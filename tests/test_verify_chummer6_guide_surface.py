@@ -141,3 +141,41 @@ def test_verify_repo_rejects_missing_support_tokens(tmp_path: Path, monkeypatch:
 
     with pytest.raises(RuntimeError, match="HOW_CAN_I_HELP.md is missing support tokens"):
         verify.verify_repo(tmp_path)
+
+
+def test_verify_repo_allows_only_sanctioned_sync_test_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    verify = _load_module()
+    monkeypatch.setattr(verify, "canonical_part_slugs", lambda: ["design", "core"])
+    monkeypatch.setattr(verify, "canonical_horizon_slugs", lambda: ["alice"])
+    monkeypatch.setattr(verify, "readme_updates_teaser_enabled", lambda: False)
+    monkeypatch.setattr(verify, "load_faq_canon", lambda: {"using_chummer6": {"entries": []}})
+    monkeypatch.setattr(verify, "load_help_canon", lambda: {"privacy_and_review_safety": []})
+    monkeypatch.setattr(verify, "load_page_registry", lambda: {"page_types": {"part_page": {"forbidden_terms": []}}})
+    _seed_valid_repo(tmp_path, parts=["design", "core"], horizons=["alice"], include_readme_updates=False)
+
+    _write(tmp_path, "tests/test_sync_public_guide_from_design.py")
+
+    result = verify.verify_repo(tmp_path)
+
+    assert result["parts"] == ["design", "core"]
+
+
+def test_verify_repo_rejects_unexpected_test_surface_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    verify = _load_module()
+    monkeypatch.setattr(verify, "canonical_part_slugs", lambda: ["design", "core"])
+    monkeypatch.setattr(verify, "canonical_horizon_slugs", lambda: ["alice"])
+    monkeypatch.setattr(verify, "readme_updates_teaser_enabled", lambda: False)
+    monkeypatch.setattr(verify, "load_faq_canon", lambda: {"using_chummer6": {"entries": []}})
+    monkeypatch.setattr(verify, "load_help_canon", lambda: {"privacy_and_review_safety": []})
+    monkeypatch.setattr(verify, "load_page_registry", lambda: {"page_types": {"part_page": {"forbidden_terms": []}}})
+    _seed_valid_repo(tmp_path, parts=["design", "core"], horizons=["alice"], include_readme_updates=False)
+
+    _write(tmp_path, "tests/test_sync_public_guide_from_design.py")
+    _write(tmp_path, "tests/test_extra_public_surface_leak.py")
+
+    with pytest.raises(RuntimeError, match="unexpected test surface paths"):
+        verify.verify_repo(tmp_path)

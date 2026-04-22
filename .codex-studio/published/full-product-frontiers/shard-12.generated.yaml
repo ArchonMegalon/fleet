@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-20T11:08:28Z'
+generated_at: '2026-04-22T13:58:25Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-12
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -56,6 +56,9 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
+  - mobile play shell
+  - ui kit and flagship polish
+  - media artifacts
   - desktop client
 quality_policy:
   bar: top_flagship_grade
@@ -65,13 +68,12 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: 'Only external host-proof gaps remain: run the missing windows proof lane
-    for 1 desktop tuple(s), ingest receipts, and then republish release truth.'
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-20T10:40:13Z'
+  generated_at: '2026-04-22T13:58:13Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -85,7 +87,7 @@ frontier:
 - id: 1430909325
   title: Extract Chummer5a oracle baselines and veteran workflow packs
   wave: flagship_product
-  status: blocked_external_host_proof
+  status: not_started
   owners:
   - executive-assistant
   dependencies: []
@@ -98,15 +100,15 @@ frontier:
     is landed for `executive-assistant` (next90-m103-ea-parity-lab).
   eta:
     status: flagship_delivery
-    eta_human: 8h-21h
+    eta_human: 9h-21h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Extract Chummer5a oracle baselines and veteran workflow
       packs'' remains open under the flagship closeout frontier. Outstanding readiness
-      coverage: desktop_client.'
-    predicted_completion_at: '2026-04-21T01:39:22Z'
-    range_low_hours: 8.41
-    range_high_hours: 20.62
+      coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
+    predicted_completion_at: '2026-04-23T05:04:07Z'
+    range_low_hours: 8.74
+    range_high_hours: 21.45
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1

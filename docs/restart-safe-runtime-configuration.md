@@ -11,6 +11,11 @@ Runtime environment files are overlays, not the source of truth:
 - `/docker/fleet/runtime.ea.env`
 - `/docker/fleet/runtime.env`
 
+Tracked examples live next to those mutable overlays:
+
+- `/docker/fleet/runtime.ea.env.example`
+- `/docker/fleet/runtime.env.example`
+
 Operator environment variables intentionally win over project-config defaults. Use them for temporary overrides only; durable policy belongs in `config/projects/fleet.yaml`.
 
 The host-default state root is `/docker/fleet/state/chummer_design_supervisor`. That path is writable for host-local runs and is the same persisted tree mounted into fleet containers as `/var/lib/codex-fleet`.

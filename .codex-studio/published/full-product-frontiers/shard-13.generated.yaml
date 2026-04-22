@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-20T11:07:03Z'
+generated_at: '2026-04-22T13:58:27Z'
 mode: flagship_product
-state_root: /docker/fleet/state/chummer_design_supervisor/shard-13
+state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-13
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -30,23 +30,35 @@ focus:
   - whole_project_frontier
   owners:
   - chummer6-ui
-  - chummer6-core
-  - chummer6-ui-kit
+  - chummer6-hub
+  - fleet
   texts:
   - top flagship grade
+  - whole project frontier
+  - feedback
+  - automatic bugfixing
+  - crash
+  - support
+  - accessibility
+  - localization
+  - restore confidence
+  - fit and finish
+  - utility
+  - dice
+  - initiative
+  - dashboard
+  - operator
   - whole-project frontier
   - no lowered standards
   - feedback loop
-  - automatic bugfixing
   - crash reporting
   - support routing
   - journey smoothness
-  - restore confidence
-  - accessibility
-  - localization
   - performance
   - proof shelf
-  - fit and finish
+  - mobile play shell
+  - ui kit and flagship polish
+  - media artifacts
   - desktop client
 quality_policy:
   bar: top_flagship_grade
@@ -56,28 +68,12 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: 'Only external host-proof gaps remain: windows: transfer /docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz,
-    set CHUMMER_UI_REPO_ROOT and either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the
-    signed-in proof cookies, run bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh,
-    bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh,
-    bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.sh,
-    bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-windows-proof.sh,
-    then return windows-proof-bundle.tgz and ingest it with bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-windows-proof-bundle.sh
-    Use powershell -ExecutionPolicy Bypass -File /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1
-    if Git Bash capture is not available.'
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 full_product_audit:
   status: fail
-  reason: 'Only external host-proof gaps remain: windows: transfer /docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz,
-    set CHUMMER_UI_REPO_ROOT and either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the
-    signed-in proof cookies, run bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh,
-    bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh,
-    bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.sh,
-    bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-windows-proof.sh,
-    then return windows-proof-bundle.tgz and ingest it with bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-windows-proof-bundle.sh
-    Use powershell -ExecutionPolicy Bypass -File /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1
-    if Git Bash capture is not available.'
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-20T10:40:13Z'
+  generated_at: '2026-04-22T13:58:13Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -86,42 +82,56 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 4066417069
+- 2137576821
 frontier:
-- id: 4066417069
-  title: Flagship desktop client and workbench finish
+- id: 2137576821
+  title: Bind parity-lab evidence into veteran readiness truth
   wave: flagship_product
-  status: blocked_external_host_proof
+  status: not_started
   owners:
-  - chummer6-ui
-  - chummer6-core
-  - chummer6-ui-kit
+  - fleet
   dependencies: []
   exit_criteria:
-  - Ship the flagship workbench/browser/desktop surface described in `projects/ui.md`
-    and `BUILD_LAB_PRODUCT_MODEL.md`, including builder, compare, explain, grouped
-    inspection, conditional toggles, desktop packaging, updater, and in-app support
-    polish.
-  - Keep the flagship desktop head centered on Avalonia with release-grade startup,
-    packaging, and support evidence rather than treating Linux exit-gate closure as
-    the whole product.
+  - Fail-close flagship readiness unless the parity-lab capture and veteran compare
+    packs ground the release-status ladder and desktop non-negotiables.
+  - 'Own and prove the surface slice(s): flagship_readiness:veteran_truth, flagship_parity:parity_lab_evidence'
+  - 'Keep implementation scoped to the allowed paths: scripts, tests, .codex-design,
+    .codex-studio (+1 more)'
+  - Refresh flagship proof and close out the queue slice honestly when this package
+    is landed for `fleet` (next90-m103-fleet-parity-lab-readiness).
   eta:
     status: flagship_delivery
-    eta_human: 10h-1.1d
+    eta_human: 9h-21h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Flagship desktop client and workbench finish'' remains open
-      under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
-    predicted_completion_at: '2026-04-21T05:09:09Z'
-    range_low_hours: 10.45
-    range_high_hours: 25.62
+    summary: 'Milestone ''Bind parity-lab evidence into veteran readiness truth''
+      remains open under the flagship closeout frontier. Outstanding readiness coverage:
+      mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
+    predicted_completion_at: '2026-04-23T05:04:09Z'
+    range_low_hours: 8.74
+    range_high_hours: 21.45
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 2.05
+    remaining_effort_units: 1.65
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+source_queue_fingerprint: next90-staging-20260415-next-big-wins-widening
+queue_package:
+  repo: fleet
+  package_id: next90-m103-fleet-parity-lab-readiness
+  title: Bind parity-lab evidence into veteran readiness truth
+  priority: 0
+  owned_surfaces:
+  - flagship_readiness:veteran_truth
+  - flagship_parity:parity_lab_evidence
+  allowed_paths:
+  - scripts
+  - tests
+  - .codex-design
+  - .codex-studio
+  - feedback

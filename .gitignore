@@ -1,6 +1,8 @@
 # Local credentials and account mappings
 runtime.env
+runtime.ea.env
 .env
+.env.*
 secrets/
 config/accounts.yaml
 *.key
@@ -9,9 +11,20 @@ config/accounts.yaml
 *.auth.json
 auth.json
 .chummer6_local_policy.json
+!.env.example
+!runtime.env.example
+!runtime.ea.env.example
 
 # Runtime state and logs
 state/
+logs/
+tmp/
+controller.db
+fleet.db
+*.db
+*.sqlite
+*.sqlite3
+$fake
 
 # Python cache
 __pycache__/
@@ -20,6 +33,8 @@ __pycache__/
 # Local build artifacts
 *.zip
 .venv/
+.nuget/packages/
+TestResults/
 
 # Generated external proof payloads
 /.codex-studio/published/external-proof-commands/*.tgz

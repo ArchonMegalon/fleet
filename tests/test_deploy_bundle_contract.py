@@ -19,7 +19,7 @@ class DeployBundleContractTests(unittest.TestCase):
         self.assertIn('copy_tree "$BUNDLE_DIR/gateway" "$INSTALL_DIR/gateway"', script)
         self.assertIn('copy_tree "$BUNDLE_DIR/scripts" "$INSTALL_DIR/scripts"', script)
         self.assertIn('copy_tree "$BUNDLE_DIR/config" "$INSTALL_DIR/config" "accounts.yaml"', script)
-        self.assertIn('copy_mutable_file "$BUNDLE_DIR/runtime.ea.env" "$INSTALL_DIR/runtime.ea.env"', script)
+        self.assertIn('copy_mutable_file "$BUNDLE_DIR/runtime.ea.env.example" "$INSTALL_DIR/runtime.ea.env"', script)
 
     def test_deploy_script_fails_closed_on_smoke_check_failure(self) -> None:
         script = DEPLOY_SCRIPT.read_text(encoding="utf-8")

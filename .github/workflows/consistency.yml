@@ -3,22 +3,32 @@ name: Fleet Consistency
 on:
   pull_request:
     paths:
+      - ".gitignore"
       - "README.md"
       - "FLEET_ADMIN_SPEC.md"
       - "admin/**"
       - "controller/**"
       - "config/**"
       - "scripts/check_consistency.py"
+      - "scripts/verify_public_repo_hygiene.py"
+      - "tests/test_verify_public_repo_hygiene.py"
+      - "deploy-fleet.sh"
+      - "runtime.ea.env.example"
   push:
     branches:
       - main
     paths:
+      - ".gitignore"
       - "README.md"
       - "FLEET_ADMIN_SPEC.md"
       - "admin/**"
       - "controller/**"
       - "config/**"
       - "scripts/check_consistency.py"
+      - "scripts/verify_public_repo_hygiene.py"
+      - "tests/test_verify_public_repo_hygiene.py"
+      - "deploy-fleet.sh"
+      - "runtime.ea.env.example"
 
 jobs:
   consistency:
@@ -35,3 +45,6 @@ jobs:
 
       - name: Run fleet consistency guard
         run: python3 scripts/check_consistency.py
+
+      - name: Run public repo hygiene guard
+        run: python3 scripts/verify_public_repo_hygiene.py

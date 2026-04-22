@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-20T11:07:09Z'
+generated_at: '2026-04-22T13:58:13Z'
 mode: flagship_product
-state_root: /docker/fleet/state/chummer_design_supervisor/shard-5
+state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-5
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -29,24 +29,38 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-ui
   - chummer6-core
+  - chummer6-ui
+  - chummer6-design
   - chummer6-ui-kit
+  - chummer6-mobile
   texts:
   - top flagship grade
+  - whole project frontier
+  - feedback
+  - automatic bugfixing
+  - crash
+  - support
+  - accessibility
+  - localization
+  - restore confidence
+  - fit and finish
+  - import
+  - oracle
+  - chummer5a
+  - hero lab
+  - genesis
   - whole-project frontier
   - no lowered standards
   - feedback loop
-  - automatic bugfixing
   - crash reporting
   - support routing
   - journey smoothness
-  - restore confidence
-  - accessibility
-  - localization
   - performance
   - proof shelf
-  - fit and finish
+  - mobile play shell
+  - ui kit and flagship polish
+  - media artifacts
   - desktop client
 quality_policy:
   bar: top_flagship_grade
@@ -56,28 +70,12 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: 'Only external host-proof gaps remain: windows: transfer /docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz,
-    set CHUMMER_UI_REPO_ROOT and either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the
-    signed-in proof cookies, run bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh,
-    bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh,
-    bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.sh,
-    bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-windows-proof.sh,
-    then return windows-proof-bundle.tgz and ingest it with bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-windows-proof-bundle.sh
-    Use powershell -ExecutionPolicy Bypass -File /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1
-    if Git Bash capture is not available.'
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 full_product_audit:
   status: fail
-  reason: 'Only external host-proof gaps remain: windows: transfer /docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz,
-    set CHUMMER_UI_REPO_ROOT and either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the
-    signed-in proof cookies, run bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh,
-    bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh,
-    bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.sh,
-    bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-windows-proof.sh,
-    then return windows-proof-bundle.tgz and ingest it with bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-windows-proof-bundle.sh
-    Use powershell -ExecutionPolicy Bypass -File /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1
-    if Git Bash capture is not available.'
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-20T10:40:13Z'
+  generated_at: '2026-04-22T13:58:09Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -86,33 +84,34 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 3449507998
+- 4182074715
 frontier:
-- id: 3449507998
-  title: Rules engine parity, explain trust, and import certification
+- id: 4182074715
+  title: Shared design system, accessibility, localization, and flagship polish
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-core
+  - chummer6-ui-kit
   - chummer6-ui
+  - chummer6-mobile
   dependencies: []
   exit_criteria:
-  - Close SR4, SR5, and SR6 character-build parity gaps using deterministic engine
-    truth, explain receipts, and legacy/import oracle evidence described in `projects/core.md`
-    and the roadmap.
-  - Make ruleset import, migration, and explain certification boring enough that flagship
-    desktop and mobile surfaces consume one grounded engine truth.
+  - Make shared tokens, dense-data primitives, accessibility primitives, localization
+    readiness, and flagship-grade visual polish real across workbench and play surfaces
+    as described in `projects/ui-kit.md`.
+  - Keep package-only shared UI discipline intact while raising the product to a flagship
+    quality bar instead of repo-local one-off chrome.
   eta:
     status: flagship_delivery
-    eta_human: 11h-1.1d
+    eta_human: 10h-1.1d
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Rules engine parity, explain trust, and import certification''
-      remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      desktop_client.'
-    predicted_completion_at: '2026-04-21T05:52:27Z'
-    range_low_hours: 10.86
-    range_high_hours: 26.65
+    summary: 'Milestone ''Shared design system, accessibility, localization, and flagship
+      polish'' remains open under the flagship closeout frontier. Outstanding readiness
+      coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
+    predicted_completion_at: '2026-04-23T08:00:37Z'
+    range_low_hours: 10.25
+    range_high_hours: 25.83
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1

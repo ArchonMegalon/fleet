@@ -60,9 +60,9 @@
     "launch_expand": [
       {
         "name": "package_authority",
-        "observed": "pass",
+        "observed": "fail",
         "required": "pass",
-        "state": "pass"
+        "state": "fail"
       },
       {
         "name": "weekly_input_health",
@@ -72,9 +72,9 @@
       },
       {
         "name": "source_input_health",
-        "observed": "pass",
+        "observed": "fail",
         "required": "pass",
-        "state": "pass"
+        "state": "fail"
       },
       {
         "name": "decision_alignment",
@@ -90,9 +90,9 @@
       },
       {
         "name": "flagship_readiness",
-        "observed": "pass",
+        "observed": "fail",
         "required": "pass",
-        "state": "pass"
+        "state": "blocked"
       },
       {
         "name": "flagship_parity",
@@ -102,9 +102,9 @@
       },
       {
         "name": "flagship_quality",
-        "observed": "pass",
+        "observed": "blocked",
         "required": "localization pass and accessibility/polish proof ready",
-        "state": "pass"
+        "state": "blocked"
       },
       {
         "name": "status_plane_final_claim",
@@ -114,9 +114,9 @@
       },
       {
         "name": "journey_gates",
-        "observed": "ready",
+        "observed": "blocked",
         "required": "ready",
-        "state": "pass"
+        "state": "blocked"
       },
       {
         "name": "local_release_proof",
@@ -182,7 +182,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-19T16:34:33Z",
+  "generated_at": "2026-04-22T13:58:14Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -218,9 +218,9 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-04-19T16:34:33Z",
+    "generated_at": "2026-04-22T13:58:14Z",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-04-26T16:34:33Z",
+    "next_packet_due_at": "2026-04-29T13:58:14Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -348,10 +348,15 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 4,
+          "blocking_gate_count": 9,
           "blocking_gates": [
+            "package_authority",
+            "source_input_health",
             "successor_dependencies",
+            "flagship_readiness",
+            "flagship_quality",
             "status_plane_final_claim",
+            "journey_gates",
             "local_release_proof",
             "provider_canary"
           ],
@@ -360,13 +365,13 @@
             "closure_health": "pass",
             "decision_alignment": "pass",
             "flagship_parity": "pass",
-            "flagship_quality": "pass",
-            "flagship_readiness": "pass",
-            "journey_gates": "pass",
+            "flagship_quality": "blocked",
+            "flagship_readiness": "blocked",
+            "journey_gates": "blocked",
             "local_release_proof": "blocked",
-            "package_authority": "pass",
+            "package_authority": "fail",
             "provider_canary": "blocked",
-            "source_input_health": "pass",
+            "source_input_health": "fail",
             "status_plane_final_claim": "blocked",
             "successor_dependencies": "blocked",
             "support_followthrough_receipts": "pass",
@@ -496,10 +501,15 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 4,
+          "blocking_gate_count": 9,
           "blocking_gates": [
+            "package_authority",
+            "source_input_health",
             "successor_dependencies",
+            "flagship_readiness",
+            "flagship_quality",
             "status_plane_final_claim",
+            "journey_gates",
             "local_release_proof",
             "provider_canary"
           ],
@@ -508,8 +518,8 @@
           "matrix_complete": true,
           "operator_action": "do_not_expand_launch",
           "ready_for_operator_packet": true,
-          "receipt_id": "m106-launch_expand-bce96ef4e777882d",
-          "receipt_sha256": "bce96ef4e777882db465a477397acf0953dc54da6e82b22f0e7d3bb540df49ce",
+          "receipt_id": "m106-launch_expand-f5f5c0323c2cbdb0",
+          "receipt_sha256": "f5f5c0323c2cbdb0d9b94e87951f81a475cd2721e164fa2246137e3164b9f4a1",
           "route": "weekly_governor_packet.launch_expand",
           "state": "blocked"
         },
@@ -700,7 +710,7 @@
         104,
         105
       ],
-      "open_registry_milestone_count": 5,
+      "open_registry_milestone_count": 4,
       "rows": [
         {
           "completion_action": "missing",
@@ -731,13 +741,13 @@
         {
           "completion_action": "missing",
           "design_queue_status": "missing",
-          "launch_gate_contribution": "blocked_until_registry_milestone_complete",
+          "launch_gate_contribution": "clear",
           "milestone_id": 103,
           "operator_route": "route_to_dependency_package",
           "package_id": "milestone-103",
           "queue_mirror_status": "drift_or_missing",
           "queue_status": "missing",
-          "registry_status": "in_progress",
+          "registry_status": "complete",
           "repo": "",
           "route_state": "package_row_missing"
         },
@@ -797,16 +807,21 @@
     "launch_gate_summary": {
       "accumulating_count": 0,
       "all_green": false,
-      "blocked_count": 4,
+      "blocked_count": 7,
       "blocking_gate_names": [
+        "package_authority",
+        "source_input_health",
         "successor_dependencies",
+        "flagship_readiness",
+        "flagship_quality",
         "status_plane_final_claim",
+        "journey_gates",
         "local_release_proof",
         "provider_canary"
       ],
-      "fail_count": 0,
+      "fail_count": 2,
       "gate_count": 16,
-      "pass_count": 12,
+      "pass_count": 7,
       "unknown_count": 0,
       "watch_count": 0
     },
@@ -831,8 +846,13 @@
       "cadence": "weekly",
       "incomplete_actions": [],
       "launch_gate_blocking_names": [
+        "package_authority",
+        "source_input_health",
         "successor_dependencies",
+        "flagship_readiness",
+        "flagship_quality",
         "status_plane_final_claim",
+        "journey_gates",
         "local_release_proof",
         "provider_canary"
       ],
@@ -847,16 +867,21 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 4,
+          "blocking_gate_count": 9,
           "blocking_gates": [
+            "package_authority",
+            "source_input_health",
             "successor_dependencies",
+            "flagship_readiness",
+            "flagship_quality",
             "status_plane_final_claim",
+            "journey_gates",
             "local_release_proof",
             "provider_canary"
           ],
           "next_decision": "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
           "operator_action": "do_not_expand_launch",
-          "receipt_id": "m106-launch_expand-bce96ef4e777882d",
+          "receipt_id": "m106-launch_expand-f5f5c0323c2cbdb0",
           "route": "weekly_governor_packet.launch_expand",
           "state": "blocked"
         },
@@ -914,7 +939,7 @@
   },
   "package_closeout": {
     "blocked_dependency_package_ids": [],
-    "closeout_reason": "Fleet package authority, queue closeout, registry work task 106.1, generated packet, markdown packet, and proof markers are current.",
+    "closeout_reason": "Fleet package authority or proof is not complete; inspect package_verification issues before reusing this slice.",
     "dependency_package_routes": {
       "closed_package_count": 0,
       "incomplete_package_milestone_ids": [],
@@ -926,7 +951,7 @@
         104,
         105
       ],
-      "open_registry_milestone_count": 5,
+      "open_registry_milestone_count": 4,
       "rows": [
         {
           "completion_action": "missing",
@@ -957,13 +982,13 @@
         {
           "completion_action": "missing",
           "design_queue_status": "missing",
-          "launch_gate_contribution": "blocked_until_registry_milestone_complete",
+          "launch_gate_contribution": "clear",
           "milestone_id": 103,
           "operator_route": "route_to_dependency_package",
           "package_id": "milestone-103",
           "queue_mirror_status": "drift_or_missing",
           "queue_status": "missing",
-          "registry_status": "in_progress",
+          "registry_status": "complete",
           "repo": "",
           "route_state": "package_row_missing"
         },
@@ -997,7 +1022,7 @@
       "rule": "Closed dependency package rows are verified instead of reopened; launch expansion still waits for successor registry milestone status to close.",
       "status": "blocked"
     },
-    "do_not_reopen_package": true,
+    "do_not_reopen_package": false,
     "milestone_106_still_open_because": "successor dependencies and sibling work tasks remain outside this Fleet package",
     "owned_surfaces": [
       "weekly_governor_packet",
@@ -1014,7 +1039,6 @@
     "remaining_milestone_dependency_ids": [
       101,
       102,
-      103,
       104,
       105
     ],
@@ -1022,7 +1046,7 @@
       "106.3",
       "106.4"
     ],
-    "status": "fleet_package_complete",
+    "status": "blocked",
     "successor_frontier_ids": [
       "2376135131"
     ],
@@ -1080,7 +1104,7 @@
         },
         {
           "id": 103,
-          "status": "in_progress",
+          "status": "complete",
           "title": "Chummer5a parity lab and veteran migration certification"
         },
         {
@@ -1098,7 +1122,6 @@
       "open_dependency_ids": [
         101,
         102,
-        103,
         104,
         105
       ],
@@ -1108,7 +1131,7 @@
     "design_queue_do_not_reopen_reason": "M106 Fleet weekly governor packet is complete; future shards must verify the weekly packet receipt, registry row, queue row, and design-queue row instead of reopening the measured rollout packet package.",
     "design_queue_frontier_id": "2376135131",
     "design_queue_landed_commit": "b467c27",
-    "design_queue_source_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+    "design_queue_source_registry_path": "/docker/chummercomplete/chummer6-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
     "design_queue_status": "complete",
     "disallowed_worker_proof_command_markers": [
       "/var/lib/codex-fleet",
@@ -1242,7 +1265,10 @@
     "expected_queue_task": "Turn readiness, parity, support, and rollout truth into a weekly governor packet that drives measured product decisions.",
     "expected_queue_title": "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions",
     "expected_registry_milestone_title": "Product-governor weekly adoption and measured rollout loop",
-    "issues": [],
+    "issues": [
+      "design queue staging source_registry_path is not the canonical successor registry",
+      "Fleet queue mirror package row diverges from design-owned queue staging for field(s): proof"
+    ],
     "local_commit_resolution": {
       "commits": [
         {
@@ -1593,8 +1619,223 @@
     "queue_do_not_reopen_reason": "M106 Fleet weekly governor packet is complete; future shards must verify the weekly packet receipt, registry row, queue row, and design-queue row instead of reopening the measured rollout packet package.",
     "queue_frontier_id": "2376135131",
     "queue_landed_commit": "b467c27",
-    "queue_mirror_drift": [],
-    "queue_mirror_status": "in_sync",
+    "queue_mirror_drift": [
+      {
+        "design_queue": [
+          "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
+          "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
+          "/docker/fleet/scripts/run_next90_m106_weekly_governor_packet_tests.py",
+          "/docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py",
+          "/docker/fleet/tests/test_materialize_weekly_governor_packet.py",
+          "/docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py",
+          "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+          "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
+          "python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+          "python3 -m py_compile scripts/run_next90_m106_weekly_governor_packet_tests.py",
+          "python3 -m py_compile scripts/verify_script_bootstrap_no_pythonpath.py tests/test_fleet_script_bootstrap_without_pythonpath.py",
+          "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
+          "python3 scripts/run_next90_m106_weekly_governor_packet_tests.py exits 0",
+          "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
+          "verifier rebuilds the decision-critical packet projection from live source inputs",
+          "markdown Generated timestamp must match JSON generated_at",
+          "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
+          "future-dated weekly and source generated_at receipts are rejected",
+          "verifier rejects compile manifest freshness drift after weekly packet refresh",
+          "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
+          "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
+          "weekly pulse duplicate or ambiguous launch governance actions are rejected",
+          "status-plane final claim drift blocks launch expansion and measured rollout readiness",
+          "status_reason distinguishes closed Fleet package proof from blocked rollout gates",
+          "forbidden worker proof strings are rejected case-insensitively",
+          "task-local telemetry field names are rejected as worker proof strings",
+          "successor-wave telemetry summary strings are rejected as worker proof strings",
+          "literal successor-wave telemetry labels are rejected as worker proof strings",
+          "frontier-detail prompt strings are rejected as worker proof strings",
+          "frontier-detail body strings are rejected as worker proof strings",
+          "run-prompt authority labels are rejected as worker proof strings",
+          "execution-discipline prompt strings are rejected as worker proof strings",
+          "runtime handoff header and model metadata strings are rejected as worker proof strings",
+          "runtime handoff frontier metadata strings are rejected as worker proof strings",
+          "handoff polling phrase guard is enforced case-insensitively",
+          "control-plane polling prohibition guard is enforced case-insensitively",
+          "worker-run OODA helper guard is enforced case-insensitively",
+          "telemetry-ownership handoff prompt strings are rejected as worker proof strings",
+          "worker-safe resume context prompt strings are rejected as worker proof strings",
+          "worker-run supervisor launcher guard is enforced case-insensitively",
+          "run-helper failure proof strings are rejected case-insensitively",
+          "repeat-prevention worker command guard records helper failure posture",
+          "verifier rejects Fleet proof paths outside package allowed path roots",
+          "production verifier rejects non-canonical source path overrides",
+          "verifier rejects reused closed successor frontier rows outside the Fleet M106 package",
+          "blocked support-packet proof routes exactly to the M102 reporter-receipts dependency package",
+          "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
+          "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
+          "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention",
+          "local proof floor commit 6d1663c pinned for M106 governor packet dependency-routing guard",
+          "local proof floor commit ade57ae pinned for M106 task-local telemetry field guard",
+          "local proof floor commit 55d8282 pinned for M106 source-authority guard",
+          "local proof floor commit 144eae5 pinned for M106 worker-run helper guard",
+          "local proof floor commit 543dfd5 pinned for M106 markdown proof-floor guard",
+          "local proof floor commit f16f13b pinned for M106 run-helper failure guard",
+          "local proof floor commit 999231f pinned for M106 source-input refresh guard",
+          "local proof floor commit 25836f6 pinned for M106 source refresh proof floor",
+          "local proof floor commit 3e7ee9b pinned for M106 governor packet proof floor",
+          "local proof floor commit 17189be pinned for M106 future-dated source timestamp guard",
+          "local proof floor commit 9d2ea4c pinned for M106 timestamp guard proof floor",
+          "local proof floor commit bb49fc1 pinned for M106 run-prompt authority guard",
+          "local proof floor commit 26679c7 pinned for M106 refreshed packet artifact floor",
+          "local proof floor commit ef50370 pinned for M106 refreshed proof-floor guard",
+          "local proof floor commit a1be389 pinned for M106 successor telemetry prompt-label guard",
+          "local proof floor commit 83d2d21 pinned for M106 OODA telemetry ownership guard",
+          "local proof floor commit e74a7ec pinned for M106 OODA telemetry proof floor",
+          "local proof floor commit 8fb8d40 pinned for M106 refreshed packet artifact floor",
+          "local proof floor commit dd5fdb5 pinned for M106 weekly governor proof floor",
+          "local proof floor commit 52fe086 pinned for M106 governor packet proof floor",
+          "local proof floor commit 6c429cb pinned for M106 verified closeout proof floor",
+          "local proof floor commit 5193bce pinned for M106 refreshed packet artifact floor",
+          "local proof floor commit f662ad3 pinned for M106 shorthand telemetry command guard",
+          "local proof floor commit 5882234 pinned for M106 blocked dependency route guard",
+          "local proof floor commit 6c376e0 pinned for M106 execution-discipline proof guard",
+          "local proof floor commit 00e870e pinned for M106 direct fixture runner guard",
+          "local proof floor commit 81e1de8 pinned for M106 refreshed source-input packet floor",
+          "local proof floor commit 941c54d pinned for M106 handoff frontier metadata guard",
+          "local proof floor commit 6981667 pinned for M106 worker helper rule guard",
+          "local proof floor commit 4a13b47 pinned for M106 markdown timestamp proof guard",
+          "local proof floor commit d597376 pinned for M106 telemetry handoff proof guard",
+          "local proof floor commit 233a52a pinned for M106 shard-runtime-handoff guard",
+          "local proof floor commit fba96cc pinned for M106 helper failure posture guard",
+          "local proof floor commit 15efd7c pinned for M106 refreshed packet artifact floor",
+          "local proof floor commit f3bfb8d pinned for M106 refreshed packet artifact floor",
+          "local proof floor commit d15a7ae pinned for M106 queue closeout action guard",
+          "local proof floor commit ac1c4ac pinned for M106 queue closeout proof floor",
+          "local proof floor commit b909cc5 pinned for M106 codexea helper proof guard",
+          "local proof floor commit 787d27a pinned for M106 packet refresh floor",
+          "local proof floor commit b467c27 pinned for M106 design queue OODA prompt proof guard",
+          "commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs",
+          "commit 81e1de8 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after source input drift from refreshed support, readiness, and journey receipts",
+          "commit 15efd7c refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after current support, readiness, and journey source input drift",
+          "commit f3bfb8d refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after current support, readiness, journey, and status-plane source input drift",
+          "commit d15a7ae tightens the M106 queue closeout action guard.",
+          "commit b909cc5 tightens the M106 codexea helper proof guard.",
+          "commit 787d27a pins the M106 packet refresh floor.",
+          "commit b467c27 tightens the M106 design queue OODA prompt proof guard.",
+          "stale aggregate receipt-gate counts cannot overstate installed-build followthrough without detailed row truth",
+          "local proof floor commit fe4c621 pinned for M106 receipt-gate row-truth guard",
+          "commit fe4c621 tightens the M106 receipt-gate row-truth guard.",
+          "local proof floor commit 653380a pinned for M106 receipt-gate row-truth proof floor",
+          "commit 653380a pins the M106 receipt-gate row-truth guard.",
+          "local proof floor commit b568034 pinned for M106 closure-proof dependency package routing guard",
+          "commit b568034 tightens the M106 governor packet closure proof.",
+          "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop",
+          "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
+        ],
+        "field": "proof",
+        "fleet_queue": [
+          "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
+          "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
+          "/docker/fleet/scripts/run_next90_m106_weekly_governor_packet_tests.py",
+          "/docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py",
+          "/docker/fleet/tests/test_materialize_weekly_governor_packet.py",
+          "/docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py",
+          "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+          "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
+          "python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+          "python3 -m py_compile scripts/run_next90_m106_weekly_governor_packet_tests.py",
+          "python3 -m py_compile scripts/verify_script_bootstrap_no_pythonpath.py tests/test_fleet_script_bootstrap_without_pythonpath.py",
+          "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
+          "python3 scripts/run_next90_m106_weekly_governor_packet_tests.py exits 0",
+          "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
+          "verifier rebuilds the decision-critical packet projection from live source inputs",
+          "markdown Generated timestamp must match JSON generated_at",
+          "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
+          "future-dated weekly and source generated_at receipts are rejected",
+          "verifier rejects compile manifest freshness drift after weekly packet refresh",
+          "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
+          "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
+          "weekly pulse duplicate or ambiguous launch governance actions are rejected",
+          "status-plane final claim drift blocks launch expansion and measured rollout readiness",
+          "status_reason distinguishes closed Fleet package proof from blocked rollout gates",
+          "forbidden worker proof strings are rejected case-insensitively",
+          "task-local telemetry field names are rejected as worker proof strings",
+          "successor-wave telemetry summary strings are rejected as worker proof strings",
+          "literal successor-wave telemetry labels are rejected as worker proof strings",
+          "frontier-detail prompt strings are rejected as worker proof strings",
+          "frontier-detail body strings are rejected as worker proof strings",
+          "run-prompt authority labels are rejected as worker proof strings",
+          "execution-discipline prompt strings are rejected as worker proof strings",
+          "runtime handoff header and model metadata strings are rejected as worker proof strings",
+          "runtime handoff frontier metadata strings are rejected as worker proof strings",
+          "handoff polling phrase guard is enforced case-insensitively",
+          "control-plane polling prohibition guard is enforced case-insensitively",
+          "worker-run OODA helper guard is enforced case-insensitively",
+          "telemetry-ownership handoff prompt strings are rejected as worker proof strings",
+          "worker-safe resume context prompt strings are rejected as worker proof strings",
+          "worker-run supervisor launcher guard is enforced case-insensitively",
+          "run-helper failure proof strings are rejected case-insensitively",
+          "repeat-prevention worker command guard records helper failure posture",
+          "verifier rejects Fleet proof paths outside package allowed path roots",
+          "production verifier rejects non-canonical source path overrides",
+          "verifier rejects reused closed successor frontier rows outside the Fleet M106 package",
+          "blocked support-packet proof routes exactly to the M102 reporter-receipts dependency package",
+          "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
+          "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
+          "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention",
+          "local proof floor commit 6d1663c pinned for M106 governor packet dependency-routing guard",
+          "local proof floor commit ade57ae pinned for M106 task-local telemetry field guard",
+          "local proof floor commit 55d8282 pinned for M106 source-authority guard",
+          "local proof floor commit 144eae5 pinned for M106 worker-run helper guard",
+          "local proof floor commit 543dfd5 pinned for M106 markdown proof-floor guard",
+          "local proof floor commit f16f13b pinned for M106 run-helper failure guard",
+          "local proof floor commit 999231f pinned for M106 source-input refresh guard",
+          "local proof floor commit 25836f6 pinned for M106 source refresh proof floor",
+          "local proof floor commit 3e7ee9b pinned for M106 governor packet proof floor",
+          "local proof floor commit 17189be pinned for M106 future-dated source timestamp guard",
+          "local proof floor commit 9d2ea4c pinned for M106 timestamp guard proof floor",
+          "local proof floor commit bb49fc1 pinned for M106 run-prompt authority guard",
+          "local proof floor commit 26679c7 pinned for M106 refreshed packet artifact floor",
+          "local proof floor commit ef50370 pinned for M106 refreshed proof-floor guard",
+          "local proof floor commit a1be389 pinned for M106 successor telemetry prompt-label guard",
+          "local proof floor commit 83d2d21 pinned for M106 OODA telemetry ownership guard",
+          "local proof floor commit e74a7ec pinned for M106 OODA telemetry proof floor",
+          "local proof floor commit 8fb8d40 pinned for M106 refreshed packet artifact floor",
+          "local proof floor commit dd5fdb5 pinned for M106 weekly governor proof floor",
+          "local proof floor commit 52fe086 pinned for M106 governor packet proof floor",
+          "local proof floor commit 6c429cb pinned for M106 verified closeout proof floor",
+          "local proof floor commit 5193bce pinned for M106 refreshed packet artifact floor",
+          "local proof floor commit f662ad3 pinned for M106 shorthand telemetry command guard",
+          "local proof floor commit 5882234 pinned for M106 blocked dependency route guard",
+          "local proof floor commit 6c376e0 pinned for M106 execution-discipline proof guard",
+          "local proof floor commit 00e870e pinned for M106 direct fixture runner guard",
+          "local proof floor commit 81e1de8 pinned for M106 refreshed source-input packet floor",
+          "local proof floor commit 941c54d pinned for M106 handoff frontier metadata guard",
+          "local proof floor commit 6981667 pinned for M106 worker helper rule guard",
+          "local proof floor commit 4a13b47 pinned for M106 markdown timestamp proof guard",
+          "local proof floor commit d597376 pinned for M106 telemetry handoff proof guard",
+          "local proof floor commit 233a52a pinned for M106 shard-runtime-handoff guard",
+          "local proof floor commit fba96cc pinned for M106 helper failure posture guard",
+          "local proof floor commit 15efd7c pinned for M106 refreshed packet artifact floor",
+          "local proof floor commit f3bfb8d pinned for M106 refreshed packet artifact floor",
+          "local proof floor commit d15a7ae pinned for M106 queue closeout action guard",
+          "local proof floor commit ac1c4ac pinned for M106 queue closeout proof floor",
+          "local proof floor commit b909cc5 pinned for M106 codexea helper proof guard",
+          "local proof floor commit 787d27a pinned for M106 packet refresh floor",
+          "local proof floor commit b467c27 pinned for M106 design queue OODA prompt proof guard",
+          "commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs",
+          "commit 81e1de8 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after source input drift from refreshed support, readiness, and journey receipts",
+          "commit 15efd7c refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after current support, readiness, and journey source input drift",
+          "commit f3bfb8d refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after current support, readiness, journey, and status-plane source input drift",
+          "commit d15a7ae tightens the M106 queue closeout action guard.",
+          "commit b909cc5 tightens the M106 codexea helper proof guard.",
+          "commit 787d27a pins the M106 packet refresh floor.",
+          "commit b467c27 tightens the M106 design queue OODA prompt proof guard.",
+          "stale aggregate receipt-gate counts cannot overstate installed-build followthrough without detailed row truth",
+          "local proof floor commit fe4c621 pinned for M106 receipt-gate row-truth guard",
+          "commit fe4c621 tightens the M106 receipt-gate row-truth guard.",
+          "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
+        ]
+      }
+    ],
+    "queue_mirror_status": "drift",
     "queue_source_design_queue_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
     "queue_source_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
     "queue_status": "complete",
@@ -1816,7 +2057,7 @@
       "tests/test_materialize_weekly_governor_packet.py",
       "tests/test_fleet_script_bootstrap_without_pythonpath.py"
     ],
-    "status": "pass",
+    "status": "fail",
     "successor_frontier_ids": [
       "2376135131"
     ]
@@ -1859,7 +2100,7 @@
         104,
         105
       ],
-      "open_registry_milestone_count": 5,
+      "open_registry_milestone_count": 4,
       "rows": [
         {
           "completion_action": "missing",
@@ -1890,13 +2131,13 @@
         {
           "completion_action": "missing",
           "design_queue_status": "missing",
-          "launch_gate_contribution": "blocked_until_registry_milestone_complete",
+          "launch_gate_contribution": "clear",
           "milestone_id": 103,
           "operator_route": "route_to_dependency_package",
           "package_id": "milestone-103",
           "queue_mirror_status": "drift_or_missing",
           "queue_status": "missing",
-          "registry_status": "in_progress",
+          "registry_status": "complete",
           "repo": "",
           "route_state": "package_row_missing"
         },
@@ -1930,7 +2171,7 @@
       "rule": "Closed dependency package rows are verified instead of reopened; launch expansion still waits for successor registry milestone status to close.",
       "status": "blocked"
     },
-    "do_not_reopen_owned_surfaces": true,
+    "do_not_reopen_owned_surfaces": false,
     "flagship_wave_guard": {
       "closed_registry_milestone_count": 18,
       "closed_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
@@ -1941,7 +2182,7 @@
       "rule": "Successor M106 packet work may summarize flagship readiness inputs, but must not reopen or re-scope the closed flagship wave.",
       "status": "closed_wave_not_reopened"
     },
-    "handoff_rule": "Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; route remaining M106 work to the listed dependency or sibling packages.",
+    "handoff_rule": "Package verification is blocked; fix package_verification.issues before treating this slice as closed.",
     "local_commit_resolution": {
       "commits": [
         {
@@ -2289,7 +2530,6 @@
     "remaining_dependency_ids": [
       101,
       102,
-      103,
       104,
       105
     ],
@@ -2304,7 +2544,7 @@
       "106.3",
       "106.4"
     ],
-    "status": "closed_for_fleet_package",
+    "status": "blocked",
     "worker_command_guard": {
       "blocked_markers": [
         "/var/lib/codex-fleet",
@@ -2464,13 +2704,13 @@
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "b097850aeb5827ab9c2d06a9bb9d01b8e965a9b9d2021e87bbf284774fc7e922",
+    "combined_source_sha256": "c37b92d9f286960e0ae0a0d9db8204f66ce115700dda99f68b715d9b340c49cd",
     "missing_inputs": [],
     "rows": [
       {
         "name": "successor_registry",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "4e43f4842ca1e9075562caf77f22b743abc5e4965ae6c9fd315eaf878c89e76d"
+        "source_sha256": "01b384faf09fbf2cc1578cbe1fde9dbfff37ad182fe132aa637a2bac79c7a203"
       },
       {
         "name": "closed_flagship_registry",
@@ -2480,7 +2720,7 @@
       {
         "name": "design_queue_staging",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "6fefaae9d421abb660319250de8b5ff8238a0b758f8eebde8bc15d5ac550a452"
+        "source_sha256": "acfa4fa0aa971160ff3d8bb71ce862aeb09b96d14edd58e333d306401849dfbf"
       },
       {
         "name": "queue_staging",
@@ -2495,29 +2735,31 @@
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "2d3f54ad89354a5004b9015b0316f32ba7fe4152f6f9ad06763173062aee5dec"
+        "source_sha256": "4202b183d7127e6736a30f6a1853c523f1b0bea298eaae27a9bc57043315e08d"
       },
       {
         "name": "journey_gates",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "c70d295c79b5f2da414400d5f3b7a2d92df6e39c4d3dede81fda3f10abc9237a"
+        "source_sha256": "b2806e9a06e65baa9e53f0a17908dc19b7a768f921a9f96bde605ddf5794a902"
       },
       {
         "name": "support_packets",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "073aab3c96b7d00cf9aa8748e5cb45ec51e7639f75db4f4b595d5d5def6087c1"
+        "source_sha256": "6c6f713696e70c0135ad8c6d8e79d85fee1b712178d5baf62bf71db684ef582e"
       },
       {
         "name": "status_plane",
         "source_path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
-        "source_sha256": "5aa1a69912dc3ded73bc808e6ef947811349d90fd1f0ab30606569711842f03e"
+        "source_sha256": "b5cd9d526e6919cd59ce06799fe1c42b485b7e27d2efcf9c79373162d7971268"
       }
     ],
     "source_count": 9,
     "status": "pass"
   },
   "source_input_health": {
-    "issues": [],
+    "issues": [
+      "weekly pulse launch cited signal(s) do not match generated source truth: journey_gate_blocked_count, journey_gate_state"
+    ],
     "required_inputs": {
       "closed_flagship_registry": {
         "milestone_count": 18,
@@ -2534,23 +2776,23 @@
       "design_queue_staging": {
         "required_key": "items",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "6fefaae9d421abb660319250de8b5ff8238a0b758f8eebde8bc15d5ac550a452",
+        "source_sha256": "acfa4fa0aa971160ff3d8bb71ce862aeb09b96d14edd58e333d306401849dfbf",
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-04-19T16:34:32Z",
+        "generated_at": "2026-04-22T13:58:13Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "2d3f54ad89354a5004b9015b0316f32ba7fe4152f6f9ad06763173062aee5dec",
+        "source_sha256": "4202b183d7127e6736a30f6a1853c523f1b0bea298eaae27a9bc57043315e08d",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-04-19T16:34:31Z",
+        "generated_at": "2026-04-22T13:58:11Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "c70d295c79b5f2da414400d5f3b7a2d92df6e39c4d3dede81fda3f10abc9237a",
+        "source_sha256": "b2806e9a06e65baa9e53f0a17908dc19b7a768f921a9f96bde605ddf5794a902",
         "state": "present"
       },
       "launch_signal_truth_alignment": {
@@ -2563,13 +2805,22 @@
         },
         "expected_from_sources": {
           "closure_health_state": "clear",
-          "journey_gate_blocked_count": "0",
-          "journey_gate_state": "ready",
+          "journey_gate_blocked_count": "6",
+          "journey_gate_state": "blocked",
           "local_release_proof_status": "unknown",
           "provider_canary_status": "Canary evidence is still accumulating"
         },
-        "mismatches": {},
-        "state": "pass"
+        "mismatches": {
+          "journey_gate_blocked_count": {
+            "cited": "0",
+            "source": "6"
+          },
+          "journey_gate_state": {
+            "cited": "ready",
+            "source": "blocked"
+          }
+        },
+        "state": "fail"
       },
       "queue_staging": {
         "required_key": "items",
@@ -2723,25 +2974,25 @@
         "state": "pass"
       },
       "status_plane": {
-        "generated_at": "2026-04-18T17:24:27Z",
+        "generated_at": "2026-04-20T11:37:04Z",
         "max_age_seconds": 691200,
         "required_key": "whole_product_final_claim_status",
         "source_path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
-        "source_sha256": "5aa1a69912dc3ded73bc808e6ef947811349d90fd1f0ab30606569711842f03e",
+        "source_sha256": "b5cd9d526e6919cd59ce06799fe1c42b485b7e27d2efcf9c79373162d7971268",
         "state": "present"
       },
       "successor_registry": {
         "required_key": "program_wave",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "4e43f4842ca1e9075562caf77f22b743abc5e4965ae6c9fd315eaf878c89e76d",
+        "source_sha256": "01b384faf09fbf2cc1578cbe1fde9dbfff37ad182fe132aa637a2bac79c7a203",
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-19T16:34:30Z",
+        "generated_at": "2026-04-22T13:58:06Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "073aab3c96b7d00cf9aa8748e5cb45ec51e7639f75db4f4b595d5d5def6087c1",
+        "source_sha256": "6c6f713696e70c0135ad8c6d8e79d85fee1b712178d5baf62bf71db684ef582e",
         "state": "present",
         "successor_package_verification_status": "pass"
       },
@@ -2753,7 +3004,7 @@
         "state": "present"
       }
     },
-    "status": "pass"
+    "status": "fail"
   },
   "source_paths": {
     "closed_flagship_registry": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
@@ -2767,7 +3018,7 @@
     "weekly_pulse": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json"
   },
   "status": "blocked",
-  "status_reason": "Fleet package is closed; measured rollout remains blocked by current source, dependency, or sibling gates.",
+  "status_reason": "Fleet package closeout is blocked; inspect package_verification issues before treating this slice as closed.",
   "successor_frontier_ids": [
     "2376135131"
   ],
@@ -2786,7 +3037,7 @@
       "families_below_gold_ready": [],
       "families_below_task_proven": [],
       "families_below_veteran_approved": [],
-      "readiness_plane_status": "ready",
+      "readiness_plane_status": "missing",
       "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml",
       "registry_present": true,
       "release_truth_status": "gold_ready",
@@ -2800,12 +3051,15 @@
       }
     },
     "flagship_quality_release_truth": {
-      "accessibility_proof_named": true,
-      "issues": [],
+      "accessibility_proof_named": false,
+      "issues": [
+        "ui kit and flagship polish status is warning",
+        "ui kit and flagship polish proof does not name accessibility"
+      ],
       "localization_release_gate_present": true,
       "localization_release_gate_status": "pass",
       "missing_locale_summary_shipping_locale_count": 0,
-      "release_truth_status": "pass",
+      "release_truth_status": "blocked",
       "shipping_locale_count": 6,
       "shipping_locales": [
         "de-de",
@@ -2816,11 +3070,11 @@
         "zh-cn"
       ],
       "translation_backlog_finding_count": 0,
-      "ui_kit_and_flagship_polish_status": "ready",
+      "ui_kit_and_flagship_polish_status": "warning",
       "untranslated_locale_count": 0
     },
-    "flagship_readiness_status": "pass",
-    "journey_gate_state": "ready",
+    "flagship_readiness_status": "fail",
+    "journey_gate_state": "blocked",
     "local_release_proof_status": "unknown",
     "provider_canary_status": "Canary evidence is still accumulating",
     "status_plane_final_claim": "fail",
@@ -2835,7 +3089,7 @@
         104,
         105
       ],
-      "open_registry_milestone_count": 5,
+      "open_registry_milestone_count": 4,
       "rows": [
         {
           "completion_action": "missing",
@@ -2866,13 +3120,13 @@
         {
           "completion_action": "missing",
           "design_queue_status": "missing",
-          "launch_gate_contribution": "blocked_until_registry_milestone_complete",
+          "launch_gate_contribution": "clear",
           "milestone_id": 103,
           "operator_route": "route_to_dependency_package",
           "package_id": "milestone-103",
           "queue_mirror_status": "drift_or_missing",
           "queue_status": "missing",
-          "registry_status": "in_progress",
+          "registry_status": "complete",
           "repo": "",
           "route_state": "package_row_missing"
         },
@@ -2920,7 +3174,7 @@
         },
         {
           "id": 103,
-          "status": "in_progress",
+          "status": "complete",
           "title": "Chummer5a parity lab and veteran migration certification"
         },
         {
@@ -2938,7 +3192,6 @@
       "open_dependency_ids": [
         101,
         102,
-        103,
         104,
         105
       ],

@@ -31,7 +31,10 @@ FORBIDDEN_ROOT_PATHS = {
     "runtime-instructions.generated.md",
     "QUEUE.generated.yaml",
 }
-FORBIDDEN_DIRS = {"src", "tests"}
+FORBIDDEN_DIRS = {"src"}
+ALLOWED_TEST_PATHS = {
+    "tests/test_sync_public_guide_from_design.py",
+}
 LEGACY_PART_FILES = {
     "PARTS/fleet.md",
     "PARTS/presentation.md",
@@ -107,6 +110,20 @@ def verify_repo(root: Path = GUIDE_REPO) -> dict[str, object]:
     forbidden_dirs = sorted(name for name in FORBIDDEN_DIRS if (root / name).exists())
     if forbidden_dirs:
         raise RuntimeError(f"forbidden guide directories still present: {forbidden_dirs}")
+
+    tests_dir = root / "tests"
+    if tests_dir.exists():
+        unexpected_test_files = sorted(
+            str(path.relative_to(root))
+            for path in tests_dir.rglob("*")
+            if path.is_file()
+            and "__pycache__" not in path.parts
+            and str(path.relative_to(root)) not in ALLOWED_TEST_PATHS
+        )
+        if unexpected_test_files:
+            raise RuntimeError(
+                f"guide repo includes unexpected test surface paths: {unexpected_test_files}"
+            )
 
     readme_text = (root / "README.md").read_text(encoding="utf-8")
     missing_readme_support = sorted(token for token in README_SUPPORT_TOKENS if token not in readme_text)

@@ -3,6 +3,8 @@ Set-StrictMode -Version Latest
 
 bash -lc 'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+bash -lc 'REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" && export REPO_ROOT && DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads" && export DOWNLOADS_ROOT'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 bash -lc 'BUNDLE_ROOT="$SCRIPT_DIR/host-proof-bundles/windows"'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 bash -lc 'BUNDLE_ARCHIVE="$SCRIPT_DIR/windows-proof-bundle.tgz"'
