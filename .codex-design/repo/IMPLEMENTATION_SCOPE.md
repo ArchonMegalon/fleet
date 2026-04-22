@@ -2,8 +2,8 @@
 
 ## Mission
 
-`fleet` is the worker orchestration and landing-control plane for Chummer-adjacent repo work.
-It exists to execute mirrored canon safely and cheaply first, not to redefine product truth.
+`fleet` is the audited control plane for agentic software work around Chummer.
+It turns mirrored canon into bounded tasks, reviewed code changes, release evidence, and operator-visible progress without redefining product truth.
 
 ## Control-plane autonomy scope
 
@@ -88,6 +88,22 @@ The default Chummer/Fleet execution plane remains cheap-first:
 * final landing authority remains with the review/jury lane
 
 The cheap baseline must not be weakened just because premium capacity exists.
+
+## Blast-radius rule
+
+Fleet must enforce automation safety limits in code and policy, not only in operator habit.
+
+Minimum default posture:
+
+* `max_prs_per_repo_per_day: 2`
+* `max_files_changed_per_run: 25`
+* `max_lines_changed_per_run: 1500`
+* `max_parallel_runs_per_repo: 1` unless canon grants an explicit exception
+* human approval required for `.github/**`, `deploy/**`, `infra/**`, `migrations/**`, `**/*.env*`, and secret-bearing paths
+* self-review forbidden
+* release-promoting changes require non-writer evidence
+
+These limits may tighten or widen by canon and explicit operator policy, but they must remain machine-enforced independent of model behavior.
 
 ## Mirror and synthesis rule
 
