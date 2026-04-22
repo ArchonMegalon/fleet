@@ -688,18 +688,27 @@ def release_stale_zero_finding_local_reviews(
         if aged_at is None or aged_at > cutoff:
             continue
         with app.db() as conn:
-            finding_count = int(
-                conn.execute(
-                    "SELECT COUNT(1) FROM review_findings WHERE project_id=? AND pr_number=?",
-                    (project_id, int(row["pr_number"] or 0)),
-                ).fetchone()[0]
-                or 0
-            )
-        if finding_count:
+            finding_row = conn.execute(
+                """
+                SELECT COUNT(1) AS finding_count,
+                       MAX(COALESCE(updated_at, created_at)) AS latest_finding_at
+                FROM review_findings
+                WHERE project_id=? AND pr_number=?
+                """,
+                (project_id, int(row["pr_number"] or 0)),
+            ).fetchone()
+        finding_count = int(finding_row["finding_count"] or 0)
+        latest_finding_at = parse_iso(finding_row["latest_finding_at"])
+        if finding_count and (latest_finding_at is None or latest_finding_at >= aged_at):
             continue
         completed_at = parse_iso(row["run_finished_at"]) or utc_now()
         now_text = iso(utc_now())
         with app.db() as conn:
+            if finding_count:
+                conn.execute(
+                    "DELETE FROM review_findings WHERE project_id=? AND pr_number=?",
+                    (project_id, int(row["pr_number"] or 0)),
+                )
             conn.execute(
                 """
                 UPDATE pull_requests

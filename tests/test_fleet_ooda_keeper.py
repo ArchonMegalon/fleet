@@ -16,10 +16,53 @@ SPEC.loader.exec_module(keeper)
 class FakeApp:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
+        self.updated_packages = []
+        self.synced = False
+        self.reconciled = False
+        self.snapshotted = False
 
     @contextlib.contextmanager
     def db(self):
         yield self._conn
+
+    def project_uses_package_scheduler(self, _config, _project_id: str) -> bool:
+        return True
+
+    def update_work_package_runtime(
+        self,
+        package_id: str,
+        *,
+        status: str,
+        runtime_state: str,
+        latest_run_id: int | None,
+        completed_at: object,
+    ) -> None:
+        self.updated_packages.append(
+            {
+                "package_id": package_id,
+                "status": status,
+                "runtime_state": runtime_state,
+                "latest_run_id": latest_run_id,
+                "completed_at": completed_at,
+            }
+        )
+        self._conn.execute(
+            """
+            UPDATE work_packages
+            SET status=?, runtime_state=?, latest_run_id=?, completed_at=?
+            WHERE package_id=?
+            """,
+            (status, runtime_state, latest_run_id, str(completed_at), package_id),
+        )
+
+    def sync_work_packages_to_db(self, _config) -> None:
+        self.synced = True
+
+    def reconcile_stuck_work_package_runtime_links(self) -> None:
+        self.reconciled = True
+
+    def save_runtime_task_cache_snapshot(self) -> None:
+        self.snapshotted = True
 
 
 def _seed_db() -> sqlite3.Connection:
@@ -40,7 +83,35 @@ def _seed_db() -> sqlite3.Connection:
             status TEXT,
             runtime_state TEXT,
             dependencies_json TEXT,
-            latest_run_id INTEGER
+            latest_run_id INTEGER,
+            completed_at TEXT
+        );
+        CREATE TABLE pull_requests (
+            id INTEGER PRIMARY KEY,
+            package_id TEXT,
+            project_id TEXT,
+            pr_number INTEGER,
+            review_status TEXT,
+            review_findings_count INTEGER,
+            review_blocking_findings_count INTEGER,
+            review_requested_at TEXT,
+            review_completed_at TEXT,
+            local_review_last_at TEXT,
+            updated_at TEXT
+        );
+        CREATE TABLE runs (
+            id INTEGER PRIMARY KEY,
+            status TEXT,
+            verify_exit_code INTEGER,
+            finished_at TEXT,
+            error_message TEXT
+        );
+        CREATE TABLE review_findings (
+            id INTEGER PRIMARY KEY,
+            project_id TEXT,
+            pr_number INTEGER,
+            updated_at TEXT,
+            created_at TEXT
         );
         """
     )
@@ -126,3 +197,52 @@ def test_anticipate_blockers_reports_capacity_and_head_of_line_failure() -> None
     assert "head_of_line_failure" in kinds
     assert "review_gate" in kinds
     assert "repeat_failure" in kinds
+
+
+def test_release_stale_zero_finding_local_reviews_ignores_old_findings_rows() -> None:
+    conn = _seed_db()
+    conn.execute(
+        "INSERT INTO work_packages(package_id, project_id, status, runtime_state, dependencies_json, latest_run_id, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("audit-task-11710", "mobile", "awaiting_review", "awaiting_review", "[]", 34143, None),
+    )
+    conn.execute(
+        """
+        INSERT INTO pull_requests(
+            id, package_id, project_id, pr_number, review_status,
+            review_findings_count, review_blocking_findings_count,
+            review_requested_at, review_completed_at, local_review_last_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            1,
+            "audit-task-11710",
+            "mobile",
+            0,
+            "local_review",
+            0,
+            0,
+            None,
+            None,
+            None,
+            "2026-04-22T13:27:37Z",
+        ),
+    )
+    conn.execute(
+        "INSERT INTO runs(id, status, verify_exit_code, finished_at, error_message) VALUES (?, ?, ?, ?, ?)",
+        (34143, "awaiting_review", 0, "2026-04-22T13:27:37Z", None),
+    )
+    conn.execute(
+        "INSERT INTO review_findings(id, project_id, pr_number, updated_at, created_at) VALUES (?, ?, ?, ?, ?)",
+        (889, "mobile", 0, "2026-03-14T00:26:02Z", "2026-03-14T00:03:43Z"),
+    )
+    app = FakeApp(conn)
+
+    released = keeper.release_stale_zero_finding_local_reviews(
+        app,
+        {},
+        stale_minutes=30,
+    )
+
+    assert [item["package_id"] for item in released] == ["audit-task-11710"]
+    assert app.updated_packages[0]["status"] == "complete"
+    assert conn.execute("SELECT COUNT(1) FROM review_findings WHERE project_id='mobile' AND pr_number=0").fetchone()[0] == 0
