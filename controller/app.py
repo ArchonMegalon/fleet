@@ -306,7 +306,7 @@ DESIGN_PROPOSAL_SCOPE_PATTERNS = (
     ".codex-studio/proposal/**",
 )
 PACKAGE_COMPILE_PACKAGE_KIND = "package_compile"
-AUTHORITY_PACKAGE_KINDS = {"contract_change", "integration", PACKAGE_COMPILE_PACKAGE_KIND}
+AUTHORITY_PACKAGE_KINDS = {"contract_change", "integration"}
 HORIZON_LOCKED_PACKAGE_KINDS = {"design_proposal", "contract_change", "integration"}
 RUNTIME_TASK_CACHE_KEY = "controller.runtime_tasks"
 WORK_PACKAGE_CACHE_KEY = "controller.work_packages"
@@ -2715,10 +2715,9 @@ def build_package_compile_work_item(
         "title": "Compile booster-ready work packages from queue truth",
         "package_kind": PACKAGE_COMPILE_PACKAGE_KIND,
         "source_ref": "quartermaster.package_compile",
-        "allowed_lanes": ["core_authority"],
+        "allowed_lanes": ["core_booster", "core_authority"],
         "allow_credit_burn": True,
         "premium_required": True,
-        "requires_contract_authority": True,
         "required_reviewer_lane": "core_authority",
         "final_reviewer_lane": "core_authority",
         "review_lane": "core_authority",

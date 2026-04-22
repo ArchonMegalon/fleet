@@ -184,7 +184,7 @@ def build_overlay(project_id: str, queue_items: List[Any], *, target_relpath: st
                 "package_kind": "package_compile",
                 "horizon_family": "package-compile",
                 "title": "Compile booster-ready work packages from queue truth",
-                "allowed_lanes": ["core_authority"],
+                "allowed_lanes": ["core_booster", "core_authority"],
                 "allow_credit_burn": True,
                 "premium_required": True,
                 "required_reviewer_lane": "core_authority",

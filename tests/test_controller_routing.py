@@ -8632,7 +8632,7 @@ class ControllerRoutingTests(unittest.TestCase):
         packages = self.controller.compile_project_work_packages(project_cfg, lanes=lanes)
 
         self.assertEqual(packages[0]["package_kind"], "package_compile")
-        self.assertEqual(packages[0]["task_meta"]["allowed_lanes"], ["core_authority"])
+        self.assertEqual(packages[0]["task_meta"]["allowed_lanes"], ["core_booster", "core_authority"])
         self.assertEqual(packages[0]["allowed_paths"], [".codex-studio/published/WORKPACKAGES.generated.yaml"])
         self.assertEqual(packages[1]["dependencies"], [packages[0]["package_id"]])
         self.assertEqual(packages[2]["dependencies"], [packages[0]["package_id"], packages[1]["package_id"]])

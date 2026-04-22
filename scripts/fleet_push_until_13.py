@@ -86,7 +86,7 @@ def main() -> int:
         for project_id in ready:
             try:
                 result = trigger_run_now(args.controller_url, project_id)
-            except urllib.error.URLError as exc:
+            except (urllib.error.URLError, TimeoutError, OSError) as exc:
                 print(f"{utc_now()} project={project_id} trigger_error={exc}", flush=True)
                 continue
             launched_any = launched_any or bool(result.get("launched"))

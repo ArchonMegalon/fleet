@@ -40,7 +40,7 @@ def test_materialize_package_compile_overlay_writes_queue_bound_front_package(tm
     manifest_payload = json.loads((published / "compile.manifest.json").read_text(encoding="utf-8"))
     package = payload["work_packages"][0]
     assert package["package_kind"] == "package_compile"
-    assert package["allowed_lanes"] == ["core_authority"]
+    assert package["allowed_lanes"] == ["core_booster", "core_authority"]
     assert package["allowed_paths"] == [".codex-studio/published/WORKPACKAGES.generated.yaml"]
     assert package["owned_surfaces"] == ["package_compile:ui"]
     assert "WORKPACKAGES.generated.yaml" in manifest_payload["artifacts"]
