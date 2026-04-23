@@ -1424,10 +1424,28 @@ items:
   - title: Render campaign primer and mission briefing bundles with captions, previews, and fallback siblings
     task: Render locale-matched cold-open and briefing bundles with captions, previews, and bounded fallback siblings.
     package_id: next90-m108-media-factory-campaign-briefing-renders
+    frontier_id: 4459920059
     work_task_id: 108.2
     milestone_id: 108
     wave: W10
     repo: chummer6-media-factory
+    status: complete
+    landed_commit: ef3f006
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M108 chummer6-media-factory campaign briefing bundles are complete; future shards must verify the campaign briefing render service, contract lane, smoke proof, generated media proof, canonical registry row, and queue mirrors instead of reopening the locale-matched bundle package.
+    proof:
+      - /docker/fleet/repos/chummer-media-factory/src/Chummer.Media.Factory.Runtime/Assets/CampaignBriefingBundleService.cs
+      - /docker/fleet/repos/chummer-media-factory/src/Chummer.Media.Contracts/Compatibility/RunServices/MediaFactoryContracts.cs
+      - /docker/fleet/repos/chummer-media-factory/tests/CampaignBriefingBundleSmoke/Program.cs
+      - /docker/fleet/repos/chummer-media-factory/tests/test_campaign_briefing_bundle_contracts.py
+      - /docker/fleet/repos/chummer-media-factory/tests/test_m108_campaign_briefing_proof.py
+      - /docker/fleet/repos/chummer-media-factory/tests/test_m108_successor_package_authority.py
+      - /docker/fleet/repos/chummer-media-factory/docs/NEXT90_M108_CAMPAIGN_BRIEFING_PROOF_FLOOR.md
+      - /docker/fleet/repos/chummer-media-factory/scripts/ai/materialize_media_release_proof.py
+      - /docker/fleet/repos/chummer-media-factory/scripts/ai/verify.sh
+      - python3 -m unittest tests.test_m108_successor_package_authority tests.test_m108_campaign_briefing_proof tests.test_campaign_briefing_bundle_contracts exits 0.
+      - dotnet run --project tests/CampaignBriefingBundleSmoke/Chummer.Media.Factory.CampaignBriefingBundleSmoke.csproj --configuration Release --nologo --verbosity quiet exits 0.
+      - ./scripts/ai/verify.sh exits 0.
     allowed_paths:
       - src
       - tests
@@ -1746,9 +1764,22 @@ items:
     task: Render install-aware release, support, and public concierge companions with captions, previews, and bounded sibling notes.
     package_id: next90-m111-media-factory-concierge-bundles
     work_task_id: 111.3
+    frontier_id: 4132724850
     milestone_id: 111
     wave: W9
     repo: chummer6-media-factory
+    status: in_progress
+    proof:
+      - /docker/fleet/repos/chummer-media-factory/src/Chummer.Media.Factory.Runtime/Assets/InstallAwareConciergeBundleService.cs
+      - /docker/fleet/repos/chummer-media-factory/src/Chummer.Media.Contracts/Compatibility/RunServices/MediaFactoryContracts.cs
+      - /docker/fleet/repos/chummer-media-factory/tests/InstallAwareConciergeSmoke/Program.cs
+      - /docker/fleet/repos/chummer-media-factory/tests/test_install_aware_concierge_rendering.py
+      - /docker/fleet/repos/chummer-media-factory/tests/test_m111_install_aware_concierge_proof.py
+      - /docker/fleet/repos/chummer-media-factory/tests/test_m111_successor_package_authority.py
+      - /docker/fleet/repos/chummer-media-factory/docs/NEXT90_M111_INSTALL_AWARE_CONCIERGE_PROOF_FLOOR.md
+      - /docker/fleet/repos/chummer-media-factory/scripts/ai/materialize_media_release_proof.py
+      - python3 -m unittest tests.test_m111_successor_package_authority tests.test_m111_install_aware_concierge_proof tests.test_install_aware_concierge_rendering exits 0
+      - dotnet run --project tests/InstallAwareConciergeSmoke/Chummer.Media.Factory.InstallAwareConciergeSmoke.csproj --configuration Release --nologo --verbosity quiet exits 0
     allowed_paths:
       - src
       - tests
