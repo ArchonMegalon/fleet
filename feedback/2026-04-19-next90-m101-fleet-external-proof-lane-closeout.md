@@ -46,6 +46,7 @@ The repeat-prevention rules are:
 - the zero-backlog command bundle still retains per-host preflight, capture, validate, bundle, ingest, and run entrypoints for Linux, macOS, and Windows
 - the finalize entrypoint still republishes after the per-host validate and ingest lanes remain available
 - the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state
+- HTML-entity encoded worker-helper citations are rejected before any queue, registry, runbook, support, journey, readiness, or closeout proof can keep the package closed
 
 ## Verification Run
 

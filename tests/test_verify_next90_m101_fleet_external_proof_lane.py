@@ -732,11 +732,25 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
         nested_base64_marker = base64.b64encode(base64_marker.encode("ascii")).decode("ascii")
         hex_marker = b"closed by TASK_LOCAL_TELEMETRY.generated.json".hex()
         url_marker = "closed%20by%20ACTIVE_RUN_HANDOFF.generated.md"
+        html_marker = "closed by TASK_LOCAL_&#84;ELEMETRY.generated.json"
 
         self.assertEqual(module._disallowed_entries([base64_marker]), [base64_marker])
         self.assertEqual(module._disallowed_entries([nested_base64_marker]), [nested_base64_marker])
         self.assertEqual(module._disallowed_entries([hex_marker]), [hex_marker])
         self.assertEqual(module._disallowed_entries([url_marker]), [url_marker])
+        self.assertEqual(module._disallowed_entries([html_marker]), [html_marker])
+
+    def test_verifier_fails_when_queue_proof_cites_html_entity_encoded_worker_helper_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            queue["items"][0]["proof"].append("closed by TASK_LOCAL_&#84;ELEMETRY.generated.json")
+            _write_yaml(fixture["queue"], queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue proof cites active-run telemetry/helper proof", result.stderr)
 
     def test_verifier_fails_when_queue_proof_cites_encoded_worker_helper_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

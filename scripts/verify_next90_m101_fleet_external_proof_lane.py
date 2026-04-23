@@ -5,6 +5,7 @@ import argparse
 import base64
 import binascii
 import hashlib
+import html
 import json
 import os
 import re
@@ -350,6 +351,9 @@ def _worker_proof_text_variants(text: str) -> list[str]:
     url_decoded = unquote(text)
     if url_decoded != text:
         variants.append(url_decoded)
+    html_decoded = html.unescape(text)
+    if html_decoded != text:
+        variants.append(html_decoded)
     if "\\" in text:
         try:
             escaped = text.encode("utf-8").decode("unicode_escape")
