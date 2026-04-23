@@ -343,6 +343,25 @@ def test_bundle_commands_clear_stale_bundle_archive_before_writing_host_bundle()
     assert "echo \"Wrote $BUNDLE_ARCHIVE\"" in commands
 
 
+def test_zero_backlog_bundle_commands_still_write_manifest_archive() -> None:
+    module = _load_runbook_module()
+
+    commands = module._bundle_commands_for_group(
+        {"requests": []},
+        host_token="linux",
+        host="linux",
+    )
+
+    assert "BUNDLE_ARCHIVE=\"$SCRIPT_DIR/linux-proof-bundle.tgz\"" in commands
+    assert "BUNDLE_ROOT=\"$SCRIPT_DIR/host-proof-bundles/linux\"" in commands
+    assert "rm -f \"$BUNDLE_ARCHIVE\"" in commands
+    assert any("external-proof-manifest.json" in command for command in commands)
+    assert any('"request_count": 0' in command for command in commands)
+    assert "echo 'No host proof files were queued for bundling.'" in commands
+    assert "tar -czf \"$BUNDLE_ARCHIVE\" -C \"$BUNDLE_ROOT\" ." in commands
+    assert "echo \"Wrote $BUNDLE_ARCHIVE\"" in commands
+
+
 def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates_when_support_plan_is_empty(
     tmp_path: Path,
 ) -> None:
@@ -414,6 +433,24 @@ def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates
         + "\n",
         encoding="utf-8",
     )
+    commands_dir = out.parent / "external-proof-commands"
+    stale_bundle_dir = commands_dir / "host-proof-bundles" / "macos"
+    stale_bundle_dir.mkdir(parents=True, exist_ok=True)
+    (stale_bundle_dir / "external-proof-manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "host": "macos",
+                "request_count": 1,
+                "requests": [{"tuple_id": "stale:osx-arm64:macos"}],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (stale_bundle_dir / "stale-proof.txt").write_text("stale\n", encoding="utf-8")
 
     result = subprocess.run(
         [
@@ -446,7 +483,7 @@ def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates
     finalize = commands_dir / "finalize-external-host-proof.sh"
     assert "run-desktop-startup-smoke.sh" in macos_capture.read_text(encoding="utf-8")
     assert 'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"' in macos_bundle.read_text(encoding="utf-8")
-    assert "tar -czf \"$SCRIPT_DIR/macos-proof-bundle.tgz\" -C \"$BUNDLE_ROOT\" ." in macos_bundle.read_text(
+    assert "tar -czf \"$BUNDLE_ARCHIVE\" -C \"$BUNDLE_ROOT\" ." in macos_bundle.read_text(
         encoding="utf-8"
     )
     assert "cp -f /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg" in macos_bundle.read_text(
@@ -925,7 +962,6 @@ def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -
 
     assert result.returncode == 0, result.stderr
     payload = out.read_text(encoding="utf-8")
-    commands_dir = out.parent / "external-proof-commands"
     assert "unresolved_request_count: 0" in payload
     assert "## Generated Command Files" in payload
     assert f"commands_dir: `{commands_dir}`" in payload
@@ -944,6 +980,14 @@ def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -
         assert f"./capture-{host}-proof.sh" in payload
         assert f"./validate-{host}-proof.sh" in payload
         assert f"./bundle-{host}-proof.sh" in payload
+        manifest_path = commands_dir / "host-proof-bundles" / host / "external-proof-manifest.json"
+        assert json.loads(manifest_path.read_text(encoding="utf-8")) == {
+            "schema_version": 1,
+            "host": host,
+            "request_count": 0,
+            "requests": [],
+        }
+    assert not (stale_bundle_dir / "stale-proof.txt").exists()
     assert f"- host_lane_powershell: `{commands_dir / 'run-windows-proof-lane.ps1'}`" in payload
     assert "### Resume Host Lane (PowerShell): windows" in payload
     assert "run-windows-proof-lane.ps1" in payload

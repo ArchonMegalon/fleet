@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 import shlex
 import tarfile
@@ -1234,13 +1235,13 @@ def _bundle_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
     ]
     if not bundle_paths:
         commands.append(f"echo {shlex.quote('No host proof files were queued for bundling.')}")
-        return commands
-    for rel in bundle_paths:
-        src = _ui_downloads_path_expr(rel)
-        dst = f"$BUNDLE_ROOT/{rel}"
-        dst_dir = f"$BUNDLE_ROOT/{Path(rel).parent.as_posix()}"
-        commands.append(f"mkdir -p \"{dst_dir}\"")
-        commands.append(f"cp -f \"{src}\" \"{dst}\"")
+    else:
+        for rel in bundle_paths:
+            src = _ui_downloads_path_expr(rel)
+            dst = f"$BUNDLE_ROOT/{rel}"
+            dst_dir = f"$BUNDLE_ROOT/{Path(rel).parent.as_posix()}"
+            commands.append(f"mkdir -p \"{dst_dir}\"")
+            commands.append(f"cp -f \"{src}\" \"{dst}\"")
     commands.extend(
         [
             "tar -czf \"$BUNDLE_ARCHIVE\" -C \"$BUNDLE_ROOT\" .",
@@ -1299,6 +1300,7 @@ def _ingest_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
             "bundle=pathlib.Path(os.environ['BUNDLE_ARCHIVE']); "
             "members=tarfile.open(bundle, 'r:gz').getmembers(); "
             "bad=[member.name for member in members if member.name.startswith('/') or '..' in pathlib.PurePosixPath(member.name).parts]; "
+            "assert not bad, 'external-proof-bundle-path-unsafe:' + ','.join(sorted(set(bad))); "
             "assert not any('..' in parts for parts in [pathlib.PurePosixPath(member.name).parts for member in members]), "
             "'external-proof-bundle-path-unsafe:' + ','.join(sorted(set(bad)))"
         ),
@@ -1847,6 +1849,19 @@ def _write_file(path: Path, content: str, *, executable: bool) -> None:
     os.chmod(path, mode)
 
 
+def _reset_zero_backlog_bundle_dir(bundle_dir: Path, expected_manifest: dict[str, Any]) -> None:
+    if int(expected_manifest.get("request_count") or 0) != 0:
+        return
+    if bundle_dir.exists():
+        shutil.rmtree(bundle_dir)
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = bundle_dir / "external-proof-manifest.json"
+    manifest_path.write_text(
+        json.dumps(expected_manifest, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def _materialize_command_files(
     plan: dict[str, Any], *, commands_dir: Path, journey_gates_path: Path | None = None, release_channel_path: Path | None = None
 ) -> dict[str, Any]:
@@ -1875,6 +1890,7 @@ def _materialize_command_files(
             bundle_archive, expected_manifest=expected_manifest
         ):
             bundle_archive.unlink()
+        _reset_zero_backlog_bundle_dir(host_bundles_root / host_token, expected_manifest)
         preflight_script = commands_dir / f"preflight-{host_token}-proof.sh"
         capture_script = commands_dir / f"capture-{host_token}-proof.sh"
         validation_script = commands_dir / f"validate-{host_token}-proof.sh"

@@ -1,13 +1,6 @@
 {
   "host": "windows",
-  "request_count": 1,
-  "requests": [
-    {
-      "expected_installer_bundle_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
-      "expected_installer_sha256": "cb3493c1113c23b5e496dfe8a1e6de9afc43c802d7da865adc5255497341e5c4",
-      "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
-      "tuple_id": "avalonia:win-x64:windows"
-    }
-  ],
+  "request_count": 0,
+  "requests": [],
   "schema_version": 1
 }

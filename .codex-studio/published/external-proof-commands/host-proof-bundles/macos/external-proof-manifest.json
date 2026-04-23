@@ -1,13 +1,6 @@
 {
   "host": "macos",
-  "request_count": 1,
-  "requests": [
-    {
-      "expected_installer_bundle_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
-      "expected_installer_sha256": "424b3216afedf86347494eea985cc1e7ceca7cb8cbf7aff04a475456a15973f4",
-      "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
-      "tuple_id": "avalonia:osx-arm64:macos"
-    }
-  ],
+  "request_count": 0,
+  "requests": [],
   "schema_version": 1
 }

@@ -1,12 +1,12 @@
 # External Proof Runbook
 
-- generated_at: 2026-04-22T16:45:55Z
+- generated_at: 2026-04-23T12:14:00Z
 - unresolved_request_count: 0
 - unresolved_hosts: (none)
-- plan_generated_at: 2026-04-22T16:45:53Z
-- release_channel_generated_at: 2026-04-21T15:36:03Z
+- plan_generated_at: 2026-04-23T12:13:57Z
+- release_channel_generated_at: 2026-04-23T11:38:59Z
 - capture_deadline_hours: 24
-- capture_deadline_utc: 2026-04-22T15:36:03Z
+- capture_deadline_utc: 2026-04-24T11:38:59Z
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@
 ## Generated Command Files
 
 - commands_dir: `/docker/fleet/.codex-studio/published/external-proof-commands`
-- command_bundle_sha256: `b5b6386f3929489c3e6afecdbba1ab154533e5cb9cd3c7e50ddd76c257515207`
+- command_bundle_sha256: `90e42fb971f67a0ce24d5d10985fe6f42f2fea230550b08a37bd0ab98aaf57e0`
 - command_bundle_file_count: 26
 - host `linux`
   preflight_script: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-linux-proof.sh`

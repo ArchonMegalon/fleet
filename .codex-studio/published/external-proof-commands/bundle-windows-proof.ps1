@@ -23,4 +23,8 @@ bash -lc 'python3 -c ''import json, os, pathlib; bundle_root=pathlib.Path(os.env
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 bash -lc 'echo ''No host proof files were queued for bundling.'''
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+bash -lc 'tar -czf "$BUNDLE_ARCHIVE" -C "$BUNDLE_ROOT" .'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+bash -lc 'echo "Wrote $BUNDLE_ARCHIVE"'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 exit 0

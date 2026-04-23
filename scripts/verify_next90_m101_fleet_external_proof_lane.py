@@ -159,6 +159,7 @@ REQUIRED_CLOSEOUT_NOTE_MARKERS = [
     "journey gates keep external-only blockers at zero",
     "flagship readiness keeps `external_host_proof.status=pass`",
     "the zero-backlog command bundle still retains per-host preflight, capture, validate, bundle, ingest, and run entrypoints for Linux, macOS, and Windows",
+    "the retained command bundle keeps `host-proof-bundles/linux`, `host-proof-bundles/macos`, and `host-proof-bundles/windows` present so ingest can resume without rebuilding the lane",
     "the finalize entrypoint still republishes after the per-host validate and ingest lanes remain available",
     "the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state",
 ]
@@ -220,6 +221,8 @@ REQUIRED_ZERO_BACKLOG_BUNDLE_TOKENS = (
     'rm -f "$BUNDLE_ARCHIVE"',
     "external-proof-manifest.json",
     '"request_count": 0',
+    'tar -czf "$BUNDLE_ARCHIVE" -C "$BUNDLE_ROOT" .',
+    'echo "Wrote $BUNDLE_ARCHIVE"',
 )
 REQUIRED_ZERO_BACKLOG_INGEST_TOKENS = (
     'BUNDLE_ARCHIVE="$SCRIPT_DIR/{host}-proof-bundle.tgz"',
@@ -230,6 +233,7 @@ REQUIRED_ZERO_BACKLOG_INGEST_TOKENS = (
     "external-proof-bundle-manifest-missing",
     "external-proof-bundle-manifest-mismatch",
     "external-proof-bundle-path-unsafe",
+    "assert not bad",
     'tar -xzf "$BUNDLE_ARCHIVE" -C "$TARGET_ROOT"',
     "No expected host proof files were queued for ingest.",
     '"request_count": 0',
@@ -545,6 +549,28 @@ def _require_file_tokens(path: Path, tokens: tuple[str, ...], issues: list[str],
     _require_tokens(payload, tokens, issues, label=label)
 
 
+def _expected_zero_backlog_manifest(host: str) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "host": host,
+        "request_count": 0,
+        "requests": [],
+    }
+
+
+def _load_retained_bundle_manifest(bundle_dir: Path, issues: list[str], *, host: str) -> dict[str, Any]:
+    manifest_path = bundle_dir / "external-proof-manifest.json"
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        issues.append(f"external proof retained host bundle manifest is missing or invalid for {host}: {manifest_path}: {exc}")
+        return {}
+    if not isinstance(payload, dict):
+        issues.append(f"external proof retained host bundle manifest is not an object for {host}: {manifest_path}")
+        return {}
+    return payload
+
+
 def verify(args: argparse.Namespace) -> Dict[str, Any]:
     issues: list[str] = []
     support_packets_path = Path(args.support_packets).resolve()
@@ -585,6 +611,8 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
     release_generated_at = _normalize_text(
         release_channel.get("generatedAt") or release_channel.get("generated_at")
     )
+    raw_release_tuple_coverage = release_channel.get("desktopTupleCoverage")
+    release_tuple_coverage = dict(raw_release_tuple_coverage) if isinstance(raw_release_tuple_coverage, dict) else {}
     runbook_generated_at = _extract_runbook_field(runbook_body, "generated_at")
     runbook_plan_generated_at = _extract_runbook_field(runbook_body, "plan_generated_at")
     runbook_release_generated_at = _extract_runbook_field(runbook_body, "release_channel_generated_at")
@@ -628,6 +656,32 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
             issues,
             "flagship readiness generated_at predates external proof runbook generated_at",
         )
+
+    _require(
+        isinstance(raw_release_tuple_coverage, dict),
+        issues,
+        "release channel desktopTupleCoverage is missing or not an object",
+    )
+    _require(
+        _normalize_list(release_tuple_coverage.get("missingRequiredPlatforms")) == [],
+        issues,
+        "release channel desktopTupleCoverage.missingRequiredPlatforms is not empty",
+    )
+    _require(
+        _normalize_list(release_tuple_coverage.get("missingRequiredPlatformHeadPairs")) == [],
+        issues,
+        "release channel desktopTupleCoverage.missingRequiredPlatformHeadPairs is not empty",
+    )
+    _require(
+        _normalize_list(release_tuple_coverage.get("missingRequiredPlatformHeadRidTuples")) == [],
+        issues,
+        "release channel desktopTupleCoverage.missingRequiredPlatformHeadRidTuples is not empty",
+    )
+    _require(
+        _normalize_list(release_tuple_coverage.get("externalProofRequests")) == [],
+        issues,
+        "release channel desktopTupleCoverage.externalProofRequests is not empty",
+    )
 
     _require(
         _coerce_int(support_summary.get("unresolved_external_proof_request_count"), -1) == 0,
@@ -773,6 +827,15 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
             f"- retained_bundle_directory_path: `{retained_bundle_directory_path}`" in runbook_body,
             issues,
             f"external proof runbook retained bundle directory path drifted for {host}",
+        )
+        _require(
+            (
+                f"- retained_bundle_directory_path: `{retained_bundle_directory_path}`\n"
+                "- retained_bundle_directory_present: `true`"
+            )
+            in runbook_body,
+            issues,
+            f"external proof runbook does not report retained bundle directory present for {host}",
         )
     _require(
         f"- host_lane_powershell: `{commands_dir_path / 'run-windows-proof-lane.ps1'}`" in runbook_body,
@@ -1022,6 +1085,18 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
             lane_path = commands_dir_path / f"run-{host}-proof-lane.sh"
             bundle_path = commands_dir_path / f"bundle-{host}-proof.sh"
             ingest_path = commands_dir_path / f"ingest-{host}-proof-bundle.sh"
+            retained_bundle_dir = commands_dir_path / "host-proof-bundles" / host
+            _require(
+                retained_bundle_dir.is_dir(),
+                issues,
+                f"external proof retained host bundle directory is missing for {host}: {retained_bundle_dir}",
+            )
+            retained_manifest = _load_retained_bundle_manifest(retained_bundle_dir, issues, host=host)
+            _require(
+                retained_manifest == _expected_zero_backlog_manifest(host),
+                issues,
+                f"external proof retained host bundle manifest is not zero-backlog for {host}",
+            )
             if lane_path.is_file():
                 lane_body = lane_path.read_text(encoding="utf-8")
                 for token in (
@@ -1157,6 +1232,18 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
         issues.append(f"closeout note missing marker: {marker}")
     for entry in _disallowed_entries([runbook_body]):
         issues.append(f"external proof runbook cites active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_entries([json.dumps(support_summary, sort_keys=True)]):
+        issues.append(f"support packets summary cites active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_entries([json.dumps(unresolved_backlog, sort_keys=True)]):
+        issues.append(f"support packets unresolved_external_proof cites active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_entries([json.dumps(execution_plan, sort_keys=True)]):
+        issues.append(f"support packets external-proof execution plan cites active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_entries([json.dumps(journey_summary, sort_keys=True)]):
+        issues.append(f"journey gates summary cites active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_entries([json.dumps(journey_rows, sort_keys=True)]):
+        issues.append(f"journey gate rows cite active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_entries([json.dumps(release_tuple_coverage, sort_keys=True)]):
+        issues.append(f"release channel desktopTupleCoverage cites active-run telemetry/helper proof: {entry}")
     for entry in _disallowed_entries([json.dumps(external_host_proof, sort_keys=True)]):
         issues.append(f"flagship readiness external_host_proof cites active-run telemetry/helper proof: {entry}")
     for entry in _disallowed_entries([json.dumps(fleet_evidence, sort_keys=True)]):

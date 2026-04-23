@@ -12,3 +12,5 @@ mkdir -p "$BUNDLE_ROOT"
 rm -f "$BUNDLE_ARCHIVE"
 python3 -c 'import json, os, pathlib; bundle_root=pathlib.Path(os.environ['"'"'BUNDLE_ROOT'"'"']); payload=json.loads('"'"'{"host": "windows", "request_count": 0, "requests": [], "schema_version": 1}'"'"'); manifest_path=bundle_root / '"'"'external-proof-manifest.json'"'"'; manifest_path.write_text(json.dumps(payload, sort_keys=True, indent=2) + '"'"'\n'"'"', encoding='"'"'utf-8'"'"')'
 echo 'No host proof files were queued for bundling.'
+tar -czf "$BUNDLE_ARCHIVE" -C "$BUNDLE_ROOT" .
+echo "Wrote $BUNDLE_ARCHIVE"

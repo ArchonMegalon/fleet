@@ -1,19 +1,6 @@
 {
   "host": "linux",
-  "request_count": 2,
-  "requests": [
-    {
-      "expected_installer_bundle_relative_path": "files/chummer-avalonia-linux-x64-installer.deb",
-      "expected_installer_sha256": "",
-      "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json",
-      "tuple_id": "avalonia:linux-x64:linux"
-    },
-    {
-      "expected_installer_bundle_relative_path": "files/chummer-blazor-desktop-linux-x64-installer.deb",
-      "expected_installer_sha256": "",
-      "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-linux-x64.receipt.json",
-      "tuple_id": "blazor-desktop:linux-x64:linux"
-    }
-  ],
+  "request_count": 0,
+  "requests": [],
   "schema_version": 1
 }

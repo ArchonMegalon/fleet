@@ -52,7 +52,7 @@ assert copied, ''"''"''external-proof-bundle-empty:''"''"'' + str(bundle_dir)'''
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 bash -lc 'else'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-bash -lc 'python3 -c ''import os, pathlib, tarfile; bundle=pathlib.Path(os.environ[''"''"''BUNDLE_ARCHIVE''"''"'']); members=tarfile.open(bundle, ''"''"''r:gz''"''"'').getmembers(); bad=[member.name for member in members if member.name.startswith(''"''"''/''"''"'') or ''"''"''..''"''"'' in pathlib.PurePosixPath(member.name).parts]; assert not any(''"''"''..''"''"'' in parts for parts in [pathlib.PurePosixPath(member.name).parts for member in members]), ''"''"''external-proof-bundle-path-unsafe:''"''"'' + ''"''"'',''"''"''.join(sorted(set(bad)))'''
+bash -lc 'python3 -c ''import os, pathlib, tarfile; bundle=pathlib.Path(os.environ[''"''"''BUNDLE_ARCHIVE''"''"'']); members=tarfile.open(bundle, ''"''"''r:gz''"''"'').getmembers(); bad=[member.name for member in members if member.name.startswith(''"''"''/''"''"'') or ''"''"''..''"''"'' in pathlib.PurePosixPath(member.name).parts]; assert not bad, ''"''"''external-proof-bundle-path-unsafe:''"''"'' + ''"''"'',''"''"''.join(sorted(set(bad))); assert not any(''"''"''..''"''"'' in parts for parts in [pathlib.PurePosixPath(member.name).parts for member in members]), ''"''"''external-proof-bundle-path-unsafe:''"''"'' + ''"''"'',''"''"''.join(sorted(set(bad)))'''
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 bash -lc 'tar -xzf "$BUNDLE_ARCHIVE" -C "$TARGET_ROOT"'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -390,6 +390,7 @@ def _closed_fixture(tmp_path: Path):
                 "- journey gates keep external-only blockers at zero",
                 "- flagship readiness keeps `external_host_proof.status=pass`",
                 "- the zero-backlog command bundle still retains per-host preflight, capture, validate, bundle, ingest, and run entrypoints for Linux, macOS, and Windows",
+                "- the retained command bundle keeps `host-proof-bundles/linux`, `host-proof-bundles/macos`, and `host-proof-bundles/windows` present so ingest can resume without rebuilding the lane",
                 "- the finalize entrypoint still republishes after the per-host validate and ingest lanes remain available",
                 "- the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state",
                 "",
@@ -480,6 +481,22 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             )
             self.assertIn("external-proof-bundle-manifest-missing", result.stderr)
 
+    def test_verifier_fails_when_zero_backlog_ingest_loses_absolute_archive_member_rejection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            ingest_script = fixture["commands_dir"] / "ingest-linux-proof-bundle.sh"
+            ingest_payload = ingest_script.read_text(encoding="utf-8")
+            ingest_script.write_text(
+                ingest_payload.replace("assert not bad, ", "assert True or bad, "),
+                encoding="utf-8",
+            )
+            result = _run_verifier(fixture)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof zero-backlog ingest script for linux missing required token: assert not bad",
+                result.stderr,
+            )
+
     def test_verifier_fails_when_zero_backlog_bundle_loses_manifest_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fixture = _closed_fixture(Path(tmp))
@@ -493,6 +510,26 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(
                 "external proof zero-backlog bundle script for macos missing required token: external-proof-manifest.json",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_zero_backlog_bundle_does_not_write_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            bundle_script = fixture["commands_dir"] / "bundle-linux-proof.sh"
+            bundle_payload = bundle_script.read_text(encoding="utf-8")
+            bundle_script.write_text(
+                bundle_payload.replace(
+                    'tar -czf "$BUNDLE_ARCHIVE" -C "$BUNDLE_ROOT" .',
+                    "echo archive-disabled",
+                ),
+                encoding="utf-8",
+            )
+            result = _run_verifier(fixture)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof zero-backlog bundle script for linux missing required token: "
+                'tar -czf "$BUNDLE_ARCHIVE" -C "$BUNDLE_ROOT" .',
                 result.stderr,
             )
 
@@ -560,6 +597,78 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("external proof command artifact is missing", result.stderr)
             self.assertIn("run-macos-proof-lane.sh", result.stderr)
+
+    def test_verifier_fails_when_retained_host_bundle_directory_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            retained_dir = fixture["commands_dir"] / "host-proof-bundles" / "macos"
+            for child in sorted(retained_dir.rglob("*"), reverse=True):
+                if child.is_file():
+                    child.unlink()
+                else:
+                    child.rmdir()
+            retained_dir.rmdir()
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof retained host bundle directory is missing for macos",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_retained_host_bundle_manifest_is_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            manifest_path = (
+                fixture["commands_dir"]
+                / "host-proof-bundles"
+                / "windows"
+                / "external-proof-manifest.json"
+            )
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "host": "windows",
+                        "request_count": 1,
+                        "requests": [{"tuple_id": "avalonia:win-x64:windows"}],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof retained host bundle manifest is not zero-backlog for windows",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_runbook_denies_retained_bundle_directory_presence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            runbook_payload = fixture["runbook"].read_text(encoding="utf-8")
+            fixture["runbook"].write_text(
+                runbook_payload.replace(
+                    "- retained_bundle_directory_present: `true`",
+                    "- retained_bundle_directory_present: `false`",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof runbook does not report retained bundle directory present",
+                result.stderr,
+            )
 
     def test_verifier_fails_when_zero_backlog_runbook_drops_retained_host_lanes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -816,6 +925,55 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("external proof runbook cites active-run telemetry/helper proof", result.stderr)
 
+    def test_verifier_fails_when_support_packet_cites_worker_local_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            support_packets = json.loads(fixture["support_packets"].read_text(encoding="utf-8"))
+            support_packets["summary"]["operator_note"] = "Closed by supervisor eta helper output"
+            support_packets["unresolved_external_proof"][
+                "operator_note"
+            ] = "Closed from ACTIVE_RUN_HANDOFF.generated.md"
+            support_packets["unresolved_external_proof_execution_plan"][
+                "operator_note"
+            ] = "Closed from TASK_LOCAL_TELEMETRY.generated.json"
+            _write_json(fixture["support_packets"], support_packets)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "support packets summary cites active-run telemetry/helper proof",
+                result.stderr,
+            )
+            self.assertIn(
+                "support packets unresolved_external_proof cites active-run telemetry/helper proof",
+                result.stderr,
+            )
+            self.assertIn(
+                "support packets external-proof execution plan cites active-run telemetry/helper proof",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_journey_gate_cites_worker_local_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            journey_gates = json.loads(fixture["journey_gates"].read_text(encoding="utf-8"))
+            journey_gates["summary"]["operator_note"] = "Closed from chummer_design_supervisor.py eta"
+            journey_gates["journeys"][0]["operator_note"] = "Closed by --telemetry-answer"
+            _write_json(fixture["journey_gates"], journey_gates)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "journey gates summary cites active-run telemetry/helper proof",
+                result.stderr,
+            )
+            self.assertIn(
+                "journey gate rows cite active-run telemetry/helper proof",
+                result.stderr,
+            )
+
     def test_verifier_fails_when_retained_command_cites_worker_helper(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fixture = _closed_fixture(Path(tmp))
@@ -873,6 +1031,44 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
                 result.stderr,
             )
             self.assertIn("fleet coverage evidence cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_release_channel_reopens_external_proof_requests(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            release_channel = json.loads(fixture["release_channel"].read_text(encoding="utf-8"))
+            release_channel["desktopTupleCoverage"]["externalProofRequests"] = [
+                {
+                    "tupleId": "avalonia:osx-arm64:macos",
+                    "requiredHost": "macos",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                }
+            ]
+            _write_json(fixture["release_channel"], release_channel)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "release channel desktopTupleCoverage.externalProofRequests is not empty",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_release_channel_cites_worker_local_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            release_channel = json.loads(fixture["release_channel"].read_text(encoding="utf-8"))
+            release_channel["desktopTupleCoverage"][
+                "operator_note"
+            ] = "Closed from TASK_LOCAL_TELEMETRY.generated.json"
+            _write_json(fixture["release_channel"], release_channel)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "release channel desktopTupleCoverage cites active-run telemetry/helper proof",
+                result.stderr,
+            )
 
     def test_verifier_fails_when_readiness_command_bundle_fingerprint_drifts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
