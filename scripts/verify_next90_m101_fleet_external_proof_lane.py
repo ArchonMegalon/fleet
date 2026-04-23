@@ -2,13 +2,18 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
+from urllib.parse import unquote
 
 import yaml
 
@@ -57,6 +62,8 @@ RELEASE_CHANNEL = (
 )
 CLOSEOUT_NOTE = ROOT / "feedback" / "2026-04-19-next90-m101-fleet-external-proof-lane-closeout.md"
 EXTERNAL_PROOF_CLOSURE_VERIFIER = ROOT / "scripts" / "verify_external_proof_closure.py"
+BOOTSTRAP_GUARD = ROOT / "scripts" / "verify_script_bootstrap_no_pythonpath.py"
+BOOTSTRAP_GUARD_TEST = ROOT / "tests" / "test_fleet_script_bootstrap_without_pythonpath.py"
 RELEVANT_JOURNEY_IDS = (
     "install_claim_restore_continue",
     "build_explain_publish",
@@ -70,6 +77,15 @@ DISALLOWED_WORKER_PROOF_MARKERS = (
     "frontier ids:",
     "open milestone ids:",
     "successor frontier detail:",
+    "active-run telemetry",
+    "active-run helper",
+    "operator-telemetry",
+    "worker-run telemetry",
+    "control-plane helper output",
+    "run-state helper output",
+    "helper output",
+    "supervisor status",
+    "supervisor eta",
     "mode: successor_wave",
     "active run",
     "run id:",
@@ -161,6 +177,12 @@ REQUIRED_ANCHOR_PATHS = [
     PUBLISHED / "FLAGSHIP_PRODUCT_READINESS.generated.json",
     CLOSEOUT_NOTE,
 ]
+REQUIRED_BOOTSTRAP_GUARD_TOKENS = (
+    "verify_external_proof_closure.py",
+    "materialize_external_proof_runbook.py",
+    "verify_next90_m101_fleet_external_proof_lane.py",
+    "materialize_proof_orchestration.py",
+)
 EXPECTED_COMMAND_PATHS = [
     "host-proof-bundles",
     "republish-after-host-proof.sh",
@@ -190,6 +212,27 @@ EXPECTED_COMMAND_PATHS = [
     "ingest-windows-proof-bundle.ps1",
     "run-windows-proof-lane.ps1",
 ]
+COMMAND_BUNDLE_SUFFIXES = frozenset({".sh", ".ps1"})
+REQUIRED_ZERO_BACKLOG_BUNDLE_TOKENS = (
+    'BUNDLE_ARCHIVE="$SCRIPT_DIR/{host}-proof-bundle.tgz"',
+    'BUNDLE_ROOT="$SCRIPT_DIR/host-proof-bundles/{host}"',
+    'rm -f "$BUNDLE_ARCHIVE"',
+    "external-proof-manifest.json",
+    '"request_count": 0',
+)
+REQUIRED_ZERO_BACKLOG_INGEST_TOKENS = (
+    'BUNDLE_ARCHIVE="$SCRIPT_DIR/{host}-proof-bundle.tgz"',
+    'BUNDLE_DIR="$SCRIPT_DIR/host-proof-bundles/{host}"',
+    "TARGET_ROOT=",
+    'Missing host proof bundle: $BUNDLE_ARCHIVE or $BUNDLE_DIR',
+    "external-proof-manifest.json",
+    "external-proof-bundle-manifest-missing",
+    "external-proof-bundle-manifest-mismatch",
+    "external-proof-bundle-path-unsafe",
+    'tar -xzf "$BUNDLE_ARCHIVE" -C "$TARGET_ROOT"',
+    "No expected host proof files were queued for ingest.",
+    '"request_count": 0',
+)
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
@@ -292,10 +335,67 @@ def _disallowed_entries(entries: list[Any]) -> list[str]:
     blocked: list[str] = []
     for entry in entries:
         text = _normalize_text(entry)
-        lower = text.lower()
-        if any(marker.lower() in lower for marker in DISALLOWED_WORKER_PROOF_MARKERS):
+        lowered_variants = [variant.lower() for variant in _worker_proof_text_variants(text)]
+        if any(
+            marker.lower() in lowered_variant
+            for marker in DISALLOWED_WORKER_PROOF_MARKERS
+            for lowered_variant in lowered_variants
+        ):
             blocked.append(text)
     return blocked
+
+
+def _worker_proof_text_variants(text: str) -> list[str]:
+    variants = [text]
+    url_decoded = unquote(text)
+    if url_decoded != text:
+        variants.append(url_decoded)
+    if "\\" in text:
+        try:
+            escaped = text.encode("utf-8").decode("unicode_escape")
+        except UnicodeDecodeError:
+            escaped = ""
+        if escaped and escaped != text:
+            variants.append(escaped)
+    variants.extend(_decoded_worker_proof_tokens(text))
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for variant in variants:
+        if variant not in seen:
+            deduped.append(variant)
+            seen.add(variant)
+    return deduped
+
+
+def _decoded_worker_proof_tokens(text: str) -> list[str]:
+    decoded: list[str] = []
+    for token in re.findall(r"\b[0-9A-Fa-f]{24,}\b", text):
+        if len(token) % 2:
+            continue
+        try:
+            decoded.append(bytes.fromhex(token).decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            continue
+    for token in re.findall(r"\b[A-Za-z0-9+/_-]{20,}={0,2}\b", text):
+        padded = token + ("=" * (-len(token) % 4))
+        try:
+            decoded.append(base64.b64decode(padded, validate=True).decode("utf-8"))
+            continue
+        except (binascii.Error, UnicodeDecodeError):
+            pass
+        try:
+            decoded.append(base64.urlsafe_b64decode(padded).decode("utf-8"))
+        except (binascii.Error, UnicodeDecodeError):
+            continue
+    return decoded
+
+
+def _disallowed_payload_entries(value: Any) -> list[str]:
+    try:
+        text = json.dumps(value, sort_keys=True)
+    except TypeError:
+        text = _normalize_text(value)
+    return _disallowed_entries([text])
 
 
 def _extract_runbook_field(markdown: str, key: str) -> str:
@@ -305,6 +405,40 @@ def _extract_runbook_field(markdown: str, key: str) -> str:
         if line.startswith(needle):
             return line[len(needle) :].strip().strip("`")
     return ""
+
+
+def _command_bundle_fingerprint(commands_dir: Path) -> dict[str, Any]:
+    files: list[dict[str, Any]] = []
+    aggregate = hashlib.sha256()
+    if not commands_dir.exists():
+        return {"sha256": "", "file_count": 0, "files": files}
+    for candidate in sorted(
+        path
+        for path in commands_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() in COMMAND_BUNDLE_SUFFIXES
+    ):
+        relative_path = candidate.relative_to(commands_dir).as_posix()
+        payload = candidate.read_bytes()
+        file_sha256 = hashlib.sha256(payload).hexdigest()
+        executable = os.access(candidate, os.X_OK)
+        aggregate.update(relative_path.encode("utf-8"))
+        aggregate.update(b"\0")
+        aggregate.update(file_sha256.encode("ascii"))
+        aggregate.update(b"\0")
+        aggregate.update(b"1" if executable else b"0")
+        aggregate.update(b"\n")
+        files.append(
+            {
+                "path": relative_path,
+                "sha256": file_sha256,
+                "executable": executable,
+            }
+        )
+    return {
+        "sha256": aggregate.hexdigest() if files else "",
+        "file_count": len(files),
+        "files": files,
+    }
 
 
 def _queue_item(queue: Dict[str, Any], package_id: str) -> tuple[list[Dict[str, Any]], Dict[str, Any]]:
@@ -377,6 +511,21 @@ def _require(condition: bool, issues: list[str], message: str) -> None:
         issues.append(message)
 
 
+def _require_tokens(payload: str, tokens: tuple[str, ...], issues: list[str], *, label: str) -> None:
+    for token in tokens:
+        if token not in payload:
+            issues.append(f"{label} missing required token: {token}")
+
+
+def _require_file_tokens(path: Path, tokens: tuple[str, ...], issues: list[str], *, label: str) -> None:
+    try:
+        payload = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        issues.append(f"{label} is missing or unreadable: {path}: {exc}")
+        return
+    _require_tokens(payload, tokens, issues, label=label)
+
+
 def verify(args: argparse.Namespace) -> Dict[str, Any]:
     issues: list[str] = []
     support_packets_path = Path(args.support_packets).resolve()
@@ -423,6 +572,14 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
     runbook_unresolved_request_count = _extract_runbook_field(runbook_body, "unresolved_request_count")
     runbook_unresolved_hosts = _extract_runbook_field(runbook_body, "unresolved_hosts")
     runbook_capture_deadline_hours = _extract_runbook_field(runbook_body, "capture_deadline_hours")
+    runbook_command_bundle_sha256 = _extract_runbook_field(runbook_body, "command_bundle_sha256")
+    runbook_command_bundle_file_count = _coerce_int(
+        _extract_runbook_field(runbook_body, "command_bundle_file_count"),
+        -1,
+    )
+    command_bundle = _command_bundle_fingerprint(commands_dir_path)
+    command_bundle_sha256 = _normalize_text(command_bundle.get("sha256"))
+    command_bundle_file_count = _coerce_int(command_bundle.get("file_count"), -1)
     readiness_generated_at = _normalize_text(flagship_readiness.get("generated_at"))
     external_host_proof = dict(flagship_readiness.get("external_host_proof") or {})
     fleet_coverage = dict(
@@ -542,6 +699,26 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
         runbook_capture_deadline_hours == "24",
         issues,
         "external proof runbook capture_deadline_hours is not 24",
+    )
+    _require(
+        bool(command_bundle_sha256),
+        issues,
+        "external proof retained command bundle fingerprint is empty",
+    )
+    _require(
+        command_bundle_file_count == len(EXPECTED_COMMAND_PATHS) - 1,
+        issues,
+        "external proof retained command bundle file count drifted from expected script inventory",
+    )
+    _require(
+        runbook_command_bundle_sha256 == command_bundle_sha256,
+        issues,
+        "external proof runbook command_bundle_sha256 drifted from retained command bundle",
+    )
+    _require(
+        runbook_command_bundle_file_count == command_bundle_file_count,
+        issues,
+        "external proof runbook command_bundle_file_count drifted from retained command bundle",
     )
     _require(
         "No unresolved external-proof requests are currently queued." in runbook_body,
@@ -688,6 +865,32 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
         "flagship readiness external_host_proof.runbook_release_channel_generated_at drifted",
     )
     _require(
+        _normalize_text(external_host_proof.get("commands_dir")) == str(commands_dir_path),
+        issues,
+        "flagship readiness external_host_proof.commands_dir drifted",
+    )
+    _require(
+        _normalize_text(external_host_proof.get("command_bundle_sha256")) == command_bundle_sha256,
+        issues,
+        "flagship readiness external_host_proof.command_bundle_sha256 drifted from retained command bundle",
+    )
+    _require(
+        _coerce_int(external_host_proof.get("command_bundle_file_count"), -1) == command_bundle_file_count,
+        issues,
+        "flagship readiness external_host_proof.command_bundle_file_count drifted from retained command bundle",
+    )
+    _require(
+        _normalize_text(external_host_proof.get("runbook_command_bundle_sha256")) == runbook_command_bundle_sha256,
+        issues,
+        "flagship readiness external_host_proof.runbook_command_bundle_sha256 drifted from runbook",
+    )
+    _require(
+        _coerce_int(external_host_proof.get("runbook_command_bundle_file_count"), -1)
+        == runbook_command_bundle_file_count,
+        issues,
+        "flagship readiness external_host_proof.runbook_command_bundle_file_count drifted from runbook",
+    )
+    _require(
         _coerce_int(fleet_evidence.get("external_proof_backlog_request_count"), -1) == 0,
         issues,
         "fleet coverage external_proof_backlog_request_count is not zero",
@@ -733,6 +936,32 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
         "fleet coverage external_proof_runbook_release_channel_generated_at drifted",
     )
     _require(
+        _normalize_text(fleet_evidence.get("external_proof_commands_dir")) == str(commands_dir_path),
+        issues,
+        "fleet coverage external_proof_commands_dir drifted",
+    )
+    _require(
+        _normalize_text(fleet_evidence.get("external_proof_command_bundle_sha256")) == command_bundle_sha256,
+        issues,
+        "fleet coverage external_proof_command_bundle_sha256 drifted from retained command bundle",
+    )
+    _require(
+        _coerce_int(fleet_evidence.get("external_proof_command_bundle_file_count"), -1) == command_bundle_file_count,
+        issues,
+        "fleet coverage external_proof_command_bundle_file_count drifted from retained command bundle",
+    )
+    _require(
+        _normalize_text(fleet_evidence.get("external_proof_runbook_command_bundle_sha256")) == runbook_command_bundle_sha256,
+        issues,
+        "fleet coverage external_proof_runbook_command_bundle_sha256 drifted from runbook",
+    )
+    _require(
+        _coerce_int(fleet_evidence.get("external_proof_runbook_command_bundle_file_count"), -1)
+        == runbook_command_bundle_file_count,
+        issues,
+        "fleet coverage external_proof_runbook_command_bundle_file_count drifted from runbook",
+    )
+    _require(
         _coerce_int(fleet_evidence.get("journey_effective_blocked_external_only_count"), -1) == 0,
         issues,
         "fleet coverage journey_effective_blocked_external_only_count is not zero",
@@ -745,6 +974,18 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
 
     for path in REQUIRED_ANCHOR_PATHS:
         _require(path.exists(), issues, f"required proof anchor is missing on disk: {path}")
+    _require_file_tokens(
+        BOOTSTRAP_GUARD,
+        REQUIRED_BOOTSTRAP_GUARD_TOKENS,
+        issues,
+        label="pythonpath bootstrap guard script",
+    )
+    _require_file_tokens(
+        BOOTSTRAP_GUARD_TEST,
+        REQUIRED_BOOTSTRAP_GUARD_TOKENS,
+        issues,
+        label="pythonpath bootstrap guard test",
+    )
 
     if not commands_dir_path.is_dir():
         issues.append(f"external proof commands directory is missing: {commands_dir_path}")
@@ -754,8 +995,14 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
             _require(candidate.exists(), issues, f"external proof command artifact is missing: {candidate}")
             if candidate.exists() and candidate.is_file() and candidate.suffix == ".sh":
                 _require(os.access(candidate, os.X_OK), issues, f"external proof command is not executable: {candidate}")
+            if candidate.exists() and candidate.is_file() and candidate.suffix.lower() in COMMAND_BUNDLE_SUFFIXES:
+                command_body = candidate.read_text(encoding="utf-8")
+                for entry in _disallowed_entries([command_body]):
+                    issues.append(f"external proof command cites active-run telemetry/helper proof: {candidate}: {entry}")
         for host in ("linux", "macos", "windows"):
             lane_path = commands_dir_path / f"run-{host}-proof-lane.sh"
+            bundle_path = commands_dir_path / f"bundle-{host}-proof.sh"
+            ingest_path = commands_dir_path / f"ingest-{host}-proof-bundle.sh"
             if lane_path.is_file():
                 lane_body = lane_path.read_text(encoding="utf-8")
                 for token in (
@@ -769,6 +1016,22 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
                         issues,
                         f"external proof host lane script is missing required token for {host}: {token}",
                     )
+            if bundle_path.is_file():
+                bundle_body = bundle_path.read_text(encoding="utf-8")
+                _require_tokens(
+                    bundle_body,
+                    tuple(token.format(host=host) for token in REQUIRED_ZERO_BACKLOG_BUNDLE_TOKENS),
+                    issues,
+                    label=f"external proof zero-backlog bundle script for {host}",
+                )
+            if ingest_path.is_file():
+                ingest_body = ingest_path.read_text(encoding="utf-8")
+                _require_tokens(
+                    ingest_body,
+                    tuple(token.format(host=host) for token in REQUIRED_ZERO_BACKLOG_INGEST_TOKENS),
+                    issues,
+                    label=f"external proof zero-backlog ingest script for {host}",
+                )
         finalize_path = commands_dir_path / "finalize-external-host-proof.sh"
         if finalize_path.is_file():
             finalize_body = finalize_path.read_text(encoding="utf-8")
@@ -787,6 +1050,19 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
                         issues,
                         f"external proof finalize script is missing required token for {host}: {token}",
                     )
+                validate_index = finalize_body.find(f"./validate-{host}-proof.sh")
+                ingest_index = finalize_body.find(f"./ingest-{host}-proof-bundle.sh")
+                republish_index = finalize_body.find("./republish-after-host-proof.sh")
+                _require(
+                    validate_index >= 0 and ingest_index >= 0 and validate_index < ingest_index,
+                    issues,
+                    f"external proof finalize script must validate before ingest for {host}",
+                )
+                _require(
+                    ingest_index >= 0 and republish_index >= 0 and ingest_index < republish_index,
+                    issues,
+                    f"external proof finalize script must ingest {host} before republish",
+                )
 
     queue_item_matches, queue_item = _queue_item(queue, PACKAGE_ID)
     design_item_matches, design_item = _queue_item(design_queue, PACKAGE_ID)
@@ -852,8 +1128,20 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
         issues.append(f"queue proof cites active-run telemetry/helper proof: {entry}")
     for entry in _disallowed_entries(design_proof):
         issues.append(f"design queue proof cites active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_payload_entries(work_task):
+        issues.append(f"registry work task cites active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_payload_entries(queue_item):
+        issues.append(f"queue item cites active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_payload_entries(design_item):
+        issues.append(f"design queue item cites active-run telemetry/helper proof: {entry}")
     for marker in _missing_markers([closeout_note_body], REQUIRED_CLOSEOUT_NOTE_MARKERS):
         issues.append(f"closeout note missing marker: {marker}")
+    for entry in _disallowed_entries([runbook_body]):
+        issues.append(f"external proof runbook cites active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_entries([json.dumps(external_host_proof, sort_keys=True)]):
+        issues.append(f"flagship readiness external_host_proof cites active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_entries([json.dumps(fleet_evidence, sort_keys=True)]):
+        issues.append(f"fleet coverage evidence cites active-run telemetry/helper proof: {entry}")
     for entry in _disallowed_entries([closeout_note_body]):
         issues.append(f"closeout note cites active-run telemetry/helper proof: {entry}")
 

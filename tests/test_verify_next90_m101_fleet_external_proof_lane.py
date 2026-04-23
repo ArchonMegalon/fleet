@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import base64
 import json
 import os
 import stat
@@ -181,10 +182,16 @@ def _readiness_payload(
     module,
     *,
     runbook_path: Path,
+    commands_dir: Path,
+    command_bundle: dict,
     support_generated_at: str,
     release_generated_at: str,
     runbook_generated_at: str,
+    runbook_command_bundle_sha256: str,
+    runbook_command_bundle_file_count: int,
 ) -> dict:
+    command_bundle_sha256 = str(command_bundle.get("sha256") or "")
+    command_bundle_file_count = int(command_bundle.get("file_count") or 0)
     return {
         "generated_at": runbook_generated_at,
         "status": "pass",
@@ -196,6 +203,11 @@ def _readiness_payload(
             "runbook_generated_at": runbook_generated_at,
             "runbook_plan_generated_at": support_generated_at,
             "runbook_release_channel_generated_at": release_generated_at,
+            "commands_dir": str(commands_dir),
+            "command_bundle_sha256": command_bundle_sha256,
+            "command_bundle_file_count": command_bundle_file_count,
+            "runbook_command_bundle_sha256": runbook_command_bundle_sha256,
+            "runbook_command_bundle_file_count": runbook_command_bundle_file_count,
             "runbook_synced": True,
             "runbook_sync_reasons": [],
             "unresolved_request_count": 0,
@@ -213,6 +225,11 @@ def _readiness_payload(
                     "external_proof_runbook_generated_at": runbook_generated_at,
                     "external_proof_runbook_plan_generated_at": support_generated_at,
                     "external_proof_runbook_release_channel_generated_at": release_generated_at,
+                    "external_proof_commands_dir": str(commands_dir),
+                    "external_proof_command_bundle_sha256": command_bundle_sha256,
+                    "external_proof_command_bundle_file_count": command_bundle_file_count,
+                    "external_proof_runbook_command_bundle_sha256": runbook_command_bundle_sha256,
+                    "external_proof_runbook_command_bundle_file_count": runbook_command_bundle_file_count,
                     "external_proof_runbook_sync_issue_count": 0,
                     "external_proof_runbook_synced": True,
                     "journey_effective_blocked_external_only_count": 0,
@@ -330,15 +347,26 @@ def _closed_fixture(tmp_path: Path):
         text=True,
     )
     assert materialize.returncode == 0, materialize.stderr
-    runbook_generated_at = _load_module()._extract_runbook_field(runbook.read_text(encoding="utf-8"), "generated_at")
+    runbook_body = runbook.read_text(encoding="utf-8")
+    loaded_module = _load_module()
+    runbook_generated_at = loaded_module._extract_runbook_field(runbook_body, "generated_at")
+    runbook_command_bundle_sha256 = loaded_module._extract_runbook_field(runbook_body, "command_bundle_sha256")
+    runbook_command_bundle_file_count = int(
+        loaded_module._extract_runbook_field(runbook_body, "command_bundle_file_count")
+    )
+    command_bundle = loaded_module._command_bundle_fingerprint(commands_dir)
     _write_json(
         readiness,
         _readiness_payload(
             module,
             runbook_path=runbook,
+            commands_dir=commands_dir,
+            command_bundle=command_bundle,
             support_generated_at=support_generated_at,
             release_generated_at=release_generated_at,
             runbook_generated_at=runbook_generated_at,
+            runbook_command_bundle_sha256=runbook_command_bundle_sha256,
+            runbook_command_bundle_file_count=runbook_command_bundle_file_count,
         ),
     )
     _write_yaml(registry, _registry_payload(module))
@@ -385,6 +413,38 @@ def _closed_fixture(tmp_path: Path):
     }
 
 
+def _run_verifier(fixture: dict) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(fixture["support_packets"]),
+            "--journey-gates",
+            str(fixture["journey_gates"]),
+            "--release-channel",
+            str(fixture["release_channel"]),
+            "--external-proof-runbook",
+            str(fixture["runbook"]),
+            "--external-proof-commands-dir",
+            str(fixture["commands_dir"]),
+            "--flagship-readiness",
+            str(fixture["readiness"]),
+            "--successor-registry",
+            str(fixture["registry"]),
+            "--queue-staging",
+            str(fixture["queue"]),
+            "--design-queue-staging",
+            str(fixture["design_queue"]),
+            "--closeout-note",
+            str(fixture["closeout"]),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
 class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
     def test_verify_script_runs_without_pythonpath(self) -> None:
         result = subprocess.run(
@@ -400,37 +460,69 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
     def test_verifier_passes_with_closed_fixture(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fixture = _closed_fixture(Path(tmp))
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT),
-                    "--support-packets",
-                    str(fixture["support_packets"]),
-                    "--journey-gates",
-                    str(fixture["journey_gates"]),
-                    "--release-channel",
-                    str(fixture["release_channel"]),
-                    "--external-proof-runbook",
-                    str(fixture["runbook"]),
-                    "--external-proof-commands-dir",
-                    str(fixture["commands_dir"]),
-                    "--flagship-readiness",
-                    str(fixture["readiness"]),
-                    "--successor-registry",
-                    str(fixture["registry"]),
-                    "--queue-staging",
-                    str(fixture["queue"]),
-                    "--design-queue-staging",
-                    str(fixture["design_queue"]),
-                    "--closeout-note",
-                    str(fixture["closeout"]),
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
+            result = _run_verifier(fixture)
             self.assertEqual(result.returncode, 0, msg=result.stderr)
             self.assertIn("verified next90-m101-fleet-external-proof-lane", result.stdout)
+
+    def test_verifier_fails_when_zero_backlog_ingest_loses_manifest_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            ingest_script = fixture["commands_dir"] / "ingest-linux-proof-bundle.sh"
+            ingest_script.write_text(
+                "#!/usr/bin/env bash\nset -euo pipefail\necho ingest-placeholder\n",
+                encoding="utf-8",
+            )
+            result = _run_verifier(fixture)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof zero-backlog ingest script for linux missing required token",
+                result.stderr,
+            )
+            self.assertIn("external-proof-bundle-manifest-missing", result.stderr)
+
+    def test_verifier_fails_when_zero_backlog_bundle_loses_manifest_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            bundle_script = fixture["commands_dir"] / "bundle-macos-proof.sh"
+            bundle_payload = bundle_script.read_text(encoding="utf-8")
+            bundle_script.write_text(
+                bundle_payload.replace("external-proof-manifest.json", "external-proof-placeholder.json"),
+                encoding="utf-8",
+            )
+            result = _run_verifier(fixture)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof zero-backlog bundle script for macos missing required token: external-proof-manifest.json",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_finalize_republishes_before_host_ingest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            finalize_script = fixture["commands_dir"] / "finalize-external-host-proof.sh"
+            finalize_script.write_text(
+                "\n".join(
+                    [
+                        "#!/usr/bin/env bash",
+                        "set -euo pipefail",
+                        "./validate-linux-proof.sh",
+                        "./republish-after-host-proof.sh",
+                        "./ingest-linux-proof-bundle.sh",
+                        "./validate-macos-proof.sh",
+                        "./ingest-macos-proof-bundle.sh",
+                        "./validate-windows-proof.sh",
+                        "./ingest-windows-proof-bundle.sh",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            result = _run_verifier(fixture)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof finalize script must ingest linux before republish",
+                result.stderr,
+            )
 
     def test_verifier_fails_when_zero_backlog_bundle_drops_host_lane_scripts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -596,6 +688,253 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("closeout note missing marker", result.stderr)
+
+    def test_verifier_fails_when_registry_work_task_metadata_cites_worker_local_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            registry = yaml.safe_load(fixture["registry"].read_text(encoding="utf-8"))
+            work_task = registry["milestones"][0]["work_tasks"][0]
+            work_task["operator_note"] = "Closed from TASK_LOCAL_TELEMETRY.generated.json"
+            _write_yaml(fixture["registry"], registry)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("registry work task cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_queue_item_metadata_cites_worker_local_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            queue["items"][0]["operator_note"] = "Closed from ACTIVE_RUN_HANDOFF.generated.md"
+            _write_yaml(fixture["queue"], queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue item cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_queue_proof_cites_generic_operator_telemetry_helper_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            queue["items"][0]["proof"].append("closed by operator-telemetry helper output")
+            _write_yaml(fixture["queue"], queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue proof cites active-run telemetry/helper proof", result.stderr)
+
+    def test_disallowed_entries_detects_encoded_worker_helper_markers(self) -> None:
+        module = _load_module()
+        base64_marker = base64.b64encode(b"closed by chummer_design_supervisor.py status").decode("ascii")
+        hex_marker = b"closed by TASK_LOCAL_TELEMETRY.generated.json".hex()
+        url_marker = "closed%20by%20ACTIVE_RUN_HANDOFF.generated.md"
+
+        self.assertEqual(module._disallowed_entries([base64_marker]), [base64_marker])
+        self.assertEqual(module._disallowed_entries([hex_marker]), [hex_marker])
+        self.assertEqual(module._disallowed_entries([url_marker]), [url_marker])
+
+    def test_verifier_fails_when_queue_proof_cites_encoded_worker_helper_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            encoded_marker = base64.b64encode(
+                b"closed by chummer_design_supervisor.py status"
+            ).decode("ascii")
+            queue["items"][0]["proof"].append(encoded_marker)
+            _write_yaml(fixture["queue"], queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue proof cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_design_queue_item_metadata_cites_worker_local_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
+            design_queue["items"][0]["operator_note"] = "Closed by chummer_design_supervisor.py status"
+            _write_yaml(fixture["design_queue"], design_queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("design queue item cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_runbook_cites_worker_local_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            with fixture["runbook"].open("a", encoding="utf-8") as handle:
+                handle.write("\nWorker note: TASK_LOCAL_TELEMETRY.generated.json proved this lane.\n")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--support-packets",
+                    str(fixture["support_packets"]),
+                    "--journey-gates",
+                    str(fixture["journey_gates"]),
+                    "--release-channel",
+                    str(fixture["release_channel"]),
+                    "--external-proof-runbook",
+                    str(fixture["runbook"]),
+                    "--external-proof-commands-dir",
+                    str(fixture["commands_dir"]),
+                    "--flagship-readiness",
+                    str(fixture["readiness"]),
+                    "--successor-registry",
+                    str(fixture["registry"]),
+                    "--queue-staging",
+                    str(fixture["queue"]),
+                    "--design-queue-staging",
+                    str(fixture["design_queue"]),
+                    "--closeout-note",
+                    str(fixture["closeout"]),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("external proof runbook cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_retained_command_cites_worker_helper(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            command_path = fixture["commands_dir"] / "run-linux-proof-lane.sh"
+            with command_path.open("a", encoding="utf-8") as handle:
+                handle.write("\n# Never close this from chummer_design_supervisor.py status output.\n")
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("external proof command cites active-run telemetry/helper proof", result.stderr)
+            self.assertIn("run-linux-proof-lane.sh", result.stderr)
+
+    def test_verifier_fails_when_readiness_cites_worker_local_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            readiness = json.loads(fixture["readiness"].read_text(encoding="utf-8"))
+            readiness["external_host_proof"]["operator_note"] = "Closed from ACTIVE_RUN_HANDOFF.generated.md"
+            readiness["coverage_details"]["fleet_and_operator_loop"]["evidence"][
+                "operator_note"
+            ] = "Closed by chummer_design_supervisor.py status"
+            _write_json(fixture["readiness"], readiness)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--support-packets",
+                    str(fixture["support_packets"]),
+                    "--journey-gates",
+                    str(fixture["journey_gates"]),
+                    "--release-channel",
+                    str(fixture["release_channel"]),
+                    "--external-proof-runbook",
+                    str(fixture["runbook"]),
+                    "--external-proof-commands-dir",
+                    str(fixture["commands_dir"]),
+                    "--flagship-readiness",
+                    str(fixture["readiness"]),
+                    "--successor-registry",
+                    str(fixture["registry"]),
+                    "--queue-staging",
+                    str(fixture["queue"]),
+                    "--design-queue-staging",
+                    str(fixture["design_queue"]),
+                    "--closeout-note",
+                    str(fixture["closeout"]),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "flagship readiness external_host_proof cites active-run telemetry/helper proof",
+                result.stderr,
+            )
+            self.assertIn("fleet coverage evidence cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_readiness_command_bundle_fingerprint_drifts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            readiness = json.loads(fixture["readiness"].read_text(encoding="utf-8"))
+            readiness["external_host_proof"]["command_bundle_sha256"] = "0" * 64
+            readiness["coverage_details"]["fleet_and_operator_loop"]["evidence"][
+                "external_proof_command_bundle_sha256"
+            ] = "0" * 64
+            _write_json(fixture["readiness"], readiness)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--support-packets",
+                    str(fixture["support_packets"]),
+                    "--journey-gates",
+                    str(fixture["journey_gates"]),
+                    "--release-channel",
+                    str(fixture["release_channel"]),
+                    "--external-proof-runbook",
+                    str(fixture["runbook"]),
+                    "--external-proof-commands-dir",
+                    str(fixture["commands_dir"]),
+                    "--flagship-readiness",
+                    str(fixture["readiness"]),
+                    "--successor-registry",
+                    str(fixture["registry"]),
+                    "--queue-staging",
+                    str(fixture["queue"]),
+                    "--design-queue-staging",
+                    str(fixture["design_queue"]),
+                    "--closeout-note",
+                    str(fixture["closeout"]),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external_host_proof.command_bundle_sha256 drifted from retained command bundle",
+                result.stderr,
+            )
+            self.assertIn(
+                "fleet coverage external_proof_command_bundle_sha256 drifted from retained command bundle",
+                result.stderr,
+            )
+
+    def test_file_token_guard_reports_missing_bootstrap_token(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "verify_script_bootstrap_no_pythonpath.py"
+            path.write_text(
+                "\n".join(
+                    [
+                        "verify_external_proof_closure.py",
+                        "materialize_external_proof_runbook.py",
+                        "materialize_proof_orchestration.py",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            issues: list[str] = []
+
+            module._require_file_tokens(
+                path,
+                module.REQUIRED_BOOTSTRAP_GUARD_TOKENS,
+                issues,
+                label="pythonpath bootstrap guard script",
+            )
+
+            self.assertIn(
+                "pythonpath bootstrap guard script missing required token: "
+                "verify_next90_m101_fleet_external_proof_lane.py",
+                issues,
+            )
 
     def test_verifier_fails_when_design_queue_assignment_drifts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
