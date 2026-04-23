@@ -369,24 +369,39 @@ def _worker_proof_text_variants(text: str) -> list[str]:
 
 def _decoded_worker_proof_tokens(text: str) -> list[str]:
     decoded: list[str] = []
-    for token in re.findall(r"\b[0-9A-Fa-f]{24,}\b", text):
-        if len(token) % 2:
-            continue
-        try:
-            decoded.append(bytes.fromhex(token).decode("utf-8"))
-        except (UnicodeDecodeError, ValueError):
-            continue
-    for token in re.findall(r"\b[A-Za-z0-9+/_-]{20,}={0,2}\b", text):
-        padded = token + ("=" * (-len(token) % 4))
-        try:
-            decoded.append(base64.b64decode(padded, validate=True).decode("utf-8"))
-            continue
-        except (binascii.Error, UnicodeDecodeError):
-            pass
-        try:
-            decoded.append(base64.urlsafe_b64decode(padded).decode("utf-8"))
-        except (binascii.Error, UnicodeDecodeError):
-            continue
+    pending = [text]
+    seen = {text}
+    for _depth in range(3):
+        next_pending: list[str] = []
+        for value in pending:
+            for token in re.findall(r"\b[0-9A-Fa-f]{24,}\b", value):
+                if len(token) % 2:
+                    continue
+                try:
+                    decoded_token = bytes.fromhex(token).decode("utf-8")
+                except (UnicodeDecodeError, ValueError):
+                    continue
+                if decoded_token not in seen:
+                    decoded.append(decoded_token)
+                    next_pending.append(decoded_token)
+                    seen.add(decoded_token)
+            for token in re.findall(r"\b[A-Za-z0-9+/_-]{20,}={0,2}\b", value):
+                padded = token + ("=" * (-len(token) % 4))
+                decoded_token = ""
+                try:
+                    decoded_token = base64.b64decode(padded, validate=True).decode("utf-8")
+                except (binascii.Error, UnicodeDecodeError):
+                    try:
+                        decoded_token = base64.urlsafe_b64decode(padded).decode("utf-8")
+                    except (binascii.Error, UnicodeDecodeError):
+                        continue
+                if decoded_token not in seen:
+                    decoded.append(decoded_token)
+                    next_pending.append(decoded_token)
+                    seen.add(decoded_token)
+        pending = next_pending
+        if not pending:
+            break
     return decoded
 
 

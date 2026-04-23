@@ -729,10 +729,12 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
     def test_disallowed_entries_detects_encoded_worker_helper_markers(self) -> None:
         module = _load_module()
         base64_marker = base64.b64encode(b"closed by chummer_design_supervisor.py status").decode("ascii")
+        nested_base64_marker = base64.b64encode(base64_marker.encode("ascii")).decode("ascii")
         hex_marker = b"closed by TASK_LOCAL_TELEMETRY.generated.json".hex()
         url_marker = "closed%20by%20ACTIVE_RUN_HANDOFF.generated.md"
 
         self.assertEqual(module._disallowed_entries([base64_marker]), [base64_marker])
+        self.assertEqual(module._disallowed_entries([nested_base64_marker]), [nested_base64_marker])
         self.assertEqual(module._disallowed_entries([hex_marker]), [hex_marker])
         self.assertEqual(module._disallowed_entries([url_marker]), [url_marker])
 
