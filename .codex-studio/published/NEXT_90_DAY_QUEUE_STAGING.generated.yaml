@@ -1437,7 +1437,7 @@ items:
     wave: W10
     repo: chummer6-mobile
     status: complete
-    landed_commit: f95c490
+    landed_commit: bc84b37
     completion_action: verify_closed_package_only
     do_not_reopen_reason: M110 chummer6-mobile runsite orientation is complete; future shards must verify the mobile runsite host-mode entry point, travel-shell artifact redirect, generated proof receipt, and queue row instead of reopening the pre-session orientation package.
     proof:
@@ -1450,6 +1450,7 @@ items:
       - /docker/chummercomplete/chummer-play/scripts/ai/verify.sh
       - /docker/chummercomplete/chummer-play/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json
       - /docker/chummercomplete/chummer-play commit f95c490 launches mobile runsite orientation before live play while keeping route preview truth inspectable.
+      - /docker/chummercomplete/chummer-play commit bc84b37 stabilizes the mobile package-plane verifier for the completed runsite orientation proof.
       - bash scripts/ai/verify.sh exits 0.
     allowed_paths:
       - src
