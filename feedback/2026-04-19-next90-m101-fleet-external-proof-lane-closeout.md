@@ -51,6 +51,7 @@ The repeat-prevention rules are:
 - commit `8dd79057` is the current proof floor for rejecting recursively encoded worker-helper citations in completed-package evidence
 - HTML-entity encoded worker-helper citations are rejected before any queue, registry, runbook, support, journey, readiness, or closeout proof can keep the package closed
 - commit `9bb8be5e` is the current proof floor for rejecting HTML-entity encoded worker-helper citations in completed-package evidence
+- commit `930966e0` is the current proof floor for rejecting worker-local telemetry or helper-command citations in root-level registry milestone, Fleet queue, and design queue metadata
 
 ## Verification Run
 
