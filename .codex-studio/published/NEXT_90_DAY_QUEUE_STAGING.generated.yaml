@@ -1393,6 +1393,7 @@ items:
       - /docker/chummercomplete/chummer6-core/tests/test_build_lab_explain_packets_generator.py
       - /docker/chummercomplete/chummer6-core/scripts/ai/verify.sh
       - /docker/chummercomplete/chummer6-core commit a52603c9 exposes approved Build Lab explain packet anchors from M104 engine proof truth.
+      - /docker/chummercomplete/chummer6-core commit a4dcffb6 tightens the M109 packet authority guard so mixed-case worker-local telemetry, active-run handoff, or blocked helper evidence cannot keep the completed package green.
       - python3 tests/test_build_lab_explain_packets_generator.py exits 0.
       - python3 scripts/generate-build-lab-explain-packets.py --repo-root . --check exits 0.
       - python3 scripts/generate-build-lab-explain-packets.py --repo-root . --out /tmp/chummer6-core-build-lab-explain-packets.generated.json exits 0.
