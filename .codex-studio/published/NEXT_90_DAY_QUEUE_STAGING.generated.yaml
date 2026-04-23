@@ -1338,7 +1338,7 @@ items:
       - /docker/chummercomplete/chummer6-hub commit d0a84683 tightens campaign briefing proof requests.
       - python3 -m unittest tests/test_artifact_factory_source_pack_launcher.py exits 0.
       - python3 scripts/verify_artifact_factory_orchestration.py exits 0.
-      - dotnet test /docker/chummercomplete/chummer6-hub/Chummer.Tests/Chummer.Tests.csproj --filter ArtifactFactoryOrchestrationServiceTests rebuilt the test project but discovered zero xUnit tests in the current project configuration; this is recorded as residual test-discovery risk, not behavioral proof.
+      - dotnet test /docker/chummercomplete/chummer6-hub/Chummer.Tests/Chummer.Tests.csproj --filter ArtifactFactoryOrchestrationServiceTests --no-restore exits 0 and reports 51 passing tests on net10.0 plus 51 passing tests on net10.0-windows.
     allowed_paths:
       - Chummer.Run.Api
       - scripts
@@ -1428,6 +1428,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish/scripts/ai/milestones/next90-m109-ui-build-explain-artifacts-check.sh
       - /docker/chummercomplete/chummer6-ui-finish commit da261bb7 Launch desktop explain companions.
       - /docker/chummercomplete/chummer6-ui-finish commit bfe39d47 Tighten M109 queue mirror proof guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit 4fc3f056 Tighten M109 encoded worker-unsafe closure proof guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit b12f06d5 Tighten M109 encoded proof guard.
       - bash scripts/ai/milestones/next90-m109-ui-build-explain-artifacts-check.sh
     allowed_paths:
       - Chummer.Avalonia
@@ -1518,9 +1520,24 @@ items:
   - title: Publish install-aware artifact identities and channel rationale for concierge bundles
     task: Store why this release, fix, or recovery artifact is correct for this installed build and channel.
     package_id: next90-m111-registry-install-aware-concierge
+    frontier_id: 1024523070
     milestone_id: 111
     wave: W9
     repo: chummer6-hub-registry
+    status: complete
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M111 chummer6-hub-registry install-aware concierge registry is complete; future shards must verify this receipt, registry row, queue row, and published release-channel artifacts instead of reopening the install-aware artifact-identity package.
+    proof:
+      - /docker/chummercomplete/chummer-hub-registry/Chummer.Hub.Registry.Contracts/ReleaseChannelContracts.cs
+      - /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py
+      - /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py
+      - /docker/chummercomplete/chummer-hub-registry/scripts/verify_next90_m111_registry_install_aware_concierge.py
+      - /docker/chummercomplete/chummer-hub-registry/scripts/test_materialize_public_release_channel.py
+      - /docker/chummercomplete/chummer-hub-registry/scripts/test_verify_public_release_channel.py
+      - /docker/chummercomplete/chummer-hub-registry/scripts/test_verify_next90_m111_registry_install_aware_concierge.py
+      - /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json
+      - /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json
+      - /docker/chummercomplete/chummer-hub-registry/docs/next90-m111-registry-install-aware-concierge.closeout.md
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
