@@ -47,6 +47,7 @@ The repeat-prevention rules are:
 - the finalize entrypoint still republishes after the per-host validate and ingest lanes remain available
 - the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state
 - HTML-entity encoded worker-helper citations are rejected before any queue, registry, runbook, support, journey, readiness, or closeout proof can keep the package closed
+- commit `9bb8be5e` is the current proof floor for rejecting HTML-entity encoded worker-helper citations in completed-package evidence
 
 ## Verification Run
 
