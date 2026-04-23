@@ -1343,9 +1343,23 @@ items:
   - title: Launch primer and briefing artifacts from mobile campaign home
     task: Surface campaign cold-open and mission-briefing artifacts on mobile and travel shells without browser ritual.
     package_id: next90-m108-mobile-campaign-artifacts
+    frontier_id: 1294209399
     milestone_id: 108
     wave: W10
     repo: chummer6-mobile
+    status: complete
+    landed_commit: bc84b37
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M108 chummer6-mobile campaign artifact launch is complete; future shards must verify this receipt, registry row, queue row, and mobile proof instead of reopening the campaign_home artifact launch or mission_briefing mobile surface.
+    proof:
+      - /docker/chummercomplete/chummer-play/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceServerPlane.cs
+      - /docker/chummercomplete/chummer-play/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceLiteProjector.cs
+      - /docker/chummercomplete/chummer-play/src/Chummer.Play.Web/PlayWebApplication.cs
+      - /docker/chummercomplete/chummer-play/src/Chummer.Play.Web/wwwroot/index.html
+      - /docker/chummercomplete/chummer-play/src/Chummer.Play.RegressionChecks/Program.cs
+      - /docker/chummercomplete/chummer-play/docs/next90-m108-mobile-campaign-artifacts.proof.md
+      - /docker/chummercomplete/chummer-play/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json
+      - /docker/chummercomplete/chummer-play commit bc84b37 stabilizes the mobile package-plane verifier and ./scripts/ai/verify.sh exits 0.
     allowed_paths:
       - src
       - tests
