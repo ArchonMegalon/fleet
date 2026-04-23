@@ -1312,9 +1312,24 @@ items:
   - title: Expose approved Build Lab explain packets and proof anchors for companion artifact generation
     task: Turn Build Lab explain output into approved packet anchors the artifact factory can render without losing engine truth.
     package_id: next90-m109-core-build-explain-packets
+    frontier_id: 4007503843
     milestone_id: 109
     wave: W9
     repo: chummer6-core
+    status: complete
+    landed_commit: a52603c9
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M109 chummer6-core Build Lab explain packets is complete; future shards must verify the generated packet receipt, generator, focused tests, registry row, and queue mirrors instead of reopening the engine-truth anchor package.
+    proof:
+      - /docker/chummercomplete/chummer6-core/.codex-studio/published/BUILD_LAB_EXPLAIN_PACKETS.generated.json
+      - /docker/chummercomplete/chummer6-core/docs/BUILD_LAB_EXPLAIN_PACKETS.md
+      - /docker/chummercomplete/chummer6-core/scripts/generate-build-lab-explain-packets.py
+      - /docker/chummercomplete/chummer6-core/tests/test_build_lab_explain_packets_generator.py
+      - /docker/chummercomplete/chummer6-core/scripts/ai/verify.sh
+      - /docker/chummercomplete/chummer6-core commit a52603c9 exposes approved Build Lab explain packet anchors from M104 engine proof truth.
+      - python3 tests/test_build_lab_explain_packets_generator.py exits 0.
+      - python3 scripts/generate-build-lab-explain-packets.py --repo-root . --check exits 0.
+      - python3 scripts/generate-build-lab-explain-packets.py --repo-root . --out /tmp/chummer6-core-build-lab-explain-packets.generated.json exits 0.
     allowed_paths:
       - src
       - tests
