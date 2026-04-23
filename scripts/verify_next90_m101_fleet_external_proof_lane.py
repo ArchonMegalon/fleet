@@ -339,6 +339,21 @@ def _missing_markers(entries: list[Any], required: list[str]) -> list[str]:
     return [marker for marker in required if not _contains_marker(entries, marker)]
 
 
+def _duplicate_normalized_entries(entries: list[Any]) -> list[str]:
+    duplicates: list[str] = []
+    seen: set[str] = set()
+    duplicate_keys: set[str] = set()
+    for entry in entries:
+        normalized = re.sub(r"\s+", " ", _normalize_text(entry)).strip().lower()
+        if not normalized:
+            continue
+        if normalized in seen and normalized not in duplicate_keys:
+            duplicates.append(_normalize_text(entry))
+            duplicate_keys.add(normalized)
+        seen.add(normalized)
+    return duplicates
+
+
 def _disallowed_entries(entries: list[Any]) -> list[str]:
     blocked: list[str] = []
     for entry in entries:
@@ -1229,6 +1244,12 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
         issues.append(f"queue proof cites active-run telemetry/helper proof: {entry}")
     for entry in _disallowed_entries(design_proof):
         issues.append(f"design queue proof cites active-run telemetry/helper proof: {entry}")
+    for entry in _duplicate_normalized_entries(registry_evidence):
+        issues.append(f"registry evidence has duplicate closure proof entry: {entry}")
+    for entry in _duplicate_normalized_entries(queue_proof):
+        issues.append(f"queue proof has duplicate closure proof entry: {entry}")
+    for entry in _duplicate_normalized_entries(design_proof):
+        issues.append(f"design queue proof has duplicate closure proof entry: {entry}")
     for entry in _disallowed_payload_entries(work_task):
         issues.append(f"registry work task cites active-run telemetry/helper proof: {entry}")
     for entry in _disallowed_payload_entries(_without_nested_items(milestone, "work_tasks")):

@@ -872,6 +872,45 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("queue proof cites active-run telemetry/helper proof", result.stderr)
 
+    def test_verifier_fails_when_registry_evidence_duplicates_closure_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            registry = yaml.safe_load(fixture["registry"].read_text(encoding="utf-8"))
+            evidence = registry["milestones"][0]["work_tasks"][0]["evidence"]
+            evidence.append(evidence[0])
+            _write_yaml(fixture["registry"], registry)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("registry evidence has duplicate closure proof entry", result.stderr)
+
+    def test_verifier_fails_when_queue_proof_duplicates_closure_proof_with_whitespace_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            proof = queue["items"][0]["proof"]
+            proof.append(f"  {proof[0]}\n")
+            _write_yaml(fixture["queue"], queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue proof has duplicate closure proof entry", result.stderr)
+
+    def test_verifier_fails_when_design_queue_proof_duplicates_closure_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
+            proof = design_queue["items"][0]["proof"]
+            proof.append(proof[0])
+            _write_yaml(fixture["design_queue"], design_queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("design queue proof has duplicate closure proof entry", result.stderr)
+
     def test_disallowed_entries_detects_encoded_worker_helper_markers(self) -> None:
         module = _load_module()
         base64_marker = base64.b64encode(b"closed by chummer_design_supervisor.py status").decode("ascii")
