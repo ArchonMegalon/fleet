@@ -1368,9 +1368,25 @@ items:
   - title: Emit install-aware release and support concierge packets from installed-build truth
     task: Compile support closure and release explainer packets from installed build, channel, and support-case truth.
     package_id: next90-m111-hub-support-concierge
+    frontier_id: 2746902416
     milestone_id: 111
     wave: W9
     repo: chummer6-hub
+    status: complete
+    landed_commit: 3fb14923
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M111 chummer6-hub support concierge is complete; future shards must verify the authenticated concierge packet route, generated proof receipts, verifier, and queue/registry rows instead of reopening this package.
+    proof:
+      - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Support/SupportConciergePacketService.cs
+      - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Controllers/SupportCasesController.cs
+      - /docker/chummercomplete/chummer6-hub/scripts/verify_install_aware_support_concierge.py
+      - /docker/chummercomplete/chummer6-hub/tests/test_install_aware_support_concierge.py
+      - /docker/chummercomplete/chummer6-hub/tests/RunServicesVerification/SupportCrashVerification.cs
+      - /docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json
+      - /docker/chummercomplete/chummer6-hub commit 3fb14923 emits install-aware support closure and release explainer packets from installed build, channel, claimed install, and support-case truth.
+      - python3 scripts/verify_install_aware_support_concierge.py exits 0.
+      - python3 -m unittest tests/test_install_aware_support_concierge.py exits 0.
+      - bash scripts/ai/run_services_verification.sh exits 0.
     allowed_paths:
       - Chummer.Run.Api
       - scripts
