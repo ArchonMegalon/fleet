@@ -1462,6 +1462,7 @@ items:
       - /docker/chummercomplete/chummer6-hub/tests/RunServicesVerification/SupportCrashVerification.cs
       - /docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json
       - /docker/chummercomplete/chummer6-hub commit 3fb14923 emits install-aware support closure and release explainer packets from installed build, channel, claimed install, and support-case truth.
+      - /docker/chummercomplete/chummer6-hub commit 22e73ccd tightens the completed M111 queue proof so Fleet and design queue rows must stay complete, cite the landed implementation commit, and carry verify_closed_package_only do-not-reopen authority.
       - python3 scripts/verify_install_aware_support_concierge.py exits 0.
       - python3 -m unittest tests/test_install_aware_support_concierge.py exits 0.
       - bash scripts/ai/run_services_verification.sh exits 0.
