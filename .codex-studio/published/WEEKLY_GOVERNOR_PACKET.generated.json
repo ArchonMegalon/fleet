@@ -182,7 +182,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-23T11:21:26Z",
+  "generated_at": "2026-04-23T13:10:59Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -218,9 +218,9 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-04-23T11:21:26Z",
+    "generated_at": "2026-04-23T13:10:59Z",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-04-30T11:21:26Z",
+    "next_packet_due_at": "2026-04-30T13:10:59Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -413,10 +413,8 @@
         },
         {
           "action": "canary",
-          "blocking_gate_count": 1,
-          "blocking_gates": [
-            "provider_canary"
-          ],
+          "blocking_gate_count": 0,
+          "blocking_gates": [],
           "cadence": "weekly",
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
@@ -424,14 +422,14 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Canary green on all active lanes",
-          "operator_action": "collect_canary_evidence",
+          "operator_action": "keep_canary_ready",
           "operator_action_when_blocked": "collect_canary_evidence",
           "operator_action_when_clear": "keep_canary_ready",
           "owner": "fleet",
           "ready_for_operator_packet": true,
           "reason": "Canary green on all active lanes",
           "route": "measured_rollout_loop.canary",
-          "route_blocked": true,
+          "route_blocked": false,
           "state": "ready",
           "trigger_gate": "provider_canary",
           "unblock_condition": "provider canary is green on all active lanes"
@@ -464,10 +462,8 @@
         },
         {
           "action": "focus_shift",
-          "blocking_gate_count": 1,
-          "blocking_gates": [
-            "successor_wave_scope"
-          ],
+          "blocking_gate_count": 0,
+          "blocking_gates": [],
           "cadence": "weekly",
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
@@ -482,7 +478,7 @@
           "ready_for_operator_packet": true,
           "reason": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
           "route": "measured_rollout_loop.focus_shift",
-          "route_blocked": true,
+          "route_blocked": false,
           "state": "queued_successor_wave",
           "trigger_gate": "successor_wave_scope",
           "unblock_condition": "closed package stays verified and remaining work routes to dependency or sibling packages"
@@ -543,21 +539,19 @@
         },
         {
           "action": "canary",
-          "blocking_gate_count": 1,
-          "blocking_gates": [
-            "provider_canary"
-          ],
+          "blocking_gate_count": 0,
+          "blocking_gates": [],
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "governor_gate_count": 1,
           "ledger_gate_count": 1,
           "matrix_complete": true,
           "max_age_seconds": 604800,
           "next_decision": "Canary green on all active lanes",
-          "operator_action": "collect_canary_evidence",
+          "operator_action": "keep_canary_ready",
           "ready_for_operator_packet": true,
           "reason": "Canary green on all active lanes",
-          "receipt_id": "m106-canary-27b594eceb8f90e1",
-          "receipt_sha256": "27b594eceb8f90e1bbdbd354b45fe521484c833562645bf0d4afc1b8a7bbcb79",
+          "receipt_id": "m106-canary-afc3d2be95960739",
+          "receipt_sha256": "afc3d2be959607398484d8233ff385ac576214146a95c056585df5b6df51c7bf",
           "route": "measured_rollout_loop.canary",
           "state": "ready"
         },
@@ -581,10 +575,8 @@
         },
         {
           "action": "focus_shift",
-          "blocking_gate_count": 1,
-          "blocking_gates": [
-            "successor_wave_scope"
-          ],
+          "blocking_gate_count": 0,
+          "blocking_gates": [],
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "governor_gate_count": 1,
           "ledger_gate_count": 1,
@@ -594,8 +586,8 @@
           "operator_action": "route_remaining_work_to_dependency_or_sibling_packages",
           "ready_for_operator_packet": true,
           "reason": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
-          "receipt_id": "m106-focus_shift-7b0f000df20e2a7f",
-          "receipt_sha256": "7b0f000df20e2a7f4fcf08f936c9cf25eb41ed2f8f6ccbafc54adeb08130471b",
+          "receipt_id": "m106-focus_shift-9e0a36a10f3ebf57",
+          "receipt_sha256": "9e0a36a10f3ebf577e5c46d52b5613a986dffa6503ed32058652f6b2cf4e719f",
           "route": "measured_rollout_loop.focus_shift",
           "state": "queued_successor_wave"
         }
@@ -895,16 +887,14 @@
         },
         {
           "action": "canary",
-          "blocking_gate_count": 1,
-          "blocking_gates": [
-            "provider_canary"
-          ],
+          "blocking_gate_count": 0,
+          "blocking_gates": [],
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "max_age_seconds": 604800,
           "next_decision": "Canary green on all active lanes",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
-          "operator_action": "collect_canary_evidence",
-          "receipt_id": "m106-canary-27b594eceb8f90e1",
+          "operator_action": "keep_canary_ready",
+          "receipt_id": "m106-canary-afc3d2be95960739",
           "route": "measured_rollout_loop.canary",
           "state": "ready"
         },
@@ -923,16 +913,14 @@
         },
         {
           "action": "focus_shift",
-          "blocking_gate_count": 1,
-          "blocking_gates": [
-            "successor_wave_scope"
-          ],
+          "blocking_gate_count": 0,
+          "blocking_gates": [],
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "max_age_seconds": 604800,
           "next_decision": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "route_remaining_work_to_dependency_or_sibling_packages",
-          "receipt_id": "m106-focus_shift-7b0f000df20e2a7f",
+          "receipt_id": "m106-focus_shift-9e0a36a10f3ebf57",
           "route": "measured_rollout_loop.focus_shift",
           "state": "queued_successor_wave"
         }
@@ -1169,12 +1157,15 @@
       "implementation only",
       "implementation-only retry",
       "this retry is implementation-only",
+      "previous attempt burned time on blocked telemetry probes",
+      "blocked telemetry probes",
       "previous attempt burned time on supervisor helper loops",
       "retry is implementation-only",
       "successor-wave pass",
       "product advance successor-wave pass",
       "next-90-day product advance successor-wave pass",
       "run these exact commands first",
+      "start by reading these files directly",
       "do not invent another orientation step",
       "read these files directly first",
       "historical operator status snippets",
@@ -1199,6 +1190,7 @@
       "exact blocker:",
       "writable scope roots",
       "operator telemetry",
+      "do not run operator telemetry helpers inside this worker run",
       "do not invoke operator telemetry",
       "do not invoke operator telemetry or active-run helper commands from inside worker runs",
       "supervisor helper loop",
@@ -1492,6 +1484,14 @@
         {
           "commit": "fe4c621",
           "status": "present"
+        },
+        {
+          "commit": "653380a",
+          "status": "present"
+        },
+        {
+          "commit": "b568034",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -1550,7 +1550,9 @@
         "b909cc5",
         "787d27a",
         "b467c27",
-        "fe4c621"
+        "fe4c621",
+        "653380a",
+        "b568034"
       ],
       "status": "pass"
     },
@@ -1609,7 +1611,9 @@
       "b909cc5",
       "787d27a",
       "b467c27",
-      "fe4c621"
+      "fe4c621",
+      "653380a",
+      "b568034"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -1736,6 +1740,11 @@
       "stale aggregate receipt-gate counts cannot overstate installed-build followthrough without detailed row truth",
       "local proof floor commit fe4c621 pinned for M106 receipt-gate row-truth guard",
       "commit fe4c621 tightens the M106 receipt-gate row-truth guard",
+      "local proof floor commit 653380a pinned for M106 receipt-gate row-truth proof floor",
+      "commit 653380a pins the M106 receipt-gate row-truth guard",
+      "local proof floor commit b568034 pinned for M106 closure-proof dependency package routing guard",
+      "commit b568034 tightens the M106 governor packet closure proof",
+      "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop",
       "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
@@ -1834,6 +1843,11 @@
       "stale aggregate receipt-gate counts cannot overstate installed-build followthrough without detailed row truth",
       "local proof floor commit fe4c621",
       "commit fe4c621 tightens the M106 receipt-gate row-truth guard",
+      "local proof floor commit 653380a",
+      "commit 653380a pins the M106 receipt-gate row-truth guard",
+      "local proof floor commit b568034",
+      "commit b568034 tightens the M106 governor packet closure proof",
+      "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop",
       "do-not-reopen handoff routes remaining M106 work"
     ],
     "required_resolving_proof_paths": [
@@ -1860,7 +1874,11 @@
       "focus_shift"
     ],
     "derived_from": "measured_rollout_loop.decision_action_matrix",
+    "freshness_policy": "refresh_before_public_status_or_operator_action_if_packet_is_overdue",
     "headline": "Launch expansion remains frozen.",
+    "max_age_seconds": 604800,
+    "next_packet_due_at": "2026-04-30T13:10:59Z",
+    "schedule_ref": "governor_packet_schedule.next_packet_due_at",
     "state": "freeze_launch"
   },
   "repeat_prevention": {
@@ -2191,6 +2209,14 @@
         {
           "commit": "fe4c621",
           "status": "present"
+        },
+        {
+          "commit": "653380a",
+          "status": "present"
+        },
+        {
+          "commit": "b568034",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -2249,7 +2275,9 @@
         "b909cc5",
         "787d27a",
         "b467c27",
-        "fe4c621"
+        "fe4c621",
+        "653380a",
+        "b568034"
       ],
       "status": "pass"
     },
@@ -2308,7 +2336,9 @@
       "b909cc5",
       "787d27a",
       "b467c27",
-      "fe4c621"
+      "fe4c621",
+      "653380a",
+      "b568034"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
@@ -2364,12 +2394,15 @@
         "implementation only",
         "implementation-only retry",
         "this retry is implementation-only",
+        "previous attempt burned time on blocked telemetry probes",
+        "blocked telemetry probes",
         "previous attempt burned time on supervisor helper loops",
         "retry is implementation-only",
         "successor-wave pass",
         "product advance successor-wave pass",
         "next-90-day product advance successor-wave pass",
         "run these exact commands first",
+        "start by reading these files directly",
         "do not invent another orientation step",
         "read these files directly first",
         "historical operator status snippets",
@@ -2394,6 +2427,7 @@
         "exact blocker:",
         "writable scope roots",
         "operator telemetry",
+        "do not run operator telemetry helpers inside this worker run",
         "do not invoke operator telemetry",
         "do not invoke operator telemetry or active-run helper commands from inside worker runs",
         "supervisor helper loop",
@@ -2491,13 +2525,13 @@
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "f0aca7d8f350019cb9c1cac65032d0f435d9cc3ba0fdf70a7ef6deec107923be",
+    "combined_source_sha256": "2ba2649096f04140f5358972305b0814cf8dc00399ed4a0f836ad54385aa089f",
     "missing_inputs": [],
     "rows": [
       {
         "name": "successor_registry",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "fc22f89f1e6cba0a98f0a34924ca2377fb1ec2bf00842d239b237cd698d632c2"
+        "source_sha256": "96e15dfaaf830babebdb2058480b01255f8810d1b5361bca533efd36ea8efe4b"
       },
       {
         "name": "closed_flagship_registry",
@@ -2507,12 +2541,12 @@
       {
         "name": "design_queue_staging",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "1558188bcddb801ff3135616165a9b7265dd1a676fc354ef66206740a092ba5b"
+        "source_sha256": "48fe6ed70654617cc2c59f34c6972fccfae5ba24d66d657cd03a037295242885"
       },
       {
         "name": "queue_staging",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "1c48d8fce2e8bad57ce00c3aa070897b371557ae34239eab9da90523fae646ef"
+        "source_sha256": "ff154a7678662ebdcb0876575f16ce2aed4ed711bf71caa5000f4c4b9b08eb90"
       },
       {
         "name": "weekly_pulse",
@@ -2522,17 +2556,17 @@
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "d63416c833b776a91da0b69788feced86c38949f93cc4aa6486a3c2af88bde59"
+        "source_sha256": "e3ff91e7bf80c7103bef7f0946f1a2099fad044be48cadca08764b289d4a14e3"
       },
       {
         "name": "journey_gates",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "a7bfc519fdfeaf2dd3d24437556c51eef1559627668870609b89b9e258712b1d"
+        "source_sha256": "30cea789542abffc6d746cabcfd8ebb1639c289db62a50c5cbda11a650b3ce6b"
       },
       {
         "name": "support_packets",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "b467f593994a77a6d20f2da9934759349dd5b14a5aa89712ec4fb73b8313a312"
+        "source_sha256": "367c5f74947eee03d9cf7a358901a0c6248d8f59c63341a6a3033d11fc2a6993"
       },
       {
         "name": "status_plane",
@@ -2561,23 +2595,23 @@
       "design_queue_staging": {
         "required_key": "items",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "1558188bcddb801ff3135616165a9b7265dd1a676fc354ef66206740a092ba5b",
+        "source_sha256": "48fe6ed70654617cc2c59f34c6972fccfae5ba24d66d657cd03a037295242885",
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-04-23T10:52:20Z",
+        "generated_at": "2026-04-23T13:10:58Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "d63416c833b776a91da0b69788feced86c38949f93cc4aa6486a3c2af88bde59",
+        "source_sha256": "e3ff91e7bf80c7103bef7f0946f1a2099fad044be48cadca08764b289d4a14e3",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-04-23T10:52:19Z",
+        "generated_at": "2026-04-23T13:10:57Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "a7bfc519fdfeaf2dd3d24437556c51eef1559627668870609b89b9e258712b1d",
+        "source_sha256": "30cea789542abffc6d746cabcfd8ebb1639c289db62a50c5cbda11a650b3ce6b",
         "state": "present"
       },
       "launch_signal_truth_alignment": {
@@ -2601,7 +2635,7 @@
       "queue_staging": {
         "required_key": "items",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "1c48d8fce2e8bad57ce00c3aa070897b371557ae34239eab9da90523fae646ef",
+        "source_sha256": "ff154a7678662ebdcb0876575f16ce2aed4ed711bf71caa5000f4c4b9b08eb90",
         "state": "present"
       },
       "source_path_authority": {
@@ -2651,12 +2685,15 @@
           "implementation only",
           "implementation-only retry",
           "this retry is implementation-only",
+          "previous attempt burned time on blocked telemetry probes",
+          "blocked telemetry probes",
           "previous attempt burned time on supervisor helper loops",
           "retry is implementation-only",
           "successor-wave pass",
           "product advance successor-wave pass",
           "next-90-day product advance successor-wave pass",
           "run these exact commands first",
+          "start by reading these files directly",
           "do not invent another orientation step",
           "read these files directly first",
           "historical operator status snippets",
@@ -2681,6 +2718,7 @@
           "exact blocker:",
           "writable scope roots",
           "operator telemetry",
+          "do not run operator telemetry helpers inside this worker run",
           "do not invoke operator telemetry",
           "do not invoke operator telemetry or active-run helper commands from inside worker runs",
           "supervisor helper loop",
@@ -2760,15 +2798,15 @@
       "successor_registry": {
         "required_key": "program_wave",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "fc22f89f1e6cba0a98f0a34924ca2377fb1ec2bf00842d239b237cd698d632c2",
+        "source_sha256": "96e15dfaaf830babebdb2058480b01255f8810d1b5361bca533efd36ea8efe4b",
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-23T10:52:18Z",
+        "generated_at": "2026-04-23T13:10:55Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "b467f593994a77a6d20f2da9934759349dd5b14a5aa89712ec4fb73b8313a312",
+        "source_sha256": "367c5f74947eee03d9cf7a358901a0c6248d8f59c63341a6a3033d11fc2a6993",
         "state": "present",
         "successor_package_verification_status": "pass"
       },

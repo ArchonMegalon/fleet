@@ -4,10 +4,12 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import html
 import json
 import re
 import subprocess
 import sys
+import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -135,6 +137,8 @@ LOCAL_PROOF_FLOOR_COMMITS = (
     "787d27a",
     "b467c27",
     "fe4c621",
+    "653380a",
+    "b568034",
 )
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
@@ -174,6 +178,15 @@ REQUIRED_DECISION_SOURCE_GATES = {
         "release_health",
     ),
     "focus_shift": ("successor_wave_scope",),
+}
+NON_BLOCKING_DECISION_GATE_STATES = {
+    "allowed",
+    "armed",
+    "available",
+    "clear",
+    "pass",
+    "queued_successor_wave",
+    "ready",
 }
 UTC = dt.timezone.utc
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
@@ -284,6 +297,11 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "stale aggregate receipt-gate counts cannot overstate installed-build followthrough without detailed row truth",
     "local proof floor commit fe4c621 pinned for M106 receipt-gate row-truth guard",
     "commit fe4c621 tightens the M106 receipt-gate row-truth guard",
+    "local proof floor commit 653380a pinned for M106 receipt-gate row-truth proof floor",
+    "commit 653380a pins the M106 receipt-gate row-truth guard",
+    "local proof floor commit b568034 pinned for M106 closure-proof dependency package routing guard",
+    "commit b568034 tightens the M106 governor packet closure proof",
+    "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop",
     "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -382,6 +400,11 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "stale aggregate receipt-gate counts cannot overstate installed-build followthrough without detailed row truth",
     "local proof floor commit fe4c621",
     "commit fe4c621 tightens the M106 receipt-gate row-truth guard",
+    "local proof floor commit 653380a",
+    "commit 653380a pins the M106 receipt-gate row-truth guard",
+    "local proof floor commit b568034",
+    "commit b568034 tightens the M106 governor packet closure proof",
+    "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop",
     "do-not-reopen handoff routes remaining M106 work",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (
@@ -423,12 +446,15 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "implementation only",
     "implementation-only retry",
     "this retry is implementation-only",
+    "previous attempt burned time on blocked telemetry probes",
+    "blocked telemetry probes",
     "previous attempt burned time on supervisor helper loops",
     "retry is implementation-only",
     "successor-wave pass",
     "product advance successor-wave pass",
     "next-90-day product advance successor-wave pass",
     "run these exact commands first",
+    "start by reading these files directly",
     "do not invent another orientation step",
     "read these files directly first",
     "historical operator status snippets",
@@ -453,6 +479,7 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "exact blocker:",
     "writable scope roots",
     "operator telemetry",
+    "do not run operator telemetry helpers inside this worker run",
     "do not invoke operator telemetry",
     "do not invoke operator telemetry or active-run helper commands from inside worker runs",
     "supervisor helper loop",
@@ -592,8 +619,10 @@ def _disallowed_worker_proof_entries(entries: List[str]) -> List[str]:
     blocked: List[str] = []
     for entry in entries:
         normalized_entry = entry.lower()
+        decoded_entry = urllib.parse.unquote(html.unescape(normalized_entry))
         for marker in DISALLOWED_WORKER_PROOF_COMMAND_MARKERS:
-            if marker.lower() in normalized_entry:
+            normalized_marker = marker.lower()
+            if normalized_marker in normalized_entry or normalized_marker in decoded_entry:
                 blocked.append(entry)
                 break
     return blocked
@@ -2177,10 +2206,23 @@ def _gate_row(name: str, state: str, required: str, observed: Any) -> Dict[str, 
     }
 
 
-def _status_copy(*, launch_allowed: bool, rollback_watch: bool, launch_reason: str) -> Dict[str, Any]:
+def _status_copy(
+    *,
+    launch_allowed: bool,
+    rollback_watch: bool,
+    launch_reason: str,
+    schedule: Dict[str, Any],
+) -> Dict[str, Any]:
     provenance = {
         "derived_from": "measured_rollout_loop.decision_action_matrix",
         "decision_actions": list(REQUIRED_DECISION_ACTIONS),
+        "schedule_ref": "governor_packet_schedule.next_packet_due_at",
+        "next_packet_due_at": str(schedule.get("next_packet_due_at") or "").strip(),
+        "max_age_seconds": _coerce_int(
+            schedule.get("max_age_seconds"),
+            WEEKLY_PACKET_CADENCE_SECONDS,
+        ),
+        "freshness_policy": "refresh_before_public_status_or_operator_action_if_packet_is_overdue",
     }
     if launch_allowed:
         return {
@@ -2464,7 +2506,8 @@ def _decision_action_routes(
         blocking_gates = [
             str(row.get("name") or "").strip() or "unknown"
             for row in ledger_rows
-            if str(row.get("state") or "unknown").strip() not in {"pass", "clear"}
+            if str(row.get("state") or "unknown").strip()
+            not in NON_BLOCKING_DECISION_GATE_STATES
         ]
         gate_states = {
             str(row.get("name") or "").strip() or "unknown": str(
@@ -3236,6 +3279,7 @@ def build_payload(
             launch_allowed=launch_allowed,
             rollback_watch=rollback_watch,
             launch_reason=launch_reason,
+            schedule=governor_packet_schedule,
         ),
         "package_closeout": {
             "status": "fleet_package_complete" if package_complete else "blocked",
@@ -3464,6 +3508,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Remaining sibling work tasks: {_markdown_list(repeat_prevention.get('remaining_sibling_work_task_ids'))}",
             f"- Handoff rule: {_markdown_status(repeat_prevention.get('handoff_rule'))}",
             f"- Worker command guard: {_markdown_status(worker_command_guard.get('status'))}",
+            f"- Worker command rule: {_markdown_status(worker_command_guard.get('rule'))}",
             f"- Blocked helper markers: {_markdown_list(worker_command_guard.get('blocked_markers'))}",
             f"- Flagship wave guard: {_markdown_status(flagship_wave_guard.get('status'))}",
             f"- Closed flagship wave: {_markdown_status(flagship_wave_guard.get('closed_wave'))}",
@@ -3474,6 +3519,10 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- State: {_markdown_status(public_copy.get('state'))}",
             f"- Derived from: {_markdown_status(public_copy.get('derived_from'))}",
             f"- Decision actions: {_markdown_list(public_copy.get('decision_actions'))}",
+            f"- Schedule ref: {_markdown_status(public_copy.get('schedule_ref'))}",
+            f"- Next packet due: {_markdown_status(public_copy.get('next_packet_due_at'))}",
+            f"- Max age seconds: {public_copy.get('max_age_seconds', 0)}",
+            f"- Freshness policy: {_markdown_status(public_copy.get('freshness_policy'))}",
             f"- Headline: {_markdown_status(public_copy.get('headline'))}",
             f"- Body: {_markdown_status(public_copy.get('body'))}",
             "",

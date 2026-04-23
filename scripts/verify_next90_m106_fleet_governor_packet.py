@@ -72,6 +72,13 @@ def _stable_weekly_health(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _stable_public_status_copy(payload: Dict[str, Any]) -> Dict[str, Any]:
+    copy = dict(payload)
+    if "next_packet_due_at" in copy:
+        copy["next_packet_due_at"] = "<ignored>"
+    return copy
+
+
 def _decision_projection(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "contract_name": payload.get("contract_name"),
@@ -91,7 +98,9 @@ def _decision_projection(payload: Dict[str, Any]) -> Dict[str, Any]:
         "decision_board": payload.get("decision_board"),
         "decision_gate_ledger": payload.get("decision_gate_ledger"),
         "governor_decisions": payload.get("governor_decisions"),
-        "public_status_copy": payload.get("public_status_copy"),
+        "public_status_copy": _stable_public_status_copy(
+            dict(payload.get("public_status_copy") or {})
+        ),
         "package_closeout": payload.get("package_closeout"),
         "measured_rollout_loop": payload.get("measured_rollout_loop"),
         "repeat_prevention": payload.get("repeat_prevention"),
@@ -854,6 +863,28 @@ def verify(args: argparse.Namespace) -> List[str]:
         "public status copy decision action list no longer matches measured rollout required actions",
     )
     _require(
+        public_status_copy.get("schedule_ref")
+        == "governor_packet_schedule.next_packet_due_at",
+        issues,
+        "public status copy no longer names the weekly packet due schedule ref",
+    )
+    _require(
+        public_status_copy.get("next_packet_due_at") == schedule.get("next_packet_due_at"),
+        issues,
+        "public status copy next_packet_due_at no longer matches governor packet schedule",
+    )
+    _require(
+        public_status_copy.get("max_age_seconds") == weekly.WEEKLY_PACKET_CADENCE_SECONDS,
+        issues,
+        "public status copy max_age_seconds no longer matches weekly cadence",
+    )
+    _require(
+        public_status_copy.get("freshness_policy")
+        == "refresh_before_public_status_or_operator_action_if_packet_is_overdue",
+        issues,
+        "public status copy freshness policy no longer requires refresh before stale status or operator action",
+    )
+    _require(
         required_decision_actions
         == list(weekly.REQUIRED_DECISION_ACTIONS),
         issues,
@@ -1152,7 +1183,8 @@ def verify(args: argparse.Namespace) -> List[str]:
         expected_blocking_gates = [
             str(item.get("name") or "").strip() or "unknown"
             for item in ledger_rows
-            if str(item.get("state") or "unknown").strip() not in {"pass", "clear"}
+            if str(item.get("state") or "unknown").strip()
+            not in weekly.NON_BLOCKING_DECISION_GATE_STATES
         ]
         expected_route_blocked = bool(expected_blocking_gates) or str(
             dict(decision_board.get(action) or {}).get("state") or "unknown"
@@ -1615,6 +1647,16 @@ def verify(args: argparse.Namespace) -> List[str]:
         "packet does not require the M106 verifier command receipt",
     )
     _require("- Status: closed_for_fleet_package" in markdown, issues, "markdown repeat-prevention status is missing")
+    _require(
+        "- Worker command rule: " in markdown
+        and "repo-local files" in markdown
+        and "active-run helper commands" in markdown
+        and "hard-blocked" in markdown
+        and "run failure" in markdown
+        and "non-zero during active runs" in markdown,
+        issues,
+        "markdown worker command rule no longer records repo-local proof and hard-blocked helper posture",
+    )
     _require(
         f"- Next packet due: {schedule.get('next_packet_due_at')}" in markdown,
         issues,
