@@ -393,6 +393,7 @@ def _closed_fixture(tmp_path: Path):
                 "- the retained command bundle keeps `host-proof-bundles/linux`, `host-proof-bundles/macos`, and `host-proof-bundles/windows` present so ingest can resume without rebuilding the lane",
                 "- the finalize entrypoint still republishes after the per-host validate and ingest lanes remain available",
                 "- the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state",
+                "- root-level registry milestone, Fleet queue, and design queue metadata cannot cite worker-local telemetry or helper commands as closure proof",
                 "",
             ]
         ),
@@ -810,6 +811,42 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("registry work task cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_registry_milestone_metadata_cites_worker_local_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            registry = yaml.safe_load(fixture["registry"].read_text(encoding="utf-8"))
+            registry["milestones"][0]["operator_note"] = "Closed from ACTIVE_RUN_HANDOFF.generated.md"
+            _write_yaml(fixture["registry"], registry)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("registry milestone cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_queue_root_metadata_cites_worker_local_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            queue["operator_note"] = "Closed by chummer_design_supervisor.py eta"
+            _write_yaml(fixture["queue"], queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue staging cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_design_queue_root_metadata_cites_worker_local_telemetry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
+            design_queue["operator_note"] = "Closed by --telemetry-answer"
+            _write_yaml(fixture["design_queue"], design_queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("design queue staging cites active-run telemetry/helper proof", result.stderr)
 
     def test_verifier_fails_when_queue_item_metadata_cites_worker_local_telemetry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

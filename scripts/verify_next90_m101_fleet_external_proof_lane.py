@@ -121,6 +121,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = [
     "external_host_proof.status=pass",
     "bind runbook generation, closure verification, and completed-package repeat prevention",
     "include the standalone M101 verifier in no-PYTHONPATH bootstrap proof",
+    "rejects worker-local telemetry or helper-command citations in the M101 registry milestone, Fleet queue root, and design queue root metadata",
 ]
 REQUIRED_QUEUE_PROOF_MARKERS = [
     "/docker/fleet/scripts/materialize_external_proof_runbook.py",
@@ -146,6 +147,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = [
     "zero-backlog command bundle retains per-host preflight/capture/validate/bundle/ingest/run scripts",
     "design-owned queue source row matches the Fleet completed queue proof assignment",
     "completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason",
+    "worker-local telemetry or helper-command citations in the M101 registry milestone, Fleet queue root, and design queue root metadata cannot close the completed package",
 ]
 REQUIRED_CLOSEOUT_NOTE_MARKERS = [
     f"Package: `{PACKAGE_ID}`",
@@ -162,6 +164,7 @@ REQUIRED_CLOSEOUT_NOTE_MARKERS = [
     "the retained command bundle keeps `host-proof-bundles/linux`, `host-proof-bundles/macos`, and `host-proof-bundles/windows` present so ingest can resume without rebuilding the lane",
     "the finalize entrypoint still republishes after the per-host validate and ingest lanes remain available",
     "the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state",
+    "root-level registry milestone, Fleet queue, and design queue metadata cannot cite worker-local telemetry or helper commands as closure proof",
 ]
 REQUIRED_ANCHOR_PATHS = [
     ROOT / "scripts" / "materialize_external_proof_runbook.py",
@@ -419,6 +422,10 @@ def _disallowed_payload_entries(value: Any) -> list[str]:
     except TypeError:
         text = _normalize_text(value)
     return _disallowed_entries([text])
+
+
+def _without_nested_items(value: Dict[str, Any], *nested_keys: str) -> Dict[str, Any]:
+    return {key: item for key, item in value.items() if key not in nested_keys}
 
 
 def _extract_runbook_field(markdown: str, key: str) -> str:
@@ -1224,6 +1231,12 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
         issues.append(f"design queue proof cites active-run telemetry/helper proof: {entry}")
     for entry in _disallowed_payload_entries(work_task):
         issues.append(f"registry work task cites active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_payload_entries(_without_nested_items(milestone, "work_tasks")):
+        issues.append(f"registry milestone cites active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_payload_entries(_without_nested_items(queue, "items")):
+        issues.append(f"queue staging cites active-run telemetry/helper proof: {entry}")
+    for entry in _disallowed_payload_entries(_without_nested_items(design_queue, "items")):
+        issues.append(f"design queue staging cites active-run telemetry/helper proof: {entry}")
     for entry in _disallowed_payload_entries(queue_item):
         issues.append(f"queue item cites active-run telemetry/helper proof: {entry}")
     for entry in _disallowed_payload_entries(design_item):

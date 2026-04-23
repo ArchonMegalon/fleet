@@ -47,6 +47,7 @@ The repeat-prevention rules are:
 - the retained command bundle keeps `host-proof-bundles/linux`, `host-proof-bundles/macos`, and `host-proof-bundles/windows` present so ingest can resume without rebuilding the lane
 - the finalize entrypoint still republishes after the per-host validate and ingest lanes remain available
 - the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state
+- root-level registry milestone, Fleet queue, and design queue metadata cannot cite worker-local telemetry or helper commands as closure proof
 - commit `8dd79057` is the current proof floor for rejecting recursively encoded worker-helper citations in completed-package evidence
 - HTML-entity encoded worker-helper citations are rejected before any queue, registry, runbook, support, journey, readiness, or closeout proof can keep the package closed
 - commit `9bb8be5e` is the current proof floor for rejecting HTML-entity encoded worker-helper citations in completed-package evidence
