@@ -764,6 +764,11 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues,
         "measured rollout launch_gate_summary all_green no longer matches launch expansion readiness",
     )
+    _require(
+        (loop.get("loop_status") == "ready") == bool(launch_gate_summary.get("all_green")),
+        issues,
+        "measured rollout loop_status no longer matches launch_gate_summary all_green",
+    )
     weekly_adoption_gate = {}
     for row in decision_gate_ledger.get("launch_expand") or []:
         if isinstance(row, dict) and row.get("name") == "weekly_adoption_truth":
@@ -1121,6 +1126,8 @@ def verify(args: argparse.Namespace) -> List[str]:
             "owner",
             "route",
             "cadence",
+            "max_age_seconds",
+            "freshness_policy",
             "trigger_gate",
             "unblock_condition",
             "operator_action_when_blocked",
@@ -1163,6 +1170,13 @@ def verify(args: argparse.Namespace) -> List[str]:
             route_operator_projection_drift.append(f"{action}.blocking_gates")
         if row.get("route_blocked") is not expected_route_blocked:
             route_operator_projection_drift.append(f"{action}.route_blocked")
+        if row.get("max_age_seconds") != weekly.WEEKLY_PACKET_CADENCE_SECONDS:
+            route_operator_projection_drift.append(f"{action}.max_age_seconds")
+        if (
+            row.get("freshness_policy")
+            != "refresh_before_operator_action_if_packet_is_overdue"
+        ):
+            route_operator_projection_drift.append(f"{action}.freshness_policy")
     _require(
         not missing_actionable_route_fields,
         issues,
@@ -1215,6 +1229,16 @@ def verify(args: argparse.Namespace) -> List[str]:
     receipt_ids = set()
     for action in weekly.REQUIRED_DECISION_ACTIONS:
         row = dict(receipt_rows_by_action.get(action) or {})
+        route = dict(
+            next(
+                (
+                    route_row
+                    for route_row in route_rows
+                    if str(route_row.get("action") or "").strip() == action
+                ),
+                {},
+            )
+        )
         if not row:
             continue
         receipt_id = str(row.get("receipt_id") or "").strip()
@@ -1223,6 +1247,23 @@ def verify(args: argparse.Namespace) -> List[str]:
             invalid_receipt_fields.append(f"{action}.receipt_id")
         if len(receipt_sha) != 64 or any(ch not in "0123456789abcdef" for ch in receipt_sha):
             invalid_receipt_fields.append(f"{action}.receipt_sha256")
+        if row.get("max_age_seconds") != weekly.WEEKLY_PACKET_CADENCE_SECONDS:
+            invalid_receipt_fields.append(f"{action}.max_age_seconds")
+        if (
+            row.get("freshness_policy")
+            != "refresh_before_operator_action_if_packet_is_overdue"
+        ):
+            invalid_receipt_fields.append(f"{action}.freshness_policy")
+        if (
+            not str(row.get("reason") or "").strip()
+            or row.get("reason") != route.get("reason")
+        ):
+            invalid_receipt_fields.append(f"{action}.reason")
+        if (
+            not str(row.get("next_decision") or "").strip()
+            or row.get("next_decision") != route.get("next_decision")
+        ):
+            invalid_receipt_fields.append(f"{action}.next_decision")
         if row.get("matrix_complete") is not True:
             invalid_receipt_fields.append(f"{action}.matrix_complete")
         if row.get("ready_for_operator_packet") is not True:
@@ -1313,7 +1354,15 @@ def verify(args: argparse.Namespace) -> List[str]:
             )
         )
         receipt_row = dict(receipt_rows_by_action.get(action) or {})
-        for field in ("state", "route", "operator_action", "receipt_id", "next_decision"):
+        for field in (
+            "state",
+            "route",
+            "operator_action",
+            "receipt_id",
+            "next_review_due_ref",
+            "freshness_policy",
+            "next_decision",
+        ):
             if not str(row.get(field) or "").strip():
                 invalid_handoff_fields.append(f"{action}.{field}")
         if row.get("route") != route_row.get("route"):
@@ -1326,6 +1375,12 @@ def verify(args: argparse.Namespace) -> List[str]:
             invalid_handoff_fields.append(f"{action}.blocking_gate_count")
         if row.get("receipt_id") != receipt_row.get("receipt_id"):
             invalid_handoff_fields.append(f"{action}.receipt_id")
+        if row.get("next_review_due_ref") != "governor_packet_schedule.next_packet_due_at":
+            invalid_handoff_fields.append(f"{action}.next_review_due_ref")
+        if row.get("max_age_seconds") != weekly.WEEKLY_PACKET_CADENCE_SECONDS:
+            invalid_handoff_fields.append(f"{action}.max_age_seconds")
+        if row.get("freshness_policy") != route_row.get("freshness_policy"):
+            invalid_handoff_fields.append(f"{action}.freshness_policy")
     _require(
         not invalid_handoff_fields,
         issues,

@@ -2403,6 +2403,8 @@ def _decision_action_routes(
             "owner": "fleet",
             "route": "weekly_governor_packet.launch_expand",
             "cadence": "weekly",
+            "max_age_seconds": WEEKLY_PACKET_CADENCE_SECONDS,
+            "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
             "trigger_gate": "launch_gate_summary.all_green",
             "unblock_condition": "all launch_expand gates pass",
             "operator_action_when_blocked": "do_not_expand_launch",
@@ -2412,6 +2414,8 @@ def _decision_action_routes(
             "owner": "fleet",
             "route": "weekly_governor_packet.freeze_launch",
             "cadence": "weekly",
+            "max_age_seconds": WEEKLY_PACKET_CADENCE_SECONDS,
+            "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
             "trigger_gate": "launch_gate_summary.blocking_gate_names",
             "unblock_condition": "launch_expand becomes allowed",
             "operator_action_when_blocked": "keep_launch_frozen",
@@ -2421,6 +2425,8 @@ def _decision_action_routes(
             "owner": "fleet",
             "route": "measured_rollout_loop.canary",
             "cadence": "weekly",
+            "max_age_seconds": WEEKLY_PACKET_CADENCE_SECONDS,
+            "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
             "trigger_gate": "provider_canary",
             "unblock_condition": "provider canary is green on all active lanes",
             "operator_action_when_blocked": "collect_canary_evidence",
@@ -2430,6 +2436,8 @@ def _decision_action_routes(
             "owner": "fleet",
             "route": "measured_rollout_loop.rollback",
             "cadence": "weekly",
+            "max_age_seconds": WEEKLY_PACKET_CADENCE_SECONDS,
+            "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
             "trigger_gate": "release_health",
             "unblock_condition": "release and support followthrough gates are clear",
             "operator_action_when_blocked": "prepare_rollback_or_revoke",
@@ -2439,6 +2447,8 @@ def _decision_action_routes(
             "owner": "fleet",
             "route": "measured_rollout_loop.focus_shift",
             "cadence": "weekly",
+            "max_age_seconds": WEEKLY_PACKET_CADENCE_SECONDS,
+            "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
             "trigger_gate": "successor_wave_scope",
             "unblock_condition": "closed package stays verified and remaining work routes to dependency or sibling packages",
             "operator_action_when_blocked": "route_remaining_work_to_dependency_or_sibling_packages",
@@ -2483,6 +2493,8 @@ def _decision_action_routes(
                 "owner": contract["owner"],
                 "route": contract["route"],
                 "cadence": contract["cadence"],
+                "max_age_seconds": contract["max_age_seconds"],
+                "freshness_policy": contract["freshness_policy"],
                 "trigger_gate": contract["trigger_gate"],
                 "unblock_condition": contract["unblock_condition"],
                 "route_blocked": route_blocked,
@@ -2501,6 +2513,8 @@ def _decision_action_routes(
                     and contract.get("owner")
                     and contract.get("route")
                     and contract.get("cadence")
+                    and contract.get("max_age_seconds")
+                    and contract.get("freshness_policy")
                     and contract.get("trigger_gate")
                     and contract.get("unblock_condition")
                     and operator_action
@@ -2549,6 +2563,10 @@ def _decision_receipts(
             "state": str(route.get("state") or matrix.get("board_state") or "").strip(),
             "route": str(route.get("route") or "").strip(),
             "operator_action": str(route.get("operator_action") or "").strip(),
+            "reason": str(route.get("reason") or "").strip(),
+            "next_decision": str(route.get("next_decision") or "").strip(),
+            "max_age_seconds": _coerce_int(route.get("max_age_seconds"), 0),
+            "freshness_policy": str(route.get("freshness_policy") or "").strip(),
             "ledger_gate_count": _coerce_int(matrix.get("ledger_gate_count"), 0),
             "governor_gate_count": _coerce_int(matrix.get("governor_gate_count"), 0),
             "blocking_gate_count": _coerce_int(route.get("blocking_gate_count"), 0),
@@ -2570,6 +2588,10 @@ def _decision_receipts(
                 "state": receipt_source["state"] or "missing",
                 "route": receipt_source["route"] or "missing",
                 "operator_action": receipt_source["operator_action"] or "missing",
+                "reason": receipt_source["reason"] or "missing",
+                "next_decision": receipt_source["next_decision"] or "missing",
+                "max_age_seconds": receipt_source["max_age_seconds"],
+                "freshness_policy": receipt_source["freshness_policy"] or "missing",
                 "ledger_gate_count": receipt_source["ledger_gate_count"],
                 "governor_gate_count": receipt_source["governor_gate_count"],
                 "blocking_gate_count": receipt_source["blocking_gate_count"],
@@ -2583,6 +2605,8 @@ def _decision_receipts(
         for row in rows
         if row["matrix_complete"] is not True
         or row["ready_for_operator_packet"] is not True
+        or row["reason"] == "missing"
+        or row["next_decision"] == "missing"
         or not str(row.get("receipt_id") or "").startswith(f"m106-{row['action']}-")
     ]
     return {
@@ -2621,6 +2645,9 @@ def _weekly_operator_handoff(
             "route": str(route.get("route") or "").strip() or "missing",
             "operator_action": str(route.get("operator_action") or "").strip() or "missing",
             "receipt_id": str(receipt.get("receipt_id") or "").strip() or "missing",
+            "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
+            "max_age_seconds": _coerce_int(route.get("max_age_seconds"), 0),
+            "freshness_policy": str(route.get("freshness_policy") or "").strip() or "missing",
             "blocking_gate_count": _coerce_int(route.get("blocking_gate_count"), 0),
             "blocking_gates": _norm_list(route.get("blocking_gates")),
             "next_decision": str(route.get("next_decision") or "").strip(),
@@ -2629,6 +2656,9 @@ def _weekly_operator_handoff(
             row["route"] == "missing"
             or row["operator_action"] == "missing"
             or row["receipt_id"] == "missing"
+            or row["next_review_due_ref"] != "governor_packet_schedule.next_packet_due_at"
+            or row["max_age_seconds"] <= 0
+            or row["freshness_policy"] == "missing"
             or not row["next_decision"]
         ):
             incomplete_actions.append(action)
@@ -2972,7 +3002,7 @@ def build_payload(
         ),
     ]
     launch_reason = str(launch_decision.get("reason") or "").strip()
-    measured_loop_ready = (
+    measured_inputs_ready = (
         verification["status"] == "pass"
         and weekly_input_health["status"] == "pass"
         and source_input_health["status"] == "pass"
@@ -3063,19 +3093,6 @@ def build_payload(
             ),
         },
     }
-    packet_status = "ready" if package_complete and measured_loop_ready else "blocked"
-    if package_complete and measured_loop_ready:
-        status_reason = "Fleet package is closed and the weekly measured rollout loop is ready."
-    elif package_complete:
-        status_reason = (
-            "Fleet package is closed; measured rollout remains blocked by current "
-            "source, dependency, or sibling gates."
-        )
-    else:
-        status_reason = (
-            "Fleet package closeout is blocked; inspect package_verification issues "
-            "before treating this slice as closed."
-        )
     decision_board = {
         "current_launch_action": launch_action,
         "current_launch_reason": str(launch_decision.get("reason") or "").strip(),
@@ -3154,6 +3171,20 @@ def build_payload(
         decision_action_routes=decision_action_routes,
     )
     launch_gate_summary = _launch_gate_summary(launch_gate_ledger)
+    measured_loop_ready = measured_inputs_ready and bool(launch_gate_summary.get("all_green"))
+    packet_status = "ready" if package_complete and measured_loop_ready else "blocked"
+    if package_complete and measured_loop_ready:
+        status_reason = "Fleet package is closed and the weekly measured rollout loop is ready."
+    elif package_complete:
+        status_reason = (
+            "Fleet package is closed; measured rollout remains blocked by current "
+            "source, dependency, or sibling gates."
+        )
+    else:
+        status_reason = (
+            "Fleet package closeout is blocked; inspect package_verification issues "
+            "before treating this slice as closed."
+        )
     source_input_fingerprint = _source_input_fingerprint(source_input_health)
     generated_at = iso_now()
     governor_packet_schedule = _packet_schedule(generated_at)
@@ -3520,8 +3551,8 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             "",
             "## Decision Action Routes",
             "",
-            "| Action | Owner | Route | Cadence | Trigger gate | Route blocked | Operator action | Blocked action | Clear action | Blocking gates | Next decision | Ready |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| Action | Owner | Route | Cadence | Max age seconds | Freshness policy | Trigger gate | Route blocked | Operator action | Blocked action | Clear action | Blocking gates | Next decision | Ready |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
     for row in action_routes.get("rows") or []:
@@ -3532,6 +3563,8 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"{_markdown_status(row.get('owner'))} | "
             f"{_markdown_status(row.get('route'))} | "
             f"{_markdown_status(row.get('cadence'))} | "
+            f"{row.get('max_age_seconds', 0)} | "
+            f"{_markdown_status(row.get('freshness_policy'))} | "
             f"{_markdown_status(row.get('trigger_gate'))} | "
             f"{bool(row.get('route_blocked'))} | "
             f"{_markdown_status(row.get('operator_action'))} | "
@@ -3543,7 +3576,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
         )
     if not action_routes.get("rows"):
         lines.append(
-            "| none | unknown | unknown | unknown | unknown | False | unknown | unknown | unknown | none | none | False |"
+            "| none | unknown | unknown | unknown | 0 | unknown | unknown | False | unknown | unknown | unknown | none | none | False |"
         )
 
     lines.extend(
@@ -3556,8 +3589,8 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Schedule ref: {_markdown_status(operator_handoff.get('schedule_ref'))}",
             f"- Launch gate blocking names: {_markdown_list(operator_handoff.get('launch_gate_blocking_names'))}",
             "",
-            "| Action | State | Route | Operator action | Receipt | Blocking gates | Next decision |",
-            "| --- | --- | --- | --- | --- | --- | --- |",
+            "| Action | State | Route | Operator action | Receipt | Next review due ref | Max age seconds | Freshness policy | Blocking gates | Next decision |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
     for row in operator_handoff.get("rows") or []:
@@ -3569,11 +3602,14 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"{_markdown_status(row.get('route'))} | "
             f"{_markdown_status(row.get('operator_action'))} | "
             f"{_markdown_status(row.get('receipt_id'))} | "
+            f"{_markdown_status(row.get('next_review_due_ref'))} | "
+            f"{row.get('max_age_seconds', 0)} | "
+            f"{_markdown_status(row.get('freshness_policy'))} | "
             f"{_markdown_list(row.get('blocking_gates'))} | "
             f"{_markdown_status(row.get('next_decision'))} |"
         )
     if not operator_handoff.get("rows"):
-        lines.append("| none | unknown | unknown | unknown | missing | none | none |")
+        lines.append("| none | unknown | unknown | unknown | missing | missing | 0 | unknown | none | none |")
 
     lines.extend(["", "## Evidence Requirements", ""])
     for requirement in loop.get("evidence_requirements") or []:

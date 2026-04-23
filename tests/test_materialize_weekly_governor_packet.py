@@ -977,10 +977,10 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert result.returncode == 0, result.stderr
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["contract_name"] == "fleet.weekly_governor_packet"
-    assert payload["status"] == "ready"
+    assert payload["status"] == "blocked"
     assert (
         payload["status_reason"]
-        == "Fleet package is closed and the weekly measured rollout loop is ready."
+        == "Fleet package is closed; measured rollout remains blocked by current source, dependency, or sibling gates."
     )
     assert payload["package_verification"]["status"] == "pass"
     assert payload["package_verification"]["registry_work_task_status"] == "complete"
@@ -1357,7 +1357,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         == 2
     )
     assert payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_installation_bound_count"] == 2
-    assert payload["measured_rollout_loop"]["loop_status"] == "ready"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
     generated_at = dt.datetime.fromisoformat(
         payload["generated_at"].replace("Z", "+00:00")
     )
@@ -1470,6 +1470,16 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert route_rows["launch_expand"]["owner"] == "fleet"
     assert route_rows["launch_expand"]["route"] == "weekly_governor_packet.launch_expand"
     assert route_rows["launch_expand"]["cadence"] == "weekly"
+    assert route_rows["launch_expand"]["max_age_seconds"] == 604800
+    assert (
+        route_rows["launch_expand"]["freshness_policy"]
+        == "refresh_before_operator_action_if_packet_is_overdue"
+    )
+    assert all(row["max_age_seconds"] == 604800 for row in action_routes["rows"])
+    assert all(
+        row["freshness_policy"] == "refresh_before_operator_action_if_packet_is_overdue"
+        for row in action_routes["rows"]
+    )
     assert route_rows["launch_expand"]["trigger_gate"] == "launch_gate_summary.all_green"
     assert route_rows["launch_expand"]["operator_action"] == "do_not_expand_launch"
     assert route_rows["launch_expand"]["route_blocked"] is True
@@ -1519,6 +1529,21 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert receipt_rows["launch_expand"]["receipt_id"].startswith("m106-launch_expand-")
     assert len(receipt_rows["launch_expand"]["receipt_sha256"]) == 64
     assert receipt_rows["launch_expand"]["operator_action"] == "do_not_expand_launch"
+    assert receipt_rows["launch_expand"]["reason"] == route_rows["launch_expand"]["reason"]
+    assert (
+        receipt_rows["launch_expand"]["next_decision"]
+        == route_rows["launch_expand"]["next_decision"]
+    )
+    assert receipt_rows["launch_expand"]["max_age_seconds"] == 604800
+    assert (
+        receipt_rows["launch_expand"]["freshness_policy"]
+        == "refresh_before_operator_action_if_packet_is_overdue"
+    )
+    assert all(row["max_age_seconds"] == 604800 for row in decision_receipts["rows"])
+    assert all(
+        row["freshness_policy"] == "refresh_before_operator_action_if_packet_is_overdue"
+        for row in decision_receipts["rows"]
+    )
     assert receipt_rows["launch_expand"]["blocking_gates"] == [
         "successor_dependencies",
         "local_release_proof",
@@ -1526,6 +1551,14 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     ]
     assert all(row["matrix_complete"] is True for row in decision_receipts["rows"])
     assert all(row["ready_for_operator_packet"] is True for row in decision_receipts["rows"])
+    assert all(
+        row["reason"] == route_rows[row["action"]]["reason"]
+        for row in decision_receipts["rows"]
+    )
+    assert all(
+        row["next_decision"] == route_rows[row["action"]]["next_decision"]
+        for row in decision_receipts["rows"]
+    )
     operator_handoff = payload["measured_rollout_loop"]["weekly_operator_handoff"]
     assert operator_handoff["status"] == "pass"
     assert operator_handoff["cadence"] == "weekly"
@@ -1553,6 +1586,20 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert handoff_rows["launch_expand"]["receipt_id"] == receipt_rows["launch_expand"][
         "receipt_id"
     ]
+    assert (
+        handoff_rows["launch_expand"]["next_review_due_ref"]
+        == "governor_packet_schedule.next_packet_due_at"
+    )
+    assert handoff_rows["launch_expand"]["max_age_seconds"] == 604800
+    assert (
+        handoff_rows["launch_expand"]["freshness_policy"]
+        == "refresh_before_operator_action_if_packet_is_overdue"
+    )
+    assert all(row["max_age_seconds"] == 604800 for row in operator_handoff["rows"])
+    assert all(
+        row["freshness_policy"] == "refresh_before_operator_action_if_packet_is_overdue"
+        for row in operator_handoff["rows"]
+    )
     assert handoff_rows["rollback"]["route"] == "measured_rollout_loop.rollback"
     assert handoff_rows["rollback"]["blocking_gates"] == []
 
@@ -2017,6 +2064,7 @@ def test_weekly_support_summary_ignores_partial_ready_rows_even_when_receipt_gat
     assert "- Receipt-gated installed-build receipts: 9" not in markdown
     assert (
         "| launch_expand | fleet | weekly_governor_packet.launch_expand | weekly | "
+        "604800 | refresh_before_operator_action_if_packet_is_overdue | "
         "launch_gate_summary.all_green | True | do_not_expand_launch | "
         "do_not_expand_launch | promote_measured_launch_expansion | "
         "successor_dependencies, local_release_proof, "
@@ -2025,7 +2073,8 @@ def test_weekly_support_summary_ignores_partial_ready_rows_even_when_receipt_gat
         "canary, closure, and support gates are all green. | True |"
     ) in markdown
     assert (
-        "| rollback | fleet | measured_rollout_loop.rollback | weekly | release_health | "
+        "| rollback | fleet | measured_rollout_loop.rollback | weekly | "
+        "604800 | refresh_before_operator_action_if_packet_is_overdue | release_health | "
         "False | keep_rollback_armed | prepare_rollback_or_revoke | "
         "keep_rollback_armed | none | "
         "Rollback stays armed from release/support truth; watch is active when support closure "
@@ -2043,6 +2092,10 @@ def test_weekly_support_summary_ignores_partial_ready_rows_even_when_receipt_gat
     assert (
         "| launch_expand | blocked | weekly_governor_packet.launch_expand | "
         "do_not_expand_launch | m106-launch_expand-"
+    ) in markdown
+    assert (
+        "604800 | refresh_before_operator_action_if_packet_is_overdue | "
+        "successor_dependencies, local_release_proof, provider_canary |"
     ) in markdown
     assert (
         "| rollback | armed | measured_rollout_loop.rollback | keep_rollback_armed | "
@@ -2846,7 +2899,7 @@ def test_verify_next90_m106_governor_packet_accepts_checked_in_closeout(tmp_path
     assert "verified next90-m106-fleet-governor-packet" in verifier.stdout
 
 
-def test_verify_next90_m106_governor_packet_rejects_ready_status_reason_drift(
+def test_verify_next90_m106_governor_packet_rejects_blocked_status_reason_drift(
     tmp_path: Path,
 ) -> None:
     paths = _fixture_tree(tmp_path)
@@ -2869,7 +2922,7 @@ def test_verify_next90_m106_governor_packet_rejects_ready_status_reason_drift(
 
     assert verifier.returncode == 1
     assert (
-        "ready packet status_reason no longer confirms closed package and ready measured rollout"
+        "blocked packet status_reason no longer distinguishes closed package proof from rollout blockage"
         in verifier.stderr
     )
 
@@ -4805,6 +4858,34 @@ def test_verify_next90_m106_governor_packet_rejects_launch_gate_summary_drift(
     )
 
 
+def test_verify_next90_m106_governor_packet_rejects_loop_status_without_green_launch_gates(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = _run_materializer(paths, out)
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    assert packet["measured_rollout_loop"]["launch_gate_summary"]["all_green"] is False
+    packet["measured_rollout_loop"]["loop_status"] = "ready"
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "measured rollout loop_status no longer matches launch_gate_summary all_green"
+        in verifier.stderr
+    )
+
+
 def test_verify_next90_m106_governor_packet_rejects_decision_receipt_drift(
     tmp_path: Path,
 ) -> None:
@@ -4820,6 +4901,12 @@ def test_verify_next90_m106_governor_packet_rejects_decision_receipt_drift(
     packet["measured_rollout_loop"]["decision_receipts"]["rows"][0][
         "receipt_sha256"
     ] = "not-a-real-digest"
+    packet["measured_rollout_loop"]["decision_receipts"]["rows"][0][
+        "reason"
+    ] = "stale rationale from an older packet"
+    packet["measured_rollout_loop"]["decision_receipts"]["rows"][0][
+        "next_decision"
+    ] = "stale next decision"
     _write_json(out, packet)
 
     verifier = subprocess.run(
@@ -4836,6 +4923,8 @@ def test_verify_next90_m106_governor_packet_rejects_decision_receipt_drift(
         in verifier.stderr
     )
     assert "measured rollout decision_receipts has invalid receipt field(s)" in verifier.stderr
+    assert "launch_expand.reason" in verifier.stderr
+    assert "launch_expand.next_decision" in verifier.stderr
 
 
 def test_verify_next90_m106_governor_packet_rejects_weekly_operator_handoff_drift(
@@ -5363,6 +5452,7 @@ def test_weekly_governor_packet_allows_launch_expand_when_dependencies_and_gates
         "blocking_gate_names": [],
         "all_green": True,
     }
+    assert payload["measured_rollout_loop"]["loop_status"] == "ready"
     route_rows = {
         row["action"]: row
         for row in payload["measured_rollout_loop"]["decision_action_routes"]["rows"]

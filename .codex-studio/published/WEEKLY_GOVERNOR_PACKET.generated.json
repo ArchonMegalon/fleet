@@ -1,5 +1,5 @@
 {
-  "as_of": "2026-04-15",
+  "as_of": "2026-04-23",
   "contract_name": "fleet.weekly_governor_packet",
   "decision_alignment": {
     "actual_action": "freeze_launch",
@@ -9,18 +9,18 @@
   },
   "decision_board": {
     "canary": {
-      "next_decision": "Hold broad promotion until public route canary coverage exists.",
-      "reason": "Canary evidence is still accumulating",
-      "state": "accumulating"
+      "next_decision": "Promote once canaries stay green and support fallout remains clear through the next route review.",
+      "reason": "Canary green on all active lanes",
+      "state": "ready"
     },
     "current_launch_action": "freeze_launch",
-    "current_launch_reason": "Freeze launch expansion until fresh local release proof passes on the public edge.",
+    "current_launch_reason": "Freeze launch expansion until successor dependency work task(s) 101.4, 102.2, 102.3, 104.4, 105.3, 105.4 close in the next-90-day registry.",
     "focus_shift": {
       "reason": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
       "state": "queued_successor_wave"
     },
     "freeze_launch": {
-      "reason": "Freeze launch expansion until fresh local release proof passes on the public edge.",
+      "reason": "Freeze launch expansion until successor dependency work task(s) 101.4, 102.2, 102.3, 104.4, 105.3, 105.4 close in the next-90-day registry.",
       "state": "active"
     },
     "launch_expand": {
@@ -36,9 +36,9 @@
     "canary": [
       {
         "name": "provider_canary",
-        "observed": "Canary evidence is still accumulating",
+        "observed": "Canary green on all active lanes",
         "required": "Canary green on all active lanes",
-        "state": "accumulating"
+        "state": "ready"
       }
     ],
     "focus_shift": [
@@ -60,9 +60,9 @@
     "launch_expand": [
       {
         "name": "package_authority",
-        "observed": "fail",
+        "observed": "pass",
         "required": "pass",
-        "state": "fail"
+        "state": "pass"
       },
       {
         "name": "weekly_input_health",
@@ -72,9 +72,9 @@
       },
       {
         "name": "source_input_health",
-        "observed": "fail",
+        "observed": "pass",
         "required": "pass",
-        "state": "fail"
+        "state": "pass"
       },
       {
         "name": "decision_alignment",
@@ -90,9 +90,9 @@
       },
       {
         "name": "flagship_readiness",
-        "observed": "fail",
+        "observed": "pass",
         "required": "pass",
-        "state": "blocked"
+        "state": "pass"
       },
       {
         "name": "flagship_parity",
@@ -102,39 +102,39 @@
       },
       {
         "name": "flagship_quality",
-        "observed": "blocked",
+        "observed": "pass",
         "required": "localization pass and accessibility/polish proof ready",
-        "state": "blocked"
+        "state": "pass"
       },
       {
         "name": "status_plane_final_claim",
-        "observed": "fail",
+        "observed": "pass",
         "required": "pass",
-        "state": "blocked"
+        "state": "pass"
       },
       {
         "name": "journey_gates",
-        "observed": "blocked",
+        "observed": "ready",
         "required": "ready",
-        "state": "blocked"
+        "state": "pass"
       },
       {
         "name": "local_release_proof",
-        "observed": "unknown",
+        "observed": "passed",
         "required": "passed",
-        "state": "blocked"
+        "state": "pass"
       },
       {
         "name": "weekly_adoption_truth",
-        "observed": "early / 15 history snapshots",
+        "observed": "clear / 17 history snapshots",
         "required": "present with measured history",
         "state": "pass"
       },
       {
         "name": "provider_canary",
-        "observed": "Canary evidence is still accumulating",
+        "observed": "Canary green on all active lanes",
         "required": "Canary green on all active lanes",
-        "state": "blocked"
+        "state": "pass"
       },
       {
         "name": "closure_health",
@@ -182,7 +182,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-22T16:45:55Z",
+  "generated_at": "2026-04-23T11:21:26Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -193,14 +193,14 @@
     {
       "action": "freeze_launch",
       "gate_count": 1,
-      "reason": "Freeze launch expansion until fresh local release proof passes on the public edge.",
+      "reason": "Freeze launch expansion until successor dependency work task(s) 101.4, 102.2, 102.3, 104.4, 105.3, 105.4 close in the next-90-day registry.",
       "state": "active"
     },
     {
       "action": "canary",
       "gate_count": 1,
-      "reason": "Canary evidence is still accumulating",
-      "state": "accumulating"
+      "reason": "Canary green on all active lanes",
+      "state": "ready"
     },
     {
       "action": "rollback",
@@ -218,15 +218,15 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-04-22T16:45:55Z",
+    "generated_at": "2026-04-23T11:21:26Z",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-04-29T16:45:55Z",
+    "next_packet_due_at": "2026-04-30T11:21:26Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
     "blocked_dependency_package_ids": [],
     "cadence": "weekly",
-    "canary_ready": false,
+    "canary_ready": true,
     "decision_action_coverage": {
       "covered_action_count": 5,
       "incomplete_actions": [],
@@ -306,11 +306,11 @@
       },
       {
         "action": "canary",
-        "board_state": "accumulating",
+        "board_state": "ready",
         "complete": true,
         "gate_count_consistent": true,
         "governor_gate_count": 1,
-        "governor_state": "accumulating",
+        "governor_state": "ready",
         "ledger_gate_count": 1,
         "state_consistent": true
       },
@@ -348,37 +348,31 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 9,
+          "blocking_gate_count": 1,
           "blocking_gates": [
-            "package_authority",
-            "source_input_health",
-            "successor_dependencies",
-            "flagship_readiness",
-            "flagship_quality",
-            "status_plane_final_claim",
-            "journey_gates",
-            "local_release_proof",
-            "provider_canary"
+            "successor_dependencies"
           ],
           "cadence": "weekly",
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
             "closure_health": "pass",
             "decision_alignment": "pass",
             "flagship_parity": "pass",
-            "flagship_quality": "blocked",
-            "flagship_readiness": "blocked",
-            "journey_gates": "blocked",
-            "local_release_proof": "blocked",
-            "package_authority": "fail",
-            "provider_canary": "blocked",
-            "source_input_health": "fail",
-            "status_plane_final_claim": "blocked",
+            "flagship_quality": "pass",
+            "flagship_readiness": "pass",
+            "journey_gates": "pass",
+            "local_release_proof": "pass",
+            "package_authority": "pass",
+            "provider_canary": "pass",
+            "source_input_health": "pass",
+            "status_plane_final_claim": "pass",
             "successor_dependencies": "blocked",
             "support_followthrough_receipts": "pass",
             "support_packets": "pass",
             "weekly_adoption_truth": "pass",
             "weekly_input_health": "pass"
           },
+          "max_age_seconds": 604800,
           "next_decision": "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
           "operator_action": "do_not_expand_launch",
           "operator_action_when_blocked": "do_not_expand_launch",
@@ -399,16 +393,18 @@
             "fail_closed_default"
           ],
           "cadence": "weekly",
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
             "fail_closed_default": "active"
           },
-          "next_decision": "Freeze launch expansion until fresh local release proof passes on the public edge.",
+          "max_age_seconds": 604800,
+          "next_decision": "Freeze launch expansion until successor dependency work task(s) 101.4, 102.2, 102.3, 104.4, 105.3, 105.4 close in the next-90-day registry.",
           "operator_action": "keep_launch_frozen",
           "operator_action_when_blocked": "keep_launch_frozen",
           "operator_action_when_clear": "leave_freeze_available",
           "owner": "fleet",
           "ready_for_operator_packet": true,
-          "reason": "Freeze launch expansion until fresh local release proof passes on the public edge.",
+          "reason": "Freeze launch expansion until successor dependency work task(s) 101.4, 102.2, 102.3, 104.4, 105.3, 105.4 close in the next-90-day registry.",
           "route": "weekly_governor_packet.freeze_launch",
           "route_blocked": true,
           "state": "active",
@@ -422,19 +418,21 @@
             "provider_canary"
           ],
           "cadence": "weekly",
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
-            "provider_canary": "accumulating"
+            "provider_canary": "ready"
           },
-          "next_decision": "Canary evidence is still accumulating",
+          "max_age_seconds": 604800,
+          "next_decision": "Canary green on all active lanes",
           "operator_action": "collect_canary_evidence",
           "operator_action_when_blocked": "collect_canary_evidence",
           "operator_action_when_clear": "keep_canary_ready",
           "owner": "fleet",
           "ready_for_operator_packet": true,
-          "reason": "Canary evidence is still accumulating",
+          "reason": "Canary green on all active lanes",
           "route": "measured_rollout_loop.canary",
           "route_blocked": true,
-          "state": "accumulating",
+          "state": "ready",
           "trigger_gate": "provider_canary",
           "unblock_condition": "provider canary is green on all active lanes"
         },
@@ -443,12 +441,14 @@
           "blocking_gate_count": 0,
           "blocking_gates": [],
           "cadence": "weekly",
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
             "closure_waiting_on_release_truth": "clear",
             "release_health": "clear",
             "support_followthrough_receipt_blockers": "clear",
             "update_required_misrouted_cases": "clear"
           },
+          "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
           "operator_action": "keep_rollback_armed",
           "operator_action_when_blocked": "prepare_rollback_or_revoke",
@@ -469,9 +469,11 @@
             "successor_wave_scope"
           ],
           "cadence": "weekly",
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
             "successor_wave_scope": "queued_successor_wave"
           },
+          "max_age_seconds": 604800,
           "next_decision": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
           "operator_action": "route_remaining_work_to_dependency_or_sibling_packages",
           "operator_action_when_blocked": "route_remaining_work_to_dependency_or_sibling_packages",
@@ -501,25 +503,21 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 9,
+          "blocking_gate_count": 1,
           "blocking_gates": [
-            "package_authority",
-            "source_input_health",
-            "successor_dependencies",
-            "flagship_readiness",
-            "flagship_quality",
-            "status_plane_final_claim",
-            "journey_gates",
-            "local_release_proof",
-            "provider_canary"
+            "successor_dependencies"
           ],
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "governor_gate_count": 16,
           "ledger_gate_count": 16,
           "matrix_complete": true,
+          "max_age_seconds": 604800,
+          "next_decision": "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
           "operator_action": "do_not_expand_launch",
           "ready_for_operator_packet": true,
-          "receipt_id": "m106-launch_expand-f5f5c0323c2cbdb0",
-          "receipt_sha256": "f5f5c0323c2cbdb0d9b94e87951f81a475cd2721e164fa2246137e3164b9f4a1",
+          "reason": "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
+          "receipt_id": "m106-launch_expand-21335ee298c99fa6",
+          "receipt_sha256": "21335ee298c99fa62159d76ea8455dbab12bf4cdac9d194ec47b675c00623ba2",
           "route": "weekly_governor_packet.launch_expand",
           "state": "blocked"
         },
@@ -529,13 +527,17 @@
           "blocking_gates": [
             "fail_closed_default"
           ],
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "governor_gate_count": 1,
           "ledger_gate_count": 1,
           "matrix_complete": true,
+          "max_age_seconds": 604800,
+          "next_decision": "Freeze launch expansion until successor dependency work task(s) 101.4, 102.2, 102.3, 104.4, 105.3, 105.4 close in the next-90-day registry.",
           "operator_action": "keep_launch_frozen",
           "ready_for_operator_packet": true,
-          "receipt_id": "m106-freeze_launch-98c7727e35d8f9e9",
-          "receipt_sha256": "98c7727e35d8f9e9b7db1332de60a72966dcd9b8f91a5c8b18dd1952bd86f5b8",
+          "reason": "Freeze launch expansion until successor dependency work task(s) 101.4, 102.2, 102.3, 104.4, 105.3, 105.4 close in the next-90-day registry.",
+          "receipt_id": "m106-freeze_launch-2946e72f353bd4e4",
+          "receipt_sha256": "2946e72f353bd4e4bfa6d5cd5d84772ac3bbabc4b56b1fd8000e13bf92e77b54",
           "route": "weekly_governor_packet.freeze_launch",
           "state": "active"
         },
@@ -545,27 +547,35 @@
           "blocking_gates": [
             "provider_canary"
           ],
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "governor_gate_count": 1,
           "ledger_gate_count": 1,
           "matrix_complete": true,
+          "max_age_seconds": 604800,
+          "next_decision": "Canary green on all active lanes",
           "operator_action": "collect_canary_evidence",
           "ready_for_operator_packet": true,
-          "receipt_id": "m106-canary-d26c9d22096a0e20",
-          "receipt_sha256": "d26c9d22096a0e20ac63631d827c995228b0709b8bdc2c2834ae1884cc3a7101",
+          "reason": "Canary green on all active lanes",
+          "receipt_id": "m106-canary-27b594eceb8f90e1",
+          "receipt_sha256": "27b594eceb8f90e1bbdbd354b45fe521484c833562645bf0d4afc1b8a7bbcb79",
           "route": "measured_rollout_loop.canary",
-          "state": "accumulating"
+          "state": "ready"
         },
         {
           "action": "rollback",
           "blocking_gate_count": 0,
           "blocking_gates": [],
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "governor_gate_count": 4,
           "ledger_gate_count": 4,
           "matrix_complete": true,
+          "max_age_seconds": 604800,
+          "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
           "operator_action": "keep_rollback_armed",
           "ready_for_operator_packet": true,
-          "receipt_id": "m106-rollback-5e74d9319f6f7334",
-          "receipt_sha256": "5e74d9319f6f73342f3f0d3a63871dc8344e864376c45011d6a0606fe979af84",
+          "reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
+          "receipt_id": "m106-rollback-fcedde06369bab3d",
+          "receipt_sha256": "fcedde06369bab3d9743f33b9ab677d50249e9d19b4d611b7089e3afa8d29452",
           "route": "measured_rollout_loop.rollback",
           "state": "armed"
         },
@@ -575,13 +585,17 @@
           "blocking_gates": [
             "successor_wave_scope"
           ],
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "governor_gate_count": 1,
           "ledger_gate_count": 1,
           "matrix_complete": true,
+          "max_age_seconds": 604800,
+          "next_decision": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
           "operator_action": "route_remaining_work_to_dependency_or_sibling_packages",
           "ready_for_operator_packet": true,
-          "receipt_id": "m106-focus_shift-a17d06d411fbd624",
-          "receipt_sha256": "a17d06d411fbd624696b66d987bca32a6a0a09b484ed1bc78c5fc30b66def41a",
+          "reason": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
+          "receipt_id": "m106-focus_shift-7b0f000df20e2a7f",
+          "receipt_sha256": "7b0f000df20e2a7f4fcf08f936c9cf25eb41ed2f8f6ccbafc54adeb08130471b",
           "route": "measured_rollout_loop.focus_shift",
           "state": "queued_successor_wave"
         }
@@ -807,21 +821,13 @@
     "launch_gate_summary": {
       "accumulating_count": 0,
       "all_green": false,
-      "blocked_count": 7,
+      "blocked_count": 1,
       "blocking_gate_names": [
-        "package_authority",
-        "source_input_health",
-        "successor_dependencies",
-        "flagship_readiness",
-        "flagship_quality",
-        "status_plane_final_claim",
-        "journey_gates",
-        "local_release_proof",
-        "provider_canary"
+        "successor_dependencies"
       ],
-      "fail_count": 2,
+      "fail_count": 0,
       "gate_count": 16,
-      "pass_count": 7,
+      "pass_count": 15,
       "unknown_count": 0,
       "watch_count": 0
     },
@@ -846,15 +852,7 @@
       "cadence": "weekly",
       "incomplete_actions": [],
       "launch_gate_blocking_names": [
-        "package_authority",
-        "source_input_health",
-        "successor_dependencies",
-        "flagship_readiness",
-        "flagship_quality",
-        "status_plane_final_claim",
-        "journey_gates",
-        "local_release_proof",
-        "provider_canary"
+        "successor_dependencies"
       ],
       "missing_actions": [],
       "required_actions": [
@@ -867,21 +865,16 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 9,
+          "blocking_gate_count": 1,
           "blocking_gates": [
-            "package_authority",
-            "source_input_health",
-            "successor_dependencies",
-            "flagship_readiness",
-            "flagship_quality",
-            "status_plane_final_claim",
-            "journey_gates",
-            "local_release_proof",
-            "provider_canary"
+            "successor_dependencies"
           ],
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
+          "max_age_seconds": 604800,
           "next_decision": "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
+          "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "do_not_expand_launch",
-          "receipt_id": "m106-launch_expand-f5f5c0323c2cbdb0",
+          "receipt_id": "m106-launch_expand-21335ee298c99fa6",
           "route": "weekly_governor_packet.launch_expand",
           "state": "blocked"
         },
@@ -891,9 +884,12 @@
           "blocking_gates": [
             "fail_closed_default"
           ],
-          "next_decision": "Freeze launch expansion until fresh local release proof passes on the public edge.",
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
+          "max_age_seconds": 604800,
+          "next_decision": "Freeze launch expansion until successor dependency work task(s) 101.4, 102.2, 102.3, 104.4, 105.3, 105.4 close in the next-90-day registry.",
+          "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_launch_frozen",
-          "receipt_id": "m106-freeze_launch-98c7727e35d8f9e9",
+          "receipt_id": "m106-freeze_launch-2946e72f353bd4e4",
           "route": "weekly_governor_packet.freeze_launch",
           "state": "active"
         },
@@ -903,19 +899,25 @@
           "blocking_gates": [
             "provider_canary"
           ],
-          "next_decision": "Canary evidence is still accumulating",
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
+          "max_age_seconds": 604800,
+          "next_decision": "Canary green on all active lanes",
+          "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "collect_canary_evidence",
-          "receipt_id": "m106-canary-d26c9d22096a0e20",
+          "receipt_id": "m106-canary-27b594eceb8f90e1",
           "route": "measured_rollout_loop.canary",
-          "state": "accumulating"
+          "state": "ready"
         },
         {
           "action": "rollback",
           "blocking_gate_count": 0,
           "blocking_gates": [],
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
+          "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
+          "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_rollback_armed",
-          "receipt_id": "m106-rollback-5e74d9319f6f7334",
+          "receipt_id": "m106-rollback-fcedde06369bab3d",
           "route": "measured_rollout_loop.rollback",
           "state": "armed"
         },
@@ -925,9 +927,12 @@
           "blocking_gates": [
             "successor_wave_scope"
           ],
+          "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
+          "max_age_seconds": 604800,
           "next_decision": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
+          "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "route_remaining_work_to_dependency_or_sibling_packages",
-          "receipt_id": "m106-focus_shift-a17d06d411fbd624",
+          "receipt_id": "m106-focus_shift-7b0f000df20e2a7f",
           "route": "measured_rollout_loop.focus_shift",
           "state": "queued_successor_wave"
         }
@@ -939,7 +944,7 @@
   },
   "package_closeout": {
     "blocked_dependency_package_ids": [],
-    "closeout_reason": "Fleet package authority or proof is not complete; inspect package_verification issues before reusing this slice.",
+    "closeout_reason": "Fleet package authority, queue closeout, registry work task 106.1, generated packet, markdown packet, and proof markers are current.",
     "dependency_package_routes": {
       "closed_package_count": 0,
       "incomplete_package_milestone_ids": [],
@@ -1022,7 +1027,7 @@
       "rule": "Closed dependency package rows are verified instead of reopened; launch expansion still waits for successor registry milestone status to close.",
       "status": "blocked"
     },
-    "do_not_reopen_package": false,
+    "do_not_reopen_package": true,
     "milestone_106_still_open_because": "successor dependencies and sibling work tasks remain outside this Fleet package",
     "owned_surfaces": [
       "weekly_governor_packet",
@@ -1046,7 +1051,7 @@
       "106.3",
       "106.4"
     ],
-    "status": "blocked",
+    "status": "fleet_package_complete",
     "successor_frontier_ids": [
       "2376135131"
     ],
@@ -1131,7 +1136,7 @@
     "design_queue_do_not_reopen_reason": "M106 Fleet weekly governor packet is complete; future shards must verify the weekly packet receipt, registry row, queue row, and design-queue row instead of reopening the measured rollout packet package.",
     "design_queue_frontier_id": "2376135131",
     "design_queue_landed_commit": "b467c27",
-    "design_queue_source_registry_path": "/docker/chummercomplete/chummer6-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+    "design_queue_source_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
     "design_queue_status": "complete",
     "disallowed_worker_proof_command_markers": [
       "/var/lib/codex-fleet",
@@ -1265,10 +1270,7 @@
     "expected_queue_task": "Turn readiness, parity, support, and rollout truth into a weekly governor packet that drives measured product decisions.",
     "expected_queue_title": "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions",
     "expected_registry_milestone_title": "Product-governor weekly adoption and measured rollout loop",
-    "issues": [
-      "design queue staging source_registry_path is not the canonical successor registry",
-      "Fleet queue mirror package row diverges from design-owned queue staging for field(s): proof"
-    ],
+    "issues": [],
     "local_commit_resolution": {
       "commits": [
         {
@@ -1619,223 +1621,8 @@
     "queue_do_not_reopen_reason": "M106 Fleet weekly governor packet is complete; future shards must verify the weekly packet receipt, registry row, queue row, and design-queue row instead of reopening the measured rollout packet package.",
     "queue_frontier_id": "2376135131",
     "queue_landed_commit": "b467c27",
-    "queue_mirror_drift": [
-      {
-        "design_queue": [
-          "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
-          "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
-          "/docker/fleet/scripts/run_next90_m106_weekly_governor_packet_tests.py",
-          "/docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py",
-          "/docker/fleet/tests/test_materialize_weekly_governor_packet.py",
-          "/docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py",
-          "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
-          "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
-          "python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
-          "python3 -m py_compile scripts/run_next90_m106_weekly_governor_packet_tests.py",
-          "python3 -m py_compile scripts/verify_script_bootstrap_no_pythonpath.py tests/test_fleet_script_bootstrap_without_pythonpath.py",
-          "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
-          "python3 scripts/run_next90_m106_weekly_governor_packet_tests.py exits 0",
-          "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
-          "verifier rebuilds the decision-critical packet projection from live source inputs",
-          "markdown Generated timestamp must match JSON generated_at",
-          "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
-          "future-dated weekly and source generated_at receipts are rejected",
-          "verifier rejects compile manifest freshness drift after weekly packet refresh",
-          "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
-          "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
-          "weekly pulse duplicate or ambiguous launch governance actions are rejected",
-          "status-plane final claim drift blocks launch expansion and measured rollout readiness",
-          "status_reason distinguishes closed Fleet package proof from blocked rollout gates",
-          "forbidden worker proof strings are rejected case-insensitively",
-          "task-local telemetry field names are rejected as worker proof strings",
-          "successor-wave telemetry summary strings are rejected as worker proof strings",
-          "literal successor-wave telemetry labels are rejected as worker proof strings",
-          "frontier-detail prompt strings are rejected as worker proof strings",
-          "frontier-detail body strings are rejected as worker proof strings",
-          "run-prompt authority labels are rejected as worker proof strings",
-          "execution-discipline prompt strings are rejected as worker proof strings",
-          "runtime handoff header and model metadata strings are rejected as worker proof strings",
-          "runtime handoff frontier metadata strings are rejected as worker proof strings",
-          "handoff polling phrase guard is enforced case-insensitively",
-          "control-plane polling prohibition guard is enforced case-insensitively",
-          "worker-run OODA helper guard is enforced case-insensitively",
-          "telemetry-ownership handoff prompt strings are rejected as worker proof strings",
-          "worker-safe resume context prompt strings are rejected as worker proof strings",
-          "worker-run supervisor launcher guard is enforced case-insensitively",
-          "run-helper failure proof strings are rejected case-insensitively",
-          "repeat-prevention worker command guard records helper failure posture",
-          "verifier rejects Fleet proof paths outside package allowed path roots",
-          "production verifier rejects non-canonical source path overrides",
-          "verifier rejects reused closed successor frontier rows outside the Fleet M106 package",
-          "blocked support-packet proof routes exactly to the M102 reporter-receipts dependency package",
-          "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
-          "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
-          "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention",
-          "local proof floor commit 6d1663c pinned for M106 governor packet dependency-routing guard",
-          "local proof floor commit ade57ae pinned for M106 task-local telemetry field guard",
-          "local proof floor commit 55d8282 pinned for M106 source-authority guard",
-          "local proof floor commit 144eae5 pinned for M106 worker-run helper guard",
-          "local proof floor commit 543dfd5 pinned for M106 markdown proof-floor guard",
-          "local proof floor commit f16f13b pinned for M106 run-helper failure guard",
-          "local proof floor commit 999231f pinned for M106 source-input refresh guard",
-          "local proof floor commit 25836f6 pinned for M106 source refresh proof floor",
-          "local proof floor commit 3e7ee9b pinned for M106 governor packet proof floor",
-          "local proof floor commit 17189be pinned for M106 future-dated source timestamp guard",
-          "local proof floor commit 9d2ea4c pinned for M106 timestamp guard proof floor",
-          "local proof floor commit bb49fc1 pinned for M106 run-prompt authority guard",
-          "local proof floor commit 26679c7 pinned for M106 refreshed packet artifact floor",
-          "local proof floor commit ef50370 pinned for M106 refreshed proof-floor guard",
-          "local proof floor commit a1be389 pinned for M106 successor telemetry prompt-label guard",
-          "local proof floor commit 83d2d21 pinned for M106 OODA telemetry ownership guard",
-          "local proof floor commit e74a7ec pinned for M106 OODA telemetry proof floor",
-          "local proof floor commit 8fb8d40 pinned for M106 refreshed packet artifact floor",
-          "local proof floor commit dd5fdb5 pinned for M106 weekly governor proof floor",
-          "local proof floor commit 52fe086 pinned for M106 governor packet proof floor",
-          "local proof floor commit 6c429cb pinned for M106 verified closeout proof floor",
-          "local proof floor commit 5193bce pinned for M106 refreshed packet artifact floor",
-          "local proof floor commit f662ad3 pinned for M106 shorthand telemetry command guard",
-          "local proof floor commit 5882234 pinned for M106 blocked dependency route guard",
-          "local proof floor commit 6c376e0 pinned for M106 execution-discipline proof guard",
-          "local proof floor commit 00e870e pinned for M106 direct fixture runner guard",
-          "local proof floor commit 81e1de8 pinned for M106 refreshed source-input packet floor",
-          "local proof floor commit 941c54d pinned for M106 handoff frontier metadata guard",
-          "local proof floor commit 6981667 pinned for M106 worker helper rule guard",
-          "local proof floor commit 4a13b47 pinned for M106 markdown timestamp proof guard",
-          "local proof floor commit d597376 pinned for M106 telemetry handoff proof guard",
-          "local proof floor commit 233a52a pinned for M106 shard-runtime-handoff guard",
-          "local proof floor commit fba96cc pinned for M106 helper failure posture guard",
-          "local proof floor commit 15efd7c pinned for M106 refreshed packet artifact floor",
-          "local proof floor commit f3bfb8d pinned for M106 refreshed packet artifact floor",
-          "local proof floor commit d15a7ae pinned for M106 queue closeout action guard",
-          "local proof floor commit ac1c4ac pinned for M106 queue closeout proof floor",
-          "local proof floor commit b909cc5 pinned for M106 codexea helper proof guard",
-          "local proof floor commit 787d27a pinned for M106 packet refresh floor",
-          "local proof floor commit b467c27 pinned for M106 design queue OODA prompt proof guard",
-          "commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs",
-          "commit 81e1de8 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after source input drift from refreshed support, readiness, and journey receipts",
-          "commit 15efd7c refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after current support, readiness, and journey source input drift",
-          "commit f3bfb8d refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after current support, readiness, journey, and status-plane source input drift",
-          "commit d15a7ae tightens the M106 queue closeout action guard.",
-          "commit b909cc5 tightens the M106 codexea helper proof guard.",
-          "commit 787d27a pins the M106 packet refresh floor.",
-          "commit b467c27 tightens the M106 design queue OODA prompt proof guard.",
-          "stale aggregate receipt-gate counts cannot overstate installed-build followthrough without detailed row truth",
-          "local proof floor commit fe4c621 pinned for M106 receipt-gate row-truth guard",
-          "commit fe4c621 tightens the M106 receipt-gate row-truth guard.",
-          "local proof floor commit 653380a pinned for M106 receipt-gate row-truth proof floor",
-          "commit 653380a pins the M106 receipt-gate row-truth guard.",
-          "local proof floor commit b568034 pinned for M106 closure-proof dependency package routing guard",
-          "commit b568034 tightens the M106 governor packet closure proof.",
-          "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop",
-          "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
-        ],
-        "field": "proof",
-        "fleet_queue": [
-          "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
-          "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
-          "/docker/fleet/scripts/run_next90_m106_weekly_governor_packet_tests.py",
-          "/docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py",
-          "/docker/fleet/tests/test_materialize_weekly_governor_packet.py",
-          "/docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py",
-          "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
-          "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
-          "python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
-          "python3 -m py_compile scripts/run_next90_m106_weekly_governor_packet_tests.py",
-          "python3 -m py_compile scripts/verify_script_bootstrap_no_pythonpath.py tests/test_fleet_script_bootstrap_without_pythonpath.py",
-          "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
-          "python3 scripts/run_next90_m106_weekly_governor_packet_tests.py exits 0",
-          "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
-          "verifier rebuilds the decision-critical packet projection from live source inputs",
-          "markdown Generated timestamp must match JSON generated_at",
-          "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
-          "future-dated weekly and source generated_at receipts are rejected",
-          "verifier rejects compile manifest freshness drift after weekly packet refresh",
-          "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
-          "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
-          "weekly pulse duplicate or ambiguous launch governance actions are rejected",
-          "status-plane final claim drift blocks launch expansion and measured rollout readiness",
-          "status_reason distinguishes closed Fleet package proof from blocked rollout gates",
-          "forbidden worker proof strings are rejected case-insensitively",
-          "task-local telemetry field names are rejected as worker proof strings",
-          "successor-wave telemetry summary strings are rejected as worker proof strings",
-          "literal successor-wave telemetry labels are rejected as worker proof strings",
-          "frontier-detail prompt strings are rejected as worker proof strings",
-          "frontier-detail body strings are rejected as worker proof strings",
-          "run-prompt authority labels are rejected as worker proof strings",
-          "execution-discipline prompt strings are rejected as worker proof strings",
-          "runtime handoff header and model metadata strings are rejected as worker proof strings",
-          "runtime handoff frontier metadata strings are rejected as worker proof strings",
-          "handoff polling phrase guard is enforced case-insensitively",
-          "control-plane polling prohibition guard is enforced case-insensitively",
-          "worker-run OODA helper guard is enforced case-insensitively",
-          "telemetry-ownership handoff prompt strings are rejected as worker proof strings",
-          "worker-safe resume context prompt strings are rejected as worker proof strings",
-          "worker-run supervisor launcher guard is enforced case-insensitively",
-          "run-helper failure proof strings are rejected case-insensitively",
-          "repeat-prevention worker command guard records helper failure posture",
-          "verifier rejects Fleet proof paths outside package allowed path roots",
-          "production verifier rejects non-canonical source path overrides",
-          "verifier rejects reused closed successor frontier rows outside the Fleet M106 package",
-          "blocked support-packet proof routes exactly to the M102 reporter-receipts dependency package",
-          "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
-          "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
-          "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention",
-          "local proof floor commit 6d1663c pinned for M106 governor packet dependency-routing guard",
-          "local proof floor commit ade57ae pinned for M106 task-local telemetry field guard",
-          "local proof floor commit 55d8282 pinned for M106 source-authority guard",
-          "local proof floor commit 144eae5 pinned for M106 worker-run helper guard",
-          "local proof floor commit 543dfd5 pinned for M106 markdown proof-floor guard",
-          "local proof floor commit f16f13b pinned for M106 run-helper failure guard",
-          "local proof floor commit 999231f pinned for M106 source-input refresh guard",
-          "local proof floor commit 25836f6 pinned for M106 source refresh proof floor",
-          "local proof floor commit 3e7ee9b pinned for M106 governor packet proof floor",
-          "local proof floor commit 17189be pinned for M106 future-dated source timestamp guard",
-          "local proof floor commit 9d2ea4c pinned for M106 timestamp guard proof floor",
-          "local proof floor commit bb49fc1 pinned for M106 run-prompt authority guard",
-          "local proof floor commit 26679c7 pinned for M106 refreshed packet artifact floor",
-          "local proof floor commit ef50370 pinned for M106 refreshed proof-floor guard",
-          "local proof floor commit a1be389 pinned for M106 successor telemetry prompt-label guard",
-          "local proof floor commit 83d2d21 pinned for M106 OODA telemetry ownership guard",
-          "local proof floor commit e74a7ec pinned for M106 OODA telemetry proof floor",
-          "local proof floor commit 8fb8d40 pinned for M106 refreshed packet artifact floor",
-          "local proof floor commit dd5fdb5 pinned for M106 weekly governor proof floor",
-          "local proof floor commit 52fe086 pinned for M106 governor packet proof floor",
-          "local proof floor commit 6c429cb pinned for M106 verified closeout proof floor",
-          "local proof floor commit 5193bce pinned for M106 refreshed packet artifact floor",
-          "local proof floor commit f662ad3 pinned for M106 shorthand telemetry command guard",
-          "local proof floor commit 5882234 pinned for M106 blocked dependency route guard",
-          "local proof floor commit 6c376e0 pinned for M106 execution-discipline proof guard",
-          "local proof floor commit 00e870e pinned for M106 direct fixture runner guard",
-          "local proof floor commit 81e1de8 pinned for M106 refreshed source-input packet floor",
-          "local proof floor commit 941c54d pinned for M106 handoff frontier metadata guard",
-          "local proof floor commit 6981667 pinned for M106 worker helper rule guard",
-          "local proof floor commit 4a13b47 pinned for M106 markdown timestamp proof guard",
-          "local proof floor commit d597376 pinned for M106 telemetry handoff proof guard",
-          "local proof floor commit 233a52a pinned for M106 shard-runtime-handoff guard",
-          "local proof floor commit fba96cc pinned for M106 helper failure posture guard",
-          "local proof floor commit 15efd7c pinned for M106 refreshed packet artifact floor",
-          "local proof floor commit f3bfb8d pinned for M106 refreshed packet artifact floor",
-          "local proof floor commit d15a7ae pinned for M106 queue closeout action guard",
-          "local proof floor commit ac1c4ac pinned for M106 queue closeout proof floor",
-          "local proof floor commit b909cc5 pinned for M106 codexea helper proof guard",
-          "local proof floor commit 787d27a pinned for M106 packet refresh floor",
-          "local proof floor commit b467c27 pinned for M106 design queue OODA prompt proof guard",
-          "commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs",
-          "commit 81e1de8 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after source input drift from refreshed support, readiness, and journey receipts",
-          "commit 15efd7c refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after current support, readiness, and journey source input drift",
-          "commit f3bfb8d refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after current support, readiness, journey, and status-plane source input drift",
-          "commit d15a7ae tightens the M106 queue closeout action guard.",
-          "commit b909cc5 tightens the M106 codexea helper proof guard.",
-          "commit 787d27a pins the M106 packet refresh floor.",
-          "commit b467c27 tightens the M106 design queue OODA prompt proof guard.",
-          "stale aggregate receipt-gate counts cannot overstate installed-build followthrough without detailed row truth",
-          "local proof floor commit fe4c621 pinned for M106 receipt-gate row-truth guard",
-          "commit fe4c621 tightens the M106 receipt-gate row-truth guard.",
-          "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
-        ]
-      }
-    ],
-    "queue_mirror_status": "drift",
+    "queue_mirror_drift": [],
+    "queue_mirror_status": "in_sync",
     "queue_source_design_queue_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
     "queue_source_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
     "queue_status": "complete",
@@ -2057,14 +1844,14 @@
       "tests/test_materialize_weekly_governor_packet.py",
       "tests/test_fleet_script_bootstrap_without_pythonpath.py"
     ],
-    "status": "fail",
+    "status": "pass",
     "successor_frontier_ids": [
       "2376135131"
     ]
   },
   "program_wave": "next_90_day_product_advance",
   "public_status_copy": {
-    "body": "Freeze launch expansion until fresh local release proof passes on the public edge.",
+    "body": "Freeze launch expansion until successor dependency work task(s) 101.4, 102.2, 102.3, 104.4, 105.3, 105.4 close in the next-90-day registry.",
     "decision_actions": [
       "launch_expand",
       "freeze_launch",
@@ -2171,7 +1958,7 @@
       "rule": "Closed dependency package rows are verified instead of reopened; launch expansion still waits for successor registry milestone status to close.",
       "status": "blocked"
     },
-    "do_not_reopen_owned_surfaces": false,
+    "do_not_reopen_owned_surfaces": true,
     "flagship_wave_guard": {
       "closed_registry_milestone_count": 18,
       "closed_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
@@ -2182,7 +1969,7 @@
       "rule": "Successor M106 packet work may summarize flagship readiness inputs, but must not reopen or re-scope the closed flagship wave.",
       "status": "closed_wave_not_reopened"
     },
-    "handoff_rule": "Package verification is blocked; fix package_verification.issues before treating this slice as closed.",
+    "handoff_rule": "Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; route remaining M106 work to the listed dependency or sibling packages.",
     "local_commit_resolution": {
       "commits": [
         {
@@ -2544,7 +2331,7 @@
       "106.3",
       "106.4"
     ],
-    "status": "blocked",
+    "status": "closed_for_fleet_package",
     "worker_command_guard": {
       "blocked_markers": [
         "/var/lib/codex-fleet",
@@ -2678,12 +2465,12 @@
   },
   "risk_clusters": [
     {
-      "cluster_id": "campaign_os_indispensable_and_launch_scale",
+      "cluster_id": "next12_trust_publication_launch_scale",
       "source_paths": [
         "products/chummer/ROADMAP.md",
-        "products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml"
+        "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml"
       ],
-      "summary": "Campaign Breadth and Promotion is the post-post-audit additive pressure cluster: make the campaign OS indispensable, widen Build and Explain, strengthen exchange and publication, and turn trust plus operator depth into launch-scale product posture."
+      "summary": "Next 12 Biggest Wins is the active pressure cluster: finish install-specific trust/support truth, creator publication and shelf posture, pulse-v3 launch governance, and no-step-back utility parity."
     },
     {
       "cluster_id": "public_release_follow_through",
@@ -2704,13 +2491,13 @@
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "2d6f167579666aead6e645641c3150fca483cb26c51da5cfe8d9dbf4c5db944d",
+    "combined_source_sha256": "f0aca7d8f350019cb9c1cac65032d0f435d9cc3ba0fdf70a7ef6deec107923be",
     "missing_inputs": [],
     "rows": [
       {
         "name": "successor_registry",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "01b384faf09fbf2cc1578cbe1fde9dbfff37ad182fe132aa637a2bac79c7a203"
+        "source_sha256": "fc22f89f1e6cba0a98f0a34924ca2377fb1ec2bf00842d239b237cd698d632c2"
       },
       {
         "name": "closed_flagship_registry",
@@ -2720,46 +2507,44 @@
       {
         "name": "design_queue_staging",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "acfa4fa0aa971160ff3d8bb71ce862aeb09b96d14edd58e333d306401849dfbf"
+        "source_sha256": "1558188bcddb801ff3135616165a9b7265dd1a676fc354ef66206740a092ba5b"
       },
       {
         "name": "queue_staging",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "d7ded4e2867712a2c8467a96fd55f484ca577726a4df559b121ffb0ac4b47779"
+        "source_sha256": "1c48d8fce2e8bad57ce00c3aa070897b371557ae34239eab9da90523fae646ef"
       },
       {
         "name": "weekly_pulse",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "36bbf138c41915701ce95bb2280d71c19662daa7daef0d741683d552c60a734b"
+        "source_sha256": "be834e5b59c8a211d15d90b3dcdf32f2737d1106c71b5c5950d7b5a666db34e6"
       },
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "df5ff513b39661dc8d8d956fca9f14b69c0140aab2fcf1d8f44bdf0905829b9d"
+        "source_sha256": "d63416c833b776a91da0b69788feced86c38949f93cc4aa6486a3c2af88bde59"
       },
       {
         "name": "journey_gates",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "7a7b97274c64108f9db24c6d5788bd2e3aceaeccd22baa554454e10ceb997b9e"
+        "source_sha256": "a7bfc519fdfeaf2dd3d24437556c51eef1559627668870609b89b9e258712b1d"
       },
       {
         "name": "support_packets",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "5090143184e2689080f571d6009020f6cf676a64769d511f141e6cf3742a4e11"
+        "source_sha256": "b467f593994a77a6d20f2da9934759349dd5b14a5aa89712ec4fb73b8313a312"
       },
       {
         "name": "status_plane",
         "source_path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
-        "source_sha256": "b5cd9d526e6919cd59ce06799fe1c42b485b7e27d2efcf9c79373162d7971268"
+        "source_sha256": "fa52775c326ba702dfd141859c8c1abb0b90291dfc80d403ba9593c240c9df6c"
       }
     ],
     "source_count": 9,
     "status": "pass"
   },
   "source_input_health": {
-    "issues": [
-      "weekly pulse launch cited signal(s) do not match generated source truth: journey_gate_blocked_count, journey_gate_state"
-    ],
+    "issues": [],
     "required_inputs": {
       "closed_flagship_registry": {
         "milestone_count": 18,
@@ -2776,23 +2561,23 @@
       "design_queue_staging": {
         "required_key": "items",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "acfa4fa0aa971160ff3d8bb71ce862aeb09b96d14edd58e333d306401849dfbf",
+        "source_sha256": "1558188bcddb801ff3135616165a9b7265dd1a676fc354ef66206740a092ba5b",
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-04-22T16:45:55Z",
+        "generated_at": "2026-04-23T10:52:20Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "df5ff513b39661dc8d8d956fca9f14b69c0140aab2fcf1d8f44bdf0905829b9d",
+        "source_sha256": "d63416c833b776a91da0b69788feced86c38949f93cc4aa6486a3c2af88bde59",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-04-22T16:45:54Z",
+        "generated_at": "2026-04-23T10:52:19Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "7a7b97274c64108f9db24c6d5788bd2e3aceaeccd22baa554454e10ceb997b9e",
+        "source_sha256": "a7bfc519fdfeaf2dd3d24437556c51eef1559627668870609b89b9e258712b1d",
         "state": "present"
       },
       "launch_signal_truth_alignment": {
@@ -2800,32 +2585,23 @@
           "closure_health_state": "clear",
           "journey_gate_blocked_count": "0",
           "journey_gate_state": "ready",
-          "local_release_proof_status": "unknown",
-          "provider_canary_status": "Canary evidence is still accumulating"
+          "local_release_proof_status": "passed",
+          "provider_canary_status": "Canary green on all active lanes"
         },
         "expected_from_sources": {
           "closure_health_state": "clear",
-          "journey_gate_blocked_count": "6",
-          "journey_gate_state": "blocked",
-          "local_release_proof_status": "unknown",
-          "provider_canary_status": "Canary evidence is still accumulating"
+          "journey_gate_blocked_count": "0",
+          "journey_gate_state": "ready",
+          "local_release_proof_status": "passed",
+          "provider_canary_status": "Canary green on all active lanes"
         },
-        "mismatches": {
-          "journey_gate_blocked_count": {
-            "cited": "0",
-            "source": "6"
-          },
-          "journey_gate_state": {
-            "cited": "ready",
-            "source": "blocked"
-          }
-        },
-        "state": "fail"
+        "mismatches": {},
+        "state": "pass"
       },
       "queue_staging": {
         "required_key": "items",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "d7ded4e2867712a2c8467a96fd55f484ca577726a4df559b121ffb0ac4b47779",
+        "source_sha256": "1c48d8fce2e8bad57ce00c3aa070897b371557ae34239eab9da90523fae646ef",
         "state": "present"
       },
       "source_path_authority": {
@@ -2974,37 +2750,37 @@
         "state": "pass"
       },
       "status_plane": {
-        "generated_at": "2026-04-20T11:37:04Z",
+        "generated_at": "2026-04-23T10:05:12Z",
         "max_age_seconds": 691200,
         "required_key": "whole_product_final_claim_status",
         "source_path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
-        "source_sha256": "b5cd9d526e6919cd59ce06799fe1c42b485b7e27d2efcf9c79373162d7971268",
+        "source_sha256": "fa52775c326ba702dfd141859c8c1abb0b90291dfc80d403ba9593c240c9df6c",
         "state": "present"
       },
       "successor_registry": {
         "required_key": "program_wave",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "01b384faf09fbf2cc1578cbe1fde9dbfff37ad182fe132aa637a2bac79c7a203",
+        "source_sha256": "fc22f89f1e6cba0a98f0a34924ca2377fb1ec2bf00842d239b237cd698d632c2",
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-22T16:45:53Z",
+        "generated_at": "2026-04-23T10:52:18Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "5090143184e2689080f571d6009020f6cf676a64769d511f141e6cf3742a4e11",
+        "source_sha256": "b467f593994a77a6d20f2da9934759349dd5b14a5aa89712ec4fb73b8313a312",
         "state": "present",
         "successor_package_verification_status": "pass"
       },
       "weekly_pulse": {
-        "generated_at": "2026-04-15T08:25:28Z",
+        "generated_at": "2026-04-23T10:04:57Z",
         "required_key": "contract_name",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "36bbf138c41915701ce95bb2280d71c19662daa7daef0d741683d552c60a734b",
+        "source_sha256": "be834e5b59c8a211d15d90b3dcdf32f2737d1106c71b5c5950d7b5a666db34e6",
         "state": "present"
       }
     },
-    "status": "fail"
+    "status": "pass"
   },
   "source_paths": {
     "closed_flagship_registry": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
@@ -3018,18 +2794,18 @@
     "weekly_pulse": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json"
   },
   "status": "blocked",
-  "status_reason": "Fleet package closeout is blocked; inspect package_verification issues before treating this slice as closed.",
+  "status_reason": "Fleet package is closed; measured rollout remains blocked by current source, dependency, or sibling gates.",
   "successor_frontier_ids": [
     "2376135131"
   ],
   "truth_inputs": {
     "adoption_health": {
-      "history_snapshot_count": 15,
-      "local_release_proof_status": "unknown",
-      "proven_journey_count": 0,
-      "proven_route_count": 0,
-      "state": "early",
-      "summary": "Current local edge proof is unknown. Journey-proof evidence is still accumulating. 15 weekly snapshots are on record for the current public trust posture."
+      "history_snapshot_count": 17,
+      "local_release_proof_status": "passed",
+      "proven_journey_count": 5,
+      "proven_route_count": 8,
+      "state": "clear",
+      "summary": "Current local edge proof passed. 5 journey proofs and 8 trust routes are on record. 17 weekly snapshots are on record for the current public trust posture."
     },
     "closed_flagship_registry_status": "complete",
     "closure_health_state": "clear",
@@ -3037,7 +2813,7 @@
       "families_below_gold_ready": [],
       "families_below_task_proven": [],
       "families_below_veteran_approved": [],
-      "readiness_plane_status": "missing",
+      "readiness_plane_status": "ready",
       "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml",
       "registry_present": true,
       "release_truth_status": "gold_ready",
@@ -3051,15 +2827,12 @@
       }
     },
     "flagship_quality_release_truth": {
-      "accessibility_proof_named": false,
-      "issues": [
-        "ui kit and flagship polish status is warning",
-        "ui kit and flagship polish proof does not name accessibility"
-      ],
+      "accessibility_proof_named": true,
+      "issues": [],
       "localization_release_gate_present": true,
       "localization_release_gate_status": "pass",
       "missing_locale_summary_shipping_locale_count": 0,
-      "release_truth_status": "blocked",
+      "release_truth_status": "pass",
       "shipping_locale_count": 6,
       "shipping_locales": [
         "de-de",
@@ -3070,14 +2843,14 @@
         "zh-cn"
       ],
       "translation_backlog_finding_count": 0,
-      "ui_kit_and_flagship_polish_status": "warning",
+      "ui_kit_and_flagship_polish_status": "ready",
       "untranslated_locale_count": 0
     },
-    "flagship_readiness_status": "fail",
-    "journey_gate_state": "blocked",
-    "local_release_proof_status": "unknown",
-    "provider_canary_status": "Canary evidence is still accumulating",
-    "status_plane_final_claim": "fail",
+    "flagship_readiness_status": "pass",
+    "journey_gate_state": "ready",
+    "local_release_proof_status": "passed",
+    "provider_canary_status": "Canary green on all active lanes",
+    "status_plane_final_claim": "pass",
     "successor_dependency_package_routes": {
       "closed_package_count": 0,
       "incomplete_package_milestone_ids": [],
@@ -3227,7 +3000,7 @@
   },
   "wave_id": "W8",
   "weekly_input_health": {
-    "generated_at": "2026-04-15T08:25:28Z",
+    "generated_at": "2026-04-23T10:04:57Z",
     "issues": [],
     "max_age_seconds": 691200,
     "required_launch_signals": [
