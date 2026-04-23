@@ -339,6 +339,7 @@ items:
       - zero-backlog command bundle retains per-host preflight/capture/validate/bundle/ingest/run scripts plus finalize and republish entrypoints
       - design-owned queue source row matches the Fleet completed queue proof assignment
       - completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason
+      - /docker/fleet commit 4e8295bb tightens the M101 external proof lane guard so encoded run-control citations cannot close the completed package.
     allowed_paths:
       - scripts
       - tests
