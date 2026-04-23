@@ -1406,9 +1406,11 @@ items:
     proof:
       - /docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceServerPlane.cs
       - /docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceLiteProjector.cs
+      - /docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Roaming/RoamingWorkspaceSyncPlanner.cs
       - /docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Web/PlayWebApplication.cs
       - /docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Web/wwwroot/index.html
       - /docker/chummercomplete/chummer6-mobile/src/Chummer.Play.RegressionChecks/Program.cs
+      - /docker/chummercomplete/chummer6-mobile/scripts/verify_next90_m108_mobile_campaign_artifacts.py
       - /docker/chummercomplete/chummer6-mobile/docs/next90-m108-mobile-campaign-artifacts.proof.md
       - /docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json
       - /docker/chummercomplete/chummer6-mobile commit bc84b37 stabilizes the mobile package-plane verifier and ./scripts/ai/verify.sh exits 0.
@@ -1658,10 +1660,29 @@ items:
   - title: Compose runsite orientation requests from approved runsite packs and route summaries
     task: Compose governed runsite orientation requests from approved runsite packs, route summaries, and preview-safe pre-session truth.
     package_id: next90-m110-hub-runsite-orientation-requests
+    frontier_id: 1545739925
     work_task_id: 110.1
     milestone_id: 110
     wave: W10
     repo: chummer6-hub
+    status: complete
+    landed_commit: 1f5dd4de
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M110 chummer6-hub runsite orientation requests are complete; future shards must verify the governed composition route, generated proof receipts, and queue/registry rows instead of reopening this package.
+    proof:
+      - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/RunsiteOrientationRequestComposerService.cs
+      - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Controllers/InternalRunsiteOrientationController.cs
+      - /docker/chummercomplete/chummer.run-services/Chummer.Tests/RunsiteOrientationRequestComposerServiceTests.cs
+      - /docker/chummercomplete/chummer.run-services/scripts/verify_runsite_orientation_requests.py
+      - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
+      - /docker/chummercomplete/chummer.run-services/tests/test_runsite_orientation_requests.py
+      - /docker/chummercomplete/chummer.run-services/tests/test_hub_local_release_proof_native_support_route.py
+      - /docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json
+      - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/wwwroot/proofs/mac-codex-release/HUB_LOCAL_RELEASE_PROOF.generated.json
+      - /docker/chummercomplete/chummer.run-services commit 1f5dd4de closes the M110 governed runsite orientation request proof package.
+      - python3 scripts/verify_runsite_orientation_requests.py exits 0.
+      - python3 -m unittest tests/test_runsite_orientation_requests.py exits 0.
+      - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter RunsiteOrientationRequestComposerServiceTests --no-restore exits 0.
     allowed_paths:
       - Chummer.Run.Api
       - scripts
@@ -1839,6 +1860,7 @@ items:
   - title: Promote campaign consequence state into governed campaign APIs
     task: Land downtime, aftermath, heat, faction, contact, and reputation state with receipts and return-loop actions.
     package_id: next90-m112-hub-campaign-consequence-truth
+    frontier_id: 4730880976
     milestone_id: 112
     wave: W11
     repo: chummer6-hub
