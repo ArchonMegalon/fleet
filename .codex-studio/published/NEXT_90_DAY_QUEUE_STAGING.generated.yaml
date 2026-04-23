@@ -1432,9 +1432,25 @@ items:
   - title: Surface runsite orientation entry points before session on mobile and travel shells
     task: Launch runsite host mode from campaign and travel shells before live play without replacing inspectable route truth.
     package_id: next90-m110-mobile-runsite-orientation
+    frontier_id: 3664656855
     milestone_id: 110
     wave: W10
     repo: chummer6-mobile
+    status: complete
+    landed_commit: f95c490
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M110 chummer6-mobile runsite orientation is complete; future shards must verify the mobile runsite host-mode entry point, travel-shell artifact redirect, generated proof receipt, and queue row instead of reopening the pre-session orientation package.
+    proof:
+      - /docker/chummercomplete/chummer-play/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceLiteProjector.cs
+      - /docker/chummercomplete/chummer-play/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceServerPlane.cs
+      - /docker/chummercomplete/chummer-play/src/Chummer.Play.Web/PlayWebApplication.cs
+      - /docker/chummercomplete/chummer-play/src/Chummer.Play.Web/wwwroot/index.html
+      - /docker/chummercomplete/chummer-play/src/Chummer.Play.RegressionChecks/Program.cs
+      - /docker/chummercomplete/chummer-play/scripts/materialize_mobile_local_release_proof.py
+      - /docker/chummercomplete/chummer-play/scripts/ai/verify.sh
+      - /docker/chummercomplete/chummer-play/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json
+      - /docker/chummercomplete/chummer-play commit f95c490 launches mobile runsite orientation before live play while keeping route preview truth inspectable.
+      - bash scripts/ai/verify.sh exits 0.
     allowed_paths:
       - src
       - tests
