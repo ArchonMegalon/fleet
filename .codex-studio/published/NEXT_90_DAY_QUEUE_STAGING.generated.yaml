@@ -1209,6 +1209,7 @@ items:
   - title: Stand up artifact-factory orchestration for release, support, and publication bundles
     task: Launch recipe-backed release, fix, support, and publication artifact jobs from approved source packs instead of one-off provider flows.
     package_id: next90-m107-hub-artifact-factory
+    work_task_id: 107.1
     milestone_id: 107
     wave: W9
     repo: chummer6-hub
@@ -1285,6 +1286,7 @@ items:
   - title: Execute structured media recipes with receipts, captions, and preview refs
     task: Make media-factory emit video, audio, preview, and packet bundles with first-class receipts and publication-ready refs.
     package_id: next90-m107-media-factory-recipe-execution
+    work_task_id: 107.2
     frontier_id: 1746209281
     milestone_id: 107
     wave: W9
@@ -1356,6 +1358,7 @@ items:
     package_id: next90-m107-design-artifact-proof-language
     work_task_id: 107.4
     milestone_id: 107
+    status: complete
     wave: W9
     repo: chummer6-design
     allowed_paths:
@@ -1368,6 +1371,7 @@ items:
   - title: Compose campaign cold-open and mission-briefing bundles from approved packs
     task: Turn approved campaign primer and mission packs into locale-matched cold-open and briefing requests with audience-safe proof anchors.
     package_id: next90-m108-hub-campaign-briefing-bundles
+    work_task_id: 108.1
     frontier_id: 1639715882
     milestone_id: 108
     wave: W10
@@ -1395,6 +1399,7 @@ items:
   - title: Launch primer and briefing artifacts from mobile campaign home
     task: Surface campaign cold-open and mission-briefing artifacts on mobile and travel shells without browser ritual.
     package_id: next90-m108-mobile-campaign-artifacts
+    work_task_id: 108.4
     frontier_id: 1294209399
     milestone_id: 108
     wave: W10
@@ -1490,6 +1495,7 @@ items:
     package_id: next90-m108-design-campaign-briefing-canon
     work_task_id: 108.5
     milestone_id: 108
+    status: complete
     wave: W10
     repo: chummer6-design
     allowed_paths:
@@ -1502,6 +1508,7 @@ items:
   - title: Expose approved Build Lab explain packets and proof anchors for companion artifact generation
     task: Turn Build Lab explain output into approved packet anchors the artifact factory can render without losing engine truth.
     package_id: next90-m109-core-build-explain-packets
+    work_task_id: 109.1
     frontier_id: 4007503843
     milestone_id: 109
     wave: W9
@@ -1533,6 +1540,7 @@ items:
   - title: Launch build explain companions from compare, import, and blocker surfaces
     task: Make desktop compare, import, and blocker surfaces open inspectable explain companions instead of plain receipts alone.
     package_id: next90-m109-ui-build-explain-artifacts
+    work_task_id: 109.2
     frontier_id: 4240255582
     milestone_id: 109
     wave: W9
@@ -1570,6 +1578,7 @@ items:
     work_task_id: 109.3
     frontier_id: 4037265286
     milestone_id: 109
+    status: in_progress
     wave: W9
     repo: chummer6-media-factory
     allowed_paths:
@@ -1585,6 +1594,7 @@ items:
     package_id: next90-m109-design-explain-truth-policy
     work_task_id: 109.4
     milestone_id: 109
+    status: complete
     wave: W9
     repo: chummer6-design
     allowed_paths:
@@ -1597,6 +1607,7 @@ items:
   - title: Render runsite host clips, route previews, and orientation bundle receipts
     task: Make runsite orientation a first-class artifact bundle with host clips, previews, and route-linked receipts.
     package_id: next90-m110-media-factory-runsite-bundles
+    work_task_id: 110.2
     frontier_id: 5126560638
     milestone_id: 110
     wave: W10
@@ -1629,6 +1640,7 @@ items:
   - title: Surface runsite orientation entry points before session on mobile and travel shells
     task: Launch runsite host mode from campaign and travel shells before live play without replacing inspectable route truth.
     package_id: next90-m110-mobile-runsite-orientation
+    work_task_id: 110.5
     frontier_id: 3664656855
     milestone_id: 110
     wave: W10
@@ -1693,10 +1705,31 @@ items:
   - title: Surface orientation entry points and preview-safe pre-session launch flows for campaign members
     task: Launch runsite orientation artifacts on mobile and travel shells with preview-safe pre-session entry points.
     package_id: next90-m110-mobile-runsite-orientation-entry
+    frontier_id: 3371425724
     work_task_id: 110.3
     milestone_id: 110
     wave: W10
     repo: chummer6-mobile
+    status: complete
+    landed_commit: 5cc6a03
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M110 chummer6-mobile runsite orientation entry is complete; future shards must verify the mobile onboarding and travel-shell host-mode entry points, generated proof package receipt, canonical registry row, and queue rows instead of reopening the pre-session orientation entry package.
+    proof:
+      - /docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceServerPlane.cs
+      - /docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceLiteProjector.cs
+      - /docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Application/PlayEntryRecoveryProjector.cs
+      - /docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Roaming/RoamingWorkspaceSyncPlanner.cs
+      - /docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Web/PlayWebApplication.cs
+      - /docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Web/wwwroot/index.html
+      - /docker/chummercomplete/chummer6-mobile/src/Chummer.Play.RegressionChecks/Program.cs
+      - /docker/chummercomplete/chummer6-mobile/scripts/materialize_mobile_local_release_proof.py
+      - /docker/chummercomplete/chummer6-mobile/scripts/verify_next90_m110_mobile_runsite_orientation_entry.py
+      - /docker/chummercomplete/chummer6-mobile/docs/next90-m110-mobile-runsite-orientation-entry.proof.md
+      - /docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json
+      - /docker/chummercomplete/chummer6-mobile commit 5cc6a03 lands the M110 mobile runsite orientation entry package inside the play-shell source, docs, verifier wiring, and generated receipt scope.
+      - /docker/chummercomplete/chummer6-mobile commit ba97b74 tracks the M110 verifier against the implementation landed_commit so future shards verify the same closed package without reopening the entry slice.
+      - python3 scripts/verify_next90_m110_mobile_runsite_orientation_entry.py exits 0.
+      - dotnet run --project src/Chummer.Play.RegressionChecks/Chummer.Play.RegressionChecks.csproj exits 0.
     allowed_paths:
       - src
       - tests
@@ -1710,6 +1743,7 @@ items:
     package_id: next90-m110-design-runsite-host-bounds
     work_task_id: 110.4
     milestone_id: 110
+    status: complete
     wave: W10
     repo: chummer6-design
     allowed_paths:
@@ -1722,6 +1756,7 @@ items:
   - title: Emit install-aware release and support concierge packets from installed-build truth
     task: Compile support closure and release explainer packets from installed build, channel, and support-case truth.
     package_id: next90-m111-hub-support-concierge
+    work_task_id: 111.1
     frontier_id: 2746902416
     milestone_id: 111
     wave: W9
@@ -1755,6 +1790,7 @@ items:
   - title: Publish install-aware artifact identities and channel rationale for concierge bundles
     task: Store why this release, fix, or recovery artifact is correct for this installed build and channel.
     package_id: next90-m111-registry-install-aware-concierge
+    work_task_id: 111.2
     frontier_id: 1024523070
     milestone_id: 111
     wave: W9
@@ -1799,8 +1835,10 @@ items:
       - /docker/fleet/repos/chummer-media-factory/tests/test_m111_successor_package_authority.py
       - /docker/fleet/repos/chummer-media-factory/docs/NEXT90_M111_INSTALL_AWARE_CONCIERGE_PROOF_FLOOR.md
       - /docker/fleet/repos/chummer-media-factory/scripts/ai/materialize_media_release_proof.py
+      - /docker/fleet/repos/chummer-media-factory/scripts/ai/verify_m111_install_aware_concierge.sh
       - python3 -m unittest tests.test_m111_successor_package_authority tests.test_m111_install_aware_concierge_proof tests.test_install_aware_concierge_rendering exits 0
       - dotnet run --project tests/InstallAwareConciergeSmoke/Chummer.Media.Factory.InstallAwareConciergeSmoke.csproj --configuration Release --nologo --verbosity quiet exits 0
+      - bash scripts/ai/verify_m111_install_aware_concierge.sh exits 0
     allowed_paths:
       - src
       - tests
@@ -1848,6 +1886,7 @@ items:
     package_id: next90-m111-design-public-concierge-bounds
     work_task_id: 111.5
     milestone_id: 111
+    status: complete
     wave: W9
     repo: chummer6-design
     allowed_paths:
@@ -1861,9 +1900,14 @@ items:
     task: Land downtime, aftermath, heat, faction, contact, and reputation state with receipts and return-loop actions.
     package_id: next90-m112-hub-campaign-consequence-truth
     frontier_id: 4730880976
+    work_task_id: 112.1
     milestone_id: 112
+    status: complete
     wave: W11
     repo: chummer6-hub
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M112 chummer6-hub campaign consequence truth is complete; future shards must verify the governed campaign consequence proof, local release proof receipts, registry row, queue row, and design queue row instead of reopening this package.
+    landed_commit: f2b0b5a6
     allowed_paths:
       - Chummer.Run.Api
       - scripts
@@ -1874,7 +1918,9 @@ items:
   - title: Surface campaign memory and consequences on desktop
     task: Make campaign consequences, stale state, and next-session return actions visible on the promoted desktop route.
     package_id: next90-m112-ui-campaign-memory
+    work_task_id: 112.3
     milestone_id: 112
+    status: in_progress
     wave: W11
     repo: chummer6-ui
     allowed_paths:
@@ -1885,12 +1931,96 @@ items:
     owned_surfaces:
       - campaign_workspace:memory
       - campaign_return_loop:desktop
+  - title: Keep campaign consequence rules portable through campaign state changes
+    task: Keep campaign consequence rules and rule-environment fingerprints portable through campaign state changes.
+    package_id: next90-m112-core-campaign-consequence-rules
+    work_task_id: 112.2
+    milestone_id: 112
+    status: complete
+    wave: W11
+    repo: chummer6-core
+    frontier_id: 4495361483
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M112 chummer6-core campaign consequence portability is complete; future shards must verify the portability contracts, workspace-service fingerprint behavior, package-local verifier, focused receipt tests, registry row, and queue mirrors instead of reopening this slice.
+    landed_commit: 4b02785b
+    proof:
+      - /docker/chummercomplete/chummer-core-engine/Chummer.Contracts/Workspaces/WorkspacePortabilityContracts.cs
+      - /docker/chummercomplete/chummer-core-engine/Chummer.Application/Workspaces/WorkspaceService.cs
+      - /docker/chummercomplete/chummer-core-engine/Chummer.Infrastructure/Workspaces/FileWorkspaceStore.cs
+      - /docker/chummercomplete/chummer-core-engine/Chummer.Tests/WorkspaceServiceTests.cs
+      - /docker/chummercomplete/chummer-core-engine/Chummer.Tests/WorkspaceStoreTests.cs
+      - /docker/chummercomplete/chummer-core-engine/scripts/verify-campaign-consequence-portability.py
+      - /docker/chummercomplete/chummer-core-engine/tests/test_campaign_consequence_portability_receipt.py
+      - /docker/chummercomplete/chummer-core-engine/docs/CAMPAIGN_CONSEQUENCE_PORTABILITY.md
+    allowed_paths:
+      - src
+      - tests
+      - docs
+      - scripts
+    owned_surfaces:
+      - campaign_memory:portable_rules
+      - consequence_state_fingerprints
+  - title: Make mobile travel campaign continuity explicit for stale campaign state
+    task: Make travel and mobile campaign continuity explicit for stale, cached, and action-required campaign state.
+    package_id: next90-m112-mobile-campaign-continuity
+    work_task_id: 112.4
+    milestone_id: 112
+    status: in_progress
+    wave: W11
+    repo: chummer6-mobile
+    allowed_paths:
+      - src
+      - tests
+      - docs
+      - scripts
+    owned_surfaces:
+      - campaign_memory:travel
+      - campaign_state:mobile
+  - title: Update campaign OS canon for downtime, heat, faction, and contact truth
+    task: Update campaign OS canon so downtime, heat, faction, and contact truth are first-class product promises.
+    package_id: next90-m112-design-campaign-canon
+    work_task_id: 112.5
+    milestone_id: 112
+    status: complete
+    wave: W11
+    repo: chummer6-design
+    frontier_id: 2514722929
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M112 chummer6-design campaign canon is complete; future shards must verify the campaign-memory canon docs, standard validator wiring, feedback closeout note, and the canonical registry plus design queue rows instead of reopening the campaign downtime/heat/faction/contact canon slice.
+    proof:
+      - /docker/chummercomplete/chummer-design/products/chummer/CAMPAIGN_SPINE_AND_CREW_MODEL.md
+      - /docker/chummercomplete/chummer-design/products/chummer/CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md
+      - /docker/chummercomplete/chummer-design/products/chummer/journeys/run-a-campaign-and-return.md
+      - /docker/chummercomplete/chummer-design/products/chummer/CAMPAIGN_OS_GAP_AND_CHANGE_GUIDE.md
+      - /docker/chummercomplete/chummer-design/scripts/ai/validate_next90_m112_design_campaign_canon.py
+      - /docker/chummercomplete/chummer-design/products/chummer/maintenance/feedback_archive/2026-04-23-next90-m112-design-campaign-canon-closeout.md
+    allowed_paths:
+      - products
+      - scripts
+      - feedback
+    owned_surfaces:
+      - campaign_memory:canon
+      - campaign_os_truth
   - title: Land crew, roster, and event movement APIs
     task: Make dossiers move between rosters, campaigns, groups, and events with ownership and audit receipts.
     package_id: next90-m113-hub-roster-ops
+    work_task_id: 113.1
     milestone_id: 113
+    status: complete
     wave: W11
     repo: chummer6-hub
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M113 chummer6-hub roster ops is complete; future shards must verify the dossier-movement API, roster-transfer API, repo-local proof contract, canonical registry row, and queue rows instead of reopening this package.
+    proof:
+      - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Contracts/CampaignMovementContracts.cs
+      - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Controllers/CampaignSpineController.cs
+      - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs
+      - /docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignMovementServiceTests.cs
+      - /docker/chummercomplete/chummer.run-services/tests/RunServicesSmoke/Program.cs
+      - /docker/chummercomplete/chummer.run-services/scripts/materialize_next90_m113_hub_roster_ops_proof.py
+      - /docker/chummercomplete/chummer.run-services/scripts/verify_next90_m113_hub_roster_ops.py
+      - /docker/chummercomplete/chummer.run-services/tests/test_next90_m113_hub_roster_ops.py
+      - /docker/chummercomplete/chummer.run-services/.codex-studio/published/NEXT90_M113_HUB_ROSTER_OPS.generated.json
     allowed_paths:
       - Chummer.Run.Api
       - scripts
@@ -1898,10 +2028,44 @@ items:
     owned_surfaces:
       - crew_roster_ops
       - campaign_group_event_movement
+  - title: Define opposition and scene packet contracts with rules-backed stats
+    task: Define opposition and scene packet contracts with rules-backed stats and bounded-loss receipts.
+    package_id: next90-m113-core-opposition-packet-contracts
+    work_task_id: 113.2
+    milestone_id: 113
+    status: in_progress
+    wave: W11
+    repo: chummer6-core
+    allowed_paths:
+      - src
+      - tests
+      - docs
+      - scripts
+    owned_surfaces:
+      - gm_prep_packets
+      - opposition_contracts
+  - title: Add GM prep and roster movement surfaces to the desktop workspace
+    task: Add GM prep and roster movement surfaces to the primary desktop workspace route.
+    package_id: next90-m113-ui-gm-prep-roster-surface
+    work_task_id: 113.3
+    milestone_id: 113
+    status: in_progress
+    wave: W11
+    repo: chummer6-ui
+    allowed_paths:
+      - Chummer.Avalonia
+      - Chummer.Desktop.Runtime
+      - Chummer.Tests
+      - scripts
+    owned_surfaces:
+      - gm_prep_packets:desktop
+      - roster_movement:desktop
   - title: Render opposition and GM prep packets from governed source packs
     task: Produce packet, preview, and optional briefing artifacts for opposition, scenes, and prep-library entries.
     package_id: next90-m113-media-factory-gm-prep-packets
+    work_task_id: 113.4
     milestone_id: 113
+    status: in_progress
     wave: W11
     repo: chummer6-media-factory
     allowed_paths:
@@ -1912,11 +2076,27 @@ items:
     owned_surfaces:
       - gm_prep_packets
       - opposition_packet_artifacts
+  - title: Produce operator-safe GM prep and roster movement packets
+    task: Produce operator-safe GM prep and roster movement packets from governed campaign truth.
+    package_id: next90-m113-executive-assistant-operator-safe-packets
+    work_task_id: 113.5
+    milestone_id: 113
+    status: in_progress
+    wave: W11
+    repo: executive-assistant
+    allowed_paths:
+      - scripts
+      - feedback
+      - docs
+    owned_surfaces:
+      - gm_prep_packets
+      - roster_movement_followthrough
   - title: Publish rule-environment studio contracts and explain receipts
     task: Build amend-package lifecycle, promotion, diff, and explain-receipt contracts for downstream UI and support surfaces.
     package_id: next90-m114-core-rule-environment-studio
     work_task_id: 114.1
     milestone_id: 114
+    status: in_progress
     wave: W12
     repo: chummer6-core
     allowed_paths:
@@ -1932,6 +2112,7 @@ items:
     package_id: next90-m114-ui-rule-studio
     work_task_id: 114.2
     milestone_id: 114
+    status: in_progress
     wave: W12
     repo: chummer6-ui
     allowed_paths:
@@ -1947,6 +2128,7 @@ items:
     package_id: next90-m114-hub-rule-environment-receipts
     work_task_id: 114.3
     milestone_id: 114
+    status: in_progress
     wave: W12
     repo: chummer6-hub
     allowed_paths:
@@ -1962,6 +2144,7 @@ items:
     package_id: next90-m114-design-rule-environment-policy
     work_task_id: 114.4
     milestone_id: 114
+    status: in_progress
     wave: W12
     repo: chummer6-design
     allowed_paths:
@@ -1976,6 +2159,7 @@ items:
     package_id: next90-m115-core-exchange-contracts
     work_task_id: 115.1
     milestone_id: 115
+    status: in_progress
     wave: W12
     repo: chummer6-core
     allowed_paths:
@@ -1991,6 +2175,7 @@ items:
     package_id: next90-m115-hub-dossier-federation-orchestration
     work_task_id: 115.2
     milestone_id: 115
+    status: in_progress
     wave: W12
     repo: chummer6-hub
     allowed_paths:
@@ -2006,6 +2191,7 @@ items:
     package_id: next90-m115-registry-exchange-lineage
     work_task_id: 115.3
     milestone_id: 115
+    status: in_progress
     wave: W12
     repo: chummer6-hub-registry
     allowed_paths:
@@ -2020,6 +2206,7 @@ items:
     package_id: next90-m115-ui-portable-dossier
     work_task_id: 115.4
     milestone_id: 115
+    status: in_progress
     wave: W12
     repo: chummer6-ui
     allowed_paths:
@@ -2035,6 +2222,7 @@ items:
     package_id: next90-m115-media-factory-exchange-previews
     work_task_id: 115.5
     milestone_id: 115
+    status: in_progress
     wave: W12
     repo: chummer6-media-factory
     allowed_paths:
@@ -2050,6 +2238,7 @@ items:
     package_id: next90-m116-hub-creator-publication
     work_task_id: 116.1
     milestone_id: 116
+    status: in_progress
     wave: W13
     repo: chummer6-hub
     allowed_paths:
@@ -2064,6 +2253,7 @@ items:
     package_id: next90-m116-registry-creator-trust
     work_task_id: 116.2
     milestone_id: 116
+    status: in_progress
     wave: W13
     repo: chummer6-hub-registry
     allowed_paths:
@@ -2078,6 +2268,7 @@ items:
     package_id: next90-m116-ui-creator-publication
     work_task_id: 116.3
     milestone_id: 116
+    status: in_progress
     wave: W13
     repo: chummer6-ui
     allowed_paths:
@@ -2093,6 +2284,7 @@ items:
     package_id: next90-m116-media-factory-creator-promo-kits
     work_task_id: 116.4
     milestone_id: 116
+    status: in_progress
     wave: W13
     repo: chummer6-media-factory
     allowed_paths:
@@ -2108,6 +2300,7 @@ items:
     package_id: next90-m116-design-creator-publication-policy
     work_task_id: 116.5
     milestone_id: 116
+    status: in_progress
     wave: W13
     repo: chummer6-design
     allowed_paths:
@@ -2122,6 +2315,7 @@ items:
     package_id: next90-m117-hub-artifact-shelf-v2
     work_task_id: 117.1
     milestone_id: 117
+    status: in_progress
     wave: W13
     repo: chummer6-hub
     allowed_paths:
@@ -2136,6 +2330,7 @@ items:
     package_id: next90-m117-ui-artifact-shelf
     work_task_id: 117.3
     milestone_id: 117
+    status: in_progress
     wave: W13
     repo: chummer6-ui
     allowed_paths:
@@ -2151,6 +2346,7 @@ items:
     package_id: next90-m117-hub-registry-artifact-shelf
     work_task_id: 117.2
     milestone_id: 117
+    status: in_progress
     wave: W13
     repo: chummer6-hub-registry
     allowed_paths:
@@ -2165,6 +2361,7 @@ items:
     package_id: next90-m117-mobile-artifact-shelf
     work_task_id: 117.4
     milestone_id: 117
+    status: in_progress
     wave: W13
     repo: chummer6-mobile
     allowed_paths:
@@ -2180,6 +2377,7 @@ items:
     package_id: next90-m117-design-artifact-shelf-policy
     work_task_id: 117.5
     milestone_id: 117
+    status: in_progress
     wave: W13
     repo: chummer6-design
     allowed_paths:
@@ -2194,6 +2392,7 @@ items:
     package_id: next90-m118-hub-organizer-ops
     work_task_id: 118.1
     milestone_id: 118
+    status: in_progress
     wave: W13
     repo: chummer6-hub
     allowed_paths:
@@ -2208,6 +2407,7 @@ items:
     package_id: next90-m118-ui-organizer-ops
     work_task_id: 118.2
     milestone_id: 118
+    status: in_progress
     wave: W13
     repo: chummer6-ui
     allowed_paths:
@@ -2223,6 +2423,7 @@ items:
     package_id: next90-m118-fleet-ea-organizer-packets
     milestone_id: 118
     work_task_id: 118.4
+    status: in_progress
     wave: W13
     repo: fleet
     allowed_paths:
@@ -2238,6 +2439,7 @@ items:
     package_id: next90-m118-ea-organizer-followthrough
     work_task_id: 118.3
     milestone_id: 118
+    status: in_progress
     wave: W13
     repo: executive-assistant
     allowed_paths:
@@ -2252,6 +2454,7 @@ items:
     package_id: next90-m118-design-organizer-boundaries
     work_task_id: 118.5
     milestone_id: 118
+    status: in_progress
     wave: W13
     repo: chummer6-design
     allowed_paths:
@@ -2266,6 +2469,7 @@ items:
     package_id: next90-m119-hub-first-session-onboarding
     work_task_id: 119.1
     milestone_id: 119
+    status: in_progress
     wave: W14
     repo: chummer6-hub
     allowed_paths:
@@ -2280,6 +2484,7 @@ items:
     package_id: next90-m119-media-factory-starter-artifacts
     work_task_id: 119.4
     milestone_id: 119
+    status: in_progress
     wave: W14
     repo: chummer6-media-factory
     allowed_paths:
@@ -2295,6 +2500,7 @@ items:
     package_id: next90-m119-ui-first-session-flow
     work_task_id: 119.2
     milestone_id: 119
+    status: in_progress
     wave: W14
     repo: chummer6-ui
     allowed_paths:
@@ -2310,6 +2516,7 @@ items:
     package_id: next90-m119-mobile-onboarding-continuity
     work_task_id: 119.3
     milestone_id: 119
+    status: in_progress
     wave: W14
     repo: chummer6-mobile
     allowed_paths:
@@ -2325,6 +2532,7 @@ items:
     package_id: next90-m119-design-onboarding-metrics
     work_task_id: 119.5
     milestone_id: 119
+    status: in_progress
     wave: W14
     repo: chummer6-design
     allowed_paths:
@@ -2339,6 +2547,7 @@ items:
     package_id: next90-m120-hub-public-launch-health
     work_task_id: 120.1
     milestone_id: 120
+    status: in_progress
     wave: W14
     repo: chummer6-hub
     allowed_paths:
@@ -2353,6 +2562,7 @@ items:
     package_id: next90-m120-fleet-launch-pulse
     work_task_id: 120.3
     milestone_id: 120
+    status: in_progress
     wave: W14
     repo: fleet
     allowed_paths:
@@ -2368,6 +2578,7 @@ items:
     package_id: next90-m120-hub-registry-launch-truth
     work_task_id: 120.2
     milestone_id: 120
+    status: in_progress
     wave: W14
     repo: chummer6-hub-registry
     allowed_paths:
@@ -2382,6 +2593,7 @@ items:
     package_id: next90-m120-ea-launch-pulse-followthrough
     work_task_id: 120.4
     milestone_id: 120
+    status: in_progress
     wave: W14
     repo: executive-assistant
     allowed_paths:
@@ -2397,6 +2609,7 @@ items:
     package_id: next90-m120-design-launch-health-language
     work_task_id: 120.5
     milestone_id: 120
+    status: in_progress
     wave: W14
     repo: chummer6-design
     allowed_paths:
