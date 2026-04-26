@@ -138,9 +138,60 @@ def load_literal(name: str) -> dict[str, object]:
     raise RuntimeError(f"missing literal {name} in {FLEET_GUIDE_SCRIPT}")
 
 
-PARTS = load_literal("PARTS")
-HORIZONS = load_literal("HORIZONS")
 GUIDE_ROOT = Path("/docker/chummercomplete/Chummer6")
+
+
+def load_guide_catalogs() -> tuple[dict[str, object], dict[str, object]]:
+    parts = load_literal("PARTS")
+    horizons = load_literal("HORIZONS")
+    scripts_dir = str(FLEET_GUIDE_SCRIPT.parent)
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    try:
+        from chummer6_design_canon import canonical_horizon_slugs, merge_horizon_canon, merge_part_canon
+
+        parts = merge_part_canon(parts)
+        horizons = merge_horizon_canon(horizons)
+        ordered_slugs = canonical_horizon_slugs()
+        if ordered_slugs:
+            horizons = {slug: horizons[slug] for slug in ordered_slugs if slug in horizons}
+    except Exception as exc:
+        raise RuntimeError("canonical Chummer6 design canon is required before EA guide generation") from exc
+
+    black_ledger = horizons.get("black-ledger")
+    if not isinstance(black_ledger, dict) or not str(black_ledger.get("public_body") or "").strip():
+        raise RuntimeError("BLACK LEDGER design canon must include public_body before EA guide generation.")
+    return parts, horizons
+
+
+PARTS, HORIZONS = load_guide_catalogs()
+
+
+BLACK_LEDGER_GENERATOR_BRIEF = (
+    "BLACK LEDGER source anchors:\\n"
+    "- BLACK LEDGER is Chummer's living-world layer: a persistent Shadowrun power struggle where megacorps, factions, "
+    "GMs, players, runners, creators, organizers, and faction managers push on the same city and the city pushes back.\\n"
+    "- The promise is: the city remembers what happened. Completed runs feed future pressure instead of disappearing.\\n"
+    "- Core loop: factions create pressure, players and GMs report intel, world ticks process state, GMs receive mission "
+    "opportunities, runs are scheduled and played, results are reported, the map changes, newsreels and faction "
+    "briefings publish fallout, then the next tick starts from the new reality.\\n"
+    "- Product surfaces: source-aware world map, Mission Market, Open Runs and the Shadowcasters Network, Lunacal "
+    "scheduling handoff, result reporting, intel review, faction and megacorp engines, faction-manager operation "
+    "intents, heat model, newsreels, city tickers, faction newsletters, Table Pulse or GOD Observer debrief assistance, "
+    "seasonal honors, creator packets, and organizer seasons.\\n"
+    "- Heat types: crew, district, sponsor, public, matrix, security, and occult. Heat must create concrete mission and "
+    "news consequences.\\n"
+    "- Authority gates: BLACK LEDGER is not a VTT replacement, not an AI GM, not passive surveillance, not pay-to-win, "
+    "and not automatic canon. User lore, faction moves, and Table Pulse/GOD summaries need human review before they "
+    "become world truth.\\n"
+    "- Faction flavor matters. Renraku, Aztechnology, Horizon, Evo, Saeder-Krupp, syndicates, gangs, magical societies, "
+    "fixer networks, and original table factions should not feel interchangeable.\\n"
+    "- First proof: Seattle Tick 001 with one city map, five districts, three factions, one GM-only mission market, intel "
+    "reports, planned runs, one scheduled open run, one completed run, one world tick, one newsreel, one faction "
+    "newsletter, and one runner legend moment.\\n"
+    "- Success: a GM opens the map, adopts a job, schedules a session, runs it, reports the result, and sees the world "
+    "change."
+)
 
 
 def read_markdown_excerpt(relative_path: str, *, limit: int = 360) -> str:
@@ -185,6 +236,16 @@ def short_sentence(text: str, *, limit: int = 160) -> str:
     if cleaned.lower().startswith("chummer6 "):
         cleaned = cleaned[len("chummer6 ") :].strip()
     return cleaned[:limit].rstrip(" ,;:-")
+
+
+def horizon_source_packet(name: str, item: dict[str, object], *, limit: int = 2200) -> str:
+    public_body = " ".join(str(item.get("public_body") or "").split()).strip()
+    if name == "black-ledger":
+        excerpt = public_body[:limit].rstrip(" ,;:-")
+        if excerpt:
+            return f"{BLACK_LEDGER_GENERATOR_BRIEF}\\n\\nCanonical public-body excerpt:\\n{excerpt}"
+        return BLACK_LEDGER_GENERATOR_BRIEF
+    return public_body[:limit].rstrip(" ,;:-")
 
 
 def _ea_orchestrator():
@@ -415,6 +476,7 @@ def build_horizon_prompt(
 ) -> str:
     foundations = "\\n".join(f"- {line}" for line in item.get("foundations", []))
     repos = ", ".join(str(repo) for repo in item.get("repos", []))
+    source_packet = horizon_source_packet(name, item)
     return f\"\"\"You are writing downstream-only horizon copy for the human-facing Chummer6 guide.
 
 Task: return a JSON object only with keys hook, brutal_truth, use_case.
@@ -427,6 +489,7 @@ Voice rules:
 - roast code habits first, but if source context makes it land harder, a little real-life spillover is fine
 - never expose secrets, tokens, passwords, or private credentials
 - keep it exciting without pretending it is active work
+- for BLACK LEDGER, preserve the living city loop, not a generic consequence graph or abstract future label
 - no mention of Fleet or EA
 - no mention of chummer5a
 - no markdown fences
@@ -450,6 +513,9 @@ Foundations:
 
 Touched repos later:
 {repos}
+
+Canonical horizon source packet:
+{source_packet}
 
 Guide OODA:
 {json.dumps(ooda or {}, ensure_ascii=True)}
@@ -502,6 +568,7 @@ def build_section_ooda_prompt(
                     f"Problem: {item.get('problem', '')}",
                     "Foundations:\\n" + "\\n".join(f"- {line}" for line in item.get("foundations", [])),
                     "Touched repos later:\\n" + "\\n".join(f"- {line}" for line in item.get("repos", [])),
+                    "Canonical source packet:\\n" + horizon_source_packet(name, item),
                 ]
             ),
         },
@@ -524,6 +591,7 @@ Rules:
 - this OODA is for this section only, not the whole repo
 - think about what a curious human reader would actually notice or care about here
 - if the source suggests strong selling points like multi-era support, Lua/scripted rules, local-first play, explain receipts, or dangerous simulation energy, surface them
+- if the section is BLACK LEDGER, keep the map, Mission Market, world tick, reviewed intel, Open Runs, Lunacal, heat, factions, newsreels, and human approval gates visible
 - do not literalize repo governance labels into the scene
 - avoid generic poster language
 - for image thinking, prefer one memorable focal subject or action over abstract icon soup
@@ -589,6 +657,7 @@ def build_section_oodas_bundle_prompt(
                 "foundations": item.get("foundations", []),
                 "repos": item.get("repos", []),
                 "not_now": item.get("not_now", ""),
+                "source_packet": horizon_source_packet(name, item),
             }
     return f\"\"\"You are doing section-level OODA for multiple human-facing Chummer6 guide sections.
 
@@ -607,6 +676,7 @@ Rules:
 - focus on what a curious human reader would actually care about here
 - if the source suggests strong selling points like multi-era support, Lua/scripted rules, local-first play, explain receipts, grounded dossier flows, or dangerous simulation energy, surface them
 - if source signals clearly include multi-era support or scripted rules, make at least one section hook say so in plain language instead of burying it
+- if a section is BLACK LEDGER, preserve the living mission market, city map, faction pressure, Open Runs, Lunacal scheduling, reviewed intel, world ticks, newsreels, Table Pulse/GOD consent gates, and Seattle Tick 001 proof shape
 - do not literalize repo governance labels into the scene
 - avoid generic poster language and repeated sentence frames
 - prefer one memorable focal subject or action over abstract icon soup
@@ -810,6 +880,7 @@ def build_horizons_bundle_prompt(*, items: dict[str, dict[str, object]], global_
             "foundations": item.get("foundations", []),
             "repos": item.get("repos", []),
             "not_now": item.get("not_now", ""),
+            "source_packet": horizon_source_packet(name, item),
             "section_ooda": section_oodas.get(name, {}),
         }
     return f\"\"\"You are writing downstream-only copy and media metadata for multiple Chummer6 horizon pages.
@@ -830,6 +901,7 @@ Rules:
 - no markdown fences
 - scenes should feel specific, cool, and dangerous
 - if the codename implies a person or metaphor, make that legible
+- if a horizon is BLACK LEDGER, preserve the living mission market, city map, faction pressure, Open Runs and the Shadowcasters Network, Lunacal scheduling, reviewed intel, world ticks, newsreels, faction newsletters, Table Pulse/GOD consent gates, seasonal honors, and Seattle Tick 001 proof shape
 - do not reuse the same sentence stem across multiple horizons
 - the copy should feel distinct per horizon, not like one template with swapped nouns
 
@@ -894,7 +966,9 @@ def normalize_horizons_bundle(result: dict[str, object], *, items: dict[str, dic
         }
         if len(cleaned_copy) < 7:
             raise ValueError(f"insufficient horizon copy: {name}")
-        media_cleaned = normalize_media_override("horizon", dict(media), item)
+        media_item = dict(item)
+        media_item.setdefault("slug", name)
+        media_cleaned = normalize_media_override("horizon", dict(media), media_item)
         copy_rows[name] = cleaned_copy
         media_rows[name] = media_cleaned
     return copy_rows, media_rows
@@ -911,6 +985,7 @@ SOURCE_SIGNAL_FILES = [
     ("/docker/chummercomplete/chummer-design/products/chummer/README.md", "design_front_door"),
     ("/docker/chummercomplete/chummer-design/products/chummer/ARCHITECTURE.md", "design_architecture"),
     ("/docker/chummercomplete/chummer-design/products/chummer/PROGRAM_MILESTONES.yaml", "design_milestones"),
+    ("/docker/chummercomplete/chummer-design/products/chummer/horizons/black-ledger.md", "black_ledger_horizon"),
 ]
 
 
@@ -943,6 +1018,10 @@ def collect_interest_signals() -> dict[str, object]:
             ("runtime bundle", "runtime_stacks"),
             ("session event", "session_events"),
             ("local-first", "local_first_play"),
+            ("black ledger", "black_ledger_living_world"),
+            ("mission market", "black_ledger_mission_market"),
+            ("world tick", "black_ledger_world_tick"),
+            ("open run", "black_ledger_open_runs"),
         ):
             if token in lowered and tag not in tags:
                 tags.append(tag)
@@ -971,6 +1050,7 @@ Rules:
 - focus on what a curious human would actually care about first
 - if the source suggests strong user-facing selling points like multi-era support, Lua/scripted rules, local-first play, explain receipts, grounded dossiers, or dangerous simulation energy, surface them
 - if source signals clearly include multi-era support or scripted rules, make at least one landing-facing sentence say so plainly
+- if BLACK LEDGER appears in the source signals, preserve it as a living-world layer with reviewed world ticks and GM authority, not as a generic roadmap item
 - do not invent implementation-specific claims unless the source canon makes them explicit
 - no mention of Fleet or EA
 - no mention of chummer5a
@@ -1192,6 +1272,7 @@ Requirements:
 Return valid JSON only.
 \"\"\"
     horizon_excerpt = read_markdown_excerpt(f"HORIZONS/{name}.md", limit=320)
+    source_packet = horizon_source_packet(name, item)
     return f\"\"\"You are writing image-card copy for a human-facing Chummer6 horizon banner.
 
 Task: return a JSON object only with keys badge, title, subtitle, kicker, note, meta, visual_prompt, overlay_hint, visual_motifs, overlay_callouts, scene_contract.
@@ -1231,6 +1312,9 @@ Foundations:
 Touched repos later:
 {repos}
 
+Canonical horizon source packet:
+{source_packet}
+
 Guide OODA:
 {json.dumps(ooda or {}, ensure_ascii=True)}
 
@@ -1241,6 +1325,7 @@ Requirements:
 - infer the scene from the source, do not just repeat headings back
 - visual_prompt must describe an actual cyberpunk scene tied to this horizon
 - visual_prompt must center one memorable focal subject, setup, or action instead of icon soup
+- if this is BLACK LEDGER, the scene must show a living city map or world-tick control surface with mission pins, faction pressure, heat, news fallout, and a GM/operator adopting a job
 - if the section naturally implies a person, make that person specific and believable
 - if the concept implies a visual metaphor like x-ray, ghost, mirror, passport, dossier, web, or blackbox, make that metaphor visibly legible in-scene
 - if the title reads like a personal codename, make the focal subject feel like that codename embodied; if it reads like a feminine personal name, it is fine to make the focal subject a woman
@@ -1271,22 +1356,29 @@ Return valid JSON only.
 def normalize_media_override(kind: str, cleaned: dict[str, object], item: dict[str, object]) -> dict[str, object]:
     def infer_scene_contract(*, asset_key: str, visual_prompt: str) -> dict[str, object]:
         lowered = visual_prompt.lower()
+        asset_key_normalized = str(asset_key or "").strip().lower()
         subject = "a cyberpunk protagonist"
-        if "team" in lowered or "table" in lowered or "gm" in lowered:
+        if asset_key_normalized == "black-ledger" or "mission market" in lowered or "world tick" in lowered:
+            subject = "a GM and world operator reading a living city map"
+        elif "team" in lowered or "table" in lowered or "gm" in lowered:
             subject = "a runner team at a live table"
-        elif "girl" in lowered or "woman" in lowered or asset_key == "alice":
+        elif "girl" in lowered or "woman" in lowered or asset_key_normalized == "alice":
             subject = "a cyberpunk woman"
-        elif "troll" in lowered or "forge" in lowered or asset_key == "karma-forge":
+        elif "troll" in lowered or "forge" in lowered or asset_key_normalized == "karma-forge":
             subject = "a cybernetic troll"
         environment = "a dangerous but inviting cyberpunk scene"
-        if "archive" in lowered or "blueprint" in lowered:
+        if asset_key_normalized == "black-ledger" or "city map" in lowered or "district" in lowered:
+            environment = "a Seattle world-tick control room facing a source-aware district map"
+        elif "archive" in lowered or "blueprint" in lowered:
             environment = "a blueprint room lit by cold neon"
         elif "workshop" in lowered or "foundation" in lowered:
             environment = "a cyberpunk workshop with exposed internals"
         elif "street" in lowered or "preview" in lowered:
             environment = "a rainy neon street front"
         action = "framing the next move before the chrome starts smoking"
-        if "x-ray" in lowered or "xray" in lowered:
+        if asset_key_normalized == "black-ledger" or "mission market" in lowered or "world tick" in lowered:
+            action = "turning completed-run fallout into reviewed job seeds, heat changes, and newsreel pins"
+        elif "x-ray" in lowered or "xray" in lowered:
             action = "pulling a glowing x-ray of cause and effect through the air"
         elif "simulation" in lowered or "branch" in lowered:
             action = "walking through branching combat outcomes"
@@ -1303,15 +1395,21 @@ def normalize_media_override(kind: str, cleaned: dict[str, object], item: dict[s
             ("dossier", "dossier evidence wall"),
             ("forge", "forge sparks and molten rules"),
             ("network", "living consequence web"),
+            ("mission market", "living city ledger"),
+            ("world tick", "living city ledger"),
             ("passport", "passport gate"),
             ("mirror", "mirror split"),
             ("blackbox", "blackbox loadout check"),
         ):
-            if token in lowered or token in asset_key:
+            if token in lowered or token in asset_key_normalized:
                 metaphor = label
                 break
+        if asset_key_normalized == "black-ledger":
+            metaphor = "living city ledger"
         composition = "single_protagonist"
-        if "table" in lowered or "team" in lowered:
+        if asset_key_normalized == "black-ledger" or "city map" in lowered or "district" in lowered:
+            composition = "district_map"
+        elif "table" in lowered or "team" in lowered:
             composition = "group_table"
         elif "dossier" in lowered or "blackbox" in lowered:
             composition = "desk_still_life"
@@ -1330,6 +1428,20 @@ def normalize_media_override(kind: str, cleaned: dict[str, object], item: dict[s
             "receipt markers",
             "signal arcs",
         ]
+        if asset_key_normalized == "black-ledger":
+            props = [
+                "Seattle district map",
+                "mission pins",
+                "faction dossiers",
+                "heat meters",
+                "newsreel thumbnails",
+            ]
+            overlays = [
+                "world-tick change traces",
+                "GM-only intel filters",
+                "public-safe news markers",
+                "faction pressure arcs",
+            ]
         return {
             "subject": subject,
             "environment": environment,

@@ -62,3 +62,36 @@ def test_embedded_worker_does_not_recommend_credential_only_provider() -> None:
 
     assert 'PREFERRED_PROVIDER_STATUSES = {"ready", "workflow_query_only"}' in worker_script
     assert 'next(\n            (row["provider"] for row in states if row["status"] in PREFERRED_PROVIDER_STATUSES),\n            "",\n        )' in worker_script
+
+
+def test_embedded_worker_loads_canonical_design_horizon_catalog() -> None:
+    module = _load_module()
+    worker_script = str(module.WORKER_SCRIPT)
+
+    assert "def load_guide_catalogs()" in worker_script
+    assert "merge_horizon_canon" in worker_script
+    assert "canonical_horizon_slugs" in worker_script
+    assert "BLACK LEDGER design canon must include public_body before EA guide generation." in worker_script
+
+
+def test_black_ledger_generator_prompt_preserves_living_world_packet() -> None:
+    module = _load_module()
+    worker_script = str(module.WORKER_SCRIPT)
+
+    assert "BLACK_LEDGER_GENERATOR_BRIEF" in worker_script
+    assert "Open Runs and the Shadowcasters Network" in worker_script
+    assert "Mission Market" in worker_script
+    assert "Table Pulse or GOD Observer" in worker_script
+    assert "not automatic canon" in worker_script
+    assert "Seattle Tick 001" in worker_script
+    assert "horizon_source_packet" in worker_script
+
+
+def test_black_ledger_media_prompt_requires_world_tick_map_scene() -> None:
+    module = _load_module()
+    worker_script = str(module.WORKER_SCRIPT)
+
+    assert "living city map or world-tick control surface" in worker_script
+    assert 'asset_key_normalized == "black-ledger"' in worker_script
+    assert "living city ledger" in worker_script
+    assert "GM-only intel filters" in worker_script
