@@ -1,7 +1,7 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-26T13:47:54Z'
-mode: flagship_product
+generated_at: '2026-04-26T16:50:02Z'
+mode: completion_review
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -114,12 +114,13 @@ focus:
   - trust
   - update
   - utility
+  - whole project frontier
   - whole-project frontier
   - workbench
   - xml
 completion_audit:
   status: fail
-  reason: desktop executable exit gate proof is stale (87559s old)
+  reason: linux desktop exit gate proof did not pass
 receipt_audit:
   status: pass
   reason: recent supervisor history ends with a trusted structured worker receipt
@@ -131,17 +132,16 @@ journey_gate_audit:
   blocked_journey_count: 0
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
-  status: pass
-  reason: linux desktop binary build/start/test proof is ready on current repo-local
-    evidence
+  status: fail
+  reason: linux desktop exit gate proof did not pass
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-  generated_at: '2026-04-25T19:46:37Z'
+  generated_at: '2026-04-26T15:17:04Z'
 weekly_pulse_audit:
   status: pass
-  reason: weekly product pulse lags the live golden-journey proof; release-health,
-    drift, and blocker signals remain green
+  reason: weekly product pulse is fresh and reports no remaining drift or blocker
+    pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-04-25T11:57:04Z'
+  generated_at: '2026-04-26T15:52:08Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -149,20 +149,37 @@ repo_backlog_audit:
   open_project_count: 0
   open_items: []
 blocking_audits:
-- component: desktop_executable_exit_gate
-  title: Desktop executable exit-gate gaps
-  reason: desktop executable exit gate proof is stale (87559s old)
-frontier_count: 0
-frontier_ids: []
-frontier: []
+- component: linux_desktop_exit_gate
+  title: Linux desktop exit-gate gaps
+  reason: linux desktop exit gate proof did not pass
+frontier_count: 1
+frontier_ids:
+- 1239074135
+frontier:
+- id: 1239074135
+  title: 'Completion gate: Linux desktop exit gate'
+  wave: completion_review
+  status: review_required
+  owners:
+  - chummer6-ui
+  - fleet
+  dependencies: []
+  exit_criteria:
+  - linux desktop exit gate proof did not pass
+  - Build the Linux desktop binary, package the primary .deb plus fallback archive,
+    run startup smoke on both packaged outputs, run desktop runtime unit tests, and
+    refresh UI_LINUX_DESKTOP_EXIT_GATE.generated.json.
 eta:
-  status: flagship_delivery
-  eta_human: 2.4d-6d
-  eta_confidence: low
-  basis: full_product_frontier_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
+  status: recovery
+  eta_human: 2h-4h
+  eta_confidence: medium
+  basis: completion_review_recovery
+  scope_kind: completion_review_recovery
+  scope_label: Completion review and proof recovery
+  scope_warning: This ETA covers registry trust, proof, and review recovery. It is
+    still narrower than a final flagship parity claim unless full-product readiness
+    is also green.
   blocking_reason: ''
-  summary: 'Current closeout gates are green, but flagship product work still remains
-    across 7 synthetic slices. Outstanding readiness coverage: desktop_client.'
+  summary: Registry closure is not yet trustworthy; recovery still needs Linux desktop
+    exit gate. Blocked journeys=0, warning journeys=0, review frontier=1, decomposed_frontier=0,
+    backlog_tail=0.
