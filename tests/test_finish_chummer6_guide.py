@@ -36,6 +36,20 @@ def test_finisher_uses_canonical_horizon_set() -> None:
     assert set(finish.HORIZONS) == set(finish.canonical_horizon_slugs())
 
 
+def test_horizon_pages_carry_design_public_body_and_readable_foundations() -> None:
+    finish = _load_module()
+
+    black_ledger = finish.horizon_page("black-ledger", finish.HORIZONS["black-ledger"])
+    karma_forge = finish.horizon_page("karma-forge", finish.HORIZONS["karma-forge"])
+
+    assert "## Mission Market" in black_ledger
+    assert "## Rule Environment" in karma_forge
+    assert "- C0 - campaign, run, and Hub-owned receipt boundaries" in black_ledger
+    assert "- D2 - restore-safe sync, package portability, and missing-package warnings" in karma_forge
+    assert "- C0\n" not in black_ledger
+    assert "- D2\n" not in karma_forge
+
+
 def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     finish = _load_module()
     monkeypatch.setattr(finish, "GUIDE_REPO", tmp_path)

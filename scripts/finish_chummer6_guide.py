@@ -1734,6 +1734,8 @@ def assert_clean(text: str, *, label: str) -> None:
         token = str(item).strip()
         if token.lower() == "chummer5a" and label_name == "from_chummer5a_to_chummer6.md":
             continue
+        if token.lower() == "chummer5a" and label_name == "karma-forge.md":
+            continue
         if token and token.lower() in lowered:
             raise ValueError(f"{label} contains forbidden provenance text: {token}")
 
@@ -3443,6 +3445,8 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
         if meanwhile
         else ""
     )
+    public_body = str(item.get("public_body") or "").strip()
+    public_body_block = f"\n{public_body}\n\n" if public_body else ""
     scene_detail = (
         '<p align="center">'
         f'<img src="../assets/horizons/details/{slug}-scene.png" alt="{title} dialogue scene still" width="420">'
@@ -3458,6 +3462,7 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
         f"{scene}\n\n"
         f"{scene_detail}"
         f"{meanwhile_block}\n"
+        f"{public_body_block}"
         "## Why that would be great\n\n"
         f"{why_great}\n\n"
         "## Why it is still a Horizon\n\n"
@@ -4075,7 +4080,7 @@ def write_guide_repo() -> None:
         ),
     )
 
-    design_owned_horizon_fields = {"problem", "use_case", "why_great", "why_waits", "not_now", "foundations", "repos"}
+    design_owned_horizon_fields = {"problem", "use_case", "why_great", "why_waits", "not_now", "foundations", "repos", "public_body"}
     for slug, item in HORIZONS.items():
         effective = deep_merge(item, EA_HORIZON_OVERRIDES.get(slug, {}))
         for field in design_owned_horizon_fields:
