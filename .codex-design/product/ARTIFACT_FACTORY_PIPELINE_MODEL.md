@@ -60,4 +60,3 @@ The artifact factory must not:
 - convert private support state into public claims
 - treat video/social metrics as product truth
 - skip accessibility, captions, and locale review where public
-

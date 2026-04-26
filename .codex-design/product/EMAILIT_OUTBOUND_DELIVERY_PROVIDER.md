@@ -155,4 +155,3 @@ Emailit metrics are delivery telemetry. Product interpretation belongs to Hub, F
 
 Emailit is a serious Hub outbound delivery candidate.
 It is not notification truth.
-

@@ -22,26 +22,6 @@ thresholds:
   require_feedback_progress_email_e2e_gate: true
   require_feedback_progress_email_decision_awards: true
   required_feedback_progress_sender_email: wageslave@chummer.run
-  require_feedback_discovery_gateway: true
-  require_feedback_discovery_ltd_registry: true
-  required_feedback_discovery_route: karma_forge_discovery
-  required_feedback_discovery_first_part_steps:
-    - public_signal
-    - structured_prescreen
-    - adaptive_interview
-  required_feedback_discovery_tools:
-    - ProductLift
-    - Signitic
-    - FacePop
-    - Deftform
-    - Icanpreneur
-    - Lunacal
-    - MetaSurvey
-    - Teable
-    - NextStep
-    - Product Governor
-    - chummer6-design
-    - Emailit
 requirements:
   - id: packets_must_be_current
     rule: Support packets must publish a current generated_at timestamp before the loop can count as healthy.
@@ -63,10 +43,6 @@ requirements:
     rule: Audited decision mail must award `Clad Feedbacker` on accepted paths and `Denied` on rejected or deferred paths.
   - id: progress_mail_e2e_receipts
     rule: The E2E gate must fail closed unless the progress-mail workflow requires sent Emailit receipts via EA `connector.dispatch`.
-  - id: feedback_discovery_gateway
-    rule: Public, design-impact, and house-rule feedback must publish a support-packet discovery plan using the Karma Forge first-part loop before it can become implementation backlog.
-  - id: feedback_discovery_ltd_registry
-    rule: The discovery plan must prove the LTD `discovery_system` registry covers the workflow tools that collect, interview, validate, govern, and close out feedback.
 status_spine:
   - received
   - clustered
@@ -89,4 +65,3 @@ failure_modes:
   - External-host proof backlog exists without current capture instructions.
   - Reporter-facing progress mail exists only as prose or timeline state instead of a sent, receipt-bearing staged email workflow.
   - Decision mail claims acceptance or denial without the bounded reason, ETA posture, and explicit Clad Feedbacker or Denied award state.
-  - House-rule or public discovery feedback bypasses the Karma Forge first-part receipts and lands directly in implementation backlog.

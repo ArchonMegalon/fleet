@@ -66,4 +66,3 @@ The stack is working when:
 - ProductLift ideas close out with evidence
 - BLACK LEDGER and Community Hub pages drive real engagement
 - no public claim outruns Chummer-owned release evidence
-

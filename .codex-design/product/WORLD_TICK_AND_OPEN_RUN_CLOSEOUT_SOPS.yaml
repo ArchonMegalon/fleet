@@ -33,4 +33,3 @@ sops:
       - approve_public_safe_honors
       - publish_honors_page
       - send_digest_or_campaign
-

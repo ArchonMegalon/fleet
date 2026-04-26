@@ -46,4 +46,3 @@ Premium must not:
 - make Invoiless or any billing tool entitlement truth
 
 Hub owns entitlement truth.
-
