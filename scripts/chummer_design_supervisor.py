@@ -188,6 +188,34 @@ DEFAULT_LOCK_PATH = DEFAULT_STATE_ROOT / "loop.lock"
 DEFAULT_WORKER_BIN = "codex"
 DEFAULT_MODEL = ""
 DEFAULT_FALLBACK_MODELS = ("ea-coder-hard",)
+SUCCESSOR_WAVE_IMPLEMENTATION_ORDER = (
+    108,
+    109,
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    123,
+    124,
+    125,
+    130,
+    126,
+    132,
+    134,
+    127,
+    128,
+    129,
+    131,
+    135,
+)
 LOW_CAPACITY_RESERVE_PERCENT = 0.10
 CORE_BATCH_WORKER_LANES = frozenset(
     {
@@ -5458,6 +5486,105 @@ def _prefer_open_successor_queue_items(
     ]
 
 
+def _filter_remaining_successor_wave_queue_items(
+    workspace_root: Path,
+    items: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    rows = [dict(item) for item in items if isinstance(item, dict)]
+    remaining_milestone_ids = {
+        item.id
+        for item in _load_next_wave_registry_milestones(workspace_root)
+        if str(item.status or "").strip().lower() not in DONE_STATUSES
+    }
+    if not remaining_milestone_ids:
+        return rows
+    filtered_rows = [
+        item
+        for item in rows
+        if _coerce_int(item.get("milestone_id"), 0) in remaining_milestone_ids
+        or _coerce_int(item.get("milestone_id"), 0) <= 0
+    ]
+    return filtered_rows or rows
+
+
+def _coerce_successor_wave_order(value: Any) -> List[int]:
+    raw_items: Sequence[Any]
+    if isinstance(value, dict):
+        raw_items = (
+            value.get("milestone_ids")
+            or value.get("ids")
+            or value.get("order")
+            or value.get("milestones")
+            or []
+        )
+    elif isinstance(value, (list, tuple)):
+        raw_items = value
+    else:
+        raw_items = []
+    rows: List[int] = []
+    seen: set[int] = set()
+    for raw in raw_items:
+        if isinstance(raw, dict):
+            raw = raw.get("milestone_id") or raw.get("id")
+        milestone_id = _coerce_int(raw, 0)
+        if milestone_id <= 0 or milestone_id in seen:
+            continue
+        seen.add(milestone_id)
+        rows.append(milestone_id)
+    return rows
+
+
+def _successor_wave_implementation_order(workspace_root: Path) -> List[int]:
+    payload = _next_wave_registry_payload(workspace_root)
+    for key in ("fleet_implementation_order", "implementation_order_milestone_ids", "implementation_order"):
+        rows = _coerce_successor_wave_order(payload.get(key))
+        if rows:
+            return rows
+    return list(SUCCESSOR_WAVE_IMPLEMENTATION_ORDER)
+
+
+def _successor_wave_priority_by_milestone_id(workspace_root: Path) -> Dict[int, int]:
+    return {
+        milestone_id: index
+        for index, milestone_id in enumerate(_successor_wave_implementation_order(workspace_root))
+    }
+
+
+def _successor_wave_ordered_queue_items(
+    workspace_root: Path,
+    items: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    priority_by_milestone_id = _successor_wave_priority_by_milestone_id(workspace_root)
+    if not priority_by_milestone_id:
+        return [dict(item) for item in items if isinstance(item, dict)]
+
+    def sort_key(indexed_item: tuple[int, Dict[str, Any]]) -> tuple[int, int, int]:
+        original_index, item = indexed_item
+        milestone_id = _coerce_int(item.get("milestone_id"), 0)
+        priority = priority_by_milestone_id.get(milestone_id)
+        if priority is not None:
+            return 0, priority, original_index
+        return 1, original_index, original_index
+
+    return [dict(item) for _index, item in sorted(enumerate(items), key=sort_key)]
+
+
+def _successor_wave_ordered_milestone_ids(
+    workspace_root: Path,
+    milestones: Sequence[Milestone],
+) -> List[int]:
+    priority_by_milestone_id = _successor_wave_priority_by_milestone_id(workspace_root)
+
+    def sort_key(indexed_item: tuple[int, Milestone]) -> tuple[int, int, int]:
+        original_index, item = indexed_item
+        priority = priority_by_milestone_id.get(item.id)
+        if priority is not None:
+            return 0, priority, original_index
+        return 1, original_index, original_index
+
+    return [item.id for _index, item in sorted(enumerate(milestones), key=sort_key)]
+
+
 def _published_queue_items(workspace_root: Path) -> List[Dict[str, Any]]:
     return _queue_items_from_payload(_published_queue_payload(workspace_root))
 
@@ -5487,6 +5614,11 @@ def _queue_payload_and_item_for_shard(
     next_wave_items = _queue_items_from_payload(next_wave_payload)
     if not next_wave_items:
         return {}, None
+    next_wave_items = _filter_remaining_successor_wave_queue_items(workspace_root, next_wave_items)
+    preferred_next_wave_items = _prefer_open_successor_queue_items(workspace_root, next_wave_items)
+    if preferred_next_wave_items:
+        next_wave_items = preferred_next_wave_items
+    next_wave_items = _successor_wave_ordered_queue_items(workspace_root, next_wave_items)
 
     current_frontier = list(base_frontier or [])
     if not current_frontier:
@@ -5533,23 +5665,11 @@ def _successor_wave_queue_payload_and_item_for_shard(
     items = _queue_items_from_payload(payload)
     if not items:
         return {}, None
-    remaining_milestone_ids = {
-        item.id
-        for item in _load_next_wave_registry_milestones(workspace_root)
-        if str(item.status or "").strip().lower() not in DONE_STATUSES
-    }
-    if remaining_milestone_ids:
-        filtered_items = [
-            item
-            for item in items
-            if _coerce_int(item.get("milestone_id"), 0) in remaining_milestone_ids
-            or _coerce_int(item.get("milestone_id"), 0) <= 0
-        ]
-        if filtered_items:
-            items = filtered_items
+    items = _filter_remaining_successor_wave_queue_items(workspace_root, items)
     preferred_items = _prefer_open_successor_queue_items(workspace_root, items)
     if preferred_items:
         items = preferred_items
+    items = _successor_wave_ordered_queue_items(workspace_root, items)
     item_index = shard_index - 1
     if 0 <= item_index < len(items):
         return dict(payload), dict(items[item_index])
@@ -12246,6 +12366,7 @@ def _successor_wave_eta_snapshot(
             "remaining_not_started_milestones": 0,
             "remaining_queue_items": 0,
             "critical_path_milestone_ids": [],
+            "implementation_order_milestone_ids": [],
             "blocking_reason": "",
             **_eta_scope_fields(
                 scope_kind="next_90_day_successor_wave",
@@ -12285,6 +12406,7 @@ def _successor_wave_eta_snapshot(
     current_time = now or _utc_now()
     in_progress_count = sum(1 for item in remaining if str(item.status or "").strip().lower() == "in_progress")
     not_started_count = max(0, len(remaining) - in_progress_count)
+    implementation_order_milestone_ids = _successor_wave_ordered_milestone_ids(workspace_root, remaining)
     queue_milestone_ids = {
         _coerce_int(item.get("milestone_id"), 0)
         for item in queue_items
@@ -12314,6 +12436,7 @@ def _successor_wave_eta_snapshot(
             if _coerce_int(item.get("milestone_id"), 0) in queue_milestone_ids
         ),
         "critical_path_milestone_ids": critical_path,
+        "implementation_order_milestone_ids": implementation_order_milestone_ids,
         "blocking_reason": "",
         **_eta_scope_fields(
             scope_kind="next_90_day_successor_wave",

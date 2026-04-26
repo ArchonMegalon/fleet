@@ -437,6 +437,98 @@ def test_successor_wave_queue_skips_rows_for_completed_registry_work_tasks() -> 
         assert item["package_id"] == "next90-m111-design-public-concierge-bounds"
 
 
+def test_successor_wave_queue_uses_fleet_implementation_order_before_file_order() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "program_wave": "next_90_day_product_advance",
+                    "milestones": [
+                        {
+                            "id": 133,
+                            "title": "Media/social horizon tranche",
+                            "wave": "W21",
+                            "status": "not_started",
+                            "owners": ["chummer6-media-factory"],
+                            "exit_criteria": ["Ghostwire remains bounded."],
+                        },
+                        {
+                            "id": 132,
+                            "title": "Deterministic horizon implementation tranche",
+                            "wave": "W20",
+                            "status": "not_started",
+                            "owners": ["fleet", "chummer6-design"],
+                            "exit_criteria": ["Karma Forge first part routes."],
+                        },
+                        {
+                            "id": 126,
+                            "title": "Horizon handoff gates",
+                            "wave": "W17",
+                            "status": "not_started",
+                            "owners": ["fleet", "chummer6-design"],
+                            "exit_criteria": ["Research-to-build gates hold."],
+                        },
+                        {
+                            "id": 130,
+                            "title": "External tools and LTD provider stewardship",
+                            "wave": "W19",
+                            "status": "not_started",
+                            "owners": ["fleet"],
+                            "exit_criteria": ["LTD provider stewardship is ready."],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        _write_next_wave_queue(
+            root,
+            [
+                {
+                    "repo": "chummer6-media-factory",
+                    "package_id": "next90-m133-ghostwire",
+                    "title": "GHOSTWIRE horizon work",
+                    "task": "Keep build ghosts bounded.",
+                    "milestone_id": 133,
+                },
+                {
+                    "repo": "chummer6-design",
+                    "package_id": "next90-m132-karma-forge",
+                    "title": "KARMA FORGE first part",
+                    "task": "Materialize deterministic feedback loop inputs.",
+                    "milestone_id": 132,
+                },
+                {
+                    "repo": "chummer6-design",
+                    "package_id": "next90-m126-horizon-gates",
+                    "title": "Horizon handoff gates",
+                    "task": "Keep handoff gates deterministic.",
+                    "milestone_id": 126,
+                },
+                {
+                    "repo": "fleet",
+                    "package_id": "next90-m130-ltd-stewardship",
+                    "title": "LTD provider stewardship",
+                    "task": "Prepare LTDs as an exit gate.",
+                    "milestone_id": 130,
+                },
+            ],
+        )
+        args = _args(root)
+
+        selected: list[int] = []
+        for shard_number in range(1, 5):
+            state_root = root / "state" / "chummer_design_supervisor" / f"shard-{shard_number}"
+            state_root.mkdir(parents=True, exist_ok=True)
+            _payload, item = module._successor_wave_queue_payload_and_item_for_shard(args, state_root)
+            assert item is not None
+            selected.append(item["milestone_id"])
+
+        assert selected == [130, 126, 132, 133]
+
+
 def _patch_launch_worker_fake_run(monkeypatch, module, fake_run) -> None:
     supports_timeout = "timeout" in inspect.signature(fake_run).parameters
 
