@@ -1,221 +1,222 @@
 # Next Session Handoff
 
-## Current Session Scope
+Last updated: 2026-04-26, Europe/Vienna.
 
-The active work was Fleet OODA stabilization, blocker prevention before materialization, and verification that the Chummer design shards are progressing on EA-only worker lanes.
+## Operator Instructions
 
-The operator Codex session should stay on OpenAI. The Fleet worker processes should stay on EA via `scripts/codex-shims/codexea`.
+- Keep short `Trace:` progress lines before meaningful work units.
+- Do not expose secrets from runtime files, env files, browser state, or credential stores.
+- Do not reset or discard unrelated dirty work. Several repos have generated or shard-owned changes.
+- Do not publish builds directly to GitHub. Source/download authority for clients is `chummer.run` only; GitHub should receive source and design changes, not release binaries.
+- The Fleet may be running worker shards. Do not interrupt worker loops unless the user explicitly asks for Fleet operations.
 
-Do not expose secrets from runtime files, environment files, browser state, or credential stores.
+## Current Objective
 
-## Current Live Fleet State
+The design and Fleet have been hardened so Chummer6 flagship readiness now requires a separate user-journey tester audit. The missing UI-side artifact is intentionally a hard gate:
 
-Last checked on 2026-04-25 around 15:20 UTC.
+`/docker/chummercomplete/chummer6-ui/.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json`
 
-- Fleet healthcheck: green.
-- Controller: `up`.
-- Design supervisor: `up`.
-- Design overwatch: `healthy`.
-- Active shard count: `13/13`.
-- Productive active shard count: `13`.
-- Nonproductive active shard count: `0`.
-- Progress evidence: `{"repo_work_detected": 13}`.
-- Stale shards: none observed.
-- Inactive shards: none observed.
-- Shard blockers: none observed.
-- Current ETA: `5d-1.8w`.
-- Open milestones: `27`.
-- Open milestone split: `12` in progress, `15` not started.
-- Active worker route audit: `0` non-EA active runs.
-- Active worker models: `ea-coder-hard`, `ea-coder-hard-batch`.
-- Loop process audit: `13` unique shard loop state roots, no duplicate shard roots.
+That audit must be created by a separate tester shard or equivalent independent tester process that runs the promoted Linux desktop binary like a real user, does not use internal APIs, captures visible evidence, and reports blocking findings instead of fixing them.
 
-## Important Recent Fixes
+## Local Commits Not Yet Pushed
 
-### Healthcheck Defaults
+Design repo:
 
-The healthcheck used to report false unhealthy locally because it defaulted to `/var/lib/codex-fleet/chummer_design_supervisor` while local Fleet state is under `/docker/fleet/state/chummer_design_supervisor`.
+- Repo: `/docker/chummercomplete/chummer-design`
+- Branch: `fleet/design`
+- Commit: `5fe3b29 Require desktop user journey tester audit`
+- Last checked status: clean.
+- Suggested push if continuing the prior publish request:
+  `git push origin HEAD:main`
 
-Updated:
+Fleet repo:
 
-- `scripts/healthcheck_design_supervisor.py`
-- `tests/test_healthcheck_design_supervisor.py`
+- Repo: `/docker/fleet`
+- Branch: `main`
+- Commit: `67e9ecd0 Gate readiness on user journey tester audit`
+- Status: `main` is ahead of `origin/main` by 1 commit, with pre-existing generated dirty files still present.
+- Suggested push if continuing the prior publish request:
+  `git push origin main`
 
-Current behavior:
+## Design Changes Made
 
-- Default state root is derived from `FLEET_WORKSPACE_ROOT` or `/docker/fleet`.
-- Default watchdog shard is `shard-1`.
-- Default watchdog max silence is `900s`.
-- `python3 scripts/healthcheck_design_supervisor.py` passes without env overrides.
+Canonical design files updated in `/docker/chummercomplete/chummer-design/products/chummer`:
 
-### OODA Materialized Status Repair
+- `DESKTOP_EXECUTABLE_EXIT_GATES.md`
+  - Added Gate B2, a required adversarial user-journey tester audit.
+  - Tester must use the Linux desktop binary as a user and must not fix code during the audit.
+  - Required workflows:
+    - `master_index_search_focus_stability`
+    - `file_new_character_visible_workspace`
+    - `minimal_character_build_save_reload`
+    - `major_navigation_sanity`
+    - `validation_or_export_smoke`
+  - Requires at least two screenshots per workflow.
+- `FLAGSHIP_UI_RELEASE_GATE.md`
+  - Added release-blocking expectation for `USER_JOURNEY_TESTER_AUDIT.generated.json`.
+  - Added the adversarial user-journey tester lane.
+- `GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+  - `build_explain_publish` now requires repo proof for `chummer6-ui.user_journey_tester_audit`.
+  - Requires status `pass`, Linux binary execution, no internal APIs, tester/fixer separation, zero open blocking findings, all workflow IDs, and screenshot evidence.
+- `README.md`
+  - Updated desktop gate summary.
+- `JOURNEY_GATES.generated.json`
+  - Rematerialized from the design contract.
 
-The stale `status-live-refresh.materialized.json` had old blocked/low-count values while live state was healthy. OODA now refreshes the materialized snapshot every cycle from current supervisor state plus active-shards evidence.
-
-Updated:
-
-- `scripts/ooda_design_supervisor.py`
-- `tests/test_ooda_design_supervisor.py`
-
-Current behavior:
-
-- `state/chummer_design_supervisor/status-live-refresh.materialized.json` is regenerated by OODA.
-- Active runs, shard rows, ETA aliases, and progress evidence are preserved.
-- `remaining_open_milestones` is derived correctly from `eta`, `successor_wave_eta`, or successor aliases.
-
-### Stale Overwatch Process Restart
-
-After patching OODA, `fleet-design-overwatch` still had the old Python module loaded and kept publishing `remaining_open_milestones=0`.
-
-Remedy applied:
-
-- Restarted only `fleet-design-overwatch`.
-- Confirmed new OODA state reports `remaining_open_milestones=27`.
-
-If this reappears, restart only overwatch:
+Design verification already passed:
 
 ```bash
-docker restart fleet-design-overwatch
+python3 scripts/ai/materialize_journey_gates_contract.py
+python3 scripts/ai/publish_local_mirrors.py --check
+bash scripts/ai/verify.sh
 ```
 
-Then verify:
+## Fleet Changes Made
 
-```bash
-python3 scripts/ooda_design_supervisor.py --once
-python3 - <<'PY'
-import json
-from pathlib import Path
-p=json.loads(Path("state/design_supervisor_ooda/state.json").read_text())
-print(p.get("eta_status"), p.get("eta_human"), p.get("remaining_open_milestones"))
-PY
-```
+Files changed and committed in `/docker/fleet`:
 
-## Validation Commands Already Run
-
-These passed in the current state:
-
-```bash
-python3 scripts/healthcheck_design_supervisor.py
-python3 scripts/ooda_design_supervisor.py --once
-python3 -m pytest -q tests/test_ooda_design_supervisor.py tests/test_healthcheck_design_supervisor.py
-python3 -m py_compile scripts/ooda_design_supervisor.py scripts/healthcheck_design_supervisor.py scripts/chummer_design_supervisor.py
-python3 /docker/chummercomplete/chummer-design/scripts/ai/validate_product_invariants.py
-python3 /docker/chummercomplete/chummer-design/scripts/ai/validate_sync_manifest.py
-```
-
-Observed results:
-
-- Healthcheck: `ok`.
-- Focused pytest: `23 passed`.
-- Design validators: `ok`.
-- Pre-materialize temp artifact scan: clean.
-- Free space: about `55G` available on `/docker/fleet`, filesystem around `89%` used.
-
-## Pre-Materialize Readiness
-
-Before materializing generated artifacts, repeat these checks:
-
-```bash
-python3 scripts/healthcheck_design_supervisor.py
-python3 scripts/ooda_design_supervisor.py --once
-python3 -m py_compile scripts/ooda_design_supervisor.py scripts/healthcheck_design_supervisor.py scripts/chummer_design_supervisor.py
-python3 /docker/chummercomplete/chummer-design/scripts/ai/validate_product_invariants.py
-python3 /docker/chummercomplete/chummer-design/scripts/ai/validate_sync_manifest.py
-```
-
-Then check routing, shard progress, and temp files:
-
-```bash
-python3 - <<'PY'
-import json, datetime as dt
-from pathlib import Path
-UTC=dt.timezone.utc
-now=dt.datetime.now(UTC)
-def parse(value):
-    text=str(value or "").strip()
-    if not text:
-        return None
-    try:
-        return dt.datetime.fromisoformat(text.replace("Z","+00:00")).astimezone(UTC)
-    except ValueError:
-        return None
-payload=json.loads(Path("state/chummer_design_supervisor/active_shards.json").read_text())
-rows=payload.get("active_shards") or []
-print("active_shards", len(rows), "configured", payload.get("configured_shard_count"))
-print("progress_evidence_counts", payload.get("progress_evidence_counts"))
-risks=[]
-for row in rows:
-    name=row.get("name") or row.get("shard_id")
-    last=parse(row.get("active_run_worker_last_output_at") or row.get("worker_last_output_at") or row.get("updated_at"))
-    age=int((now-last).total_seconds()) if last else None
-    evidence=row.get("active_run_progress_evidence")
-    state=row.get("active_run_progress_state")
-    alive=row.get("active_run_process_alive")
-    model=row.get("selected_model")
-    alias=row.get("selected_account_alias")
-    print(f"{name}: state={state} evidence={evidence} last_output_age_s={age} alive={alive} model={model} alias={alias}")
-    if age is None or age > 900 or state not in {"streaming","running_silent","container_scoped"} or evidence != "repo_work_detected":
-        risks.append((name,state,evidence,age,alive))
-print("progress_risks", len(risks))
-for item in risks:
-    print("risk", item)
-PY
-
-find .codex-studio/published -maxdepth 1 -type f \( -name '*.generated.*.json' -o -name 'compile.manifest.*.json' \) -printf '%p\n'
-find state/chummer_design_supervisor -maxdepth 3 -type f \( -name '*.tmp' -o -name '.*.tmp' \) -mmin +5 -printf '%p\n' 2>/dev/null
-```
-
-Avoid broad recursive `du -sh state/chummer_design_supervisor state/design_supervisor_ooda ...`; that traversal can hang on large state trees. Prefer bounded `find -maxdepth` checks.
-
-## Materialization Context
-
-The generated/published plane already has many dirty files from current and prior fleet materialization work. Do not reset or discard unrelated changes.
-
-Relevant currently dirty/generated areas include:
-
-- `.codex-studio/published/**`
-- `.codex-design/product/**`
-- `.codex-design/repo/IMPLEMENTATION_SCOPE.md`
+- `scripts/materialize_flagship_product_readiness.py`
+  - Added optional `--ui-user-journey-tester-audit`.
+  - Added validation for the tester audit artifact.
+  - Fails `desktop_client` readiness if the audit is missing, not passing, missing discipline evidence, missing workflows, or has fewer than two screenshots per workflow.
+  - Adds detailed evidence fields for missing/nonpassing/underscreenshotted workflows and open blocking findings.
 - `scripts/chummer_design_supervisor.py`
-- `scripts/healthcheck_design_supervisor.py`
-- `scripts/ooda_design_supervisor.py`
-- related `tests/**`
-- `LTDs.md`
-- runtime example/config files
+  - Passes the preferred UI repo audit path into flagship readiness refresh.
+- `config/projects/fleet.yaml`
+  - `verify_cmd` and `supervisor_contract` now pass the required UI tester audit path.
+- `tests/test_materialize_flagship_product_readiness.py`
+  - Added pass-payload helper and failing-gate tests.
+- `.codex-design/product/README.md`
+- `.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+- `.codex-design/product/DESKTOP_EXECUTABLE_EXIT_GATES.md`
+  - Updated by design mirror publication.
 
-There are also untracked generated/feedback files. Treat them as existing work unless the user explicitly asks for cleanup.
+Fleet verification already passed:
 
-## Design Queue Context
+```bash
+python3 -m py_compile scripts/materialize_flagship_product_readiness.py scripts/chummer_design_supervisor.py
+pytest -q tests/test_materialize_flagship_product_readiness.py -k "user_journey_tester_audit or recovers_windows_gate_from_aggregate_executable_proof"
+git diff --check
+```
 
-The design queue has been expanded to cover the Chummer6 design:
+Focused test result:
 
-- Queue: `178` items total.
-- Queue status summary at last known expansion: `40 complete`, `41 in_progress`, `97 not_started`.
-- Registry: `35` milestones.
-- Registry status summary at last known expansion: `8 complete`, `12 in_progress`, `15 not_started`.
-- Open milestones: `108`, `109`, `111` through `135`.
-- Critical path: `109 -> 114 -> 115 -> 116 -> 117 -> 119 -> 120 -> 125 -> 126 -> 132 -> 134 -> 135`.
+- `3 passed, 96 deselected`
 
-Canonical and mirror files touched during that expansion:
+Probe result proving the new gate is active:
 
-- `/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml`
-- `/docker/fleet/.codex-design/product/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml`
-- `/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md`
-- `/docker/fleet/.codex-design/product/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md`
-- `/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml`
-- `/docker/fleet/.codex-design/product/NEXT_90_DAY_QUEUE_STAGING.generated.yaml`
-- `/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml`
+```bash
+python3 scripts/materialize_flagship_product_readiness.py \
+  --out /tmp/FLAGSHIP_PRODUCT_READINESS.user-journey-probe.json \
+  --mirror-out "" \
+  --ui-user-journey-tester-audit /docker/chummercomplete/chummer6-ui/.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json
+```
 
-## Suggested Next Moves
+Observed:
 
-1. Run the pre-materialize checks above.
-2. If still green, materialize only the required generated artifacts for the user’s requested slice.
-3. Re-run health/OODA after materialization.
-4. Re-run focused tests for any scripts touched.
-5. Do not commit unless explicitly asked.
+- Overall readiness: `fail; ready=7, warning=0, missing=1`
+- `desktop_client`: `missing`
+- Missing all five required tester workflows.
+- Missing discipline evidence: `linux_binary_under_test`, `used_internal_apis_false`, `fix_shard_separate_true`.
 
-## Known Non-Blockers
+This is expected until the UI repo produces a valid `USER_JOURNEY_TESTER_AUDIT.generated.json`.
 
-- `/docker/fleet` filesystem is high but acceptable at about `89%` used with about `55G` free.
-- The fleet is intentionally using EA worker lanes; this Codex operator session may remain on OpenAI.
-- Some old generated and feedback files are dirty/untracked; they are not current blockers by themselves.
+## Mirror Publication State
+
+`/docker/chummercomplete/chummer-design/scripts/ai/publish_local_mirrors.py` was run and mirror checks passed afterward.
+
+Mirror files updated in sibling repos:
+
+- `chummer6-core`: `.codex-design/product/README.md`, `.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+- `chummer6-ui`: same two files
+- `chummer6-hub`: same two files
+- `chummer6-mobile`: same two files
+- `chummer6-ui-kit`: same two files if repo is present locally
+- `chummer6-hub-registry`: same two files if repo is present locally
+- `chummer6-media-factory`: same two files if repo is present locally
+- `executive-assistant`: same two files if repo is present locally
+- `fleet`: mirror files were included in Fleet commit `67e9ecd0`
+
+Some sibling repos have unrelated dirty generated/source work. If committing mirror sync, stage only the `.codex-design/product` files unless the user asks for broader integration.
+
+## Known Dirty Worktree State
+
+`/docker/fleet` still has pre-existing generated dirty files under `.codex-studio/published/**`, including frontier, readiness, journey, support, weekly-governor, manifest, and shard-generated artifacts. They were not part of the Fleet commit and should not be reverted casually.
+
+`/docker/chummercomplete/chummer6-ui` has many dirty files and untracked screenshot/run artifacts from UI parity and desktop exit-gate work, including:
+
+- `.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+- `.codex-design/product/README.md`
+- many `.codex-studio/published/**` parity and screenshot artifacts
+- `Chummer.Avalonia/App.axaml.cs`
+- several `Chummer.Tests/**` files
+- untracked Linux desktop exit-gate run directories and workflow screenshots
+
+Treat these as active work from the current or parallel UI effort. Do not clean them without explicit instruction.
+
+## UI Bugs Still Needing Work
+
+The user reported two concrete user-facing failures:
+
+- Master Index search text field loses focus on every keyboard letter.
+- `File > New Character` writes/logs that something initialized, but no visible workspace appears.
+
+These should be fixed in `/docker/chummercomplete/chummer6-ui`, then verified through visible desktop workflow evidence. The new tester audit should catch both:
+
+- `master_index_search_focus_stability`
+- `file_new_character_visible_workspace`
+
+## Next Concrete Steps
+
+1. If the user wants persistence first, push the local commits:
+   - `/docker/chummercomplete/chummer-design`: `git push origin HEAD:main`
+   - `/docker/fleet`: `git push origin main`
+2. Commit/push mirror-only `.codex-design/product` updates in sibling repos as needed, while avoiding unrelated dirty files.
+3. In `chummer6-ui`, fix the Master Index focus loss and invisible New Character workspace.
+4. Build/run the Linux desktop binary and create `USER_JOURNEY_TESTER_AUDIT.generated.json` with:
+   - `status: pass`
+   - `evidence.linux_binary_under_test: true`
+   - `evidence.used_internal_apis: false`
+   - `evidence.fix_shard_separate: true`
+   - `evidence.open_blocking_findings_count: 0`
+   - all five required workflow IDs
+   - at least two screenshot paths per workflow
+5. Re-run Fleet readiness with the audit path and verify `desktop_client` no longer fails because of the tester audit.
+6. Only after green evidence, continue broader flagship parity and Karma Forge/LTD feedback-loop work.
+
+## Useful Commands
+
+Check current repo state:
+
+```bash
+git -C /docker/chummercomplete/chummer-design status --short --branch
+git -C /docker/fleet status --short --branch
+git -C /docker/chummercomplete/chummer6-ui status --short --branch
+```
+
+Re-run Fleet focused tests:
+
+```bash
+cd /docker/fleet
+python3 -m py_compile scripts/materialize_flagship_product_readiness.py scripts/chummer_design_supervisor.py
+pytest -q tests/test_materialize_flagship_product_readiness.py -k "user_journey_tester_audit or recovers_windows_gate_from_aggregate_executable_proof"
+```
+
+Probe the tester audit gate without changing published artifacts:
+
+```bash
+cd /docker/fleet
+python3 scripts/materialize_flagship_product_readiness.py \
+  --out /tmp/FLAGSHIP_PRODUCT_READINESS.user-journey-probe.json \
+  --mirror-out "" \
+  --ui-user-journey-tester-audit /docker/chummercomplete/chummer6-ui/.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json
+```
+
+Design verification:
+
+```bash
+cd /docker/chummercomplete/chummer-design
+python3 scripts/ai/materialize_journey_gates_contract.py
+python3 scripts/ai/publish_local_mirrors.py --check
+bash scripts/ai/verify.sh
+```
