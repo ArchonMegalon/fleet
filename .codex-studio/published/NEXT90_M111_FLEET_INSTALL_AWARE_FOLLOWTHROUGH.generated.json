@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.install_aware_followthrough_gate",
   "schema_version": 1,
-  "generated_at": "2026-04-26T15:53:56Z",
+  "generated_at": "2026-04-26T16:45:07Z",
   "package_id": "next90-m111-fleet-install-aware-followthrough",
   "frontier_id": 5200108449,
   "milestone_id": 111,
@@ -51,7 +51,7 @@
     "queue_staging": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
   },
   "support_receipt_truth": {
-    "support_packets_generated_at": "2026-04-26T15:50:40Z",
+    "support_packets_generated_at": "2026-04-26T16:44:54Z",
     "successor_package_verification_status": "pass",
     "reporter_followthrough_blocked_missing_install_receipts_count": 0,
     "reporter_followthrough_blocked_receipt_mismatch_count": 0,
@@ -65,7 +65,7 @@
     "weekly_product_pulse_as_of": "2026-04-26",
     "weekly_product_pulse_action": "launch_expand",
     "weekly_product_pulse_reason": "Launch expansion is approved for the next bounded window while canaries and support closure remain clear.",
-    "weekly_governor_packet_generated_at": "2026-04-26T15:52:59Z",
+    "weekly_governor_packet_generated_at": "2026-04-26T16:45:06Z",
     "weekly_governor_packet_as_of": "2026-04-26",
     "governor_expected_action": "launch_expand",
     "governor_actual_action": "launch_expand",
@@ -84,8 +84,8 @@
       "role": "install-aware followthrough receipt source",
       "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
       "exists": true,
-      "sha256": "78f49dd55ca0fa650fbd7a09c5377c41d925940f66d8efc1e01ab36d3ba073be",
-      "generated_at": "2026-04-26T15:50:40Z",
+      "sha256": "4bd4c65947e41c30d23f9145ef3962dde9eef24cc984e957ee007d3c6a1ea9ae",
+      "generated_at": "2026-04-26T16:44:54Z",
       "as_of": ""
     },
     {
@@ -93,8 +93,8 @@
       "role": "promotion and kill-switch ledger",
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
       "exists": true,
-      "sha256": "984b868e5eb4ffe3ae2a97806e71f02218a808895bdfebe98984bf94025cb0f7",
-      "generated_at": "2026-04-26T15:52:59Z",
+      "sha256": "822d7e960cd8bea1c6a43bb195f39dc1917a37fabb7375046180fafcd85be73c",
+      "generated_at": "2026-04-26T16:45:06Z",
       "as_of": "2026-04-26"
     },
     {

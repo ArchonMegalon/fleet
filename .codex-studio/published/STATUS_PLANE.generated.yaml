@@ -1,19 +1,17 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-04-26T15:52:29Z'
-source_public_status_generated_at: '2026-04-26T15:52:23Z'
+generated_at: '2026-04-26T16:45:05Z'
+source_public_status_generated_at: '2026-04-26T16:45:00Z'
 mission_snapshot:
-  headline: 'Working now: title: Close the remaining quality, restore, migration,
-    and release-proof obligations for `ui` with executable evidence instead of registry
-    prose alone. | difficulty: auto | risk_level: auto. ETA: 30m 47s. Next: Auto-detect
-    and repair recurring `core` mirror drift after 14449 repeated audit observations;
-    keep one bounded queue slice for the affected local design mirror bundle instead
-    of reopening one-off mirror refresh work.. Vision: 0s. Capacity: Core 33%, Easy
-    33%, Jury n/a. Stop risk: 26d 19h runway.'
-  current_eta: 30m 47s
-  next_title: Auto-detect and repair recurring `core` mirror drift after 14449 repeated
-    audit observations; keep one bounded queue slice for the affected local design
-    mirror bundle instead of reopening one-off mirror refresh work.
+  headline: 'Working now: title: Publish or append runnable backlog for Catalog, visual-regression,
+    and release discipline for the shared kit are not yet materialized.. | difficulty:
+    auto | risk_level: auto. ETA: 43m 31s. Next: {''Execute WL-D014-01'': ''compute
+    source and destination SHA-256 checksums for all WL-D007 review-template mirror
+    targets and append the cycle block in `products/chummer/sync/REVIEW_TEMPLATE_MIRROR_PUBLISH_EVIDENCE.md`.''}.
+    Vision: 0s. Capacity: Core 33%, Easy 33%, Jury n/a. Stop risk: 26d 19h runway.'
+  current_eta: 43m 31s
+  next_title: '{''Execute WL-D014-01'': ''compute source and destination SHA-256 checksums
+    for all WL-D007 review-template mirror targets and append the cycle block in `products/chummer/sync/REVIEW_TEMPLATE_MIRROR_PUBLISH_EVIDENCE.md`.''}'
   vision_eta: 0s
   milestone_title: chummer-vnext
   milestone_eta: 0s
@@ -24,42 +22,23 @@ mission_snapshot:
   stop_risk: 26d 19h runway
 queue_forecast:
   now:
-    project_id: ui
-    title: 'title: Close the remaining quality, restore, migration, and release-proof
-      obligations for `ui` with executable evidence instead of registry prose alone.
-      | difficulty: auto | risk_level: auto'
+    project_id: ui-kit
+    title: 'title: Publish or append runnable backlog for Catalog, visual-regression,
+      and release discipline for the shared kit are not yet materialized.. | difficulty:
+      auto | risk_level: auto'
     lane: easy
     provider: EA
     brain: EA backend / ea-coder-hard-batch
     reason: interactive_or_first_pass
-    elapsed_seconds: 1753
-    elapsed_human: 29m 13s
-    remaining_seconds: 1847
-    remaining_human: 30m 47s
+    elapsed_seconds: 989
+    elapsed_human: 16m 29s
+    remaining_seconds: 2611
+    remaining_human: 43m 31s
     total_seconds: 3600
     total_human: 1h
     verify_or_review_ahead: false
     prerequisites: the slice is waiting on local review
   next:
-    project_id: core
-    title: Auto-detect and repair recurring `core` mirror drift after 14449 repeated
-      audit observations; keep one bounded queue slice for the affected local design
-      mirror bundle instead of reopening one-off mirror refresh work.
-    lane: easy
-    provider: not active
-    brain: not active
-    reason: interactive_or_first_pass
-    elapsed_seconds: 0
-    elapsed_human: 0s
-    remaining_seconds: 3600
-    remaining_human: 1h
-    total_seconds: 3600
-    total_human: 1h
-    verify_or_review_ahead: true
-    prerequisites: configured queue has remaining work and is waiting for scheduler
-      dispatch
-    confidence: stable
-  then:
     project_id: design
     title: '{''Execute WL-D014-01'': ''compute source and destination SHA-256 checksums
       for all WL-D007 review-template mirror targets and append the cycle block in
@@ -76,6 +55,24 @@ queue_forecast:
     total_human: 1h
     verify_or_review_ahead: false
     prerequisites: the slice is waiting on GitHub Codex review
+    confidence: likely
+  then:
+    project_id: ea
+    title: Auto-detect and repair recurring `ea` mirror drift after 15287 repeated
+      audit observations; keep one bounded queue slice for the affected local design
+      mirror bundle instead of reopening one-off mirror refresh work.
+    lane: easy
+    provider: not active
+    brain: not active
+    reason: interactive_or_first_pass
+    elapsed_seconds: 0
+    elapsed_human: 0s
+    remaining_seconds: 3600
+    remaining_human: 1h
+    total_seconds: 3600
+    total_human: 1h
+    verify_or_review_ahead: false
+    prerequisites: the slice is waiting on local review
     confidence: likely
 capacity_forecast:
   lanes:
@@ -794,7 +791,7 @@ capacity_forecast:
     remaining_slices: 0
     slot_share_percent: 0
     drain_share_percent: 0
-    bottleneck: 'ui: waiting on review lane'
+    bottleneck: 'design: waiting on review lane'
     deployment_summary: Public Chummer portal is live at chummer.run as a promoted
       preview release shell for the split heads.
     program_eta: 0s
@@ -815,7 +812,7 @@ capacity_forecast:
   account_pressure: []
 blocker_forecast:
   now: the slice is waiting on local review
-  next: configured queue has remaining work and is waiting for scheduler dispatch
+  next: the slice is waiting on GitHub Codex review
   vision: blocked unresolved incidents, active workers, and healing runs
 deployment_posture:
   operator_auth_required: true
@@ -929,12 +926,11 @@ readiness_summary:
     boundary_pure: 5
     publicly_promoted: 3
   warning_count: 0
-  final_claim_ready: 4
+  final_claim_ready: 3
   final_claim_ready_project_ids:
   - hub
   - mobile
   - ui
-  - ui-kit
   whole_product_final_claim_status: pass
   whole_product_final_claim_bar: top_flagship_grade
   whole_product_final_claim_whole_project_frontier_required: true
@@ -942,12 +938,11 @@ readiness_summary:
   whole_product_final_claim_accept_lowered_standards: false
   whole_product_final_claim_ready: 1
   whole_product_final_claim_warning_keys: []
-final_claim_ready: 4
+final_claim_ready: 3
 final_claim_ready_project_ids:
 - hub
 - mobile
 - ui
-- ui-kit
 whole_product_final_claim_status: pass
 whole_product_final_claim_bar: top_flagship_grade
 whole_product_final_claim_whole_project_frontier_required: true
@@ -1017,12 +1012,12 @@ support_summary:
   update_required_misrouted_case_count: 0
   update_required_routed_to_downloads_count: 0
   top_clusters: []
-  generated_at: '2026-04-26T15:50:40Z'
+  generated_at: '2026-04-26T16:44:54Z'
   freshness:
     available: true
-    at: '2026-04-26T15:50:40Z'
-    age_seconds: 108
-    age_human: 1m 48s
+    at: '2026-04-26T16:44:54Z'
+    age_seconds: 11
+    age_human: 11s
     state: fresh
     label: fresh
 publish_readiness:
@@ -1131,7 +1126,7 @@ external_proof_autoingest:
 projects:
 - id: core
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1161,7 +1156,7 @@ projects:
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1221,7 +1216,7 @@ projects:
   deployment_access_posture: public
 - id: ui
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: publicly_promoted
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: true
@@ -1234,8 +1229,8 @@ projects:
   runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: true
-  readiness_warning_count: 0
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 1
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''
@@ -1250,7 +1245,7 @@ groups:
   blocking_owner_projects: []
 - id: control-plane
   lifecycle: live
-  phase: proposed_tasks
+  phase: running
   deployment_status: internal
   deployment_promotion_stage: internal
   deployment_access_posture: ''

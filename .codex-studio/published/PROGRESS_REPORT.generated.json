@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.public_progress_report",
   "contract_version": "2026-03-23",
-  "generated_at": "2026-04-26T15:52:07Z",
+  "generated_at": "2026-04-26T16:44:55Z",
   "as_of": "2026-04-26",
   "history_snapshot_count": 19,
   "brand": "Chummer6",
@@ -122,7 +122,7 @@
           "body": "A boring, auditable core runtime with no hidden legacy cargo."
         }
       ],
-      "recent_commit_count_7d": 7,
+      "recent_commit_count_7d": 6,
       "remaining_open_weight": 0,
       "remaining_open_milestones": 0,
       "uncovered_scope_count": 0,
@@ -154,7 +154,7 @@
           "repo_slug": "chummer6-core",
           "path": "/docker/chummercomplete/chummer6-core",
           "lifecycle": "live",
-          "recent_commit_count_7d": 7,
+          "recent_commit_count_7d": 6,
           "design_total_weight": 40,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
@@ -208,7 +208,7 @@
           "body": "Complete desktop/browser workbench with accessibility, localization, and polished shared components."
         }
       ],
-      "recent_commit_count_7d": 9,
+      "recent_commit_count_7d": 99,
       "remaining_open_weight": 0,
       "remaining_open_milestones": 0,
       "uncovered_scope_count": 0,
@@ -229,7 +229,7 @@
         "capacity_compile": true,
         "capacity_compile_count": 2,
         "published_artifacts_present": true,
-        "published_artifact_count": 21,
+        "published_artifact_count": 29,
         "lifecycle_counts": {
           "live": 1,
           "scaffold": 1
@@ -241,43 +241,51 @@
           "repo_slug": "chummer6-ui",
           "path": "/docker/chummercomplete/chummer6-ui",
           "lifecycle": "live",
-          "recent_commit_count_7d": 1,
+          "recent_commit_count_7d": 91,
           "design_total_weight": 56,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-04-26T15:17:04.366778Z",
+            "published_at": "2026-04-26T16:03:25.066261Z",
             "stages": {
+              "capacity_compile": true,
               "design_compile": true,
-              "policy_compile": true,
               "execution_compile": true,
               "package_compile": true,
-              "capacity_compile": true
+              "policy_compile": true
             },
             "dispatchable_truth_ready": false,
             "artifacts": [
               "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
+              "CHUMMER5A_LAYOUT_HARD_GATE.generated.json",
+              "CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
+              "CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json",
+              "DENSE_WORKBENCH_RECOVERY_GATE.generated.json",
               "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
               "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
               "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
-              "NEXT90_M109_UI_BUILD_EXPLAIN_ARTIFACTS.generated.json",
-              "NEXT90_M112_UI_CAMPAIGN_MEMORY.generated.json",
-              "NEXT90_M113_UI_GM_PREP_ROSTER_SURFACE.generated.json",
-              "NEXT90_M114_UI_RULE_ENVIRONMENT_STUDIO.generated.json",
+              "NEXT90_M101_AVALONIA_PRIMARY_ROUTE_PROOF.generated.json",
+              "QUARANTINED_INSTALLER_PROMOTION.generated.json",
               "QUEUE.generated.yaml",
               "SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
               "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
               "SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
+              "UI_EXTERNAL_HOST_PROOF_BLOCKERS.generated.json",
               "UI_FLAGSHIP_RELEASE_GATE.generated.json",
+              "UI_LINUX_BLAZOR_DESKTOP_EXIT_GATE.generated.json",
               "UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
               "UI_LOCALIZATION_RELEASE_GATE.generated.json",
               "UI_LOCAL_RELEASE_PROOF.generated.json",
+              "UI_MACOS_AVALONIA_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json",
+              "UI_MACOS_AVALONIA_OSX_X64_DESKTOP_EXIT_GATE.generated.json",
+              "UI_MACOS_BLAZOR_DESKTOP_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json",
+              "UI_WINDOWS_BLAZOR_DESKTOP_WIN_X64_DESKTOP_EXIT_GATE.generated.json",
               "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json",
-              "WORKPACKAGES.generated.yaml",
-              "quarantine-installer-promotion.generated.json"
+              "VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json",
+              "WORKPACKAGES.generated.yaml"
             ],
-            "lifecycle": ""
+            "lifecycle": "live"
           }
         },
         {
@@ -426,7 +434,7 @@
           "body": "A cohesive hosted community and publication stack ready for real public participation."
         }
       ],
-      "recent_commit_count_7d": 104,
+      "recent_commit_count_7d": 100,
       "remaining_open_weight": 0,
       "remaining_open_milestones": 0,
       "uncovered_scope_count": 0,
@@ -459,7 +467,7 @@
           "repo_slug": "chummer6-hub",
           "path": "/docker/chummercomplete/chummer6-hub",
           "lifecycle": "live",
-          "recent_commit_count_7d": 64,
+          "recent_commit_count_7d": 63,
           "design_total_weight": 60,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
@@ -489,7 +497,7 @@
           "repo_slug": "chummer6-hub-registry",
           "path": "/docker/chummercomplete/chummer-hub-registry",
           "lifecycle": "dispatchable",
-          "recent_commit_count_7d": 18,
+          "recent_commit_count_7d": 16,
           "design_total_weight": 44,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
@@ -519,7 +527,7 @@
           "repo_slug": "chummer6-media-factory",
           "path": "/docker/fleet/repos/chummer-media-factory",
           "lifecycle": "dispatchable",
-          "recent_commit_count_7d": 22,
+          "recent_commit_count_7d": 21,
           "design_total_weight": 54,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
