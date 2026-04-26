@@ -1,4 +1,4 @@
-# Open runs and Shadowcasters Network
+# Open runs and Community Hub
 
 ## Purpose
 
@@ -37,7 +37,7 @@ They must not become the authority for run existence, roster truth, consent trut
 BLACK LEDGER should not stop at “a job exists.”
 It should be able to move the GM from job selection to table formation and back into world consequence.
 
-The `Shadowcasters Network` is the governed discovery layer for that move.
+The `Community Hub` is the governed discovery layer for that move.
 
 It is not a random LFG board.
 It is a Chummer-run mission network with:
@@ -82,7 +82,7 @@ An `OpenRun` may be visible to:
 - invited players
 - one campaign group
 - one organizer community
-- the Shadowcasters Network
+- the Community Hub
 - a public preview cohort
 - selected language or time-zone cohorts
 
@@ -109,7 +109,7 @@ join_policy:
   character:
     require_runner_dossier: true
     allow_quickstart_runner: true
-    rule_environment_ref: sr6_shadowcasters_seattle
+    rule_environment_ref: sr6_community_hub_seattle
   schedule:
     scheduling_mode: lunacal_slots
     expected_duration_minutes: 240
@@ -246,7 +246,7 @@ Forbidden outputs:
 
 ## GM prep and opposition
 
-If SHADOWCASTERS NETWORK is useful, a GM should be able to move from listing to prep without opening a second planning system.
+If COMMUNITY HUB is useful, a GM should be able to move from listing to prep without opening a second planning system.
 
 That means:
 
@@ -267,11 +267,11 @@ open_run:
     type: job_packet
     ref: job_azt_ritual_017
   visibility:
-    audience: shadowcasters_network
+    audience: community_hub
     spoiler_class: player_safe
-  community_rule_environment_ref: cre_shadowcasters_seattle_01
+  community_rule_environment_ref: cre_community_hub_seattle_01
   join_policy_ref: jp_001
-  table_contract_ref: tc_shadowcasters_beginner_001
+  table_contract_ref: tc_community_hub_beginner_001
   schedule:
     state: collecting_availability
     provider: lunacal
@@ -284,7 +284,7 @@ open_run:
     - foundry
     - roll20
   quickstart_runner_refs:
-    - qrp_shadowcasters_starter_decker
+    - qrp_community_hub_starter_decker
   lifecycle_state: published
 ```
 
@@ -331,7 +331,7 @@ If the network layer grows into a durable product boundary, it is a legitimate c
 
 ## First proof gate
 
-**Shadowcasters Open Run 001**
+**Community Hub Open Run 001**
 
 Includes:
 
