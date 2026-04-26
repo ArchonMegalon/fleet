@@ -175,6 +175,8 @@ BLACK_LEDGER_GENERATOR_BRIEF = (
     "- Core loop: factions create pressure, players and GMs report intel, world ticks process state, GMs receive mission "
     "opportunities, runs are scheduled and played, results are reported, the map changes, newsreels and faction "
     "briefings publish fallout, then the next tick starts from the new reality.\\n"
+    "- Regeneration is explicit: every cycle renders current state plus candidate futures, branching outcomes, and alternate "
+    "counter-move branches that can become candidate missions.\\n"
     "- Product surfaces: source-aware world map, Mission Market, Open Runs and the Shadowcasters Network, Lunacal "
     "scheduling handoff, result reporting, intel review, faction and megacorp engines, faction-manager operation "
     "intents, heat model, newsreels, city tickers, faction newsletters, Table Pulse or GOD Observer debrief assistance, "
@@ -489,7 +491,7 @@ Voice rules:
 - roast code habits first, but if source context makes it land harder, a little real-life spillover is fine
 - never expose secrets, tokens, passwords, or private credentials
 - keep it exciting without pretending it is active work
-- for BLACK LEDGER, preserve the living city loop, not a generic consequence graph or abstract future label
+- for BLACK LEDGER, preserve the living city loop, not a generic consequence graph or abstract future label, and expose AR branches for competing futures
 - no mention of Fleet or EA
 - no mention of chummer5a
 - no markdown fences
@@ -591,7 +593,7 @@ Rules:
 - this OODA is for this section only, not the whole repo
 - think about what a curious human reader would actually notice or care about here
 - if the source suggests strong selling points like multi-era support, Lua/scripted rules, local-first play, explain receipts, or dangerous simulation energy, surface them
-- if the section is BLACK LEDGER, keep the map, Mission Market, world tick, reviewed intel, Open Runs, Lunacal, heat, factions, newsreels, and human approval gates visible
+- if the section is BLACK LEDGER, keep the map, Mission Market, world tick, reviewed intel, Open Runs, Lunacal, heat, factions, newsreels, and human approval gates visible, and include an AR future-possibility layer
 - do not literalize repo governance labels into the scene
 - avoid generic poster language
 - for image thinking, prefer one memorable focal subject or action over abstract icon soup
@@ -676,7 +678,7 @@ Rules:
 - focus on what a curious human reader would actually care about here
 - if the source suggests strong selling points like multi-era support, Lua/scripted rules, local-first play, explain receipts, grounded dossier flows, or dangerous simulation energy, surface them
 - if source signals clearly include multi-era support or scripted rules, make at least one section hook say so in plain language instead of burying it
-- if a section is BLACK LEDGER, preserve the living mission market, city map, faction pressure, Open Runs, Lunacal scheduling, reviewed intel, world ticks, newsreels, Table Pulse/GOD consent gates, and Seattle Tick 001 proof shape
+- if a section is BLACK LEDGER, preserve the living mission market, city map, faction pressure, Open Runs, Lunacal scheduling, reviewed intel, world ticks, newsreels, Table Pulse/GOD consent gates, Seattle Tick 001 proof shape, and AR possibility layers
 - do not literalize repo governance labels into the scene
 - avoid generic poster language and repeated sentence frames
 - prefer one memorable focal subject or action over abstract icon soup
@@ -901,7 +903,7 @@ Rules:
 - no markdown fences
 - scenes should feel specific, cool, and dangerous
 - if the codename implies a person or metaphor, make that legible
-- if a horizon is BLACK LEDGER, preserve the living mission market, city map, faction pressure, Open Runs and the Shadowcasters Network, Lunacal scheduling, reviewed intel, world ticks, newsreels, faction newsletters, Table Pulse/GOD consent gates, seasonal honors, and Seattle Tick 001 proof shape
+- if a horizon is BLACK LEDGER, preserve the living mission market, city map, faction pressure, Open Runs and the Shadowcasters Network, Lunacal scheduling, reviewed intel, world ticks, newsreels, faction newsletters, Table Pulse/GOD consent gates, seasonal honors, Seattle Tick 001 proof shape, and AR possibility previews for candidate futures
 - do not reuse the same sentence stem across multiple horizons
 - the copy should feel distinct per horizon, not like one template with swapped nouns
 
@@ -1050,7 +1052,7 @@ Rules:
 - focus on what a curious human would actually care about first
 - if the source suggests strong user-facing selling points like multi-era support, Lua/scripted rules, local-first play, explain receipts, grounded dossiers, or dangerous simulation energy, surface them
 - if source signals clearly include multi-era support or scripted rules, make at least one landing-facing sentence say so plainly
-- if BLACK LEDGER appears in the source signals, preserve it as a living-world layer with reviewed world ticks and GM authority, not as a generic roadmap item
+- if BLACK LEDGER appears in the source signals, preserve it as a living-world layer with reviewed world ticks, branching possibility previews, and GM authority, not as a generic roadmap item
 - do not invent implementation-specific claims unless the source canon makes them explicit
 - no mention of Fleet or EA
 - no mention of chummer5a
@@ -1325,7 +1327,7 @@ Requirements:
 - infer the scene from the source, do not just repeat headings back
 - visual_prompt must describe an actual cyberpunk scene tied to this horizon
 - visual_prompt must center one memorable focal subject, setup, or action instead of icon soup
-- if this is BLACK LEDGER, the scene must show a living city map or world-tick control surface with mission pins, faction pressure, heat, news fallout, and a GM/operator adopting a job
+- if this is BLACK LEDGER, the scene must show a living city map or world-tick control surface with mission pins, faction pressure, heat, news fallout, a GM/operator adopting a job, and an AR overlay of possible futures and branches
 - if the section naturally implies a person, make that person specific and believable
 - if the concept implies a visual metaphor like x-ray, ghost, mirror, passport, dossier, web, or blackbox, make that metaphor visibly legible in-scene
 - if the title reads like a personal codename, make the focal subject feel like that codename embodied; if it reads like a feminine personal name, it is fine to make the focal subject a woman
@@ -1359,7 +1361,7 @@ def normalize_media_override(kind: str, cleaned: dict[str, object], item: dict[s
         asset_key_normalized = str(asset_key or "").strip().lower()
         subject = "a cyberpunk protagonist"
         if asset_key_normalized == "black-ledger" or "mission market" in lowered or "world tick" in lowered:
-            subject = "a GM and world operator reading a living city map"
+            subject = "a GM and world operator reading a living city map with AR branches"
         elif "team" in lowered or "table" in lowered or "gm" in lowered:
             subject = "a runner team at a live table"
         elif "girl" in lowered or "woman" in lowered or asset_key_normalized == "alice":
@@ -1368,7 +1370,7 @@ def normalize_media_override(kind: str, cleaned: dict[str, object], item: dict[s
             subject = "a cybernetic troll"
         environment = "a dangerous but inviting cyberpunk scene"
         if asset_key_normalized == "black-ledger" or "city map" in lowered or "district" in lowered:
-            environment = "a Seattle world-tick control room facing a source-aware district map"
+            environment = "a Seattle world-tick control room facing a source-aware district map with augmented-reality branch overlays"
         elif "archive" in lowered or "blueprint" in lowered:
             environment = "a blueprint room lit by cold neon"
         elif "workshop" in lowered or "foundation" in lowered:
@@ -1377,7 +1379,7 @@ def normalize_media_override(kind: str, cleaned: dict[str, object], item: dict[s
             environment = "a rainy neon street front"
         action = "framing the next move before the chrome starts smoking"
         if asset_key_normalized == "black-ledger" or "mission market" in lowered or "world tick" in lowered:
-            action = "turning completed-run fallout into reviewed job seeds, heat changes, and newsreel pins"
+            action = "turning completed-run fallout into reviewed job seeds, heat changes, branch previews, and newsreel pins"
         elif "x-ray" in lowered or "xray" in lowered:
             action = "pulling a glowing x-ray of cause and effect through the air"
         elif "simulation" in lowered or "branch" in lowered:
@@ -1434,6 +1436,8 @@ def normalize_media_override(kind: str, cleaned: dict[str, object], item: dict[s
                 "mission pins",
                 "faction dossiers",
                 "heat meters",
+                "AR projectors",
+                "possibility token stack",
                 "newsreel thumbnails",
             ]
             overlays = [
@@ -1441,6 +1445,8 @@ def normalize_media_override(kind: str, cleaned: dict[str, object], item: dict[s
                 "GM-only intel filters",
                 "public-safe news markers",
                 "faction pressure arcs",
+                "branch probability heat",
+                "alternative outcome grid",
             ]
         return {
             "subject": subject,
