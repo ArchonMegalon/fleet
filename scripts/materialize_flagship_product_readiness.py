@@ -147,6 +147,28 @@ USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS = (
     "major_navigation_sanity",
     "validation_or_export_smoke",
 )
+USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS = {
+    "master_index_search_focus_stability": (
+        "focus_preserved_after_typing",
+        "search_text_accumulates_keyboard_input",
+    ),
+    "file_new_character_visible_workspace": (
+        "new_character_action_opened_visible_workspace",
+        "visible_workspace_nonblank",
+    ),
+    "minimal_character_build_save_reload": (
+        "character_created_saved_reloaded",
+        "reload_preserved_character_identity",
+    ),
+    "major_navigation_sanity": (
+        "primary_navigation_clicks_change_visible_content",
+        "no_unhandled_errors",
+    ),
+    "validation_or_export_smoke": (
+        "validation_or_export_action_completed",
+        "result_visible_or_file_created",
+    ),
+}
 
 
 def _runtime_env_candidates(repo_root: Path | None = None) -> List[Path]:
@@ -2949,15 +2971,41 @@ def _user_journey_tester_workflow_status(row: Dict[str, Any]) -> str:
     return str(row.get("status") or row.get("result") or row.get("state") or "").strip().lower()
 
 
-def _user_journey_tester_workflow_screenshot_count(row: Dict[str, Any]) -> int:
-    for key in ("screenshot_count", "screenshotCount"):
-        if key in row:
-            return _nonnegative_int(row.get(key), 0)
+def _user_journey_tester_workflow_screenshots(row: Dict[str, Any]) -> List[str]:
     for key in ("screenshots", "screenshot_paths", "screenshotPaths"):
         value = row.get(key)
         if isinstance(value, list):
-            return len([item for item in value if str(item).strip()])
-    return 0
+            return [str(item).strip() for item in value if str(item).strip()]
+    return []
+
+
+def _user_journey_tester_workflow_screenshot_count(row: Dict[str, Any]) -> int:
+    return len(_user_journey_tester_workflow_screenshots(row))
+
+
+def _user_journey_tester_workflow_screenshot_review_ok(row: Dict[str, Any]) -> bool:
+    review_rows = _dict_rows(row.get("screenshotReview")) or _dict_rows(row.get("screenshot_review"))
+    if len(review_rows) < USER_JOURNEY_TESTER_MIN_SCREENSHOTS_PER_WORKFLOW:
+        return False
+    for review_row in review_rows:
+        if review_row.get("exists") is not True:
+            return False
+        if review_row.get("is_png") is not True and review_row.get("isPng") is not True:
+            return False
+        if review_row.get("within_repo_root") is not True and review_row.get("withinRepoRoot") is not True:
+            return False
+    return True
+
+
+def _user_journey_tester_missing_assertions(workflow_id: str, row: Dict[str, Any]) -> List[str]:
+    assertions = row.get("assertions")
+    if not isinstance(assertions, dict):
+        assertions = {}
+    return [
+        assertion
+        for assertion in USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS.get(workflow_id, ())
+        if assertions.get(assertion) is not True
+    ]
 
 
 def _user_journey_tester_binary_target_ok(evidence: Dict[str, Any], payload: Dict[str, Any]) -> bool:
@@ -3010,6 +3058,28 @@ def user_journey_tester_audit_gaps(payload: Dict[str, Any]) -> Dict[str, Any]:
         and _user_journey_tester_workflow_screenshot_count(by_id[workflow_id])
         < USER_JOURNEY_TESTER_MIN_SCREENSHOTS_PER_WORKFLOW
     )
+    counter_only_screenshot_workflows = sorted(
+        workflow_id
+        for workflow_id in USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
+        if workflow_id in by_id
+        and not _user_journey_tester_workflow_screenshots(by_id[workflow_id])
+        and (
+            "screenshot_count" in by_id[workflow_id]
+            or "screenshotCount" in by_id[workflow_id]
+        )
+    )
+    unverified_screenshot_workflows = sorted(
+        workflow_id
+        for workflow_id in USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
+        if workflow_id in by_id
+        and not _user_journey_tester_workflow_screenshot_review_ok(by_id[workflow_id])
+    )
+    missing_workflow_assertions = {
+        workflow_id: missing_assertions
+        for workflow_id in USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
+        if workflow_id in by_id
+        if (missing_assertions := _user_journey_tester_missing_assertions(workflow_id, by_id[workflow_id]))
+    }
     open_blocking_findings_count = _nonnegative_int(
         evidence.get("open_blocking_findings_count", payload.get("open_blocking_findings_count", 0)),
         0,
@@ -3025,18 +3095,34 @@ def user_journey_tester_audit_gaps(payload: Dict[str, Any]) -> Dict[str, Any]:
         missing_execution_discipline.append("fix_shard_separate_true")
     if open_blocking_findings_count > 0:
         missing_execution_discipline.append("no_open_blocking_findings")
+    if counter_only_screenshot_workflows:
+        missing_execution_discipline.append("workflow_screenshots_must_be_paths_not_counters")
+    if unverified_screenshot_workflows:
+        missing_execution_discipline.append("workflow_screenshot_review_must_prove_existing_pngs")
+    if missing_workflow_assertions:
+        missing_execution_discipline.append("workflow_assertions_must_prove_visible_user_results")
     return {
         "required_workflows": list(USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS),
+        "required_workflow_assertions": {
+            key: list(value)
+            for key, value in USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS.items()
+        },
         "workflow_count": len(workflow_rows),
         "missing_workflows": missing_workflows,
         "nonpassing_workflows": nonpassing_workflows,
         "insufficient_screenshot_workflows": insufficient_screenshot_workflows,
+        "counter_only_screenshot_workflows": counter_only_screenshot_workflows,
+        "unverified_screenshot_workflows": unverified_screenshot_workflows,
+        "missing_workflow_assertions": missing_workflow_assertions,
         "open_blocking_findings_count": open_blocking_findings_count,
         "missing_execution_discipline": missing_execution_discipline,
         "ready": not (
             missing_workflows
             or nonpassing_workflows
             or insufficient_screenshot_workflows
+            or counter_only_screenshot_workflows
+            or unverified_screenshot_workflows
+            or missing_workflow_assertions
             or missing_execution_discipline
         ),
     }
@@ -3714,6 +3800,30 @@ def build_flagship_product_readiness_payload(
                 desktop_reasons.append(
                     "User-journey tester audit lacks multiple screenshots for workflows: "
                     + ", ".join(user_journey_tester_audit_gap_payload["insufficient_screenshot_workflows"])
+                    + "."
+                )
+            if user_journey_tester_audit_gap_payload.get("counter_only_screenshot_workflows"):
+                desktop_reasons.append(
+                    "User-journey tester audit uses screenshot counters without actual screenshot paths for workflows: "
+                    + ", ".join(user_journey_tester_audit_gap_payload["counter_only_screenshot_workflows"])
+                    + "."
+                )
+            if user_journey_tester_audit_gap_payload.get("unverified_screenshot_workflows"):
+                desktop_reasons.append(
+                    "User-journey tester audit lacks verified existing PNG screenshot review for workflows: "
+                    + ", ".join(user_journey_tester_audit_gap_payload["unverified_screenshot_workflows"])
+                    + "."
+                )
+            if user_journey_tester_audit_gap_payload.get("missing_workflow_assertions"):
+                missing_assertion_summary = [
+                    f"{workflow_id}: {', '.join(assertions)}"
+                    for workflow_id, assertions in sorted(
+                        user_journey_tester_audit_gap_payload["missing_workflow_assertions"].items()
+                    )
+                ]
+                desktop_reasons.append(
+                    "User-journey tester audit lacks required user-visible assertions: "
+                    + "; ".join(missing_assertion_summary)
                     + "."
                 )
             if user_journey_tester_audit_gap_payload.get("missing_execution_discipline"):
@@ -5026,6 +5136,10 @@ def build_flagship_product_readiness_payload(
                 report_path(ui_user_journey_tester_audit_path) if ui_user_journey_tester_audit_path else ""
             ),
             "ui_user_journey_tester_audit_required_workflows": list(USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS),
+            "ui_user_journey_tester_audit_required_workflow_assertions": {
+                key: list(value)
+                for key, value in USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS.items()
+            },
             "ui_user_journey_tester_audit_workflow_count": int(
                 user_journey_tester_audit_gap_payload.get("workflow_count") or 0
             ),
@@ -5037,6 +5151,15 @@ def build_flagship_product_readiness_payload(
             ),
             "ui_user_journey_tester_audit_insufficient_screenshot_workflows": list(
                 user_journey_tester_audit_gap_payload.get("insufficient_screenshot_workflows") or []
+            ),
+            "ui_user_journey_tester_audit_counter_only_screenshot_workflows": list(
+                user_journey_tester_audit_gap_payload.get("counter_only_screenshot_workflows") or []
+            ),
+            "ui_user_journey_tester_audit_unverified_screenshot_workflows": list(
+                user_journey_tester_audit_gap_payload.get("unverified_screenshot_workflows") or []
+            ),
+            "ui_user_journey_tester_audit_missing_workflow_assertions": dict(
+                user_journey_tester_audit_gap_payload.get("missing_workflow_assertions") or {}
             ),
             "ui_user_journey_tester_audit_missing_execution_discipline": list(
                 user_journey_tester_audit_gap_payload.get("missing_execution_discipline") or []

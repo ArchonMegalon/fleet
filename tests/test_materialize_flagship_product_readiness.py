@@ -744,6 +744,7 @@ def _desktop_visual_familiarity_pass_payload(module) -> dict:
 
 
 def _user_journey_tester_audit_pass_payload(module) -> dict:
+    required_assertions = module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS
     return {
         "contract_name": "chummer6-ui.user_journey_tester_audit",
         "status": "pass",
@@ -760,6 +761,24 @@ def _user_journey_tester_audit_pass_payload(module) -> dict:
                         f"{workflow_id}-before.png",
                         f"{workflow_id}-after.png",
                     ],
+                    "screenshotReview": [
+                        {
+                            "path": f".codex-studio/published/user-journey-tester-screenshots/{workflow_id}-before.png",
+                            "exists": True,
+                            "is_png": True,
+                            "within_repo_root": True,
+                        },
+                        {
+                            "path": f".codex-studio/published/user-journey-tester-screenshots/{workflow_id}-after.png",
+                            "exists": True,
+                            "is_png": True,
+                            "within_repo_root": True,
+                        },
+                    ],
+                    "assertions": {
+                        assertion: True
+                        for assertion in required_assertions[workflow_id]
+                    },
                 }
                 for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
             ],
@@ -6780,6 +6799,18 @@ def test_user_journey_tester_audit_requires_visible_focus_and_new_character_work
                         "id": "master_index_search_focus_stability",
                         "status": "pass",
                         "screenshots": ["before.png"],
+                        "screenshotReview": [
+                            {
+                                "path": "before.png",
+                                "exists": True,
+                                "is_png": True,
+                                "within_repo_root": True,
+                            }
+                        ],
+                        "assertions": {
+                            "focus_preserved_after_typing": True,
+                            "search_text_accumulates_keyboard_input": True,
+                        },
                     }
                 ],
             },
@@ -6789,6 +6820,37 @@ def test_user_journey_tester_audit_requires_visible_focus_and_new_character_work
     assert gaps["ready"] is False
     assert "file_new_character_visible_workspace" in gaps["missing_workflows"]
     assert gaps["insufficient_screenshot_workflows"] == ["master_index_search_focus_stability"]
+
+
+def test_user_journey_tester_audit_rejects_counter_only_screenshot_claims() -> None:
+    module = _load_module()
+
+    gaps = module.user_journey_tester_audit_gaps(
+        {
+            "contract_name": "chummer6-ui.user_journey_tester_audit",
+            "status": "pass",
+            "evidence": {
+                "linux_binary_under_test": True,
+                "used_internal_apis": False,
+                "fix_shard_separate": True,
+                "open_blocking_findings_count": 0,
+                "workflows": [
+                    {
+                        "id": workflow_id,
+                        "status": "pass",
+                        "screenshot_count": 2,
+                    }
+                    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
+                ],
+            },
+        }
+    )
+
+    assert gaps["ready"] is False
+    assert gaps["counter_only_screenshot_workflows"] == sorted(module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS)
+    assert "workflow_screenshots_must_be_paths_not_counters" in gaps["missing_execution_discipline"]
+    assert "workflow_screenshot_review_must_prove_existing_pngs" in gaps["missing_execution_discipline"]
+    assert "workflow_assertions_must_prove_visible_user_results" in gaps["missing_execution_discipline"]
 
 
 def test_materialize_flagship_product_readiness_requires_user_journey_tester_audit(tmp_path: Path) -> None:
