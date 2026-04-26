@@ -6103,6 +6103,7 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
             ui_executable_exit_gate_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
             ui_workflow_execution_gate_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
             ui_visual_familiarity_exit_gate_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+            ui_user_journey_tester_audit_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "USER_JOURNEY_TESTER_AUDIT.generated.json",
             ui_localization_release_gate_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LOCALIZATION_RELEASE_GATE.generated.json",
             sr4_workflow_parity_proof_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
             sr6_workflow_parity_proof_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json",

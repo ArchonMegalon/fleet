@@ -172,6 +172,7 @@ def _materialize_flagship_readiness_with_parity_lab(
     ooda_state_payload=None,
     synced_external_runbook: bool = False,
     journey_gates_payload: dict | None = None,
+    user_journey_tester_audit_payload: dict | None = None,
 ) -> dict:
     out_path = tmp_path / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
@@ -194,6 +195,7 @@ def _materialize_flagship_readiness_with_parity_lab(
     ui_executable_exit_gate_path = tmp_path / "ui" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
     ui_workflow_execution_gate_path = tmp_path / "ui" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
     ui_visual_familiarity_exit_gate_path = tmp_path / "ui" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    ui_user_journey_tester_audit_path = tmp_path / "ui" / "USER_JOURNEY_TESTER_AUDIT.generated.json"
     sr4_workflow_parity_path = tmp_path / "ui" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
     sr6_workflow_parity_path = tmp_path / "ui" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
     sr4_sr6_frontier_receipt_path = tmp_path / "ui" / "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"
@@ -268,6 +270,10 @@ def _materialize_flagship_readiness_with_parity_lab(
         {"contract_name": "chummer6-ui.desktop_workflow_execution_gate", "status": "pass", "evidence": {}},
     )
     _write_json(ui_visual_familiarity_exit_gate_path, _desktop_visual_familiarity_pass_payload(module))
+    _write_json(
+        ui_user_journey_tester_audit_path,
+        user_journey_tester_audit_payload or _user_journey_tester_audit_pass_payload(module),
+    )
     _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
     _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"})
     _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"})
@@ -323,6 +329,8 @@ def _materialize_flagship_readiness_with_parity_lab(
             str(ui_workflow_execution_gate_path),
             "--ui-visual-familiarity-exit-gate",
             str(ui_visual_familiarity_exit_gate_path),
+            "--ui-user-journey-tester-audit",
+            str(ui_user_journey_tester_audit_path),
             "--sr4-workflow-parity-proof",
             str(sr4_workflow_parity_path),
             "--sr6-workflow-parity-proof",
@@ -731,6 +739,30 @@ def _desktop_visual_familiarity_pass_payload(module) -> dict:
             "runtimeBackedMasterIndex": "pass",
             "runtimeBackedCharacterRoster": "pass",
             "legacyMainframeVisualSimilarity": "pass",
+        },
+    }
+
+
+def _user_journey_tester_audit_pass_payload(module) -> dict:
+    return {
+        "contract_name": "chummer6-ui.user_journey_tester_audit",
+        "status": "pass",
+        "evidence": {
+            "linux_binary_under_test": True,
+            "used_internal_apis": False,
+            "fix_shard_separate": True,
+            "open_blocking_findings_count": 0,
+            "workflows": [
+                {
+                    "id": workflow_id,
+                    "status": "pass",
+                    "screenshots": [
+                        f"{workflow_id}-before.png",
+                        f"{workflow_id}-after.png",
+                    ],
+                }
+                for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
+            ],
         },
     }
 
@@ -6729,6 +6761,73 @@ def test_materialize_flagship_product_readiness_requires_strong_workflow_executi
     assert evidence["ui_workflow_execution_gate_execution_weak_receipt_count"] == 1
     assert evidence["ui_workflow_execution_gate_unresolved_receipt_count"] == 1
     assert evidence["ui_workflow_execution_gate_unresolved_receipts"] == ["sr4::dense-workbench"]
+
+
+def test_user_journey_tester_audit_requires_visible_focus_and_new_character_workflows() -> None:
+    module = _load_module()
+
+    gaps = module.user_journey_tester_audit_gaps(
+        {
+            "contract_name": "chummer6-ui.user_journey_tester_audit",
+            "status": "pass",
+            "evidence": {
+                "linux_binary_under_test": True,
+                "used_internal_apis": False,
+                "fix_shard_separate": True,
+                "open_blocking_findings_count": 0,
+                "workflows": [
+                    {
+                        "id": "master_index_search_focus_stability",
+                        "status": "pass",
+                        "screenshots": ["before.png"],
+                    }
+                ],
+            },
+        }
+    )
+
+    assert gaps["ready"] is False
+    assert "file_new_character_visible_workspace" in gaps["missing_workflows"]
+    assert gaps["insufficient_screenshot_workflows"] == ["master_index_search_focus_stability"]
+
+
+def test_materialize_flagship_product_readiness_requires_user_journey_tester_audit(tmp_path: Path) -> None:
+    module = _load_module()
+
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        synced_external_runbook=True,
+        user_journey_tester_audit_payload={
+            "contract_name": "chummer6-ui.user_journey_tester_audit",
+            "status": "pass",
+            "evidence": {
+                "linux_binary_under_test": True,
+                "used_internal_apis": False,
+                "fix_shard_separate": True,
+                "open_blocking_findings_count": 0,
+                "workflows": [
+                    {
+                        "id": "master_index_search_focus_stability",
+                        "status": "pass",
+                        "screenshots": ["before.png", "after.png"],
+                    }
+                ],
+            },
+        },
+    )
+
+    assert payload["coverage"]["desktop_client"] == "missing"
+    reasons = payload["coverage_details"]["desktop_client"]["reasons"]
+    assert any("Dedicated user-journey tester audit is missing or not passed" in reason for reason in reasons)
+    evidence = payload["coverage_details"]["desktop_client"]["evidence"]
+    assert evidence["ui_user_journey_tester_audit_required"] is True
+    assert evidence["ui_user_journey_tester_audit_missing_workflows"] == [
+        "file_new_character_visible_workspace",
+        "major_navigation_sanity",
+        "minimal_character_build_save_reload",
+        "validation_or_export_smoke",
+    ]
 
 
 def test_materialize_flagship_product_readiness_requires_windows_payload_integrity_proof(tmp_path: Path) -> None:

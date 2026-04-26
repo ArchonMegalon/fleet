@@ -108,6 +108,7 @@ DEFAULT_UI_WORKFLOW_PARITY_PROOF = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "p
 DEFAULT_UI_EXECUTABLE_EXIT_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
 DEFAULT_UI_WORKFLOW_EXECUTION_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
 DEFAULT_UI_VISUAL_FAMILIARITY_EXIT_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+DEFAULT_UI_USER_JOURNEY_TESTER_AUDIT = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "USER_JOURNEY_TESTER_AUDIT.generated.json"
 DEFAULT_UI_LOCALIZATION_RELEASE_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LOCALIZATION_RELEASE_GATE.generated.json"
 DEFAULT_HUB_LOCAL_RELEASE_PROOF = Path("/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json")
 DEFAULT_MOBILE_LOCAL_RELEASE_PROOF = Path("/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json")
@@ -138,6 +139,14 @@ PROMOTION_ORDER = {
     "public": 2,
 }
 DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS = 24 * 3600
+USER_JOURNEY_TESTER_MIN_SCREENSHOTS_PER_WORKFLOW = 2
+USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS = (
+    "master_index_search_focus_stability",
+    "file_new_character_visible_workspace",
+    "minimal_character_build_save_reload",
+    "major_navigation_sanity",
+    "validation_or_export_smoke",
+)
 
 
 def _runtime_env_candidates(repo_root: Path | None = None) -> List[Path]:
@@ -458,6 +467,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--ui-visual-familiarity-exit-gate",
         default=str(DEFAULT_UI_VISUAL_FAMILIARITY_EXIT_GATE),
         help="path to DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+    )
+    parser.add_argument(
+        "--ui-user-journey-tester-audit",
+        default="",
+        help="path to USER_JOURNEY_TESTER_AUDIT.generated.json",
     )
     parser.add_argument(
         "--ui-localization-release-gate",
@@ -2927,6 +2941,107 @@ def workflow_execution_gate_receipt_gaps(payload: Dict[str, Any]) -> Dict[str, L
     }
 
 
+def _user_journey_tester_workflow_id(row: Dict[str, Any]) -> str:
+    return str(row.get("id") or row.get("workflow_id") or row.get("workflowId") or row.get("name") or "").strip()
+
+
+def _user_journey_tester_workflow_status(row: Dict[str, Any]) -> str:
+    return str(row.get("status") or row.get("result") or row.get("state") or "").strip().lower()
+
+
+def _user_journey_tester_workflow_screenshot_count(row: Dict[str, Any]) -> int:
+    for key in ("screenshot_count", "screenshotCount"):
+        if key in row:
+            return _nonnegative_int(row.get(key), 0)
+    for key in ("screenshots", "screenshot_paths", "screenshotPaths"):
+        value = row.get(key)
+        if isinstance(value, list):
+            return len([item for item in value if str(item).strip()])
+    return 0
+
+
+def _user_journey_tester_binary_target_ok(evidence: Dict[str, Any], payload: Dict[str, Any]) -> bool:
+    if bool(evidence.get("linux_binary_under_test")) or bool(payload.get("linux_binary_under_test")):
+        return True
+    if bool(evidence.get("actual_binary_under_test")) or bool(payload.get("actual_binary_under_test")):
+        target_text = " ".join(
+            [
+                str(evidence.get("binary_under_test") or ""),
+                str(evidence.get("run_target") or ""),
+                str(payload.get("binary_under_test") or ""),
+                str(payload.get("run_target") or ""),
+            ]
+        ).lower()
+        return "linux" in target_text or not target_text.strip()
+    target_text = " ".join(
+        [
+            str(evidence.get("binary_under_test") or ""),
+            str(evidence.get("run_target") or ""),
+            str(payload.get("binary_under_test") or ""),
+            str(payload.get("run_target") or ""),
+        ]
+    ).lower()
+    return "linux" in target_text and any(token in target_text for token in ("binary", "executable", "bin", "appimage"))
+
+
+def user_journey_tester_audit_gaps(payload: Dict[str, Any]) -> Dict[str, Any]:
+    evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
+    workflow_rows = _dict_rows(evidence.get("workflows")) or _dict_rows(payload.get("workflows"))
+    by_id = {
+        workflow_id: row
+        for row in workflow_rows
+        if (workflow_id := _user_journey_tester_workflow_id(row))
+    }
+    missing_workflows = sorted(
+        workflow_id
+        for workflow_id in USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
+        if workflow_id not in by_id
+    )
+    nonpassing_workflows = sorted(
+        workflow_id
+        for workflow_id in USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
+        if workflow_id in by_id
+        and _user_journey_tester_workflow_status(by_id[workflow_id]) not in {"pass", "passed", "ready"}
+    )
+    insufficient_screenshot_workflows = sorted(
+        workflow_id
+        for workflow_id in USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
+        if workflow_id in by_id
+        and _user_journey_tester_workflow_screenshot_count(by_id[workflow_id])
+        < USER_JOURNEY_TESTER_MIN_SCREENSHOTS_PER_WORKFLOW
+    )
+    open_blocking_findings_count = _nonnegative_int(
+        evidence.get("open_blocking_findings_count", payload.get("open_blocking_findings_count", 0)),
+        0,
+    )
+    used_internal_apis = evidence.get("used_internal_apis", payload.get("used_internal_apis"))
+    fix_shard_separate = evidence.get("fix_shard_separate", payload.get("fix_shard_separate"))
+    missing_execution_discipline: List[str] = []
+    if not _user_journey_tester_binary_target_ok(evidence, payload):
+        missing_execution_discipline.append("linux_binary_under_test")
+    if used_internal_apis is not False:
+        missing_execution_discipline.append("used_internal_apis_false")
+    if fix_shard_separate is not True:
+        missing_execution_discipline.append("fix_shard_separate_true")
+    if open_blocking_findings_count > 0:
+        missing_execution_discipline.append("no_open_blocking_findings")
+    return {
+        "required_workflows": list(USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS),
+        "workflow_count": len(workflow_rows),
+        "missing_workflows": missing_workflows,
+        "nonpassing_workflows": nonpassing_workflows,
+        "insufficient_screenshot_workflows": insufficient_screenshot_workflows,
+        "open_blocking_findings_count": open_blocking_findings_count,
+        "missing_execution_discipline": missing_execution_discipline,
+        "ready": not (
+            missing_workflows
+            or nonpassing_workflows
+            or insufficient_screenshot_workflows
+            or missing_execution_discipline
+        ),
+    }
+
+
 def _workflow_receipts_are_sr4_sr6_only(receipts: List[str]) -> bool:
     normalized = [str(item).strip().lower() for item in receipts if str(item).strip()]
     if not normalized:
@@ -3110,6 +3225,7 @@ def build_flagship_product_readiness_payload(
     mobile_local_release_proof_path: Path,
     release_channel_path: Path,
     releases_json_path: Path,
+    ui_user_journey_tester_audit_path: Path | None = None,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
     effective_acceptance_path, acceptance = load_acceptance_with_fallback(acceptance_path)
@@ -3304,6 +3420,7 @@ def build_flagship_product_readiness_payload(
     ui_executable_exit_gate = load_json(ui_executable_exit_gate_path)
     ui_workflow_execution_gate = load_json(ui_workflow_execution_gate_path)
     ui_visual_familiarity_exit_gate = load_json(ui_visual_familiarity_exit_gate_path)
+    ui_user_journey_tester_audit = load_json(ui_user_journey_tester_audit_path) if ui_user_journey_tester_audit_path else {}
     ui_localization_release_gate = load_json(ui_localization_release_gate_path)
     sr4_workflow_parity_proof = load_json(sr4_workflow_parity_proof_path)
     sr6_workflow_parity_proof = load_json(sr6_workflow_parity_proof_path)
@@ -3566,6 +3683,45 @@ def build_flagship_product_readiness_payload(
             desktop_reasons.append(
                 "Executable desktop workflow execution gate proof is missing or not passed. Catalog parity without click-through receipts does not pass."
             )
+    user_journey_tester_audit_required = ui_user_journey_tester_audit_path is not None
+    user_journey_tester_audit_gap_payload = user_journey_tester_audit_gaps(ui_user_journey_tester_audit)
+    if user_journey_tester_audit_required:
+        if proof_passed(
+            ui_user_journey_tester_audit,
+            expected_contract="chummer6-ui.user_journey_tester_audit",
+            accepted_statuses=("passed", "pass", "ready"),
+        ) and bool(user_journey_tester_audit_gap_payload.get("ready")):
+            desktop_positives += 1
+        else:
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Dedicated user-journey tester audit is missing or not passed. "
+                "A separate tester shard must run the Linux binary like a user and prove visible workflow results."
+            )
+            if user_journey_tester_audit_gap_payload.get("missing_workflows"):
+                desktop_reasons.append(
+                    "User-journey tester audit is missing required workflows: "
+                    + ", ".join(user_journey_tester_audit_gap_payload["missing_workflows"])
+                    + "."
+                )
+            if user_journey_tester_audit_gap_payload.get("nonpassing_workflows"):
+                desktop_reasons.append(
+                    "User-journey tester audit reports non-passing workflows: "
+                    + ", ".join(user_journey_tester_audit_gap_payload["nonpassing_workflows"])
+                    + "."
+                )
+            if user_journey_tester_audit_gap_payload.get("insufficient_screenshot_workflows"):
+                desktop_reasons.append(
+                    "User-journey tester audit lacks multiple screenshots for workflows: "
+                    + ", ".join(user_journey_tester_audit_gap_payload["insufficient_screenshot_workflows"])
+                    + "."
+                )
+            if user_journey_tester_audit_gap_payload.get("missing_execution_discipline"):
+                desktop_reasons.append(
+                    "User-journey tester audit lacks required execution discipline: "
+                    + ", ".join(user_journey_tester_audit_gap_payload["missing_execution_discipline"])
+                    + "."
+                )
     if proof_passed(
         ui_visual_familiarity_exit_gate,
         expected_contract="chummer6-ui.desktop_visual_familiarity_exit_gate",
@@ -4864,6 +5020,31 @@ def build_flagship_product_readiness_payload(
             "ui_workflow_execution_gate_unresolved_receipts_sr4_sr6_only": bool(
                 workflow_execution_sr4_sr6_only
             ),
+            "ui_user_journey_tester_audit_required": user_journey_tester_audit_required,
+            "ui_user_journey_tester_audit_status": str(ui_user_journey_tester_audit.get("status") or "").strip(),
+            "ui_user_journey_tester_audit_path": (
+                report_path(ui_user_journey_tester_audit_path) if ui_user_journey_tester_audit_path else ""
+            ),
+            "ui_user_journey_tester_audit_required_workflows": list(USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS),
+            "ui_user_journey_tester_audit_workflow_count": int(
+                user_journey_tester_audit_gap_payload.get("workflow_count") or 0
+            ),
+            "ui_user_journey_tester_audit_missing_workflows": list(
+                user_journey_tester_audit_gap_payload.get("missing_workflows") or []
+            ),
+            "ui_user_journey_tester_audit_nonpassing_workflows": list(
+                user_journey_tester_audit_gap_payload.get("nonpassing_workflows") or []
+            ),
+            "ui_user_journey_tester_audit_insufficient_screenshot_workflows": list(
+                user_journey_tester_audit_gap_payload.get("insufficient_screenshot_workflows") or []
+            ),
+            "ui_user_journey_tester_audit_missing_execution_discipline": list(
+                user_journey_tester_audit_gap_payload.get("missing_execution_discipline") or []
+            ),
+            "ui_user_journey_tester_audit_open_blocking_findings_count": int(
+                user_journey_tester_audit_gap_payload.get("open_blocking_findings_count") or 0
+            ),
+            "ui_user_journey_tester_audit_ready": bool(user_journey_tester_audit_gap_payload.get("ready")),
             "ui_visual_familiarity_exit_gate_status": str(ui_visual_familiarity_exit_gate.get("status") or "").strip(),
             "ui_visual_familiarity_exit_gate_path": report_path(ui_visual_familiarity_exit_gate_path),
             "ui_visual_familiarity_required_milestone2_tests": list(DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS),
@@ -6653,6 +6834,9 @@ def build_flagship_product_readiness_payload(
             "ui_windows_exit_gate": report_path(ui_windows_exit_gate_path),
             "ui_workflow_execution_gate": report_path(ui_workflow_execution_gate_path),
             "ui_visual_familiarity_exit_gate": report_path(ui_visual_familiarity_exit_gate_path),
+            "ui_user_journey_tester_audit": (
+                report_path(ui_user_journey_tester_audit_path) if ui_user_journey_tester_audit_path else ""
+            ),
             "ui_workflow_parity_proof": report_path(ui_workflow_parity_proof_path),
             "sr4_workflow_parity_proof": report_path(sr4_workflow_parity_proof_path),
             "sr6_workflow_parity_proof": report_path(sr6_workflow_parity_proof_path),
@@ -6726,6 +6910,7 @@ def materialize_flagship_product_readiness(
     mobile_local_release_proof_path: Path,
     release_channel_path: Path,
     releases_json_path: Path,
+    ui_user_journey_tester_audit_path: Path | None = None,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
     payload = build_flagship_product_readiness_payload(
@@ -6755,6 +6940,7 @@ def materialize_flagship_product_readiness(
         mobile_local_release_proof_path=mobile_local_release_proof_path,
         release_channel_path=release_channel_path,
         releases_json_path=releases_json_path,
+        ui_user_journey_tester_audit_path=ui_user_journey_tester_audit_path,
         ignore_nonlinux_desktop_host_proof_blockers=ignore_nonlinux_desktop_host_proof_blockers,
     )
 
@@ -6809,6 +6995,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         ui_executable_exit_gate_path=Path(args.ui_executable_exit_gate).resolve(),
         ui_workflow_execution_gate_path=Path(args.ui_workflow_execution_gate).resolve(),
         ui_visual_familiarity_exit_gate_path=Path(args.ui_visual_familiarity_exit_gate).resolve(),
+        ui_user_journey_tester_audit_path=(
+            Path(args.ui_user_journey_tester_audit).resolve()
+            if str(args.ui_user_journey_tester_audit or "").strip()
+            else None
+        ),
         ui_localization_release_gate_path=Path(args.ui_localization_release_gate).resolve(),
         sr4_workflow_parity_proof_path=Path(args.sr4_workflow_parity_proof).resolve(),
         sr6_workflow_parity_proof_path=Path(args.sr6_workflow_parity_proof).resolve(),

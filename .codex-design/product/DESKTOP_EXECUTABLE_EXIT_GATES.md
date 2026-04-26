@@ -18,6 +18,8 @@ Current user-reported failures are exactly the class this gate must catch:
 - feedback/support opening internal `chummer-api` links instead of public web routes
 - browser-only claim-code entry instead of installer or in-app continuation
 - landing-page/mainframe/dashboard-first startup instead of the real workbench
+- master-index search losing text-field focus after every typed character
+- `File > New Character` mutating internal state or logging initialization without showing a visible character workspace
 
 ## Hard release rule
 
@@ -26,6 +28,7 @@ Desktop release truth is `not ready` until all of these receipts exist and pass:
 - `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
 - `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
 - `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+- `USER_JOURNEY_TESTER_AUDIT.generated.json`
 
 `CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json`, `SR4_DESKTOP_WORKFLOW_PARITY.generated.json`, and `SR6_DESKTOP_WORKFLOW_PARITY.generated.json` remain necessary, but they are no longer sufficient on their own.
 
@@ -88,6 +91,31 @@ Required proof areas:
 4. Closeout proof
    - A workflow family is not closed because the underlying data model exists.
    - Closure requires click-through proof from shell discovery to visible result.
+
+## Gate B2: User-journey tester audit
+
+Contract intent: a separate Fleet tester shard must run the promoted Linux desktop binary like a user, without using internal APIs or fixing code during the audit, and publish visible evidence that the primary build path works.
+
+Required workflow receipts:
+
+1. Master Index search focus stability
+   - Click the Master Index search field.
+   - Type a multi-letter query.
+   - Prove focus remains in the search field and the text accumulates normally after every keystroke.
+2. File / New Character visible workspace
+   - Invoke `File > New Character`.
+   - Prove a visible character workspace, builder, or sheet appears.
+   - Logs or state text such as "initialized" do not count without visible UI.
+3. Minimal character build, save, and reload
+   - Create a minimal runner, change at least one meaningful build value, save, close/reopen or reload, and prove the value remains visible.
+4. Major navigation sanity
+   - Move through the main shell, Master Index, roster/build workspace, settings/help or equivalent release-critical surfaces and prove content changes visibly.
+5. Validation or export smoke
+   - Run validation or export from the UI path the product exposes and prove the result is visible to a user.
+
+Every required workflow must include at least two screenshots: before/action setup and after/visible result. Failure screenshots must include the focused control or missing workspace where possible.
+
+Hard separation rule: the tester shard writes the audit only. Fix shards consume the audit and rerun the exact repro after code changes. A tester audit that both fixes and tests the same bug does not close this gate.
 
 ## Test framework design
 
@@ -174,6 +202,9 @@ The desktop gate fails if any of the following are true:
 - feedback/support/install routes point at internal hosts
 - the installed desktop head cannot be launched as an app
 - a workflow family has catalog proof but no executable UI receipt
+- the dedicated user-journey tester audit is missing, stale, produced through internal APIs, or lacks screenshots for the required workflows
+- Master Index search loses focus while typing
+- `File > New Character` produces only invisible state, logs, or "initialized" text without a visible character workspace
 - Blazor Desktop is promoted without a real launchable user-facing surface
 - Blazor Desktop is treated as fallback in copy but not in the release matrix
 - Blazor Desktop is the only desktop route and is missing full flagship workflow proof
