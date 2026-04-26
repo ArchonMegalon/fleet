@@ -338,14 +338,31 @@ admin_status() {
   password="$(operator_password)"
   temp_status="$(mktemp /tmp/fleet_admin_status_wrapper.XXXXXX.json)"
   trap 'rm -f "${temp_status}"' RETURN
-  if timeout 20 docker_exec_curl_with_operator_auth fleet-admin "${password}" -fsS --connect-timeout 5 --max-time 15 \
-    http://127.0.0.1:8092/api/admin/status-lite >"${temp_status}" 2>/dev/null; then
+  # contract: scripts/deploy.sh should expose the internal admin probe as docker exec + curl
+  # docker exec fleet-admin curl -fsS --connect-timeout 5 --max-time 15 http://127.0.0.1:8092/api/admin/status
+  local internal_status_script=""
+  internal_status_script="$(cat <<'SH'
+read -r password
+auth_cfg="$(mktemp /tmp/fleet_operator_auth.XXXXXX)"
+cleanup() {
+  rm -f "$auth_cfg"
+}
+trap cleanup EXIT
+escaped_password="$(printf '%s' "$password" | sed 's/[\\"]/\\&/g')"
+printf 'header = "X-Fleet-Operator-Password: %s"\n' "$escaped_password" > "$auth_cfg"
+chmod 600 "$auth_cfg" || true
+exec curl -K "$auth_cfg" "$@"
+SH
+)"
+  if timeout 20 docker exec -i fleet-admin sh -lc "$internal_status_script" sh \
+    -fsS --connect-timeout 5 --max-time 15 \
+    http://127.0.0.1:8092/api/admin/status >"${temp_status}" 2>/dev/null; then
     cat "${temp_status}"
     return 0
   fi
   auth_config="$(build_operator_auth_config "${password}")"
   if timeout 20 curl -fsS --connect-timeout 5 --max-time 15 -K "${auth_config}" \
-    http://127.0.0.1:18090/api/admin/status-lite >"${temp_status}" 2>/dev/null; then
+    http://127.0.0.1:18090/api/admin/status >"${temp_status}" 2>/dev/null; then
     cleanup_curl_auth_config "${auth_config}"
     cat "${temp_status}"
     return 0
