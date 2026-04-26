@@ -14,9 +14,18 @@ SCRIPT = Path("/docker/fleet/scripts/materialize_public_progress_report.py")
 
 def _seed_repo_root(root: Path) -> None:
     (root / "config" / "projects").mkdir(parents=True, exist_ok=True)
+    (root / "products" / "chummer").mkdir(parents=True, exist_ok=True)
     (root / "state").mkdir(parents=True, exist_ok=True)
     (root / "repo-a").mkdir(parents=True, exist_ok=True)
     (root / "repo-b").mkdir(parents=True, exist_ok=True)
+    (root / "products" / "chummer" / "ROADMAP.md").write_text(
+        "The current recommended wave is **Next 12 Biggest Wins**.\n",
+        encoding="utf-8",
+    )
+    (root / "products" / "chummer" / "NEXT_12_BIGGEST_WINS_REGISTRY.yaml").write_text(
+        "status: active\n",
+        encoding="utf-8",
+    )
     (root / "config" / "public_progress_parts.yaml").write_text(
         yaml.safe_dump(
             {

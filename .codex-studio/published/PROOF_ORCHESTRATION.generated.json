@@ -1,6 +1,6 @@
 {
   "contract_name": "fleet.proof_orchestration",
-  "generated_at": "2026-04-18T17:56:21Z",
+  "generated_at": "2026-04-26T15:53:17Z",
   "jobs": [
     {
       "command": "python3 scripts/materialize_fleet_queue_overlay.py --repo-root /docker/fleet --project-id fleet",
@@ -12,14 +12,14 @@
       "output_states": [
         {
           "acceptable_statuses": [],
-          "age_minutes": 4966,
+          "age_minutes": 24,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-15T07:10:06Z",
+          "generated_at": "2026-04-26T15:29:02Z",
           "path": "/docker/fleet/.codex-studio/published/QUEUE.generated.yaml",
           "payload_status": "",
           "required": true,
-          "state": "stale",
+          "state": "fresh",
           "status_ok": true
         }
       ],
@@ -30,7 +30,7 @@
           "transient_io"
         ]
       },
-      "state": "stale",
+      "state": "ready",
       "title": "Publish live queue overlay"
     },
     {
@@ -45,10 +45,10 @@
       "output_states": [
         {
           "acceptable_statuses": [],
-          "age_minutes": 4966,
+          "age_minutes": 351,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-15T07:09:53Z",
+          "generated_at": "2026-04-26T10:02:01Z",
           "path": "/docker/fleet/.codex-studio/published/WORKPACKAGES.generated.yaml",
           "payload_status": "",
           "required": true,
@@ -79,7 +79,7 @@
           "age_minutes": 2,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-18T17:53:50Z",
+          "generated_at": "2026-04-26T15:50:40Z",
           "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
           "payload_status": "",
           "required": true,
@@ -110,26 +110,26 @@
       "output_states": [
         {
           "acceptable_statuses": [],
-          "age_minutes": 2814,
+          "age_minutes": 1,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-16T19:01:44Z",
+          "generated_at": "2026-04-26T15:52:07Z",
           "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
           "payload_status": "",
           "required": true,
-          "state": "stale",
+          "state": "fresh",
           "status_ok": true
         },
         {
           "acceptable_statuses": [],
-          "age_minutes": 2814,
+          "age_minutes": 1,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-16T19:01:43Z",
+          "generated_at": "2026-04-26T15:52:07Z",
           "path": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
           "payload_status": "",
           "required": true,
-          "state": "stale",
+          "state": "fresh",
           "status_ok": true
         }
       ],
@@ -140,7 +140,7 @@
           "transient_io"
         ]
       },
-      "state": "stale",
+      "state": "ready",
       "title": "Materialize public progress and history"
     },
     {
@@ -157,10 +157,10 @@
       "output_states": [
         {
           "acceptable_statuses": [],
-          "age_minutes": 31,
+          "age_minutes": 0,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-18T17:24:27Z",
+          "generated_at": "2026-04-26T15:52:29Z",
           "path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
           "payload_status": "",
           "required": true,
@@ -195,7 +195,7 @@
           "age_minutes": 2,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-18T17:53:51Z",
+          "generated_at": "2026-04-26T15:51:05Z",
           "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
           "payload_status": "",
           "required": true,
@@ -232,12 +232,12 @@
           "age_minutes": 2,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-18T17:53:51Z",
+          "generated_at": "2026-04-26T15:51:08Z",
           "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-          "payload_status": "fail",
+          "payload_status": "pass",
           "required": true,
-          "state": "failed_status",
-          "status_ok": false
+          "state": "fresh",
+          "status_ok": true
         }
       ],
       "retry": {
@@ -269,10 +269,10 @@
             "passed",
             "ready"
           ],
-          "age_minutes": 0,
+          "age_minutes": 1,
           "exists": true,
           "freshness_window_minutes": 1440,
-          "generated_at": "2026-04-18T17:55:48Z",
+          "generated_at": "2026-04-26T15:51:18Z",
           "path": "/docker/fleet/.codex-studio/published/CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json",
           "payload_status": "fail",
           "required": true,
@@ -291,7 +291,7 @@
       "title": "Materialize campaign OS 4-month continuity-liveness monitor"
     },
     {
-      "command": "python3 scripts/materialize_external_proof_runbook.py --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --external-proof-commands-dir .codex-studio/published/external-proof-commands",
+      "command": "python3 scripts/materialize_external_proof_runbook.py --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --commands-dir .codex-studio/published/external-proof-commands",
       "dependencies": [
         "journey_gates",
         "flagship_product_readiness"
@@ -303,10 +303,10 @@
       "output_states": [
         {
           "acceptable_statuses": [],
-          "age_minutes": 2,
+          "age_minutes": 125,
           "exists": true,
           "freshness_window_minutes": 1440,
-          "generated_at": "2026-04-18T17:53:51Z",
+          "generated_at": "2026-04-26T13:47:50Z",
           "path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
           "payload_status": "",
           "required": true,
@@ -340,12 +340,12 @@
             "passed",
             "ready"
           ],
-          "age_minutes": 31,
+          "age_minutes": 36,
           "exists": true,
           "freshness_window_minutes": 1440,
-          "generated_at": "2026-04-18T17:24:47Z",
+          "generated_at": "2026-04-26T15:17:04Z",
           "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
-          "payload_status": "passed",
+          "payload_status": "pass",
           "required": true,
           "state": "fresh",
           "status_ok": true
@@ -375,15 +375,15 @@
             "passed",
             "ready"
           ],
-          "age_minutes": 26,
+          "age_minutes": 36,
           "exists": true,
           "freshness_window_minutes": 1440,
-          "generated_at": "2026-04-18T17:30:01.461736Z",
+          "generated_at": "2026-04-26T15:17:04Z",
           "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
-          "payload_status": "fail",
+          "payload_status": "pass",
           "required": true,
-          "state": "failed_status",
-          "status_ok": false
+          "state": "fresh",
+          "status_ok": true
         }
       ],
       "retry": {
@@ -399,11 +399,11 @@
   "source": "/docker/fleet/config/projects/fleet.yaml",
   "status": "fail",
   "summary": {
-    "failed_status_output_count": 3,
+    "failed_status_output_count": 1,
     "job_count": 11,
     "missing_output_count": 0,
     "required_output_count": 12,
-    "stale_output_count": 4,
+    "stale_output_count": 1,
     "unknown_freshness_output_count": 0,
     "unknown_status_output_count": 0
   }

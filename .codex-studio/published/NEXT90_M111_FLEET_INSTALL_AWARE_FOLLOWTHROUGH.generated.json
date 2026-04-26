@@ -1,0 +1,150 @@
+{
+  "contract_name": "fleet.install_aware_followthrough_gate",
+  "schema_version": 1,
+  "generated_at": "2026-04-26T15:53:56Z",
+  "package_id": "next90-m111-fleet-install-aware-followthrough",
+  "frontier_id": 5200108449,
+  "milestone_id": 111,
+  "work_task_id": "111.4",
+  "wave_id": "W9",
+  "registry_milestone_title": "Install-aware release, support, and public concierge",
+  "registry_status": "in_progress",
+  "registry_exit_criteria": [
+    "Fix confirmation, release explainer, and support closure bundles compile from install-aware channel and support truth instead of queued support state alone.",
+    "Public trust surfaces such as downloads, release, and help-entry pages may offer bounded concierge routing with first-party fallbacks, while authenticated and truth-bearing surfaces remain first-party only.",
+    "Help, support, status, and release surfaces can answer what changed, what to do next, and why this build, channel, or action is correct for this user.",
+    "Mail, in-product notices, public trust surfaces, and the public proof shelf all cite the same install-aware release and recovery receipts."
+  ],
+  "registry_dependencies": [
+    101,
+    102,
+    106,
+    107
+  ],
+  "registry_work_task_title": "Gate followthrough mail, public proof promotion, and public concierge rollout against the same install-aware receipts and kill-switch posture.",
+  "registry_work_task_status": "complete",
+  "registry_work_task_completion_action": "verify_closed_package_only",
+  "registry_work_task_do_not_reopen_reason": "M111 Fleet install-aware followthrough is complete; future shards must verify the install-aware gate receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the followthrough-mail and public-proof promotion package.",
+  "queue_title": "Gate followthrough mail and public proof promotion against install-aware receipts",
+  "queue_task": "Promote release and support concierge artifacts only when install-aware recovery receipts and publication refs agree.",
+  "queue_repo": "fleet",
+  "queue_wave": "W9",
+  "queue_status": "complete",
+  "queue_completion_action": "verify_closed_package_only",
+  "queue_do_not_reopen_reason": "M111 Fleet install-aware followthrough is complete; future shards must verify the install-aware gate receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the followthrough-mail and public-proof promotion package.",
+  "queue_allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "queue_owned_surfaces": [
+    "install_aware_followthrough",
+    "product_governor:artifact_promotion"
+  ],
+  "source_paths": {
+    "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+    "weekly_governor_packet": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+    "weekly_product_pulse": "/docker/fleet/.codex-design/product/WEEKLY_PRODUCT_PULSE.generated.json",
+    "progress_report": "/docker/fleet/.codex-design/product/PROGRESS_REPORT.generated.json",
+    "successor_registry": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+    "queue_staging": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+  },
+  "support_receipt_truth": {
+    "support_packets_generated_at": "2026-04-26T15:50:40Z",
+    "successor_package_verification_status": "pass",
+    "reporter_followthrough_blocked_missing_install_receipts_count": 0,
+    "reporter_followthrough_blocked_receipt_mismatch_count": 0,
+    "followthrough_receipt_gates_blocked_missing_install_receipts_count": 0,
+    "followthrough_receipt_gates_blocked_receipt_mismatch_count": 0,
+    "closure_waiting_on_release_truth": 0,
+    "followthrough_ready_count": 0
+  },
+  "launch_truth": {
+    "weekly_product_pulse_generated_at": "2026-04-26T15:52:08Z",
+    "weekly_product_pulse_as_of": "2026-04-26",
+    "weekly_product_pulse_action": "launch_expand",
+    "weekly_product_pulse_reason": "Launch expansion is approved for the next bounded window while canaries and support closure remain clear.",
+    "weekly_governor_packet_generated_at": "2026-04-26T15:52:59Z",
+    "weekly_governor_packet_as_of": "2026-04-26",
+    "governor_expected_action": "launch_expand",
+    "governor_actual_action": "launch_expand",
+    "governor_alignment_status": "pass",
+    "freeze_launch_state": "available",
+    "launch_expand_state": "allowed",
+    "rollback_state": "armed",
+    "public_status_state": "launch_expand_allowed",
+    "public_status_headline": "Measured launch expansion is allowed.",
+    "public_status_body": "Readiness, parity, support, canary, dependency, and release-proof gates are green for this weekly packet.",
+    "expected_public_status_state": "launch_expand_allowed"
+  },
+  "publication_refs": [
+    {
+      "name": "support_packets",
+      "role": "install-aware followthrough receipt source",
+      "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+      "exists": true,
+      "sha256": "78f49dd55ca0fa650fbd7a09c5377c41d925940f66d8efc1e01ab36d3ba073be",
+      "generated_at": "2026-04-26T15:50:40Z",
+      "as_of": ""
+    },
+    {
+      "name": "weekly_governor_packet",
+      "role": "promotion and kill-switch ledger",
+      "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+      "exists": true,
+      "sha256": "984b868e5eb4ffe3ae2a97806e71f02218a808895bdfebe98984bf94025cb0f7",
+      "generated_at": "2026-04-26T15:52:59Z",
+      "as_of": "2026-04-26"
+    },
+    {
+      "name": "weekly_product_pulse",
+      "role": "public promotion decision source",
+      "path": "/docker/fleet/.codex-design/product/WEEKLY_PRODUCT_PULSE.generated.json",
+      "exists": true,
+      "sha256": "fac9e19e49c15b483743801a1b85d26be1f182448b915e5b2cd70128d510d8ff",
+      "generated_at": "2026-04-26T15:52:08Z",
+      "as_of": "2026-04-26"
+    },
+    {
+      "name": "progress_report",
+      "role": "public proof shelf snapshot",
+      "path": "/docker/fleet/.codex-design/product/PROGRESS_REPORT.generated.json",
+      "exists": true,
+      "sha256": "7d3841315469ad9899193bb4e68338bfe1c033a6f001df4bb4608626ad3bcc01",
+      "generated_at": "2026-04-26T15:52:07Z",
+      "as_of": "2026-04-26"
+    }
+  ],
+  "agreement": {
+    "queue_scope_matches_package": true,
+    "registry_scope_matches_package": true,
+    "queue_closure_matches_package": true,
+    "registry_closure_matches_package": true,
+    "receipt_blockers_clear": true,
+    "closure_clear": true,
+    "support_successor_verification_pass": true,
+    "weekly_launch_action_aligned": true,
+    "governor_public_status_aligned": true,
+    "publication_refs_present": true,
+    "publication_ref_as_of_aligned": true,
+    "publication_refs_agree": true
+  },
+  "kill_switch_posture": {
+    "freeze_launch_state": "available",
+    "rollback_state": "armed",
+    "launch_expand_state": "allowed",
+    "expected_public_status_state": "launch_expand_allowed",
+    "allows_public_promotion": true
+  },
+  "gates": {
+    "followthrough_mail": {
+      "state": "pass",
+      "reason": "Install-aware followthrough mail is clear: support receipt blockers are zero, support closure is current, and the source support packet remains verifier-backed."
+    },
+    "public_proof_promotion": {
+      "state": "pass",
+      "reason": "Public proof promotion is clear: install-aware receipt gates are green, weekly launch truth agrees, and the promoted publication refs share one public snapshot."
+    }
+  }
+}

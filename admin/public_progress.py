@@ -537,8 +537,15 @@ def _flagship_readiness_truth() -> Dict[str, Any]:
     }
 
 
-def _current_recommended_wave() -> str:
-    roadmap_path = CHUMMER_PRODUCT_CANON_DIR / "ROADMAP.md"
+def _product_canon_dir_for_repo(repo_root: pathlib.Path = FLEET_ROOT) -> pathlib.Path:
+    local_canon_dir = repo_root / "products" / "chummer"
+    if not _same_path(repo_root, FLEET_ROOT) and local_canon_dir.exists():
+        return local_canon_dir
+    return CHUMMER_PRODUCT_CANON_DIR
+
+
+def _current_recommended_wave(repo_root: pathlib.Path = FLEET_ROOT) -> str:
+    roadmap_path = _product_canon_dir_for_repo(repo_root) / "ROADMAP.md"
     text = _read_text(roadmap_path)
     match = re.search(r"The current recommended wave is \*\*(.+?)\*\*\.", text)
     if match:
@@ -546,19 +553,21 @@ def _current_recommended_wave() -> str:
     return "Scale & stabilize"
 
 
-def _active_wave_status(active_wave: str) -> str:
+def _active_wave_status(active_wave: str, repo_root: pathlib.Path = FLEET_ROOT) -> str:
+    product_canon_dir = _product_canon_dir_for_repo(repo_root)
+    next12_registry_path = product_canon_dir / "NEXT_12_BIGGEST_WINS_REGISTRY.yaml"
     registry_map = {
-        "Next 12 Biggest Wins": ACTIVE_WAVE_REGISTRY_PATH,
-        "Next 20 Big Wins After Post-Audit Closeout": LEGACY_ACTIVE_WAVE_REGISTRY_PATH,
-        "Post-Audit Next 20 Big Wins": POST_AUDIT_NEXT20_REGISTRY_PATH,
-        "Next 20 Big Wins": NEXT20_REGISTRY_PATH,
+        "Next 12 Biggest Wins": ACTIVE_WAVE_REGISTRY_PATH if _same_path(repo_root, FLEET_ROOT) else next12_registry_path,
+        "Next 20 Big Wins After Post-Audit Closeout": product_canon_dir / "NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml",
+        "Post-Audit Next 20 Big Wins": product_canon_dir / "POST_AUDIT_NEXT_20_BIG_WINS_REGISTRY.yaml",
+        "Next 20 Big Wins": product_canon_dir / "NEXT_20_BIG_WINS_REGISTRY.yaml",
     }
     active_wave_key = str(active_wave or "").strip()
     registry_path = registry_map.get(active_wave_key)
     if registry_path is None and active_wave_key.lower().startswith("next 12"):
-        registry_path = NEXT12_REGISTRY_PATH
-    if registry_path is None and NEXT12_REGISTRY_PATH.exists():
-        registry_path = NEXT12_REGISTRY_PATH
+        registry_path = next12_registry_path
+    if registry_path is None and next12_registry_path.exists():
+        registry_path = next12_registry_path
     if registry_path is None or not registry_path.exists():
         return "unknown"
     payload = _load_yaml(registry_path)
@@ -1476,8 +1485,8 @@ def build_progress_report_payload(
     eta_sources = sorted({str(part.get("eta_source") or "").strip() for part in parts if str(part.get("eta_source") or "").strip()})
     history_backed_eta = any(str(part.get("eta_source") or "") == "history_velocity" for part in parts)
     phase_label = _phase_label(overall_progress_percent, phase_labels)
-    active_wave = _current_recommended_wave()
-    active_wave_status = _active_wave_status(active_wave)
+    active_wave = _current_recommended_wave(repo_root)
+    active_wave_status = _active_wave_status(active_wave, repo_root)
     active_slice = active_wave
     if not active_parts and repo_backlog_lead_task:
         active_slice = repo_backlog_lead_task
@@ -1543,7 +1552,7 @@ def build_progress_report_payload(
         if repo_backlog_lead_task:
             backlog_summary += f" Next up: {repo_backlog_lead_task}."
         release_readiness = {
-            "status": "tracked",
+            "status": "warning",
             "summary": backlog_summary,
             "blocking_parts": list(release_readiness.get("blocking_parts") or []),
         }

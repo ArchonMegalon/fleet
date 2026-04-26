@@ -1,7 +1,7 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-23T13:10:59Z
-As of: 2026-04-23
+Generated: 2026-04-26T15:52:59Z
+As of: 2026-04-26
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
@@ -9,8 +9,8 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 | Decision | State | Reason |
 | --- | --- | --- |
-| Launch expand | blocked | Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green. |
-| Freeze launch | active | Freeze launch expansion until successor dependency work task(s) 101.4, 102.2, 102.3, 104.4, 105.3, 105.4 close in the next-90-day registry. |
+| Launch expand | allowed | All measured launch gates are green. |
+| Freeze launch | available | Launch expansion is approved for the next bounded window while canaries and support closure remain clear. |
 | Canary | ready | Canary green on all active lanes |
 | Rollback | armed | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. |
 | Focus shift | queued_successor_wave | Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice. |
@@ -20,16 +20,16 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Package verification: pass
 - Weekly input health: pass
 - Source input health: pass
-- Source input fingerprint: 2ba2649096f04140f5358972305b0814cf8dc00399ed4a0f836ad54385aa089f
+- Source input fingerprint: 9d598b4b6a9831c5dd458e306f65f0ea295c4f29eeb82d102446701fc6763abe
 - Launch cited signal truth alignment: pass
 - Decision alignment: pass
-- Expected launch action: freeze_launch
-- Actual launch action: freeze_launch
+- Expected launch action: launch_expand
+- Actual launch action: launch_expand
 - Package closeout: fleet_package_complete
 - Do not reopen package: True
-- Measured rollout loop: blocked
+- Measured rollout loop: ready
 - Governor packet cadence: weekly
-- Next packet due: 2026-04-30T13:10:59Z
+- Next packet due: 2026-05-03T15:52:59Z
 - Decision action coverage: pass
 - Decision actions covered: 5 / 5
 - Decision source coverage: pass
@@ -37,28 +37,29 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Decision action routing: pass
 - Weekly operator handoff: pass
 - Weekly operator handoff actions: 5 / 5
-- Launch expansion ready: False
-- Launch gates green: False
-- Launch gate pass count: 15
-- Launch gate blocked count: 1
+- Launch expansion ready: True
+- Launch gates green: True
+- Launch gate pass count: 17
+- Launch gate blocked count: 0
 - Launch gate fail count: 0
-- Launch gate blocking names: successor_dependencies
-- Freeze active: True
+- Launch gate blocking names: none
+- Freeze active: False
 - Canary ready: True
 - Rollback watch: False
 - Registry work task 106.1 status: complete
-- Required registry evidence markers: 101
+- Required registry evidence markers: 103
 - Queue closeout status: complete
 - Queue mirror status: in_sync
-- Required queue proof markers: 101
+- Required queue proof markers: 103
 - Required resolving proof paths: scripts/materialize_weekly_governor_packet.py, scripts/verify_next90_m106_fleet_governor_packet.py, scripts/run_next90_m106_weekly_governor_packet_tests.py, scripts/verify_script_bootstrap_no_pythonpath.py, tests/test_materialize_weekly_governor_packet.py, tests/test_fleet_script_bootstrap_without_pythonpath.py
-- Successor dependency posture: open
-- Open successor dependencies: 101, 102, 104, 105
-- Dependency package routing: blocked
-- Closed dependency packages verified: 0
-- Open registry dependency milestones: 4
-- Remaining dependency packages: milestone-101, milestone-102, milestone-103, milestone-104, milestone-105
-- Remaining sibling work tasks: 106.3, 106.4
+- Successor dependency posture: satisfied
+- Open successor dependencies: none
+- Dependency package routing: pass
+- Closed dependency packages verified: 12
+- Open registry dependency milestones: 0
+- Remaining dependency packages: none
+- Launch-blocking dependency packages: none
+- Remaining sibling work tasks: none
 - Flagship readiness: pass
 - Flagship parity release truth: gold_ready
 - Flagship quality release truth: pass
@@ -67,9 +68,9 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Journey gate state: ready
 - Local release proof: passed
 - Weekly adoption state: clear
-- Weekly adoption history snapshots: 17
+- Weekly adoption history snapshots: 19
 - Weekly adoption proven journeys: 5
-- Weekly adoption proven routes: 8
+- Weekly adoption proven routes: 10
 - Provider canary: Canary green on all active lanes
 - Closure health: clear
 - Open non-external support packets: 0
@@ -84,7 +85,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Receipt-gated followthrough ready: 0
 - Receipt-gated installed-build receipts: 0
 - Closeout reason: Fleet package authority, queue closeout, registry work task 106.1, generated packet, markdown packet, and proof markers are current.
-- Milestone 106 still open because: successor dependencies and sibling work tasks remain outside this Fleet package
+- Milestone 106 still open because: no open dependency or sibling task remains visible in the successor registry
 
 ## Repeat Prevention
 
@@ -92,34 +93,35 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Closed package: next90-m106-fleet-governor-packet
 - Closed work task: 106.1
 - Closed successor frontier ids: 2376135131
-- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282, 144eae5, 543dfd5, f16f13b, 999231f, 25836f6, 3e7ee9b, 17189be, 9d2ea4c, bb49fc1, 26679c7, ef50370, a1be389, 83d2d21, e74a7ec, 8fb8d40, dd5fdb5, 52fe086, 6c429cb, 5193bce, f662ad3, 5882234, 6c376e0, 00e870e, 81e1de8, 941c54d, 6981667, 4a13b47, d597376, 233a52a, fba96cc, 15efd7c, f3bfb8d, d15a7ae, ac1c4ac, b909cc5, 787d27a, b467c27, fe4c621, 653380a, b568034
+- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282, 144eae5, 543dfd5, f16f13b, 999231f, 25836f6, 3e7ee9b, 17189be, 9d2ea4c, bb49fc1, 26679c7, ef50370, a1be389, 83d2d21, e74a7ec, 8fb8d40, dd5fdb5, 52fe086, 6c429cb, 5193bce, f662ad3, 5882234, 6c376e0, 00e870e, 81e1de8, 941c54d, 6981667, 4a13b47, d597376, 233a52a, fba96cc, 15efd7c, f3bfb8d, d15a7ae, ac1c4ac, b909cc5, 787d27a, b467c27, fe4c621, 653380a, b568034, a94dd245
 - Do not reopen owned surfaces: True
 - Owned surfaces: weekly_governor_packet, measured_rollout_loop
 - Allowed paths: admin, scripts, tests, .codex-studio
-- Remaining dependency milestones: 101, 102, 104, 105
-- Remaining dependency packages: milestone-101, milestone-102, milestone-103, milestone-104, milestone-105
+- Remaining dependency milestones: none
+- Remaining dependency packages: none
+- Launch-blocking dependency packages: none
 - Blocked dependency packages: none
 - Dependency package route rule: Closed dependency package rows are verified instead of reopened; launch expansion still waits for successor registry milestone status to close.
-- Remaining sibling work tasks: 106.3, 106.4
+- Remaining sibling work tasks: none
 - Handoff rule: Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; route remaining M106 work to the listed dependency or sibling packages.
 - Worker command guard: active_run_helpers_forbidden
 - Worker command rule: Worker proof must come from repo-local files, generated packets, and tests, not operator telemetry, supervisor helper loops, supervisor status/ETA helpers, or active-run helper commands; active-run helpers are hard-blocked, count as run failure, and return non-zero during active runs.
-- Blocked helper markers: /var/lib/codex-fleet, ACTIVE_RUN_HANDOFF.generated.md, run_ooda_design_supervisor_until_quiet, run_chummer_design_supervisor.sh, run_ooda_design_supervisor.sh, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json, first_commands, focus_owners, focus_profiles, focus_texts, frontier_briefs, status: complete; owners:, deps: 101, 102, 103, 104, 105, own and prove the surface slice(s): weekly_governor_packet, measured_rollout_loop, refresh flagship proof and close out the queue slice honestly, frontier ids:, open milestone ids:, mode: successor_wave, polling_disabled, runtime_handoff_path, shard runtime handoff, use the shard runtime handoff as the worker-safe resume context, status_query_supported, task-local telemetry file, local machine-readable context, implementation-only, implementation only, implementation-only retry, this retry is implementation-only, previous attempt burned time on blocked telemetry probes, blocked telemetry probes, previous attempt burned time on supervisor helper loops, retry is implementation-only, successor-wave pass, product advance successor-wave pass, next-90-day product advance successor-wave pass, run these exact commands first, start by reading these files directly, do not invent another orientation step, read these files directly first, historical operator status snippets, stale notes rather than commands, remaining milestones, remaining queue items, critical path, successor-wave telemetry:, eta:, eta , successor frontier detail:, successor frontier ids to prioritize first, current steering focus, assigned successor queue package, assigned slice authority, execution rules inside this run, execution discipline, first action rule, if you stop, report only, what shipped:, what remains:, exact blocker:, writable scope roots, operator telemetry, do not run operator telemetry helpers inside this worker run, do not invoke operator telemetry, do not invoke operator telemetry or active-run helper commands from inside worker runs, supervisor helper loop, supervisor helper loops, supervisor status polling, supervisor eta polling, supervisor status or eta helpers, supervisor status or eta helpers inside this worker run, do not query supervisor status, do not query supervisor status or eta, do not run supervisor status or eta helpers, polling the supervisor again, current flagship closeout, do not reopen the closed flagship wave, reopen the closed flagship wave, active-run telemetry, active run, run id:, selected account, selected model, prompt path, recent stderr tail, active-run helper, active-run helper commands, active run helper, active worker run, worker runs, operator/OODA loop, operator ooda loop, operator/OODA loop owns telemetry, operator/OODA loop owns telemetry; keep working the assigned slice, operator ooda loop owns telemetry, ooda loop owns telemetry, operator-owned telemetry, operator-owned run-helper, operator-owned helper, inside worker runs, run failure, count as run failure, hard-blocked, helpers are hard-blocked, hard blocked, non-zero during active runs, return non-zero during active runs, nonzero during active runs, --telemetry-answer, codexea telemetry, codexea status, codexea eta, codexea watch, codexea-watchdog, codexea --telemetry, codexea --status, codexea --eta, codexea --watch, chummer_design_supervisor status, chummer_design_supervisor eta, supervisor status, supervisor eta, operator telemetry helper, active-run status helper, chummer_design_supervisor.py, chummer_design_supervisor.py status, chummer_design_supervisor.py eta
+- Blocked helper markers: /var/lib/codex-fleet, ACTIVE_RUN_HANDOFF.generated.md, run_ooda_design_supervisor_until_quiet, run_chummer_design_supervisor.sh, run_ooda_design_supervisor.sh, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json, first_commands, focus_owners, focus_profiles, focus_texts, frontier_briefs, status: complete; owners:, deps: 101, 102, 103, 104, 105, own and prove the surface slice(s): weekly_governor_packet, measured_rollout_loop, refresh flagship proof and close out the queue slice honestly, frontier ids:, open milestone ids:, mode: successor_wave, polling_disabled, runtime_handoff_path, shard runtime handoff, use the shard runtime handoff as the worker-safe resume context, status_query_supported, task-local telemetry file, local machine-readable context, implementation-only, implementation only, implementation-only retry, this retry is implementation-only, previous attempt burned time on blocked telemetry probes, blocked telemetry probes, previous attempt burned time on supervisor helper loops, retry is implementation-only, successor-wave pass, product advance successor-wave pass, next-90-day product advance successor-wave pass, run these exact commands first, start by reading these files directly, do not invent another orientation step, read these files directly first, historical operator status snippets, stale notes rather than commands, remaining milestones, remaining queue items, critical path, successor-wave telemetry:, eta:, eta , successor frontier detail:, successor frontier ids to prioritize first, current steering focus, assigned successor queue package, assigned slice authority, execution rules inside this run, execution discipline, first action rule, if you stop, report only, what shipped:, what remains:, exact blocker:, writable scope roots, operator telemetry, do not run operator telemetry helpers inside this worker run, do not invoke operator telemetry, do not invoke operator telemetry or active-run helper commands from inside worker runs, supervisor helper loop, supervisor helper loops, supervisor status polling, supervisor eta polling, supervisor status or eta helpers, supervisor status or eta helpers inside this worker run, do not query supervisor status, do not query supervisor status or eta, do not run supervisor status or eta helpers, polling the supervisor again, current flagship closeout, do not reopen the closed flagship wave, reopen the closed flagship wave, active-run telemetry, active run, run id:, selected account, selected model, started at:, first output at:, last output at:, prompt path, recent stderr tail, active-run helper, active-run helper commands, active run helper, active worker run, worker runs, operator/OODA loop, operator ooda loop, operator/OODA loop owns telemetry, operator/OODA loop owns telemetry; keep working the assigned slice, operator ooda loop owns telemetry, ooda loop owns telemetry, operator-owned telemetry, operator-owned run-helper, operator-owned helper, inside worker runs, run failure, count as run failure, hard-blocked, helpers are hard-blocked, hard blocked, non-zero during active runs, return non-zero during active runs, nonzero during active runs, --telemetry-answer, codexea telemetry, codexea status, codexea eta, codexea watch, codexea-watchdog, codexea --telemetry, codexea --status, codexea --eta, codexea --watch, chummer_design_supervisor status, chummer_design_supervisor eta, supervisor status, supervisor eta, operator telemetry helper, active-run status helper, chummer_design_supervisor.py, chummer_design_supervisor.py status, chummer_design_supervisor.py eta, Codex could not find system bubblewrap, vendored bubblewrap
 - Flagship wave guard: closed_wave_not_reopened
 - Closed flagship wave: next_12_biggest_wins
 - Flagship readiness inputs: read-only readiness, parity, journey, and support snapshots
 
 ## Public Status Copy
 
-- State: freeze_launch
+- State: launch_expand_allowed
 - Derived from: measured_rollout_loop.decision_action_matrix
 - Decision actions: launch_expand, freeze_launch, canary, rollback, focus_shift
 - Schedule ref: governor_packet_schedule.next_packet_due_at
-- Next packet due: 2026-04-30T13:10:59Z
+- Next packet due: 2026-05-03T15:52:59Z
 - Max age seconds: 604800
 - Freshness policy: refresh_before_public_status_or_operator_action_if_packet_is_overdue
-- Headline: Launch expansion remains frozen.
-- Body: Freeze launch expansion until successor dependency work task(s) 101.4, 102.2, 102.3, 104.4, 105.3, 105.4 close in the next-90-day registry.
+- Headline: Measured launch expansion is allowed.
+- Body: Readiness, parity, support, canary, dependency, and release-proof gates are green for this weekly packet.
 
 ## Launch Gate Ledger
 
@@ -127,16 +129,17 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 | --- | --- | --- | --- |
 | package_authority | pass | pass | pass |
 | weekly_input_health | pass | pass | pass |
+| weekly_launch_decision | pass | launch_expand | launch_expand |
 | source_input_health | pass | pass | pass |
-| decision_alignment | pass | freeze_launch | freeze_launch |
-| successor_dependencies | blocked | satisfied | open |
+| decision_alignment | pass | launch_expand | launch_expand |
+| successor_dependencies | pass | satisfied | satisfied |
 | flagship_readiness | pass | pass | pass |
 | flagship_parity | pass | gold_ready | gold_ready |
 | flagship_quality | pass | localization pass and accessibility/polish proof ready | pass |
 | status_plane_final_claim | pass | pass | pass |
 | journey_gates | pass | ready | ready |
 | local_release_proof | pass | passed | passed |
-| weekly_adoption_truth | pass | present with measured history | clear / 17 history snapshots |
+| weekly_adoption_truth | pass | present with measured history | clear / 19 history snapshots |
 | provider_canary | pass | Canary green on all active lanes | Canary green on all active lanes |
 | closure_health | pass | clear | clear |
 | support_packets | pass | 0 open non-external packets | 0 |
@@ -154,8 +157,8 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 | Action | Board state | Ledger gates | Governor state | Governor gates | Complete |
 | --- | --- | --- | --- | --- | --- |
-| launch_expand | blocked | 16 | blocked | 16 | True |
-| freeze_launch | active | 1 | active | 1 | True |
+| launch_expand | allowed | 17 | allowed | 17 | True |
+| freeze_launch | available | 1 | available | 1 | True |
 | canary | ready | 1 | ready | 1 | True |
 | rollback | armed | 4 | armed | 4 | True |
 | focus_shift | queued_successor_wave | 1 | queued_successor_wave | 1 | True |
@@ -164,7 +167,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 | Action | Required gates | Missing gates | Covered |
 | --- | --- | --- | --- |
-| launch_expand | package_authority, weekly_input_health, source_input_health, decision_alignment, successor_dependencies, flagship_readiness, flagship_parity, flagship_quality, status_plane_final_claim, journey_gates, local_release_proof, weekly_adoption_truth, provider_canary, closure_health, support_packets, support_followthrough_receipts | none | True |
+| launch_expand | package_authority, weekly_input_health, weekly_launch_decision, source_input_health, decision_alignment, successor_dependencies, flagship_readiness, flagship_parity, flagship_quality, status_plane_final_claim, journey_gates, local_release_proof, weekly_adoption_truth, provider_canary, closure_health, support_packets, support_followthrough_receipts | none | True |
 | freeze_launch | fail_closed_default | none | True |
 | canary | provider_canary | none | True |
 | rollback | closure_waiting_on_release_truth, update_required_misrouted_cases, support_followthrough_receipt_blockers, release_health | none | True |
@@ -174,8 +177,8 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 | Action | Owner | Route | Cadence | Max age seconds | Freshness policy | Trigger gate | Route blocked | Operator action | Blocked action | Clear action | Blocking gates | Next decision | Ready |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| launch_expand | fleet | weekly_governor_packet.launch_expand | weekly | 604800 | refresh_before_operator_action_if_packet_is_overdue | launch_gate_summary.all_green | True | do_not_expand_launch | do_not_expand_launch | promote_measured_launch_expansion | successor_dependencies | Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green. | True |
-| freeze_launch | fleet | weekly_governor_packet.freeze_launch | weekly | 604800 | refresh_before_operator_action_if_packet_is_overdue | launch_gate_summary.blocking_gate_names | True | keep_launch_frozen | keep_launch_frozen | leave_freeze_available | fail_closed_default | Freeze launch expansion until successor dependency work task(s) 101.4, 102.2, 102.3, 104.4, 105.3, 105.4 close in the next-90-day registry. | True |
+| launch_expand | fleet | weekly_governor_packet.launch_expand | weekly | 604800 | refresh_before_operator_action_if_packet_is_overdue | launch_gate_summary.all_green | False | promote_measured_launch_expansion | do_not_expand_launch | promote_measured_launch_expansion | none | All measured launch gates are green. | True |
+| freeze_launch | fleet | weekly_governor_packet.freeze_launch | weekly | 604800 | refresh_before_operator_action_if_packet_is_overdue | launch_gate_summary.blocking_gate_names | False | leave_freeze_available | keep_launch_frozen | leave_freeze_available | none | Launch expansion is approved for the next bounded window while canaries and support closure remain clear. | True |
 | canary | fleet | measured_rollout_loop.canary | weekly | 604800 | refresh_before_operator_action_if_packet_is_overdue | provider_canary | False | keep_canary_ready | collect_canary_evidence | keep_canary_ready | none | Canary green on all active lanes | True |
 | rollback | fleet | measured_rollout_loop.rollback | weekly | 604800 | refresh_before_operator_action_if_packet_is_overdue | release_health | False | keep_rollback_armed | prepare_rollback_or_revoke | keep_rollback_armed | none | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. | True |
 | focus_shift | fleet | measured_rollout_loop.focus_shift | weekly | 604800 | refresh_before_operator_action_if_packet_is_overdue | successor_wave_scope | False | route_remaining_work_to_dependency_or_sibling_packages | route_remaining_work_to_dependency_or_sibling_packages | route_remaining_work_to_dependency_or_sibling_packages | none | Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice. | True |
@@ -185,15 +188,20 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Source: measured_rollout_loop.decision_action_routes+decision_receipts
 - Cadence: weekly
 - Schedule ref: governor_packet_schedule.next_packet_due_at
-- Launch gate blocking names: successor_dependencies
+- Launch gate blocking names: none
+- Handoff remaining dependency packages: none
+- Handoff launch-blocking dependency packages: none
+- Handoff blocked dependency packages: none
+- Handoff remaining sibling work tasks: none
+- Handoff route rule: Verify closed dependency packages instead of reopening them; route sibling M106 work outside the closed Fleet packet slice.
 
-| Action | State | Route | Operator action | Receipt | Next review due ref | Max age seconds | Freshness policy | Blocking gates | Next decision |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| launch_expand | blocked | weekly_governor_packet.launch_expand | do_not_expand_launch | m106-launch_expand-21335ee298c99fa6 | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | successor_dependencies | Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green. |
-| freeze_launch | active | weekly_governor_packet.freeze_launch | keep_launch_frozen | m106-freeze_launch-2946e72f353bd4e4 | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | fail_closed_default | Freeze launch expansion until successor dependency work task(s) 101.4, 102.2, 102.3, 104.4, 105.3, 105.4 close in the next-90-day registry. |
-| canary | ready | measured_rollout_loop.canary | keep_canary_ready | m106-canary-afc3d2be95960739 | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Canary green on all active lanes |
-| rollback | armed | measured_rollout_loop.rollback | keep_rollback_armed | m106-rollback-fcedde06369bab3d | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. |
-| focus_shift | queued_successor_wave | measured_rollout_loop.focus_shift | route_remaining_work_to_dependency_or_sibling_packages | m106-focus_shift-9e0a36a10f3ebf57 | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice. |
+| Action | State | Route | Operator action | Receipt | Next review due | Next review due ref | Max age seconds | Freshness policy | Blocking gates | Next decision |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| launch_expand | allowed | weekly_governor_packet.launch_expand | promote_measured_launch_expansion | m106-launch_expand-16e298f80f85949d | 2026-05-03T15:52:59Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | All measured launch gates are green. |
+| freeze_launch | available | weekly_governor_packet.freeze_launch | leave_freeze_available | m106-freeze_launch-65253d4d25b49f81 | 2026-05-03T15:52:59Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Launch expansion is approved for the next bounded window while canaries and support closure remain clear. |
+| canary | ready | measured_rollout_loop.canary | keep_canary_ready | m106-canary-afc3d2be95960739 | 2026-05-03T15:52:59Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Canary green on all active lanes |
+| rollback | armed | measured_rollout_loop.rollback | keep_rollback_armed | m106-rollback-fcedde06369bab3d | 2026-05-03T15:52:59Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. |
+| focus_shift | queued_successor_wave | measured_rollout_loop.focus_shift | route_remaining_work_to_dependency_or_sibling_packages | m106-focus_shift-9e0a36a10f3ebf57 | 2026-05-03T15:52:59Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice. |
 
 ## Evidence Requirements
 
@@ -227,11 +235,11 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 | Milestone | Package | Registry | Queue | Design queue | Route | Launch gate |
 | --- | --- | --- | --- | --- | --- | --- |
-| 101 | milestone-101 | in_progress | missing | missing | route_to_dependency_package | blocked_until_registry_milestone_complete |
-| 102 | milestone-102 | in_progress | missing | missing | route_to_dependency_package | blocked_until_registry_milestone_complete |
-| 103 | milestone-103 | complete | missing | missing | route_to_dependency_package | clear |
-| 104 | milestone-104 | in_progress | missing | missing | route_to_dependency_package | blocked_until_registry_milestone_complete |
-| 105 | milestone-105 | in_progress | missing | missing | route_to_dependency_package | blocked_until_registry_milestone_complete |
+| 101 | next90-m101-fleet-external-proof-lane, next90-m101-registry-promotion-discipline, next90-m101-ui-release-train | complete | complete | complete | verify_closed_package_only | clear |
+| 102 | next90-m102-fleet-reporter-receipts, next90-m102-hub-desktop-native-trust | complete | complete | complete | verify_closed_package_only | clear |
+| 103 | next90-m103-ea-parity-lab, next90-m103-fleet-parity-lab-readiness, next90-m103-ui-veteran-certification | complete | complete | complete | verify_closed_package_only | clear |
+| 104 | next90-m104-core-proof-pack, next90-m104-ui-explain-receipts | complete | complete | complete | verify_closed_package_only | clear |
+| 105 | next90-m105-hub-workspace-continuity, next90-m105-ui-restore-continuity | complete | complete | complete | verify_closed_package_only | clear |
 
 ## Source Paths
 
