@@ -868,6 +868,29 @@ items:
     assert "successor queue item wave drifted" in verification["issues"]
 
 
+def test_materialize_support_case_packets_accepts_complete_successor_milestone_for_closed_package(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    registry = tmp_path / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
+    queue = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    design_queue = tmp_path / "design_queue.generated.yaml"
+
+    _write_registry(registry)
+    registry.write_text(
+        registry.read_text(encoding="utf-8").replace("    status: in_progress\n", "    status: complete\n", 1),
+        encoding="utf-8",
+    )
+    _write_queue(queue, design_queue)
+
+    with _override_design_queue_path(design_queue):
+        verification = module._successor_package_verification(registry, queue)
+
+    assert verification["status"] == "pass"
+    assert "successor milestone 102 is neither in_progress nor complete" not in verification["issues"]
+    assert verification["registry_status"] == "complete"
+
+
 def test_materialize_support_case_packets_fails_successor_package_authority_without_structured_frontier_id(
     tmp_path: Path,
 ) -> None:
@@ -1571,13 +1594,65 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
     assert isinstance(bug_packet["install_diagnosis"], dict)
     assert isinstance(bug_packet["fix_confirmation"], dict)
     assert isinstance(bug_packet["recovery_path"], dict)
-    assert canon_packet["primary_lane"] == "canon"
+    assert canon_packet["primary_lane"] == "discovery"
+    assert canon_packet["feedback_discovery"]["route_id"] == "feedback_forge_discovery"
     assert "FEEDBACK_AND_SIGNAL_OODA_LOOP.md" in canon_packet["affected_canon_files"]
+    assert payload["summary"]["feedback_discovery_candidate_count"] == 1
+    assert payload["feedback_discovery_plan"]["candidate_count"] == 1
+    assert payload["feedback_discovery_plan"]["action_groups"]["public_signal"][0]["packet_id"] == canon_packet["packet_id"]
     assert "reporter_subject_id" not in bug_packet
     assert "case_id" not in bug_packet
     assert "cluster_key" not in bug_packet
     assert "title" not in bug_packet
     assert "summary" not in bug_packet
+
+
+def test_materialize_support_case_packets_routes_house_rule_feedback_through_karma_forge_first_part() -> None:
+    module = _load_module()
+
+    payload = module.build_packets_payload(
+        {
+            "items": [
+                {
+                    "caseId": "feedback-karma-1",
+                    "clusterKey": "feedback:karma",
+                    "kind": "feedback",
+                    "status": "accepted",
+                    "title": "Campaign house rule gear unlocks",
+                    "summary": "We need house rule gear unlock overlays before play.",
+                    "candidateOwnerRepo": "chummer6-hub",
+                    "publicSignalReceiptId": "productlift-signal-1",
+                }
+            ],
+        },
+        "unit",
+        release_channel_index={},
+    )
+
+    assert payload["summary"]["feedback_discovery_candidate_count"] == 1
+    assert payload["summary"]["feedback_discovery_karma_forge_candidate_count"] == 1
+    assert payload["summary"]["feedback_discovery_first_part_complete_count"] == 0
+    packet = payload["packets"][0]
+    assert packet["primary_lane"] == "discovery"
+    assert packet["target_repo"] == "chummer6-design"
+    assert packet["feedback_discovery"]["route_id"] == "karma_forge_discovery"
+    assert packet["feedback_discovery"]["next_step"] == "structured_prescreen"
+    assert packet["feedback_discovery"]["next_action"] == "request_deftform_structured_prescreen"
+    assert packet["feedback_discovery"]["first_part_complete"] is False
+    assert {"ProductLift", "Deftform", "Icanpreneur"}.issubset(
+        set(packet["feedback_discovery"]["required_tools"])
+    )
+    plan = payload["feedback_discovery_plan"]
+    assert plan["candidate_count"] == 1
+    assert plan["karma_forge_candidate_count"] == 1
+    assert plan["first_part_routed_count"] == 1
+    assert plan["ltd_product_system"] == "discovery_system"
+    assert plan["ltd_discovery_system_ready"] is True
+    assert plan["ltd_discovery_system_missing_tools"] == []
+    assert {"ProductLift", "FacePop", "Signitic", "Emailit"}.issubset(
+        set(plan["ltd_discovery_system_tools"])
+    )
+    assert plan["action_groups"]["structured_prescreen"][0]["packet_id"] == packet["packet_id"]
 
 
 def test_materialize_support_case_packets_refreshes_compile_manifest(tmp_path: Path) -> None:
@@ -2485,6 +2560,23 @@ def test_derived_followthrough_grouping_preserves_fix_available_update_posture()
     assert no_update["fix_available_next_action"] == "send_fix_available"
     assert with_update["fix_available_ready"] is True
     assert with_update["fix_available_next_action"] == "send_fix_available_with_update"
+
+
+def test_derived_followthrough_grouping_routes_discovery_feedback_progress() -> None:
+    module = _load_module()
+
+    grouping = module._derived_followthrough_grouping(
+        {"feedback_discovery_route": "karma_forge_discovery", "blockers": []},
+        {
+            "feedback_loop_ready": True,
+            "fix_available_ready": False,
+            "please_test_ready": False,
+            "recovery_loop_ready": False,
+        },
+    )
+
+    assert grouping["feedback_ready"] is True
+    assert grouping["feedback_next_action"] == "send_feedback_discovery_progress"
 
 
 def test_followthrough_receipt_gates_recompute_counts_from_receipt_truth() -> None:

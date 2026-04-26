@@ -12,6 +12,7 @@ import yaml
 
 
 SCRIPT = Path("/docker/fleet/scripts/materialize_flagship_product_readiness.py")
+SUPPORT_CASE_PACKETS_SCRIPT = Path("/docker/fleet/scripts/materialize_support_case_packets.py")
 
 
 def _load_module():
@@ -20,6 +21,22 @@ def _load_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _load_support_case_packets_module():
+    previous_sys_path = list(sys.path)
+    sys.path.insert(0, str(SUPPORT_CASE_PACKETS_SCRIPT.parent))
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "materialize_support_case_packets_for_readiness_e2e",
+            SUPPORT_CASE_PACKETS_SCRIPT,
+        )
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path[:] = previous_sys_path
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -48,6 +65,44 @@ def _write_json(path: Path, payload: dict) -> None:
 def _write_yaml(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+
+def _write_horizon_mirror(product_root: Path, module) -> None:
+    product_root.mkdir(parents=True, exist_ok=True)
+    (product_root / "HORIZONS.md").write_text("# Horizons\n", encoding="utf-8")
+    (product_root / "FLAGSHIP_PRODUCT_BAR.md").write_text("# Flagship Bar\n", encoding="utf-8")
+    (product_root / "SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md").write_text("# Surface Review\n", encoding="utf-8")
+    (product_root / "CHUMMER5A_FAMILIARITY_BRIDGE.md").write_text("# Familiarity Bridge\n", encoding="utf-8")
+    (product_root / "DESKTOP_EXECUTABLE_EXIT_GATES.md").write_text("# Desktop Exit Gates\n", encoding="utf-8")
+    (product_root / "LEGACY_CLIENT_AND_ADJACENT_PARITY.md").write_text("# Legacy Parity\n", encoding="utf-8")
+    _write_yaml(product_root / "PUBLIC_RELEASE_EXPERIENCE.yaml", {"product": "chummer"})
+    horizons_dir = product_root / "horizons"
+    horizons_dir.mkdir(parents=True, exist_ok=True)
+    for canonical_doc in module.CANONICAL_HORIZONS_DIR.glob("*.md"):
+        (horizons_dir / canonical_doc.name).write_text(f"# {canonical_doc.stem}\n", encoding="utf-8")
+
+
+def _write_synced_external_runbook(module, runbook_path: Path, commands_dir: Path, generated_at: str) -> None:
+    commands_dir.mkdir(parents=True, exist_ok=True)
+    command_path = commands_dir / "noop-proof.sh"
+    command_path.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    command_path.chmod(0o755)
+    command_bundle = module.external_proof_command_bundle_fingerprint(commands_dir)
+    runbook_path.parent.mkdir(parents=True, exist_ok=True)
+    runbook_path.write_text(
+        "\n".join(
+            [
+                "# External Proof Runbook",
+                f"- generated_at: {generated_at}",
+                f"- plan_generated_at: {generated_at}",
+                f"- release_channel_generated_at: {generated_at}",
+                f"- command_bundle_sha256: {command_bundle['sha256']}",
+                f"- command_bundle_file_count: {command_bundle['file_count']}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
 
 def _base_acceptance() -> dict:
@@ -112,6 +167,11 @@ def _materialize_flagship_readiness_with_parity_lab(
     missing_capture_non_negotiable_ids=(),
     missing_workflow_non_negotiable_ids=(),
     whole_product_coverage_keys=None,
+    windows_exit_gate_status: str = "passed",
+    active_shards_payload=None,
+    ooda_state_payload=None,
+    synced_external_runbook: bool = False,
+    journey_gates_payload: dict | None = None,
 ) -> dict:
     out_path = tmp_path / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
@@ -121,8 +181,11 @@ def _materialize_flagship_readiness_with_parity_lab(
     progress_history_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
     journey_gates_path = tmp_path / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
     support_packets_path = tmp_path / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+    external_runbook_path = tmp_path / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    external_commands_dir = tmp_path / ".codex-studio" / "published" / "external-proof-commands"
     compile_manifest_path = tmp_path / ".codex-studio" / "published" / "compile.manifest.json"
     supervisor_state_path = tmp_path / "state" / "chummer_design_supervisor" / "state.json"
+    active_shards_path = tmp_path / "state" / "chummer_design_supervisor" / "active_shards.json"
     ooda_state_path = tmp_path / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
     ui_local_release_path = tmp_path / "ui" / "UI_LOCAL_RELEASE_PROOF.generated.json"
     ui_exit_gate_path = tmp_path / "ui" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
@@ -143,6 +206,7 @@ def _materialize_flagship_readiness_with_parity_lab(
     current_iso = _now_iso()
 
     _write_yaml(acceptance_path, _base_acceptance())
+    _write_horizon_mirror(acceptance_path.parent, module)
     _write_yaml(flagship_parity_registry_path, _flagship_parity_registry_payload(release_status=release_status))
     _write_yaml(
         parity_lab_capture_pack_path,
@@ -164,21 +228,27 @@ def _materialize_flagship_readiness_with_parity_lab(
     _write_yaml(status_plane_path, _base_status_plane())
     _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
     _write_json(progress_history_path, {"snapshot_count": 6})
-    _write_json(journey_gates_path, _base_journey_gates())
-    _write_json(support_packets_path, {"generated_at": current_iso})
+    _write_json(journey_gates_path, journey_gates_payload or _base_journey_gates())
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso))
+    if synced_external_runbook:
+        _write_synced_external_runbook(module, external_runbook_path, external_commands_dir, current_iso)
     _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
     supervisor_state = _base_supervisor_state()
     supervisor_state["updated_at"] = current_iso
     supervisor_state["focus_profiles"] = ["top_flagship_grade", "whole_project_frontier"]
     _write_json(supervisor_state_path, supervisor_state)
-    _write_json(ooda_state_path, _base_ooda_state())
+    if active_shards_payload is not None:
+        active_shards = dict(active_shards_payload)
+        active_shards.setdefault("generated_at", current_iso)
+        _write_json(active_shards_path, active_shards)
+    _write_json(ooda_state_path, ooda_state_payload or _base_ooda_state())
     _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
     _write_json(ui_exit_gate_path, {"contract_name": "chummer6-ui.linux_desktop_exit_gate", "status": "passed"})
     _write_json(
         ui_windows_exit_gate_path,
         {
             "contract_name": "chummer6-ui.windows_desktop_exit_gate",
-            "status": "passed",
+            "status": windows_exit_gate_status,
             "checks": {
                 "embedded_payload_marker_present": True,
                 "embedded_sample_marker_present": True,
@@ -277,6 +347,111 @@ def _materialize_flagship_readiness_with_parity_lab(
     return json.loads(out_path.read_text(encoding="utf-8"))
 
 
+def test_materialize_flagship_product_readiness_recovers_windows_gate_from_aggregate_executable_proof(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        windows_exit_gate_status="failed",
+    )
+
+    assert payload["coverage"]["desktop_client"] == "ready"
+    evidence = payload["coverage_details"]["desktop_client"]["evidence"]
+    assert evidence["ui_windows_exit_gate_status"] == "failed"
+    assert evidence["ui_windows_exit_gate_recovered_from_executable_gate"] is True
+    assert evidence["ui_windows_exit_gate_effective_ready"] is True
+    assert payload["coverage_details"]["desktop_client"]["reasons"] == []
+
+
+def test_materialize_flagship_product_readiness_recovers_stale_ooda_from_current_supervisor_topology(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    stale_ooda = _base_ooda_state()
+    stale_ooda["aggregate_stale"] = True
+    stale_ooda["aggregate_timestamp_stale"] = True
+
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        active_shards_payload={
+            "active_run_count": 0,
+            "active_shards": [],
+            "configured_shard_count": 13,
+            "configured_shards": [{"name": "shard-1"}, {"name": "shard-2"}],
+            "manifest_kind": "configured_shard_topology",
+        },
+        ooda_state_payload=stale_ooda,
+        synced_external_runbook=True,
+    )
+
+    assert payload["coverage"]["fleet_and_operator_loop"] == "ready"
+    fleet_detail = payload["coverage_details"]["fleet_and_operator_loop"]
+    assert fleet_detail["reasons"] == []
+    evidence = fleet_detail["evidence"]
+    assert evidence["ooda_controller"] == "up"
+    assert evidence["ooda_supervisor"] == "up"
+    assert evidence["ooda_state_recovered_from_active_shards"] is True
+    assert evidence["ooda_state_recovery_source"] == "configured_shard_topology"
+    assert evidence["ooda_aggregate_stale"] is False
+    assert evidence["ooda_timestamp_stale"] is False
+    assert evidence["ooda_recovered_from_current_supervisor_topology"] is True
+
+
+def test_materialize_flagship_product_readiness_treats_owner_scoped_routed_campaign_blocker_as_ready(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    journey_gates = _base_journey_gates()
+    for row in journey_gates["journeys"]:
+        if row["id"] == "campaign_session_recover_recap":
+            row.update(
+                {
+                    "state": "blocked",
+                    "local_blocking_reasons": [
+                        "repo proof chummer6-hub:Chummer.Run.Api/Services/Community/CampaignSpineService.cs is missing required marker 'governed faction, heat, contact, and reputation signal(s)'."
+                    ],
+                    "blocking_reasons": [
+                        "repo proof chummer6-hub:Chummer.Run.Api/Services/Community/CampaignSpineService.cs is missing required marker 'governed faction, heat, contact, and reputation signal(s)'."
+                    ],
+                    "blockers": [
+                        "repo proof chummer6-hub:Chummer.Run.Api/Services/Community/CampaignSpineService.cs is missing required marker 'governed faction, heat, contact, and reputation signal(s)'."
+                    ],
+                    "owner_repos": ["chummer6-hub", "chummer6-mobile", "chummer6-ui", "fleet"],
+                }
+            )
+            break
+    journey_gates["summary"]["overall_state"] = "blocked"
+    journey_gates["summary"]["blocked_count"] = 1
+    journey_gates["summary"]["blocked_with_local_count"] = 1
+    journey_gates["summary"]["blocked_external_only_count"] = 0
+
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        journey_gates_payload=journey_gates,
+        synced_external_runbook=True,
+    )
+
+    assert payload["status"] == "pass"
+    assert payload["coverage"]["mobile_play_shell"] == "ready"
+    assert payload["coverage"]["ui_kit_and_flagship_polish"] == "ready"
+    assert payload["readiness_planes"]["structural_ready"]["status"] == "ready"
+    mobile_evidence = payload["coverage_details"]["mobile_play_shell"]["evidence"]
+    assert mobile_evidence["campaign_session_recover_recap"] == "blocked"
+    assert mobile_evidence["campaign_session_recover_recap_owner_scoped_effective_state"] == "ready"
+    assert mobile_evidence["campaign_session_recover_recap_owner_scoped_unrelated_routed_local_only"] is True
+    assert mobile_evidence["campaign_session_recover_recap_owner_scoped_routed_owner_repos"] == ["chummer6-hub"]
+    ui_kit_evidence = payload["coverage_details"]["ui_kit_and_flagship_polish"]["evidence"]
+    assert ui_kit_evidence["campaign_session_recover_recap_owner_scoped_effective_state"] == "ready"
+    assert ui_kit_evidence["campaign_session_recover_recap_owner_scoped_unrelated_routed_local_only"] is True
+    structural_evidence = payload["readiness_planes"]["structural_ready"]["evidence"]
+    assert structural_evidence["journey_overall_state"] == "blocked"
+    assert structural_evidence["journey_effective_overall_state"] == "ready"
+
+
 def _base_feedback_loop_gate() -> dict:
     return {
         "version": 1,
@@ -295,8 +470,99 @@ def _base_feedback_loop_gate() -> dict:
             "require_feedback_progress_email_e2e_gate": True,
             "require_feedback_progress_email_decision_awards": True,
             "required_feedback_progress_sender_email": "wageslave@chummer.run",
+            "require_feedback_discovery_gateway": True,
+            "require_feedback_discovery_ltd_registry": True,
+            "required_feedback_discovery_route": "karma_forge_discovery",
+            "required_feedback_discovery_first_part_steps": [
+                "public_signal",
+                "structured_prescreen",
+                "adaptive_interview",
+            ],
+            "required_feedback_discovery_tools": [
+                "ProductLift",
+                "Signitic",
+                "FacePop",
+                "Deftform",
+                "Icanpreneur",
+                "Lunacal",
+                "MetaSurvey",
+                "Teable",
+                "NextStep",
+                "Product Governor",
+                "chummer6-design",
+                "Emailit",
+            ],
         },
     }
+
+
+def _base_feedback_discovery_plan() -> dict:
+    return {
+        "workflow_ready": True,
+        "candidate_count": 1,
+        "karma_forge_candidate_count": 1,
+        "first_part_routed_count": 1,
+        "missing_route_count": 0,
+        "missing_next_action_count": 0,
+        "route_counts": {"karma_forge_discovery": 1},
+        "ltd_registry_path": "/tmp/LTD_RUNTIME_AND_PROJECTION_REGISTRY.yaml",
+        "ltd_registry_key": "ltd_runtime_and_projection_registry",
+        "ltd_product_system": "discovery_system",
+        "ltd_discovery_system_ready": True,
+        "ltd_discovery_system_missing_tools": [],
+        "ltd_discovery_system_tools": [
+            "ProductLift",
+            "Signitic",
+            "FacePop",
+            "Deftform",
+            "Icanpreneur",
+            "Lunacal",
+            "MetaSurvey",
+            "Teable",
+            "NextStep",
+            "Product Governor",
+            "chummer6-design",
+            "Emailit",
+        ],
+        "required_first_part_steps": [
+            "public_signal",
+            "structured_prescreen",
+            "adaptive_interview",
+        ],
+        "required_tools": [
+            "ProductLift",
+            "Signitic",
+            "FacePop",
+            "Deftform",
+            "Icanpreneur",
+            "Lunacal",
+            "MetaSurvey",
+            "Teable",
+            "NextStep",
+            "Product Governor",
+            "chummer6-design",
+            "Emailit",
+        ],
+    }
+
+
+def _base_support_packets_payload(generated_at: str, *, summary: dict | None = None) -> dict:
+    payload = {
+        "generated_at": generated_at,
+        "feedback_discovery_plan": _base_feedback_discovery_plan(),
+    }
+    if summary is not None:
+        payload["summary"] = summary
+    return payload
+
+
+def _e2e_feedback_loop_gate_with_one_open_discovery_case() -> dict:
+    gate = _base_feedback_loop_gate()
+    gate["thresholds"] = dict(gate["thresholds"])
+    gate["thresholds"]["max_open_non_external_packets"] = 1
+    gate["thresholds"]["max_closure_waiting_on_release_truth"] = 1
+    gate["thresholds"]["max_non_external_needs_human_response"] = 1
+    return gate
 
 
 def _base_feedback_progress_email_workflow() -> dict:
@@ -431,6 +697,14 @@ def _desktop_executable_exit_gate_pass_payload(
     for platform in enabled_platforms:
         evidence[f"{platform}_statuses"] = {
             f"{head}:{rid_by_platform[platform]}": "pass"
+            for head in enabled_heads
+        }
+    if "windows" in enabled_platforms:
+        evidence["windows_gates"] = {
+            f"{head}:{rid_by_platform['windows']}": {
+                "embedded_payload_marker_present": True,
+                "embedded_sample_marker_present": True,
+            }
             for head in enabled_heads
         }
     stamp = generated_at or _now_iso()
@@ -700,7 +974,11 @@ def test_feedback_loop_readiness_plane_marks_clean_release_truth_backed_closure_
         gate_path=Path("/tmp/FEEDBACK_LOOP_RELEASE_GATE.yaml"),
         feedback_progress_email_workflow=_base_feedback_progress_email_workflow(),
         feedback_progress_email_workflow_path=Path("/tmp/FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml"),
-        support_packets={"generated_at": "2026-04-12T10:00:00Z", "source": {}},
+        support_packets={
+            "generated_at": "2026-04-12T10:00:00Z",
+            "source": {},
+            "feedback_discovery_plan": _base_feedback_discovery_plan(),
+        },
         support_open_packet_count=0,
         support_open_non_external_packet_count=0,
         support_generated_at="2026-04-12T10:00:00Z",
@@ -719,6 +997,9 @@ def test_feedback_loop_readiness_plane_marks_clean_release_truth_backed_closure_
     assert plane["status"] == "ready"
     assert plane["evidence"]["support_open_non_external_packet_count"] == 0
     assert plane["evidence"]["feedback_progress_email_sender"] == "wageslave@chummer.run"
+    assert plane["evidence"]["feedback_discovery_gateway_ready"] is True
+    assert plane["evidence"]["feedback_discovery_ltd_system_ready"] is True
+    assert plane["evidence"]["feedback_discovery_route_counts"] == {"karma_forge_discovery": 1}
 
 
 def test_feedback_loop_readiness_plane_flags_release_truth_and_owner_gaps() -> None:
@@ -749,6 +1030,129 @@ def test_feedback_loop_readiness_plane_flags_release_truth_and_owner_gaps() -> N
     assert any("lack a named owner repo" in reason for reason in plane["reasons"])
     assert any("cached_packets_fallback mode" in reason for reason in plane["reasons"])
     assert any("email workflow" in reason.lower() for reason in plane["reasons"])
+    assert any("discovery gateway plan" in reason.lower() for reason in plane["reasons"])
+
+
+def test_feedback_loop_readiness_e2e_requires_ltd_discovery_system_exit_gate(tmp_path: Path) -> None:
+    readiness_module = _load_module()
+    support_module = _load_support_case_packets_module()
+    feedback_source = {
+        "items": [
+            {
+                "caseId": "feedback-karma-e2e",
+                "clusterKey": "feedback:karma:e2e",
+                "kind": "feedback",
+                "status": "accepted",
+                "title": "Campaign house rule edge economy",
+                "summary": "The table needs a house rule edge economy before the next run.",
+                "candidateOwnerRepo": "chummer6-hub",
+            }
+        ],
+    }
+
+    bad_ltd_registry = tmp_path / "bad-LTD_RUNTIME_AND_PROJECTION_REGISTRY.yaml"
+    _write_yaml(
+        bad_ltd_registry,
+        {
+            "key": "ltd_runtime_and_projection_registry",
+            "product_systems": {
+                "discovery_system": {
+                    "tools": ["ProductLift", "Deftform"],
+                    "contract": "KARMA_FORGE_DISCOVERY_LAB_WORKFLOWS.yaml",
+                }
+            },
+        },
+    )
+    good_ltd_registry = tmp_path / "good-LTD_RUNTIME_AND_PROJECTION_REGISTRY.yaml"
+    _write_yaml(
+        good_ltd_registry,
+        {
+            "key": "ltd_runtime_and_projection_registry",
+            "product_systems": {
+                "discovery_system": {
+                    "tools": _base_feedback_discovery_plan()["ltd_discovery_system_tools"],
+                    "contract": "KARMA_FORGE_DISCOVERY_LAB_WORKFLOWS.yaml",
+                }
+            },
+        },
+    )
+
+    original_ltd_paths = (
+        support_module.LTD_RUNTIME_AND_PROJECTION_REGISTRY_PATH,
+        support_module.CANONICAL_LTD_RUNTIME_AND_PROJECTION_REGISTRY_PATH,
+    )
+    try:
+        support_module.LTD_RUNTIME_AND_PROJECTION_REGISTRY_PATH = bad_ltd_registry
+        support_module.CANONICAL_LTD_RUNTIME_AND_PROJECTION_REGISTRY_PATH = bad_ltd_registry
+        blocked_packets = support_module.build_packets_payload(
+            feedback_source,
+            "unit",
+            release_channel_index={},
+        )
+        assert blocked_packets["feedback_discovery_plan"]["candidate_count"] == 1
+        assert blocked_packets["feedback_discovery_plan"]["ltd_discovery_system_ready"] is False
+
+        support_module.LTD_RUNTIME_AND_PROJECTION_REGISTRY_PATH = good_ltd_registry
+        support_module.CANONICAL_LTD_RUNTIME_AND_PROJECTION_REGISTRY_PATH = good_ltd_registry
+        ready_packets = support_module.build_packets_payload(
+            feedback_source,
+            "unit",
+            release_channel_index={},
+        )
+        assert ready_packets["feedback_discovery_plan"]["candidate_count"] == 1
+        assert ready_packets["feedback_discovery_plan"]["ltd_discovery_system_ready"] is True
+    finally:
+        (
+            support_module.LTD_RUNTIME_AND_PROJECTION_REGISTRY_PATH,
+            support_module.CANONICAL_LTD_RUNTIME_AND_PROJECTION_REGISTRY_PATH,
+        ) = original_ltd_paths
+
+    def evaluate(support_packets: dict) -> tuple[str, dict]:
+        summary = support_packets["summary"]
+        return readiness_module._feedback_loop_readiness_plane(
+            feedback_loop_gate=_e2e_feedback_loop_gate_with_one_open_discovery_case(),
+            gate_path=Path("/tmp/FEEDBACK_LOOP_RELEASE_GATE.yaml"),
+            feedback_progress_email_workflow=_base_feedback_progress_email_workflow(),
+            feedback_progress_email_workflow_path=Path("/tmp/FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml"),
+            support_packets=support_packets,
+            support_open_packet_count=summary["open_packet_count"],
+            support_open_non_external_packet_count=summary["open_non_external_packet_count"],
+            support_generated_at=support_packets["generated_at"],
+            support_generated_age_seconds=60,
+            support_source_refresh_mode="",
+            support_closure_waiting_on_release_truth=summary["closure_waiting_on_release_truth"],
+            support_update_required_misrouted_case_count=summary["update_required_misrouted_case_count"],
+            support_non_external_needs_human_response_count=summary["non_external_needs_human_response"],
+            support_non_external_packets_without_named_owner=summary["non_external_packets_without_named_owner"],
+            support_non_external_packets_without_lane=summary["non_external_packets_without_lane"],
+            unresolved_external_requests=0,
+            external_runbook_synced=True,
+        )
+
+    blocked_status, blocked_plane = evaluate(blocked_packets)
+    ready_status, ready_plane = evaluate(ready_packets)
+
+    assert blocked_status == "warning"
+    assert any("LTD discovery system registry" in reason for reason in blocked_plane["reasons"])
+    assert blocked_plane["evidence"]["feedback_discovery_gateway_ready"] is False
+    assert blocked_plane["evidence"]["feedback_discovery_ltd_system_ready"] is False
+    assert blocked_plane["evidence"]["feedback_discovery_ltd_missing_tools"] == [
+        "Signitic",
+        "FacePop",
+        "Icanpreneur",
+        "Lunacal",
+        "MetaSurvey",
+        "Teable",
+        "NextStep",
+        "Product Governor",
+        "chummer6-design",
+        "Emailit",
+    ]
+    assert ready_status == "ready"
+    assert ready_plane["evidence"]["feedback_discovery_gateway_ready"] is True
+    assert ready_plane["evidence"]["feedback_discovery_ltd_system_ready"] is True
+    assert ready_plane["evidence"]["feedback_discovery_ltd_missing_tools"] == []
+    assert ready_plane["evidence"]["feedback_discovery_route_counts"] == {"karma_forge_discovery": 1}
 
 
 def test_journey_local_blocker_routes_expands_desktop_executable_gate_local_findings() -> None:
@@ -1022,6 +1426,8 @@ def test_materialize_flagship_product_readiness_recovers_fleet_bucket_when_only_
     progress_history_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
     journey_gates_path = tmp_path / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
     support_packets_path = tmp_path / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+    external_runbook_path = tmp_path / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    external_commands_dir = tmp_path / ".codex-studio" / "published" / "external-proof-commands"
     compile_manifest_path = tmp_path / ".codex-studio" / "published" / "compile.manifest.json"
     external_proof_runbook_path = tmp_path / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
     supervisor_state_path = tmp_path / "state" / "chummer_design_supervisor" / "state.json"
@@ -1058,7 +1464,25 @@ def test_materialize_flagship_product_readiness_recovers_fleet_bucket_when_only_
     _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
     _write_json(progress_history_path, {"snapshot_count": 6})
     _write_json(journey_gates_path, _base_journey_gates())
-    _write_json(support_packets_path, {"generated_at": current_iso})
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso))
+    external_commands_dir.mkdir(parents=True, exist_ok=True)
+    (external_commands_dir / "noop-proof.sh").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    command_bundle = module.external_proof_command_bundle_fingerprint(external_commands_dir)
+    external_runbook_path.parent.mkdir(parents=True, exist_ok=True)
+    external_runbook_path.write_text(
+        "\n".join(
+            [
+                "# External Proof Runbook",
+                f"- generated_at: {current_iso}",
+                f"- plan_generated_at: {current_iso}",
+                f"- release_channel_generated_at: {current_iso}",
+                f"- command_bundle_sha256: {command_bundle['sha256']}",
+                f"- command_bundle_file_count: {command_bundle['file_count']}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
     _write_json(
         supervisor_state_path,
@@ -1252,6 +1676,7 @@ def test_materialize_flagship_product_readiness_uses_effective_install_journey_a
     releases_json_path = tmp_path / "registry" / "releases.json"
 
     _write_yaml(acceptance_path, _base_acceptance())
+    _write_horizon_mirror(acceptance_path.parent, module)
     _write_yaml(status_plane_path, _base_status_plane())
     _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
     _write_json(progress_history_path, {"snapshot_count": 6})
@@ -1266,7 +1691,7 @@ def test_materialize_flagship_product_readiness_uses_effective_install_journey_a
         "owner_repos": ["chummer6-hub", "fleet"],
     }
     _write_json(journey_gates_path, journey_gates)
-    _write_json(support_packets_path, {"generated_at": current_iso})
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso))
     _write_json(supervisor_state_path, _base_supervisor_state())
     _write_json(ooda_state_path, _base_ooda_state())
     _write_json(
@@ -1788,20 +2213,13 @@ def test_materialize_flagship_product_readiness_uses_release_proof_journey_overr
             ],
         },
     )
-    _write_json(support_packets_path, {"generated_at": current_iso, "summary": {}})
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso, summary={}))
     _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
-    external_proof_runbook_path.parent.mkdir(parents=True, exist_ok=True)
-    external_proof_runbook_path.write_text(
-        "\n".join(
-            [
-                "# External Proof Runbook",
-                f"- generated_at: {current_iso}",
-                f"- plan_generated_at: {current_iso}",
-                f"- release_channel_generated_at: {current_iso}",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
+    _write_synced_external_runbook(
+        module,
+        external_proof_runbook_path,
+        external_proof_runbook_path.parent / "external-proof-commands",
+        current_iso,
     )
     supervisor_state = _base_supervisor_state()
     supervisor_state["updated_at"] = current_iso
@@ -1913,6 +2331,7 @@ def test_materialize_flagship_product_readiness_recovers_fleet_loop_when_only_ro
 
     current_iso = _now_iso()
     _write_yaml(acceptance_path, _base_acceptance())
+    _write_horizon_mirror(acceptance_path.parent, module)
     _write_yaml(status_plane_path, _base_status_plane())
     _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
     _write_json(progress_history_path, {"snapshot_count": 6})
@@ -1954,20 +2373,13 @@ def test_materialize_flagship_product_readiness_recovers_fleet_loop_when_only_ro
             ],
         },
     )
-    _write_json(support_packets_path, {"generated_at": current_iso, "summary": {}})
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso, summary={}))
     _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
-    external_proof_runbook_path.parent.mkdir(parents=True, exist_ok=True)
-    external_proof_runbook_path.write_text(
-        "\n".join(
-            [
-                "# External Proof Runbook",
-                f"- generated_at: {current_iso}",
-                f"- plan_generated_at: {current_iso}",
-                f"- release_channel_generated_at: {current_iso}",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
+    _write_synced_external_runbook(
+        module,
+        external_proof_runbook_path,
+        external_proof_runbook_path.parent / "external-proof-commands",
+        current_iso,
     )
     supervisor_state = _base_supervisor_state()
     supervisor_state["updated_at"] = current_iso
@@ -2239,6 +2651,7 @@ def test_materialize_flagship_product_readiness_external_only_requires_no_deskto
 def test_materialize_flagship_product_readiness_recovers_fleet_when_only_blocked_journeys_are_desktop_scoped(
     tmp_path: Path,
 ) -> None:
+    module = _load_module()
     current_iso = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
@@ -2374,18 +2787,11 @@ def test_materialize_flagship_product_readiness_recovers_fleet_when_only_blocked
         },
     )
     _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
-    external_proof_runbook_path.parent.mkdir(parents=True, exist_ok=True)
-    external_proof_runbook_path.write_text(
-        "\n".join(
-            [
-                "# External Proof Runbook",
-                f"- generated_at: {current_iso}",
-                f"- plan_generated_at: {current_iso}",
-                f"- release_channel_generated_at: {current_iso}",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
+    _write_synced_external_runbook(
+        module,
+        external_proof_runbook_path,
+        external_proof_runbook_path.parent / "external-proof-commands",
+        current_iso,
     )
     _write_json(
         supervisor_state_path,
@@ -2728,6 +3134,7 @@ def test_journey_local_reason_is_desktop_scoped_for_executable_gate_marker_contr
 def test_materialize_flagship_product_readiness_allows_ooda_supervisor_fallback_to_current_supervisor_loop(
     tmp_path: Path,
 ) -> None:
+    module = _load_module()
     current_iso = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
@@ -2829,18 +3236,11 @@ def test_materialize_flagship_product_readiness_allows_ooda_supervisor_fallback_
         },
     )
     _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
-    external_proof_runbook_path.parent.mkdir(parents=True, exist_ok=True)
-    external_proof_runbook_path.write_text(
-        "\n".join(
-            [
-                "# External Proof Runbook",
-                f"- generated_at: {current_iso}",
-                f"- plan_generated_at: {current_iso}",
-                f"- release_channel_generated_at: {current_iso}",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
+    _write_synced_external_runbook(
+        module,
+        external_proof_runbook_path,
+        external_proof_runbook_path.parent / "external-proof-commands",
+        current_iso,
     )
     _write_json(
         supervisor_state_path,
@@ -6204,7 +6604,7 @@ def test_materialize_flagship_product_readiness_requires_strong_workflow_executi
     _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
     _write_json(progress_history_path, {"snapshot_count": 6})
     _write_json(journey_gates_path, _base_journey_gates())
-    _write_json(support_packets_path, {"generated_at": current_iso})
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso))
     _write_json(supervisor_state_path, _base_supervisor_state())
     _write_json(ooda_state_path, _base_ooda_state())
     _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
@@ -7715,6 +8115,7 @@ def test_materialize_flagship_product_readiness_accepts_complete_supervisor_mode
 
 
 def test_materialize_flagship_product_readiness_accepts_hard_focus_successor_wave_operator_proxy(tmp_path: Path) -> None:
+    module = _load_module()
     current_iso = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
@@ -7741,8 +8142,14 @@ def test_materialize_flagship_product_readiness_accepts_hard_focus_successor_wav
     _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
     _write_json(progress_history_path, {"snapshot_count": 6})
     _write_json(journey_gates_path, _base_journey_gates())
-    _write_json(support_packets_path, {"generated_at": current_iso})
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso))
     _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
+    _write_synced_external_runbook(
+        module,
+        tmp_path / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md",
+        tmp_path / ".codex-studio" / "published" / "external-proof-commands",
+        current_iso,
+    )
     supervisor_state = _base_supervisor_state()
     supervisor_state["updated_at"] = current_iso
     supervisor_state["mode"] = "successor_wave"
@@ -8166,6 +8573,8 @@ def test_select_best_supervisor_state_prefers_live_shard_flagship_over_stale_agg
 
 
 def test_materialize_flagship_product_readiness_recovers_supervisor_from_active_shards_and_runtime_profile(tmp_path: Path) -> None:
+    module = _load_module()
+    current_iso = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
@@ -8194,6 +8603,12 @@ def test_materialize_flagship_product_readiness_recovers_supervisor_from_active_
     _write_json(journey_gates_path, _base_journey_gates())
     _write_json(support_packets_path, {"generated_at": "2026-04-01T08:00:00Z"})
     _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
+    _write_synced_external_runbook(
+        module,
+        tmp_path / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md",
+        tmp_path / ".codex-studio" / "published" / "external-proof-commands",
+        current_iso,
+    )
     _write_json(
         supervisor_state_path,
         {
@@ -8310,12 +8725,14 @@ def test_materialize_flagship_product_readiness_recovers_supervisor_from_active_
     assert evidence["active_shards_count"] == 0
     assert evidence["active_shards_manifest_kind"] == "configured_shard_topology"
     assert evidence["configured_shards_count"] == 2
-    assert payload["evidence_sources"]["active_shards"].endswith("/active_shards.json")
+    assert "active_shards_path" not in evidence
+    assert "active_shards" not in payload["evidence_sources"]
 
 
 def test_materialize_flagship_product_readiness_accepts_current_successor_wave_steering_without_completion_audit(
     tmp_path: Path,
 ) -> None:
+    module = _load_module()
     current_iso = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
@@ -8342,8 +8759,14 @@ def test_materialize_flagship_product_readiness_accepts_current_successor_wave_s
     _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
     _write_json(progress_history_path, {"snapshot_count": 6})
     _write_json(journey_gates_path, _base_journey_gates())
-    _write_json(support_packets_path, {"generated_at": current_iso})
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso))
     _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
+    _write_synced_external_runbook(
+        module,
+        tmp_path / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md",
+        tmp_path / ".codex-studio" / "published" / "external-proof-commands",
+        current_iso,
+    )
     _write_json(
         supervisor_state_path,
         {
@@ -8480,8 +8903,14 @@ def test_materialize_flagship_product_readiness_accepts_current_completion_revie
     _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
     _write_json(progress_history_path, {"snapshot_count": 6})
     _write_json(journey_gates_path, _base_journey_gates())
-    _write_json(support_packets_path, {"generated_at": current_iso})
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso))
     _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
+    _write_synced_external_runbook(
+        module,
+        tmp_path / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md",
+        tmp_path / ".codex-studio" / "published" / "external-proof-commands",
+        current_iso,
+    )
     supervisor_state = _base_supervisor_state()
     supervisor_state["updated_at"] = current_iso
     supervisor_state["mode"] = "completion_review"
@@ -8578,6 +9007,167 @@ def test_materialize_flagship_product_readiness_accepts_current_completion_revie
     assert evidence["supervisor_mode"] == "completion_review"
     assert evidence["supervisor_completion_status"] == "pass"
     assert evidence["supervisor_recent_enough"] is True
+
+
+def test_materialize_flagship_product_readiness_accepts_live_ooda_progress_when_rollup_is_stale(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
+    out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+    status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
+    progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
+    progress_history_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
+    journey_gates_path = tmp_path / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
+    support_packets_path = tmp_path / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+    external_runbook_path = tmp_path / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    external_commands_dir = tmp_path / ".codex-studio" / "published" / "external-proof-commands"
+    compile_manifest_path = tmp_path / ".codex-studio" / "published" / "compile.manifest.json"
+    supervisor_state_path = tmp_path / "state" / "chummer_design_supervisor" / "state.json"
+    ooda_state_path = tmp_path / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
+    ui_local_release_path = tmp_path / "ui" / "UI_LOCAL_RELEASE_PROOF.generated.json"
+    ui_exit_gate_path = tmp_path / "ui" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+    missing_ui_receipt_path = tmp_path / "ui" / "missing-receipt.json"
+    hub_local_release_path = tmp_path / "hub" / "HUB_LOCAL_RELEASE_PROOF.generated.json"
+    mobile_local_release_path = tmp_path / "mobile" / "MOBILE_LOCAL_RELEASE_PROOF.generated.json"
+    release_channel_path = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    releases_json_path = tmp_path / "registry" / "releases.json"
+
+    _write_yaml(acceptance_path, _base_acceptance())
+    _write_yaml(status_plane_path, _base_status_plane())
+    _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
+    _write_json(progress_history_path, {"snapshot_count": 6})
+    _write_json(journey_gates_path, _base_journey_gates())
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso))
+    external_commands_dir.mkdir(parents=True, exist_ok=True)
+    (external_commands_dir / "noop-proof.sh").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    command_bundle = module.external_proof_command_bundle_fingerprint(external_commands_dir)
+    external_runbook_path.parent.mkdir(parents=True, exist_ok=True)
+    external_runbook_path.write_text(
+        "\n".join(
+            [
+                "# External Proof Runbook",
+                f"- generated_at: {current_iso}",
+                f"- plan_generated_at: {current_iso}",
+                f"- release_channel_generated_at: {current_iso}",
+                f"- command_bundle_sha256: {command_bundle['sha256']}",
+                f"- command_bundle_file_count: {command_bundle['file_count']}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
+    supervisor_state = _base_supervisor_state()
+    supervisor_state["updated_at"] = current_iso
+    supervisor_state["mode"] = "flagship_product"
+    supervisor_state["focus_profiles"] = ["top_flagship_grade", "whole_project_frontier"]
+    supervisor_state["completion_audit"] = {"status": "pass"}
+    _write_json(supervisor_state_path, supervisor_state)
+    _write_json(
+        ooda_state_path,
+        {
+            "controller": "up",
+            "supervisor": "up",
+            "aggregate_stale": True,
+            "aggregate_timestamp_stale": True,
+            "active_runs_count": 1,
+            "active_shards": [
+                {
+                    "name": "shard-3",
+                    "mode": "flagship_product",
+                    "active_run": True,
+                    "active_run_id": "20260423T145459Z-shard-3",
+                    "worker_last_output_at": current_iso,
+                    "updated_at": current_iso,
+                }
+            ],
+        },
+    )
+    _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
+    _write_json(ui_exit_gate_path, {"contract_name": "chummer6-ui.linux_desktop_exit_gate", "status": "passed"})
+    _write_json(hub_local_release_path, {"contract_name": "chummer6-hub.local_release_proof", "status": "passed"})
+    _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
+    _write_json(
+        release_channel_path,
+        {
+            "status": "published",
+            "releaseProof": {"status": "passed"},
+            "artifacts": [{"head": "avalonia", "platform": "linux"}],
+        },
+    )
+    _write_json(releases_json_path, {"status": "published"})
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(tmp_path),
+            "--out",
+            str(out_path),
+            "--mirror-out",
+            str(mirror_path),
+            "--acceptance",
+            str(acceptance_path),
+            "--status-plane",
+            str(status_plane_path),
+            "--progress-report",
+            str(progress_report_path),
+            "--progress-history",
+            str(progress_history_path),
+            "--journey-gates",
+            str(journey_gates_path),
+            "--support-packets",
+            str(support_packets_path),
+            "--external-proof-runbook",
+            str(external_runbook_path),
+            "--supervisor-state",
+            str(supervisor_state_path),
+            "--ooda-state",
+            str(ooda_state_path),
+            "--ui-local-release-proof",
+            str(ui_local_release_path),
+            "--ui-linux-exit-gate",
+            str(ui_exit_gate_path),
+            "--ui-executable-exit-gate",
+            str(missing_ui_receipt_path),
+            "--ui-workflow-execution-gate",
+            str(missing_ui_receipt_path),
+            "--ui-visual-familiarity-exit-gate",
+            str(missing_ui_receipt_path),
+            "--ui-workflow-parity-proof",
+            str(missing_ui_receipt_path),
+            "--sr4-workflow-parity-proof",
+            str(missing_ui_receipt_path),
+            "--sr6-workflow-parity-proof",
+            str(missing_ui_receipt_path),
+            "--sr4-sr6-frontier-receipt",
+            str(missing_ui_receipt_path),
+            "--hub-local-release-proof",
+            str(hub_local_release_path),
+            "--mobile-local-release-proof",
+            str(mobile_local_release_path),
+            "--release-channel",
+            str(release_channel_path),
+            "--releases-json",
+            str(releases_json_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    evidence = payload["coverage_details"]["fleet_and_operator_loop"]["evidence"]
+    reasons = payload["coverage_details"]["fleet_and_operator_loop"]["reasons"]
+    assert not any("OODA monitor" in reason for reason in reasons)
+    assert evidence["ooda_aggregate_stale"] is True
+    assert evidence["ooda_timestamp_stale"] is True
+    assert evidence["ooda_live_active_progress"] is True
 
 
 def test_materialize_flagship_product_readiness_accepts_loop_mode_with_last_run_pass_proxy(tmp_path: Path) -> None:
@@ -8882,6 +9472,98 @@ def test_recover_ooda_state_from_active_shards_marks_loop_up() -> None:
     assert payload["aggregate_timestamp_stale"] is False
     assert payload["frontier_ids"] == [3449507998]
     assert payload["recovered_from_active_shards"] is True
+    assert payload["recovery_source"] == "active_shards"
+
+
+def test_recover_ooda_state_from_configured_shard_topology_marks_loop_up() -> None:
+    module = _load_module()
+
+    payload = module._recover_ooda_state_from_active_shards(
+        {
+            "manifest_kind": "configured_shard_topology",
+            "active_shards": [],
+            "configured_shards": [
+                {"name": "shard-1", "mode": "flagship_product"},
+                {"name": "shard-2", "mode": "flagship_product"},
+            ],
+        },
+        active_shards_recent=True,
+    )
+
+    assert payload["controller"] == "up"
+    assert payload["supervisor"] == "up"
+    assert payload["aggregate_stale"] is False
+    assert payload["aggregate_timestamp_stale"] is False
+    assert [item["name"] for item in payload["last_observed_shards"]] == ["shard-1", "shard-2"]
+    assert payload["recovered_from_active_shards"] is True
+    assert payload["recovery_source"] == "configured_shard_topology"
+
+
+def test_materialize_flagship_product_readiness_recovers_stale_ooda_from_configured_shard_topology(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        active_shards_payload={
+            "manifest_kind": "configured_shard_topology",
+            "configured_shard_count": 2,
+            "configured_shards": [{"name": "shard-1"}, {"name": "shard-2"}],
+            "active_run_count": 0,
+            "active_shards": [],
+        },
+        ooda_state_payload={
+            "controller": "up",
+            "supervisor": "up",
+            "aggregate_stale": True,
+            "aggregate_timestamp_stale": True,
+        },
+    )
+
+    assert payload["coverage"]["fleet_and_operator_loop"] == "warning"
+    evidence = payload["coverage_details"]["fleet_and_operator_loop"]["evidence"]
+    assert evidence["ooda_state_recovered_from_active_shards"] is True
+    assert evidence["ooda_state_recovery_source"] == "configured_shard_topology"
+    assert evidence["ooda_aggregate_stale"] is False
+    assert evidence["ooda_timestamp_stale"] is False
+    assert not any("OODA monitor" in reason for reason in payload["coverage_details"]["fleet_and_operator_loop"]["reasons"])
+
+
+def test_materialize_flagship_product_readiness_accepts_live_ooda_progress_when_aggregate_timestamps_lag(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
+
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        ooda_state_payload={
+            "controller": "up",
+            "supervisor": "up",
+            "aggregate_stale": True,
+            "aggregate_timestamp_stale": True,
+            "active_runs_count": 1,
+            "active_shards": [
+                {
+                    "name": "shard-4",
+                    "mode": "flagship_product",
+                    "active_run": True,
+                    "worker_last_output_at": current_iso,
+                }
+            ],
+        },
+    )
+
+    evidence = payload["coverage_details"]["fleet_and_operator_loop"]["evidence"]
+    reasons = payload["coverage_details"]["fleet_and_operator_loop"]["reasons"]
+    assert not any("OODA monitor" in reason for reason in reasons)
+    assert evidence["ooda_aggregate_stale"] is True
+    assert evidence["ooda_timestamp_stale"] is True
+    assert evidence["ooda_live_active_progress"] is True
+    assert evidence["ooda_steady_complete_quiet"] is False
 
 
 def test_materialize_flagship_product_readiness_fail_closes_stale_executable_gate_freshness_evidence(tmp_path: Path) -> None:
@@ -9081,7 +9763,7 @@ def test_materialize_flagship_product_readiness_accepts_stale_flagship_gate_age_
     _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
     _write_json(progress_history_path, {"snapshot_count": 6})
     _write_json(journey_gates_path, _base_journey_gates())
-    _write_json(support_packets_path, {"generated_at": current_iso})
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso))
     _write_json(supervisor_state_path, _base_supervisor_state())
     _write_json(ooda_state_path, _base_ooda_state())
     _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
@@ -10725,7 +11407,7 @@ def test_materialize_flagship_product_readiness_recovers_desktop_lane_from_effec
     journey_gates["summary"]["blocked_count"] = 1
     journey_gates["summary"]["blocked_with_local_count"] = 1
     _write_json(journey_gates_path, journey_gates)
-    _write_json(support_packets_path, {"generated_at": current_iso, "summary": {}})
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso, summary={}))
     _write_json(supervisor_state_path, _base_supervisor_state())
     _write_json(ooda_state_path, _base_ooda_state())
     _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
@@ -11264,20 +11946,13 @@ def test_materialize_flagship_product_readiness_recovers_desktop_and_fleet_from_
             ],
         },
     )
-    _write_json(support_packets_path, {"generated_at": current_iso})
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso))
     _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
-    external_runbook_path.parent.mkdir(parents=True, exist_ok=True)
-    external_runbook_path.write_text(
-        "\n".join(
-            [
-                "# External Proof Runbook",
-                f"- generated_at: {current_iso}",
-                f"- plan_generated_at: {current_iso}",
-                f"- release_channel_generated_at: {current_iso}",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
+    _write_synced_external_runbook(
+        module,
+        external_runbook_path,
+        external_runbook_path.parent / "external-proof-commands",
+        current_iso,
     )
     supervisor_state = _base_supervisor_state()
     supervisor_state["updated_at"] = current_iso

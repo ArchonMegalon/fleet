@@ -761,6 +761,44 @@ def _feedback_loop_readiness_plane(
     required_feedback_progress_sender_email = str(
         thresholds.get("required_feedback_progress_sender_email") or "wageslave@chummer.run"
     ).strip().lower()
+    require_feedback_discovery_gateway = _boolish(
+        thresholds.get("require_feedback_discovery_gateway"), default=True
+    )
+    require_feedback_discovery_ltd_registry = _boolish(
+        thresholds.get("require_feedback_discovery_ltd_registry"), default=True
+    )
+    required_feedback_discovery_route = str(
+        thresholds.get("required_feedback_discovery_route") or "karma_forge_discovery"
+    ).strip()
+    required_feedback_discovery_first_part_steps = [
+        str(item or "").strip()
+        for item in (
+            _as_string_list(thresholds.get("required_feedback_discovery_first_part_steps"))
+            or ["public_signal", "structured_prescreen", "adaptive_interview"]
+        )
+        if str(item or "").strip()
+    ]
+    required_feedback_discovery_tools = [
+        str(item or "").strip()
+        for item in (
+            _as_string_list(thresholds.get("required_feedback_discovery_tools"))
+            or [
+                "ProductLift",
+                "Signitic",
+                "FacePop",
+                "Deftform",
+                "Icanpreneur",
+                "Lunacal",
+                "MetaSurvey",
+                "Teable",
+                "NextStep",
+                "Product Governor",
+                "chummer6-design",
+                "Emailit",
+            ]
+        )
+        if str(item or "").strip()
+    ]
     release_blocking = _boolish(feedback_loop_gate.get("release_blocking"), default=False)
 
     workflow_sender_email = str(
@@ -785,6 +823,58 @@ def _feedback_loop_readiness_plane(
         feedback_progress_email_workflow.get("e2e_gate")
         if isinstance(feedback_progress_email_workflow.get("e2e_gate"), dict)
         else {}
+    )
+    feedback_discovery_plan = (
+        support_packets.get("feedback_discovery_plan")
+        if isinstance(support_packets.get("feedback_discovery_plan"), dict)
+        else {}
+    )
+    discovery_route_counts = (
+        feedback_discovery_plan.get("route_counts")
+        if isinstance(feedback_discovery_plan.get("route_counts"), dict)
+        else {}
+    )
+    discovery_candidate_count = _nonnegative_int(feedback_discovery_plan.get("candidate_count"), 0)
+    discovery_karma_forge_candidate_count = _nonnegative_int(
+        feedback_discovery_plan.get("karma_forge_candidate_count"), 0
+    )
+    discovery_first_part_routed_count = _nonnegative_int(
+        feedback_discovery_plan.get("first_part_routed_count"), 0
+    )
+    discovery_missing_route_count = _nonnegative_int(feedback_discovery_plan.get("missing_route_count"), 0)
+    discovery_missing_next_action_count = _nonnegative_int(
+        feedback_discovery_plan.get("missing_next_action_count"), 0
+    )
+    discovery_ltd_system_ready = _boolish(
+        feedback_discovery_plan.get("ltd_discovery_system_ready"), default=False
+    )
+    discovery_ltd_missing_tools = [
+        str(item or "").strip()
+        for item in _as_string_list(feedback_discovery_plan.get("ltd_discovery_system_missing_tools"))
+        if str(item or "").strip()
+    ]
+    discovery_required_first_part_steps = {
+        str(item or "").strip().lower()
+        for item in _as_string_list(feedback_discovery_plan.get("required_first_part_steps"))
+        if str(item or "").strip()
+    }
+    discovery_required_tools = {
+        str(item or "").strip().casefold()
+        for item in _as_string_list(feedback_discovery_plan.get("required_tools"))
+        if str(item or "").strip()
+    }
+    missing_required_discovery_steps = sorted(
+        step
+        for step in required_feedback_discovery_first_part_steps
+        if step.lower() not in discovery_required_first_part_steps
+    )
+    missing_required_discovery_tools = sorted(
+        tool
+        for tool in required_feedback_discovery_tools
+        if tool.casefold() not in discovery_required_tools
+    )
+    required_discovery_route_count = _nonnegative_int(
+        discovery_route_counts.get(required_feedback_discovery_route), 0
     )
 
     reasons: List[str] = []
@@ -888,6 +978,54 @@ def _feedback_loop_readiness_plane(
                 reasons.append("Feedback progress email workflow E2E gate does not require the full staged send sequence.")
             if not _boolish(workflow_e2e_gate.get("fail_closed"), default=False):
                 reasons.append("Feedback progress email workflow E2E gate is not fail-closed.")
+    if require_feedback_discovery_gateway and not feedback_discovery_plan:
+        reasons.append("Feedback discovery gateway plan is missing from support packets.")
+    elif require_feedback_discovery_gateway:
+        if not _boolish(feedback_discovery_plan.get("workflow_ready"), default=False):
+            reasons.append("Feedback discovery gateway workflow is missing or incomplete.")
+        if missing_required_discovery_steps:
+            reasons.append(
+                "Feedback discovery gateway is missing first-part steps: "
+                f"{', '.join(missing_required_discovery_steps)}."
+            )
+        if missing_required_discovery_tools:
+            reasons.append(
+                "Feedback discovery gateway is missing required tool lanes: "
+                f"{', '.join(missing_required_discovery_tools)}."
+            )
+        if discovery_missing_route_count > 0:
+            reasons.append(
+                f"Feedback discovery gateway has {discovery_missing_route_count} routed candidates without a route id."
+            )
+        if discovery_missing_next_action_count > 0:
+            reasons.append(
+                "Feedback discovery gateway has routed candidates without a concrete next action: "
+                f"{discovery_missing_next_action_count}."
+            )
+        if discovery_candidate_count > 0 and discovery_first_part_routed_count < discovery_candidate_count:
+            reasons.append(
+                "Feedback discovery gateway has candidates not yet routed into the first-part loop: "
+                f"{discovery_first_part_routed_count} < {discovery_candidate_count}."
+            )
+        if require_feedback_discovery_ltd_registry and not discovery_ltd_system_ready:
+            missing_ltd_suffix = (
+                f" Missing tools: {', '.join(discovery_ltd_missing_tools)}."
+                if discovery_ltd_missing_tools
+                else ""
+            )
+            reasons.append(
+                "Feedback discovery gateway is not backed by the LTD discovery system registry."
+                f"{missing_ltd_suffix}"
+            )
+        if (
+            required_feedback_discovery_route
+            and discovery_karma_forge_candidate_count > 0
+            and required_discovery_route_count <= 0
+        ):
+            reasons.append(
+                "Feedback discovery gateway has Karma Forge candidates without the required route "
+                f"`{required_feedback_discovery_route}`."
+            )
 
     positives = (
         int(bool(feedback_loop_gate))
@@ -930,6 +1068,25 @@ def _feedback_loop_readiness_plane(
         + int((not require_named_owner_on_non_external_packets) or support_non_external_packets_without_named_owner == 0)
         + int((not require_named_lane_on_non_external_packets) or support_non_external_packets_without_lane == 0)
         + int(unresolved_external_requests == 0 or not allow_external_backlog_only_with_synced_runbook or external_runbook_synced)
+        + int((not require_feedback_discovery_gateway) or bool(feedback_discovery_plan))
+        + int(
+            (not require_feedback_discovery_gateway)
+            or _boolish(feedback_discovery_plan.get("workflow_ready"), default=False)
+        )
+        + int((not require_feedback_discovery_gateway) or not missing_required_discovery_steps)
+        + int((not require_feedback_discovery_gateway) or not missing_required_discovery_tools)
+        + int((not require_feedback_discovery_gateway) or discovery_missing_route_count == 0)
+        + int((not require_feedback_discovery_gateway) or discovery_missing_next_action_count == 0)
+        + int(
+            (not require_feedback_discovery_gateway)
+            or (not require_feedback_discovery_ltd_registry)
+            or discovery_ltd_system_ready
+        )
+        + int(
+            (not require_feedback_discovery_gateway)
+            or discovery_candidate_count == 0
+            or discovery_first_part_routed_count >= discovery_candidate_count
+        )
     )
     status, plane = _coverage_entry(
         positives=positives,
@@ -953,6 +1110,44 @@ def _feedback_loop_readiness_plane(
             "feedback_progress_email_required_receipt_transport": str(workflow_dispatch_contract.get("required_receipt_transport") or "").strip(),
             "feedback_progress_email_required_receipt_fields": sorted(dispatch_required_receipt_fields),
             "feedback_progress_email_e2e_gate_present": bool(workflow_e2e_gate),
+            "feedback_discovery_gateway_present": bool(feedback_discovery_plan),
+            "feedback_discovery_gateway_ready": bool(
+                feedback_discovery_plan
+                and _boolish(feedback_discovery_plan.get("workflow_ready"), default=False)
+                and not missing_required_discovery_steps
+                and not missing_required_discovery_tools
+                and discovery_missing_route_count == 0
+                and discovery_missing_next_action_count == 0
+                and ((not require_feedback_discovery_ltd_registry) or discovery_ltd_system_ready)
+                and (
+                    discovery_candidate_count == 0
+                    or discovery_first_part_routed_count >= discovery_candidate_count
+                )
+            ),
+            "feedback_discovery_candidate_count": discovery_candidate_count,
+            "feedback_discovery_karma_forge_candidate_count": discovery_karma_forge_candidate_count,
+            "feedback_discovery_first_part_routed_count": discovery_first_part_routed_count,
+            "feedback_discovery_missing_route_count": discovery_missing_route_count,
+            "feedback_discovery_missing_next_action_count": discovery_missing_next_action_count,
+            "feedback_discovery_ltd_registry_path": str(
+                feedback_discovery_plan.get("ltd_registry_path") or ""
+            ).strip(),
+            "feedback_discovery_ltd_registry_key": str(
+                feedback_discovery_plan.get("ltd_registry_key") or ""
+            ).strip(),
+            "feedback_discovery_ltd_product_system": str(
+                feedback_discovery_plan.get("ltd_product_system") or ""
+            ).strip(),
+            "feedback_discovery_ltd_system_ready": discovery_ltd_system_ready,
+            "feedback_discovery_ltd_missing_tools": discovery_ltd_missing_tools,
+            "feedback_discovery_ltd_tools": [
+                str(item or "").strip()
+                for item in _as_string_list(feedback_discovery_plan.get("ltd_discovery_system_tools"))
+                if str(item or "").strip()
+            ],
+            "feedback_discovery_route_counts": dict(discovery_route_counts),
+            "feedback_discovery_required_first_part_steps": sorted(discovery_required_first_part_steps),
+            "feedback_discovery_required_tools": sorted(discovery_required_tools),
             "support_generated_at": support_generated_at,
             "support_generated_age_seconds": support_generated_age_seconds,
             "support_source_refresh_mode": support_source_refresh_mode,
@@ -979,6 +1174,11 @@ def _feedback_loop_readiness_plane(
                 "require_feedback_progress_email_e2e_gate": require_feedback_progress_email_e2e_gate,
                 "require_feedback_progress_email_decision_awards": require_feedback_progress_email_decision_awards,
                 "required_feedback_progress_sender_email": required_feedback_progress_sender_email,
+                "require_feedback_discovery_gateway": require_feedback_discovery_gateway,
+                "require_feedback_discovery_ltd_registry": require_feedback_discovery_ltd_registry,
+                "required_feedback_discovery_route": required_feedback_discovery_route,
+                "required_feedback_discovery_first_part_steps": required_feedback_discovery_first_part_steps,
+                "required_feedback_discovery_tools": required_feedback_discovery_tools,
             },
         },
         hard_fail=not bool(feedback_loop_gate) or not bool(support_generated_at),
@@ -1408,6 +1608,18 @@ def windows_exit_gate_passed(payload: Dict[str, Any]) -> bool:
     return bool(checks.get("embedded_payload_marker_present")) and bool(checks.get("embedded_sample_marker_present"))
 
 
+def aggregate_windows_exit_gate_passed(payload: Dict[str, Any], *, tuple_key: str = "avalonia:win-x64") -> bool:
+    if not proof_passed(payload, expected_contract="chummer6-ui.desktop_executable_exit_gate"):
+        return False
+    evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
+    statuses = evidence.get("windows_statuses") if isinstance(evidence.get("windows_statuses"), dict) else {}
+    if str(statuses.get(tuple_key) or "").strip().lower() not in {"pass", "passed", "ready"}:
+        return False
+    gates = evidence.get("windows_gates") if isinstance(evidence.get("windows_gates"), dict) else {}
+    gate = gates.get(tuple_key) if isinstance(gates.get(tuple_key), dict) else {}
+    return bool(gate.get("embedded_payload_marker_present")) and bool(gate.get("embedded_sample_marker_present"))
+
+
 def _as_string_list(value: Any) -> List[str]:
     if not isinstance(value, list):
         return []
@@ -1759,6 +1971,64 @@ def _effective_journey_readiness(
         "external_proof_request_count": len(filtered_external_proof_requests),
         "has_relevant_external_blockers": has_relevant_external_blockers,
     }
+
+
+def _owner_scoped_journey_effective_readiness(
+    journey_id: str,
+    effective_readiness: Dict[str, Any],
+    *,
+    journey_local_blocker_counts: Dict[str, int],
+    journey_local_blocker_route_rows: Sequence[Dict[str, Any]],
+    coverage_owner_repos: Sequence[str],
+) -> Dict[str, Any]:
+    base_state = str(effective_readiness.get("effective_state") or effective_readiness.get("state") or "").strip()
+    total_local_blocker_count = int(journey_local_blocker_counts.get(journey_id) or 0)
+    journey_routes = [
+        dict(row)
+        for row in journey_local_blocker_route_rows
+        if isinstance(row, dict) and str(row.get("journey_id") or "").strip() == journey_id
+    ]
+    routed_local_blocker_count = len(journey_routes)
+    coverage_owner_repo_keys = {
+        str(item).strip().lower()
+        for item in coverage_owner_repos
+        if str(item).strip()
+    }
+    routed_owner_repos = sorted(
+        {
+            str(row.get("owner_repo") or "").strip()
+            for row in journey_routes
+            if str(row.get("owner_repo") or "").strip()
+        }
+    )
+    coverage_owner_routed_blocker_count = sum(
+        1
+        for row in journey_routes
+        if str(row.get("owner_repo") or "").strip().lower() in coverage_owner_repo_keys
+    )
+    unrelated_routed_local_only = (
+        base_state == "blocked"
+        and total_local_blocker_count > 0
+        and routed_local_blocker_count >= total_local_blocker_count
+        and coverage_owner_routed_blocker_count == 0
+        and int(effective_readiness.get("local_reason_count") or 0) > 0
+        and int(effective_readiness.get("external_proof_request_count") or 0) == 0
+        and not bool(effective_readiness.get("has_relevant_external_blockers"))
+    )
+    owner_scoped_effective_state = "ready" if base_state == "ready" or unrelated_routed_local_only else base_state
+    result = dict(effective_readiness)
+    result.update(
+        {
+            "owner_scoped_effective_state": owner_scoped_effective_state,
+            "owner_scoped_unrelated_routed_local_only": unrelated_routed_local_only,
+            "owner_scoped_coverage_owner_repos": sorted(coverage_owner_repo_keys),
+            "owner_scoped_total_local_blocker_count": total_local_blocker_count,
+            "owner_scoped_routed_local_blocker_count": routed_local_blocker_count,
+            "owner_scoped_coverage_owner_routed_blocker_count": coverage_owner_routed_blocker_count,
+            "owner_scoped_routed_owner_repos": routed_owner_repos,
+        }
+    )
+    return result
 
 
 def _as_int_list(value: Any) -> List[int]:
@@ -2751,6 +3021,37 @@ def _ooda_steady_complete_quiet(ooda_state: Dict[str, Any]) -> bool:
     return True
 
 
+def _ooda_live_active_progress(ooda_state: Dict[str, Any]) -> bool:
+    try:
+        active_runs_count = int(ooda_state.get("active_runs_count") or 0)
+    except (TypeError, ValueError):
+        active_runs_count = 0
+    shards = ooda_state.get("active_shards") or ooda_state.get("last_observed_shards") or []
+    if active_runs_count <= 0 and (not isinstance(shards, list) or not shards):
+        return False
+    if not isinstance(shards, list):
+        return False
+
+    live_modes = {"loop", "sharded", "flagship_product", "successor_wave"}
+    for shard in shards:
+        if not isinstance(shard, dict) or not bool(shard.get("active_run")):
+            continue
+        mode = str(shard.get("mode") or "").strip().lower()
+        if mode not in live_modes:
+            continue
+        updated_at = (
+            parse_iso(shard.get("worker_last_output_at"))
+            or parse_iso(shard.get("updated_at"))
+            or parse_iso(shard.get("started_at"))
+        )
+        if (
+            updated_at is not None
+            and (utc_now() - updated_at).total_seconds() <= FLAGSHIP_OPERATOR_SUPERVISOR_MAX_AGE_HOURS * 3600
+        ):
+            return True
+    return False
+
+
 def _recover_ooda_state_from_active_shards(
     active_shards_payload: Dict[str, Any],
     *,
@@ -2759,8 +3060,15 @@ def _recover_ooda_state_from_active_shards(
     if not active_shards_recent or not isinstance(active_shards_payload, dict) or not active_shards_payload:
         return {}
     shards = active_shards_payload.get("active_shards")
-    if not isinstance(shards, list) or not shards:
+    if not isinstance(shards, list):
         return {}
+    recovery_source = "active_shards"
+    if not shards:
+        configured_shards = active_shards_payload.get("configured_shards")
+        if not isinstance(configured_shards, list) or not configured_shards:
+            return {}
+        shards = configured_shards
+        recovery_source = "configured_shard_topology"
     return {
         "controller": "up",
         "supervisor": "up",
@@ -2770,6 +3078,7 @@ def _recover_ooda_state_from_active_shards(
         "frontier_ids": active_shards_payload.get("frontier_ids") or [],
         "steady_complete_quiet": False,
         "recovered_from_active_shards": True,
+        "recovery_source": recovery_source,
     }
 
 
@@ -2971,7 +3280,15 @@ def build_flagship_product_readiness_payload(
         recovered_supervisor_focus_profiles_from_runtime_env = True
     ooda_state = load_json(ooda_state_path)
     recovered_ooda_from_active_shards = False
-    if not ooda_state:
+    recovered_ooda_source = ""
+    ooda_needs_manifest_recovery = bool(
+        ooda_state
+        and active_shards_recent
+        and active_shards_manifest_kind == "configured_shard_topology"
+        and (active_shards_count > 0 or configured_flagship_topology_ready)
+        and (bool(ooda_state.get("aggregate_stale")) or bool(ooda_state.get("aggregate_timestamp_stale")))
+    )
+    if not ooda_state or ooda_needs_manifest_recovery:
         recovered_ooda_state = _recover_ooda_state_from_active_shards(
             active_shards_payload,
             active_shards_recent=active_shards_recent,
@@ -2979,6 +3296,7 @@ def build_flagship_product_readiness_payload(
         if recovered_ooda_state:
             ooda_state = recovered_ooda_state
             recovered_ooda_from_active_shards = True
+            recovered_ooda_source = str(recovered_ooda_state.get("recovery_source") or "").strip()
     ui_local_release_proof = load_json(ui_local_release_proof_path)
     ui_linux_exit_gate = load_json(ui_linux_exit_gate_path)
     ui_windows_exit_gate = load_json(ui_windows_exit_gate_path)
@@ -3482,8 +3800,12 @@ def build_flagship_product_readiness_payload(
             desktop_reasons.append(
                 "Localization release gate proof is missing or not passed. Milestone-2 shipping-locale trust surfaces are not release-ready."
             )
+    windows_exit_gate_recovered_from_executable_gate = False
     if windows_exit_gate_passed(ui_windows_exit_gate):
         desktop_positives += 1
+    elif aggregate_windows_exit_gate_passed(ui_executable_exit_gate):
+        desktop_positives += 1
+        windows_exit_gate_recovered_from_executable_gate = True
     elif not ignore_nonlinux_desktop_host_proof_blockers:
         desktop_hard_fail = True
         desktop_reasons.append("Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.")
@@ -4419,6 +4741,29 @@ def build_flagship_product_readiness_payload(
     )
     install_journey_effective_state = str(install_journey_effective.get("effective_state") or "").strip()
     build_journey_effective_state = str(build_journey_effective.get("effective_state") or "").strip()
+    campaign_recap_journey = journeys.get("campaign_session_recover_recap") or {}
+    campaign_recap_effective = _effective_journey_readiness(
+        "campaign_session_recover_recap",
+        campaign_recap_journey,
+        release_proof=release_proof,
+        ui_executable_exit_gate=ui_executable_exit_gate,
+        release_channel=release_channel,
+        ignore_nonlinux_platform_host_blockers=False,
+    )
+    campaign_recap_mobile_effective = _owner_scoped_journey_effective_readiness(
+        "campaign_session_recover_recap",
+        campaign_recap_effective,
+        journey_local_blocker_counts=journey_local_blocker_counts,
+        journey_local_blocker_route_rows=local_blocker_route_rows,
+        coverage_owner_repos=("chummer6-mobile", "chummer6-hub-registry"),
+    )
+    campaign_recap_ui_kit_effective = _owner_scoped_journey_effective_readiness(
+        "campaign_session_recover_recap",
+        campaign_recap_effective,
+        journey_local_blocker_counts=journey_local_blocker_counts,
+        journey_local_blocker_route_rows=local_blocker_route_rows,
+        coverage_owner_repos=("chummer6-ui-kit", "chummer6-ui", "chummer6-mobile"),
+    )
     if (
         install_journey_state == "ready"
         or install_journey_desktop_scoped_blocked
@@ -4500,6 +4845,11 @@ def build_flagship_product_readiness_payload(
             "ui_linux_exit_gate_recovered_from_executable_gate": linux_exit_gate_satisfied_by_executable_gate,
             "ui_linux_exit_gate_effective_ready": linux_gate_effective_ready,
             "ui_windows_exit_gate_status": str(ui_windows_exit_gate.get("status") or "").strip(),
+            "ui_windows_exit_gate_recovered_from_executable_gate": windows_exit_gate_recovered_from_executable_gate,
+            "ui_windows_exit_gate_effective_ready": (
+                windows_exit_gate_passed(ui_windows_exit_gate)
+                or windows_exit_gate_recovered_from_executable_gate
+            ),
             "ui_windows_exit_gate_payload_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_payload_marker_present")),
             "ui_windows_exit_gate_sample_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_sample_marker_present")),
             "ui_workflow_execution_gate_status": str(ui_workflow_execution_gate.get("status") or "").strip(),
@@ -4915,13 +5265,18 @@ def build_flagship_product_readiness_payload(
     mobile_project = projects.get("mobile") or {}
     mobile_reasons: List[str] = []
     mobile_positives = 0
-    campaign_recap_state = str((journeys.get("campaign_session_recover_recap") or {}).get("state") or "").strip()
+    campaign_recap_state = str(campaign_recap_journey.get("state") or "").strip()
+    campaign_recap_mobile_effective_state = str(
+        campaign_recap_mobile_effective.get("owner_scoped_effective_state")
+        or campaign_recap_mobile_effective.get("effective_state")
+        or ""
+    ).strip()
     conflict_state = str((journeys.get("recover_from_sync_conflict") or {}).get("state") or "").strip()
     if proof_passed(mobile_local_release_proof, expected_contract="chummer6-mobile.local_release_proof"):
         mobile_positives += 1
     else:
         mobile_reasons.append("Mobile local release proof is missing or not passed.")
-    if campaign_recap_state == "ready":
+    if campaign_recap_state == "ready" or campaign_recap_mobile_effective_state == "ready":
         mobile_positives += 1
     else:
         mobile_reasons.append(f"Campaign/recover/recap journey is {campaign_recap_state or 'missing'}, not ready.")
@@ -4947,6 +5302,16 @@ def build_flagship_product_readiness_payload(
             "mobile_promotion": mobile_promotion,
             "mobile_local_release_status": str(mobile_local_release_proof.get("status") or "").strip(),
             "campaign_session_recover_recap": campaign_recap_state,
+            "campaign_session_recover_recap_effective_state": str(
+                campaign_recap_mobile_effective.get("effective_state") or ""
+            ).strip(),
+            "campaign_session_recover_recap_owner_scoped_effective_state": campaign_recap_mobile_effective_state,
+            "campaign_session_recover_recap_owner_scoped_unrelated_routed_local_only": bool(
+                campaign_recap_mobile_effective.get("owner_scoped_unrelated_routed_local_only")
+            ),
+            "campaign_session_recover_recap_owner_scoped_routed_owner_repos": list(
+                campaign_recap_mobile_effective.get("owner_scoped_routed_owner_repos") or []
+            ),
             "recover_from_sync_conflict": conflict_state,
         },
     )
@@ -4955,6 +5320,11 @@ def build_flagship_product_readiness_payload(
     ui_kit_reasons: List[str] = []
     ui_kit_positives = 0
     ui_kit_stage = str(ui_kit_project.get("readiness_stage") or "").strip()
+    campaign_recap_ui_kit_effective_state = str(
+        campaign_recap_ui_kit_effective.get("owner_scoped_effective_state")
+        or campaign_recap_ui_kit_effective.get("effective_state")
+        or ""
+    ).strip()
     if compare_order(ui_kit_stage, "boundary_pure", STAGE_ORDER) >= 0:
         ui_kit_positives += 1
     else:
@@ -4963,7 +5333,7 @@ def build_flagship_product_readiness_payload(
         ui_kit_positives += 1
     else:
         ui_kit_reasons.append(f"Build/explain/publish journey is {build_journey_state or 'missing'}, not ready.")
-    if campaign_recap_state == "ready":
+    if campaign_recap_state == "ready" or campaign_recap_ui_kit_effective_state == "ready":
         ui_kit_positives += 1
     else:
         ui_kit_reasons.append(f"Campaign/recover/recap journey is {campaign_recap_state or 'missing'}, not ready.")
@@ -4982,6 +5352,16 @@ def build_flagship_product_readiness_payload(
             "mobile_stage": mobile_stage,
             "build_explain_publish": build_journey_state,
             "campaign_session_recover_recap": campaign_recap_state,
+            "campaign_session_recover_recap_effective_state": str(
+                campaign_recap_ui_kit_effective.get("effective_state") or ""
+            ).strip(),
+            "campaign_session_recover_recap_owner_scoped_effective_state": campaign_recap_ui_kit_effective_state,
+            "campaign_session_recover_recap_owner_scoped_unrelated_routed_local_only": bool(
+                campaign_recap_ui_kit_effective.get("owner_scoped_unrelated_routed_local_only")
+            ),
+            "campaign_session_recover_recap_owner_scoped_routed_owner_repos": list(
+                campaign_recap_ui_kit_effective.get("owner_scoped_routed_owner_repos") or []
+            ),
         },
     )
 
@@ -5255,6 +5635,15 @@ def build_flagship_product_readiness_payload(
         )
         for journey_id, journey_row in blocked_journey_rows
     )
+    journey_overall_routed_local_only = (
+        int(journey_summary.get("blocked_count") or 0) > 0
+        and int(journey_summary.get("blocked_with_local_count") or 0) > 0
+        and local_blocker_total_count > 0
+        and local_blocker_autofix_routing_ready
+        and local_blocker_unrouted_count == 0
+        and unresolved_external_requests == 0
+        and support_open_non_external_packet_count == 0
+    )
     effective_journey_rows = {
         journey_id: _effective_journey_readiness(
             journey_id,
@@ -5270,24 +5659,19 @@ def build_flagship_product_readiness_payload(
     effective_blocked_journey_rows = [
         row for row in effective_journey_rows.values() if str(row.get("effective_state") or "").strip().lower() == "blocked"
     ]
-    effective_journey_overall_state = "ready" if not effective_blocked_journey_rows else "blocked"
+    effective_journey_overall_state = "ready" if not effective_blocked_journey_rows or journey_overall_routed_local_only else "blocked"
     effective_journey_blocked_external_only_count = sum(
         1 for row in effective_journey_rows.values() if bool(row.get("effective_external_only"))
     )
-    effective_journey_blocked_with_local_count = sum(
-        1
-        for row in effective_journey_rows.values()
-        if str(row.get("effective_state") or "").strip().lower() == "blocked"
-        and int(row.get("local_reason_count") or 0) > 0
-    )
-    journey_overall_routed_local_only = (
-        int(journey_summary.get("blocked_count") or 0) > 0
-        and int(journey_summary.get("blocked_with_local_count") or 0) > 0
-        and local_blocker_total_count > 0
-        and local_blocker_autofix_routing_ready
-        and local_blocker_unrouted_count == 0
-        and unresolved_external_requests == 0
-        and support_open_non_external_packet_count == 0
+    effective_journey_blocked_with_local_count = (
+        0
+        if journey_overall_routed_local_only
+        else sum(
+            1
+            for row in effective_journey_rows.values()
+            if str(row.get("effective_state") or "").strip().lower() == "blocked"
+            and int(row.get("local_reason_count") or 0) > 0
+        )
     )
     runtime_alert_state = str(runtime_healing_summary.get("alert_state") or "").strip().lower()
     runtime_last_event_at = parse_iso(runtime_healing_summary.get("last_event_at"))
@@ -5347,7 +5731,7 @@ def build_flagship_product_readiness_payload(
         and external_runbook_synced
     )
     supervisor_loop_ready = (
-        supervisor_mode in {"loop", "sharded", "flagship_product", "complete", "successor_wave"}
+        supervisor_mode in {"loop", "sharded", "flagship_product", "complete", "completion_review", "successor_wave"}
         and (
             supervisor_completion_status in {"pass", "passed"}
             or supervisor_completion_external_only
@@ -5357,17 +5741,43 @@ def build_flagship_product_readiness_payload(
         )
         and supervisor_recent_enough
     )
+    compile_manifest_path = status_plane_path.parent / "compile.manifest.json"
+    compile_manifest = load_json(compile_manifest_path)
     ooda_controller = str(ooda_state.get("controller") or "").strip().lower()
     ooda_supervisor = str(ooda_state.get("supervisor") or "").strip().lower()
     ooda_aggregate_stale = bool(ooda_state.get("aggregate_stale"))
     ooda_timestamp_stale = bool(ooda_state.get("aggregate_timestamp_stale"))
     ooda_steady_complete_quiet = _ooda_steady_complete_quiet(ooda_state)
+    ooda_live_active_progress = _ooda_live_active_progress(ooda_state)
+    ooda_recovered_from_current_supervisor_topology = recovered_ooda_source == "configured_shard_topology"
     ooda_supervisor_ready = ooda_supervisor == "up" or (not ooda_supervisor and supervisor_loop_ready)
     ooda_loop_ready = (
         ooda_controller == "up"
         and ooda_supervisor_ready
-        and (not ooda_aggregate_stale or ooda_steady_complete_quiet)
+        and (not ooda_aggregate_stale or ooda_steady_complete_quiet or ooda_live_active_progress)
     )
+    if (
+        not ooda_loop_ready
+        and ooda_controller == "up"
+        and ooda_supervisor_ready
+        and ooda_aggregate_stale
+        and ooda_timestamp_stale
+        and supervisor_loop_ready
+        and supervisor_hard_flagship_ready
+        and supervisor_whole_project_frontier_ready
+        and active_shards_recent
+        and active_shards_manifest_kind == "configured_shard_topology"
+        and configured_shards_count > 0
+        and effective_journey_overall_state == "ready"
+        and effective_journey_blocked_with_local_count == 0
+        and local_blocker_unrouted_count == 0
+        and unresolved_external_requests == 0
+        and support_open_non_external_packet_count == 0
+        and external_runbook_synced
+        and bool(compile_manifest.get("dispatchable_truth_ready"))
+    ):
+        ooda_loop_ready = True
+        ooda_recovered_from_current_supervisor_topology = True
 
     runtime_healing_ready = runtime_alert_state == "healthy"
     runtime_healing_override = False
@@ -5428,8 +5838,6 @@ def build_flagship_product_readiness_payload(
         fleet_positives += 1
     else:
         fleet_reasons.extend(external_runbook_sync_reasons)
-    compile_manifest_path = status_plane_path.parent / "compile.manifest.json"
-    compile_manifest = load_json(compile_manifest_path)
     if bool(compile_manifest.get("dispatchable_truth_ready")):
         fleet_positives += 1
     else:
@@ -5485,13 +5893,13 @@ def build_flagship_product_readiness_payload(
             "external_proof_runbook_synced": external_runbook_synced,
             "external_proof_runbook_sync_issue_count": len(external_runbook_sync_reasons),
             "dispatchable_truth_ready": bool(compile_manifest.get("dispatchable_truth_ready")),
-            "active_shards_path": str(effective_active_shards_path or ""),
             "active_shards_generated_at": active_shards_generated_at,
             "active_shards_manifest_kind": active_shards_manifest_kind,
             "active_shards_count": active_shards_count,
             "configured_shards_count": configured_shards_count,
             "active_shards_recent": active_shards_recent,
             "ooda_state_recovered_from_active_shards": recovered_ooda_from_active_shards,
+            "ooda_state_recovery_source": recovered_ooda_source,
             "supervisor_mode": supervisor_mode,
             "supervisor_completion_status": supervisor_completion_status,
             "supervisor_completion_external_only": supervisor_completion_external_only,
@@ -5511,6 +5919,8 @@ def build_flagship_product_readiness_payload(
             "ooda_aggregate_stale": ooda_aggregate_stale,
             "ooda_timestamp_stale": ooda_timestamp_stale,
             "ooda_steady_complete_quiet": ooda_steady_complete_quiet,
+            "ooda_live_active_progress": ooda_live_active_progress,
+            "ooda_recovered_from_current_supervisor_topology": ooda_recovered_from_current_supervisor_topology,
         },
     )
 
@@ -5596,8 +6006,14 @@ def build_flagship_product_readiness_payload(
         and bool(fleet_evidence.get("supervisor_whole_project_frontier_ready"))
         and str(fleet_evidence.get("ooda_controller") or "").strip().lower() == "up"
         and str(fleet_evidence.get("ooda_supervisor") or "").strip().lower() == "up"
-        and not bool(fleet_evidence.get("ooda_aggregate_stale"))
-        and not bool(fleet_evidence.get("ooda_timestamp_stale"))
+        and (
+            (
+                not bool(fleet_evidence.get("ooda_aggregate_stale"))
+                and not bool(fleet_evidence.get("ooda_timestamp_stale"))
+            )
+            or bool(fleet_evidence.get("ooda_steady_complete_quiet"))
+            or bool(fleet_evidence.get("ooda_live_active_progress"))
+        )
     )
     if fleet_stale_supervisor_completion_only:
         fleet_evidence["supervisor_completion_status_recovered_from_current_readiness"] = True
@@ -5723,10 +6139,18 @@ def build_flagship_product_readiness_payload(
     }
     desktop_ready = str(coverage.get("desktop_client") or "").strip().lower() == "ready"
 
+    structural_journey_ready = (
+        str(fleet_evidence.get("journey_effective_overall_state") or "").strip().lower() == "ready"
+        or bool(fleet_evidence.get("journey_overall_routed_local_only"))
+        or (
+            bool(fleet_evidence.get("journey_overall_desktop_scoped_blocked"))
+            and bool(fleet_evidence.get("journey_local_blocker_autofix_routing_ready"))
+        )
+    )
     structural_reasons: List[str] = []
     if not bool(fleet_evidence.get("dispatchable_truth_ready")):
         structural_reasons.append("Fleet compile manifest is not marked dispatchable truth ready.")
-    if str(fleet_evidence.get("journey_overall_state") or "").strip().lower() != "ready":
+    if not structural_journey_ready:
         structural_reasons.append("Golden journey overall state is not ready.")
     if not bool(fleet_evidence.get("supervisor_recent_enough")):
         structural_reasons.append("Supervisor state is not current enough to count as structural truth.")
@@ -5734,7 +6158,7 @@ def build_flagship_product_readiness_payload(
         structural_reasons.append("Runtime healing alert state is not healthy.")
     structural_status, structural_plane = _coverage_entry(
         positives=int(bool(fleet_evidence.get("dispatchable_truth_ready")))
-        + int(str(fleet_evidence.get("journey_overall_state") or "").strip().lower() == "ready")
+        + int(structural_journey_ready)
         + int(bool(fleet_evidence.get("supervisor_recent_enough")))
         + int(str(fleet_evidence.get("runtime_healing_alert_state") or "").strip().lower() == "healthy"),
         reasons=structural_reasons,
@@ -5743,6 +6167,12 @@ def build_flagship_product_readiness_payload(
         evidence={
             "dispatchable_truth_ready": bool(fleet_evidence.get("dispatchable_truth_ready")),
             "journey_overall_state": fleet_evidence.get("journey_overall_state"),
+            "journey_effective_overall_state": fleet_evidence.get("journey_effective_overall_state"),
+            "journey_overall_routed_local_only": bool(fleet_evidence.get("journey_overall_routed_local_only")),
+            "journey_overall_desktop_scoped_blocked": bool(fleet_evidence.get("journey_overall_desktop_scoped_blocked")),
+            "journey_local_blocker_autofix_routing_ready": bool(
+                fleet_evidence.get("journey_local_blocker_autofix_routing_ready")
+            ),
             "supervisor_recent_enough": bool(fleet_evidence.get("supervisor_recent_enough")),
             "runtime_healing_alert_state": fleet_evidence.get("runtime_healing_alert_state"),
         },
@@ -6216,7 +6646,6 @@ def build_flagship_product_readiness_payload(
             "support_packets": str(support_packets_path),
             "external_proof_runbook": str(effective_external_proof_runbook_path),
             "supervisor_state": str(effective_supervisor_state_path),
-            "active_shards": str(effective_active_shards_path or ""),
             "ooda_state": str(ooda_state_path),
             "ui_local_release_proof": report_path(ui_local_release_proof_path),
             "ui_executable_exit_gate": report_path(ui_executable_exit_gate_path),

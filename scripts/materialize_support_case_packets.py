@@ -39,6 +39,28 @@ ROOT = Path("/docker/fleet")
 DEFAULT_OUT_PATH = Path("/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json")
 DEFAULT_SOURCE_MIRROR_NAME = "SUPPORT_CASE_SOURCE_MIRROR.generated.json"
 DEFAULT_RELEASE_CHANNEL_PATH = REGISTRY_RELEASE_CHANNEL_PATH
+KARMA_FORGE_DISCOVERY_WORKFLOW_PATH = (
+    ROOT / ".codex-design" / "product" / "KARMA_FORGE_DISCOVERY_LAB_WORKFLOWS.yaml"
+)
+CANONICAL_KARMA_FORGE_DISCOVERY_WORKFLOW_PATH = (
+    Path("/docker/chummercomplete/chummer-design/products/chummer")
+    / "KARMA_FORGE_DISCOVERY_LAB_WORKFLOWS.yaml"
+)
+LTD_RUNTIME_AND_PROJECTION_REGISTRY_PATH = (
+    ROOT / ".codex-design" / "product" / "LTD_RUNTIME_AND_PROJECTION_REGISTRY.yaml"
+)
+CANONICAL_LTD_RUNTIME_AND_PROJECTION_REGISTRY_PATH = (
+    Path("/docker/chummercomplete/chummer-design/products/chummer")
+    / "LTD_RUNTIME_AND_PROJECTION_REGISTRY.yaml"
+)
+KARMA_FORGE_ROUTE_ID = "karma_forge_discovery"
+FEEDBACK_FORGE_ROUTE_ID = "feedback_forge_discovery"
+FEEDBACK_DISCOVERY_LTD_PRODUCT_SYSTEM = "discovery_system"
+FEEDBACK_DISCOVERY_FIRST_PART_STEPS = (
+    "public_signal",
+    "structured_prescreen",
+    "adaptive_interview",
+)
 SUCCESSOR_REGISTRY_PATH = (
     Path("/docker/chummercomplete/chummer-design/products/chummer")
     / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
@@ -1258,6 +1280,418 @@ def _normalize_text(value: Any, fallback: str = "") -> str:
     return str(value).strip() or fallback
 
 
+def _load_yaml_mapping_first(*paths: Path) -> tuple[Path, Dict[str, Any]]:
+    for path in paths:
+        try:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        if isinstance(payload, dict):
+            return path, payload
+    return Path(""), {}
+
+
+def _feedback_discovery_workflow_contract() -> tuple[Path, Dict[str, Any]]:
+    return _load_yaml_mapping_first(
+        KARMA_FORGE_DISCOVERY_WORKFLOW_PATH,
+        CANONICAL_KARMA_FORGE_DISCOVERY_WORKFLOW_PATH,
+    )
+
+
+def _feedback_discovery_ltd_contract() -> tuple[Path, Dict[str, Any]]:
+    return _load_yaml_mapping_first(
+        LTD_RUNTIME_AND_PROJECTION_REGISTRY_PATH,
+        CANONICAL_LTD_RUNTIME_AND_PROJECTION_REGISTRY_PATH,
+    )
+
+
+def _as_string_list(value: Any) -> List[str]:
+    if isinstance(value, list):
+        return [_normalize_text(item) for item in value if _normalize_text(item)]
+    if isinstance(value, tuple):
+        return [_normalize_text(item) for item in value if _normalize_text(item)]
+    raw = _normalize_text(value)
+    return [raw] if raw else []
+
+
+def _feedback_discovery_workflow_steps(workflow: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows = workflow.get("workflow") if isinstance(workflow, dict) else []
+    steps: List[Dict[str, Any]] = []
+    for row in (rows if isinstance(rows, list) else []):
+        if not isinstance(row, dict):
+            continue
+        step_id = _normalize_text(row.get("step")).lower()
+        if not step_id:
+            continue
+        steps.append(
+            {
+                "step": step_id,
+                "tools": _as_string_list(row.get("tools")),
+                "output": _normalize_text(row.get("output")),
+                "boundary": _normalize_text(row.get("boundary")),
+            }
+        )
+    return steps
+
+
+def _feedback_discovery_workflow_tools(workflow: Dict[str, Any]) -> List[str]:
+    tools: List[str] = []
+    for step in _feedback_discovery_workflow_steps(workflow):
+        for tool in _as_string_list(step.get("tools")):
+            if tool not in tools:
+                tools.append(tool)
+    return tools
+
+
+def _feedback_discovery_ltd_tools(registry: Dict[str, Any]) -> List[str]:
+    product_systems = registry.get("product_systems") if isinstance(registry, dict) else {}
+    if not isinstance(product_systems, dict):
+        return []
+    discovery_system = product_systems.get(FEEDBACK_DISCOVERY_LTD_PRODUCT_SYSTEM)
+    if not isinstance(discovery_system, dict):
+        return []
+    return _as_string_list(discovery_system.get("tools"))
+
+
+def _field_text(item: Dict[str, Any], *names: str) -> str:
+    for name in names:
+        value = item.get(name)
+        if isinstance(value, dict):
+            for nested in ("id", "receiptId", "receipt_id", "value", "ref"):
+                nested_value = _normalize_text(value.get(nested))
+                if nested_value:
+                    return nested_value
+            continue
+        if isinstance(value, list):
+            for entry in value:
+                text = _normalize_text(entry)
+                if text:
+                    return text
+            continue
+        text = _normalize_text(value)
+        if text:
+            return text
+    return ""
+
+
+def _feedback_discovery_receipt_id(item: Dict[str, Any], step_id: str) -> str:
+    fields = {
+        "public_signal": (
+            "publicSignalReceiptId",
+            "public_signal_receipt_id",
+            "productLiftReceiptId",
+            "product_lift_receipt_id",
+            "facePopReceiptId",
+            "face_pop_receipt_id",
+            "signiticReceiptId",
+            "signitic_receipt_id",
+        ),
+        "structured_prescreen": (
+            "houseRulePrescreenReceiptId",
+            "house_rule_prescreen_receipt_id",
+            "deftformReceiptId",
+            "deftform_receipt_id",
+            "prescreenReceiptId",
+            "prescreen_receipt_id",
+        ),
+        "adaptive_interview": (
+            "discoveryInterviewReceiptId",
+            "discovery_interview_receipt_id",
+            "icanpreneurInterviewReceiptId",
+            "icanpreneur_interview_receipt_id",
+            "lunacalBookingReceiptId",
+            "lunacal_booking_receipt_id",
+        ),
+        "quant_validation": (
+            "validationSurveyReceiptId",
+            "validation_survey_receipt_id",
+            "metaSurveyReceiptId",
+            "meta_survey_receipt_id",
+        ),
+        "review_board": (
+            "adminIntentId",
+            "admin_intent_id",
+            "teableReviewId",
+            "teable_review_id",
+            "nextStepProcessId",
+            "next_step_process_id",
+        ),
+        "decision": (
+            "houseRuleDemandPacketDecisionId",
+            "house_rule_demand_packet_decision_id",
+            "governorDecisionId",
+            "governor_decision_id",
+            "designDecisionId",
+            "design_decision_id",
+        ),
+        "closeout": (
+            "publicCloseoutReceiptId",
+            "public_closeout_receipt_id",
+            "productLiftCloseoutReceiptId",
+            "product_lift_closeout_receipt_id",
+            "emailitCloseoutReceiptId",
+            "emailit_closeout_receipt_id",
+            "signiticCloseoutReceiptId",
+            "signitic_closeout_receipt_id",
+        ),
+    }
+    return _field_text(item, *fields.get(step_id, ()))
+
+
+def _feedback_discovery_combined_text(item: Dict[str, Any], *, title: str = "", summary: str = "") -> str:
+    parts = [
+        title,
+        summary,
+        _field_text(item, "feedbackQuestion", "feedback_question", "question"),
+        _field_text(item, "userWordsSummary", "user_words_summary", "userWords", "user_words"),
+        _field_text(item, "currentWorkaround", "current_workaround"),
+        _field_text(item, "interpretedNeedSummary", "interpreted_need_summary"),
+        _field_text(item, "impactNotes", "impact_notes"),
+        _field_text(item, "shareabilityNotes", "shareability_notes"),
+        _field_text(item, "publicSignalSource", "public_signal_source", "feedbackSource", "feedback_source"),
+        _field_text(item, "intakeChannel", "intake_channel"),
+    ]
+    return " ".join(part for part in parts if part).lower()
+
+
+def _explicit_feedback_discovery_route(item: Dict[str, Any]) -> str:
+    route = _field_text(
+        item,
+        "feedbackDiscoveryRoute",
+        "feedback_discovery_route",
+        "discoveryRoute",
+        "discovery_route",
+        "proposedRoute",
+        "proposed_route",
+    ).lower()
+    if not route:
+        return ""
+    if "karma" in route or "house" in route:
+        return KARMA_FORGE_ROUTE_ID
+    if "feedback" in route or "discovery" in route:
+        return FEEDBACK_FORGE_ROUTE_ID
+    return ""
+
+
+def _feedback_discovery_route_id(
+    item: Dict[str, Any],
+    *,
+    kind: str,
+    title: str,
+    summary: str,
+    design_impact: bool,
+) -> str:
+    explicit_route = _explicit_feedback_discovery_route(item)
+    if explicit_route:
+        return explicit_route
+    if kind != "feedback":
+        return ""
+    text = _feedback_discovery_combined_text(item, title=title, summary=summary)
+    karma_terms = (
+        "karma forge",
+        "house rule",
+        "houserule",
+        "homebrew",
+        "custom rule",
+        "rule variant",
+        "rule environment",
+        "campaign rule",
+        "gear unlock",
+        "availability overlay",
+        "edge economy",
+        "nuyen pacing",
+        "karma pacing",
+        "amend package",
+        "rule pack",
+        "black ledger",
+    )
+    if any(term in text for term in karma_terms):
+        return KARMA_FORGE_ROUTE_ID
+    public_discovery_terms = (
+        "productlift",
+        "public idea",
+        "public feedback",
+        "vote",
+        "roadmap",
+        "deftform",
+        "metasurvey",
+        "icanpreneur",
+        "facepop",
+    )
+    if design_impact or any(term in text for term in public_discovery_terms):
+        return FEEDBACK_FORGE_ROUTE_ID
+    return ""
+
+
+def _feedback_discovery_next_action(step_id: str) -> str:
+    return {
+        "public_signal": "capture_productlift_public_signal_receipt",
+        "structured_prescreen": "request_deftform_structured_prescreen",
+        "adaptive_interview": "launch_icanpreneur_adaptive_interview",
+        "quant_validation": "run_metasurvey_validation",
+        "review_board": "project_teable_admin_intent_review",
+        "decision": "request_product_governor_decision",
+        "closeout": "publish_productlift_emailit_signitic_closeout",
+        "complete": "keep_public_closeout_receipts_in_sync",
+    }.get(step_id, "route_feedback_discovery")
+
+
+def _feedback_discovery_packet(
+    item: Dict[str, Any],
+    *,
+    route_id: str,
+    workflow_path: Path,
+    workflow: Dict[str, Any],
+) -> Dict[str, Any]:
+    steps = _feedback_discovery_workflow_steps(workflow)
+    step_receipts: List[Dict[str, Any]] = []
+    for step in steps:
+        step_id = _normalize_text(step.get("step")).lower()
+        receipt_id = _feedback_discovery_receipt_id(item, step_id)
+        step_receipts.append(
+            {
+                **step,
+                "receipt_id": receipt_id,
+                "complete": bool(receipt_id),
+                "next_action": _feedback_discovery_next_action(step_id),
+            }
+        )
+    next_step = next((row for row in step_receipts if not bool(row.get("complete"))), None)
+    first_part_ids = set(FEEDBACK_DISCOVERY_FIRST_PART_STEPS)
+    first_part_rows = [row for row in step_receipts if _normalize_text(row.get("step")) in first_part_ids]
+    route_family = "karma_forge" if route_id == KARMA_FORGE_ROUTE_ID else "feedback_forge"
+    workflow_ready = bool(
+        workflow
+        and steps
+        and _normalize_text(workflow.get("required_packet"))
+        and all(_normalize_text(row.get("output")) and _normalize_text(row.get("boundary")) for row in steps)
+    )
+    return {
+        "contract_name": "fleet.feedback_forge.discovery_packet",
+        "enabled": True,
+        "route_id": route_id,
+        "route_family": route_family,
+        "workflow_key": _normalize_text(workflow.get("key")),
+        "workflow_path": str(workflow_path) if _normalize_text(str(workflow_path)) else "",
+        "workflow_ready": workflow_ready,
+        "required_packet": _normalize_text(workflow.get("required_packet"), "HouseRuleDemandPacket"),
+        "forbidden": _as_string_list(workflow.get("forbidden")),
+        "required_tools": _feedback_discovery_workflow_tools(workflow),
+        "first_part_step_ids": list(FEEDBACK_DISCOVERY_FIRST_PART_STEPS),
+        "first_part_complete": bool(first_part_rows) and all(bool(row.get("complete")) for row in first_part_rows),
+        "step_receipts": step_receipts,
+        "next_step": _normalize_text((next_step or {}).get("step"), "complete"),
+        "next_action": _feedback_discovery_next_action(_normalize_text((next_step or {}).get("step"), "complete")),
+        "governor_decision_required": route_id == KARMA_FORGE_ROUTE_ID,
+    }
+
+
+def _feedback_discovery_plan(
+    packets: List[Dict[str, Any]],
+    *,
+    generated_at: str,
+    workflow_path: Path,
+    workflow: Dict[str, Any],
+    ltd_registry_path: Path,
+    ltd_registry: Dict[str, Any],
+) -> Dict[str, Any]:
+    discovery_packets = [
+        dict(packet)
+        for packet in packets
+        if bool(((packet.get("feedback_discovery") or {}).get("enabled")))
+    ]
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for packet in discovery_packets:
+        discovery = dict(packet.get("feedback_discovery") or {})
+        next_step = _normalize_text(discovery.get("next_step"), "complete")
+        row = {
+            "packet_id": _normalize_text(packet.get("packet_id")),
+            "case_id": _normalize_text(packet.get("case_id")),
+            "title": _normalize_text(packet.get("title")),
+            "kind": _normalize_text(packet.get("kind")),
+            "route_id": _normalize_text(discovery.get("route_id")),
+            "route_family": _normalize_text(discovery.get("route_family")),
+            "target_repo": _normalize_text(packet.get("target_repo")),
+            "next_step": next_step,
+            "next_action": _normalize_text(discovery.get("next_action")),
+            "first_part_complete": bool(discovery.get("first_part_complete")),
+            "workflow_ready": bool(discovery.get("workflow_ready")),
+            "required_packet": _normalize_text(discovery.get("required_packet")),
+        }
+        groups.setdefault(next_step, []).append(row)
+    for key in list(groups.keys()):
+        groups[key] = sorted(groups[key], key=lambda row: (_normalize_text(row.get("route_id")), _normalize_text(row.get("packet_id"))))
+    missing_route_count = sum(
+        1 for packet in discovery_packets if not _normalize_text((packet.get("feedback_discovery") or {}).get("route_id"))
+    )
+    missing_next_action_count = sum(
+        1 for packet in discovery_packets if not _normalize_text((packet.get("feedback_discovery") or {}).get("next_action"))
+    )
+    first_part_routed_count = sum(
+        1
+        for packet in discovery_packets
+        for discovery in [dict(packet.get("feedback_discovery") or {})]
+        if _normalize_text(discovery.get("next_step")) in set(FEEDBACK_DISCOVERY_FIRST_PART_STEPS)
+        or bool(discovery.get("first_part_complete"))
+    )
+    workflow_steps = _feedback_discovery_workflow_steps(workflow)
+    workflow_tools = _feedback_discovery_workflow_tools(workflow)
+    ltd_tools = _feedback_discovery_ltd_tools(ltd_registry)
+    ltd_tool_keys = {tool.casefold() for tool in ltd_tools}
+    missing_ltd_tools = [tool for tool in workflow_tools if tool.casefold() not in ltd_tool_keys]
+    return {
+        "generated_at": generated_at,
+        "contract_name": "fleet.feedback_forge.discovery_plan",
+        "source_rule": (
+            "Public or design-impact feedback is routed through the Karma Forge discovery loop shape: "
+            "ProductLift/FacePop signal, Deftform pre-screen, Icanpreneur interview, MetaSurvey validation, "
+            "Teable/NextStep review, Product Governor decision, and ProductLift/Emailit/Signitic closeout."
+        ),
+        "workflow_path": str(workflow_path) if _normalize_text(str(workflow_path)) else "",
+        "workflow_key": _normalize_text(workflow.get("key")),
+        "workflow_ready": bool(workflow and workflow_steps),
+        "ltd_registry_path": str(ltd_registry_path) if _normalize_text(str(ltd_registry_path)) else "",
+        "ltd_registry_key": _normalize_text(ltd_registry.get("key")),
+        "ltd_product_system": FEEDBACK_DISCOVERY_LTD_PRODUCT_SYSTEM,
+        "ltd_discovery_system_tools": ltd_tools,
+        "ltd_discovery_system_missing_tools": missing_ltd_tools,
+        "ltd_discovery_system_ready": bool(
+            ltd_registry
+            and ltd_tools
+            and not missing_ltd_tools
+        ),
+        "required_packet": _normalize_text(workflow.get("required_packet"), "HouseRuleDemandPacket"),
+        "required_first_part_steps": list(FEEDBACK_DISCOVERY_FIRST_PART_STEPS),
+        "required_tools": workflow_tools,
+        "candidate_count": len(discovery_packets),
+        "karma_forge_candidate_count": sum(
+            1
+            for packet in discovery_packets
+            if _normalize_text((packet.get("feedback_discovery") or {}).get("route_id")) == KARMA_FORGE_ROUTE_ID
+        ),
+        "feedback_forge_candidate_count": sum(
+            1
+            for packet in discovery_packets
+            if _normalize_text((packet.get("feedback_discovery") or {}).get("route_id")) == FEEDBACK_FORGE_ROUTE_ID
+        ),
+        "first_part_complete_count": sum(
+            1 for packet in discovery_packets if bool((packet.get("feedback_discovery") or {}).get("first_part_complete"))
+        ),
+        "first_part_routed_count": first_part_routed_count,
+        "missing_route_count": missing_route_count,
+        "missing_next_action_count": missing_next_action_count,
+        "route_counts": _counter_map(
+            _normalize_text((packet.get("feedback_discovery") or {}).get("route_id"))
+            for packet in discovery_packets
+        ),
+        "next_step_counts": _counter_map(
+            _normalize_text((packet.get("feedback_discovery") or {}).get("next_step"), "complete")
+            for packet in discovery_packets
+        ),
+        "action_groups": groups,
+    }
+
+
 def _is_receipt_mismatch_blocker(value: Any) -> bool:
     blocker = _normalize_text(value)
     return bool(
@@ -1604,8 +2038,9 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
             issues.append("successor milestone 102 title drifted")
         if _normalize_text(milestone.get("wave")) != SUCCESSOR_WAVE:
             issues.append("successor milestone 102 wave drifted")
-        if _normalize_text(milestone.get("status")).lower() != "in_progress":
-            issues.append("successor milestone 102 is not in_progress")
+        milestone_status = _normalize_text(milestone.get("status")).lower()
+        if milestone_status not in {"in_progress", "complete"}:
+            issues.append("successor milestone 102 is neither in_progress nor complete")
         if "fleet" not in set(_normalize_list(milestone.get("owners"))):
             issues.append("successor milestone 102 does not name fleet as an owner")
         registry_dependencies = [
@@ -2585,13 +3020,36 @@ def _recovery_path(*, status: str, installation_id: str, install_truth_state: st
     }
 
 
-def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str, Any]) -> Dict[str, Any]:
+def _decision_for_case(
+    item: Dict[str, Any],
+    *,
+    release_channel_index: Dict[str, Any],
+    feedback_discovery_workflow_path: Path,
+    feedback_discovery_workflow: Dict[str, Any],
+) -> Dict[str, Any]:
     kind = _normalize_text(item.get("kind")).lower()
     status = _normalize_text(item.get("status")).lower()
     owner_repo = _normalize_text(item.get("candidateOwnerRepo") or item.get("candidate_owner_repo"), "chummer6-hub")
     design_impact = _normalize_bool(item.get("designImpactSuspected") or item.get("design_impact_suspected"))
     title = _normalize_text(item.get("title"), "Support case")
     summary = _normalize_text(item.get("summary"), title)
+    feedback_discovery_route = _feedback_discovery_route_id(
+        item,
+        kind=kind,
+        title=title,
+        summary=summary,
+        design_impact=design_impact,
+    )
+    feedback_discovery = (
+        _feedback_discovery_packet(
+            item,
+            route_id=feedback_discovery_route,
+            workflow_path=feedback_discovery_workflow_path,
+            workflow=feedback_discovery_workflow,
+        )
+        if feedback_discovery_route
+        else {}
+    )
 
     primary_lane = "support"
     change_class = "type_b"
@@ -2628,6 +3086,29 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
             "FEEDBACK_AND_CRASH_STATUS_MODEL.md",
         ]
         reason = "Case content suggests public-story, docs, or policy drift and needs canon review instead of repo-local patching alone."
+
+    if feedback_discovery:
+        primary_lane = "discovery"
+        change_class = "type_d"
+        target_repo = "chummer6-design"
+        affected_canon_files = [
+            "FEEDBACK_AND_SIGNAL_OODA_LOOP.md",
+            "FEEDBACK_AND_CRASH_STATUS_MODEL.md",
+            "FEEDBACK_LOOP_RELEASE_GATE.yaml",
+            "KARMA_FORGE_DISCOVERY_AND_HOUSE_RULE_INTAKE.md",
+            "KARMA_FORGE_DISCOVERY_LAB_WORKFLOWS.yaml",
+            "LTD_RUNTIME_AND_PROJECTION_REGISTRY.yaml",
+        ]
+        route_family = _normalize_text(feedback_discovery.get("route_family"), "feedback_forge")
+        next_step = _normalize_text(feedback_discovery.get("next_step"), "complete")
+        reason = (
+            "Feedback matches the public discovery gateway and must run the "
+            f"{route_family} first-part loop before it becomes implementation backlog."
+        )
+        exit_condition = (
+            "HouseRuleDemandPacket discovery reaches accepted/rejected/deferred governor decision "
+            f"or completes the first-part receipts; current next step is {next_step}."
+        )
 
     if status in {"deferred", "rejected", "user_notified"}:
         primary_lane = "defer" if status == "deferred" else primary_lane
@@ -2851,7 +3332,7 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
         recovery_path=recovery_path,
     )
 
-    return {
+    packet = {
         "packet_id": packet_id,
         "packet_kind": "support_case",
         "support_case_backed": True,
@@ -3002,6 +3483,9 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
         "reporter_followthrough": reporter_followthrough,
         "recovery_path": recovery_path,
     }
+    if feedback_discovery:
+        packet["feedback_discovery"] = feedback_discovery
+    return packet
 
 
 def _counter_map(values: Iterable[str]) -> Dict[str, int]:
@@ -3579,6 +4063,7 @@ def _followthrough_packet_row(packet: Dict[str, Any], followthrough: Dict[str, A
         for blocker in (followthrough.get("blockers") or [])
         if _normalize_text(blocker)
     ]
+    feedback_discovery = dict(packet.get("feedback_discovery") or {})
     return {
         "packet_id": _normalize_text(packet.get("packet_id")),
         "kind": _normalize_text(packet.get("kind")),
@@ -3664,6 +4149,10 @@ def _followthrough_packet_row(packet: Dict[str, Any], followthrough: Dict[str, A
         ),
         "current_install_on_fixed_build": bool(followthrough.get("current_install_on_fixed_build")),
         "recovery_loop_ready": bool(followthrough.get("recovery_loop_ready")),
+        "feedback_discovery_route": _normalize_text(feedback_discovery.get("route_id")),
+        "feedback_discovery_next_step": _normalize_text(feedback_discovery.get("next_step")),
+        "feedback_discovery_next_action": _normalize_text(feedback_discovery.get("next_action")),
+        "feedback_discovery_first_part_complete": bool(feedback_discovery.get("first_part_complete")),
         "blockers": blockers,
         "recovery_path": dict(packet.get("recovery_path") or {}),
     }
@@ -3847,6 +4336,11 @@ def _derived_followthrough_grouping(
         or bool(_normalize_text(row.get("fixed_channel_receipt_id")))
     )
     has_receipt_mismatch = any(_is_receipt_mismatch_blocker(blocker) for blocker in blockers)
+    feedback_next_action = (
+        "send_feedback_discovery_progress"
+        if _normalize_text(row.get("feedback_discovery_route"))
+        else "send_feedback_progress"
+    )
     ready_any = any(
         bool(derived_truth.get(flag))
         for flag in (
@@ -3866,7 +4360,7 @@ def _derived_followthrough_grouping(
         "blocked_missing_install_receipts": bool(has_fix and not ready_any),
         "blocked_receipt_mismatch": bool(has_fix and not ready_any and has_receipt_mismatch),
         "hold_until_fix_receipt": bool(not has_fix),
-        "feedback_next_action": "send_feedback_progress",
+        "feedback_next_action": feedback_next_action,
         "fix_available_next_action": (
             "send_fix_available_with_update" if update_required else "send_fix_available"
         ),
@@ -3993,6 +4487,8 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
     generated_at = _utc_now_iso()
     raw_items, install_receipt_source = _items_with_install_receipt_truth(source_payload)
     raw_items, fix_receipt_source = _items_with_fix_receipt_truth(raw_items, source_payload)
+    feedback_discovery_workflow_path, feedback_discovery_workflow = _feedback_discovery_workflow_contract()
+    feedback_discovery_ltd_registry_path, feedback_discovery_ltd_registry = _feedback_discovery_ltd_contract()
     open_statuses = {
         "new",
         "clustered",
@@ -4006,7 +4502,14 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
         packet
         for item in raw_items
         if isinstance(item, dict)
-        for packet in [_decision_for_case(dict(item), release_channel_index=release_channel_index)]
+        for packet in [
+            _decision_for_case(
+                dict(item),
+                release_channel_index=release_channel_index,
+                feedback_discovery_workflow_path=feedback_discovery_workflow_path,
+                feedback_discovery_workflow=feedback_discovery_workflow,
+            )
+        ]
         if packet["status"] in open_statuses
     ]
     unresolved_external_proof = _external_proof_backlog_summary(release_channel_index)
@@ -4031,6 +4534,14 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
     non_external_packets = [dict(item) for item in open_packets if _is_non_external_packet(item)]
     reporter_followthrough_plan = _reporter_followthrough_plan(packets, generated_at=generated_at)
     followthrough_receipt_gates = _followthrough_receipt_gates(packets, generated_at=generated_at)
+    feedback_discovery_plan = _feedback_discovery_plan(
+        packets,
+        generated_at=generated_at,
+        workflow_path=feedback_discovery_workflow_path,
+        workflow=feedback_discovery_workflow,
+        ltd_registry_path=feedback_discovery_ltd_registry_path,
+        ltd_registry=feedback_discovery_ltd_registry,
+    )
     open_items = [
         dict(item)
         for item in raw_items
@@ -4047,6 +4558,14 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
             "materialized_count": len(packets),
             "case_materialized_count": len(case_packets),
             "operator_packet_count": len(operator_packets),
+            "feedback_discovery_workflow_path": str(feedback_discovery_workflow_path)
+            if _normalize_text(str(feedback_discovery_workflow_path))
+            else "",
+            "feedback_discovery_workflow_key": _normalize_text(feedback_discovery_workflow.get("key")),
+            "feedback_discovery_ltd_registry_path": str(feedback_discovery_ltd_registry_path)
+            if _normalize_text(str(feedback_discovery_ltd_registry_path))
+            else "",
+            "feedback_discovery_ltd_registry_key": _normalize_text(feedback_discovery_ltd_registry.get("key")),
             **install_receipt_source,
             **fix_receipt_source,
         },
@@ -4102,6 +4621,19 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
             "fix_available_ready_count": int(followthrough_receipt_gates.get("fix_available_ready_count") or 0),
             "please_test_ready_count": int(followthrough_receipt_gates.get("please_test_ready_count") or 0),
             "recovery_loop_ready_count": int(followthrough_receipt_gates.get("recovery_loop_ready_count") or 0),
+            "feedback_discovery_candidate_count": int(feedback_discovery_plan.get("candidate_count") or 0),
+            "feedback_discovery_karma_forge_candidate_count": int(
+                feedback_discovery_plan.get("karma_forge_candidate_count") or 0
+            ),
+            "feedback_discovery_first_part_complete_count": int(
+                feedback_discovery_plan.get("first_part_complete_count") or 0
+            ),
+            "feedback_discovery_missing_route_count": int(
+                feedback_discovery_plan.get("missing_route_count") or 0
+            ),
+            "feedback_discovery_missing_next_action_count": int(
+                feedback_discovery_plan.get("missing_next_action_count") or 0
+            ),
             "external_proof_required_case_count": sum(
                 1 for item in case_packets if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
             ),
@@ -4126,6 +4658,7 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
         "unresolved_external_proof_execution_plan": dict(unresolved_external_proof_execution_plan),
         "reporter_followthrough_plan": reporter_followthrough_plan,
         "followthrough_receipt_gates": followthrough_receipt_gates,
+        "feedback_discovery_plan": feedback_discovery_plan,
         "packets": packets,
     }
 
