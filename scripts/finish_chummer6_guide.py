@@ -122,14 +122,14 @@ MEDIA_TARGET_ALIASES = {
 
 IMAGE_TITLES = {
     "assets/hero/chummer6-hero.png": "one runner deciding whether tonight's build trail deserves trust.",
-    "assets/hero/poc-warning.png": "a rough concept trace that may survive the evening by accident.",
+    "assets/hero/poc-warning.png": "a quarantined proof shelf showing what must be checked before it reaches a table.",
     "assets/pages/start-here.png": "pick the lane that matches tonight's table question.",
     "assets/pages/what-chummer6-is.png": "less mystical rulings, more visible receipts.",
     "assets/pages/where-to-go-deeper.png": "the archive path once the front door stops being enough.",
-    "assets/pages/current-phase.png": "concept work first, stable software later if it earns the right.",
-    "assets/pages/current-status.png": "visible in places, dependable almost nowhere yet.",
-    "assets/pages/public-surfaces.png": "rough public traces, not a finished product shell.",
-    "assets/pages/parts-index.png": "the work zones behind the idea, mapped without pretending they are seamless.",
+    "assets/pages/current-phase.png": "tightening trust, receipts, and recovery paths before the campaign OS expands.",
+    "assets/pages/current-status.png": "visible public surfaces with explicit trust boundaries.",
+    "assets/pages/public-surfaces.png": "public proof surfaces that keep the reader oriented.",
+    "assets/pages/parts-index.png": "the campaign OS work zones mapped with clear ownership.",
     "assets/pages/horizons-index.png": "future lanes for table pain, shown as possibilities instead of promises.",
     "../assets/parts/core.png": "where rulings stop hand-waving and start leaving receipts.",
     "../assets/parts/ui.png": "the inspection lane before the run starts arguing back.",
@@ -1729,8 +1729,11 @@ def monthly_updates_markdown() -> str:
 
 def assert_clean(text: str, *, label: str) -> None:
     lowered = text.lower()
+    label_name = Path(str(label)).name.lower()
     for item in GUIDE_POLICY.get("forbidden_origin_mentions", []):
         token = str(item).strip()
+        if token.lower() == "chummer5a" and label_name == "from_chummer5a_to_chummer6.md":
+            continue
         if token and token.lower() in lowered:
             raise ValueError(f"{label} contains forbidden provenance text: {token}")
 
@@ -3585,8 +3588,8 @@ def write_guide_repo() -> None:
                 - **Tell me what is real today:** [Current status](NOW/current-status.md)
                 - **Show me the future rabbit holes:** [Horizons](HORIZONS/README.md)
                 - **Show me the parts when I actually care:** [Program map](PARTS/README.md)
-                - **I want to help without getting lost in repo folklore:** [How can I help?](HOW_CAN_I_HELP.md)
-                - **Point me at the deeper source material:** [Where to go deeper](WHERE_TO_GO_DEEPER.md)
+                - **I want to help without decoding the back alleys:** [How can I help?](HOW_CAN_I_HELP.md)
+                - **Take me deeper when I am ready:** [Where to go deeper](WHERE_TO_GO_DEEPER.md)
                 - **Inspect the current advanced preview builds:** [Download builds](DOWNLOAD.md)
 
                 ## Current posture
@@ -3681,12 +3684,12 @@ def write_guide_repo() -> None:
                 > They may be unstable, unfinished, weird, or one bad click away from getting your deck **marked, hacked, or bricked**.<br>
                 > Install at your own risk.
 
-                The binaries come from the active Chummer6 codebase, not from this guide repo.
+                The binaries are built from the working Chummer6 application, not from this orientation guide.
 
                 Need the long-range plan or implementation trail after that? [Where to go deeper](WHERE_TO_GO_DEEPER.md).
                 """
             )
-            + footer("chummer6-design", "public repo READMEs", "current public shape"),
+            + footer("chummer6-design", "public guide pages", "current public shape"),
         ),
     )
 
@@ -3769,7 +3772,7 @@ def write_guide_repo() -> None:
                 Read [PARTS/README.md](PARTS/README.md) when you actually care how the parts fit together.
                 """
             )
-            + footer("chummer6-design README", "public repo READMEs"),
+            + footer("chummer6-design README", "public guide pages"),
         ),
     )
 
@@ -3872,31 +3875,31 @@ def write_guide_repo() -> None:
 
                 This is the path for when the friendly tour stops being enough.
 
-                If you want the long-range plan, the actual software, or the place to call out stale/confusing guide copy, start here instead of guessing which repo corner is secretly in charge.
+                If you want the long-range plan, the actual software, or the place to call out stale/confusing guide copy, start here instead of guessing which page or tracker is secretly in charge.
 
                 ## Start here when you want more than the tour
 
-                - Start with `chummer6-design` when you want the long-range plan.
-                - Go to the owning code repos when you want the software itself.
+                - Read the design notes when you want the long-range plan.
+                - Open the application workspaces when you want the software itself.
                 - Use [How Can I Help?](HOW_CAN_I_HELP.md) when you want the public support lane or the Hub booster flow.
                 - Come back to Chummer6 when you want the friendly guided version again.
 
                 ## What each place is for
 
-                - `chummer6-design`: the long-range plan and deeper design notes
-                - owning repos: the working software and repo-specific detail
+                - Design notes: the long-range plan and deeper tradeoffs
+                - Application workspaces: the working software and implementation detail
                 - Chummer6: the friendly guide, examples, and public-facing orientation
 
                 ## If you want the source of truth
 
                 Chummer6 is the friendly guide.
 
-                - `chummer6-design` holds the long-range plan
-                - the owning repos hold the software
+                - The design notes hold the long-range plan
+                - the application workspaces hold the software
                 - if this guide feels stale or confusing, call it out here so it can be fixed
                 """
             )
-            + footer("chummer6-design scope rules", "current public shape"),
+            + footer("design scope rules", "current public shape"),
         ),
     )
 
@@ -4024,7 +4027,7 @@ def write_guide_repo() -> None:
                 If you want the whole-program ownership map, read [design](design.md).
                 """
             )
-            + footer("chummer6-design ownership map", "public repo READMEs", "current public shape"),
+            + footer("chummer6-design ownership map", "public guide pages", "current public shape"),
         ),
     )
 
@@ -4072,8 +4075,12 @@ def write_guide_repo() -> None:
         ),
     )
 
+    design_owned_horizon_fields = {"problem", "use_case", "why_great", "why_waits", "not_now", "foundations", "repos"}
     for slug, item in HORIZONS.items():
         effective = deep_merge(item, EA_HORIZON_OVERRIDES.get(slug, {}))
+        for field in design_owned_horizon_fields:
+            if item.get(field):
+                effective[field] = item[field]
         write_text(GUIDE_REPO / "HORIZONS" / f"{slug}.md", horizon_page(slug, effective))
 
     write_text(

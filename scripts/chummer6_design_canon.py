@@ -223,7 +223,7 @@ def load_horizon_canon() -> dict[str, dict[str, object]]:
             doc_title, sections = _markdown_sections(canon_doc)
             if doc_title:
                 title = doc_title
-        problem = str(row.get("pain_label") or "").strip() or _paragraph(sections.get("table pain", ""))
+        problem = _paragraph(sections.get("table pain", "")) or str(row.get("pain_label") or "").strip()
         use_case = _paragraph(sections.get("bounded product move", "")) or str(row.get("wow_promise") or "").strip()
         not_now = _paragraph(sections.get("why still a horizon", "")) or str((row.get("build_path") or {}).get("current_state") or "").strip()
         foundations = [str(value).strip() for value in (row.get("foundations") or []) if str(value).strip()]
@@ -312,6 +312,8 @@ def merge_horizon_canon(defaults: dict[str, dict[str, object]]) -> dict[str, dic
         row["foundations"] = list(parsed.get("foundations") or row.get("foundations") or [])
         row["repos"] = list(parsed.get("repos") or row.get("repos") or [])
         row["not_now"] = str(parsed.get("not_now") or row.get("not_now") or "").strip()
+        row["why_great"] = str(parsed.get("use_case") or row.get("why_great") or row.get("use_case") or "").strip()
+        row["why_waits"] = str(parsed.get("not_now") or row.get("why_waits") or row.get("not_now") or "").strip()
         row["hook"] = str(parsed.get("hook") or row.get("hook") or "").strip()
         row["brutal_truth"] = str(parsed.get("brutal_truth") or row.get("brutal_truth") or "").strip()
         row["access_posture"] = str(parsed.get("access_posture") or row.get("access_posture") or "").strip()
