@@ -44,10 +44,14 @@ def test_horizon_pages_carry_design_public_body_and_readable_foundations() -> No
 
     assert "## Mission Market" in black_ledger
     assert "## Rule Environment" in karma_forge
-    assert "- C0 - campaign, run, and Hub-owned receipt boundaries" in black_ledger
-    assert "- D2 - restore-safe sync, package portability, and missing-package warnings" in karma_forge
-    assert "- C0\n" not in black_ledger
-    assert "- D2\n" not in karma_forge
+    assert "## Canon Links" not in black_ledger
+    assert "## Canon Links" not in karma_forge
+    assert "products/chummer/" not in black_ledger
+    assert "products/chummer/" not in karma_forge
+    assert "## What would need to exist first" not in black_ledger
+    assert "## What would need to exist first" not in karma_forge
+    assert "- C0" not in black_ledger
+    assert "- D2" not in karma_forge
 
 
 def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -71,7 +75,7 @@ def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch:
         "PARTS/README.md",
         "HORIZONS/README.md",
         "assets/hero/chummer6-hero.png",
-        "assets/hero/poc-warning.png",
+        "assets/hero/preview-warning.png",
         "assets/pages/start-here.png",
         "assets/pages/what-chummer6-is.png",
         "assets/pages/where-to-go-deeper.png",
@@ -89,7 +93,7 @@ def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch:
         if path.suffix == ".md":
             if rel == "README.md":
                 path.write_text(
-                    "## Pick your path\n## Current posture\n## What Changed Lately\nUPDATES/README.md\n## Try it now\nDOWNLOAD.md\n## What this means at a real table\n## Why this is worth watching\n## How can I help?\nHOW_CAN_I_HELP.md\nhttps://chummer.run/participate\n## POC shelf\nhttps://github.com/ArchonMegalon/Chummer6/releases\n",
+                    "## Pick your path\n## Current posture\n## What Changed Lately\nUPDATES/README.md\n## Try it now\nDOWNLOAD.md\n## What this means at a real table\n## Why this is worth watching\n## How can I help?\nHOW_CAN_I_HELP.md\nhttps://chummer.run/participate\n## Preview builds\nhttps://github.com/ArchonMegalon/Chummer6/releases\n",
                     encoding="utf-8",
                 )
             elif rel == "DOWNLOAD.md":
@@ -414,8 +418,8 @@ def test_updates_index_markdown_mentions_excluded_repos(monkeypatch: pytest.Monk
 
     text = finish.updates_index_markdown()
 
-    assert "Fleet and EA pushes do not appear here." in text
-    assert "Latest substantial pushes" in text
+    assert "Fleet and EA pushes do not appear here." not in text
+    assert "Latest visible changes" in text
     assert "Monthly archive" in text
 
 

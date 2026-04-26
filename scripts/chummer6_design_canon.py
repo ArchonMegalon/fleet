@@ -83,12 +83,34 @@ def _paragraph(text: str) -> str:
     return " ".join(parts).strip()
 
 
+def _meaningful_horizon_wait(text: str) -> str:
+    value = " ".join(str(text or "").split()).strip()
+    if value.casefold() in {"horizon", "future", "future idea", "future lane"}:
+        return ""
+    return value
+
+
 def _public_horizon_body(path: Path) -> str:
     text = _read_text(path)
     match = re.search(r"^##\s+(Human Promise|The Promise)\s*$", text, flags=re.MULTILINE | re.IGNORECASE)
     if not match:
         return ""
-    return text[match.start() :].strip()
+    return _strip_public_only_sections(text[match.start() :]).strip()
+
+
+def _strip_public_only_sections(text: str) -> str:
+    blocked = {"canon links", "source links", "design links", "repo links"}
+    lines: list[str] = []
+    skipping = False
+    for raw in str(text or "").splitlines():
+        section_match = SECTION_RE.match(raw.strip())
+        if section_match:
+            skipping = section_match.group(1).strip().casefold() in blocked
+            if skipping:
+                continue
+        if not skipping:
+            lines.append(raw)
+    return "\n".join(lines).strip()
 
 
 def load_page_registry() -> dict[str, object]:
@@ -233,7 +255,7 @@ def load_horizon_canon() -> dict[str, dict[str, object]]:
                 title = doc_title
         problem = _paragraph(sections.get("table pain", "")) or str(row.get("pain_label") or "").strip()
         use_case = _paragraph(sections.get("bounded product move", "")) or str(row.get("wow_promise") or "").strip()
-        not_now = _paragraph(sections.get("why still a horizon", "")) or str((row.get("build_path") or {}).get("current_state") or "").strip()
+        not_now = _meaningful_horizon_wait(_paragraph(sections.get("why still a horizon", ""))) or _meaningful_horizon_wait(str((row.get("build_path") or {}).get("current_state") or ""))
         foundation_lines = [value.replace("`", "") for value in _bullet_lines(sections.get("foundations", ""))]
         foundations = foundation_lines or [str(value).strip() for value in (row.get("foundations") or []) if str(value).strip()]
         repos = [str(value).strip() for value in (row.get("owning_repos") or []) if str(value).strip()]

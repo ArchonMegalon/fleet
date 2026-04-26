@@ -75,6 +75,7 @@ CHANGELOG_SKIP_SUBJECT_CONTAINS = (
     " mirrored ",
     "mirror discipline",
     "sender to god@chummer.run",
+    "github codex review",
     "docs-only",
     "repository contents",
 )
@@ -121,8 +122,8 @@ MEDIA_TARGET_ALIASES = {
 }
 
 IMAGE_TITLES = {
-    "assets/hero/chummer6-hero.png": "one runner deciding whether tonight's build trail deserves trust.",
-    "assets/hero/poc-warning.png": "a quarantined proof shelf showing what must be checked before it reaches a table.",
+    "assets/hero/chummer6-hero.png": "a streetdoc fitting a new cyberarm while the table asks whether the proof holds.",
+    "assets/hero/preview-warning.png": "a quarantined proof shelf showing what must be checked before it reaches a table.",
     "assets/pages/start-here.png": "pick the lane that matches tonight's table question.",
     "assets/pages/what-chummer6-is.png": "less mystical rulings, more visible receipts.",
     "assets/pages/where-to-go-deeper.png": "the archive path once the front door stops being enough.",
@@ -181,6 +182,9 @@ RETIRED = [
     "assets/hero/chummer6-hero.svg",
     "assets/hero/poc-warning.svg",
     "assets/hero/poc-warning.gif",
+    "assets/hero/poc-warning.png",
+    "assets/hero/poc-warning.webp",
+    "assets/hero/poc-warning.avif",
     "assets/diagrams/program-map.png",
     "assets/diagrams/status-strip.png",
     "assets/diagrams/program-map.svg",
@@ -207,6 +211,14 @@ RETIRED = [
     "assets/horizons/rule-x-ray.svg",
     "assets/horizons/run-passport.svg",
     "assets/horizons/threadcutter.svg",
+    "logs",
+    "HORIZONS/black-ledger.md.bak",
+    "HORIZONS/karma-forge.md.bak",
+    "UPDATES/2026-04-21-github-review-pr.md",
+    "UPDATES/2026-04-22-github-review-pr.md",
+    "UPDATES/2026-04-23-github-review-pr.md",
+    "UPDATES/2026-04-24-github-review-pr.md",
+    ".pytest_cache",
 ]
 
 PARTS = {
@@ -1488,13 +1500,7 @@ def dedent(text: str) -> str:
 
 
 def footer(*sources: str) -> str:
-    return dedent(
-        f"""
-        ---
-
-        <sub>Updated: {TODAY}</sub>
-        """
-    ).rstrip() + "\n"
+    return ""
 
 
 def _clean_commit_subject(subject: str) -> str:
@@ -1533,7 +1539,7 @@ def _generic_for_you(repo_label: str) -> str:
         return "The public-facing shell moved a little closer to behaving like a real front door instead of a clever stub."
     if lowered == "design":
         return "The public-facing rules for what Chummer should expose got less contradictory."
-    return "The visible Chummer surface moved a little, even if most of the work is still beneath the floorboards."
+    return "The visible Chummer surface moved a little closer to being clear for normal readers."
 
 
 def _generic_not_promised() -> str:
@@ -1581,7 +1587,7 @@ def _entry_copy(repo_label: str, subject: str) -> tuple[str, str, str]:
     if "canon" in lowered or "contract" in lowered:
         return (
             "The public rules for the project got tighter.",
-            "The repos are doing a little less free-styling about what should be visible to normal humans.",
+            "The public pages got clearer about what should be visible to normal readers.",
             "that the implementation already lives up to that contract.",
         )
     if "imag" in lowered or "visual" in lowered or "art" in lowered or "scene" in lowered:
@@ -1692,8 +1698,6 @@ def recent_changes_updates_index_markdown(*, limit: int = 8) -> str:
                 f"""
                 ### {entry['date']} · {entry['title']}
 
-                - Surface: {entry['repo_label']}
-                - Source push: `{entry['subject']}`
                 - What changed for you: {entry['what_changed_for_you']}
                 - Still not promised: {entry['still_not_promised']}
                 """
@@ -1707,9 +1711,8 @@ def recent_changes_updates_index_markdown(*, limit: int = 8) -> str:
 def updates_index_markdown() -> str:
     current_month = TODAY[:7]
     return (
-        "If you are checking whether this idea is still moving, this is the shortest honest shelf.\n\n"
-        "These entries track Chummer-facing repos only. Fleet and EA pushes do not appear here.\n\n"
-        "## Latest substantial pushes\n\n"
+        "If you are checking whether the idea is still moving, start here.\n\n"
+        "## Latest visible changes\n\n"
         f"{recent_changes_updates_index_markdown(limit=8)}\n\n"
         "## Monthly archive\n\n"
         f"- [{current_month}](./{current_month}.md)\n"
@@ -1721,8 +1724,8 @@ def monthly_updates_markdown() -> str:
     return (
         "## The quick read\n\n"
         f"{month_label} is mostly about making the public shape less misleading.\n\n"
-        "The useful question here is not \"did they push code\" but \"did anything get clearer for a normal person.\"\n\n"
-        "## Substantial pushes\n\n"
+        "The useful question here is: did anything get clearer for a normal person?\n\n"
+        "## Visible changes\n\n"
         f"{recent_changes_updates_index_markdown(limit=12)}\n"
     )
 
@@ -1812,6 +1815,8 @@ def dynamic_retired_outputs() -> list[str]:
         rel = path.relative_to(GUIDE_REPO).as_posix()
         if path.name != "README.md" and rel not in allowed_horizon_pages:
             retired.append(rel)
+    for path in (GUIDE_REPO / "HORIZONS").glob("*.md.bak"):
+        retired.append(path.relative_to(GUIDE_REPO).as_posix())
     for path in (GUIDE_REPO / "assets" / "horizons").glob("*.png"):
         rel = path.relative_to(GUIDE_REPO).as_posix()
         if rel not in allowed_horizon_assets:
@@ -3096,9 +3101,10 @@ def write_assets() -> None:
     audit_ea_media_manifest()
     media_manifest = load_ea_media_manifest()
     hero_path = GUIDE_REPO / "assets" / "hero" / "chummer6-hero.png"
-    poc_path = GUIDE_REPO / "assets" / "hero" / "poc-warning.png"
+    preview_source_path = GUIDE_REPO / "assets" / "pages" / "current-status.png"
+    preview_path = GUIDE_REPO / "assets" / "hero" / "preview-warning.png"
     write_binary(hero_path, require_guide_media_bytes(hero_path, media_manifest))
-    write_binary(poc_path, require_guide_media_bytes(poc_path, media_manifest))
+    write_binary(preview_path, require_guide_media_bytes(preview_source_path, media_manifest))
     for page_asset in (
         GUIDE_REPO / "assets" / "pages" / "start-here.png",
         GUIDE_REPO / "assets" / "pages" / "what-chummer6-is.png",
@@ -3433,11 +3439,11 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
     )
     meanwhile = str(item.get("meanwhile") or fallback.get("meanwhile") or "").strip()
     why_great = str(item.get("why_great") or fallback.get("why_great") or item.get("brutal_truth") or item.get("hook") or "").strip()
-    why_waits = str(item.get("why_waits") or item.get("not_now") or "It stays parked in the garage until the current foundation work is actually done.").strip()
+    why_waits = str(item.get("why_waits") or item.get("not_now") or "It stays parked until the current product can prove the basics well enough.").strip()
     pitch_line = str(
         item.get("pitch_line")
         or fallback.get("pitch_line")
-        or "If your table pain is different, head back to the [Horizons index](README.md) and pitch a better future mess."
+        or "If your table pain is different, head back to the [Horizons index](README.md) and look for the closest future idea."
     ).strip()
     meanwhile_block = (
         "\n## Meanwhile, Chummer is doing this\n\n"
@@ -3445,13 +3451,27 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
         if meanwhile
         else ""
     )
-    public_body = str(item.get("public_body") or "").strip()
-    public_body_block = f"\n{public_body}\n\n" if public_body else ""
     scene_detail = (
         '<p align="center">'
         f'<img src="../assets/horizons/details/{slug}-scene.png" alt="{title} dialogue scene still" width="420">'
         "</p>\n\n"
     )
+    public_body = str(item.get("public_body") or "").strip()
+    if public_body:
+        body = (
+            f"{image_banner(f'{title} banner', f'../assets/horizons/{slug}.png')}\n\n"
+            f"**{item['hook']}**\n\n"
+            "_Status: Horizon only — future idea, not active build work._\n\n"
+            "## What problem does this solve?\n\n"
+            f"{problem}\n\n"
+            "## A real table scene\n\n"
+            f"{scene}\n\n"
+            f"{scene_detail}"
+            f"{meanwhile_block}\n"
+            f"\n{public_body}\n"
+            + footer("chummer6-design horizon guidance", "current public shape")
+        )
+        return page_markdown(title, body)
     body = (
         f"{image_banner(f'{title} banner', f'../assets/horizons/{slug}.png')}\n\n"
         f"**{item['hook']}**\n\n"
@@ -3462,15 +3482,10 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
         f"{scene}\n\n"
         f"{scene_detail}"
         f"{meanwhile_block}\n"
-        f"{public_body_block}"
         "## Why that would be great\n\n"
         f"{why_great}\n\n"
         "## Why it is still a Horizon\n\n"
         f"{why_waits}\n\n"
-        "## What would need to exist first\n\n"
-        f"{foundations}\n\n"
-        "## Pitch your own future\n\n"
-        f"{pitch_line}\n"
         + footer("chummer6-design horizon guidance", "current public shape")
     )
     return page_markdown(title, body)
@@ -3591,9 +3606,9 @@ def write_guide_repo() -> None:
                 - **I am new here:** [Start Here](START_HERE.md)
                 - **Give me the product story:** [What Chummer6 is](WHAT_CHUMMER6_IS.md)
                 - **Tell me what is real today:** [Current status](NOW/current-status.md)
-                - **Show me the future rabbit holes:** [Horizons](HORIZONS/README.md)
+                - **Show me future ideas:** [Horizons](HORIZONS/README.md)
                 - **Show me the parts when I actually care:** [Program map](PARTS/README.md)
-                - **I want to help without decoding the back alleys:** [How can I help?](HOW_CAN_I_HELP.md)
+                - **I want to help without decoding project internals:** [How can I help?](HOW_CAN_I_HELP.md)
                 - **Take me deeper when I am ready:** [Where to go deeper](WHERE_TO_GO_DEEPER.md)
                 - **Inspect the current advanced preview builds:** [Download builds](DOWNLOAD.md)
 
@@ -3644,7 +3659,7 @@ def write_guide_repo() -> None:
 
                 ## What is happening right now
 
-                Right now the crew is doing trust work, not bolting neon spoilers onto half-built engines.
+                Right now the project is doing trust work before promising more than the preview can carry.
                 {tension}
 
                 Current focus:
@@ -3657,7 +3672,7 @@ def write_guide_repo() -> None:
 
                 ## When you want the map
 
-                You do not need the seam map first, but it is here when you need it:
+                You do not need the program map first, but it is here when you need it:
 
                 - **Rules truth** lives in [Core](PARTS/core.md)
                 - **Prep and inspect** lives in [UI](PARTS/ui.md)
@@ -3670,28 +3685,28 @@ def write_guide_repo() -> None:
 
                 If you want the full guided version, read the [Program map](PARTS/README.md).
 
-                ## Future rabbit holes
+                ## Future ideas
 
                 {horizon_intro}
 
                 - [Horizons index](HORIZONS/README.md)
 
-                ## POC shelf
+                ## Preview builds
 
-                {image_banner("POC warning banner", "assets/hero/poc-warning.png")}
+                {image_banner("Preview warning banner", "assets/hero/preview-warning.png")}
 
-                Want to know whether all this talk cashes out into real software? This is the shelf where you stop reading and start risking your evening.
+                Want to know whether any of this exists as software yet? Start with the current preview builds.
 
                 - [Download builds](DOWNLOAD.md)
                 - [Raw GitHub releases]({GITHUB_RELEASES_URL})
 
-                > **Street warning:** POC builds are for curious chummers, not cautious wageslaves.<br>
-                > They may be unstable, unfinished, weird, or one bad click away from getting your deck **marked, hacked, or bricked**.<br>
+                > **Preview warning:** these builds are for curious testers, not cautious production use.<br>
+                > They may be unstable, unfinished, or awkward to install.<br>
                 > Install at your own risk.
 
                 The binaries are built from the working Chummer6 application, not from this orientation guide.
 
-                Need the long-range plan or implementation trail after that? [Where to go deeper](WHERE_TO_GO_DEEPER.md).
+                Need the long-range plan after that? [Where to go deeper](WHERE_TO_GO_DEEPER.md).
                 """
             )
             + footer("chummer6-design", "public guide pages", "current public shape"),
@@ -3708,9 +3723,9 @@ def write_guide_repo() -> None:
 
                 Start with the problem you have tonight, not with a lecture about how the software is arranged.
 
-                Chummer6 is here for four common moments: you need to run a live session, prove why a number changed, support a cursed house rule, or peek at the future rabbit holes.
+                Chummer6 is here for four common moments: you need to run a live session, prove why a number changed, support a house rule, or see the future ideas.
 
-                You do not need the internal map first. You need the shortest path to the page that tells you whether this can run a session, explain a weird number, support a cursed table rule, or show you what the project is trying to become.
+                You do not need the internal map first. You need the shortest path to the page that tells you whether this can run a session, explain a weird number, support a table rule, or show you what the project is trying to become.
 
                 ## I want to try a build first
 
@@ -3738,9 +3753,9 @@ def write_guide_repo() -> None:
 
                 ## I want to bend the rules for my table
 
-                You want the lane that handles scripted edge cases, multi-era weirdness, and the deeper docs behind custom behavior.
+                You want the lane that handles custom table behavior, edge cases, and deeper explanations.
 
-                Tonight: your table has a house rule, an SR4 habit, or a cursed exception that needs a real home instead of a sticky note.
+                Tonight: your table has a house rule, an older-edition habit, or an exception that needs a real home instead of a sticky note.
 
                 Start here: [WHERE_TO_GO_DEEPER.md](WHERE_TO_GO_DEEPER.md)
 
@@ -3748,15 +3763,15 @@ def write_guide_repo() -> None:
 
                 You want the future-facing ideas: the problems the project wants to solve later, the table pain behind them, and the stuff that is still firmly in dream territory.
 
-                Tonight: you already get the current pitch and now want to know what the next rabbit holes could be.
+                Tonight: you already get the current pitch and want to know what future ideas are on the table.
 
                 Start here: [HORIZONS/README.md](HORIZONS/README.md)
 
                 ## I want to help the project
 
-                You want the shortest path to public bug reports, feature ideas, or the new booster flow for explicitly lending temporary premium help without turning the whole project into premium-by-default chaos.
+                You want the shortest path to public bug reports, feature ideas, or the booster flow for explicitly lending temporary premium help without turning the whole project into premium-by-default.
 
-                Tonight: you like what the project is trying to do and want a clean way to support it without guessing which repo cave to shout into.
+                Tonight: you like what the project is trying to do and want a clean way to support it without guessing where to go.
 
                 Start here: [HOW_CAN_I_HELP.md](HOW_CAN_I_HELP.md)
 
@@ -3764,7 +3779,7 @@ def write_guide_repo() -> None:
 
                 You want the short human version of what changed recently, why it matters, and what is still very much not promised.
 
-                Tonight: you do not need a commit feed. You need proof that the idea is either crawling forward or still face-down in a puddle.
+                Tonight: you need a quick read on whether anything visible moved.
 
                 Start here: [UPDATES/README.md](UPDATES/README.md)
 
@@ -3821,7 +3836,7 @@ def write_guide_repo() -> None:
 
                 ## Why that matters at the table
 
-                When the number moves, the table should not have to stop and reverse-engineer folklore. When the network gets stupid, the session should not die. When a table uses a weird era mix or one cursed house rule, that weirdness should have a real home instead of a pile of "remember this next time" notes.
+                When the number moves, the table should not have to stop and reverse-engineer folklore. When the network gets unreliable, the session should not die. When a table uses an older-edition mix or one house rule, that rule should have a real home instead of a pile of "remember this next time" notes.
 
                 ## What feels different from older opaque tool behavior
 
@@ -3854,7 +3869,7 @@ def write_guide_repo() -> None:
 
                 If you want that map, go to [PARTS/README.md](PARTS/README.md).
 
-                Need the long-range plan or implementation trail after the product story? Start with [PARTS/README.md](PARTS/README.md) or [WHERE_TO_GO_DEEPER.md](WHERE_TO_GO_DEEPER.md).
+                Need the long-range plan after the product story? Start with [PARTS/README.md](PARTS/README.md) or [WHERE_TO_GO_DEEPER.md](WHERE_TO_GO_DEEPER.md).
                 """
             )
             + footer("chummer6-design", "current public shape"),
@@ -3892,7 +3907,7 @@ def write_guide_repo() -> None:
                 ## What each place is for
 
                 - Design notes: the long-range plan and deeper tradeoffs
-                - Application workspaces: the working software and implementation detail
+                - Application workspaces: the working software and technical detail
                 - Chummer6: the friendly guide, examples, and public-facing orientation
 
                 ## If you want the source of truth
@@ -3934,9 +3949,9 @@ def write_guide_repo() -> None:
 
                 ## Why that matters
 
-                This is the work that makes later wow-ideas cheap instead of chaotic.
+                This is the work that makes later ideas safer to build.
 
-                No neon spoiler matters if the frame is still loose.
+                No future feature matters if the basics are still unreliable.
                 """
             )
             + footer("chummer6-design vision", "current public shape"),
@@ -3980,7 +3995,7 @@ def write_guide_repo() -> None:
 
                 {public_surfaces_body}
 
-                Canonical preview surfaces from `STATUS_PLANE.generated.yaml`:
+                Current visible surfaces:
 
                 {public_surface_block}
 
@@ -4052,13 +4067,9 @@ def write_guide_repo() -> None:
 
                 {horizons_index_body}
 
-                > **Reality check from the troll behind the curtain**
-                > These are horizon ideas, not signed blood contracts. Some may ship. Some may mutate. Some may remain beautiful nonsense forever.
-                > If your table pain is different, pitch a better future. Later there should be a better way for chummers to help signal which rabbit holes deserve the next flashlight.
-                >
-                > Also, if any of this sounds too certain, distrust the sentence before you trust the horizon.
+                These are future ideas, not shipment promises. They are here to show the table problems Chummer6 wants to solve later.
 
-                ## Pick the pain, then the codename
+                ## Pick the problem
 
 {horizon_index_lines()}
 
@@ -4069,11 +4080,7 @@ def write_guide_repo() -> None:
                 - what Chummer would be doing while the table keeps playing
                 - the payoff if it ever lands
                 - the reason it is still parked
-                - the foundations that have to exist first
-
-                ## Pitch your own future
-
-                If your table pain is not on this list, good. Horizons is not holy scripture. Bring a better problem and a sharper idea.
+                - the first useful version when that is known
                 """
             )
             + footer("chummer6-design horizon guidance", "current public shape"),
@@ -4124,7 +4131,6 @@ def write_guide_repo() -> None:
                 - **preview**: visible and usable, but still moving toward its final public shape
                 - **runtime stack**: the exact rules, options, and package mix the session is using
                 - **ruleset**: the era or package of Shadowrun rules currently in play
-                - **POC**: a build or surface that is real enough to try, but still rough enough to bite
                 - **horizon**: a future idea that is being explored, not promised
                 """
             )
@@ -4226,6 +4232,22 @@ def audit_generated_repo() -> None:
         "blocker truth",
         "generic review context",
     ]
+    casual_reader_forbidden_terms = [
+        "## canon links",
+        "products/chummer/",
+        "/docker/",
+        "chummer6-design",
+        "executive-assistant",
+        "source push:",
+        "source trail",
+        "source trails",
+        "implementation trail",
+        "poc warning",
+        "github codex review",
+        "what would need to exist first",
+        "pitch your own future",
+        "<sub>updated:",
+    ]
     required = [
         GUIDE_REPO / "README.md",
         GUIDE_REPO / "DOWNLOAD.md",
@@ -4241,7 +4263,7 @@ def audit_generated_repo() -> None:
         required.extend(
             [
                 GUIDE_REPO / "assets" / "hero" / "chummer6-hero.png",
-                GUIDE_REPO / "assets" / "hero" / "poc-warning.png",
+                GUIDE_REPO / "assets" / "hero" / "preview-warning.png",
                 GUIDE_REPO / "assets" / "pages" / "start-here.png",
                 GUIDE_REPO / "assets" / "pages" / "what-chummer6-is.png",
                 GUIDE_REPO / "assets" / "pages" / "where-to-go-deeper.png",
@@ -4290,6 +4312,9 @@ def audit_generated_repo() -> None:
             for term in forbidden_hotlinks:
                 if term and term in lowered:
                     raise ValueError(f"{path} contains forbidden hotlink term: {term}")
+            for term in casual_reader_forbidden_terms:
+                if term and term in lowered:
+                    raise ValueError(f"{path} contains visitor-hostile public term: {term}")
 
     readme = (GUIDE_REPO / "README.md").read_text(encoding="utf-8")
     required_readme_needles = [
@@ -4302,7 +4327,7 @@ def audit_generated_repo() -> None:
         "## How can I help?",
         "HOW_CAN_I_HELP.md",
         "https://chummer.run/participate",
-        "## POC shelf",
+        "## Preview builds",
         GITHUB_RELEASES_URL,
     ]
     if readme_updates_teaser_enabled():
