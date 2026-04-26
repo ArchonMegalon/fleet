@@ -118,6 +118,97 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertIsNotNone(row)
             self.assertTrue(str(row["trace_id"] or "").startswith("controller-github-review-"))
 
+    def test_request_github_review_regenerates_stale_zero_pr_record(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.QUEUE_RECOVERY_DIR = root / "queue-recovery"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[]', 0, 0, 'review_requested', 'Review ui', NULL, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    ("ui", str(repo_root), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO pull_requests(
+                        package_id, project_id, repo_owner, repo_name, branch_name, base_branch, pr_number,
+                        pr_url, pr_title, pr_body, pr_state, draft, head_sha, review_mode, review_trigger,
+                        review_focus, review_status, created_at, updated_at
+                    )
+                    VALUES('legacy:ui', 'ui', 'ArchonMegalon', 'chummer6-ui', 'fleet/ui', 'main', 0,
+                        '', 'stale', '', 'draft', 1, 'oldsha', 'github', 'manual_comment',
+                        'focus=stale', 'queued', ?, ?)
+                    """,
+                    (now, now),
+                )
+
+            config = {
+                "projects": [
+                    {
+                        "id": "ui",
+                        "path": str(repo_root),
+                        "review": {
+                            "enabled": True,
+                            "mode": "github",
+                            "owner": "ArchonMegalon",
+                            "repo": "chummer6-ui",
+                            "base_branch": "main",
+                        },
+                    }
+                ],
+                "accounts": {},
+            }
+            regenerated_pr = {
+                "project_id": "ui",
+                "repo_owner": "ArchonMegalon",
+                "repo_name": "chummer6-ui",
+                "branch_name": "fleet/ui",
+                "base_branch": "main",
+                "pr_number": 42,
+                "pr_url": "https://github.example/pr/42",
+                "head_sha": "newsha",
+                "review_focus": "focus=stale",
+            }
+
+            with mock.patch.object(self.controller, "normalize_config", return_value=config):
+                with mock.patch.object(self.controller, "github_token", return_value="token"):
+                    with mock.patch.object(
+                        self.controller,
+                        "project_github_repo",
+                        return_value={"owner": "ArchonMegalon", "repo": "chummer6-ui", "base_branch": "main"},
+                    ):
+                        with mock.patch.object(
+                            self.controller,
+                            "ensure_review_pull_request_record",
+                            return_value=({"head_sha": "newsha"}, regenerated_pr),
+                        ) as ensure_record:
+                            with mock.patch.object(self.controller, "request_github_review", return_value=123) as request_review:
+                                result = self.controller.request_project_github_review_now("ui")
+
+            ensure_record.assert_called_once()
+            request_review.assert_called_once()
+            self.assertEqual(request_review.call_args.args[1]["pr_number"], 42)
+            self.assertEqual(result["pr_number"], 42)
+
+    def test_review_branch_push_uses_force_with_lease(self) -> None:
+        source = MODULE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn('"push",\n            "--force-with-lease"', source)
+
     def _ready_lane_capacity(self) -> dict[str, dict[str, object]]:
         lane_snapshot = {"state": "ready", "providers": []}
         return {
@@ -1941,6 +2032,52 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(alias, "acct-chatgpt-archon")
 
+    def test_choose_review_account_alias_uses_shared_ea_fallback_for_legacy_project_accounts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.controller.DB_PATH = Path(tmpdir) / "fleet.db"
+            self.controller.LOG_DIR = Path(tmpdir) / "logs"
+            self.controller.CODEX_HOME_ROOT = Path(tmpdir) / "homes"
+            self.controller.GROUP_ROOT = Path(tmpdir) / "groups"
+            self.controller.init_db()
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at)
+                    VALUES(?, 'ea', '["ea-coder-hard"]', 1, 'ready', ?)
+                    """,
+                    ("acct-ea-core", now),
+                )
+
+            alias = self.controller.choose_review_account_alias(
+                {
+                    "accounts": {
+                        "acct-chatgpt-archon": {
+                            "lane": "core",
+                            "auth_kind": "chatgpt_auth_json",
+                            "health_state": "disabled",
+                        },
+                        "acct-ea-core": {
+                            "lane": "core",
+                            "auth_kind": "ea",
+                            "allowed_models": ["ea-coder-hard"],
+                        },
+                    }
+                },
+                {
+                    "id": "mobile",
+                    "accounts": ["acct-chatgpt-archon"],
+                    "account_policy": {
+                        "preferred_accounts": ["acct-chatgpt-archon"],
+                        "allow_chatgpt_accounts": True,
+                        "allow_api_accounts": True,
+                    },
+                },
+                reviewer_lane="core",
+            )
+
+        self.assertEqual(alias, "acct-ea-core")
+
     def test_ea_codex_profiles_falls_back_to_persisted_runtime_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             self.controller.DB_PATH = Path(tmpdir) / "fleet.db"
@@ -3420,6 +3557,14 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertFalse(gate["blocked"])
         self.assertEqual(gate["target_lane"], "easy")
         self.assertEqual(gate["remaining_by_lane"], {"core_booster": 0})
+
+    def test_package_compile_targets_authority_capacity_even_when_lane_prefers_booster(self) -> None:
+        target_lane = self.controller.quartermaster_target_lane_for_decision(
+            {"lane": "core_booster", "requires_contract_authority": False},
+            {"package_kind": "package_compile"},
+        )
+
+        self.assertEqual(target_lane, "core_authority")
 
     def test_quartermaster_active_lane_usage_ignores_unmanaged_easy_runtime_tasks(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -5575,6 +5720,73 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(model, "gpt-5.3-codex")
         self.assertIn("starvation fallback", why)
 
+    def test_pick_account_and_model_allows_package_compile_booster_fallback_to_emergency_chatgpt_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            auth_json = root / "auth.json"
+            auth_json.write_text("{}", encoding="utf-8")
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, auth_json_file, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES(?, 'chatgpt_auth_json', ?, ?, 1, 'ready', ?)
+                    """,
+                    ("acct-chatgpt-archon", str(auth_json), json.dumps(["gpt-5.3-codex"]), now),
+                )
+
+            config = {
+                "accounts": {
+                    "acct-chatgpt-archon": {
+                        "auth_kind": "chatgpt_auth_json",
+                    },
+                },
+                "lanes": {
+                    "core": {"runtime_model": "ea-coder-hard"},
+                    "core_booster": {"runtime_model": "ea-coder-hard"},
+                    "core_authority": {"runtime_model": "ea-coder-hard"},
+                },
+                "spider": {"price_table": self.controller.DEFAULT_PRICE_TABLE},
+            }
+            project_cfg = {
+                "id": "fleet",
+                "accounts": [],
+                "account_policy": {
+                    "preferred_accounts": [],
+                    "allow_api_accounts": True,
+                    "allow_chatgpt_accounts": False,
+                    "emergency_chatgpt_fallback_accounts": ["acct-chatgpt-archon"],
+                },
+            }
+            decision = {
+                "tier": "bounded_fix",
+                "lane": "core_booster",
+                "lane_submode": "default",
+                "escalation_reason": "package_compile_frontier",
+                "allowed_lanes": ["core_booster", "core_authority"],
+                "model_preferences": ["ea-coder-hard-batch"],
+                "estimated_input_tokens": 800,
+                "estimated_output_tokens": 200,
+                "task_meta": {
+                    "package_kind": "package_compile",
+                    "requires_contract_authority": False,
+                },
+            }
+
+            alias, model, why, _trace = self.controller.pick_account_and_model(config, project_cfg, decision)
+
+        self.assertEqual(alias, "acct-chatgpt-archon")
+        self.assertEqual(model, "gpt-5.3-codex")
+        self.assertIn("starvation fallback", why)
+
     def test_pick_account_and_model_falls_back_from_survival_to_core_when_survival_pool_is_starved(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -6200,6 +6412,45 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(cache_payload["tasks"][0]["task_kind"], "coding")
         self.assertEqual(cache_payload["tasks"][0]["slice_name"], "persist survival queue state")
 
+    def test_stale_scheduled_runtime_task_without_live_handle_releases_capacity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            self.controller.sync_config_to_db(
+                {
+                    "projects": [
+                        {
+                            "id": "fleet",
+                            "path": str(repo_root),
+                            "queue": ["persist survival queue state"],
+                            "enabled": True,
+                        }
+                    ]
+                }
+            )
+            stale_at = self.controller.utc_now() - self.controller.dt.timedelta(
+                seconds=self.controller.RUNTIME_TASK_SCHEDULED_GRACE_SECONDS + 30
+            )
+            self.controller.upsert_runtime_task(
+                "fleet",
+                task_kind="coding",
+                task_state="scheduled",
+                payload={"slice_name": "persist survival queue state"},
+                scheduled_at=stale_at,
+            )
+
+            has_runtime_task = self.controller.project_has_runtime_task("fleet")
+            task = self.controller.runtime_task_row("fleet")
+
+        self.assertFalse(has_runtime_task)
+        self.assertIsNone(task)
+
     def test_rehydrate_runtime_tasks_relaunches_scheduled_coding_intent(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -6255,6 +6506,75 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(launched, ["persist survival queue state"])
         self.assertFalse(has_runtime_task)
+
+    def test_attach_runtime_task_handle_uses_current_running_loop(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            started: list[str] = []
+
+            async def fake_runtime() -> None:
+                started.append("started")
+
+            async def _run() -> None:
+                foreign_loop = asyncio.new_event_loop()
+                self.addCleanup(foreign_loop.close)
+                self.controller.state.controller_loop = foreign_loop
+                attached = self.controller.attach_runtime_task_handle("fleet", fake_runtime())
+                self.assertTrue(attached)
+                await asyncio.sleep(0)
+                self.controller.prune_finished_tasks()
+                self.controller.state.controller_loop = None
+
+            asyncio.run(_run())
+
+        self.assertEqual(started, ["started"])
+
+    def test_ensure_package_worktree_repairs_broken_existing_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            subprocess.run(["git", "init", "-b", "main"], cwd=repo_root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            (repo_root / "README.md").write_text("initial\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=repo_root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["git", "commit", "-m", "initial"], cwd=repo_root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            worktree_root = root / "worktree"
+            worktree_root.mkdir()
+            (worktree_root / ".git").write_text("gitdir: /missing/worktree/admin\n", encoding="utf-8")
+            (worktree_root / "old.txt").write_text("preserve broken contents\n", encoding="utf-8")
+
+            repaired = self.controller.ensure_package_worktree(
+                {"id": "fleet", "path": str(repo_root)},
+                {
+                    "package_id": "pkg",
+                    "worktree_root": str(worktree_root),
+                    "base_ref": "HEAD",
+                    "branch_name": "fleet/fleet/pkg",
+                },
+            )
+
+            probe = subprocess.run(
+                ["git", "rev-parse", "--is-inside-work-tree"],
+                cwd=repaired,
+                check=True,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            quarantined = any(root.glob(".broken-worktree-*"))
+
+            self.assertEqual(repaired, worktree_root)
+            self.assertEqual(probe.stdout.strip(), "true")
+            self.assertTrue(quarantined)
 
     def test_api_pause_project_cancels_live_runtime_and_marks_project_paused(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -6761,10 +7081,22 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertNotIn("--model", captured_cmd)
         self.assertEqual(captured_env["CODEXEA_MODEL"], "ea-coder-hard")
         self.assertEqual(captured_env["CODEXEA_REASONING_EFFORT"], "high")
-        self.assertIn('mcp_servers.ea.required=false', captured_cmd)
+        self.assertNotIn('mcp_servers.ea.required=false', captured_cmd)
         self.assertNotIn('model_provider="ea"', captured_cmd)
         self.assertNotIn('model_providers.ea.base_url="http://host.docker.internal:8090/v1"', captured_cmd)
         self.assertNotIn('model_providers.ea.http_headers={"X-EA-Principal-ID"="codex-fleet"}', captured_cmd)
+
+    def test_ea_shim_safe_runner_overrides_drop_mcp_server_config(self) -> None:
+        filtered = self.controller.ea_shim_safe_runner_overrides(
+            [
+                'mcp_servers.ea.command="python3"',
+                'mcp_servers.ea.required=false',
+                'model_providers.ea.base_url="http://host.docker.internal:8090/v1"',
+                'tools.web_search=true',
+            ]
+        )
+
+        self.assertEqual(filtered, ['tools.web_search=true'])
 
     def test_execute_project_slice_easy_mcp_sets_codexea_easy_submode(self) -> None:
         repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
@@ -8604,6 +8936,65 @@ class ControllerRoutingTests(unittest.TestCase):
 
             self.assertEqual(self.controller.project_dispatch_slots_remaining(config, config["projects"][0]), 1)
 
+    def test_independent_group_projects_keep_package_scheduler_scope_leases(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-a",
+                        "    title: Slice A",
+                        "    allowed_lanes:",
+                        "      - core_booster",
+                        "    allowed_paths:",
+                        "      - src/a.py",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "project_groups": [
+                    {"id": "control-plane", "projects": ["fleet"], "mode": "independent"}
+                ],
+                "lanes": {"core_booster": {"id": "core_booster", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            with self.controller.db() as conn:
+                row = conn.execute("SELECT * FROM projects WHERE id='fleet'").fetchone()
+
+            self.assertTrue(self.controller.project_uses_package_scheduler(config, "fleet"))
+            candidates = self.controller.prepare_work_package_dispatch_candidates(
+                config,
+                config["projects"][0],
+                row,
+                self.controller.utc_now(),
+            )
+
+        self.assertEqual([candidate.package_id for candidate in candidates], ["fleet-a"])
+        self.assertTrue(candidates[0].dispatchable)
+
     def test_compile_project_work_packages_injects_package_compile_for_scope_free_booster_queue(self) -> None:
         project_cfg = {
             "id": "fleet",
@@ -8672,6 +9063,87 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual([package["package_kind"] for package in packages], ["implementation", "implementation"])
         self.assertEqual(packages[0]["dependencies"], [])
         self.assertEqual(packages[1]["dependencies"], [])
+
+    def test_completed_unscoped_queue_items_do_not_force_package_compile(self) -> None:
+        project_cfg = {
+            "id": "fleet",
+            "path": "/tmp/fleet",
+            "queue": [
+                {
+                    "package_id": "fleet-done",
+                    "title": "Already closed platform slice",
+                    "status": "done",
+                    "allowed_lanes": ["core_booster"],
+                },
+                {
+                    "package_id": "fleet-active",
+                    "title": "Scoped active mirror repair",
+                    "allowed_lanes": ["core_booster"],
+                    "allowed_paths": [".codex-design"],
+                    "owned_surfaces": ["design_mirror:fleet"],
+                },
+            ],
+        }
+        lanes = {
+            "core": {"id": "core", "runtime_model": "ea-coder-hard"},
+            "core_authority": {"id": "core_authority", "runtime_model": "ea-coder-hard"},
+            "core_booster": {"id": "core_booster", "runtime_model": "ea-coder-hard"},
+        }
+
+        packages = self.controller.compile_project_work_packages(project_cfg, lanes=lanes)
+
+        self.assertEqual([package["package_id"] for package in packages], ["fleet-done", "fleet-active"])
+        self.assertEqual([package["package_kind"] for package in packages], ["implementation", "implementation"])
+        self.assertEqual(packages[0]["declared_status"], "done")
+        self.assertEqual(packages[1]["dependencies"], [])
+
+    def test_sync_work_packages_preserves_declared_done_status_without_package_compile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [
+                            {
+                                "package_id": "fleet-done",
+                                "title": "Already closed platform slice",
+                                "status": "done",
+                                "allowed_lanes": ["core_booster"],
+                            },
+                            {
+                                "package_id": "fleet-active",
+                                "title": "Scoped active mirror repair",
+                                "allowed_lanes": ["core_booster"],
+                                "allowed_paths": [".codex-design"],
+                                "owned_surfaces": ["design_mirror:fleet"],
+                            },
+                        ],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {
+                    "core": {"id": "core", "runtime_model": "ea-coder-hard"},
+                    "core_authority": {"id": "core_authority", "runtime_model": "ea-coder-hard"},
+                    "core_booster": {"id": "core_booster", "runtime_model": "ea-coder-hard"},
+                },
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            rows = self.controller.work_package_rows(project_id="fleet")
+
+        self.assertEqual([row["package_id"] for row in rows], ["fleet-done", "fleet-active"])
+        self.assertEqual([row["status"] for row in rows], ["complete", "ready"])
 
     def test_plan_candidate_launch_requires_scope_lease_for_booster_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -8992,6 +9464,67 @@ class ControllerRoutingTests(unittest.TestCase):
                 "scope conflict with fleet-contract-a on surface:horizon_family:contract_change:control-plane",
                 str(self.controller.work_package_scope_conflict(packages[1])),
             )
+
+    def test_generated_package_compile_overlay_keeps_booster_execution_lane(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-package-compile-abc123",
+                        "    package_kind: package_compile",
+                        "    horizon_family: package-compile",
+                        "    title: Compile booster-ready work packages from queue truth",
+                        "    allowed_lanes:",
+                        "      - core_booster",
+                        "      - core_authority",
+                        "    required_reviewer_lane: core_authority",
+                        "    final_reviewer_lane: core_authority",
+                        "    landing_lane: core_authority",
+                        "    allowed_paths:",
+                        "      - .codex-studio/published/WORKPACKAGES.generated.yaml",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {
+                    "core": {"id": "core", "runtime_model": "ea-coder-hard"},
+                    "core_authority": {"id": "core_authority", "runtime_model": "ea-coder-hard"},
+                    "core_booster": {"id": "core_booster", "runtime_model": "ea-coder-hard"},
+                },
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            packages = self.controller.work_package_rows(project_id="fleet")
+
+            self.assertEqual(len(packages), 1)
+            self.assertEqual(packages[0]["task_meta"]["allowed_lanes"], ["core_booster", "core_authority"])
+            self.assertFalse(bool(packages[0]["task_meta"].get("requires_contract_authority")))
+            self.assertEqual(packages[0]["task_meta"]["required_reviewer_lane"], "core_authority")
+            self.assertEqual(packages[0]["task_meta"]["final_reviewer_lane"], "core_authority")
+            self.assertEqual(packages[0]["task_meta"]["landing_lane"], "core_authority")
 
     def test_work_package_scope_conflict_detects_overlapping_allowed_path_wildcards(self) -> None:
         self.assertTrue(

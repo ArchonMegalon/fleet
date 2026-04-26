@@ -289,6 +289,18 @@ def _bundle_member_name(name: str) -> str:
     return normalized.strip("/")
 
 
+def _bundle_member_name_is_unsafe(name: str) -> bool:
+    normalized = name.strip().replace("\\", "/")
+    if not normalized:
+        return True
+    if normalized.startswith("/") or re.match(r"^[A-Za-z]:/", normalized):
+        return True
+    if normalized.startswith("./"):
+        normalized = normalized[2:]
+    parts = [part for part in normalized.split("/") if part not in {"", "."}]
+    return not parts or ".." in parts
+
+
 def _bundle_archive_is_reusable(bundle_archive: Path, *, expected_manifest: dict[str, Any]) -> bool:
     if not bundle_archive.is_file():
         return False
@@ -297,7 +309,7 @@ def _bundle_archive_is_reusable(bundle_archive: Path, *, expected_manifest: dict
             members = {
                 _bundle_member_name(member.name): member
                 for member in archive.getmembers()
-                if member.isfile()
+                if member.isfile() and not _bundle_member_name_is_unsafe(member.name)
             }
             manifest_member = members.get("external-proof-manifest.json")
             if manifest_member is None:
@@ -1296,15 +1308,36 @@ def _ingest_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
         "else",
         "  python3 -c "
         + shlex.quote(
-            "import os, pathlib, tarfile; "
-            "bundle=pathlib.Path(os.environ['BUNDLE_ARCHIVE']); "
-            "members=tarfile.open(bundle, 'r:gz').getmembers(); "
-            "bad=[member.name for member in members if member.name.startswith('/') or '..' in pathlib.PurePosixPath(member.name).parts]; "
-            "assert not bad, 'external-proof-bundle-path-unsafe:' + ','.join(sorted(set(bad))); "
-            "assert not any('..' in parts for parts in [pathlib.PurePosixPath(member.name).parts for member in members]), "
-            "'external-proof-bundle-path-unsafe:' + ','.join(sorted(set(bad)))"
+            "import os, pathlib, shutil, tarfile\n"
+            "bundle=pathlib.Path(os.environ['BUNDLE_ARCHIVE'])\n"
+            "target_root=pathlib.Path(os.environ['TARGET_ROOT'])\n"
+            "target_root.mkdir(parents=True, exist_ok=True)\n"
+            "target_root_resolved=target_root.resolve()\n"
+            "bad=[]\n"
+            "copied=[]\n"
+            "with tarfile.open(bundle, 'r:gz') as archive:\n"
+            "    for member in archive.getmembers():\n"
+            "        pure=pathlib.PurePosixPath(member.name)\n"
+            "        parts=tuple(part for part in pure.parts if part not in ('', '.'))\n"
+            "        if member.name.startswith('/') or '..' in parts or not member.isfile():\n"
+            "            bad.append(member.name)\n"
+            "            continue\n"
+            "        destination=target_root.joinpath(*parts)\n"
+            "        destination_parent=destination.parent.resolve()\n"
+            "        if target_root_resolved != destination_parent and target_root_resolved not in destination_parent.parents:\n"
+            "            bad.append(member.name)\n"
+            "            continue\n"
+            "        source=archive.extractfile(member)\n"
+            "        if source is None:\n"
+            "            bad.append(member.name)\n"
+            "            continue\n"
+            "        destination.parent.mkdir(parents=True, exist_ok=True)\n"
+            "        with source, destination.open('wb') as handle:\n"
+            "            shutil.copyfileobj(source, handle)\n"
+            "        copied.append('/'.join(parts))\n"
+            "assert not bad, 'external-proof-bundle-member-unsafe:' + ','.join(sorted(set(bad)))\n"
+            "assert copied, 'external-proof-bundle-empty:' + str(bundle)"
         ),
-        "  tar -xzf \"$BUNDLE_ARCHIVE\" -C \"$TARGET_ROOT\"",
         "fi",
         "python3 -c "
         + shlex.quote(
@@ -1611,14 +1644,12 @@ def _shell_hint_for_host(host: str) -> str:
 
 
 def _powershell_wrappers(commands: list[str]) -> list[str]:
-    wrapped: list[str] = []
-    for command in commands:
-        normalized = _normalize_text(command)
-        if not normalized:
-            continue
-        escaped = normalized.replace("'", "''")
-        wrapped.append(f"bash -lc '{escaped}'")
-    return wrapped
+    normalized_commands = [_normalize_text(command) for command in commands if _normalize_text(command)]
+    if not normalized_commands:
+        return []
+    script = "\n".join(["set -euo pipefail", *normalized_commands])
+    escaped = script.replace("'", "''")
+    return [f"bash -lc '{escaped}'"]
 
 
 def _preflight_commands_for_group(group: dict[str, Any], *, host: str) -> list[str]:
@@ -1862,11 +1893,20 @@ def _reset_zero_backlog_bundle_dir(bundle_dir: Path, expected_manifest: dict[str
     )
 
 
+def _materialize_zero_backlog_bundle_archive(bundle_archive: Path, bundle_dir: Path, expected_manifest: dict[str, Any]) -> None:
+    if int(expected_manifest.get("request_count") or 0) != 0:
+        return
+    if bundle_archive.exists():
+        bundle_archive.unlink()
+    with tarfile.open(bundle_archive, "w:gz") as archive:
+        archive.add(bundle_dir, arcname=".")
+
+
 def _materialize_command_files(
     plan: dict[str, Any], *, commands_dir: Path, journey_gates_path: Path | None = None, release_channel_path: Path | None = None
 ) -> dict[str, Any]:
     requested_hosts = [str(item) for item in (plan.get("hosts") or []) if str(item)]
-    hosts = requested_hosts or sorted(ALLOWED_REQUIRED_HOSTS)
+    hosts = sorted(set(requested_hosts).union(ALLOWED_REQUIRED_HOSTS))
     host_groups = plan.get("host_groups") or {}
     host_files: list[dict[str, str]] = []
     commands_dir.mkdir(parents=True, exist_ok=True)
@@ -1891,6 +1931,11 @@ def _materialize_command_files(
         ):
             bundle_archive.unlink()
         _reset_zero_backlog_bundle_dir(host_bundles_root / host_token, expected_manifest)
+        _materialize_zero_backlog_bundle_archive(
+            bundle_archive,
+            host_bundles_root / host_token,
+            expected_manifest,
+        )
         preflight_script = commands_dir / f"preflight-{host_token}-proof.sh"
         capture_script = commands_dir / f"capture-{host_token}-proof.sh"
         validation_script = commands_dir / f"validate-{host_token}-proof.sh"

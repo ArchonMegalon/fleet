@@ -1,36 +1,30 @@
 contract_name: executive_assistant.parity_lab_capture_pack
 schema_version: 1
-generated_at: 2026-04-19 11:57:17+00:00
+generated_at: 2026-04-23 04:22:19+00:00
 milestone:
   id: 103
   package_id: next90-m103-ea-parity-lab
   owned_surfaces:
   - parity_lab:capture
 sync_context:
-  task_local_telemetry_path: /docker/fleet/state/chummer_design_supervisor/shard-4/runs/20260419T153713Z-shard-4/TASK_LOCAL_TELEMETRY.generated.json
+  task_local_telemetry_path: /docker/fleet/state/chummer_design_supervisor/shard-4/runs/20260423T042213Z-shard-4/TASK_LOCAL_TELEMETRY.generated.json
   task_local_telemetry_snapshot:
     mode: implementation_only
-    scope_label: Next 90-day product advance wave
-    slice_summary: '20 next-wave milestones remain across 43 queue slices (20 in progress,
-      0 not started). Current dependency critical path: 101 -> 102 -> 103 -> 104 ->
-      105 -> 106 -> 107 -> 109 -> 114 -> 115 -> 116 -> 117 -> 119 -> 120.'
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    slice_summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open
+      under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+      ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
     status_query_supported: false
     polling_disabled: true
-    package_id: next90-m103-ea-parity-lab
-    frontier_id: 4287684466
-    milestone_id: 103
-    owned_surfaces:
-    - parity_lab:capture
-    - veteran_compare_packs
-    allowed_paths:
-    - skills
-    - tests
-    - feedback
-    - docs
+    package_id: ''
+    frontier_id: 1300044932
+    milestone_id: 0
+    owned_surfaces: []
+    allowed_paths: []
   readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  readiness_generated_at: '2026-04-19T15:37:38Z'
+  readiness_generated_at: '2026-04-23T04:22:19Z'
   runtime_handoff_path: /docker/fleet/state/chummer_design_supervisor/shard-4/ACTIVE_RUN_HANDOFF.generated.md
-  runtime_handoff_first_output_at: '2026-04-19T15:37:16Z'
+  runtime_handoff_first_output_at: '2026-04-23T04:22:17Z'
 worker_run_guard:
   implementation_only: true
   polling_disabled: true

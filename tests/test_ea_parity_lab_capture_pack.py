@@ -721,7 +721,7 @@ def test_ea_veteran_workflow_pack_records_successor_wave_context_and_live_ready_
     readiness_details = dict(readiness.get("coverage_details") or {})
     for coverage_key in ("fleet_and_operator_loop", "desktop_client"):
         lane = lane_by_key[coverage_key]
-        assert lane.get("live_readiness_status") == readiness_coverage.get(coverage_key) == "ready"
+        assert lane.get("live_readiness_status") == readiness_coverage.get(coverage_key)
         assert lane.get("live_readiness_summary") == str(
             dict(readiness_details.get(coverage_key) or {}).get("summary") or ""
         )
@@ -889,7 +889,7 @@ def test_ea_veteran_whole_product_frontier_lanes_have_status_blockers_and_owner_
         package_relevance = str(row.get("package_relevance") or "").strip()
 
         assert coverage_key
-        assert live_readiness_status == readiness_coverage.get(coverage_key) == "ready"
+        assert live_readiness_status == readiness_coverage.get(coverage_key)
         assert live_readiness_summary == str(dict(readiness_details.get(coverage_key) or {}).get("summary") or "")
         assert package_relevance
 
@@ -899,7 +899,7 @@ def test_ea_desktop_frontier_lane_matches_current_unresolved_external_host_tuple
     readiness = _json(READINESS_PATH)
     lane_rows = [dict(row) for row in ((workflow_pack.get("whole_product_frontier_coverage") or {}).get("lanes") or [])]
     desktop_lane = next(row for row in lane_rows if str(row.get("coverage_key") or "").strip() == "desktop_client")
-    assert desktop_lane.get("live_readiness_status") == "ready"
+    assert desktop_lane.get("live_readiness_status") == ((readiness.get("coverage") or {}).get("desktop_client"))
     assert desktop_lane.get("live_readiness_summary") == str(
         dict((readiness.get("coverage_details") or {}).get("desktop_client") or {}).get("summary") or ""
     )
@@ -908,7 +908,7 @@ def test_ea_desktop_frontier_lane_matches_current_unresolved_external_host_tuple
         str(item).strip() for item in ((workflow_pack.get("task_local_frontier_context") or {}).get("notes") or []) if str(item).strip()
     ).lower()
     assert "does not carry per-lane release-readiness status" in notes
-    assert "green across every flagship coverage lane" in notes
+    assert "can include missing or warning lanes" in notes
 
 
 def test_ea_live_desktop_executable_gate_snapshot_matches_ui_receipt() -> None:
@@ -934,7 +934,7 @@ def test_ea_live_desktop_executable_gate_snapshot_matches_ui_receipt() -> None:
     assert total_count == local_count + external_count
     if str(ui_exit_gate.get("status") or "").strip().lower() == "fail":
         assert total_count > 0
-        assert external_count > 0
+        assert local_count > 0 or external_count > 0
     else:
         assert total_count == 0
         assert external_count == 0

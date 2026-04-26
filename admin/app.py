@@ -217,6 +217,14 @@ WEEKLY_GOVERNOR_PACKET_MARKDOWN_FILENAME = "WEEKLY_GOVERNOR_PACKET.generated.md"
 CHUMMER_RELEASE_CHANNEL_PATH = pathlib.Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
 CHUMMER_RELEASE_REGISTRY_CURRENT_URL = str(os.environ.get("CHUMMER_RELEASE_REGISTRY_CURRENT_URL", "") or "").strip()
 CHUMMER_HUB_REGISTRY_BASE_URL = str(os.environ.get("CHUMMER_HUB_REGISTRY_BASE_URL", "") or "").strip()
+CHUMMER_DESIGN_ROOT = pathlib.Path(os.environ.get("CHUMMER_DESIGN_ROOT", "/docker/chummercomplete/chummer-design"))
+CHUMMER_PRODUCT_ROOT = CHUMMER_DESIGN_ROOT / "products" / "chummer"
+CHUMMER_WEEKLY_PRODUCT_PULSE_PATH = CHUMMER_PRODUCT_ROOT / "WEEKLY_PRODUCT_PULSE.generated.json"
+CHUMMER_KARMA_FORGE_HORIZON_PATH = CHUMMER_PRODUCT_ROOT / "horizons" / "karma-forge.md"
+CHUMMER_KARMA_FORGE_DISCOVERY_PATH = CHUMMER_PRODUCT_ROOT / "KARMA_FORGE_DISCOVERY_AND_HOUSE_RULE_INTAKE.md"
+CHUMMER_ICANPRENEUR_LANE_PATH = CHUMMER_PRODUCT_ROOT / "ICANPRENEUR_DISCOVERY_AND_VALIDATION_LANE.md"
+CHUMMER_HOUSE_RULE_DISCOVERY_REGISTRY_PATH = CHUMMER_PRODUCT_ROOT / "HOUSE_RULE_DISCOVERY_REGISTRY.yaml"
+CHUMMER_HORIZON_SIGNAL_POLICY_PATH = CHUMMER_PRODUCT_ROOT / "HORIZON_SIGNAL_POLICY.md"
 RUNTIME_HEALING_STABILITY_WINDOW_HOURS = int(os.environ.get("FLEET_RUNTIME_HEALING_STABILITY_WINDOW_HOURS", "6"))
 SUPPORT_CASE_SOURCE_ENV_KEYS = (
     "FLEET_SUPPORT_CASE_SOURCE",
@@ -887,8 +895,19 @@ def work_package_summary_payload(config: Optional[Dict[str, Any]] = None) -> Dic
     complete_packages = [
         row for row in package_rows if str(row.get("status") or "").strip().lower() in {"complete", "archived"}
     ]
-    active_claims: List[Dict[str, Any]] = [
+    active_package_ids = {
+        str(row.get("package_id") or "").strip()
+        for row in active_packages
+        if str(row.get("package_id") or "").strip()
+    }
+    active_claim_rows = [
         row for row in claim_rows if str(row.get("claim_state") or "").strip().lower() == "active"
+    ]
+    active_claims: List[Dict[str, Any]] = [
+        row for row in active_claim_rows if str(row.get("package_id") or "").strip() in active_package_ids
+    ]
+    stale_active_claims = [
+        row for row in active_claim_rows if str(row.get("package_id") or "").strip() not in active_package_ids
     ]
     selected_claims: List[Dict[str, Any]] = list(active_claims)
     ready_scope_packages = 0
@@ -967,6 +986,7 @@ def work_package_summary_payload(config: Optional[Dict[str, Any]] = None) -> Dic
         "ready_scope_cap": ready_scope_packages,
         "ready_booster_scope_cap": ready_booster_scope_packages,
         "active_scope_claims": len(active_claims),
+        "stale_active_scope_claims": len(stale_active_claims),
     }
 
 
@@ -10888,6 +10908,13 @@ def load_json_payload(path: pathlib.Path) -> Dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def load_text_payload(path: pathlib.Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except Exception:
+        return ""
+
+
 def load_json_url_payload(url: str, *, timeout: int = 5) -> Dict[str, Any]:
     if not str(url or "").strip():
         return {}
@@ -11139,6 +11166,741 @@ def support_case_surface_payload() -> Dict[str, Any]:
     }
 
 
+_FEEDBACK_FORGE_STOP_WORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "be",
+    "does",
+    "for",
+    "from",
+    "how",
+    "i",
+    "if",
+    "in",
+    "into",
+    "is",
+    "it",
+    "me",
+    "my",
+    "of",
+    "on",
+    "or",
+    "our",
+    "should",
+    "so",
+    "tell",
+    "that",
+    "the",
+    "this",
+    "to",
+    "us",
+    "we",
+    "what",
+    "why",
+    "with",
+}
+
+
+def _feedback_query_tokens(text: str) -> List[str]:
+    seen: List[str] = []
+    for token in re.findall(r"[a-z0-9][a-z0-9_-]{1,}", str(text or "").lower()):
+        if token in _FEEDBACK_FORGE_STOP_WORDS or token in seen:
+            continue
+        seen.append(token)
+    return seen
+
+
+def _feedback_question_matches(tokens: Sequence[str], *terms: str) -> bool:
+    token_set = set(tokens)
+    return any(str(term or "").strip().lower() in token_set for term in terms)
+
+
+def _feedback_sentence(text: Any, *, limit: int = 220) -> str:
+    clean = " ".join(str(text or "").split()).strip()
+    if not clean:
+        return ""
+    if len(clean) <= limit:
+        return clean
+    return clean[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _markdown_section_body(path: pathlib.Path, heading: str) -> str:
+    text = load_text_payload(path)
+    if not text:
+        return ""
+    match = re.search(
+        rf"^##\s+{re.escape(heading)}\s*$\n(?P<body>.*?)(?=^##\s+|\Z)",
+        text,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if not match:
+        return ""
+    return str(match.group("body") or "").strip()
+
+
+def _markdown_first_paragraph(section_body: str) -> str:
+    lines: List[str] = []
+    for raw in str(section_body or "").splitlines():
+        stripped = raw.strip()
+        if not stripped:
+            if lines:
+                break
+            continue
+        if stripped.startswith(("* ", "- ")) or re.match(r"^\d+\.\s+", stripped):
+            break
+        lines.append(stripped)
+    return " ".join(lines).strip()
+
+
+def _markdown_bullets(section_body: str) -> List[str]:
+    items: List[str] = []
+    for raw in str(section_body or "").splitlines():
+        stripped = raw.strip()
+        if stripped.startswith("* "):
+            items.append(stripped[2:].strip())
+    return items
+
+
+def _markdown_numbered_steps(section_body: str) -> List[str]:
+    items: List[str] = []
+    for raw in str(section_body or "").splitlines():
+        stripped = raw.strip()
+        match = re.match(r"^\d+\.\s+(.*)$", stripped)
+        if match:
+            items.append(match.group(1).strip())
+    return items
+
+
+def _slug_key(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(text or "").strip().lower()).strip("_")
+
+
+def _markdown_subsections(section_body: str, *, heading_level: int = 3) -> List[Tuple[str, str]]:
+    marker = "#" * max(1, int(heading_level))
+    pattern = re.compile(
+        rf"^{re.escape(marker)}\s+(?P<title>.+?)\s*$\n(?P<body>.*?)(?=^{re.escape(marker)}\s+|\Z)",
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    return [
+        (str(match.group("title") or "").strip(), str(match.group("body") or "").strip())
+        for match in pattern.finditer(str(section_body or ""))
+    ]
+
+
+def _markdown_yaml_code_block(section_body: str) -> Dict[str, Any]:
+    match = re.search(r"```yaml\s*(?P<body>.*?)```", str(section_body or ""), flags=re.DOTALL)
+    if not match:
+        return {}
+    try:
+        payload = yaml.safe_load(match.group("body") or "")
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _karma_forge_track_family(track_key: str) -> str:
+    clean = str(track_key or "").strip().lower()
+    if "gm_house_rule" in clean:
+        return "gm_house_rule"
+    if "player_trust" in clean:
+        return "player_trust"
+    if "creator" in clean or "publisher" in clean:
+        return "creator_publisher"
+    if "black_ledger" in clean or "organizer" in clean:
+        return "organizer_black_ledger"
+    if "veteran" in clean or "migration" in clean or "5a" in clean:
+        return "veteran_migration"
+    return clean or "gm_house_rule"
+
+
+def karma_forge_interview_tracks_payload() -> List[Dict[str, Any]]:
+    section = _markdown_section_body(CHUMMER_KARMA_FORGE_DISCOVERY_PATH, "Icanpreneur interview tracks")
+    tracks: List[Dict[str, Any]] = []
+    for title, body in _markdown_subsections(section, heading_level=3):
+        track_key = _slug_key(title)
+        questions = _markdown_bullets(body)
+        tracks.append(
+            {
+                "key": track_key,
+                "title": title,
+                "family": _karma_forge_track_family(track_key),
+                "questions": questions,
+                "source_path": str(CHUMMER_KARMA_FORGE_DISCOVERY_PATH),
+            }
+        )
+    return tracks
+
+
+def karma_forge_candidate_decisions_payload() -> Dict[str, str]:
+    section = _markdown_section_body(CHUMMER_KARMA_FORGE_DISCOVERY_PATH, "Candidate classification")
+    payload = _markdown_yaml_code_block(section)
+    rows = payload.get("candidate_decisions")
+    if not isinstance(rows, dict):
+        return {}
+    return {
+        str(key).strip(): str((value or {}).get("meaning") if isinstance(value, dict) else value).strip()
+        for key, value in rows.items()
+        if str(key).strip()
+    }
+
+
+def karma_forge_process_templates_payload() -> List[Dict[str, Any]]:
+    section = _markdown_section_body(CHUMMER_KARMA_FORGE_DISCOVERY_PATH, "NextStep process templates")
+    templates: List[Dict[str, Any]] = []
+    for title, body in _markdown_subsections(section, heading_level=3):
+        templates.append(
+            {
+                "key": _slug_key(title),
+                "title": title,
+                "steps": _markdown_numbered_steps(body),
+            }
+        )
+    return templates
+
+
+def house_rule_demand_packet_example_payload() -> Dict[str, Any]:
+    section = _markdown_section_body(CHUMMER_KARMA_FORGE_DISCOVERY_PATH, "Canonical output: HouseRuleDemandPacket")
+    payload = _markdown_yaml_code_block(section)
+    packet = payload.get("house_rule_demand_packet")
+    return dict(packet) if isinstance(packet, dict) else {}
+
+
+def default_feedback_forge_form_payload() -> Dict[str, str]:
+    return {
+        "feedback_question": "",
+        "discovery_track": "gm_house_rule_track",
+        "respondent_role": "GM",
+        "edition": "SR6",
+        "table_type": "home_campaign",
+        "user_words_summary": "",
+        "current_workaround": "",
+        "interpreted_need_summary": "",
+        "impact_notes": "",
+        "shareability_notes": "",
+    }
+
+
+def normalize_feedback_forge_form_payload(payload: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    base = default_feedback_forge_form_payload()
+    source = dict(payload or {})
+    for key in list(base.keys()):
+        if key in source:
+            base[key] = " ".join(str(source.get(key) or "").split()).strip() if key != "feedback_question" else str(source.get(key) or "").strip()
+    if not base["user_words_summary"] and base["feedback_question"]:
+        base["user_words_summary"] = base["feedback_question"]
+    return base
+
+
+def _contains_any(text: str, terms: Sequence[str]) -> bool:
+    haystack = str(text or "").lower()
+    return any(str(term).lower() in haystack for term in terms)
+
+
+def _house_rule_domains(text: str, *, track_family: str) -> List[str]:
+    haystack = str(text or "").lower()
+    domain_map = [
+        ("gear", ("gear", "weapon", "armor", "cyberware")),
+        ("availability", ("availability", "restricted", "forbidden", "unlock")),
+        ("character_build_legality", ("legality", "legal", "illegal", "build", "chargen", "character creation")),
+        ("campaign_progression", ("campaign", "progression", "advance", "advancement", "karma", "nuyen", "downtime")),
+        ("dice_pools", ("dice pool", "dice pools", "pool modifier", "modifier")),
+        ("edge_economy", ("edge",)),
+        ("matrix", ("matrix", "deck", "hacking", "host")),
+        ("magic", ("magic", "drain", "ritual", "spirit", "summon", "spell")),
+        ("lifestyle", ("lifestyle", "rent", "downtime", "license", "sin")),
+        ("npc_opposition", ("npc", "opposition", "enemy", "encounter", "threat")),
+        ("black_ledger", ("black ledger", "faction", "district", "job board", "world offer", "scenario")),
+        ("migration", ("chummer5a", "import", "legacy", "migration", "custom data", "amend")),
+    ]
+    found: List[str] = [name for name, terms in domain_map if _contains_any(haystack, terms)]
+    if found:
+        return found
+    fallback = {
+        "player_trust": ["character_build_legality", "campaign_progression"],
+        "creator_publisher": ["campaign_progression"],
+        "organizer_black_ledger": ["black_ledger", "campaign_progression"],
+        "veteran_migration": ["migration", "character_build_legality"],
+    }
+    return fallback.get(track_family, ["campaign_progression"])
+
+
+def _house_rule_scope(text: str, *, track_family: str, shareability_notes: str) -> List[str]:
+    haystack = " ".join([str(text or "").lower(), str(shareability_notes or "").lower()])
+    scopes: List[str] = []
+    scope_map = [
+        ("character", ("one character", "single character", "my character")),
+        ("campaign", ("campaign", "table", "group", "home game")),
+        ("scene", ("scene", "run only", "single run")),
+        ("district", ("district", "neighborhood")),
+        ("all_games", ("all my games", "all games", "global")),
+        ("reusable_pack_candidate", ("reusable", "publish", "share", "other tables", "package")),
+    ]
+    for name, terms in scope_map:
+        if _contains_any(haystack, terms):
+            scopes.append(name)
+    if not scopes:
+        scopes.append("campaign")
+    return scopes
+
+
+def _house_rule_objects(domains: Sequence[str], scope: Sequence[str], text: str) -> Tuple[List[str], List[str]]:
+    haystack = str(text or "").lower()
+    likely: List[str] = ["RuleEnvironment"]
+    if "reusable_pack_candidate" in scope or "migration" in domains or _contains_any(haystack, ("package", "amend", "preset")):
+        likely.append("AmendPackage")
+    if "campaign" in scope or "scene" in scope or "district" in scope:
+        likely.append("CampaignOverlayPackage")
+    if _contains_any(haystack, ("receipt", "rollback", "approval", "unlock", "before/after", "before after", "preview")):
+        likely.append("ActivationReceipt")
+    black_ledger: List[str] = []
+    if "black_ledger" in domains or _contains_any(haystack, ("faction", "district", "job board", "reward", "unlock")):
+        black_ledger.append("WorldOffer")
+        black_ledger.append("ScenarioModifier")
+    return list(dict.fromkeys(likely)), list(dict.fromkeys(black_ledger))
+
+
+def _house_rule_trust_requirements(track_family: str, text: str) -> Dict[str, bool]:
+    haystack = str(text or "").lower()
+    return {
+        "player_visible_before_join": track_family in {"player_trust", "organizer_black_ledger"} or _contains_any(haystack, ("join", "before play", "campaign invite", "player visible")),
+        "build_diff_required": _contains_any(haystack, ("build", "diff", "cost", "availability", "dice", "legality", "preview")),
+        "rollback_required": _contains_any(haystack, ("rollback", "reversible", "mid-campaign", "undo", "revert")) or track_family in {"gm_house_rule", "organizer_black_ledger"},
+        "approval_required": _contains_any(haystack, ("approve", "approval", "warn", "blocked", "gm decides", "consent")) or track_family != "veteran_migration",
+        "receipt_required": _contains_any(haystack, ("receipt", "version", "proof", "unlock", "restore")) or True,
+    }
+
+
+def _house_rule_portability_requirements(scope: Sequence[str], text: str, *, shareability_notes: str) -> Dict[str, bool]:
+    haystack = " ".join([str(text or "").lower(), str(shareability_notes or "").lower()])
+    shareable = "reusable_pack_candidate" in scope or _contains_any(haystack, ("share", "publish", "other tables", "template"))
+    return {
+        "cross_device_restore": shareable or _contains_any(haystack, ("device", "phone", "sync", "restore", "laptop")),
+        "package_fingerprint_required": shareable or _contains_any(haystack, ("fingerprint", "version", "rollback", "receipt")),
+    }
+
+
+def _house_rule_priority_signals(text: str, *, shareability_notes: str, track_family: str) -> Dict[str, Any]:
+    haystack = " ".join([str(text or "").lower(), str(shareability_notes or "").lower()])
+    blocker_score = 5 if _contains_any(haystack, ("blocked", "can't", "cannot", "breaks", "stops play")) else 4 if _contains_any(haystack, ("need", "must", "depends on")) else 3
+    if _contains_any(haystack, ("every session", "most often", "constantly", "all the time")):
+        frequency_signal = "high"
+    elif _contains_any(haystack, ("sometimes", "occasionally", "rare")):
+        frequency_signal = "low"
+    else:
+        frequency_signal = "medium"
+    shareability_score = 5 if _contains_any(haystack, ("publish", "share", "other tables", "reusable")) else 3 if _contains_any(haystack, ("campaign", "group")) else 1
+    if _contains_any(haystack, ("matrix", "magic", "migration", "import", "core math", "engine")):
+        implementation_risk = "high"
+    elif track_family in {"organizer_black_ledger", "gm_house_rule"}:
+        implementation_risk = "medium"
+    else:
+        implementation_risk = "low"
+    monetization_relevance = "possible_premium_gm_tool" if track_family in {"gm_house_rule", "creator_publisher"} else "unclear"
+    return {
+        "blocker_score": blocker_score,
+        "frequency_signal": frequency_signal,
+        "shareability_score": shareability_score,
+        "implementation_risk": implementation_risk,
+        "monetization_relevance": monetization_relevance,
+    }
+
+
+def _house_rule_candidate_decision(track_family: str, text: str) -> str:
+    haystack = str(text or "").lower()
+    if _contains_any(haystack, ("chummer5a", "legacy", "migration", "custom data", "import")):
+        return "legacy_import_candidate"
+    if _contains_any(haystack, ("wrong math", "engine bug", "core bug", "incorrect rules", "does not work")):
+        return "core_ruleset_gap"
+    if _contains_any(haystack, ("faction", "district", "world offer", "job board", "season-wide")):
+        return "world_offer_candidate"
+    if _contains_any(haystack, ("scene", "scenario", "run modifier")):
+        return "scenario_modifier_candidate"
+    if _contains_any(haystack, ("preset", "template", "character generation", "chargen")):
+        return "preset_candidate"
+    if _contains_any(haystack, ("campaign", "availability", "unlock", "overlay", "workspace")):
+        return "campaign_overlay_candidate"
+    if _contains_any(haystack, ("package", "amend", "share", "publish")):
+        return "amend_package_candidate"
+    if track_family == "player_trust":
+        return "document_only"
+    return "research_more"
+
+
+def _house_rule_next_steps(
+    *,
+    track_family: str,
+    user_words_summary: str,
+    current_workaround: str,
+    interpreted_need_summary: str,
+    decision: str,
+) -> List[str]:
+    steps: List[str] = []
+    if not user_words_summary:
+        steps.append("Capture the user's own wording before clustering.")
+    if not current_workaround:
+        steps.append("Document the current workaround with one concrete session example.")
+    if track_family != "player_trust":
+        steps.append("Validate the draft with the player trust track before any prototype route.")
+    if not interpreted_need_summary:
+        steps.append("Rewrite the request into a Chummer-owned interpreted need summary.")
+    if decision == "research_more":
+        steps.append("Cluster at least three similar signals before Product Governor classification.")
+    elif decision == "core_ruleset_gap":
+        steps.append("Verify whether this is an engine correctness gap before routing it into KARMA FORGE.")
+    else:
+        steps.append("Prepare a Product Governor route decision with trust, rollback, and portability evidence.")
+    return steps[:4]
+
+
+def feedback_forge_house_rule_draft_payload(payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    form = normalize_feedback_forge_form_payload(payload)
+    tracks = karma_forge_interview_tracks_payload()
+    track = next((item for item in tracks if item.get("key") == form["discovery_track"]), None) or (tracks[0] if tracks else {
+        "key": form["discovery_track"],
+        "title": "GM house-rule track",
+        "family": "gm_house_rule",
+        "questions": [],
+    })
+    track_family = str(track.get("family") or "gm_house_rule")
+    combined_text = " ".join(
+        part for part in [
+            form.get("feedback_question"),
+            form.get("user_words_summary"),
+            form.get("current_workaround"),
+            form.get("interpreted_need_summary"),
+            form.get("impact_notes"),
+            form.get("shareability_notes"),
+        ]
+        if str(part or "").strip()
+    )
+    domains = _house_rule_domains(combined_text, track_family=track_family)
+    desired_scope = _house_rule_scope(combined_text, track_family=track_family, shareability_notes=form.get("shareability_notes", ""))
+    likely_objects, black_ledger_objects = _house_rule_objects(domains, desired_scope, combined_text)
+    trust_requirements = _house_rule_trust_requirements(track_family, combined_text)
+    portability_requirements = _house_rule_portability_requirements(
+        desired_scope,
+        combined_text,
+        shareability_notes=form.get("shareability_notes", ""),
+    )
+    priority_signals = _house_rule_priority_signals(
+        combined_text,
+        shareability_notes=form.get("shareability_notes", ""),
+        track_family=track_family,
+    )
+    decision = _house_rule_candidate_decision(track_family, combined_text)
+    title_source = form.get("interpreted_need_summary") or form.get("user_words_summary") or form.get("feedback_question") or "House-rule discovery draft"
+    title = _feedback_sentence(title_source, limit=72) or "House-rule discovery draft"
+    packet_id = f"hrp_{utc_now().strftime('%Y_%m_%d_%H%M%S')}_{_slug_key(track.get('key') or 'draft')}"
+    next_steps = _house_rule_next_steps(
+        track_family=track_family,
+        user_words_summary=form.get("user_words_summary", ""),
+        current_workaround=form.get("current_workaround", ""),
+        interpreted_need_summary=form.get("interpreted_need_summary", ""),
+        decision=decision,
+    )
+    candidate_decisions = karma_forge_candidate_decisions_payload()
+    process_templates = karma_forge_process_templates_payload()
+    primary_template = next((item for item in process_templates if item.get("key") == "karma_forge_discovery_sprint"), {})
+    packet = {
+        "id": packet_id,
+        "title": title,
+        "source": {
+            "intake_channel": "Feedback Forge -> Icanpreneur draft",
+            "canonical_lane": "FacePop -> Deftform -> Icanpreneur",
+            "respondent_role": form.get("respondent_role"),
+            "edition": form.get("edition"),
+            "table_type": form.get("table_type"),
+            "interview_track": track.get("title"),
+            "interview_ref": "",
+            "consent_ref": "",
+        },
+        "user_words": {
+            "summary": form.get("user_words_summary"),
+            "current_workaround": form.get("current_workaround"),
+        },
+        "interpreted_need": {
+            "summary": form.get("interpreted_need_summary") or form.get("user_words_summary"),
+            "confidence": "medium" if form.get("interpreted_need_summary") else "low",
+        },
+        "affected_domains": domains,
+        "desired_scope": desired_scope,
+        "likely_chummer_objects": likely_objects,
+        "possible_black_ledger_objects": black_ledger_objects,
+        "trust_requirements": trust_requirements,
+        "portability_requirements": portability_requirements,
+        "priority_signals": priority_signals,
+        "classification": {
+            "current_status": "candidate",
+            "decision_needed": True,
+            "candidate_decision": decision,
+            "candidate_decision_meaning": candidate_decisions.get(decision, ""),
+            "proposed_route": "KARMA_FORGE" if decision != "core_ruleset_gap" else "core_ruleset_gap_review",
+        },
+        "next_steps": next_steps,
+        "operator_notes": {
+            "feedback_question": form.get("feedback_question"),
+            "impact_notes": form.get("impact_notes"),
+            "shareability_notes": form.get("shareability_notes"),
+        },
+    }
+    candidate = {
+        "id": f"kfc_{packet_id}",
+        "title": title,
+        "linked_packet_id": packet_id,
+        "track_key": track.get("key"),
+        "track_title": track.get("title"),
+        "candidate_decision": decision,
+        "candidate_decision_meaning": candidate_decisions.get(decision, ""),
+        "proposed_route": packet["classification"]["proposed_route"],
+        "governor_decision_required": True,
+        "confidence": packet["interpreted_need"]["confidence"],
+        "priority_signals": priority_signals,
+    }
+    impact_hypothesis = {
+        "id": f"reh_{packet_id}",
+        "title": title,
+        "summary": packet["interpreted_need"]["summary"],
+        "affected_domains": domains,
+        "likely_objects": likely_objects,
+        "possible_black_ledger_objects": black_ledger_objects,
+        "trust_pressure": [key for key, enabled in trust_requirements.items() if enabled],
+        "portability_pressure": [key for key, enabled in portability_requirements.items() if enabled],
+        "rollout_scope": desired_scope,
+        "comparison_surface": "build_diff" if trust_requirements.get("build_diff_required") else "notice_only",
+        "player_visibility": "before_join" if trust_requirements.get("player_visible_before_join") else "in_workspace",
+        "rollback_surface": "rollback_required" if trust_requirements.get("rollback_required") else "inform_only",
+    }
+    selected_questions = [str(item) for item in (track.get("questions") or []) if str(item).strip()]
+    return {
+        "contract_name": "fleet.feedback_forge.house_rule_draft",
+        "generated_at": iso(utc_now()),
+        "form": form,
+        "track": track,
+        "candidate_decisions": candidate_decisions,
+        "process_template": primary_template,
+        "next_questions": selected_questions[:6],
+        "packet": packet,
+        "candidate": candidate,
+        "impact_hypothesis": impact_hypothesis,
+        "example_packet": house_rule_demand_packet_example_payload(),
+    }
+
+
+def karma_forge_horizon_payload() -> Dict[str, Any]:
+    path = CHUMMER_KARMA_FORGE_HORIZON_PATH
+    if not path.exists():
+        return {"available": False, "source_path": str(path)}
+    discovery_body = _markdown_section_body(path, "Discovery-first rule")
+    workflow_body = _markdown_section_body(path, "First flagship discovery lane")
+    outputs_body = _markdown_section_body(path, "Canonical outputs")
+    tool_posture_body = _markdown_section_body(path, "Tool posture")
+    return {
+        "available": True,
+        "title": "KARMA FORGE",
+        "source_path": str(path),
+        "problem": _markdown_first_paragraph(_markdown_section_body(path, "The problem")),
+        "product_move": _markdown_first_paragraph(_markdown_section_body(path, "What it would do")),
+        "discovery_steps": _markdown_numbered_steps(discovery_body),
+        "workflow_tools": _markdown_bullets(workflow_body),
+        "canonical_outputs": _markdown_bullets(outputs_body),
+        "tool_posture": _markdown_first_paragraph(tool_posture_body),
+        "not_ready_reason": _markdown_first_paragraph(_markdown_section_body(path, "Why it is not ready yet")),
+        "entry_lane": "Icanpreneur adaptive interview",
+    }
+
+
+def _feedback_question_score(tokens: Sequence[str], text: str) -> int:
+    haystack = str(text or "").lower()
+    if not haystack:
+        return 0
+    score = 0
+    for token in tokens:
+        if not token:
+            continue
+        if re.search(rf"\b{re.escape(token)}\b", haystack):
+            score += 2
+        elif token in haystack:
+            score += 1
+    return score
+
+
+def feedback_forge_surface_payload(
+    question: str = "",
+    *,
+    support_surface: Optional[Dict[str, Any]] = None,
+    weekly_pulse: Optional[Dict[str, Any]] = None,
+    progress_report: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    clean_question = " ".join(str(question or "").split()).strip()
+    query_tokens = _feedback_query_tokens(clean_question)
+    resolved_support_surface = dict(support_surface or support_case_surface_payload())
+    resolved_weekly_pulse = dict(weekly_pulse or load_json_payload(CHUMMER_WEEKLY_PRODUCT_PULSE_PATH))
+    resolved_progress_report = dict(progress_report or load_published_json_payload(PROGRESS_REPORT_FILENAME))
+    support_summary = dict(resolved_support_surface.get("summary") or {})
+    support_packets = [dict(item) for item in (resolved_support_surface.get("packets") or []) if isinstance(item, dict)]
+    top_clusters = [dict(item) for item in (support_summary.get("top_clusters") or []) if isinstance(item, dict)]
+    pulse_clusters = [dict(item) for item in (resolved_weekly_pulse.get("top_support_or_feedback_clusters") or []) if isinstance(item, dict)]
+    governor_decisions = [dict(item) for item in (resolved_weekly_pulse.get("governor_decisions") or []) if isinstance(item, dict)]
+    karma_forge = karma_forge_horizon_payload()
+    signal_policy = _markdown_first_paragraph(_markdown_section_body(CHUMMER_HORIZON_SIGNAL_POLICY_PATH, "Advisory rule"))
+    open_packet_count = int(support_summary.get("open_packet_count") or len(support_packets))
+    needs_human_response = int(support_summary.get("needs_human_response") or 0)
+    closure_waiting = int(support_summary.get("closure_waiting_on_release_truth") or 0)
+    wants_karma_forge = _feedback_question_matches(
+        query_tokens,
+        "karma",
+        "forge",
+        "house",
+        "rule",
+        "rules",
+        "icanpreneur",
+        "interview",
+    )
+    wants_questions = _feedback_question_matches(query_tokens, "ask", "question", "questions", "interview")
+    evidence_rows: List[Dict[str, Any]] = []
+
+    support_snapshot_detail = (
+        f"{open_packet_count} packet(s) in the live support surface, "
+        f"{needs_human_response} waiting on human response, "
+        f"{closure_waiting} waiting on release truth."
+    )
+    evidence_rows.append(
+        {
+            "label": "Support surface",
+            "summary": support_snapshot_detail,
+            "source_path": str(published_artifact_path(SUPPORT_CASE_PACKETS_FILENAME)),
+            "score": _feedback_question_score(query_tokens, support_snapshot_detail),
+        }
+    )
+    for item in top_clusters[:4]:
+        detail = (
+            f"{int(item.get('count') or 0)} feedback/support packets for "
+            f"{str(item.get('kind') or 'support')} in {str(item.get('target_repo') or 'unassigned')}."
+        )
+        evidence_rows.append(
+            {
+                "label": f"Packet cluster · {str(item.get('kind') or 'support')}:{str(item.get('target_repo') or 'unassigned')}",
+                "summary": detail,
+                "source_path": str(published_artifact_path(SUPPORT_CASE_PACKETS_FILENAME)),
+                "score": _feedback_question_score(query_tokens, detail),
+            }
+        )
+    for item in pulse_clusters[:4]:
+        summary = _feedback_sentence(item.get("summary") or "")
+        text = " ".join(
+            part for part in [str(item.get("cluster_id") or ""), summary] if str(part).strip()
+        )
+        evidence_rows.append(
+            {
+                "label": f"Weekly pulse · {str(item.get('cluster_id') or 'cluster')}",
+                "summary": summary,
+                "source_path": str(CHUMMER_WEEKLY_PRODUCT_PULSE_PATH),
+                "score": _feedback_question_score(query_tokens, text),
+            }
+        )
+    for item in governor_decisions[:3]:
+        reason = _feedback_sentence(item.get("reason") or "")
+        text = " ".join(part for part in [str(item.get("action") or ""), reason] if part)
+        evidence_rows.append(
+            {
+                "label": f"Governor decision · {str(item.get('action') or 'decision')}",
+                "summary": reason,
+                "source_path": str(CHUMMER_WEEKLY_PRODUCT_PULSE_PATH),
+                "score": _feedback_question_score(query_tokens, text),
+            }
+        )
+    if karma_forge.get("available"):
+        karma_summary = _feedback_sentence(karma_forge.get("product_move") or karma_forge.get("problem") or "")
+        evidence_rows.append(
+            {
+                "label": "KARMA FORGE horizon",
+                "summary": karma_summary,
+                "source_path": str(karma_forge.get("source_path") or ""),
+                "score": _feedback_question_score(query_tokens, f"{karma_summary} {karma_forge.get('problem') or ''}")
+                + (6 if wants_karma_forge else 0),
+            }
+        )
+
+    evidence_rows.sort(key=lambda item: (-int(item.get("score") or 0), str(item.get("label") or "")))
+    top_evidence = [dict(item) for item in evidence_rows[:6]]
+    top_cluster_summary = _feedback_sentence(((pulse_clusters[0] if pulse_clusters else {}).get("summary") or ""), limit=180)
+    support_headline = (
+        "The live support packet surface is quiet right now."
+        if open_packet_count == 0
+        else f"The live support packet surface has {open_packet_count} active packet(s)."
+    )
+    answer_bits: List[str] = [support_headline]
+    if needs_human_response > 0:
+        answer_bits.append(f"{needs_human_response} case(s) still need a human answer.")
+    if closure_waiting > 0:
+        answer_bits.append(f"{closure_waiting} case(s) are waiting on release truth before the loop can close.")
+    if top_cluster_summary:
+        answer_bits.append(f"Current product pressure is led by: {top_cluster_summary}")
+    if wants_karma_forge and karma_forge.get("available"):
+        answer_bits.append(
+            "This does read like KARMA FORGE territory: canon says house-rule demand stays in a governed discovery lane first, with Icanpreneur as the adaptive interview step before any prototype route."
+        )
+    elif clean_question and top_evidence:
+        answer_bits.append(f"Best matched evidence right now: {_feedback_sentence(top_evidence[0].get('summary') or '', limit=180)}")
+    next_checkpoint = _feedback_sentence(resolved_weekly_pulse.get("next_checkpoint_question") or "", limit=180)
+    if next_checkpoint:
+        answer_bits.append(f"Next checkpoint question: {next_checkpoint}")
+    suggested_questions = [
+        "Which feedback cluster needs a human answer first?",
+        "Does this belong in KARMA FORGE or in the normal support closure loop?",
+        "What proof would make this safe to prototype or easy to reject?",
+    ]
+    if wants_karma_forge or wants_questions:
+        suggested_questions = [
+            "What house-rule pain is actually blocking play at the table?",
+            "Who is affected by the change, and what compatibility break are they afraid of?",
+            "What rollback clue or approval gate would make this safe to pilot?",
+            "What evidence would justify turning this into a HouseRuleDemandPacket?",
+        ]
+    discovery_lane = {
+        "enabled": bool(karma_forge.get("available")),
+        "title": str(karma_forge.get("title") or "KARMA FORGE"),
+        "summary": str(karma_forge.get("product_move") or ""),
+        "problem": str(karma_forge.get("problem") or ""),
+        "entry_lane": str(karma_forge.get("entry_lane") or "Icanpreneur adaptive interview"),
+        "steps": [str(item) for item in (karma_forge.get("discovery_steps") or []) if str(item).strip()],
+        "workflow_tools": [str(item) for item in (karma_forge.get("workflow_tools") or []) if str(item).strip()],
+        "canonical_outputs": [str(item) for item in (karma_forge.get("canonical_outputs") or []) if str(item).strip()],
+        "not_ready_reason": str(karma_forge.get("not_ready_reason") or ""),
+        "source_path": str(karma_forge.get("source_path") or ""),
+    }
+    return {
+        "contract_name": "fleet.feedback_forge",
+        "generated_at": iso(utc_now()),
+        "question": clean_question,
+        "answer": " ".join(bit for bit in answer_bits if bit).strip(),
+        "signal_posture": signal_policy
+        or "Signals and community feedback are advisory only; canon changes still have to land in chummer6-design.",
+        "support_snapshot": {
+            "open_packet_count": open_packet_count,
+            "needs_human_response": needs_human_response,
+            "closure_waiting_on_release_truth": closure_waiting,
+            "top_clusters": top_clusters,
+            "freshness": dict(resolved_support_surface.get("freshness") or {}),
+        },
+        "progress_snapshot": {
+            "headline": str(resolved_progress_report.get("headline") or ""),
+            "active_wave": str(resolved_progress_report.get("active_wave") or ""),
+            "active_wave_status": str(resolved_progress_report.get("active_wave_status") or ""),
+        },
+        "weekly_pulse": {
+            "generated_at": str(resolved_weekly_pulse.get("generated_at") or ""),
+            "next_checkpoint_question": str(resolved_weekly_pulse.get("next_checkpoint_question") or ""),
+            "top_clusters": pulse_clusters[:4],
+        },
+        "evidence": top_evidence,
+        "suggested_questions": suggested_questions,
+        "discovery_lane": discovery_lane,
+    }
+
+
 def journey_gates_surface_payload() -> Dict[str, Any]:
     payload = load_published_json_payload(JOURNEY_GATES_FILENAME)
     journeys = [dict(item) for item in (payload.get("journeys") or []) if isinstance(item, dict)]
@@ -11387,7 +12149,7 @@ def publish_readiness_payload(
     weekly_governor_state = str(weekly_governor_freshness.get("state") or "").strip().lower()
     if weekly_governor_in_scope:
         if weekly_governor_state in {"stale", "missing"}:
-            warning_reasons.append(
+            blocking_reasons.append(
                 str(
                     weekly_governor_freshness.get("reason")
                     or f"Weekly governor packet freshness is {weekly_governor_state}."
@@ -13260,7 +14022,7 @@ def health() -> str:
 
 @app.get("/api/capacity/status")
 def api_capacity_status() -> Dict[str, Any]:
-    status = admin_status_payload()
+    status = admin_status_payload(public_mode=True)
     config = dict(status.get("config") or {})
     return {
         "generated_at": status.get("generated_at"),
@@ -13421,6 +14183,40 @@ def api_admin_status() -> Dict[str, Any]:
 @app.get("/api/admin/status-lite")
 def api_admin_status_lite() -> Dict[str, Any]:
     return status_surface_payload(admin_status_payload(public_mode=True))
+
+
+@app.get("/api/admin/feedback-forge")
+def api_admin_feedback_forge(question: str = "") -> Dict[str, Any]:
+    return feedback_forge_surface_payload(question)
+
+
+@app.post("/api/admin/feedback-forge/house-rule-draft")
+def api_admin_feedback_forge_house_rule_draft(
+    feedback_question: str = Form(""),
+    discovery_track: str = Form("gm_house_rule_track"),
+    respondent_role: str = Form("GM"),
+    edition: str = Form("SR6"),
+    table_type: str = Form("home_campaign"),
+    user_words_summary: str = Form(""),
+    current_workaround: str = Form(""),
+    interpreted_need_summary: str = Form(""),
+    impact_notes: str = Form(""),
+    shareability_notes: str = Form(""),
+) -> Dict[str, Any]:
+    return feedback_forge_house_rule_draft_payload(
+        {
+            "feedback_question": feedback_question,
+            "discovery_track": discovery_track,
+            "respondent_role": respondent_role,
+            "edition": edition,
+            "table_type": table_type,
+            "user_words_summary": user_words_summary,
+            "current_workaround": current_workaround,
+            "interpreted_need_summary": interpreted_need_summary,
+            "impact_notes": impact_notes,
+            "shareability_notes": shareability_notes,
+        }
+    )
 
 
 @app.get("/api/public/status")
@@ -14739,7 +15535,14 @@ def api_admin_studio_session_message(session_id: int, message: str = Form("")) -
     return RedirectResponse("/admin/details#studio", status_code=303)
 
 
-def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str = "") -> str:
+def render_admin_dashboard(
+    *,
+    show_details: bool = False,
+    initial_focus_id: str = "",
+    initial_tab: str = "",
+    feedback_question: str = "",
+    feedback_form: Optional[Dict[str, Any]] = None,
+) -> str:
     status = admin_status_payload()
     projects = status["config"]["projects"]
     groups = status.get("groups") or status["config"].get("groups", [])
@@ -14918,6 +15721,67 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
             f"{td(progress.get('percent_blocked'))}% blocked · "
             f"{td(progress.get(gray_key))}% {gray_label}"
         )
+
+    feedback_form_state = normalize_feedback_forge_form_payload(
+        feedback_form or {"feedback_question": feedback_question}
+    ) if show_details else {}
+    feedback_forge = feedback_forge_surface_payload(
+        str(feedback_form_state.get("feedback_question") or feedback_question or "")
+    ) if show_details else {}
+    feedback_snapshot = dict(feedback_forge.get("support_snapshot") or {})
+    feedback_discovery_lane = dict(feedback_forge.get("discovery_lane") or {})
+    feedback_signal_posture = str(feedback_forge.get("signal_posture") or "").strip()
+    feedback_tracks = karma_forge_interview_tracks_payload() if show_details else []
+    feedback_track_options_html = "".join(
+        f'<option value="{td(item.get("key"))}"{" selected" if str(item.get("key") or "") == str(feedback_form_state.get("discovery_track") or "") else ""}>{td(item.get("title"))}</option>'
+        for item in feedback_tracks
+    ) or '<option value="gm_house_rule_track">GM house-rule track</option>'
+    feedback_house_rule_draft = feedback_forge_house_rule_draft_payload(feedback_form_state) if show_details else {}
+    feedback_packet_json = html.escape(json.dumps(feedback_house_rule_draft.get("packet") or {}, indent=2, ensure_ascii=True))
+    feedback_candidate_json = html.escape(json.dumps(feedback_house_rule_draft.get("candidate") or {}, indent=2, ensure_ascii=True))
+    feedback_impact_json = html.escape(json.dumps(feedback_house_rule_draft.get("impact_hypothesis") or {}, indent=2, ensure_ascii=True))
+    feedback_example_json = html.escape(json.dumps(feedback_house_rule_draft.get("example_packet") or {}, indent=2, ensure_ascii=True))
+    feedback_next_questions_html = "".join(
+        f"<li>{td(item)}</li>" for item in (feedback_house_rule_draft.get("next_questions") or [])
+    ) or "<li>No canonical interview prompts loaded.</li>"
+    feedback_candidate_decisions_html = "".join(
+        f"<li><strong>{td(key)}</strong>: {td(value)}</li>"
+        for key, value in (feedback_house_rule_draft.get("candidate_decisions") or {}).items()
+    ) or "<li>No candidate decision meanings loaded.</li>"
+    feedback_process_steps_html = "".join(
+        f"<li>{td(item)}</li>" for item in ((feedback_house_rule_draft.get("process_template") or {}).get("steps") or [])
+    ) or "<li>No discovery sprint template loaded.</li>"
+    feedback_evidence_html = "".join(
+        f"""
+        <article class="mini-card">
+          <div class="mini-head">
+            <strong>{td(item.get('label'))}</strong>
+            {chip(f"score {td(item.get('score') or 0)}", tone='warn' if int(item.get('score') or 0) > 0 else 'muted')}
+          </div>
+          <div class="mini-body">{td(item.get('summary') or '')}</div>
+          <div class="mini-meta"><code>{td(item.get('source_path') or '')}</code></div>
+        </article>
+        """
+        for item in (feedback_forge.get("evidence") or [])
+    ) or '<div class="empty-state">Ask a feedback question to rank evidence from support packets, the weekly pulse, and Chummer6 horizon canon.</div>'
+    feedback_questions_html = "".join(
+        f"<li>{td(item)}</li>" for item in (feedback_forge.get("suggested_questions") or [])
+    ) or "<li>No suggested prompts yet.</li>"
+    feedback_discovery_steps_html = "".join(
+        f"<li>{td(item)}</li>" for item in (feedback_discovery_lane.get("steps") or [])
+    ) or "<li>No discovery steps loaded.</li>"
+    feedback_workflow_tools_html = "".join(
+        f"<li>{td(item)}</li>" for item in (feedback_discovery_lane.get("workflow_tools") or [])
+    ) or "<li>No workflow tools loaded.</li>"
+    feedback_outputs_html = "".join(
+        f"<li>{td(item)}</li>" for item in (feedback_discovery_lane.get("canonical_outputs") or [])
+    ) or "<li>No canonical outputs loaded.</li>"
+    feedback_progress_headline = (
+        f"{td((feedback_forge.get('progress_snapshot') or {}).get('headline') or 'No progress headline loaded.')}"
+    )
+    feedback_open_packets = int(feedback_snapshot.get("open_packet_count") or 0)
+    feedback_needs_human = int(feedback_snapshot.get("needs_human_response") or 0)
+    feedback_waiting_release = int(feedback_snapshot.get("closure_waiting_on_release_truth") or 0)
 
     focus_blocks: List[str] = []
     project_rows: List[str] = []
@@ -16555,6 +17419,7 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
                       <a class="detail-link" href="/admin/details#audit"><strong>Audit</strong><span class="muted">Open findings and publishable candidate tasks.</span></a>
                       <a class="detail-link" href="/admin/details#accounts"><strong>Accounts</strong><span class="muted">Pool state, budgets, auth, parallelism, and backoff.</span></a>
                       <a class="detail-link" href="/admin/details#routing"><strong>Routing</strong><span class="muted">Route classes, price table, and recent routing decisions.</span></a>
+                      <a class="detail-link" href="/admin/details?tab=feedback#feedback"><strong>Feedback Forge</strong><span class="muted">Ask what current feedback is saying, or whether a signal belongs in KARMA FORGE.</span></a>
                     </div>
                   </section>
                 </div>
@@ -17294,7 +18159,7 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 18px;
           }}
-          input[type=text], textarea {{
+          input[type=text], textarea, select {{
             width: 100%;
             box-sizing: border-box;
             border: 1px solid var(--line);
@@ -17385,6 +18250,7 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
             <button class="tab-button" type="button" data-tab="routing">Routing</button>
             <button class="tab-button" type="button" data-tab="history">History</button>
             <button class="tab-button" type="button" data-tab="studio">Studio</button>
+            <button class="tab-button" type="button" data-tab="feedback">Feedback Forge</button>
             <button class="tab-button" type="button" data-tab="settings">Settings</button>
           </div>
 
@@ -17582,6 +18448,189 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
             </div>
           </section>
 
+          <section class="detail-pane" id="feedback" data-tab-pane="feedback">
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Feedback Forge</h2>
+                  <p class="muted">Operator-side question loop plus guided KARMA FORGE intake. It reads the Fleet support surface, the Chummer6 weekly pulse, and the house-rule discovery canon without treating raw signal as truth.</p>
+                </div>
+                <div class="hero-links">
+                  <a class="hero-link" href="/api/admin/feedback-forge">API</a>
+                </div>
+              </div>
+              <form method="post" action="/admin/details/feedback-forge">
+                <div class="mini-grid">
+                  <div>
+                    <label for="discovery-track">Icanpreneur track</label>
+                    <select id="discovery-track" name="discovery_track">{feedback_track_options_html}</select>
+                  </div>
+                  <div>
+                    <label for="respondent-role">Respondent role</label>
+                    <input id="respondent-role" name="respondent_role" type="text" value="{td(feedback_form_state.get('respondent_role') or '')}" />
+                  </div>
+                  <div>
+                    <label for="edition">Edition</label>
+                    <input id="edition" name="edition" type="text" value="{td(feedback_form_state.get('edition') or '')}" />
+                  </div>
+                  <div>
+                    <label for="table-type">Table type</label>
+                    <input id="table-type" name="table_type" type="text" value="{td(feedback_form_state.get('table_type') or '')}" />
+                  </div>
+                </div>
+                <label for="feedback-question">Question / feedback prompt</label>
+                <textarea id="feedback-question" name="feedback_question" rows="3" placeholder="Does this sound like KARMA FORGE feedback? What should we ask next?">{td(feedback_form_state.get('feedback_question') or '')}</textarea>
+                <label for="user-words-summary">User words</label>
+                <textarea id="user-words-summary" name="user_words_summary" rows="3" placeholder="What did the user actually ask for?">{td(feedback_form_state.get('user_words_summary') or '')}</textarea>
+                <label for="current-workaround">Current workaround</label>
+                <textarea id="current-workaround" name="current_workaround" rows="3" placeholder="How is the table coping today?">{td(feedback_form_state.get('current_workaround') or '')}</textarea>
+                <label for="interpreted-need-summary">Interpreted need</label>
+                <textarea id="interpreted-need-summary" name="interpreted_need_summary" rows="3" placeholder="Rewrite the request into a Chummer-owned need summary.">{td(feedback_form_state.get('interpreted_need_summary') or '')}</textarea>
+                <div class="mini-grid">
+                  <div>
+                    <label for="impact-notes">Impact notes</label>
+                    <textarea id="impact-notes" name="impact_notes" rows="4" placeholder="Trust, legality, dice pools, rollback, approvals, portability.">{td(feedback_form_state.get('impact_notes') or '')}</textarea>
+                  </div>
+                  <div>
+                    <label for="shareability-notes">Shareability notes</label>
+                    <textarea id="shareability-notes" name="shareability_notes" rows="4" placeholder="One campaign only, publishable pack, other tables, versioning, receipts.">{td(feedback_form_state.get('shareability_notes') or '')}</textarea>
+                  </div>
+                </div>
+                <p class="muted">This is an operator draft lane. It simulates the Icanpreneur discovery pass and normalizes the result into Chummer-owned packets without pretending the real public recruitment flow already happened.</p>
+                <p><button type="submit">Run Feedback Forge + Draft Packets</button></p>
+              </form>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Current Read</h2>
+                  <p class="muted">{feedback_progress_headline}</p>
+                </div>
+                <div class="actions">
+                  {chip(f"{feedback_open_packets} packet(s)", tone='warn' if feedback_open_packets else 'muted')}
+                  {chip(f"{feedback_needs_human} human replies", tone='warn' if feedback_needs_human else 'good')}
+                  {chip(f"{feedback_waiting_release} waiting on release", tone='warn' if feedback_waiting_release else 'good')}
+                </div>
+              </div>
+              <p><strong>Answer:</strong> {td(feedback_forge.get('answer') or 'Ask a question to synthesize the current feedback evidence.')}</p>
+              <p class="muted"><strong>Signal posture:</strong> {td(feedback_signal_posture or 'Signals stay advisory until canon updates land.')}</p>
+              <p class="muted"><strong>Weekly pulse checkpoint:</strong> {td((feedback_forge.get('weekly_pulse') or {}).get('next_checkpoint_question') or 'No checkpoint question loaded.')}</p>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Evidence</h2>
+                  <p class="muted">Best matches across support packets, pulse clusters, governor decisions, and horizon canon.</p>
+                </div>
+              </div>
+              <div class="mini-grid">
+                {feedback_evidence_html}
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Icanpreneur next questions</h2>
+                  <p class="muted">Canonical prompts for the selected discovery track, plus the candidate decision meanings the Product Governor can use later.</p>
+                </div>
+                <div class="actions">
+                  {chip(feedback_discovery_lane.get('entry_lane') or 'Icanpreneur adaptive interview', tone='good')}
+                </div>
+              </div>
+              <div class="bridge-strip">
+                <article class="mini-card">
+                  <div class="mini-head"><strong>Track prompts</strong></div>
+                  <ul>{feedback_next_questions_html}</ul>
+                </article>
+                <article class="mini-card">
+                  <div class="mini-head"><strong>Candidate decisions</strong></div>
+                  <ul>{feedback_candidate_decisions_html}</ul>
+                </article>
+                <article class="mini-card">
+                  <div class="mini-head"><strong>Discovery sprint</strong></div>
+                  <ul>{feedback_process_steps_html}</ul>
+                </article>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Drafted packets</h2>
+                  <p class="muted">These are Chummer-owned draft outputs, not implementation truth. Use them to decide whether the signal belongs in KARMA FORGE, normal support closure, or a core-ruleset gap review.</p>
+                </div>
+                <div class="actions">
+                  {chip(((feedback_house_rule_draft.get('packet') or {}).get('classification') or {}).get('candidate_decision') or 'research_more', tone='warn')}
+                  {chip(((feedback_house_rule_draft.get('packet') or {}).get('classification') or {}).get('proposed_route') or 'KARMA_FORGE', tone='good')}
+                </div>
+              </div>
+              <div class="worker-preview-grid">
+                <div class="worker-preview-panel">
+                  <div class="worker-preview-label">HouseRuleDemandPacket draft</div>
+                  <pre>{feedback_packet_json}</pre>
+                </div>
+                <div class="worker-preview-panel">
+                  <div class="worker-preview-label">KarmaForgeCandidate draft</div>
+                  <pre>{feedback_candidate_json}</pre>
+                </div>
+                <div class="worker-preview-panel">
+                  <div class="worker-preview-label">RuleEnvironmentImpactHypothesis draft</div>
+                  <pre>{feedback_impact_json}</pre>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>KARMA FORGE lane</h2>
+                  <p class="muted">When the feedback is really about house-rule demand, this is the governed discovery lane canon already defines.</p>
+                </div>
+                <div class="actions">
+                  {chip(feedback_discovery_lane.get('entry_lane') or 'Icanpreneur adaptive interview', tone='good')}
+                </div>
+              </div>
+              <p><strong>Bounded move:</strong> {td(feedback_discovery_lane.get('summary') or 'No KARMA FORGE summary loaded.')}</p>
+              <p class="muted"><strong>Table pain:</strong> {td(feedback_discovery_lane.get('problem') or 'No KARMA FORGE problem statement loaded.')}</p>
+              <div class="bridge-strip">
+                <article class="mini-card">
+                  <div class="mini-head"><strong>Discovery steps</strong></div>
+                  <div class="mini-meta"><code>{td(feedback_discovery_lane.get('source_path') or '')}</code></div>
+                  <ul>{feedback_discovery_steps_html}</ul>
+                </article>
+                <article class="mini-card">
+                  <div class="mini-head"><strong>Workflow tools</strong></div>
+                  <div class="mini-body">{td(feedback_discovery_lane.get('entry_lane') or 'Icanpreneur adaptive interview')}</div>
+                  <ul>{feedback_workflow_tools_html}</ul>
+                </article>
+                <article class="mini-card">
+                  <div class="mini-head"><strong>Canonical outputs</strong></div>
+                  <div class="mini-meta">{td(feedback_discovery_lane.get('not_ready_reason') or 'No readiness note loaded.')}</div>
+                  <ul>{feedback_outputs_html}</ul>
+                </article>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Canonical example</h2>
+                  <p class="muted">Reference example from the discovery canon, so the operator draft stays structurally close to the design-owned packet shape.</p>
+                </div>
+              </div>
+              <div class="worker-preview-panel">
+                <div class="worker-preview-label">Canonical example packet</div>
+                <pre>{feedback_example_json}</pre>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Suggested Questions</h2>
+                  <p class="muted">Use these to sharpen the next pass rather than dumping raw signal straight into implementation.</p>
+                </div>
+              </div>
+              <ul>{feedback_questions_html}</ul>
+            </div>
+          </section>
+
           <section class="detail-pane" id="settings" data-tab-pane="settings">
             <div class="panel">
               <div class="panel-head"><div><h2>Settings</h2><p class="muted">Keep the raw control-plane forms, but move them behind the Explorer.</p></div></div>
@@ -17659,8 +18708,11 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
           }}
           (function() {{
             var hash = (window.location.hash || '').replace('#', '');
+            var initialTab = {json.dumps(str(initial_tab or ""))};
             if (hash && document.querySelector('[data-tab-pane=\"' + hash + '\"]')) {{
               setActiveTab(hash);
+            }} else if (initialTab && document.querySelector('[data-tab-pane=\"' + initialTab + '\"]')) {{
+              setActiveTab(initialTab, false);
             }} else {{
               setActiveTab('projects', false);
               focusCard(hash);
@@ -17700,8 +18752,50 @@ def admin_dashboard() -> str:
 
 
 @app.get("/admin/details", response_class=HTMLResponse)
-def admin_details(focus: Optional[str] = None) -> str:
-    return render_admin_dashboard(show_details=True, initial_focus_id=str(focus or "").strip())
+def admin_details(
+    focus: Optional[str] = None,
+    tab: Optional[str] = None,
+    feedback_question: str = "",
+) -> str:
+    return render_admin_dashboard(
+        show_details=True,
+        initial_focus_id=str(focus or "").strip(),
+        initial_tab=str(tab or "").strip(),
+        feedback_question=str(feedback_question or "").strip(),
+    )
+
+
+@app.post("/admin/details/feedback-forge", response_class=HTMLResponse)
+def admin_feedback_forge_details(
+    feedback_question: str = Form(""),
+    discovery_track: str = Form("gm_house_rule_track"),
+    respondent_role: str = Form("GM"),
+    edition: str = Form("SR6"),
+    table_type: str = Form("home_campaign"),
+    user_words_summary: str = Form(""),
+    current_workaround: str = Form(""),
+    interpreted_need_summary: str = Form(""),
+    impact_notes: str = Form(""),
+    shareability_notes: str = Form(""),
+) -> str:
+    form_payload = {
+        "feedback_question": feedback_question,
+        "discovery_track": discovery_track,
+        "respondent_role": respondent_role,
+        "edition": edition,
+        "table_type": table_type,
+        "user_words_summary": user_words_summary,
+        "current_workaround": current_workaround,
+        "interpreted_need_summary": interpreted_need_summary,
+        "impact_notes": impact_notes,
+        "shareability_notes": shareability_notes,
+    }
+    return render_admin_dashboard(
+        show_details=True,
+        initial_tab="feedback",
+        feedback_question=str(feedback_question or "").strip(),
+        feedback_form=form_payload,
+    )
 
 
 @app.get("/admin/groups/{group_id}", response_class=HTMLResponse)

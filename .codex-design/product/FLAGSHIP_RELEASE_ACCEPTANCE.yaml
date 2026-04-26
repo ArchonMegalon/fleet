@@ -101,6 +101,7 @@ surfaces:
       - chummer5a
     must_prove:
       - Deterministic rules and explain provenance stay authoritative for promoted mechanics surfaces.
+      - The release-bound engine proof pack publishes oracle-suite coverage, import-certification truth, and performance budgets for the promoted desktop release instead of relying on softer milestone or support summaries.
       - Legacy Chummer4, Chummer5a, and approved Hero Lab imports emit explicit receipts for lossy, partial, or blocked outcomes.
       - Oracle tests compare imported source facts against Chummer6-derived outcomes and surface divergences as hardening work.
       - Custom drugs, stacked active effects, and timing windows resolve through deterministic engine state rather than UI-side folklore.

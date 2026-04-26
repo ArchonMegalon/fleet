@@ -21,7 +21,7 @@ DEFAULT_REPAIR_COOLDOWN_SECONDS = 1800
 DEFAULT_SERVICE_RESTART_COOLDOWN_SECONDS = 1800
 DEFAULT_STALE_SECONDS = 900
 DEFAULT_ACTIVE_OUTPUT_FRESH_SECONDS = 180
-DEFAULT_SUPERVISOR_STATUS_TIMEOUT_SECONDS = 30
+DEFAULT_SUPERVISOR_STATUS_TIMEOUT_SECONDS = 5
 DOCKER_SOCKET_PATH = "/var/run/docker.sock"
 DOCKER_API_VERSION = "v1.44"
 SERVICE_CONTAINER_NAMES = {
@@ -80,6 +80,21 @@ def eta_payload_from_state(state_payload: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(successor, dict) and successor:
         return dict(successor)
     return {}
+
+
+def remaining_open_milestones_from_state(state_payload: Dict[str, Any], eta_payload: Dict[str, Any]) -> int:
+    for value in (
+        state_payload.get("remaining_open_milestones"),
+        state_payload.get("successor_wave_remaining_open_milestones"),
+        eta_payload.get("remaining_open_milestones"),
+    ):
+        try:
+            count = int(value or 0)
+        except (TypeError, ValueError):
+            count = 0
+        if count > 0:
+            return count
+    return 0
 
 
 def path_modified_at(path: Path) -> Optional[dt.datetime]:
@@ -226,6 +241,59 @@ def read_json(path: Path) -> Dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def read_active_shards_payload(state_root: Path) -> Dict[str, Any]:
+    return read_json(state_root / "active_shards.json")
+
+
+def active_shards_from_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows = payload.get("active_shards") if isinstance(payload, dict) else []
+    active_shards: List[Dict[str, Any]] = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        active_run_id = str(row.get("active_run_id") or "").strip()
+        if not active_run_id:
+            continue
+        shard_id = str(row.get("shard_id") or row.get("name") or "").strip()
+        if not shard_id:
+            continue
+        active_shards.append(
+            {
+                "shard_id": shard_id,
+                "name": shard_id,
+                "updated_at": str(row.get("updated_at") or "").strip(),
+                "mode": str(row.get("mode") or "").strip(),
+                "active_run": True,
+                "active_run_id": active_run_id,
+                "selected_account_alias": str(row.get("selected_account_alias") or "").strip(),
+                "selected_model": str(row.get("selected_model") or "").strip(),
+                "progress_state": str(row.get("active_run_progress_state") or "").strip(),
+                "progress_evidence": str(row.get("active_run_progress_evidence") or "").strip(),
+                "worker_last_output_at": str(row.get("active_run_worker_last_output_at") or "").strip(),
+            }
+        )
+    return active_shards
+
+
+def active_runs_count_from_state(
+    state_payload: Dict[str, Any],
+    active_shards_payload: Dict[str, Any],
+) -> int:
+    active_shards = active_shards_from_payload(active_shards_payload)
+    if active_shards:
+        return len(active_shards)
+    try:
+        active_run_count = int(active_shards_payload.get("active_run_count") or 0)
+    except (TypeError, ValueError):
+        active_run_count = 0
+    if active_run_count > 0:
+        return active_run_count
+    try:
+        return int(state_payload.get("active_runs_count") or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def shard_state_roots(state_root: Path) -> List[Path]:
@@ -410,6 +478,159 @@ def write_json(path: Path, payload: Dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def materialized_status_path(state_root: Path) -> Path:
+    return state_root / "status-live-refresh.materialized.json"
+
+
+def int_or_zero(value: Any) -> int:
+    try:
+        return int(str(value or "0").strip() or "0")
+    except (TypeError, ValueError):
+        return 0
+
+
+def materialized_shards_with_manifest_evidence(
+    observed_shards: List[Dict[str, Any]],
+    active_shards_payload: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    manifest_by_name: Dict[str, Dict[str, Any]] = {}
+    for row in active_shards_payload.get("active_shards") or []:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("shard_id") or row.get("name") or "").strip()
+        if name:
+            manifest_by_name[name] = dict(row)
+
+    materialized: List[Dict[str, Any]] = []
+    for row in observed_shards:
+        if not isinstance(row, dict):
+            continue
+        observed = dict(row)
+        name = str(observed.get("shard_id") or observed.get("name") or "").strip()
+        manifest = manifest_by_name.get(name) or {}
+        manifest_run_id = str(manifest.get("active_run_id") or "").strip()
+        observed_run_id = str(observed.get("active_run_id") or "").strip()
+        if manifest and (not manifest_run_id or not observed_run_id or manifest_run_id == observed_run_id):
+            merged = dict(manifest)
+            merged.update(observed)
+            materialized.append(merged)
+            continue
+        materialized.append(observed)
+    return materialized
+
+
+def materialized_active_runs_from_observed_shards(observed_shards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    active_runs: List[Dict[str, Any]] = []
+    for row in observed_shards:
+        if not isinstance(row, dict):
+            continue
+        active_run_id = str(row.get("active_run_id") or "").strip()
+        if not active_run_id:
+            continue
+        progress_state = str(row.get("active_run_progress_state") or row.get("progress_state") or "").strip()
+        if progress_state in {"closing", "missing_process"}:
+            continue
+        active_runs.append(
+            {
+                "_shard": str(row.get("shard_id") or row.get("name") or "").strip(),
+                "run_id": active_run_id,
+                "frontier_ids": list(row.get("active_frontier_ids") or row.get("frontier_ids") or []),
+                "open_milestone_ids": list(row.get("open_milestone_ids") or []),
+                "progress_state": progress_state,
+                "started_at": str(row.get("active_run_started_at") or "").strip(),
+                "selected_account_alias": str(row.get("selected_account_alias") or "").strip(),
+                "selected_model": str(row.get("selected_model") or "").strip(),
+                "worker_pid": int_or_zero(row.get("active_run_worker_pid")),
+                "worker_first_output_at": str(row.get("active_run_worker_first_output_at") or "").strip(),
+                "worker_last_output_at": str(row.get("active_run_worker_last_output_at") or "").strip(),
+                "output_updated_at": str(row.get("active_run_output_updated_at") or "").strip(),
+                "output_sizes": dict(row.get("active_run_output_sizes") or {}),
+                "process_alive": row.get("active_run_process_alive"),
+                "process_state": str(row.get("active_run_process_state") or "").strip(),
+                "process_cpu_seconds": row.get("active_run_process_cpu_seconds"),
+            }
+        )
+    return active_runs
+
+
+def refresh_materialized_status_snapshot(
+    state_root: Path,
+    *,
+    state_payload: Dict[str, Any],
+    active_shards_payload: Dict[str, Any],
+    observed_shards: List[Dict[str, Any]],
+) -> None:
+    generated_at = iso_now()
+    materialized_shards = materialized_shards_with_manifest_evidence(observed_shards, active_shards_payload)
+    active_runs = materialized_active_runs_from_observed_shards(materialized_shards)
+    progress_evidence_counts: Dict[str, int] = {}
+    for row in materialized_shards:
+        if not isinstance(row, dict) or not str(row.get("active_run_id") or "").strip():
+            continue
+        progress_state = str(row.get("active_run_progress_state") or "").strip()
+        if progress_state in {"closing", "missing_process"}:
+            continue
+        progress_evidence = str(row.get("active_run_progress_evidence") or "").strip() or "unknown"
+        progress_evidence_counts[progress_evidence] = progress_evidence_counts.get(progress_evidence, 0) + 1
+
+    try:
+        configured_shard_count = int(
+            active_shards_payload.get("configured_shard_count")
+            or state_payload.get("shard_count")
+            or len(observed_shards)
+            or 0
+        )
+    except (TypeError, ValueError):
+        configured_shard_count = len(observed_shards)
+
+    payload = dict(state_payload or {})
+    payload.update(
+        {
+            "contract_name": "fleet.chummer_design_supervisor.status_live_refresh_materialized",
+            "generated_at": generated_at,
+            "updated_at": generated_at,
+            "state_root": str(state_root),
+            "configured_shard_count": configured_shard_count,
+            "shard_count": len(observed_shards) or configured_shard_count,
+            "active_run_count": len(active_runs),
+            "active_runs_count": len(active_runs),
+            "productive_active_runs_count": progress_evidence_counts.get("repo_work_detected", 0),
+            "nonproductive_active_runs_count": max(
+                0,
+                len(active_runs) - progress_evidence_counts.get("repo_work_detected", 0),
+            ),
+            "progress_evidence_counts": progress_evidence_counts,
+            "active_runs": active_runs,
+            "shards": materialized_shards,
+        }
+    )
+    eta_payload = eta_payload_from_state(payload)
+    if eta_payload:
+        eta_status = str(eta_payload.get("status") or "").strip()
+        eta_human = str(eta_payload.get("eta_human") or "").strip()
+        eta_summary = str(eta_payload.get("summary") or "").strip()
+        if eta_status and not str(payload.get("eta_status") or "").strip():
+            payload["eta_status"] = eta_status
+        if eta_human and not str(payload.get("eta_human") or "").strip():
+            payload["eta_human"] = eta_human
+        if eta_summary and not str(payload.get("eta_summary") or "").strip():
+            payload["eta_summary"] = eta_summary
+        remaining_open = remaining_open_milestones_from_state(payload, eta_payload)
+        if remaining_open > 0:
+            payload["remaining_open_milestones"] = remaining_open
+        for source_key, target_key in (
+            ("remaining_in_progress_milestones", "remaining_in_progress_milestones"),
+            ("remaining_not_started_milestones", "remaining_not_started_milestones"),
+        ):
+            try:
+                count = int(eta_payload.get(source_key) or 0)
+            except (TypeError, ValueError):
+                count = 0
+            if count > 0:
+                payload[target_key] = count
+    write_json(materialized_status_path(state_root), payload)
+
+
 def append_event(path: Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
@@ -447,6 +668,14 @@ def run_command(
             127,
             stdout="",
             stderr=f"{missing}: not found",
+        )
+    except subprocess.TimeoutExpired as exc:
+        timeout_seconds_value = timeout_seconds if timeout_seconds is not None else 0
+        return subprocess.CompletedProcess(
+            command,
+            124,
+            stdout=str(exc.stdout or ""),
+            stderr=f"timeout after {timeout_seconds_value}s",
         )
     except subprocess.TimeoutExpired:
         timeout_label = int(timeout_seconds) if timeout_seconds else 0
@@ -619,6 +848,29 @@ def service_restart_allowed(service: str, monitor_state: Dict[str, Any], *, now:
     return True
 
 
+def supervisor_restart_needed(
+    *,
+    supervisor_state: str,
+    aggregate_stale: bool,
+    stale_shards: Sequence[str],
+    inactive_shards: Sequence[str],
+    shard_count: int,
+) -> bool:
+    if supervisor_state in {"exited", "unknown"} or aggregate_stale:
+        return True
+    if shard_count <= 0:
+        return bool(stale_shards or inactive_shards)
+
+    quorum = max(3, (int(shard_count) + 1) // 2)
+    stale_count = len([item for item in stale_shards if str(item or "").strip()])
+    inactive_count = len([item for item in inactive_shards if str(item or "").strip()])
+    if stale_count >= quorum:
+        return True
+    if inactive_count == shard_count:
+        return True
+    return inactive_count >= quorum
+
+
 def record_service_restart(
     service: str,
     completed: subprocess.CompletedProcess[str],
@@ -674,19 +926,17 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
     now = utc_now()
 
     state_payload = read_json(state_root / "state.json")
+    active_shards_payload = read_active_shards_payload(state_root)
+    active_shards = active_shards_from_payload(active_shards_payload)
     account_runtime = read_json(state_root / "account_runtime.json")
     eta_payload = eta_payload_from_state(state_payload)
     eta_status = str(eta_payload.get("status") or state_payload.get("eta_status") or "").strip()
     eta_human = str(eta_payload.get("eta_human") or state_payload.get("eta_human") or "").strip()
     blocking_reason = str(state_payload.get("blocking_reason") or "").strip()
-    try:
-        active_runs_count = int(state_payload.get("active_runs_count") or 0)
-    except (TypeError, ValueError):
-        active_runs_count = 0
-    try:
-        remaining_open_milestones = int(state_payload.get("remaining_open_milestones") or 0)
-    except (TypeError, ValueError):
-        remaining_open_milestones = 0
+    active_runs_count = active_runs_count_from_state(state_payload, active_shards_payload)
+    active_shards_count = len(active_shards) if active_shards else active_runs_count
+    provider_capacity_summary = dict(state_payload.get("provider_capacity_summary") or {})
+    remaining_open_milestones = remaining_open_milestones_from_state(state_payload, eta_payload)
     supervisor_fields = {
         "mode": str(state_payload.get("mode") or "").strip(),
         "updated_at": str(state_payload.get("updated_at") or "").strip(),
@@ -764,6 +1014,12 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
         and (not shard_payloads or len(stale_shards) == len(shard_payloads))
         and not steady_complete_quiet
     )
+    refresh_materialized_status_snapshot(
+        state_root,
+        state_payload=state_payload,
+        active_shards_payload=active_shards_payload,
+        observed_shards=observed_shards,
+    )
 
     append_event(
         event_path,
@@ -781,6 +1037,8 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
                 "eta_status": eta_status,
                 "blocking_reason": blocking_reason,
                 "active_runs_count": active_runs_count,
+                "active_shards_count": active_shards_count,
+                "provider_capacity_summary": provider_capacity_summary,
                 "remaining_open_milestones": remaining_open_milestones,
                 "failure_hint": ((state_payload.get("last_run") or {}).get("failure_hint") or ""),
                 "stale_shards": stale_shards,
@@ -795,10 +1053,14 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
         completed = restart_service(workspace_root, "fleet-controller")
         record_service_restart("fleet-controller", completed, monitor_state)
         log(log_path, f"intervene restart fleet-controller rc={completed.returncode}")
-    if (
-        (supervisor_state in {"exited", "unknown"} or stale or stale_shards or inactive_shards)
-        and service_restart_allowed("fleet-design-supervisor", monitor_state, now=now)
-    ):
+    supervisor_restart = supervisor_restart_needed(
+        supervisor_state=supervisor_state,
+        aggregate_stale=stale,
+        stale_shards=stale_shards,
+        inactive_shards=inactive_shards,
+        shard_count=len(shard_payloads),
+    )
+    if supervisor_restart and service_restart_allowed("fleet-design-supervisor", monitor_state, now=now):
         completed = restart_service(workspace_root, "fleet-design-supervisor")
         record_service_restart("fleet-design-supervisor", completed, monitor_state)
         log(
@@ -830,6 +1092,9 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
     monitor_state["eta_status"] = eta_status
     monitor_state["blocking_reason"] = blocking_reason
     monitor_state["active_runs_count"] = active_runs_count
+    monitor_state["active_shards_count"] = active_shards_count
+    monitor_state["provider_capacity_summary"] = provider_capacity_summary
+    monitor_state["active_shards"] = active_shards
     monitor_state["remaining_open_milestones"] = remaining_open_milestones
     monitor_state["supervisor_reported_mode"] = str(supervisor_fields.get("mode") or "")
     monitor_state["supervisor_reported_updated_at"] = str(supervisor_fields.get("updated_at") or "")

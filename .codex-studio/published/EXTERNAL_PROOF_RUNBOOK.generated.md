@@ -1,12 +1,12 @@
 # External Proof Runbook
 
-- generated_at: 2026-04-23T12:14:00Z
+- generated_at: 2026-04-26T13:47:50Z
 - unresolved_request_count: 0
 - unresolved_hosts: (none)
-- plan_generated_at: 2026-04-23T12:13:57Z
-- release_channel_generated_at: 2026-04-23T11:38:59Z
+- plan_generated_at: 2026-04-26T13:47:48Z
+- release_channel_generated_at: 2026-04-25T11:38:04Z
 - capture_deadline_hours: 24
-- capture_deadline_utc: 2026-04-24T11:38:59Z
+- capture_deadline_utc: 2026-04-26T11:38:04Z
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@
 ## Generated Command Files
 
 - commands_dir: `/docker/fleet/.codex-studio/published/external-proof-commands`
-- command_bundle_sha256: `90e42fb971f67a0ce24d5d10985fe6f42f2fea230550b08a37bd0ab98aaf57e0`
+- command_bundle_sha256: `a2909d7ddb08cd259eba9856d0de76003d29ce1430e967490f63f907c4e96329`
 - command_bundle_file_count: 26
 - host `linux`
   preflight_script: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-linux-proof.sh`
@@ -62,7 +62,7 @@ These command bundles stay materialized even with zero backlog so native-host pr
 - tuples: (none)
 - host_lane_script: `/docker/fleet/.codex-studio/published/external-proof-commands/run-linux-proof-lane.sh`
 - retained_bundle_archive_path: `/docker/fleet/.codex-studio/published/external-proof-commands/linux-proof-bundle.tgz`
-- retained_bundle_archive_present: `false`
+- retained_bundle_archive_present: `true`
 - retained_bundle_directory_path: `/docker/fleet/.codex-studio/published/external-proof-commands/host-proof-bundles/linux`
 - retained_bundle_directory_present: `true`
 
@@ -74,7 +74,7 @@ These command bundles stay materialized even with zero backlog so native-host pr
 - tuples: (none)
 - host_lane_script: `/docker/fleet/.codex-studio/published/external-proof-commands/run-macos-proof-lane.sh`
 - retained_bundle_archive_path: `/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-bundle.tgz`
-- retained_bundle_archive_present: `false`
+- retained_bundle_archive_present: `true`
 - retained_bundle_directory_path: `/docker/fleet/.codex-studio/published/external-proof-commands/host-proof-bundles/macos`
 - retained_bundle_directory_present: `true`
 
@@ -87,7 +87,7 @@ These command bundles stay materialized even with zero backlog so native-host pr
 - host_lane_script: `/docker/fleet/.codex-studio/published/external-proof-commands/run-windows-proof-lane.sh`
 - host_lane_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/run-windows-proof-lane.ps1`
 - retained_bundle_archive_path: `/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-bundle.tgz`
-- retained_bundle_archive_present: `false`
+- retained_bundle_archive_present: `true`
 - retained_bundle_directory_path: `/docker/fleet/.codex-studio/published/external-proof-commands/host-proof-bundles/windows`
 - retained_bundle_directory_present: `true`
 
@@ -128,11 +128,12 @@ cd /docker/fleet/.codex-studio/published/external-proof-commands
 ### Resume Host Lane (PowerShell): windows
 
 ```powershell
-bash -lc 'cd /docker/fleet/.codex-studio/published/external-proof-commands'
-bash -lc './preflight-windows-proof.sh'
-bash -lc './capture-windows-proof.sh'
-bash -lc './validate-windows-proof.sh'
-bash -lc './bundle-windows-proof.sh'
+bash -lc 'set -euo pipefail
+cd /docker/fleet/.codex-studio/published/external-proof-commands
+./preflight-windows-proof.sh
+./capture-windows-proof.sh
+./validate-windows-proof.sh
+./bundle-windows-proof.sh'
 ```
 
 ## After Host Proof Capture

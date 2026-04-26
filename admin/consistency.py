@@ -487,6 +487,7 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
     publish_truth_sources = list(dict.fromkeys(_text_list(item.get("publish_truth_sources"))))
     package_id = str(item.get("package_id") or "").strip()
     package_kind = str(item.get("package_kind") or "implementation").strip().lower() or "implementation"
+    status = str(item.get("status") or "").strip().lower()
     horizon_family = str(item.get("horizon_family") or "").strip()
     source_items = list(dict.fromkeys(_text_list(item.get("source_items"))))
     allowed_paths = list(dict.fromkeys(_text_list(item.get("allowed_paths"))))
@@ -627,6 +628,7 @@ def normalize_task_queue_item(value: Any, *, lanes: Any = None) -> Dict[str, Any
         "publish_truth_sources": publish_truth_sources,
         "package_id": package_id,
         "package_kind": package_kind,
+        "status": status,
         "horizon_family": horizon_family,
         "source_items": source_items,
         "allowed_paths": allowed_paths,

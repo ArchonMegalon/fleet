@@ -83,6 +83,22 @@ def test_compose_command_falls_back_to_docker_when_tools_missing(monkeypatch) ->
     assert command == ["docker", "compose", "ps", "fleet-controller"]
 
 
+def test_run_command_returns_timeout_completed_process(monkeypatch, tmp_path: Path) -> None:
+    def fake_run(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs.get("timeout", 0))
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    completed = module.run_command(
+        ["python3", "scripts/chummer_design_supervisor.py", "status"],
+        cwd=tmp_path,
+        timeout_seconds=5,
+    )
+
+    assert completed.returncode == 124
+    assert "timeout after 5s" in completed.stderr
+
+
 def test_restart_service_prefers_docker_socket_restart(monkeypatch) -> None:
     monkeypatch.setattr(module.shutil, "which", lambda name: "/usr/bin/curl" if name == "curl" else None)
     monkeypatch.setattr(module.Path, "exists", lambda self: str(self) == module.DOCKER_SOCKET_PATH)
@@ -122,6 +138,32 @@ def test_service_restart_allowed_respects_cooldown() -> None:
     assert module.service_restart_allowed("fleet-design-supervisor", monitor_state, now=now) is False
 
 
+def test_supervisor_restart_needed_ignores_small_inactive_minority() -> None:
+    assert (
+        module.supervisor_restart_needed(
+            supervisor_state="up",
+            aggregate_stale=False,
+            stale_shards=[],
+            inactive_shards=["shard-11", "shard-12"],
+            shard_count=13,
+        )
+        is False
+    )
+
+
+def test_supervisor_restart_needed_restarts_when_inactive_quorum_is_down() -> None:
+    assert (
+        module.supervisor_restart_needed(
+            supervisor_state="up",
+            aggregate_stale=False,
+            stale_shards=[],
+            inactive_shards=[f"shard-{index}" for index in range(1, 8)],
+            shard_count=13,
+        )
+        is True
+    )
+
+
 def test_freshest_updated_at_prefers_live_shard_timestamp() -> None:
     aggregate = module.parse_iso("2026-03-31T07:58:10Z")
     shard_payloads = [
@@ -142,6 +184,7 @@ def test_eta_payload_from_state_prefers_successor_wave_eta_when_primary_eta_miss
                 "status": "tracked",
                 "eta_human": "5.6d-2w",
                 "summary": "6 milestones remain.",
+                "remaining_open_milestones": 6,
             },
         }
     )
@@ -150,7 +193,9 @@ def test_eta_payload_from_state_prefers_successor_wave_eta_when_primary_eta_miss
         "status": "tracked",
         "eta_human": "5.6d-2w",
         "summary": "6 milestones remain.",
+        "remaining_open_milestones": 6,
     }
+    assert module.remaining_open_milestones_from_state({}, payload) == 6
 
 
 def test_parse_supervisor_status_text_extracts_effective_shard_modes() -> None:
@@ -564,6 +609,214 @@ def test_run_cycle_persists_structured_eta_payload_for_successor_wave(
     assert payload["eta"]["eta_human"] == "5.6d-2w"
     assert payload["eta_human"] == "5.6d-2w"
     assert payload["eta_status"] == "tracked"
+
+
+def test_run_cycle_prefers_active_shards_manifest_for_live_active_count(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    state_root = tmp_path / "state" / "chummer_design_supervisor"
+    state_root.mkdir(parents=True)
+    (state_root / "state.json").write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-04-01T04:48:34Z",
+                "mode": "flagship_product",
+                "active_runs_count": 6,
+                "provider_capacity_summary": {
+                    "allowed_active_shards": 9,
+                    "configured_shard_count": 13,
+                    "ready_slots": 10,
+                    "hard_max_active_requests": 8,
+                    "estimated_remaining_credits_total": 44198385,
+                    "reason": "live provider capacity caps shard dispatch at 9/13",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (state_root / "active_shards.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-01T04:48:40Z",
+                "active_run_count": 9,
+                "active_shards": [
+                    {
+                        "name": "shard-1",
+                        "shard_id": "shard-1",
+                        "active_run_id": "run-1",
+                        "active_run_progress_state": "streaming",
+                        "active_run_progress_evidence": "repo_work_detected",
+                        "active_run_worker_last_output_at": "2026-04-01T04:48:39Z",
+                        "selected_account_alias": "acct-chatgpt-b",
+                        "selected_model": "gpt-5.4",
+                    },
+                    {
+                        "name": "shard-7",
+                        "shard_id": "shard-7",
+                        "active_run_id": "run-7",
+                        "active_run_progress_state": "running_silent",
+                        "active_run_progress_evidence": "worker_output_only",
+                        "active_run_worker_last_output_at": "2026-04-01T04:48:38Z",
+                        "selected_account_alias": "lane:core",
+                        "selected_model": "qwen3-coder-next:q8_0",
+                    },
+                    {
+                        "name": "shard-10",
+                        "shard_id": "shard-10",
+                    },
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    log_path = tmp_path / "monitor" / "ooda.log"
+    event_path = tmp_path / "monitor" / "events.jsonl"
+    state_path = tmp_path / "monitor" / "state.json"
+    args = argparse.Namespace(
+        workspace_root=str(workspace_root),
+        state_root=str(state_root),
+        monitor_root=str(tmp_path / "monitor"),
+        poll_seconds=300,
+        duration_seconds=28800,
+        repair_cooldown_seconds=1800,
+        stale_seconds=900,
+        once=True,
+    )
+
+    def fake_run_command(command, *, cwd, env=None):  # type: ignore[no-untyped-def]
+        if command[:3] == ["python3", "scripts/chummer_design_supervisor.py", "status"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="updated_at: 2026-04-01T04:48:34Z\nmode: flagship_product\n",
+                stderr="",
+            )
+        if command[:7] == [
+            "/usr/bin/curl",
+            "--silent",
+            "--show-error",
+            "--fail",
+            "--unix-socket",
+            module.DOCKER_SOCKET_PATH,
+            "-X",
+        ]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout='{"State": {"Status": "running"}}\n',
+                stderr="",
+            )
+        if command[-2:] == ["compose", "version"]:
+            return subprocess.CompletedProcess(command, 0, stdout="Docker Compose version v2.0.0\n", stderr="")
+        if command[-3:] == ["compose", "ps", "fleet-controller"] or command[-3:] == ["compose", "ps", "fleet-design-supervisor"]:
+            return subprocess.CompletedProcess(command, 0, stdout="service Up\n", stderr="")
+        raise AssertionError(command)
+
+    monkeypatch.setattr(module, "utc_now", _now)
+    monkeypatch.setattr(module, "run_command", fake_run_command)
+
+    module.run_cycle(args, log_path=log_path, event_path=event_path, state_path=state_path)
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert payload["active_runs_count"] == 2
+    assert payload["active_shards_count"] == 2
+    assert payload["provider_capacity_summary"]["estimated_remaining_credits_total"] == 44198385
+    assert payload["provider_capacity_summary"]["ready_slots"] == 10
+    assert [item["shard_id"] for item in payload["active_shards"]] == ["shard-1", "shard-7"]
+    assert payload["active_shards"][0]["progress_evidence"] == "repo_work_detected"
+    assert payload["active_shards"][1]["selected_model"] == "qwen3-coder-next:q8_0"
+
+
+def test_refresh_materialized_status_snapshot_replaces_stale_blocked_snapshot(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "state" / "chummer_design_supervisor"
+    state_root.mkdir(parents=True)
+    (state_root / "status-live-refresh.materialized.json").write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-03-31T04:00:00Z",
+                "eta_status": "blocked",
+                "active_runs_count": 1,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "iso_now", lambda: "2026-04-01T05:20:00Z")
+
+    module.refresh_materialized_status_snapshot(
+        state_root,
+        state_payload={
+            "updated_at": "2026-04-01T05:19:00Z",
+            "mode": "successor_wave",
+            "successor_wave_eta": {
+                "status": "tracked",
+                "eta_human": "5.6d-2w",
+                "summary": "27 open milestones remain.",
+                "remaining_open_milestones": 27,
+                "remaining_in_progress_milestones": 13,
+                "remaining_not_started_milestones": 14,
+            },
+        },
+        active_shards_payload={
+            "configured_shard_count": 13,
+            "active_shards": [
+                {
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_evidence": "repo_work_detected",
+                },
+                {
+                    "name": "shard-2",
+                    "active_run_id": "run-2",
+                    "active_run_progress_evidence": "worker_output_only",
+                },
+            ],
+        },
+        observed_shards=[
+            {
+                "name": "shard-1",
+                "shard_id": "shard-1",
+                "active_run_id": "run-1",
+                "active_frontier_ids": [109],
+                "open_milestone_ids": [109],
+                "active_run_progress_state": "streaming",
+                "active_run_worker_pid": "1234",
+                "active_run_worker_last_output_at": "2026-04-01T05:19:50Z",
+            },
+            {
+                "name": "shard-2",
+                "shard_id": "shard-2",
+                "active_run_id": "run-2",
+                "active_frontier_ids": [114],
+                "open_milestone_ids": [114],
+                "active_run_progress_state": "streaming",
+                "active_run_worker_pid": "2345",
+                "active_run_worker_last_output_at": "2026-04-01T05:19:55Z",
+            },
+        ],
+    )
+
+    payload = json.loads((state_root / "status-live-refresh.materialized.json").read_text(encoding="utf-8"))
+
+    assert payload["contract_name"] == "fleet.chummer_design_supervisor.status_live_refresh_materialized"
+    assert payload["updated_at"] == "2026-04-01T05:20:00Z"
+    assert payload["eta_status"] == "tracked"
+    assert payload["remaining_open_milestones"] == 27
+    assert payload["remaining_in_progress_milestones"] == 13
+    assert payload["remaining_not_started_milestones"] == 14
+    assert payload["configured_shard_count"] == 13
+    assert payload["active_runs_count"] == 2
+    assert payload["productive_active_runs_count"] == 1
+    assert payload["nonproductive_active_runs_count"] == 1
+    assert [item["run_id"] for item in payload["active_runs"]] == ["run-1", "run-2"]
 
 
 def test_run_cycle_treats_flagship_product_quiet_snapshot_as_non_stale(

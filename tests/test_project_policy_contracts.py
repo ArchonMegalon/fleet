@@ -74,6 +74,10 @@ def test_fleet_supervisor_contract_carries_shard_routing_and_proof_paths() -> No
     assert all(shard["focus_owner"] for shard in shards)
     assert all(shard["focus_text"] for shard in shards)
     assert shards[0]["focus_profile"] == ["top_flagship_grade", "whole_project_frontier"]
+    assert runtime["fallback_lanes"] == ["core_rescue"]
+    assert runtime["fallback_models"] == ["ea-coder-hard-batch", "ea-coder-hard"]
+    assert all("worker_bin" not in shard or shard["worker_bin"].endswith("/scripts/codex-shims/codexea") for shard in shards)
+    assert all(shard.get("worker_model") != "qwen3-coder-next:q8_0" for shard in shards)
     assert "desktop_client" in contract["focus_profiles"]
     assert contract["proof_paths"]["completion_review_frontier"].endswith(
         "/COMPLETION_REVIEW_FRONTIER.generated.yaml"
@@ -88,6 +92,9 @@ def test_launcher_hydrates_shard_focus_defaults_from_project_contract() -> None:
     assert "project_contract_shard_owner_groups" in launcher
     assert "project_contract_shard_focus_profile_groups" in launcher
     assert "project_contract_shard_focus_text_groups" in launcher
+    assert "project_contract_shard_worker_bin_groups" in launcher
+    assert "project_contract_shard_worker_lane_groups" in launcher
+    assert "project_contract_shard_worker_model_groups" in launcher
     assert "project_contract_parallel_shards" in launcher
     assert "project_contract_operating_profile" in launcher
     assert "project_contract_memory_dispatch_reserve_gib" in launcher
@@ -129,8 +136,41 @@ def test_launcher_cold_restart_policy_is_reproducible_from_project_contract() ->
     assert lines["worker_bin"] == "/docker/fleet/scripts/codex-shims/codexea"
     assert lines["worker_lane"] == "core"
     assert lines["worker_model"] == "ea-coder-hard-batch"
-    assert lines["fallback_lanes"] == "core_rescue,codexliz"
+    assert lines["fallback_lanes"] == "core_rescue"
+    assert "codexliz" not in lines["resolved_shard_worker_bins"]
     assert "fleet,chummer6-design,chummer6-ui" in lines["shard_owner_groups"]
+    assert lines["selected_shard_indexes"] == "1,2,3,4,5,6,7,8,9,10,11,12,13"
+
+
+def test_launcher_reduced_parallel_width_selects_ea_shards_in_order() -> None:
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "CHUMMER_DESIGN_SUPERVISOR_PRINT_RUNTIME_POLICY": "1",
+        "CHUMMER_DESIGN_SUPERVISOR_PROJECT_CONFIG": "/docker/fleet/config/projects/fleet.yaml",
+        "CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS": "2",
+        "CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_LANES": "groundwork;repair",
+        "CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_MODELS": "ea-groundwork-gemini;ea-coder-fast",
+    }
+
+    result = subprocess.run(
+        ["bash", "/docker/fleet/scripts/run_chummer_design_supervisor.sh"],
+        check=True,
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+    lines = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+
+    assert lines["parallel_shards"] == "2"
+    assert lines["selected_shard_indexes"] == "1,2"
+    resolved_bins = lines["resolved_shard_worker_bins"].split(";")
+    resolved_lanes = lines["resolved_shard_worker_lanes"].split(";")
+    resolved_models = lines["resolved_shard_worker_models"].split(";")
+    assert all(value != "/docker/fleet/scripts/codex-shims/codexliz" for value in resolved_bins)
+    assert resolved_lanes[0] == "groundwork"
+    assert resolved_lanes[1] == "repair"
+    assert resolved_models[0] == "ea-groundwork-gemini"
+    assert resolved_models[1] == "ea-coder-fast"
 
 
 def test_fleet_restart_safe_runtime_contract_is_documented() -> None:

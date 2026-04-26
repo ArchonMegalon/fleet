@@ -3918,7 +3918,7 @@ def _active_shard_manifest_live_summaries(aggregate_root: Path) -> List[Dict[str
         token = str(row.get("name") or "").strip()
         if not token.startswith("shard-"):
             continue
-        entry = dict(row)
+        entry = _clear_historical_terminal_worker_transport(dict(row))
         entry["name"] = token
         entry.setdefault("shard_id", token)
         entry.setdefault("shard_token", token)
@@ -3936,6 +3936,28 @@ def _active_shard_manifest_entry_map(aggregate_root: Path) -> Dict[str, Dict[str
         for entry in _active_shard_manifest_entries(aggregate_root)
         if str(entry.get("name") or "").strip()
     }
+
+
+def _clear_historical_terminal_worker_transport(row: Dict[str, Any]) -> Dict[str, Any]:
+    state = str(row.get("worker_transport_state") or "").strip().lower()
+    if state != "failure" or bool(row.get("worker_transport_current_outage")):
+        return row
+    if str(row.get("worker_transport_next_retry_at") or "").strip():
+        return row
+    updated = dict(row)
+    updated["worker_transport_state"] = ""
+    updated["worker_transport_current_outage"] = False
+    updated["worker_transport_updated_at"] = ""
+    updated["worker_transport_outage_started_at"] = ""
+    updated["worker_transport_outage_seconds"] = 0
+    updated["worker_transport_last_http_status"] = 0
+    updated["worker_transport_last_cf_ray"] = ""
+    updated["worker_transport_last_reason"] = ""
+    updated["worker_transport_last_error"] = ""
+    updated["worker_transport_retry_count"] = 0
+    updated["worker_transport_next_retry_at"] = ""
+    updated["worker_transport_state_path"] = ""
+    return updated
 
 
 def _shard_index_from_root(aggregate_root: Path, shard_root: Path) -> Optional[int]:
@@ -15112,6 +15134,28 @@ def _task_local_telemetry_path(run_dir: Path) -> Path:
 
 
 def _load_codexliz_transport_state_for_shard(shard_root: Path, *, selected_account_alias: str = "") -> Dict[str, Any]:
+    def _read_transport_payload(path: Path) -> Dict[str, Any]:
+        payload = _read_state(path)
+        if not isinstance(payload, dict) or not payload:
+            return {}
+        updated = dict(payload)
+        updated["state_path"] = str(path)
+        return updated
+
+    def _is_active_transport_payload(payload: Dict[str, Any]) -> bool:
+        if bool(payload.get("current_outage")):
+            return True
+        state = str(payload.get("state") or "").strip().lower()
+        return state in {"outage_waiting", "outage_timeout", "reconnecting"}
+
+    def _is_historical_terminal_failure(payload: Dict[str, Any]) -> bool:
+        if bool(payload.get("current_outage")):
+            return False
+        state = str(payload.get("state") or "").strip().lower()
+        if state != "failure":
+            return False
+        return not str(payload.get("next_retry_at") or "").strip()
+
     codex_homes_root = shard_root / "codex-homes"
     if not codex_homes_root.is_dir():
         return {}
@@ -15125,19 +15169,21 @@ def _load_codexliz_transport_state_for_shard(shard_root: Path, *, selected_accou
         candidate = codex_homes_root / clean / ".cache" / "codexliz" / "outage.json"
         if candidate.is_file():
             candidate_paths.append(candidate)
-    if not candidate_paths:
-        candidate_paths = sorted(
-            codex_homes_root.glob("*/.cache/codexliz/outage.json"),
-            key=lambda path: path.stat().st_mtime if path.exists() else 0.0,
-            reverse=True,
-        )
     for path in candidate_paths:
-        payload = _read_state(path)
-        if not isinstance(payload, dict) or not payload:
+        payload = _read_transport_payload(path)
+        if not payload or _is_historical_terminal_failure(payload):
             continue
-        updated = dict(payload)
-        updated["state_path"] = str(path)
-        return updated
+        return payload
+    fallback_paths = sorted(
+        codex_homes_root.glob("*/.cache/codexliz/outage.json"),
+        key=lambda path: path.stat().st_mtime if path.exists() else 0.0,
+        reverse=True,
+    )
+    for path in fallback_paths:
+        payload = _read_transport_payload(path)
+        if not payload or not _is_active_transport_payload(payload):
+            continue
+        return payload
     return {}
 
 

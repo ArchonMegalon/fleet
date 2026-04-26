@@ -23,6 +23,7 @@ from admin.readiness import _load_milestone_capability_queue, _load_tasks_work_l
 
 PROJECTS_CONFIG_DIR = ROOT / "config" / "projects"
 DEFAULT_TARGET_RELPATH = ".codex-studio/published/WORKPACKAGES.generated.yaml"
+RAW_QUEUE_TERMINAL_STATUSES = {"done", "complete", "completed", "shipped", "archived", "cancelled", "canceled", "skipped"}
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
@@ -55,6 +56,27 @@ def package_safe_token(value: str) -> str:
 def work_package_source_queue_fingerprint(items: List[Any]) -> str:
     payload = json.dumps(list(items or []), sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
+def queue_item_terminal(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    return str(item.get("status") or "").strip().lower() in RAW_QUEUE_TERMINAL_STATUSES
+
+
+def queue_item_has_explicit_scope(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    return bool([value for value in item.get("allowed_paths") or [] if str(value).strip()] or [value for value in item.get("owned_surfaces") or [] if str(value).strip()])
+
+
+def queue_needs_compile(queue_items: List[Any]) -> bool:
+    for item in queue_items:
+        if queue_item_terminal(item):
+            continue
+        if not queue_item_has_explicit_scope(item):
+            return True
+    return False
 
 
 def apply_queue_source(project_cfg: dict[str, Any], queue: List[Any], source_cfg: dict[str, Any]) -> List[Any]:
@@ -170,7 +192,7 @@ def resolve_project_id(repo_root: Path, projects_dir: Path, explicit: str | None
 
 def build_overlay(project_id: str, queue_items: List[Any], *, target_relpath: str) -> dict[str, Any]:
     queue_fingerprint = work_package_source_queue_fingerprint(queue_items)
-    if not queue_items:
+    if not queue_items or not queue_needs_compile(queue_items):
         return {
             "source_queue_fingerprint": queue_fingerprint,
             "work_packages": [],

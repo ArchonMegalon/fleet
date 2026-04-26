@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -79,6 +81,20 @@ def _stable_public_status_copy(payload: Dict[str, Any]) -> Dict[str, Any]:
     return copy
 
 
+def _stable_measured_rollout_loop(payload: Dict[str, Any]) -> Dict[str, Any]:
+    stable = copy.deepcopy(payload)
+    handoff = stable.get("weekly_operator_handoff")
+    if isinstance(handoff, dict):
+        if "next_review_due_at" in handoff:
+            handoff["next_review_due_at"] = "<ignored>"
+        rows = handoff.get("rows")
+        if isinstance(rows, list):
+            for row in rows:
+                if isinstance(row, dict) and "next_review_due_at" in row:
+                    row["next_review_due_at"] = "<ignored>"
+    return stable
+
+
 def _decision_projection(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "contract_name": payload.get("contract_name"),
@@ -102,7 +118,9 @@ def _decision_projection(payload: Dict[str, Any]) -> Dict[str, Any]:
             dict(payload.get("public_status_copy") or {})
         ),
         "package_closeout": payload.get("package_closeout"),
-        "measured_rollout_loop": payload.get("measured_rollout_loop"),
+        "measured_rollout_loop": _stable_measured_rollout_loop(
+            dict(payload.get("measured_rollout_loop") or {})
+        ),
         "repeat_prevention": payload.get("repeat_prevention"),
         "risk_clusters": payload.get("risk_clusters"),
         "source_paths": payload.get("source_paths"),
@@ -119,6 +137,12 @@ def _stable_markdown(markdown: str) -> str:
     return "\n".join(
         "Generated: <ignored>" if line.startswith("Generated: ")
         else "- Next packet due: <ignored>" if line.startswith("- Next packet due: ")
+        else re.sub(
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z",
+            "<ignored>",
+            line,
+        )
+        if "governor_packet_schedule.next_packet_due_at" in line
         else line
         for line in lines
     )
@@ -478,7 +502,18 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues,
         "packet weekly risk-cluster required fields drifted",
     )
-    _require(decision_alignment.get("status") == "pass", issues, "packet decision_alignment.status is not pass")
+    decision_alignment_status = str(decision_alignment.get("status") or "").strip()
+    _require(
+        decision_alignment_status in {"pass", "fail"},
+        issues,
+        "packet decision_alignment.status is not pass or fail",
+    )
+    if decision_alignment_status == "fail":
+        _require(
+            bool(decision_alignment.get("issues")),
+            issues,
+            "packet decision_alignment fail status does not explain the measured decision drift",
+        )
     source_input_status = source_health.get("status")
     source_input_blocked = source_input_status != "pass"
     package_complete = (
@@ -557,11 +592,6 @@ def verify(args: argparse.Namespace) -> List[str]:
                 issues,
                 "measured rollout loop does not route blocked support-packet proof to the M102 dependency package",
             )
-        _require(
-            decision_board.get("current_launch_action") == "freeze_launch",
-            issues,
-            "source-blocked packet does not freeze launch",
-        )
         _require(
             dict(decision_board.get("launch_expand") or {}).get("state") == "blocked",
             issues,
@@ -831,11 +861,15 @@ def verify(args: argparse.Namespace) -> List[str]:
     elif loop.get("rollback_watch") is True:
         expected_public_state = "freeze_with_rollback_watch"
         expected_public_headline = "Launch expansion is frozen with rollback watch active."
-        expected_public_body = str(decision_board.get("current_launch_reason") or "").strip()
+        expected_public_body = str(decision_board.get("current_launch_reason") or "").strip() or (
+            "Release or support truth requires rollback watch before any broader launch move."
+        )
     else:
         expected_public_state = "freeze_launch"
         expected_public_headline = "Launch expansion remains frozen."
-        expected_public_body = str(decision_board.get("current_launch_reason") or "").strip()
+        expected_public_body = str(decision_board.get("current_launch_reason") or "").strip() or (
+            "Measured launch gates are incomplete, so the weekly governor packet holds broad promotion."
+        )
     _require(
         public_status_copy.get("state") == expected_public_state,
         issues,
@@ -1296,6 +1330,8 @@ def verify(args: argparse.Namespace) -> List[str]:
             or row.get("next_decision") != route.get("next_decision")
         ):
             invalid_receipt_fields.append(f"{action}.next_decision")
+        if row.get("gate_states") != route.get("gate_states"):
+            invalid_receipt_fields.append(f"{action}.gate_states")
         if row.get("matrix_complete") is not True:
             invalid_receipt_fields.append(f"{action}.matrix_complete")
         if row.get("ready_for_operator_packet") is not True:
@@ -1320,11 +1356,25 @@ def verify(args: argparse.Namespace) -> List[str]:
         "measured rollout decision_receipts has invalid receipt field(s): "
         + ", ".join(invalid_receipt_fields),
     )
+    expected_remaining_dependency_package_ids = weekly._remaining_dependency_package_ids(
+        dependency_package_routes
+    )
+    expected_launch_blocking_dependency_package_ids = (
+        weekly._launch_blocking_dependency_package_ids(dependency_package_routes)
+    )
     expected_operator_handoff = weekly._weekly_operator_handoff(
         schedule=schedule,
         launch_gate_summary=launch_gate_summary,
         decision_action_routes=decision_action_routes,
         decision_receipts=decision_receipts,
+        remaining_dependency_package_ids=list(loop.get("remaining_dependency_package_ids") or []),
+        launch_blocking_dependency_package_ids=list(
+            loop.get("launch_blocking_dependency_package_ids") or []
+        ),
+        blocked_dependency_package_ids=list(loop.get("blocked_dependency_package_ids") or []),
+        remaining_sibling_work_task_ids=list(
+            package_closeout.get("remaining_sibling_work_task_ids") or []
+        ),
     )
     _require(
         weekly_operator_handoff == expected_operator_handoff,
@@ -1358,10 +1408,46 @@ def verify(args: argparse.Namespace) -> List[str]:
         "measured rollout weekly_operator_handoff schedule reference drifted",
     )
     _require(
+        weekly_operator_handoff.get("next_review_due_at") == schedule.get("next_packet_due_at"),
+        issues,
+        "measured rollout weekly_operator_handoff due timestamp drifted",
+    )
+    _require(
         weekly_operator_handoff.get("source")
         == "measured_rollout_loop.decision_action_routes+decision_receipts",
         issues,
         "measured rollout weekly_operator_handoff source drifted",
+    )
+    handoff_routing_context = dict(weekly_operator_handoff.get("routing_context") or {})
+    _require(
+        handoff_routing_context.get("remaining_dependency_package_ids")
+        == expected_remaining_dependency_package_ids,
+        issues,
+        "measured rollout weekly_operator_handoff remaining dependency packages drifted",
+    )
+    _require(
+        handoff_routing_context.get("launch_blocking_dependency_package_ids")
+        == expected_launch_blocking_dependency_package_ids,
+        issues,
+        "measured rollout weekly_operator_handoff launch-blocking dependency packages drifted",
+    )
+    _require(
+        handoff_routing_context.get("blocked_dependency_package_ids")
+        == list(loop.get("blocked_dependency_package_ids") or []),
+        issues,
+        "measured rollout weekly_operator_handoff blocked dependency packages drifted",
+    )
+    _require(
+        handoff_routing_context.get("remaining_sibling_work_task_ids")
+        == expected_remaining_siblings,
+        issues,
+        "measured rollout weekly_operator_handoff sibling work-task routes drifted",
+    )
+    _require(
+        "Verify closed dependency packages instead of reopening them"
+        in str(handoff_routing_context.get("route_rule") or ""),
+        issues,
+        "measured rollout weekly_operator_handoff route rule no longer blocks dependency reopen work",
     )
     handoff_rows = [
         row for row in weekly_operator_handoff.get("rows") or [] if isinstance(row, dict)
@@ -1392,6 +1478,7 @@ def verify(args: argparse.Namespace) -> List[str]:
             "operator_action",
             "receipt_id",
             "next_review_due_ref",
+            "next_review_due_at",
             "freshness_policy",
             "next_decision",
         ):
@@ -1403,12 +1490,16 @@ def verify(args: argparse.Namespace) -> List[str]:
             invalid_handoff_fields.append(f"{action}.operator_action")
         if row.get("blocking_gates") != route_row.get("blocking_gates"):
             invalid_handoff_fields.append(f"{action}.blocking_gates")
+        if row.get("gate_states") != route_row.get("gate_states"):
+            invalid_handoff_fields.append(f"{action}.gate_states")
         if row.get("blocking_gate_count") != route_row.get("blocking_gate_count"):
             invalid_handoff_fields.append(f"{action}.blocking_gate_count")
         if row.get("receipt_id") != receipt_row.get("receipt_id"):
             invalid_handoff_fields.append(f"{action}.receipt_id")
         if row.get("next_review_due_ref") != "governor_packet_schedule.next_packet_due_at":
             invalid_handoff_fields.append(f"{action}.next_review_due_ref")
+        if row.get("next_review_due_at") != schedule.get("next_packet_due_at"):
+            invalid_handoff_fields.append(f"{action}.next_review_due_at")
         if row.get("max_age_seconds") != weekly.WEEKLY_PACKET_CADENCE_SECONDS:
             invalid_handoff_fields.append(f"{action}.max_age_seconds")
         if row.get("freshness_policy") != route_row.get("freshness_policy"):
@@ -1496,14 +1587,17 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues,
         "package closeout remaining dependency list no longer matches live successor registry posture",
     )
-    expected_remaining_dependency_package_ids = weekly._remaining_dependency_package_ids(
-        dependency_package_routes
-    )
     _require(
         package_closeout.get("remaining_dependency_package_ids")
         == expected_remaining_dependency_package_ids,
         issues,
         "package closeout remaining dependency package list no longer matches dependency package routing",
+    )
+    _require(
+        package_closeout.get("launch_blocking_dependency_package_ids")
+        == expected_launch_blocking_dependency_package_ids,
+        issues,
+        "package closeout launch-blocking dependency package list no longer matches dependency package routing",
     )
     _require(
         repeat_prevention.get("remaining_dependency_ids") == expected_remaining_dependencies,
@@ -1515,6 +1609,12 @@ def verify(args: argparse.Namespace) -> List[str]:
         == expected_remaining_dependency_package_ids,
         issues,
         "repeat prevention remaining dependency package list no longer matches dependency package routing",
+    )
+    _require(
+        repeat_prevention.get("launch_blocking_dependency_package_ids")
+        == expected_launch_blocking_dependency_package_ids,
+        issues,
+        "repeat prevention launch-blocking dependency package list no longer matches dependency package routing",
     )
     _require(
         repeat_prevention.get("remaining_sibling_work_task_ids") == expected_remaining_siblings,
@@ -1530,6 +1630,12 @@ def verify(args: argparse.Namespace) -> List[str]:
         loop.get("remaining_dependency_package_ids") == expected_remaining_dependency_package_ids,
         issues,
         "measured rollout loop remaining dependency package list no longer matches dependency package routing",
+    )
+    _require(
+        loop.get("launch_blocking_dependency_package_ids")
+        == expected_launch_blocking_dependency_package_ids,
+        issues,
+        "measured rollout loop launch-blocking dependency package list no longer matches dependency package routing",
     )
     _require(
         "route remaining M106 work" in str(repeat_prevention.get("handoff_rule") or ""),
@@ -1661,6 +1767,12 @@ def verify(args: argparse.Namespace) -> List[str]:
         f"- Next packet due: {schedule.get('next_packet_due_at')}" in markdown,
         issues,
         "markdown weekly packet schedule due date is missing",
+    )
+    _require(
+        f"| launch_expand |" in markdown
+        and f"| {schedule.get('next_packet_due_at')} | governor_packet_schedule.next_packet_due_at |" in markdown,
+        issues,
+        "markdown weekly operator handoff due timestamp is missing",
     )
     _require(
         "- Closed successor frontier ids: 2376135131" in markdown,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib.util
+import os
 import sqlite3
 from pathlib import Path
 
@@ -14,8 +15,9 @@ SPEC.loader.exec_module(keeper)
 
 
 class FakeApp:
-    def __init__(self, conn: sqlite3.Connection) -> None:
+    def __init__(self, conn: sqlite3.Connection, *, uses_package_scheduler: bool = True) -> None:
         self._conn = conn
+        self._uses_package_scheduler = uses_package_scheduler
         self.updated_packages = []
         self.synced = False
         self.reconciled = False
@@ -26,7 +28,7 @@ class FakeApp:
         yield self._conn
 
     def project_uses_package_scheduler(self, _config, _project_id: str) -> bool:
-        return True
+        return self._uses_package_scheduler
 
     def update_work_package_runtime(
         self,
@@ -63,6 +65,31 @@ class FakeApp:
 
     def save_runtime_task_cache_snapshot(self) -> None:
         self.snapshotted = True
+
+
+def test_set_host_controller_env_defaults_points_host_import_at_state_db(monkeypatch, tmp_path) -> None:
+    keys = [
+        "FLEET_DB_PATH",
+        "FLEET_LOG_DIR",
+        "FLEET_QUEUE_RECOVERY_DIR",
+        "FLEET_WORKTREE_ROOT",
+        "FLEET_CONTROLLER_HEARTBEAT_PATH",
+        "FLEET_CODEX_HOME_ROOT",
+        "FLEET_GROUP_ROOT",
+    ]
+    for key in keys:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(keeper, "RUNNING_IN_CONTROLLER_CONTAINER", False)
+
+    keeper.set_host_controller_env_defaults(tmp_path / "controller")
+
+    assert Path(os.environ["FLEET_DB_PATH"]) == tmp_path / "state" / "fleet.db"
+    assert Path(os.environ["FLEET_LOG_DIR"]) == tmp_path / "state" / "logs"
+    assert Path(os.environ["FLEET_QUEUE_RECOVERY_DIR"]) == tmp_path / "state" / "queue-recovery"
+    assert Path(os.environ["FLEET_WORKTREE_ROOT"]) == tmp_path / "state" / "worktrees"
+    assert Path(os.environ["FLEET_CONTROLLER_HEARTBEAT_PATH"]) == tmp_path / "state" / "controller-heartbeat.json"
+    assert Path(os.environ["FLEET_CODEX_HOME_ROOT"]) == tmp_path / "state" / "codex-homes"
+    assert Path(os.environ["FLEET_GROUP_ROOT"]) == tmp_path / "state" / "groups"
 
 
 def _seed_db() -> sqlite3.Connection:
@@ -246,3 +273,47 @@ def test_release_stale_zero_finding_local_reviews_ignores_old_findings_rows() ->
     assert [item["package_id"] for item in released] == ["audit-task-11710"]
     assert app.updated_packages[0]["status"] == "complete"
     assert conn.execute("SELECT COUNT(1) FROM review_findings WHERE project_id='mobile' AND pr_number=0").fetchone()[0] == 0
+
+
+def test_release_stale_zero_finding_local_reviews_does_not_require_scheduler_flag() -> None:
+    conn = _seed_db()
+    conn.execute(
+        "INSERT INTO work_packages(package_id, project_id, status, runtime_state, dependencies_json, latest_run_id, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("media-factory-0008", "media-factory", "awaiting_review", "awaiting_review", "[]", 34343, None),
+    )
+    conn.execute(
+        """
+        INSERT INTO pull_requests(
+            id, package_id, project_id, pr_number, review_status,
+            review_findings_count, review_blocking_findings_count,
+            review_requested_at, review_completed_at, local_review_last_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            1,
+            "media-factory-0008",
+            "media-factory",
+            0,
+            "local_review",
+            0,
+            0,
+            None,
+            None,
+            "2026-04-22T17:36:55Z",
+            "2026-04-22T17:36:55Z",
+        ),
+    )
+    conn.execute(
+        "INSERT INTO runs(id, status, verify_exit_code, finished_at, error_message) VALUES (?, ?, ?, ?, ?)",
+        (34343, "awaiting_review", 0, "2026-04-22T17:36:55Z", None),
+    )
+    app = FakeApp(conn, uses_package_scheduler=False)
+
+    released = keeper.release_stale_zero_finding_local_reviews(
+        app,
+        {},
+        stale_minutes=30,
+    )
+
+    assert [item["package_id"] for item in released] == ["media-factory-0008"]
+    assert app.updated_packages[0]["status"] == "complete"

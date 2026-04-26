@@ -46,6 +46,8 @@ class CodexEaShimTests(unittest.TestCase):
                     "        'CODEXEA_SUBMODE': os.environ.get('CODEXEA_SUBMODE'),",
                     "        'CODEXEA_RESPONSES_AUTH_TOKEN': os.environ.get('CODEXEA_RESPONSES_AUTH_TOKEN'),",
                     "        'EA_MCP_MODEL': os.environ.get('EA_MCP_MODEL'),",
+                    "        'HOME': os.environ.get('HOME'),",
+                    "        'XDG_CACHE_HOME': os.environ.get('XDG_CACHE_HOME'),",
                     "    },",
                     "}",
                     "with open(os.environ['CODEXEA_TEST_CAPTURE'], 'w', encoding='utf-8') as handle:",
@@ -73,6 +75,7 @@ class CodexEaShimTests(unittest.TestCase):
                 "CODEXEA_TEST_CAPTURE": str(self.capture_path),
                 "EA_MCP_MODEL": "gemini-2.5-flash",
                 "HOME": str(self.root),
+                "OPENAI_API_KEY": "",
             }
         )
         if extra_env:
@@ -236,7 +239,7 @@ class CodexEaShimTests(unittest.TestCase):
 
         completed = result["completed"]
         self.assertEqual(completed.returncode, 0)
-        self.assertIn("Trace: lane=easy waiting for model output", completed.stderr)
+        self.assertIn("Trace: lane=easy waiting for upstream response", completed.stderr)
 
     def test_noarg_non_tty_stdin_is_treated_as_prompt_session(self) -> None:
         result = self.run_shim(
@@ -311,7 +314,7 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         self.assertIsNotNone(payload)
         self.assertEqual(payload["stdin"], "fleet worker stdin prompt")
-        self.assertIn("Trace: lane=core waiting for model output", completed.stderr)
+        self.assertIn("Trace: lane=core waiting for upstream response", completed.stderr)
 
     def test_prompt_session_bootstrap_zero_disables_exec_trace_injection(self) -> None:
         trace_file = self.root / "exec-trace.md"
@@ -766,7 +769,7 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIn("exec", argv)
         self.assertLess(argv.index("--search"), argv.index("exec"))
 
-    def test_non_easy_mcp_override_emits_truthful_provider_trace(self) -> None:
+    def test_non_easy_mcp_override_without_openai_auth_falls_back_to_ea_responses(self) -> None:
         result = self.run_shim(
             "investigate architecture",
             extra_env={
@@ -781,9 +784,46 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         self.assertIsNotNone(payload)
         argv = payload["argv"]
+        self.assertIn('model_provider="ea"', argv)
+        self.assertIn('model="ea-groundwork-gemini"', argv)
+        self.assertIn("Trace: lane=groundwork provider=ea model=ea-groundwork-gemini mode=responses next=start_exec_session", completed.stderr)
+
+    def test_non_easy_mcp_override_keeps_mcp_when_openai_auth_is_available(self) -> None:
+        result = self.run_shim(
+            "investigate architecture",
+            extra_env={
+                "CODEXEA_LANE": "groundwork",
+                "CODEXEA_MODE": "mcp",
+                "CODEXEA_TRACE_STARTUP": "1",
+                "OPENAI_API_KEY": "sk-test",
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        argv = payload["argv"]
         self.assertIn('model="ea-groundwork-gemini"', argv)
         self.assertNotIn('model_provider="ea"', argv)
         self.assertIn("Trace: lane=groundwork provider=mcp model=ea-groundwork-gemini mode=mcp next=start_exec_session", completed.stderr)
+
+    def test_unwritable_home_falls_back_before_launch(self) -> None:
+        fallback_home = self.root / "codexea-home"
+        result = self.run_shim(
+            "continue the slice",
+            extra_env={
+                "HOME": "/",
+                "CODEXEA_FALLBACK_HOME": str(fallback_home),
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["env"]["HOME"], str(fallback_home))
+        self.assertEqual(payload["env"]["XDG_CACHE_HOME"], str(fallback_home / ".cache"))
 
     def test_interactive_flag_stays_interactive(self) -> None:
         result = self.run_shim("--interactive")
@@ -1027,6 +1067,29 @@ class CodexEaShimTests(unittest.TestCase):
         argv = json.loads(self.route_capture_path.read_text(encoding="utf-8"))["argv"]
         self.assertEqual(argv[:2], ["--onemin-aggregate", "--billing"])
         self.assertNotIn("--billing-full-refresh", argv)
+
+    def test_direct_onemin_aggregate_routes_to_helper(self) -> None:
+        route_helper = self.write_route_helper()
+
+        result = self.run_shim(
+            "--onemin-aggregate",
+            "--refresh",
+            "--billing",
+            "--billing-full-refresh",
+            "--json",
+            extra_env={
+                "CODEXEA_ROUTE_HELPER": str(route_helper),
+                "CODEXEA_ROUTE_CAPTURE": str(self.route_capture_path),
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        argv = json.loads(self.route_capture_path.read_text(encoding="utf-8"))["argv"]
+        self.assertEqual(
+            argv,
+            ["--onemin-aggregate", "--refresh", "--billing", "--billing-full-refresh", "--json"],
+        )
 
     def test_credits_preserves_manual_billing_full_refresh_flag(self) -> None:
         route_helper = self.write_route_helper()

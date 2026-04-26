@@ -111,16 +111,16 @@ accounts:
     lane: survival
     codex_model_aliases: [ea-coder-survival]
 
-  # Optional project-local API key accounts live below the lane aliases. They can still back
-  # Studio, one-off projects, or bridge fallbacks, but they are not Fleet's routing truth.
+  # Optional non-EA accounts live below the lane aliases. They are disabled by default so
+  # Fleet routing remains EA-only unless an operator explicitly re-enables them for one-offs.
   acct-core-a:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
     allowed_models: [gpt-5-mini, gpt-5.4, gpt-5.3-codex]
-    health_state: ready
+    health_state: disabled
     daily_budget_usd: 30
     monthly_budget_usd: 300
-    max_parallel_runs: 1
+    max_parallel_runs: 0
     owner_id: tibor.girschele
     account_class: protected_operator
     drain_policy: never
@@ -130,10 +130,10 @@ accounts:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
     allowed_models: [gpt-5-mini, gpt-5.4]
-    health_state: ready
+    health_state: disabled
     daily_budget_usd: 20
     monthly_budget_usd: 200
-    max_parallel_runs: 1
+    max_parallel_runs: 0
     owner_id: the.girscheles
     account_class: protected_operator
     drain_policy: never
@@ -143,10 +143,10 @@ accounts:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
     allowed_models: [gpt-5-mini, gpt-5.4]
-    health_state: ready
+    health_state: disabled
     daily_budget_usd: 20
     monthly_budget_usd: 200
-    max_parallel_runs: 1
+    max_parallel_runs: 0
     owner_id: the.girscheles
     account_class: protected_operator
     drain_policy: never
@@ -156,10 +156,10 @@ accounts:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
     allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4]
-    health_state: ready
+    health_state: disabled
     daily_budget_usd: 10
     monthly_budget_usd: 100
-    max_parallel_runs: 1
+    max_parallel_runs: 0
     owner_id: the.girscheles
     account_class: protected_operator
     drain_policy: never
@@ -169,10 +169,10 @@ accounts:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
     allowed_models: [gpt-5-mini, gpt-5.4]
-    health_state: ready
+    health_state: disabled
     daily_budget_usd: 25
     monthly_budget_usd: 250
-    max_parallel_runs: 1
+    max_parallel_runs: 0
     owner_id: tibor.girschele
     account_class: protected_operator
     drain_policy: never
@@ -182,10 +182,10 @@ accounts:
     auth_kind: api_key
     api_key_env: OPENAI_API_KEY
     allowed_models: [gpt-5-nano, gpt-5-mini, gpt-5.4, gpt-5.3-codex]
-    health_state: ready
+    health_state: disabled
     daily_budget_usd: 50
     monthly_budget_usd: 500
-    max_parallel_runs: 1
+    max_parallel_runs: 0
     owner_id: the.girscheles
     account_class: protected_operator
     drain_policy: never
@@ -196,8 +196,8 @@ accounts:
     auth_json_file: /run/secrets/acct-chatgpt-core.auth.json
     allowed_models: [gpt-5.3-codex-spark, gpt-5.4, gpt-5.3-codex]
     spark_enabled: true
-    health_state: ready
-    max_parallel_runs: 1
+    health_state: disabled
+    max_parallel_runs: 0
     owner_id: tibor.girschele
     account_class: protected_operator
     drain_policy: never
@@ -211,8 +211,8 @@ accounts:
     auth_json_file: /run/secrets/acct-chatgpt-b.auth.json
     allowed_models: [gpt-5-mini, gpt-5.4]
     spark_enabled: false
-    health_state: ready
-    max_parallel_runs: 1
+    health_state: disabled
+    max_parallel_runs: 0
     owner_id: the.girscheles
     account_class: protected_operator
     drain_policy: never
@@ -223,8 +223,8 @@ accounts:
     auth_json_file: /run/secrets/acct-chatgpt-archon.auth.json
     allowed_models: [gpt-5.3-codex-spark, gpt-5.4, gpt-5.3-codex]
     spark_enabled: true
-    health_state: ready
-    max_parallel_runs: 1
+    health_state: disabled
+    max_parallel_runs: 0
     owner_id: archon.megalon
     account_class: protected_operator
     drain_policy: never

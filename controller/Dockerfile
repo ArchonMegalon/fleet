@@ -13,6 +13,7 @@ RUN apt-get update \
       docker.io \
       docker-compose \
       git \
+      git-lfs \
       gnupg \
       jq \
       nodejs \

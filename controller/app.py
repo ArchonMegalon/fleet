@@ -1,6 +1,8 @@
 import ast
 import asyncio
+import concurrent.futures
 import contextlib
+import copy
 import datetime as dt
 import fnmatch
 import hashlib
@@ -33,6 +35,31 @@ from email.utils import format_datetime, make_msgid
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import yaml
+
+try:
+    sys.setswitchinterval(
+        max(
+            0.0005,
+            float(os.environ.get("FLEET_CONTROLLER_THREAD_SWITCH_INTERVAL_SECONDS", "0.001") or "0.001"),
+        )
+    )
+except Exception:
+    pass
+
+try:
+    _SCHEDULER_COOPERATE_SECONDS = max(
+        0.0,
+        float(os.environ.get("FLEET_CONTROLLER_SCHEDULER_COOPERATE_SECONDS", "0.002") or "0.002"),
+    )
+except Exception:
+    _SCHEDULER_COOPERATE_SECONDS = 0.002
+
+
+def scheduler_cooperate() -> None:
+    if _SCHEDULER_COOPERATE_SECONDS > 0:
+        time.sleep(_SCHEDULER_COOPERATE_SECONDS)
+
+
 try:
     from fastapi import FastAPI, HTTPException, Request
 except ImportError:  # pragma: no cover - test stubs can expose only FastAPI
@@ -199,6 +226,11 @@ MAIL_STATE_PATH: Optional[pathlib.Path] = pathlib.Path(_MAIL_STATE_PATH_ENV) if 
 _DB_WAL_READY = False
 _DB_WAL_LOCK = threading.Lock()
 _LAST_SYNCED_ACCOUNT_CONFIG_SIGNATURE = ""
+_CONFIG_CACHE_LOCK = threading.Lock()
+_CONFIG_CACHE_SIGNATURE: Tuple[Tuple[str, int, int], ...] = ()
+_CONFIG_CACHE_PAYLOAD: Optional[Dict[str, Any]] = None
+_CONFIG_CACHE_EXPIRES_AT = 0.0
+_CONFIG_CACHE_TTL_SECONDS = max(1.0, float(os.environ.get("FLEET_CONFIG_CACHE_TTL_SECONDS", "30") or "30"))
 RUNTIME_FALLBACK_ROOT = pathlib.Path(
     os.environ.get("FLEET_RUNTIME_FALLBACK_ROOT", "/tmp/codex-fleet-runtime")
 )
@@ -309,6 +341,10 @@ PACKAGE_COMPILE_PACKAGE_KIND = "package_compile"
 AUTHORITY_PACKAGE_KINDS = {"contract_change", "integration"}
 HORIZON_LOCKED_PACKAGE_KINDS = {"design_proposal", "contract_change", "integration"}
 RUNTIME_TASK_CACHE_KEY = "controller.runtime_tasks"
+RUNTIME_TASK_SCHEDULED_GRACE_SECONDS = max(
+    60,
+    int(os.environ.get("FLEET_RUNTIME_TASK_SCHEDULED_GRACE_SECONDS", "180") or "180"),
+)
 WORK_PACKAGE_CACHE_KEY = "controller.work_packages"
 REVIEW_HOLD_STATUSES = {
     "awaiting_pr",
@@ -2558,6 +2594,12 @@ def apply_generated_work_package_policy(
         add_default_denied_patterns(IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS)
 
     authority_only_paths = [path for path in allowed_paths if package_scope_matches(path, AUTHORITY_ONLY_PACKAGE_SCOPE_PATTERNS)]
+    if clean_package_kind == PACKAGE_COMPILE_PACKAGE_KIND:
+        authority_only_paths = [
+            path
+            for path in authority_only_paths
+            if normalize_scope_path(path) != normalize_scope_path(package_compile_target)
+        ]
     if authority_only_paths:
         allowed_lanes = [
             str(item or "").strip().lower()
@@ -2701,6 +2743,36 @@ def task_meta_has_explicit_package_scope(task_meta: Dict[str, Any], raw_item: An
     return bool(allowed_paths or owned_surfaces)
 
 
+RAW_QUEUE_TERMINAL_STATUSES = {"done", "complete", "completed", "shipped", "archived", "cancelled", "canceled", "skipped"}
+
+
+def raw_queue_item_terminal_status(raw_item: Any, task_meta: Optional[Dict[str, Any]] = None) -> str:
+    raw = dict(raw_item) if isinstance(raw_item, dict) else {}
+    meta = dict(task_meta or {})
+    status = str(meta.get("status") or raw.get("status") or "").strip().lower()
+    return status if status in RAW_QUEUE_TERMINAL_STATUSES else ""
+
+
+def existing_work_package_terminal_status(raw_item: Any, task_meta: Optional[Dict[str, Any]] = None) -> str:
+    raw = dict(raw_item) if isinstance(raw_item, dict) else {}
+    meta = dict(task_meta or {})
+    package_id = str(meta.get("package_id") or raw.get("package_id") or "").strip()
+    if not package_id:
+        return ""
+    try:
+        row = work_package_row(package_id)
+    except Exception:
+        return ""
+    status = str((row or {}).get("status") or "").strip().lower()
+    if status == "complete" or status in RAW_QUEUE_TERMINAL_STATUSES:
+        return status
+    return ""
+
+
+def queue_item_terminal_status(raw_item: Any, task_meta: Optional[Dict[str, Any]] = None) -> str:
+    return raw_queue_item_terminal_status(raw_item, task_meta) or existing_work_package_terminal_status(raw_item, task_meta)
+
+
 def build_package_compile_work_item(
     project_cfg: Dict[str, Any],
     raw_items: Sequence[Dict[str, Any]],
@@ -2747,6 +2819,8 @@ def project_requires_package_compile(
     scoped_booster_candidates = 0
     for raw_item in raw_items:
         task_meta = normalize_task_queue_item(raw_item, lanes=lanes)
+        if queue_item_terminal_status(raw_item, task_meta):
+            continue
         if not task_meta_allows_booster_lane(task_meta, lanes=lanes):
             continue
         booster_candidates += 1
@@ -2793,6 +2867,7 @@ def compile_project_work_packages(project_cfg: Dict[str, Any], *, lanes: Optiona
         package_id = str(task_meta.get("package_id") or raw_item.get("package_id") or "").strip() or default_package_id(project_id, title, queue_index)
         dependencies = [str(item).strip() for item in (task_meta.get("dependencies") or raw_item.get("dependencies") or []) if str(item).strip()]
         package_kind = normalize_package_kind(task_meta.get("package_kind") or raw_item.get("package_kind") or "implementation")
+        declared_status = queue_item_terminal_status(raw_item, task_meta)
         if package_compile_id and package_id != package_compile_id and package_compile_id not in dependencies:
             dependencies = [package_compile_id, *dependencies]
         if (
@@ -2848,6 +2923,7 @@ def compile_project_work_packages(project_cfg: Dict[str, Any], *, lanes: Optiona
             "max_touched_files": int(task_meta.get("max_touched_files") or raw_item.get("max_touched_files") or 0),
             "priority": int(task_meta.get("priority") or raw_item.get("priority") or index),
             "ttl_seconds": int(task_meta.get("ttl_seconds") or raw_item.get("ttl_seconds") or 0),
+            "declared_status": declared_status,
         }
         compiled.append(package)
         if package_kind != PACKAGE_COMPILE_PACKAGE_KIND:
@@ -2891,8 +2967,15 @@ def sync_work_packages_to_db(config: Dict[str, Any]) -> None:
                 runtime_state = str((existing["runtime_state"] if existing else "idle") or "idle").strip().lower() or "idle"
                 existing_status = str((existing["status"] if existing else "") or "").strip().lower()
                 completed_at = str((existing["completed_at"] if existing else "") or "").strip()
+                declared_status = str(package.get("declared_status") or "").strip().lower()
                 dispatchability = str(((package.get("task_meta") or {}).get("dispatchability_state")) or "dispatchable").strip().lower()
                 if completed_at:
+                    status = "complete"
+                elif existing_status == "archived":
+                    status = "archived"
+                elif declared_status == "archived":
+                    status = "archived"
+                elif declared_status in RAW_QUEUE_TERMINAL_STATUSES:
                     status = "complete"
                 elif runtime_state in ACTIVE_WORK_PACKAGE_RUNTIME_STATES:
                     status = "awaiting_review" if runtime_state == "awaiting_review" else "running"
@@ -4675,7 +4758,10 @@ def persisted_runtime_task_active(package_or_project_id: str, row: Optional[Dict
         return False
     task_state = str(task_row.get("task_state") or "").strip().lower()
     if task_state == "scheduled":
-        return True
+        scheduled_at = parse_iso(str(task_row.get("scheduled_at") or "")) or parse_iso(str(task_row.get("updated_at") or ""))
+        if scheduled_at is None:
+            return True
+        return (utc_now() - scheduled_at).total_seconds() <= RUNTIME_TASK_SCHEDULED_GRACE_SECONDS
     if task_state != "running":
         return False
     task_kind = str(task_row.get("task_kind") or "").strip().lower()
@@ -4939,11 +5025,30 @@ def attach_runtime_task_handle(
             coroutine.close()
         return False
     loop = state.controller_loop
+
+    def _cleanup_failed_task(task: Any) -> None:
+        try:
+            if hasattr(task, "cancelled") and task.cancelled():
+                return
+            exc = task.exception()
+        except (asyncio.CancelledError, concurrent.futures.CancelledError):
+            return
+        except Exception as callback_exc:
+            exc = callback_exc
+        if exc is None:
+            return
+        traceback.print_exception(type(exc), exc, exc.__traceback__)
+        state.tasks.pop(project, None)
+        if clear_on_failure:
+            clear_runtime_task(project)
+
     try:
         running_loop = asyncio.get_running_loop()
     except RuntimeError:
         running_loop = None
-    if running_loop is not None and running_loop is loop:
+    if loop and loop.is_running() and running_loop is not loop:
+        task = asyncio.run_coroutine_threadsafe(coroutine, loop)
+    elif running_loop is not None:
         task = asyncio.create_task(coroutine)
     elif loop and loop.is_running():
         task = asyncio.run_coroutine_threadsafe(coroutine, loop)
@@ -4953,6 +5058,8 @@ def attach_runtime_task_handle(
         if clear_on_failure:
             clear_runtime_task(project)
         return False
+    if hasattr(task, "add_done_callback"):
+        task.add_done_callback(_cleanup_failed_task)
     state.tasks[project] = task
     save_runtime_task_cache_snapshot()
     return True
@@ -5051,13 +5158,22 @@ def provider_slot_state(provider_payload: Dict[str, Any]) -> str:
     return "unknown"
 
 
-def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
+def ea_codex_profiles(force: bool = False, *, cache_only: bool = False) -> Dict[str, Any]:
     now = time.time()
     cached = _EA_PROFILE_CACHE.get("payload")
     fetched_at = float(_EA_PROFILE_CACHE.get("fetched_at") or 0.0)
     if not force and cached and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
         return cached if isinstance(cached, dict) else {}
     persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_PROFILES)
+    if cache_only:
+        payload = persisted_payload if persisted_payload else (cached if isinstance(cached, dict) else {})
+        if payload:
+            cache_now = now
+            if persisted_fetched_at is not None:
+                cache_now = max(0.0, persisted_fetched_at.timestamp())
+            _EA_PROFILE_CACHE["fetched_at"] = cache_now
+            _EA_PROFILE_CACHE["payload"] = payload
+        return payload if isinstance(payload, dict) else {}
     runtime_settings = resolved_ea_runtime_settings()
     status_base_url = str(runtime_settings.get("base_url") or EA_STATUS_BASE_URL).strip()
     status_api_token = str(runtime_settings.get("api_token") or EA_STATUS_API_TOKEN).strip()
@@ -5098,7 +5214,7 @@ def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
     return _EA_PROFILE_CACHE["payload"]
 
 
-def ea_codex_status(force: bool = False, *, window: str = "7d") -> Dict[str, Any]:
+def ea_codex_status(force: bool = False, *, window: str = "7d", cache_only: bool = False) -> Dict[str, Any]:
     now = time.time()
     cached = _EA_STATUS_CACHE.get("payload")
     fetched_at = float(_EA_STATUS_CACHE.get("fetched_at") or 0.0)
@@ -5106,6 +5222,16 @@ def ea_codex_status(force: bool = False, *, window: str = "7d") -> Dict[str, Any
     if not force and cached and cached_window == window and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
         return cached if isinstance(cached, dict) else {}
     persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_STATUS)
+    if cache_only:
+        payload = persisted_payload if persisted_payload else (cached if isinstance(cached, dict) else {})
+        if payload:
+            cache_now = now
+            if persisted_fetched_at is not None:
+                cache_now = max(0.0, persisted_fetched_at.timestamp())
+            _EA_STATUS_CACHE["fetched_at"] = cache_now
+            _EA_STATUS_CACHE["payload"] = payload
+            _EA_STATUS_CACHE["window"] = window
+        return payload if isinstance(payload, dict) else {}
     runtime_settings = resolved_ea_runtime_settings()
     status_base_url = str(runtime_settings.get("base_url") or EA_STATUS_BASE_URL).strip()
     status_api_token = str(runtime_settings.get("api_token") or EA_STATUS_API_TOKEN).strip()
@@ -5162,13 +5288,22 @@ def _latest_iso_value(values: Sequence[Any]) -> Optional[str]:
     return latest_text or None
 
 
-def ea_onemin_manager_status(force: bool = False) -> Dict[str, Any]:
+def ea_onemin_manager_status(force: bool = False, *, cache_only: bool = False) -> Dict[str, Any]:
     now = time.time()
     cached = _EA_ONEMIN_MANAGER_CACHE.get("payload")
     fetched_at = float(_EA_ONEMIN_MANAGER_CACHE.get("fetched_at") or 0.0)
     if not force and cached and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
         return cached if isinstance(cached, dict) else {}
     persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_ONEMIN_MANAGER_STATUS)
+    if cache_only:
+        payload = persisted_payload if persisted_payload else (cached if isinstance(cached, dict) else {})
+        if payload:
+            cache_now = now
+            if persisted_fetched_at is not None:
+                cache_now = max(0.0, persisted_fetched_at.timestamp())
+            _EA_ONEMIN_MANAGER_CACHE["fetched_at"] = cache_now
+            _EA_ONEMIN_MANAGER_CACHE["payload"] = payload
+        return dict(payload) if isinstance(payload, dict) else {}
     runtime_settings = resolved_ea_runtime_settings()
     status_base_url = str(runtime_settings.get("base_url") or EA_STATUS_BASE_URL).strip()
     status_api_token = str(runtime_settings.get("api_token") or EA_STATUS_API_TOKEN).strip()
@@ -5222,13 +5357,16 @@ def ea_onemin_manager_status(force: bool = False) -> Dict[str, Any]:
     return dict(payload)
 
 
-def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
-    manager_payload = ea_onemin_manager_status(force=force)
+def ea_onemin_manager_billing_aggregate(force: bool = False, *, cache_only: bool = False) -> Dict[str, Any]:
+    try:
+        manager_payload = ea_onemin_manager_status(force=force, cache_only=cache_only)
+    except TypeError:
+        manager_payload = ea_onemin_manager_status(force=force)
     aggregate = dict(manager_payload.get("aggregate") or {})
     runway = dict(manager_payload.get("runway") or {})
     accounts = [dict(item) for item in aggregate.get("accounts") or [] if isinstance(item, dict)]
     if not aggregate:
-        legacy_payload = ea_codex_status(window="7d")
+        legacy_payload = ea_codex_status(window="7d", cache_only=cache_only)
         legacy_aggregate = dict(legacy_payload.get("onemin_billing_aggregate") or {})
         last_actual_balance = str(((legacy_payload.get("topup_summary") or {}).get("last_actual_balance_check_at")) or "").strip()
         if last_actual_balance and not str(legacy_aggregate.get("last_actual_balance_check_at") or "").strip():
@@ -5237,7 +5375,7 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
 
     sum_free_credits = aggregate.get("sum_free_credits")
     sum_max_credits = aggregate.get("sum_max_credits")
-    runtime_lease_payload = onemin_runtime_lease_payload()
+    runtime_lease_payload = onemin_runtime_lease_payload(cache_only=cache_only)
     reported_active_lease_count = max(0, int(aggregate.get("active_lease_count") or 0))
     runtime_active_lease_count = max(0, int(runtime_lease_payload.get("active_onemin_codexers") or 0))
     effective_active_lease_count = max(reported_active_lease_count, runtime_active_lease_count)
@@ -5336,8 +5474,11 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
     }
 
 
-def onemin_profile_models() -> set[str]:
-    payload = ea_codex_profiles()
+def onemin_profile_models(*, cache_only: bool = False) -> set[str]:
+    try:
+        payload = ea_codex_profiles(cache_only=cache_only)
+    except TypeError:
+        payload = ea_codex_profiles()
     models: set[str] = set()
     for item in payload.get("profiles") or []:
         provider_hints = {
@@ -5395,10 +5536,10 @@ def resolve_onemin_topup_window(
     }
 
 
-def onemin_runtime_lease_payload() -> Dict[str, Any]:
+def onemin_runtime_lease_payload(*, cache_only: bool = False) -> Dict[str, Any]:
     if not table_exists("runs"):
         return {"active_onemin_codexers": 0, "active_onemin_projects": [], "active_onemin_accounts": []}
-    onemin_models = onemin_profile_models()
+    onemin_models = onemin_profile_models(cache_only=cache_only)
     with db() as conn:
         rows = conn.execute(
             """
@@ -5676,6 +5817,9 @@ def quartermaster_capacity_tick(*, reason: str = "") -> Dict[str, Any]:
 
 
 def quartermaster_target_lane_for_decision(decision: Dict[str, Any], task_meta: Optional[Dict[str, Any]]) -> str:
+    clean_package_kind = str((task_meta or {}).get("package_kind") or "").strip().lower()
+    if clean_package_kind == PACKAGE_COMPILE_PACKAGE_KIND:
+        return "core_authority"
     lane = str(decision.get("lane") or "").strip().lower()
     if lane == "core":
         return "core_authority" if bool(decision.get("requires_contract_authority")) else "core_booster"
@@ -6647,6 +6791,7 @@ def participant_burst_credit_guard_status(
     policy: Dict[str, Any],
     *,
     sponsor_ready_lanes: int,
+    cache_only: bool = False,
 ) -> Dict[str, Any]:
     guard = dict(policy.get("credit_guard") or {})
     result: Dict[str, Any] = {
@@ -6671,7 +6816,7 @@ def participant_burst_credit_guard_status(
     if result["provider"] not in {"onemin", "1min", "1min.ai", "oneminai"}:
         result["reason"] = "unsupported_provider"
         return result
-    aggregate = dict(ea_onemin_manager_billing_aggregate() or {})
+    aggregate = dict(ea_onemin_manager_billing_aggregate(cache_only=cache_only) or {})
     if not aggregate:
         result["reason"] = "billing_aggregate_missing"
         return result
@@ -7176,6 +7321,11 @@ def choose_review_account_alias(
     ordered_aliases = reorder_aliases_with_preference(
         ordered_aliases,
         preferred_review_aliases,
+    )
+    ordered_aliases.extend(
+        alias
+        for alias in shared_lane_fallback_aliases(config, project_cfg, target_lanes=[reviewer_lane])
+        if alias not in ordered_aliases
     )
     accounts_cfg = config.get("accounts") or {}
     now = utc_now()
@@ -9554,7 +9704,57 @@ def refresh_config_consistency_blockers(config: Dict[str, Any]) -> List[Dict[str
     return blockers
 
 
-def normalize_config() -> Dict[str, Any]:
+def config_source_signature() -> Tuple[Tuple[str, int, int], ...]:
+    paths: List[pathlib.Path] = [
+        CONFIG_PATH,
+        ACCOUNTS_PATH,
+        POLICIES_PATH,
+        ROUTING_PATH,
+        GROUPS_PATH,
+        PROJECT_INDEX_PATH,
+    ]
+    if PROJECTS_DIR.exists() and PROJECTS_DIR.is_dir():
+        paths.extend(sorted(path for path in PROJECTS_DIR.glob("*.yaml") if path.is_file()))
+
+    signature: List[Tuple[str, int, int]] = []
+    for path in paths:
+        try:
+            stat = path.stat()
+        except OSError:
+            signature.append((str(path), -1, -1))
+            continue
+        signature.append((str(path), int(stat.st_mtime_ns), int(stat.st_size)))
+
+    if DB_PATH.exists():
+        try:
+            with db() as conn:
+                table_info = conn.execute("PRAGMA table_info(participant_lanes)").fetchall()
+                if not any(str(item["name"]) == "lane_id" for item in table_info):
+                    raise sqlite3.Error("participant_lanes schema missing lane_id")
+                has_updated_at = any(str(item["name"]) == "updated_at" for item in table_info)
+                row = conn.execute(
+                    """
+                    SELECT COUNT(*) AS lane_count,
+                           COALESCE(MAX(lane_id), '') AS max_lane_id
+                           """ + (", COALESCE(MAX(updated_at), '') AS max_updated_at" if has_updated_at else "")
+                    + """
+                    FROM participant_lanes
+                    """
+                ).fetchone()
+            if row:
+                lane_count = row["lane_count"] if row["lane_count"] is not None else 0
+                if has_updated_at:
+                    digest_input = f"{lane_count}|{row['max_lane_id']}|{row['max_updated_at']}"
+                else:
+                    digest_input = f"{lane_count}|{row['max_lane_id']}"
+                participant_digest = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
+                signature.append(("participant_lanes", int(participant_digest[:16], 16), int(lane_count or 0)))
+        except sqlite3.Error:
+            signature.append(("participant_lanes", -1, -1))
+    return tuple(signature)
+
+
+def normalize_config_uncached() -> Dict[str, Any]:
     fleet = load_yaml(CONFIG_PATH)
     fleet = merge_split_config(fleet)
     accounts_cfg = load_yaml(ACCOUNTS_PATH)
@@ -9653,6 +9853,27 @@ def normalize_config() -> Dict[str, Any]:
         default_floor = len(dispatch_members) if str(group.get("mode", "") or "").strip().lower() == "lockstep" and dispatch_members else 1
         group["captain"] = normalized_captain_policy(group.get("captain"), default_service_floor=default_floor)
     refresh_config_consistency_blockers(fleet)
+    return fleet
+
+
+def normalize_config() -> Dict[str, Any]:
+    global _CONFIG_CACHE_EXPIRES_AT, _CONFIG_CACHE_PAYLOAD, _CONFIG_CACHE_SIGNATURE
+
+    now_monotonic = time.monotonic()
+    signature = config_source_signature()
+    with _CONFIG_CACHE_LOCK:
+        if (
+            _CONFIG_CACHE_PAYLOAD is not None
+            and signature == _CONFIG_CACHE_SIGNATURE
+            and now_monotonic < _CONFIG_CACHE_EXPIRES_AT
+        ):
+            return copy.deepcopy(_CONFIG_CACHE_PAYLOAD)
+
+    fleet = normalize_config_uncached()
+    with _CONFIG_CACHE_LOCK:
+        _CONFIG_CACHE_SIGNATURE = signature
+        _CONFIG_CACHE_PAYLOAD = copy.deepcopy(fleet)
+        _CONFIG_CACHE_EXPIRES_AT = time.monotonic() + _CONFIG_CACHE_TTL_SECONDS
     return fleet
 
 
@@ -10493,6 +10714,24 @@ def ensure_package_worktree(
     worktree_root = pathlib.Path(str(package_row.get("worktree_root") or "")).resolve()
     worktree_root.parent.mkdir(parents=True, exist_ok=True)
     base_ref = str(package_row.get("base_ref") or "HEAD").strip() or "HEAD"
+    if worktree_root.exists():
+        probe = run_capture(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=str(worktree_root),
+            timeout_seconds=30,
+        )
+        if probe.returncode != 0 or "true" not in str(probe.stdout or "").strip().lower():
+            quarantine_root = worktree_root.parent / (
+                f".broken-{worktree_root.name}-{utc_now().strftime('%Y%m%dT%H%M%SZ')}"
+            )
+            suffix = 1
+            while quarantine_root.exists():
+                suffix += 1
+                quarantine_root = worktree_root.parent / (
+                    f".broken-{worktree_root.name}-{utc_now().strftime('%Y%m%dT%H%M%SZ')}-{suffix}"
+                )
+            shutil.move(str(worktree_root), str(quarantine_root))
+            run_capture(["git", "worktree", "prune"], cwd=str(repo_path), timeout_seconds=60)
     if not worktree_root.exists():
         add = run_capture(
             ["git", "worktree", "add", "--detach", str(worktree_root), base_ref],
@@ -11075,7 +11314,14 @@ def commit_and_push_review_branch(
         raise RuntimeError(commit.stderr.strip() or commit.stdout.strip() or "git commit failed")
     head_sha = git_head_sha(repo_path)
     push = run_capture(
-        ["git", "push", "-u", authenticated_push_url(repo_meta["owner"], repo_meta["repo"], token), f"HEAD:refs/heads/{branch}"],
+        [
+            "git",
+            "push",
+            "--force-with-lease",
+            "-u",
+            authenticated_push_url(repo_meta["owner"], repo_meta["repo"], token),
+            f"HEAD:refs/heads/{branch}",
+        ],
         cwd=repo_path,
         timeout_seconds=180,
     )
@@ -13455,7 +13701,14 @@ def current_slice(project_row: sqlite3.Row) -> Optional[str]:
     return None
 
 
-def participant_burst_metrics(config: Dict[str, Any], project_id: str, *, project_cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def participant_burst_metrics(
+    config: Dict[str, Any],
+    project_id: str,
+    *,
+    project_cfg: Optional[Dict[str, Any]] = None,
+    refresh_lanes: bool = True,
+    credit_guard_live: bool = True,
+) -> Dict[str, Any]:
     project = str(project_id or "").strip()
     if not project:
         return {
@@ -13472,7 +13725,7 @@ def participant_burst_metrics(config: Dict[str, Any], project_id: str, *, projec
     lane_rows = participant_lane_rows(
         project_id=project,
         statuses=[PARTICIPANT_LANE_PENDING_AUTH, PARTICIPANT_LANE_ACTIVE],
-        refresh=True,
+        refresh=refresh_lanes,
     )
     active_by_role: Dict[str, int] = {}
     sponsor_ready_lanes = 0
@@ -13558,7 +13811,11 @@ def participant_burst_metrics(config: Dict[str, Any], project_id: str, *, projec
     effective_max = int(policy.get("max_active_workers") or 0)
     if bool(autoscale_policy.get("enabled")) and autoscale_authority != "capacity_plan_hint_only":
         effective_max = local_hint_recommended
-    credit_guard = participant_burst_credit_guard_status(policy, sponsor_ready_lanes=sponsor_ready_lanes)
+    credit_guard = participant_burst_credit_guard_status(
+        policy,
+        sponsor_ready_lanes=sponsor_ready_lanes,
+        cache_only=not credit_guard_live,
+    )
     if bool(credit_guard.get("enabled")):
         effective_max = min(
             effective_max,
@@ -15117,7 +15374,8 @@ def project_uses_package_scheduler(config: Dict[str, Any], project_id: str) -> b
     groups = project_group_defs(config, project_id)
     if groups:
         group = groups[0]
-        if str(group.get("mode") or "singleton").strip().lower() != "singleton":
+        group_mode = str(group.get("mode") or "singleton").strip().lower()
+        if group_mode not in {"singleton", "independent"}:
             return False
     return bool(work_package_rows(project_id=project_id))
 
@@ -17883,6 +18141,16 @@ def estimate_cost_usd_for_model(price_table: Dict[str, Any], model: str, input_t
 
 
 def usage_for_account(alias: str, period: str) -> Dict[str, float]:
+    return usage_for_accounts([alias], period).get(
+        alias,
+        {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0, "cost": 0.0},
+    )
+
+
+def usage_for_accounts(aliases: Sequence[str], period: str) -> Dict[str, Dict[str, float]]:
+    clean_aliases = sorted({str(alias or "").strip() for alias in aliases if str(alias or "").strip()})
+    if not clean_aliases:
+        return {}
     now = utc_now()
     if period == "day":
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -17890,27 +18158,42 @@ def usage_for_account(alias: str, period: str) -> Dict[str, float]:
         start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     else:
         raise ValueError(period)
+    placeholders = ", ".join("?" for _ in clean_aliases)
     with db() as conn:
-        row = conn.execute(
-            """
+        rows = conn.execute(
+            f"""
             SELECT
+              account_alias,
               COALESCE(SUM(input_tokens), 0) AS input_tokens,
               COALESCE(SUM(cached_input_tokens), 0) AS cached_input_tokens,
               COALESCE(SUM(output_tokens), 0) AS output_tokens,
               COALESCE(SUM(estimated_cost_usd), 0.0) AS cost
             FROM runs
-            WHERE account_alias=? AND started_at >= ?
+            WHERE account_alias IN ({placeholders}) AND started_at >= ?
+            GROUP BY account_alias
             """,
-            (alias, iso(start)),
-        ).fetchone()
-    return dict(row) if row else {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0, "cost": 0.0}
+            (*clean_aliases, iso(start)),
+        ).fetchall()
+    payload = {str(row["account_alias"]): dict(row) for row in rows}
+    for row in payload.values():
+        row.pop("account_alias", None)
+    default = {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0, "cost": 0.0}
+    return {alias: dict(payload.get(alias) or default) for alias in clean_aliases}
 
 
 def active_run_count_for_account(alias: str) -> int:
+    return active_run_counts_for_accounts([alias]).get(str(alias or "").strip(), 0)
+
+
+def active_run_counts_for_accounts(aliases: Sequence[str]) -> Dict[str, int]:
+    clean_aliases = sorted({str(alias or "").strip() for alias in aliases if str(alias or "").strip()})
+    if not clean_aliases:
+        return {}
+    placeholders = ", ".join("?" for _ in clean_aliases)
     sql = """
-        SELECT COUNT(*)
+        SELECT account_alias, COUNT(*) AS active_count
         FROM runs
-        WHERE account_alias=?
+        WHERE account_alias IN (__ALIASES__)
           AND status IN ('starting', 'running')
           AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'healing', 'local_review')
     """
@@ -17933,9 +18216,12 @@ def active_run_count_for_account(alias: str) -> int:
                 )
           )
         """
+    sql += " GROUP BY account_alias"
+    sql = sql.replace("__ALIASES__", placeholders)
     with db() as conn:
-        row = conn.execute(sql, (alias,)).fetchone()
-    return int(row[0] if row else 0)
+        rows = conn.execute(sql, tuple(clean_aliases)).fetchall()
+    counts = {str(row["account_alias"]): int(row["active_count"] or 0) for row in rows}
+    return {alias: int(counts.get(alias, 0)) for alias in clean_aliases}
 
 
 def active_run_count_for_aliases(aliases: Sequence[str]) -> int:
@@ -19058,7 +19344,13 @@ def core_starvation_fallback_decision(
     if bool(decision.get("_starvation_core_fallback")):
         return None
     requested_lane = str(decision.get("lane") or "").strip().lower()
-    if requested_lane not in {"easy", "groundwork", "repair", "survival"}:
+    task_meta = dict(decision.get("task_meta") or {})
+    package_kind = str(task_meta.get("package_kind") or "").strip().lower()
+    package_compile_booster_fallback = (
+        requested_lane == "core_booster"
+        and package_kind == PACKAGE_COMPILE_PACKAGE_KIND
+    )
+    if requested_lane not in {"easy", "groundwork", "repair", "survival"} and not package_compile_booster_fallback:
         return None
     allowed_lanes = [
         str(item or "").strip().lower()
@@ -19077,11 +19369,10 @@ def core_starvation_fallback_decision(
     ]
     if not bool(policy.get("allow_chatgpt_accounts", True)) and not emergency_chatgpt_aliases:
         return None
-    task_meta = dict(decision.get("task_meta") or {})
     if bool(task_meta.get("protected_runtime")):
         return None
     tier = str(decision.get("tier") or "").strip().lower()
-    if tier not in {"inspect", "draft", "micro_edit", "bounded_fix", "multi_file_impl"}:
+    if tier not in {"inspect", "draft", "micro_edit", "bounded_fix", "multi_file_impl"} and not package_compile_booster_fallback:
         return None
     fallback_models: List[str] = []
     for model in (
@@ -19097,7 +19388,11 @@ def core_starvation_fallback_decision(
     fallback = dict(decision)
     fallback["lane"] = "core"
     fallback["lane_submode"] = "responses_hard"
-    fallback["escalation_reason"] = "cheap_pool_starved_core_fallback"
+    fallback["escalation_reason"] = (
+        "package_compile_pool_starved_core_fallback"
+        if package_compile_booster_fallback
+        else "cheap_pool_starved_core_fallback"
+    )
     fallback["allowed_lanes"] = [*allowed_lanes, "core"]
     fallback["model_preferences"] = fallback_models
     fallback["_starvation_core_fallback"] = True
@@ -19823,6 +20118,7 @@ def ea_shim_safe_runner_overrides(overrides: Sequence[Any]) -> List[str]:
         "openai_base_url=",
         "chatgpt_base_url=",
         "model_providers.ea.",
+        "mcp_servers.ea.",
     )
     filtered: List[str] = []
     for item in overrides or []:
@@ -22623,30 +22919,40 @@ async def scheduler_loop() -> None:
             if state.startup_reconcile_pending:
                 reconcile_abandoned_runs(config)
                 state.startup_reconcile_pending = False
+            scheduler_cooperate()
             if bool(get_policy(config, "auto_heal_enabled", True)):
                 auto_publish_approved_audit_candidates(config)
+            scheduler_cooperate()
             publish_support_packets_to_feedback(config)
+            scheduler_cooperate()
             config = normalize_config()
             sync_config_to_db(config)
+            scheduler_cooperate()
             normalize_usage_limit_account_backoffs(config)
             normalize_auth_failure_account_backoffs(config)
+            scheduler_cooperate()
             sync_design_repo_mirrors_if_safe(config)
+            scheduler_cooperate()
             reconcile_stale_worker_sessions(config)
             reconcile_orphaned_active_runs(config)
             reconcile_finished_run_links()
+            scheduler_cooperate()
             heal_pending_pull_request_reviews(config)
             heal_orphaned_local_reviews(config)
             sync_pending_github_reviews(config)
             heal_stalled_github_reviews(config)
+            scheduler_cooperate()
             reconcile_project_incidents()
             sync_group_runtime_phase(config)
             request_due_group_audits(config)
+            scheduler_cooperate()
             max_parallel = int(get_policy(config, "max_parallel_runs", 3))
             with db() as conn:
                 projects = conn.execute("SELECT * FROM projects ORDER BY id").fetchall()
             now = utc_now()
             registry = load_program_registry(config)
             group_runtime = group_runtime_rows()
+            scheduler_cooperate()
             active_project_ids = {
                 str(row["id"] or "").strip()
                 for row in projects
@@ -22661,6 +22967,7 @@ async def scheduler_loop() -> None:
             qm_plan = quartermaster_tick_if_due(config)
             quartermaster_capacity_reconcile(config, plan=qm_plan)
             qm_drain = quartermaster_capacity_drain(config, plan=qm_plan)
+            scheduler_cooperate()
             drained_project_ids = {
                 str(project_id).strip()
                 for project_id in (qm_drain.get("drained_projects") or [])
@@ -22685,6 +22992,7 @@ async def scheduler_loop() -> None:
                 if project_id in active_project_ids or project_has_runtime_task(project_id):
                     continue
                 candidates[project_id] = prepare_dispatch_candidate(config, project_cfg, row, now)
+            scheduler_cooperate()
 
             handled_projects: set[str] = set(drained_project_ids)
             running_by_group: Dict[str, int] = {}
@@ -22822,6 +23130,7 @@ async def scheduler_loop() -> None:
                         },
                     )
                     running_by_group[str(group.get("id") or "")] = int(running_by_group.get(str(group.get("id") or "")) or 0) + len(launch_plan)
+            scheduler_cooperate()
 
             idle_named_bridge_aliases = idle_bridge_service_aliases(
                 config,
@@ -22833,12 +23142,19 @@ async def scheduler_loop() -> None:
                 and active_named_bridge_count < min(named_bridge_floor, len(bridge_services))
             )
 
+            def backfill_sort_candidate(project_id: str) -> Optional[DispatchCandidate]:
+                direct_candidate = candidates.get(project_id)
+                if direct_candidate is not None:
+                    return direct_candidate
+                package_candidates = package_candidates_by_project.get(project_id) or []
+                return package_candidates[0] if package_candidates else None
+
             ordered_rows = sorted(
                 projects,
                 key=lambda item: dispatch_backfill_priority(
                     config=config,
                     row=item,
-                    candidate=candidates.get(item["id"]),
+                    candidate=backfill_sort_candidate(item["id"]),
                     running_by_group=running_by_group,
                     pressure_high=max_parallel > 0 and running_count >= max_parallel,
                 ),
@@ -22847,16 +23163,17 @@ async def scheduler_loop() -> None:
                 ordered_rows = sorted(
                     ordered_rows,
                     key=lambda item: (
-                        0 if candidate_supports_any_alias(candidates.get(item["id"]), idle_named_bridge_aliases) else 1,
+                        0 if candidate_supports_any_alias(backfill_sort_candidate(item["id"]), idle_named_bridge_aliases) else 1,
                         dispatch_backfill_priority(
                             config=config,
                             row=item,
-                            candidate=candidates.get(item["id"]),
+                            candidate=backfill_sort_candidate(item["id"]),
                             running_by_group=running_by_group,
                             pressure_high=max_parallel > 0 and running_count >= max_parallel,
                         ),
                     ),
                 )
+            scheduler_cooperate()
             for row in ordered_rows:
                 project_id = row["id"]
                 if project_id in handled_projects:
@@ -23326,12 +23643,11 @@ async def shutdown() -> None:
 
 
 @app.get("/health", response_class=PlainTextResponse)
-def health() -> str:
+async def health() -> str:
     return "ok"
 
 
-@app.get("/api/status")
-def api_status() -> Dict[str, Any]:
+def full_status_payload() -> Dict[str, Any]:
     config = normalize_config()
     consistency_blockers = list(_CONFIG_CONSISTENCY_BLOCKERS)
     registry = load_program_registry(config)
@@ -23392,9 +23708,15 @@ def api_status() -> Dict[str, Any]:
             project["status_internal"] = runtime_status
             project["status"] = runtime_status
             project["dispatch_participant"] = project_dispatch_participates(project_cfg)
-            participant_rows = participant_lane_rows(project_id=project["id"], refresh=True)
+            participant_rows = participant_lane_rows(project_id=project["id"], refresh=False)
             participant_active = [row for row in participant_rows if str(row.get("status") or "") == PARTICIPANT_LANE_ACTIVE]
-            participant_metrics = participant_burst_metrics(config, project["id"], project_cfg=project_cfg) if bool((project_cfg.get("participant_burst") or {}).get("enabled")) else {}
+            participant_metrics = participant_burst_metrics(
+                config,
+                project["id"],
+                project_cfg=project_cfg,
+                refresh_lanes=False,
+                credit_guard_live=False,
+            ) if bool((project_cfg.get("participant_burst") or {}).get("enabled")) else {}
             project["participant_burst"] = {
                 "enabled": bool((project_cfg.get("participant_burst") or {}).get("enabled")),
                 "max_active_workers": int(((project_cfg.get("participant_burst") or {}).get("max_active_workers") or 0)),
@@ -23716,13 +24038,17 @@ def api_status() -> Dict[str, Any]:
     for project in projects:
         project.pop("_project_order", None)
         project.pop("_schedule", None)
+    account_aliases = [str(account.get("alias") or "").strip() for account in accounts if str(account.get("alias") or "").strip()]
+    daily_usage_by_account = usage_for_accounts(account_aliases, "day")
+    monthly_usage_by_account = usage_for_accounts(account_aliases, "month")
+    active_run_counts_by_account = active_run_counts_for_accounts(account_aliases)
     for account in accounts:
         account["allowed_models"] = json.loads(account.pop("allowed_models_json") or "[]")
         account_cfg = (config.get("accounts") or {}).get(account["alias"], {})
         account_backend, account_identity = run_backend_and_identity(account["alias"], (config.get("accounts") or {}))
-        account["daily_usage"] = usage_for_account(account["alias"], "day")
-        account["monthly_usage"] = usage_for_account(account["alias"], "month")
-        account["active_runs"] = active_run_count_for_account(account["alias"])
+        account["daily_usage"] = daily_usage_by_account.get(str(account["alias"])) or {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0, "cost": 0.0}
+        account["monthly_usage"] = monthly_usage_by_account.get(str(account["alias"])) or {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0, "cost": 0.0}
+        account["active_runs"] = active_run_counts_by_account.get(str(account["alias"]), 0)
         account["account_backend"] = account_backend
         account["account_identity"] = account_identity
         account["configured_health_state"] = str(account_cfg.get("health_state", "ready") or "ready")
@@ -23769,8 +24095,138 @@ def api_status() -> Dict[str, Any]:
         "group_publish_events": group_publish_events(),
         "group_runs": group_runs(),
         "token_alliance": summarize_alliance(config),
-        "participant_lanes": participant_lane_rows(refresh=True),
+        "participant_lanes": participant_lane_rows(refresh=False),
     }
+
+
+def compact_status_payload() -> Dict[str, Any]:
+    config = normalize_config()
+    now = utc_now()
+    consistency_blockers = list(_CONFIG_CONSISTENCY_BLOCKERS)
+    accounts_cfg = config.get("accounts") or {}
+    with db() as conn:
+        project_rows = [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id")]
+        account_rows = [dict(row) for row in conn.execute("SELECT * FROM accounts ORDER BY alias")]
+        recent_runs = [dict(row) for row in conn.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 10")]
+    projects: List[Dict[str, Any]] = []
+    for row in project_rows:
+        project_id = str(row.get("id") or "").strip()
+        queue = json.loads(row.get("queue_json") or "[]")
+        queue_index = int(row.get("queue_index") or 0)
+        project_cfg = get_project_cfg(config, project_id)
+        active_run = active_run_row(row.get("active_run_id"))
+        active_alias = str((active_run or {}).get("account_alias") or "").strip()
+        active_model = str((active_run or {}).get("model") or "").strip()
+        active_backend, active_identity = run_backend_and_identity(active_alias, accounts_cfg)
+        enabled = bool(project_cfg.get("enabled", True))
+        runtime_status = effective_project_status(
+            project_id=project_id,
+            stored_status=row.get("status"),
+            queue=queue,
+            queue_index=queue_index,
+            enabled=enabled,
+            active_run_id=row.get("active_run_id"),
+            source_backlog_open=bool(project_cfg.get("queue_sources")) and bool(queue),
+        )
+        if active_run:
+            runtime_status = runtime_status_for_active_run(runtime_status, active_run)
+        current_task_item = queue[queue_index] if queue_index < len(queue) else row.get("current_slice")
+        projects.append(
+            {
+                "id": project_id,
+                "path": row.get("path"),
+                "status": runtime_status,
+                "status_internal": runtime_status,
+                "runtime_status": runtime_status,
+                "queue": queue,
+                "queue_index": queue_index,
+                "active_run_id": row.get("active_run_id"),
+                "active_run_account_alias": active_alias or None,
+                "active_run_account_backend": active_backend,
+                "active_run_account_identity": active_identity,
+                "active_run_model": active_model,
+                "active_run_brain": run_brain_label(active_alias, active_model, active_identity) if active_run else "not active",
+                "cooldown_until": row.get("cooldown_until"),
+                "current_slice": row.get("current_slice"),
+                "current_queue_item": current_task_item,
+                "current_task_meta": normalize_task_queue_item(current_task_item, lanes=config.get("lanes")),
+                "last_error": row.get("last_error"),
+                "last_run_at": row.get("last_run_at"),
+                "enabled": enabled,
+                "lifecycle": project_cfg.get("lifecycle"),
+                "dispatch_participant": project_dispatch_participates(project_cfg),
+                "participant_burst": {"enabled": False, "active_count": 0, "pending_count": 0, "lane_ids": []},
+                "completion_basis": project_completion_basis(
+                    runtime_status=runtime_status,
+                    queue=queue,
+                    queue_index=queue_index,
+                    has_queue_sources=bool(project_cfg.get("queue_sources")),
+                ),
+            }
+        )
+    account_aliases = [str(account.get("alias") or "").strip() for account in account_rows if str(account.get("alias") or "").strip()]
+    active_run_counts_by_account = active_run_counts_for_accounts(account_aliases)
+    accounts: List[Dict[str, Any]] = []
+    for account in account_rows:
+        alias = str(account.get("alias") or "").strip()
+        backend, identity = run_backend_and_identity(alias, accounts_cfg)
+        accounts.append(
+            {
+                "alias": alias,
+                "account_backend": backend,
+                "account_identity": identity,
+                "active_runs": active_run_counts_by_account.get(alias, 0),
+                "configured_health_state": str((accounts_cfg.get(alias) or {}).get("health_state", "ready") or "ready"),
+                "allowed_models": json.loads(account.get("allowed_models_json") or "[]"),
+            }
+        )
+    for run in recent_runs:
+        backend, identity = run_backend_and_identity(run.get("account_alias") or "", accounts_cfg)
+        run_model = str(run.get("model") or "")
+        run["account_backend"] = backend
+        run["account_identity"] = identity
+        run["run_model"] = run_model
+        run["run_brain"] = run_brain_label(run.get("account_alias") or "", run_model, identity)
+    return {
+        "config": {
+            "policies": config.get("policies", {}),
+            "spider": config.get("spider", {}),
+            "lanes": (config.get("lanes") or DEFAULT_LANES),
+            "core_backends": config.get("core_backends", {}),
+            "project_count": len(config.get("projects", [])),
+            "group_count": len(config.get("project_groups", [])),
+            "account_count": len(config.get("accounts", {})),
+            "consistency_blocker_count": len(consistency_blockers),
+            "consistency_blockers": consistency_blockers,
+            "compact": True,
+        },
+        "projects": projects,
+        "eta": {},
+        "queue_eta": {},
+        "groups": [],
+        "notifications": [],
+        "incidents": [],
+        "milestone_eta": {},
+        "program_eta": {},
+        "accounts": accounts,
+        "recent_runs": recent_runs,
+        "recent_decisions": [],
+        "group_publish_events": [],
+        "group_runs": [],
+        "token_alliance": summarize_alliance(config),
+        "participant_lanes": [],
+        "generated_at": iso(now),
+    }
+
+
+@app.get("/api/status")
+def api_status() -> Dict[str, Any]:
+    return compact_status_payload()
+
+
+@app.get("/api/status/full")
+def api_status_full() -> Dict[str, Any]:
+    return full_status_payload()
 
 
 @app.get("/api/internal/participant-lanes")
@@ -24241,7 +24697,7 @@ def request_project_github_review_now(project_id: str) -> Dict[str, Any]:
             "healing": True,
         }
 
-    if not pr_row:
+    if not pr_row or int(pr_row["pr_number"] or 0) <= 0:
         try:
             _, pr_row = ensure_review_pull_request_record(project_cfg, repo_meta, slice_name, token)
         except RuntimeError as exc:
@@ -24397,7 +24853,38 @@ def api_pause_project(project_id: str) -> Dict[str, Any]:
 
 @app.post("/api/projects/{project_id}/run-now")
 def api_run_project_now(project_id: str) -> Dict[str, Any]:
-    return api_retry_project(project_id)
+    result = api_retry_project(project_id)
+    config = normalize_config()
+    if not project_uses_package_scheduler(config, project_id):
+        return result
+    with db() as conn:
+        row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+    if not row:
+        return result
+    project_cfg = get_project_cfg(config, project_id)
+    quartermaster_capacity_reconcile(config, plan=quartermaster_tick_if_due(config))
+    package_candidates = prepare_work_package_dispatch_candidates(config, project_cfg, row, utc_now())
+    for candidate in package_candidates:
+        planned = plan_candidate_launch(
+            config,
+            candidate,
+            reserved_account_counts={},
+            reserved_lane_counts={},
+            reserved_scale_up_count=0,
+            reserved_project_counts={},
+            reserved_scope_claims=[],
+        )
+        if not planned:
+            continue
+        if launch_planned_project_task(config, planned):
+            return {
+                "ok": True,
+                "project_id": project_id,
+                "status": "scheduled",
+                "action": "run_now_package",
+                "package_id": planned.package_id or None,
+            }
+    return result
 
 
 @app.post("/api/projects/{project_id}/review/sync")
@@ -24468,7 +24955,7 @@ def api_final(run_id: int) -> str:
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> str:
-    status = api_status()
+    status = full_status_payload()
     alliance = status["token_alliance"]
     fleet_eta = status.get("queue_eta") or status.get("eta") or {}
     milestone_eta = status.get("milestone_eta") or {}

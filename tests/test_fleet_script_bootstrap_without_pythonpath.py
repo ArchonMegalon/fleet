@@ -16,10 +16,13 @@ SCRIPTS = (
     Path("/docker/fleet/scripts/materialize_public_progress_report.py"),
     Path("/docker/fleet/scripts/materialize_support_case_packets.py"),
     Path("/docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py"),
+    Path("/docker/fleet/scripts/materialize_next90_m111_fleet_install_aware_followthrough.py"),
+    Path("/docker/fleet/scripts/verify_next90_m111_fleet_install_aware_followthrough.py"),
     Path("/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py"),
     Path("/docker/fleet/scripts/materialize_flagship_product_readiness.py"),
     Path("/docker/fleet/scripts/materialize_proof_orchestration.py"),
     Path("/docker/fleet/scripts/chummer_design_supervisor.py"),
+    Path("/docker/fleet/scripts/fleet_ooda_timer_guard.py"),
     Path("/docker/fleet/scripts/materialize_package_compile_overlay.py"),
 )
 

@@ -323,3 +323,77 @@ class CodexLizShimTests(unittest.TestCase):
         self.assertEqual(outage_state["retry_count"], 1)
         self.assertEqual(outage_state["last_reason"], "success")
         self.assertEqual(output_path.read_text(encoding="utf-8").strip(), "transport recovered")
+
+    def test_codexliz_retries_retryable_404_until_transport_recovers(self) -> None:
+        output_path = self.root / "last-message.txt"
+        attempt_counter_path = self.root / "attempt-count.txt"
+        self.fake_codex.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env python3",
+                    "import json, os, sys",
+                    "from pathlib import Path",
+                    "counter_path = Path(os.environ['CODEXLIZ_TEST_ATTEMPT_COUNTER'])",
+                    "try:",
+                    "    attempt = int(counter_path.read_text(encoding='utf-8').strip())",
+                    "except Exception:",
+                    "    attempt = 0",
+                    "attempt += 1",
+                    "counter_path.write_text(str(attempt), encoding='utf-8')",
+                    "if attempt == 1:",
+                    "    port = os.environ.get('CODEXLIZ_PROXY_PORT', '')",
+                    "    sys.stderr.write('ERROR: unexpected status 404 Not Found: {\\\\\"error\\\\\":\\\\\"not_found\\\\\"}, url: http://127.0.0.1:%s/v1/responses, cf-ray: not-found-ray\\\\n' % port)",
+                    "    raise SystemExit(17)",
+                    "payload = {",
+                    "    'argv': sys.argv[1:],",
+                    "    'attempt': attempt,",
+                    "}",
+                    "with open(os.environ['CODEXLIZ_TEST_CAPTURE'], 'w', encoding='utf-8') as handle:",
+                    "    json.dump(payload, handle)",
+                    "output_path = Path(os.environ['CODEXLIZ_TEST_OUTPUT_PATH'])",
+                    "output_path.write_text('transport recovered', encoding='utf-8')",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        self.fake_codex.chmod(self.fake_codex.stat().st_mode | stat.S_IXUSR)
+
+        requests: list[str] = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                requests.append(self.path)
+                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server, _thread = self._server(Handler)
+        completed = self._run_shim(
+            f"http://127.0.0.1:{server.server_port}",
+            extra_args=["exec", "-o", str(output_path)],
+            extra_env={
+                "CODEXLIZ_TEST_ATTEMPT_COUNTER": str(attempt_counter_path),
+                "CODEXLIZ_TEST_OUTPUT_PATH": str(output_path),
+                "CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS": "1",
+                "CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS": "1",
+                "CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS": "1",
+                "CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS": "30",
+            },
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("Trace: provider=liz transport=outage status=404", completed.stderr)
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["attempt"], 2)
+        outage_state = json.loads((self.state_dir / "outage.json").read_text(encoding="utf-8"))
+        self.assertEqual(outage_state["state"], "healthy")
+        self.assertFalse(outage_state["current_outage"])
+        self.assertEqual(outage_state["retry_count"], 1)
+        self.assertEqual(outage_state["last_reason"], "success")
+        self.assertEqual(output_path.read_text(encoding="utf-8").strip(), "transport recovered")

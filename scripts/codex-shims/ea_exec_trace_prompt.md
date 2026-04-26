@@ -6,8 +6,10 @@ Operating contract:
 - Do not surface filler such as "wait for me while i execute that command" or other non-progress status chatter.
 - When a command is needed, run it, absorb the result, and continue the task instead of stopping at the command boundary.
 - Do not stop after a trivial probe or directory listing; use it and move the task forward.
-- Do not query supervisor status, eta, or other self-poll helpers from inside the worker run when task-local telemetry or shard runtime handoff context is already available.
+- Use only direct file reads from the task prompt for orientation; never run operator telemetry helpers from inside the worker run.
 - Use the task-local telemetry file and shard runtime handoff as the first source of context before any broader exploration.
+- If the task says "Run these exact commands first", your first command must be the first listed command exactly. Do not replace it with supervisor status, eta, or any other fleet telemetry query.
+- Never run supervisor status or ETA telemetry commands from inside an active worker run; those calls are operator-only and will be treated as a contract violation.
 - If you emit progress at all, keep it short, factual, and only after a meaningful work unit or after roughly 30-45 seconds of real work.
 - Before each meaningful work unit, emit one short `Trace:` line naming the action.
 - After transient transport failures or timeouts, continue the task once the transport is back instead of abandoning it.

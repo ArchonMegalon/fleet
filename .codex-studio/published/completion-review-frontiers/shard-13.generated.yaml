@@ -1,7 +1,7 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-22T15:31:26Z'
-mode: flagship_product
+generated_at: '2026-04-26T15:58:55Z'
+mode: completion_review
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-13
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -49,75 +49,74 @@ focus:
   - initiative
   - dashboard
   - operator
-  - whole-project frontier
-  - no lowered standards
-  - feedback loop
-  - crash reporting
-  - support routing
-  - journey smoothness
-  - performance
-  - proof shelf
-  - mobile play shell
-  - ui kit and flagship polish
-  - media artifacts
-  - desktop client
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: linux desktop exit gate proof did not pass
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260422T143213Z-shard-13 is not trusted: worker
-    exit 124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
-  latest_run_id: 20260422T143213Z-shard-13
-  latest_run_reason: 'worker exit 124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
+  reason: 'latest worker receipt 20260426T052907Z-shard-13 is not trusted: Error:
+    502: upstream_unavailable:onemin/gpt-5.4:onemin_exhausted_for_request:352564:ONEMIN_AI...'
+  latest_run_id: 20260426T052907Z-shard-13
+  latest_run_reason: 'Error: 502: upstream_unavailable:onemin/gpt-5.4:onemin_exhausted_for_request:352564:ONEMIN_AI...'
 journey_gate_audit:
-  status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
-  blocked_journey_count: 6
+  status: pass
+  reason: golden journey proof is ready
+  blocked_journey_count: 0
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
   status: fail
-  reason: linux desktop exit gate primary .deb install/remove verification is invalid
+  reason: linux desktop exit gate proof did not pass
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-  generated_at: '2026-04-21T20:40:16Z'
+  generated_at: '2026-04-26T15:17:04Z'
 weekly_pulse_audit:
   status: pass
   reason: weekly product pulse is fresh and reports no remaining drift or blocker
     pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-04-22T06:10:04Z'
+  generated_at: '2026-04-26T15:52:08Z'
 repo_backlog_audit:
   status: pass
-  reason: no active repo-local queue items remain outside the design registry
+  reason: no active repo-local backlog remains outside the closed design registry
   open_item_count: 0
   open_project_count: 0
   open_items: []
 blocking_audits:
-- component: journey_gate
-  status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 - component: linux_desktop_exit_gate
-  status: fail
-  reason: linux desktop exit gate primary .deb install/remove verification is invalid
-- component: desktop_executable_exit_gate
-  status: fail
-  reason: desktop executable exit gate proof did not pass
+  title: Linux desktop exit-gate gaps
+  reason: linux desktop exit gate proof did not pass
 - component: trusted_completion_receipt
-  status: fail
-  reason: 'latest worker receipt 20260422T143213Z-shard-13 is not trusted: worker
-    exit 124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
-frontier_count: 0
-frontier_ids: []
-frontier: []
+  title: Trusted completion receipt
+  reason: 'latest worker receipt 20260426T052907Z-shard-13 is not trusted: Error:
+    502: upstream_unavailable:onemin/gpt-5.4:onemin_exhausted_for_request:352564:ONEMIN_AI...'
+frontier_count: 1
+frontier_ids:
+- 1239074135
+frontier:
+- id: 1239074135
+  title: 'Completion gate: Linux desktop exit gate'
+  wave: completion_review
+  status: review_required
+  owners:
+  - chummer6-ui
+  - fleet
+  dependencies: []
+  exit_criteria:
+  - linux desktop exit gate proof did not pass
+  - Build the Linux desktop binary, package the primary .deb plus fallback archive,
+    run startup smoke on both packaged outputs, run desktop runtime unit tests, and
+    refresh UI_LINUX_DESKTOP_EXIT_GATE.generated.json.
 eta:
-  status: flagship_delivery
-  eta_human: 9h-21h
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Bind parity-lab evidence into veteran readiness truth'' remains
-    open under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
-    ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
+  status: blocked
+  eta_human: 2h-6h after unblock
+  eta_confidence: medium
+  basis: completion_review_recovery+external_blocker
+  scope_kind: completion_review_recovery
+  scope_label: Completion review and proof recovery
+  scope_warning: This ETA covers registry trust, proof, and review recovery. It is
+    still narrower than a final flagship parity claim unless full-product readiness
+    is also green.
+  blocking_reason: 'Error: 502: upstream_unavailable:onemin/gpt-5.4:onemin_exhausted_for_request:352564:ONEMIN_AI_API_KEY,ONEMIN_AI_API_KEY_FALLBACK_1,ONEMIN_AI_API_KEY_FALLBACK_10,ONEMIN_AI_API_KE...'
+  summary: 'Registry closure is not yet trustworthy; recovery still needs trusted
+    completion receipt, Linux desktop exit gate. Blocked journeys=0, warning journeys=0,
+    review frontier=1, decomposed_frontier=0, backlog_tail=0. Current external blocker:
+    Error: 502: upstream_unavailable:onemin/gpt-5.4:onemin_exhausted_for_request:352564:ONEMIN_AI_API_KEY,ONEMIN_AI_API_KEY_FALLBACK_1,ONEMIN_AI_API_KEY_FALLBACK_10,ONEMIN_AI_API_KE...'

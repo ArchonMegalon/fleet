@@ -337,9 +337,11 @@ admin_status() {
   local auth_config=""
   password="$(operator_password)"
   temp_status="$(mktemp /tmp/fleet_admin_status_wrapper.XXXXXX.json)"
-  trap 'rm -f "${temp_status}"' RETURN
-  # contract: scripts/deploy.sh should expose the internal admin probe as docker exec + curl
-  # docker exec fleet-admin curl -fsS --connect-timeout 5 --max-time 15 http://127.0.0.1:8092/api/admin/status
+  # contract: scripts/deploy.sh should expose the internal admin probe as docker exec + curl.
+  # Use the bounded status-lite surface here: status-plane materialization only needs
+  # public-status, project, and group posture, while full admin status can exceed
+  # gateway limits when account, audit, and review payloads are large.
+  # docker exec fleet-admin curl -fsS --connect-timeout 5 --max-time 15 http://127.0.0.1:8092/api/admin/status-lite
   local internal_status_script=""
   internal_status_script="$(cat <<'SH'
 read -r password
@@ -356,18 +358,21 @@ SH
 )"
   if timeout 20 docker exec -i fleet-admin sh -lc "$internal_status_script" sh \
     -fsS --connect-timeout 5 --max-time 15 \
-    http://127.0.0.1:8092/api/admin/status >"${temp_status}" 2>/dev/null; then
+    http://127.0.0.1:8092/api/admin/status-lite >"${temp_status}" 2>/dev/null; then
     cat "${temp_status}"
+    rm -f "${temp_status}"
     return 0
   fi
   auth_config="$(build_operator_auth_config "${password}")"
   if timeout 20 curl -fsS --connect-timeout 5 --max-time 15 -K "${auth_config}" \
-    http://127.0.0.1:18090/api/admin/status >"${temp_status}" 2>/dev/null; then
+    http://127.0.0.1:18090/api/admin/status-lite >"${temp_status}" 2>/dev/null; then
     cleanup_curl_auth_config "${auth_config}"
     cat "${temp_status}"
+    rm -f "${temp_status}"
     return 0
   fi
   cleanup_curl_auth_config "${auth_config}"
+  rm -f "${temp_status}"
   echo "fleet admin status is unavailable via canonical internal admin or gateway fallback" >&2
   return 1
 }
@@ -377,18 +382,21 @@ admin_post() {
   local password
   local temp_output
   local auth_config=""
+  local http_code=""
   password="$(operator_password)"
   temp_output="$(mktemp /tmp/fleet_admin_post_wrapper.XXXXXX.out)"
-  trap 'rm -f "${temp_output}"' RETURN
   auth_config="$(build_operator_auth_config "${password}")"
-  if curl -fsS -o "${temp_output}" -w "%{http_code}\n" \
+  if http_code="$(curl -fsS -o "${temp_output}" -w "%{http_code}" \
     -K "${auth_config}" \
-    -X POST "http://127.0.0.1:8081${path}" 2>/dev/null; then
+    -X POST "http://127.0.0.1:8081${path}" 2>/dev/null)"; then
     cleanup_curl_auth_config "${auth_config}"
     cat "${temp_output}"
+    printf '%s\n' "${http_code}"
+    rm -f "${temp_output}"
     return 0
   fi
   cleanup_curl_auth_config "${auth_config}"
+  rm -f "${temp_output}"
   docker_exec_curl_with_operator_auth fleet-admin "${password}" -sS -o /dev/null -w "%{http_code}\n" \
     -X POST "http://127.0.0.1:8092${path}"
 }

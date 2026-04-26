@@ -6,6 +6,7 @@ from pathlib import Path
 
 DEPLOY_SCRIPT = Path("/docker/fleet/deploy-fleet.sh")
 DOCKER_COMPOSE = Path("/docker/fleet/docker-compose.yml")
+CONTROLLER_DOCKERFILE = Path("/docker/fleet/controller/Dockerfile")
 README = Path("/docker/fleet/README.md")
 
 
@@ -54,6 +55,11 @@ class DeployBundleContractTests(unittest.TestCase):
         self.assertIn("Packaged installs are now self-contained for the Fleet self-project.", readme)
         self.assertIn("fleet-design-supervisor", readme)
         self.assertIn("CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER=chummer6-ui", readme)
+
+    def test_controller_image_installs_git_lfs_for_review_branch_hooks(self) -> None:
+        dockerfile = CONTROLLER_DOCKERFILE.read_text(encoding="utf-8")
+
+        self.assertIn("git-lfs", dockerfile)
 
 
 if __name__ == "__main__":

@@ -279,9 +279,9 @@ FLEET_EXTERNAL_PROOF_AUTOINGEST_COOLDOWN_SECONDS=120
 FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS=45
 FLEET_AUDITOR_RUN_MAX_AGE_SECONDS=900
 FLEET_AUDITOR_STARTUP_GRACE_SECONDS=180
-CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD=shard-13
-CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS=900
-CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=900
+CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD=shard-7
+CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS=240
+CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=90
 FLEET_COMPOSE_PROJECT_NAME=fleet
 FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS=3
 FLEET_AUTOHEAL_ESCALATE_WINDOW_SECONDS=1800
@@ -298,6 +298,12 @@ is self-clearing and publishes an explicit escalation state instead of looping f
 escalations now materialize as first-class Fleet incidents and feed cockpit publish-readiness, and
 the canonical `scripts/deploy.sh admin-status` path now reads the internal admin plane first before
 falling back to the public gateway.
+
+The design supervisor watchdog is tuned for faster shard recovery now: prompt-only silent starts
+recycle after about `90s`, and shards that stop emitting output after startup recycle after about
+`240s` instead of lingering for fifteen minutes. In the live fleet, that watchdog should stay pinned
+to `shard-7`, the `code.girschele.com` non-EA lane, so the critical fallback shard cannot drift
+quietly without tripping health.
 
 ## Chummer6 Guide Refresh
 

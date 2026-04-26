@@ -3168,6 +3168,7 @@ def main() -> int:
                             path_safety_tokens = (
                                 "tarfile.open",
                                 "member.name.startswith(",
+                                "assert not bad",
                                 " in parts",
                             )
                             for token in path_safety_tokens:

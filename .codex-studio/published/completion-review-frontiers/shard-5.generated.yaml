@@ -1,8 +1,8 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-22T14:31:05Z'
+generated_at: '2026-04-26T13:43:35Z'
 mode: flagship_product
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-5
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-5
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 projects_dir: /docker/fleet/config/projects
@@ -36,78 +36,66 @@ focus:
   - chummer6-ui-kit
   - chummer6-mobile
   texts:
-  - top flagship grade
-  - whole project frontier
-  - feedback
-  - automatic bugfixing
-  - crash
-  - support
-  - accessibility
-  - localization
-  - restore confidence
-  - fit and finish
   - import
   - oracle
   - chummer5a
   - hero lab
   - genesis
+  - top flagship grade
   - whole-project frontier
   - no lowered standards
   - feedback loop
+  - automatic bugfixing
   - crash reporting
   - support routing
   - journey smoothness
+  - restore confidence
+  - accessibility
+  - localization
   - performance
   - proof shelf
-  - mobile play shell
-  - ui kit and flagship polish
-  - media artifacts
+  - fit and finish
   - desktop client
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: desktop executable exit gate proof is stale (87299s old)
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260422T122038Z-shard-5 is not trusted: worker exit
-    124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
-  latest_run_id: 20260422T122038Z-shard-5
-  latest_run_reason: 'worker exit 124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
+  reason: 'latest worker receipt 20260426T063139Z-shard-5 is not trusted: worker exit
+    1'
+  latest_run_id: 20260426T063139Z-shard-5
+  latest_run_reason: worker exit 1
 journey_gate_audit:
-  status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
-  blocked_journey_count: 6
+  status: pass
+  reason: golden journey proof is ready
+  blocked_journey_count: 0
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
-  status: fail
-  reason: linux desktop exit gate primary .deb install/remove verification is invalid
+  status: pass
+  reason: linux desktop binary build/start/test proof is ready on current repo-local
+    evidence
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-  generated_at: '2026-04-21T20:40:16Z'
+  generated_at: '2026-04-25T19:46:37Z'
 weekly_pulse_audit:
   status: pass
-  reason: weekly product pulse is fresh and reports no remaining drift or blocker
-    pressure
+  reason: weekly product pulse lags the live golden-journey proof; release-health,
+    drift, and blocker signals remain green
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-04-22T06:10:04Z'
+  generated_at: '2026-04-25T11:57:04Z'
 repo_backlog_audit:
   status: pass
-  reason: no active repo-local queue items remain outside the design registry
+  reason: no active repo-local backlog remains outside the closed design registry
   open_item_count: 0
   open_project_count: 0
   open_items: []
 blocking_audits:
-- component: journey_gate
-  status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
-- component: linux_desktop_exit_gate
-  status: fail
-  reason: linux desktop exit gate primary .deb install/remove verification is invalid
 - component: desktop_executable_exit_gate
-  status: fail
-  reason: desktop executable exit gate proof did not pass
+  title: Desktop executable exit-gate gaps
+  reason: desktop executable exit gate proof is stale (87299s old)
 - component: trusted_completion_receipt
-  status: fail
-  reason: 'latest worker receipt 20260422T122038Z-shard-5 is not trusted: worker exit
-    124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
+  title: Trusted completion receipt
+  reason: 'latest worker receipt 20260426T063139Z-shard-5 is not trusted: worker exit
+    1'
 frontier_count: 0
 frontier_ids: []
 frontier: []
@@ -122,4 +110,4 @@ eta:
   blocking_reason: ''
   summary: 'Milestone ''Shared design system, accessibility, localization, and flagship
     polish'' remains open under the flagship closeout frontier. Outstanding readiness
-    coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
+    coverage: desktop_client.'

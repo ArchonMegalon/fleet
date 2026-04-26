@@ -4,6 +4,7 @@
 
 `fleet` is the audited control plane for agentic software work around Chummer.
 It turns mirrored canon into bounded tasks, reviewed code changes, release evidence, and operator-visible progress without redefining product truth.
+It is internal leverage, not the public Chummer user experience.
 
 ## Control-plane autonomy scope
 
@@ -78,6 +79,7 @@ The live executable loop belongs in Fleet:
 * the meaning of the `chummer.run` landing page or registered overlays
 * installer recipe truth
 * canonical release-channel or update-feed truth
+* public-facing product vocabulary that makes Chummer read like a control plane instead of a trusted tabletop tool
 
 ## Baseline execution rule
 
@@ -193,5 +195,6 @@ Reject changes that:
 * store raw participant Codex/OpenAI auth data in Hub
 * bypass mirrored design canon with repo-local policy inventions
 * blur the difference between managed EA core burst and participant direct burst
+* leak Fleet control-plane framing into public Chummer UX where the user should only see trust, continuity, and honest product status
 * skip fail-closed completion evidence when desktop flagship proof is missing real workbench-first startup, a first-class master index or character roster, or in-product claim/recovery handling
 * let Fleet mark the desktop flagship as complete while the user still sees a generic shell, a browser-ritual claim detour, or a framework-first installer choice

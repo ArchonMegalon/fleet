@@ -26,6 +26,11 @@ project_config_path="${CHUMMER_DESIGN_SUPERVISOR_PROJECT_CONFIG:-/docker/fleet/c
 shard_owner_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS:-}"
 shard_focus_profile_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_PROFILE_GROUPS:-}"
 shard_focus_text_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_TEXT_GROUPS:-}"
+project_contract_shard_worker_bin_groups_raw=""
+project_contract_shard_worker_lane_groups_raw=""
+project_contract_shard_worker_model_groups_raw=""
+project_contract_configured_shard_count_raw=""
+project_contract_primary_probe_shard=""
 
 load_project_runtime_contract_defaults() {
   local config_path="${1:-}"
@@ -118,6 +123,11 @@ exports = {
     "project_contract_shard_focus_profile_groups": groups_for("focus_profile"),
     "project_contract_shard_owner_groups": groups_for("focus_owner"),
     "project_contract_shard_focus_text_groups": groups_for("focus_text"),
+    "project_contract_shard_worker_bin_groups": groups_for("worker_bin"),
+    "project_contract_shard_worker_lane_groups": groups_for("worker_lane"),
+    "project_contract_shard_worker_model_groups": groups_for("worker_model"),
+    "project_contract_configured_shard_count": scalar(len(configured)),
+    "project_contract_primary_probe_shard": scalar(topology.get("primary_probe_shard")),
     "project_contract_state_root": scalar(launcher_defaults.get("state_root") or runtime_policy.get("state_root")),
     "project_contract_parallel_shards": scalar(
         launcher_defaults.get("parallel_shards")
@@ -168,7 +178,7 @@ PY
 apply_env_default() {
   local name="$1"
   local value="${2:-}"
-  if [[ -n "${value//[[:space:]]/}" && -z "${!name:-}" ]]; then
+  if [[ -n "${value//[[:space:]]/}" && ! -v $name ]]; then
     printf -v "$name" '%s' "$value"
     export "$name"
   fi
@@ -177,6 +187,11 @@ apply_env_default() {
 project_contract_defaults="$(load_project_runtime_contract_defaults "$project_config_path")"
 if [[ -n "$project_contract_defaults" ]]; then
   eval "$project_contract_defaults"
+  project_contract_shard_worker_bin_groups_raw="${project_contract_shard_worker_bin_groups:-}"
+  project_contract_shard_worker_lane_groups_raw="${project_contract_shard_worker_lane_groups:-}"
+  project_contract_shard_worker_model_groups_raw="${project_contract_shard_worker_model_groups:-}"
+  project_contract_configured_shard_count_raw="${project_contract_configured_shard_count:-}"
+  project_contract_primary_probe_shard="${project_contract_primary_probe_shard:-}"
   apply_env_default CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT "${project_contract_state_root:-}"
   apply_env_default CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS "${project_contract_parallel_shards:-}"
   apply_env_default CHUMMER_DESIGN_SUPERVISOR_CLEAR_LOCK_ON_BOOT "${project_contract_clear_lock_on_boot:-}"
@@ -249,52 +264,45 @@ if [[ ! "$frontier_derive_timeout_seconds" =~ ^[0-9]+$ ]]; then
   frontier_derive_timeout_seconds=15
 fi
 
+print_runtime_policy=0
 case "$(printf '%s' "${CHUMMER_DESIGN_SUPERVISOR_PRINT_RUNTIME_POLICY:-0}" | tr '[:upper:]' '[:lower:]')" in
   1|true|yes|on)
-    printf 'project_config=%s\n' "$project_config_path"
-    printf 'state_root=%s\n' "$state_root_base"
-    printf 'parallel_shards=%s\n' "$parallel_shards"
-    printf 'clear_lock_on_boot=%s\n' "$clear_lock_on_boot"
-    printf 'health_max_age_seconds=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_HEALTH_MAX_AGE_SECONDS:-}"
-    printf 'operating_profile=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_OPERATING_PROFILE:-}"
-    printf 'memory_dispatch_reserve_gib=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_RESERVE_GIB:-}"
-    printf 'memory_dispatch_shard_budget_gib=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_SHARD_BUDGET_GIB:-}"
-    printf 'memory_dispatch_warning_available_percent=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT:-}"
-    printf 'memory_dispatch_critical_available_percent=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT:-}"
-    printf 'memory_dispatch_warning_swap_used_percent=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT:-}"
-    printf 'memory_dispatch_critical_swap_used_percent=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT:-}"
-    printf 'memory_dispatch_parked_poll_seconds=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_PARKED_POLL_SECONDS:-}"
-    printf 'dynamic_account_routing=%s\n' "$dynamic_account_routing_mode"
-    printf 'prefer_full_ea_lanes=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_PREFER_FULL_EA_LANES:-}"
-    printf 'pin_account_aliases=%s\n' "$pinned_account_aliases_mode"
-    printf 'worker_bin=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-}"
-    printf 'worker_lane=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE:-}"
-    printf 'worker_model=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL:-}"
-    printf 'fallback_lanes=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_FALLBACK_LANES:-}"
-    printf 'fallback_models=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_FALLBACK_MODELS:-}"
-    printf 'shard_owner_groups=%s\n' "$shard_owner_groups_raw"
-    printf 'shard_focus_profile_groups=%s\n' "$shard_focus_profile_groups_raw"
-    printf 'shard_focus_text_groups=%s\n' "$shard_focus_text_groups_raw"
-    exit 0
+    print_runtime_policy=1
     ;;
 esac
 
-shard_focus_profile_groups_raw="${shard_focus_profile_groups_raw//$'\n'/;}"
-IFS=';' read -r -a shard_focus_profile_groups <<<"$shard_focus_profile_groups_raw"
-shard_owner_groups_raw="${shard_owner_groups_raw//$'\n'/;}"
-IFS=';' read -r -a shard_owner_groups <<<"$shard_owner_groups_raw"
-shard_account_groups_raw="${shard_account_groups_raw//$'\n'/;}"
-IFS=';' read -r -a shard_account_groups <<<"$shard_account_groups_raw"
-shard_focus_text_groups_raw="${shard_focus_text_groups_raw//$'\n'/;}"
-IFS=';' read -r -a shard_focus_text_groups <<<"$shard_focus_text_groups_raw"
-shard_frontier_id_groups_raw="${shard_frontier_id_groups_raw//$'\n'/;}"
-IFS=';' read -r -a shard_frontier_id_groups <<<"$shard_frontier_id_groups_raw"
-shard_worker_bin_groups_raw="${shard_worker_bin_groups_raw//$'\n'/;}"
-IFS=';' read -r -a shard_worker_bins <<<"$shard_worker_bin_groups_raw"
-shard_worker_lane_groups_raw="${shard_worker_lane_groups_raw//$'\n'/;}"
-IFS=';' read -r -a shard_worker_lanes <<<"$shard_worker_lane_groups_raw"
-shard_worker_model_groups_raw="${shard_worker_model_groups_raw//$'\n'/;}"
-IFS=';' read -r -a shard_worker_models <<<"$shard_worker_model_groups_raw"
+split_semicolon_groups() {
+  local raw="${1:-}"
+  local -n dest="$2"
+  local remainder=""
+  raw="${raw//$'\n'/;}"
+  dest=()
+  if [[ -z "$raw" ]]; then
+    return 0
+  fi
+  remainder="$raw"
+  while true; do
+    if [[ "$remainder" == *";"* ]]; then
+      dest+=("${remainder%%;*}")
+      remainder="${remainder#*;}"
+      continue
+    fi
+    dest+=("$remainder")
+    return 0
+  done
+}
+
+split_semicolon_groups "$shard_focus_profile_groups_raw" shard_focus_profile_groups
+split_semicolon_groups "$shard_owner_groups_raw" shard_owner_groups
+split_semicolon_groups "$shard_account_groups_raw" shard_account_groups
+split_semicolon_groups "$shard_focus_text_groups_raw" shard_focus_text_groups
+split_semicolon_groups "$shard_frontier_id_groups_raw" shard_frontier_id_groups
+split_semicolon_groups "$shard_worker_bin_groups_raw" shard_worker_bins
+split_semicolon_groups "$shard_worker_lane_groups_raw" shard_worker_lanes
+split_semicolon_groups "$shard_worker_model_groups_raw" shard_worker_models
+split_semicolon_groups "$project_contract_shard_worker_bin_groups_raw" project_contract_shard_worker_bins
+split_semicolon_groups "$project_contract_shard_worker_lane_groups_raw" project_contract_shard_worker_lanes
+split_semicolon_groups "$project_contract_shard_worker_model_groups_raw" project_contract_shard_worker_models
 
 append_split_flags() {
   local -n dest="$1"
@@ -309,6 +317,126 @@ append_split_flags() {
     item="${item%"${item##*[![:space:]]}"}"
     if [[ -n "$item" ]]; then
       dest+=("$flag" "$item")
+    fi
+  done
+}
+
+fill_sparse_group_from_defaults() {
+  local -n values="$1"
+  local -n defaults="$2"
+  local value_len="${#values[@]}"
+  local default_len="${#defaults[@]}"
+  local max_len=$(( value_len > default_len ? value_len : default_len ))
+  local idx=0
+  for ((idx = 0; idx < max_len; idx++)); do
+    if [[ -z "${values[$idx]:-}" && -n "${defaults[$idx]:-}" ]]; then
+      values[$idx]="${defaults[$idx]}"
+    fi
+  done
+}
+
+append_unique_shard_index() {
+  local -n values="$1"
+  local candidate="${2:-}"
+  local configured_shard_slots="${3:-0}"
+  local existing=""
+  if [[ ! "$candidate" =~ ^[0-9]+$ ]]; then
+    return 0
+  fi
+  if (( candidate <= 0 )); then
+    return 0
+  fi
+  if (( configured_shard_slots > 0 && candidate > configured_shard_slots )); then
+    return 0
+  fi
+  for existing in "${values[@]:-}"; do
+    if [[ "$existing" == "$candidate" ]]; then
+      return 0
+    fi
+  done
+  values+=("$candidate")
+}
+
+configured_shard_slots() {
+  local configured="${project_contract_configured_shard_count_raw:-0}"
+  local candidate=0
+  if [[ ! "$configured" =~ ^[0-9]+$ ]]; then
+    configured=0
+  fi
+  for candidate in \
+    "${#shard_focus_profile_groups[@]}" \
+    "${#shard_owner_groups[@]}" \
+    "${#shard_account_groups[@]}" \
+    "${#shard_focus_text_groups[@]}" \
+    "${#shard_frontier_id_groups[@]}" \
+    "${#shard_worker_bins[@]}" \
+    "${#shard_worker_lanes[@]}" \
+    "${#shard_worker_models[@]}" \
+    "${#project_contract_shard_worker_bins[@]}" \
+    "${#project_contract_shard_worker_lanes[@]}" \
+    "${#project_contract_shard_worker_models[@]}"; do
+    if (( candidate > configured )); then
+      configured="$candidate"
+    fi
+  done
+  if (( configured <= 0 )); then
+    configured="$parallel_shards"
+  fi
+  printf '%s\n' "$configured"
+}
+
+primary_probe_shard_index() {
+  if [[ "$project_contract_primary_probe_shard" =~ ^shard-([0-9]+)$ ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  printf '0\n'
+}
+
+join_with_semicolons() {
+  local -n values="$1"
+  local joined=""
+  local idx=0
+  local limit="${resolved_configured_shard_slots:-0}"
+  if [[ ! "$limit" =~ ^[0-9]+$ ]] || (( limit <= 0 )); then
+    limit="${#values[@]}"
+  fi
+  for ((idx = 0; idx < limit; idx++)); do
+    if (( idx > 0 )); then
+      joined+=";"
+    fi
+    joined+="${values[$idx]-}"
+  done
+  printf '%s\n' "$joined"
+}
+
+resolve_active_shard_indexes() {
+  local configured="${1:-0}"
+  local -n dest="$2"
+  local primary_index=0
+  local idx=0
+  local effective_worker_bin=""
+  dest=()
+  if (( configured <= 0 )); then
+    configured="$parallel_shards"
+  fi
+  if (( parallel_shards < configured )); then
+    primary_index="$(primary_probe_shard_index)"
+    append_unique_shard_index "$2" "$primary_index" "$configured"
+    for ((idx = 1; idx <= configured; idx++)); do
+      effective_worker_bin="${shard_worker_bins[$((idx - 1))]:-${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-codex}}"
+      if ! worker_bin_uses_codexea "$effective_worker_bin"; then
+        append_unique_shard_index "$2" "$idx" "$configured"
+        if (( ${#dest[@]} >= parallel_shards )); then
+          return 0
+        fi
+      fi
+    done
+  fi
+  for ((idx = 1; idx <= configured; idx++)); do
+    append_unique_shard_index "$2" "$idx" "$configured"
+    if (( ${#dest[@]} >= parallel_shards )); then
+      return 0
     fi
   done
 }
@@ -389,6 +517,47 @@ worker_bin_uses_codexea() {
   token="$(basename "$worker_bin" | tr '[:upper:]' '[:lower:]')"
   [[ "$token" == "codexea" ]]
 }
+
+fill_sparse_group_from_defaults shard_worker_bins project_contract_shard_worker_bins
+fill_sparse_group_from_defaults shard_worker_lanes project_contract_shard_worker_lanes
+fill_sparse_group_from_defaults shard_worker_models project_contract_shard_worker_models
+
+resolved_configured_shard_slots="$(configured_shard_slots)"
+resolved_active_shard_indexes=()
+resolve_active_shard_indexes "$resolved_configured_shard_slots" resolved_active_shard_indexes
+
+if (( print_runtime_policy )); then
+  printf 'project_config=%s\n' "$project_config_path"
+  printf 'state_root=%s\n' "$state_root_base"
+  printf 'parallel_shards=%s\n' "$parallel_shards"
+  printf 'configured_shard_slots=%s\n' "$resolved_configured_shard_slots"
+  printf 'selected_shard_indexes=%s\n' "$(IFS=,; printf '%s' "${resolved_active_shard_indexes[*]}")"
+  printf 'clear_lock_on_boot=%s\n' "$clear_lock_on_boot"
+  printf 'health_max_age_seconds=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_HEALTH_MAX_AGE_SECONDS:-}"
+  printf 'operating_profile=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_OPERATING_PROFILE:-}"
+  printf 'memory_dispatch_reserve_gib=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_RESERVE_GIB:-}"
+  printf 'memory_dispatch_shard_budget_gib=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_SHARD_BUDGET_GIB:-}"
+  printf 'memory_dispatch_warning_available_percent=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT:-}"
+  printf 'memory_dispatch_critical_available_percent=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT:-}"
+  printf 'memory_dispatch_warning_swap_used_percent=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT:-}"
+  printf 'memory_dispatch_critical_swap_used_percent=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT:-}"
+  printf 'memory_dispatch_parked_poll_seconds=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_PARKED_POLL_SECONDS:-}"
+  printf 'dynamic_account_routing=%s\n' "$dynamic_account_routing_mode"
+  printf 'prefer_full_ea_lanes=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_PREFER_FULL_EA_LANES:-}"
+  printf 'pin_account_aliases=%s\n' "$pinned_account_aliases_mode"
+  printf 'worker_bin=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-}"
+  printf 'worker_lane=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE:-}"
+  printf 'worker_model=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL:-}"
+  printf 'fallback_lanes=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_FALLBACK_LANES:-}"
+  printf 'fallback_models=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_FALLBACK_MODELS:-}"
+  printf 'shard_owner_groups=%s\n' "$shard_owner_groups_raw"
+  printf 'shard_focus_profile_groups=%s\n' "$shard_focus_profile_groups_raw"
+  printf 'shard_focus_text_groups=%s\n' "$shard_focus_text_groups_raw"
+  printf 'resolved_shard_worker_bins=%s\n' "$(join_with_semicolons shard_worker_bins)"
+  printf 'resolved_shard_worker_lanes=%s\n' "$(join_with_semicolons shard_worker_lanes)"
+  printf 'resolved_shard_worker_models=%s\n' "$(join_with_semicolons shard_worker_models)"
+  exit 0
+fi
 
 should_derive_frontier() {
   case "$frontier_derive_mode" in
@@ -579,8 +748,6 @@ build_loop_args() {
   fi
   if [[ -n "$shard_worker_lane" ]]; then
     dest+=(--worker-lane "$shard_worker_lane")
-  elif ! worker_bin_uses_codexea "$effective_worker_bin"; then
-    dest+=(--worker-lane "")
   fi
   if [[ -n "$shard_worker_model" ]]; then
     dest+=(--worker-model "$shard_worker_model")
@@ -888,7 +1055,7 @@ trap cleanup EXIT TERM INT
 
 preseed_manifest_rows=()
 if [[ -n "$state_root_base" ]] && (( parallel_shards > 1 )); then
-  for ((shard_index = 1; shard_index <= parallel_shards; shard_index++)); do
+  for shard_index in "${resolved_active_shard_indexes[@]}"; do
     shard_frontier_ids_raw="${shard_frontier_id_groups[$((shard_index - 1))]:-}"
     if [[ -z "${shard_frontier_ids_raw//[[:space:]]/}" ]] && ! frontier_derive_is_forced; then
       shard_frontier_ids_raw="$(published_shard_frontier_ids "$shard_index")"
@@ -913,7 +1080,7 @@ if [[ -n "$state_root_base" ]] && (( parallel_shards > 1 )); then
   fi
 fi
 
-for ((shard_index = 1; shard_index <= parallel_shards; shard_index++)); do
+for shard_index in "${resolved_active_shard_indexes[@]}"; do
   shard_args=()
   shard_frontier_ids_raw="${shard_frontier_id_groups[$((shard_index - 1))]:-}"
   if [[ -z "${shard_frontier_ids_raw//[[:space:]]/}" ]] && ! frontier_derive_is_forced; then

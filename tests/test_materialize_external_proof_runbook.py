@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import hashlib
+import io
 import json
 import os
 import subprocess
@@ -234,6 +235,12 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     macos_validate = commands_dir / "validate-macos-proof.sh"
     macos_bundle = commands_dir / "bundle-macos-proof.sh"
     macos_ingest = commands_dir / "ingest-macos-proof-bundle.sh"
+    linux_preflight = commands_dir / "preflight-linux-proof.sh"
+    linux_capture = commands_dir / "capture-linux-proof.sh"
+    linux_validate = commands_dir / "validate-linux-proof.sh"
+    linux_bundle = commands_dir / "bundle-linux-proof.sh"
+    linux_ingest = commands_dir / "ingest-linux-proof-bundle.sh"
+    linux_run_lane = commands_dir / "run-linux-proof-lane.sh"
     post_capture = commands_dir / "republish-after-host-proof.sh"
     finalize = commands_dir / "finalize-external-host-proof.sh"
 
@@ -267,7 +274,16 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "### Commands (PowerShell Bundle Wrappers)" in payload
     assert "### Commands (PowerShell Ingest Wrappers)" in payload
     assert "```powershell" in payload
-    assert "bash -lc 'echo windows-proof'" in payload
+    assert linux_preflight.is_file()
+    assert linux_capture.is_file()
+    assert linux_validate.is_file()
+    assert linux_bundle.is_file()
+    assert linux_ingest.is_file()
+    assert linux_run_lane.is_file()
+    assert (commands_dir / "host-proof-bundles" / "linux" / "external-proof-manifest.json").is_file()
+    assert (commands_dir / "linux-proof-bundle.tgz").is_file()
+    assert "bash -lc 'set -euo pipefail" in payload
+    assert "echo windows-proof" in payload
     assert "installer-preflight-sha256-mismatch" in payload
     assert "installer-download-html-response" in payload
     assert "installer-download-signature-mismatch" in payload
@@ -292,7 +308,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "readyCheckpoint" in payload
     assert "hostClass" in payload
     assert "\"head_id\": \"avalonia\"" in payload
-    assert "bash -lc 'REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\"" in payload
+    assert "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\"" in payload
     assert "  commands:" in payload
     assert "## After Host Proof Capture" in payload
     assert "python3 scripts/materialize_support_case_packets.py" in payload
@@ -486,10 +502,10 @@ def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates
     assert "tar -czf \"$BUNDLE_ARCHIVE\" -C \"$BUNDLE_ROOT\" ." in macos_bundle.read_text(
         encoding="utf-8"
     )
-    assert "cp -f /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg" in macos_bundle.read_text(
+    assert 'cp -f "$DOWNLOADS_ROOT/files/chummer-avalonia-osx-arm64-installer.dmg"' in macos_bundle.read_text(
         encoding="utf-8"
     )
-    assert "cp -f /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json" in macos_bundle.read_text(
+    assert 'cp -f "$DOWNLOADS_ROOT/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json"' in macos_bundle.read_text(
         encoding="utf-8"
     )
     ingest_payload = macos_ingest.read_text(encoding="utf-8")
@@ -497,10 +513,13 @@ def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates
     assert "BUNDLE_DIR=\"$SCRIPT_DIR/host-proof-bundles/macos\"" in ingest_payload
     assert "if [ ! -s \"$BUNDLE_ARCHIVE\" ]; then" in ingest_payload
     assert "external-proof-bundle-path-unsafe" in ingest_payload
+    assert "external-proof-bundle-member-unsafe" in ingest_payload
     assert "import os, pathlib, shutil" in ingest_payload
     assert "shutil.copy2(source, destination)" in ingest_payload
+    assert "member.isfile()" in ingest_payload
+    assert "shutil.copyfileobj(source, handle)" in ingest_payload
     assert "source.is_absolute()" not in ingest_payload
-    assert "tar -xzf \"$BUNDLE_ARCHIVE\" -C \"$TARGET_ROOT\"" in ingest_payload
+    assert "tar -xzf \"$BUNDLE_ARCHIVE\" -C \"$TARGET_ROOT\"" not in ingest_payload
     assert "if [ ! -d \"$BUNDLE_DIR\" ]; then" in ingest_payload
     assert "external-proof-bundle-empty" in ingest_payload
     assert "test -s \"$TARGET_ROOT/files/chummer-avalonia-osx-arm64-installer.dmg\"" in ingest_payload
@@ -515,9 +534,16 @@ def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates
     assert "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json" in post_capture.read_text(encoding="utf-8")
     assert "python3 scripts/chummer_design_supervisor.py status" not in post_capture.read_text(encoding="utf-8")
     finalize_payload = finalize.read_text(encoding="utf-8")
+    assert "./validate-linux-proof.sh" in finalize_payload
+    assert "./ingest-linux-proof-bundle.sh" in finalize_payload
     assert "./validate-macos-proof.sh" in finalize_payload
     assert "./ingest-macos-proof-bundle.sh" in finalize_payload
+    assert "./validate-windows-proof.sh" in finalize_payload
+    assert "./ingest-windows-proof-bundle.sh" in finalize_payload
     assert "./republish-after-host-proof.sh" in finalize_payload
+    assert finalize_payload.index("./ingest-linux-proof-bundle.sh") < finalize_payload.index(
+        "./republish-after-host-proof.sh"
+    )
     assert finalize_payload.index("./validate-macos-proof.sh") < finalize_payload.index(
         "./ingest-macos-proof-bundle.sh"
     )
@@ -716,6 +742,29 @@ def test_materialize_external_proof_runbook_removes_stale_existing_bundle_archiv
 
     assert result.returncode == 0, result.stderr
     assert not bundle_archive.exists()
+
+
+def test_bundle_archive_reuse_rejects_absolute_member_names(tmp_path: Path) -> None:
+    module = _load_runbook_module()
+    bundle_archive = tmp_path / "linux-proof-bundle.tgz"
+    manifest_path = tmp_path / "external-proof-manifest.json"
+    expected_manifest = {
+        "schema_version": 1,
+        "host": "linux",
+        "request_count": 0,
+        "requests": [],
+    }
+    manifest_path.write_text(
+        json.dumps(expected_manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    with tarfile.open(bundle_archive, "w:gz") as archive:
+        manifest_bytes = manifest_path.read_bytes()
+        member = tarfile.TarInfo("/external-proof-manifest.json")
+        member.size = len(manifest_bytes)
+        archive.addfile(member, io.BytesIO(manifest_bytes))
+
+    assert module._bundle_archive_is_reusable(bundle_archive, expected_manifest=expected_manifest) is False
 
 
 def test_materialize_external_proof_runbook_preserves_per_tuple_command_sequences(tmp_path: Path) -> None:
@@ -931,6 +980,10 @@ def test_materialize_external_proof_runbook_uses_expected_installer_relative_pat
 def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -> None:
     support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     out = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    commands_dir = out.parent / "external-proof-commands"
+    stale_bundle_dir = commands_dir / "host-proof-bundles" / "macos"
+    stale_bundle_dir.mkdir(parents=True, exist_ok=True)
+    (stale_bundle_dir / "stale-proof.txt").write_text("stale\n", encoding="utf-8")
     support_packets.write_text(
         json.dumps(
             {
@@ -975,6 +1028,7 @@ def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -
         assert "- request_count: 0" in payload
         assert f"- host_lane_script: `{commands_dir / f'run-{host}-proof-lane.sh'}`" in payload
         assert f"- retained_bundle_archive_path: `{commands_dir / f'{host}-proof-bundle.tgz'}`" in payload
+        assert "- retained_bundle_archive_present: `true`" in payload
         assert f"- retained_bundle_directory_path: `{commands_dir / 'host-proof-bundles' / host}`" in payload
         assert f"./preflight-{host}-proof.sh" in payload
         assert f"./capture-{host}-proof.sh" in payload
@@ -987,6 +1041,24 @@ def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -
             "request_count": 0,
             "requests": [],
         }
+        archive_path = commands_dir / f"{host}-proof-bundle.tgz"
+        assert archive_path.is_file()
+        with tarfile.open(archive_path, "r:gz") as archive:
+            members = {
+                member.name.strip("./"): member
+                for member in archive.getmembers()
+                if member.isfile() and member.name.strip("./")
+            }
+            member_names = sorted(members)
+            assert member_names == ["external-proof-manifest.json"]
+            manifest_member = archive.extractfile(members["external-proof-manifest.json"])
+            assert manifest_member is not None
+            assert json.loads(manifest_member.read().decode("utf-8")) == {
+                "schema_version": 1,
+                "host": host,
+                "request_count": 0,
+                "requests": [],
+            }
     assert not (stale_bundle_dir / "stale-proof.txt").exists()
     assert f"- host_lane_powershell: `{commands_dir / 'run-windows-proof-lane.ps1'}`" in payload
     assert "### Resume Host Lane (PowerShell): windows" in payload
@@ -1095,10 +1167,14 @@ def test_materialize_external_proof_runbook_accepts_camel_case_plan_fields(tmp_p
     validate_ps1_payload = windows_validate_ps1.read_text(encoding="utf-8")
     assert "$ErrorActionPreference = 'Stop'" in capture_ps1_payload
     assert "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }" in capture_ps1_payload
-    assert "bash -lc 'echo windows-proof'" in capture_ps1_payload
+    assert "bash -lc 'set -euo pipefail" in capture_ps1_payload
+    assert "echo windows-proof" in capture_ps1_payload
+    assert capture_ps1_payload.count("bash -lc '") == 1
     assert "$ErrorActionPreference = 'Stop'" in validate_ps1_payload
     assert "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }" in validate_ps1_payload
-    assert "bash -lc 'REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\"" in validate_ps1_payload
+    assert "bash -lc 'set -euo pipefail" in validate_ps1_payload
+    assert "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\"" in validate_ps1_payload
+    assert validate_ps1_payload.count("bash -lc '") == 1
 
 
 def test_materialize_external_proof_runbook_fails_with_absolute_expected_installer_relative_path(tmp_path: Path) -> None:

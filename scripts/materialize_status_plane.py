@@ -512,14 +512,16 @@ def main(argv: List[str] | None = None) -> int:
     else:
         status_json_out_path = None
 
+    use_default_snapshot = status_json_path is not None
+
     try:
-        admin_status = load_admin_status(status_json_path, use_default_snapshot=True)
+        admin_status = load_admin_status(status_json_path, use_default_snapshot=use_default_snapshot)
     except StatusPlaneDriftError as exc:
         if status_json_path is not None:
             print(f"status-plane materialization failed: {exc}", file=sys.stderr)
             return 1
         try:
-            admin_status = load_admin_status(None, use_default_snapshot=True)
+            admin_status = load_admin_status(None, use_default_snapshot=False)
         except StatusPlaneDriftError:
             print(f"status-plane materialization failed: {exc}", file=sys.stderr)
             return 1

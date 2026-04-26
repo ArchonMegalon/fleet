@@ -1,38 +1,32 @@
 contract_name: executive_assistant.veteran_compare_packs
 schema_version: 1
-generated_at: 2026-04-19 11:57:17+00:00
+generated_at: 2026-04-23 04:22:19+00:00
 milestone:
   id: 103
   package_id: next90-m103-ea-parity-lab
   owned_surfaces:
   - veteran_compare_packs
 sync_context:
-  task_local_telemetry_path: /docker/fleet/state/chummer_design_supervisor/shard-4/runs/20260419T153713Z-shard-4/TASK_LOCAL_TELEMETRY.generated.json
+  task_local_telemetry_path: /docker/fleet/state/chummer_design_supervisor/shard-4/runs/20260423T042213Z-shard-4/TASK_LOCAL_TELEMETRY.generated.json
   task_local_telemetry_snapshot:
     mode: implementation_only
-    scope_label: Next 90-day product advance wave
-    slice_summary: '20 next-wave milestones remain across 43 queue slices (20 in progress,
-      0 not started). Current dependency critical path: 101 -> 102 -> 103 -> 104 ->
-      105 -> 106 -> 107 -> 109 -> 114 -> 115 -> 116 -> 117 -> 119 -> 120.'
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    slice_summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open
+      under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+      ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
     status_query_supported: false
     polling_disabled: true
-    package_id: next90-m103-ea-parity-lab
-    frontier_id: 4287684466
-    milestone_id: 103
-    owned_surfaces:
-    - parity_lab:capture
-    - veteran_compare_packs
-    allowed_paths:
-    - skills
-    - tests
-    - feedback
-    - docs
+    package_id: ''
+    frontier_id: 1300044932
+    milestone_id: 0
+    owned_surfaces: []
+    allowed_paths: []
   readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  readiness_generated_at: '2026-04-19T15:37:38Z'
+  readiness_generated_at: '2026-04-23T04:22:19Z'
   desktop_executable_exit_gate_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
-  desktop_executable_exit_gate_generated_at: '2026-04-18T18:19:11.035798Z'
+  desktop_executable_exit_gate_generated_at: '2026-04-22T23:48:17.432738Z'
   runtime_handoff_path: /docker/fleet/state/chummer_design_supervisor/shard-4/ACTIVE_RUN_HANDOFF.generated.md
-  runtime_handoff_first_output_at: '2026-04-19T15:37:16Z'
+  runtime_handoff_first_output_at: '2026-04-23T04:22:17Z'
 required_landmarks:
 - File menu
 - Tools menu
@@ -293,16 +287,17 @@ desktop_client_coverage:
     - character_roster_multi_character_flow
 task_local_frontier_context:
   assignment_kind: successor_wave_package
-  frontier_id: 4287684466
+  frontier_id: 1300044932
   focus_profiles:
   - top_flagship_grade
   - whole_project_frontier
-  - next_90_day_successor_wave
   focus_owners:
   - chummer6-ui
   - chummer6-core
   - chummer6-design
-  - executive-assistant
+  - chummer6-mobile
+  - chummer6-ui-kit
+  - chummer6-hub
   focus_texts:
   - top flagship grade
   - whole project frontier
@@ -319,28 +314,37 @@ task_local_frontier_context:
   - custom-data
   - xml
   - translator
-  - next90-m103-ea-parity-lab
-  - Extract Chummer5a oracle baselines and veteran workflow packs
+  - whole-project frontier
+  - no lowered standards
+  - feedback loop
+  - crash reporting
+  - support routing
+  - journey smoothness
+  - performance
+  - proof shelf
+  - mobile play shell
+  - ui kit and flagship polish
+  - media artifacts
+  - desktop client
   frontier_briefs:
-  - '4287684466 [W7] Extract Chummer5a oracle baselines and veteran workflow packs
-    (status: complete; owners: executive-assistant; deps: 101, 102; exit: Capture
-    screenshot baselines, first-minute veteran tasks, and compare artifacts from the
-    Chummer5a oracle repo.; Own and prove the surface slice(s): parity_lab:capture,
-    veteran_compare_packs; Keep implementation scoped to the allowed paths: skills,
-    tests, feedback, docs; Refresh flagship proof and close out the queue slice honestly
-    when this package is landed for `executive-assistant` (next90-m103-ea-parity-lab).;
-    Advance successor milestone 103: Chummer5a parity lab and veteran migration certification.)'
+  - '1300044932 [flagship_product] Mobile and play-shell flagship finish (status:
+    not_started; owners: chummer6-mobile, chummer6-core, chummer6-ui-kit, chummer6-hub;
+    deps: none; exit: Deliver the dedicated player/GM/session shell described in
+    `projects/mobile.md`, including local-first play, replay/resume, reconnect confidence,
+    installable mobile posture, and cross-device continuity.; Keep mobile grounded
+    on package-only engine/play/UI-kit seams rather than cloning workbench or orchestration
+    logic.)'
   notes:
-  - Task-local telemetry is the current shard-4 successor-wave assignment context
-    for package next90-m103-ea-parity-lab, not a release-readiness completion certificate.
+  - Task-local telemetry is the current shard-4 flagship-closeout assignment context,
+    not a release-readiness completion certificate.
   - The worker-run guard for this retry is implementation-only; historical operator
     status snippets and supervisor helper outputs are not package evidence.
   - The task-local telemetry does not carry per-lane release-readiness status, so
     the live whole-product coverage block below stays sourced from the latest published
     readiness receipt.
-  - The current published flagship readiness receipt is green across every flagship
-    coverage lane, so this pack preserves successor-wave assignment context separately
-    from live release truth.
+  - The current published flagship readiness receipt can include missing or warning
+    lanes, so this pack preserves assignment context separately from live release
+    truth.
 whole_product_frontier_coverage:
   source_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
   package_relevant_coverage_keys:
@@ -361,7 +365,7 @@ whole_product_frontier_coverage:
       proof are current.
 live_desktop_executable_gate_snapshot:
   source_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
-  generated_at: 2026-04-18 18:19:11.035798+00:00
+  generated_at: 2026-04-23 09:26:16.415910+00:00
   status: pass
   blocked_by_external_constraints_only: false
   blocking_findings_count: 0
@@ -373,7 +377,7 @@ live_desktop_executable_gate_snapshot:
 visual_familiarity_screenshot_snapshot:
   source_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
   screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
-  reference_generated_at: 2026-04-18 18:16:17.739675+00:00
+  reference_generated_at: 2026-04-23 09:25:22.807251+00:00
   required_screenshots:
   - 01-initial-shell-light.png
   - 02-menu-open-light.png
@@ -395,16 +399,17 @@ visual_familiarity_screenshot_snapshot:
   - 18-import-dialog-light.png
   missing_screenshots: []
 exit_readiness:
-  blocker:
+  ready:
     local_executable_gate_findings: []
     unresolved_external_host_proof_tuples: []
+    desktop_client_status: ready
   notes:
   - Veteran compare packs are now extracted and source-backed.
   - Live readiness and desktop executable-gate posture can move during the worker
     run; the pack records the latest observed state at sync time.
-  - The current published UI executable gate passes with zero local or external blocking
-    findings.
-  - The current published flagship readiness receipt is green with no remaining coverage-gap
-    lanes.
+  - The current published UI executable gate passes with zero local or external
+    blocking findings.
+  - The current published flagship readiness receipt is green across all whole-product
+    coverage lanes, including desktop_client.
   - The current task-local telemetry is successor-wave assignment context only; it
     does not override release-truth receipts.

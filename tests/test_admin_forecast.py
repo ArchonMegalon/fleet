@@ -430,6 +430,114 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["ready_scope_cap"], 1)
         self.assertEqual(payload["ready_booster_scope_cap"], 1)
 
+    def test_work_package_summary_payload_ignores_stale_active_scope_claims(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            old_db_path = self.admin.DB_PATH
+            self.admin.DB_PATH = db_path
+            self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
+            now = self.admin.iso(self.admin.utc_now())
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                """
+                CREATE TABLE work_packages (
+                    package_id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    queue_index INTEGER NOT NULL DEFAULT 0,
+                    priority INTEGER NOT NULL DEFAULT 100,
+                    title TEXT NOT NULL,
+                    slice_name TEXT NOT NULL,
+                    task_meta_json TEXT NOT NULL DEFAULT '{}',
+                    status TEXT NOT NULL DEFAULT 'ready',
+                    runtime_state TEXT NOT NULL DEFAULT 'idle',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE scope_claims (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    package_id TEXT NOT NULL,
+                    project_id TEXT NOT NULL,
+                    claim_type TEXT NOT NULL,
+                    claim_value TEXT NOT NULL,
+                    scope_key TEXT NOT NULL,
+                    claim_state TEXT NOT NULL DEFAULT 'prepared',
+                    created_at TEXT NOT NULL,
+                    activated_at TEXT,
+                    released_at TEXT
+                )
+                """
+            )
+            conn.executemany(
+                """
+                INSERT INTO work_packages(
+                    package_id, project_id, queue_index, title, slice_name, task_meta_json, created_at, updated_at,
+                    status, runtime_state
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        "fleet-ready",
+                        "fleet",
+                        0,
+                        "Ready slice",
+                        "Ready slice",
+                        json.dumps(
+                            {
+                                "allowed_lanes": ["core_booster", "core"],
+                                "allow_credit_burn": True,
+                            }
+                        ),
+                        now,
+                        now,
+                        "ready",
+                        "idle",
+                    ),
+                    (
+                        "fleet-old",
+                        "fleet",
+                        1,
+                        "Old slice",
+                        "Old slice",
+                        json.dumps(
+                            {
+                                "allowed_lanes": ["core_booster", "core"],
+                                "allow_credit_burn": True,
+                            }
+                        ),
+                        now,
+                        now,
+                        "complete",
+                        "idle",
+                    ),
+                ],
+            )
+            conn.executemany(
+                """
+                INSERT INTO scope_claims(package_id, project_id, claim_type, claim_value, scope_key, claim_state, created_at, activated_at)
+                VALUES(?, ?, ?, ?, ?, 'active', ?, ?)
+                """,
+                [
+                    ("fleet-ready", "fleet", "path", ".codex-design", "path:.codex-design", now, now),
+                    ("fleet-old", "fleet", "path", ".codex-design", "path:.codex-design", now, now),
+                ],
+            )
+            conn.commit()
+            conn.close()
+
+            payload = self.admin.work_package_summary_payload({"lanes": {"core": {"id": "core"}}})
+
+        self.assertEqual(payload["ready_packages"], 1)
+        self.assertEqual(payload["ready_booster_packages"], 1)
+        self.assertEqual(payload["ready_scope_cap"], 1)
+        self.assertEqual(payload["ready_booster_scope_cap"], 1)
+        self.assertEqual(payload["active_scope_claims"], 0)
+        self.assertEqual(payload["stale_active_scope_claims"], 2)
+
     def test_merge_queue_overlay_item_stamps_pre_overlay_queue_fingerprint_from_queue_sources(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -1994,7 +2102,7 @@ class AdminForecastTests(unittest.TestCase):
             ],
         )
 
-    def test_publish_readiness_warns_when_weekly_governor_packet_is_stale(self) -> None:
+    def test_publish_readiness_blocks_when_weekly_governor_packet_is_stale(self) -> None:
         status = {
             "runtime_healing": {"summary": {"alert_state": "healthy"}},
         }
@@ -2027,14 +2135,14 @@ class AdminForecastTests(unittest.TestCase):
             provider_routes=[],
         )
 
-        self.assertEqual(payload["state"], "warning")
+        self.assertEqual(payload["state"], "blocked")
         self.assertIn(
             "Weekly governor packet is older than the measured rollout window.",
-            payload["warning_reasons"],
+            payload["blocking_reasons"],
         )
         self.assertEqual(payload["signals"]["weekly_governor_packet_freshness_state"], "stale")
 
-    def test_publish_readiness_warns_when_weekly_governor_packet_is_past_due(self) -> None:
+    def test_publish_readiness_blocks_when_weekly_governor_packet_is_past_due(self) -> None:
         status = {
             "runtime_healing": {"summary": {"alert_state": "healthy"}},
         }
@@ -2090,15 +2198,15 @@ class AdminForecastTests(unittest.TestCase):
                 provider_routes=[],
             )
 
-        self.assertEqual(payload["state"], "warning")
+        self.assertEqual(payload["state"], "blocked")
         self.assertIn(
             "Weekly governor packet is past due for its weekly cadence.",
-            payload["warning_reasons"],
+            payload["blocking_reasons"],
         )
         self.assertEqual(payload["signals"]["weekly_governor_packet_freshness_state"], "stale")
         self.assertEqual(payload["signals"]["weekly_governor_packet_schedule_state"], "overdue")
 
-    def test_publish_readiness_warns_when_weekly_governor_packet_source_truth_is_newer(self) -> None:
+    def test_publish_readiness_blocks_when_weekly_governor_packet_source_truth_is_newer(self) -> None:
         status = {
             "runtime_healing": {"summary": {"alert_state": "healthy"}},
         }
@@ -2165,11 +2273,11 @@ class AdminForecastTests(unittest.TestCase):
                     provider_routes=[],
                 )
 
-        self.assertEqual(payload["state"], "warning")
+        self.assertEqual(payload["state"], "blocked")
         self.assertEqual(payload["signals"]["weekly_governor_packet_freshness_state"], "stale")
         self.assertIn(
             "newer than the published weekly governor packet",
-            " ".join(payload["warning_reasons"]),
+            " ".join(payload["blocking_reasons"]),
         )
 
     def test_publish_readiness_blocks_when_weekly_governor_packet_freezes_launch(self) -> None:
@@ -2739,6 +2847,131 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["now"]["title"], "persist survival lane queue state")
         self.assertEqual(payload["now"]["lane"], "easy")
         self.assertNotEqual(payload["now"]["title"], "Idle")
+
+    def test_feedback_forge_surface_payload_routes_house_rule_questions_to_karma_forge(self) -> None:
+        weekly_pulse = {
+            "generated_at": "2026-04-23T10:04:57Z",
+            "next_checkpoint_question": "What evidence would justify a safe prototype?",
+            "top_support_or_feedback_clusters": [
+                {
+                    "cluster_id": "public_release_follow_through",
+                    "summary": "Downloads, updates, support closure, and trust copy must move in lockstep.",
+                }
+            ],
+            "governor_decisions": [
+                {
+                    "action": "focus_shift",
+                    "reason": "Keep the public trust and support loop coherent while the longest pole stays in Core Engine.",
+                }
+            ],
+        }
+        progress_report = {
+            "headline": "Progress report for a product becoming a build machine.",
+            "active_wave": "Next 12 Biggest Wins",
+            "active_wave_status": "complete",
+        }
+        support_surface = {
+            "packets": [],
+            "summary": {
+                "open_packet_count": 0,
+                "needs_human_response": 2,
+                "closure_waiting_on_release_truth": 1,
+                "top_clusters": [{"kind": "feedback", "target_repo": "chummer6-hub", "count": 3}],
+            },
+            "freshness": {"state": "fresh", "label": "fresh"},
+        }
+
+        with mock.patch.object(self.admin, "support_case_surface_payload", return_value=support_surface), mock.patch.object(
+            self.admin,
+            "load_json_payload",
+            side_effect=lambda path: weekly_pulse if path == self.admin.CHUMMER_WEEKLY_PRODUCT_PULSE_PATH else {},
+        ), mock.patch.object(
+            self.admin,
+            "load_published_json_payload",
+            side_effect=lambda filename: progress_report if filename == self.admin.PROGRESS_REPORT_FILENAME else {},
+        ):
+            payload = self.admin.feedback_forge_surface_payload(
+                "Does this house rule feedback belong in Karma Forge, and what should we ask next?"
+            )
+
+        self.assertIn("KARMA FORGE", payload["answer"])
+        self.assertIn("Icanpreneur", payload["answer"])
+        self.assertEqual(payload["support_snapshot"]["needs_human_response"], 2)
+        self.assertEqual(payload["discovery_lane"]["entry_lane"], "Icanpreneur adaptive interview")
+        self.assertTrue(any(item["label"] == "KARMA FORGE horizon" for item in payload["evidence"]))
+        self.assertEqual(
+            payload["suggested_questions"][0],
+            "What house-rule pain is actually blocking play at the table?",
+        )
+
+    def test_karma_forge_interview_tracks_payload_includes_gm_track(self) -> None:
+        tracks = self.admin.karma_forge_interview_tracks_payload()
+
+        gm_track = next(item for item in tracks if item["key"] == "gm_house_rule_track")
+        self.assertEqual(gm_track["family"], "gm_house_rule")
+        self.assertIn("What rule does your table change most often?", gm_track["questions"])
+
+    def test_feedback_forge_house_rule_draft_payload_builds_house_rule_packets(self) -> None:
+        self.admin.utc_now = lambda: self.admin.parse_iso("2026-04-23T12:00:00Z")
+
+        payload = self.admin.feedback_forge_house_rule_draft_payload(
+            {
+                "feedback_question": "Can we make campaign gear unlocks visible before play?",
+                "discovery_track": "gm_house_rule_track",
+                "respondent_role": "GM",
+                "edition": "SR6",
+                "table_type": "home_campaign",
+                "user_words_summary": "I want to mark gear unavailable until the campaign unlocks it.",
+                "current_workaround": "Manual review and Discord notes.",
+                "interpreted_need_summary": "Campaign-scoped availability overlays with player-visible receipts and rollback.",
+                "impact_notes": "Players should see the restriction before they join and get a before/after build diff.",
+                "shareability_notes": "This should eventually become a reusable pack for other tables.",
+            }
+        )
+
+        packet = payload["packet"]
+        self.assertEqual(packet["source"]["respondent_role"], "GM")
+        self.assertIn("availability", packet["affected_domains"])
+        self.assertIn("campaign", packet["desired_scope"])
+        self.assertIn("reusable_pack_candidate", packet["desired_scope"])
+        self.assertIn("CampaignOverlayPackage", packet["likely_chummer_objects"])
+        self.assertTrue(packet["trust_requirements"]["player_visible_before_join"])
+        self.assertEqual(packet["classification"]["proposed_route"], "KARMA_FORGE")
+        self.assertEqual(payload["candidate"]["candidate_decision"], "campaign_overlay_candidate")
+        self.assertIn("What rule does your table change most often?", payload["next_questions"])
+
+    def test_api_admin_feedback_forge_house_rule_draft_uses_helper(self) -> None:
+        with mock.patch.object(
+            self.admin,
+            "feedback_forge_house_rule_draft_payload",
+            return_value={"packet": {"id": "hrp_demo"}},
+        ) as helper:
+            payload = self.admin.api_admin_feedback_forge_house_rule_draft(
+                feedback_question="Does this belong in Karma Forge?",
+                discovery_track="gm_house_rule_track",
+                respondent_role="GM",
+                edition="SR6",
+                table_type="home_campaign",
+                user_words_summary="Need campaign rule overlays",
+                current_workaround="Discord",
+                interpreted_need_summary="Overlay plus receipts",
+                impact_notes="Need before-join visibility",
+                shareability_notes="Could be reusable",
+            )
+
+        helper.assert_called_once()
+        self.assertEqual(payload["packet"]["id"], "hrp_demo")
+
+    def test_api_admin_feedback_forge_uses_helper(self) -> None:
+        with mock.patch.object(
+            self.admin,
+            "feedback_forge_surface_payload",
+            return_value={"answer": "ok", "question": "why"},
+        ) as helper:
+            payload = self.admin.api_admin_feedback_forge("why")
+
+        helper.assert_called_once_with("why")
+        self.assertEqual(payload["answer"], "ok")
 
 
 if __name__ == "__main__":

@@ -599,6 +599,7 @@ path: {tmp_path / "hub-registry"}
 def test_materialize_status_plane_defaults_status_snapshot_out_for_live_runs(monkeypatch, tmp_path: Path) -> None:
     out_path = tmp_path / "STATUS_PLANE.generated.yaml"
     snapshot_path = tmp_path / "status-plane.verify.json"
+    load_calls: list[tuple[object | None, bool]] = []
     admin_status = {
         "generated_at": "2026-04-20T12:00:00Z",
         "public_status": {
@@ -611,11 +612,16 @@ def test_materialize_status_plane_defaults_status_snapshot_out_for_live_runs(mon
         "groups": [],
     }
     monkeypatch.setattr(materialize_status_plane_module, "DEFAULT_STATUS_JSON_SNAPSHOT_PATH", snapshot_path)
-    monkeypatch.setattr(materialize_status_plane_module, "load_admin_status", lambda *_args, **_kwargs: admin_status)
+    def fake_load_admin_status(status_json_path, *, use_default_snapshot=True):
+        load_calls.append((status_json_path, use_default_snapshot))
+        return admin_status
+
+    monkeypatch.setattr(materialize_status_plane_module, "load_admin_status", fake_load_admin_status)
 
     result = materialize_status_plane_module.main(["--out", str(out_path)])
 
     assert result == 0
+    assert load_calls == [(None, False)]
     snapshot_payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
     assert snapshot_payload["generated_at"] == "2026-04-20T12:00:00Z"
 

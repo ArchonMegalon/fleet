@@ -1,97 +1,221 @@
 # Next Session Handoff
 
-## What changed
-- Tightened `Character Roster` so it now uses the configured roster path instead of a pure placeholder posture.
-- Added roster watch-folder tree content, saved-runner entries, actual watch-folder status, and denser roster commands.
-- Added a deterministic portrait source placeholder path so Avalonia and Blazor now expose the same roster portrait contract.
-- Fixed Fleet shard honesty again: stale `streaming` no longer survives when a shard has a worker PID and run paths but zero output timestamps and zero output artifacts.
-- Restarted `fleet-design-supervisor` so the new Fleet honesty logic is live.
+## Current Session Scope
 
-## Exact files changed
-- `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/DesktopDialogFactory.cs`
-- `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs`
-- `/docker/fleet/scripts/chummer_design_supervisor.py`
-- `/docker/fleet/tests/test_chummer_design_supervisor.py`
+The active work was Fleet OODA stabilization, blocker prevention before materialization, and verification that the Chummer design shards are progressing on EA-only worker lanes.
 
-## Exact validations run and results
-- `dotnet test /docker/chummercomplete/chummer-presentation/Chummer.Tests/Chummer.Tests.csproj --filter 'FullyQualifiedName~DesktopDialogFactoryTests' --nologo`
-  - Result: `50 passed`
-- `dotnet test /docker/chummercomplete/chummer-presentation/Chummer.Tests/Chummer.Tests.csproj --filter 'FullyQualifiedName~DesktopDialogFactoryTests|FullyQualifiedName~AvaloniaFlagshipUiGateTests|FullyQualifiedName~DesktopShellRulesetCatalogTests|FullyQualifiedName~BlazorShellComponentTests|FullyQualifiedName~DialogCoordinatorTests|FullyQualifiedName~DesktopPreferenceRuntimeTests|FullyQualifiedName~CharacterOverviewPresenterTests|FullyQualifiedName~DualHeadAcceptanceTests|FullyQualifiedName~RulesetUiDirectiveCatalogTests' --nologo`
-  - Result: `231 passed`
-- `bash /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/chummer5a-layout-hard-gate.sh`
-  - Result: `PASS`
-- `bash /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/classic-dense-workbench-posture-gate.sh`
-  - Result: `PASS`
-- `bash /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/chummer5a-screenshot-review-gate.sh`
-  - Result: `PASS`
-- `bash /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/chummer5a-desktop-workflow-parity-check.sh`
-  - Result: `PASS`
-- `pytest -q /docker/fleet/tests/test_chummer_design_supervisor.py -k 'preserves_waiting_for_model_output or waiting_tail_overrides_stale_streaming_progress or marks_missing_output_artifacts_instead_of_streaming or waiting_overrides_stale_streaming_without_output_evidence'`
-  - Result: `4 passed`
+The operator Codex session should stay on OpenAI. The Fleet worker processes should stay on EA via `scripts/codex-shims/codexea`.
 
-## Exact commits and pushes
-- `chummer6-ui`
-  - Commit: `3bd37458`
-  - Message: `Tighten roster watch and portrait posture`
-  - Pushed to:
-    - `origin/main`
-    - `origin/safe-push-fix-windows-installer-payload-20260401`
-- `fleet`
-  - Commit: `9470ff55`
-  - Message: `Mark silent shards waiting without output evidence`
-  - Pushed to:
-    - `origin/main`
+Do not expose secrets from runtime files, environment files, browser state, or credential stores.
 
-## What still differs from Chummer5a, item by item, and why
-- `Character Roster`
-  - Closer now, but still not a true legacy roster coordinator.
-  - Reason: there is still no real mugshot/image pipeline and no actual live watch-folder/file-watcher behavior; the portrait and watch folder are still deterministic placeholders over shared dialog state.
-- `Master Index`
-  - Closer now, but still not a fully interactive legacy browser.
-  - Reason: snippet/result posture is better, but source switching, result activation, and page-open follow-through still ride the shared dialog model instead of a dedicated stateful coordinator.
-- High-use add/select dialogs
-  - Closer now, but still not exact Chummer5a selectors.
-  - Reason: category/result posture and `Add & More` are tighter, but the dialogs still lack exact legacy category-tree coupling and fuller per-form coordinator behavior.
-- Edit/remove utility dialogs
-  - Denser now, but still not fully identical.
-  - Reason: they still run on shared dialog primitives instead of dedicated per-form legacy coordinators.
-- `Blazor`
-  - Still not pixel-identical.
-  - Reason: browser font metrics, focus semantics, and menu behavior differ from desktop.
-- `SR4` / `SR6`
-  - Still partially neutral in dialog wording.
-  - Reason: not every dialog title, label, and message is authored per edition yet.
+## Current Live Fleet State
 
-## Current ETA
-- Remaining roster true coordinator follow-through: `0.5–1 working day`
-- Remaining `Master Index` dedicated coordinator follow-through: `0.25–0.5 working day`
-- Remaining selector and utility coordinator parity: `0.5–1 working day`
-- Remaining SR4/SR6 authored wording beyond the shell layer: `0.5 working day`
-- Honest `98%+` parity claim across Avalonia + Blazor + SR4/SR5/SR6 wording: `1.0–2.0 working days`
+Last checked on 2026-04-25 around 15:20 UTC.
 
-## Live Fleet truth relevant to the next slice
-- Before the latest fix, all `13` active shard state files claimed `streaming` while exposing:
-  - no `active_run_worker_first_output_at`
-  - no `active_run_worker_last_output_at`
-  - no `latest_stdout_at`
-  - no `latest_stderr_at`
-  - no output artifact paths that actually existed
-- `shard-13` was on EA, not `code.girschele.com`, using `acct-ea-core-01`.
-- After applying `9470ff55` and restarting `fleet-design-supervisor`, the aggregate board is temporarily repopulating from zero:
-  - current `active_run_count = 0`
-  - top-level shard entries are blank while the supervisor repopulates state
-- So the honest live statement right now is:
-  - the previous board overstated progress
-  - the new honesty logic is live
-  - the aggregate board needs a fresh post-restart sample before any positive shard-progress claim is credible
+- Fleet healthcheck: green.
+- Controller: `up`.
+- Design supervisor: `up`.
+- Design overwatch: `healthy`.
+- Active shard count: `13/13`.
+- Productive active shard count: `13`.
+- Nonproductive active shard count: `0`.
+- Progress evidence: `{"repo_work_detected": 13}`.
+- Stale shards: none observed.
+- Inactive shards: none observed.
+- Shard blockers: none observed.
+- Current ETA: `5d-1.8w`.
+- Open milestones: `27`.
+- Open milestone split: `12` in progress, `15` not started.
+- Active worker route audit: `0` non-EA active runs.
+- Active worker models: `ea-coder-hard`, `ea-coder-hard-batch`.
+- Loop process audit: `13` unique shard loop state roots, no duplicate shard roots.
 
-## Real blocker and exact external step if blocked
-- No host-local blocker for ongoing UI parity work.
-- The broader product still has the previously known external Windows-proof blocker for honest Windows green status, but that does not block the current UI parity slices.
+## Important Recent Fixes
 
-## Exact next slice to work on
-1. Author SR4/SR6 dialog wording beyond the shell layer in `Chummer.Presentation/Rulesets/RulesetUiDirectiveCatalog.cs` and the highest-use dialog factories that still read neutral.
-2. Re-run the focused parity suite and the four parity gates.
-3. Commit and push the green slice immediately.
-4. Re-sample Fleet shard truth after the supervisor repopulates.
-5. Start next working slice.
+### Healthcheck Defaults
+
+The healthcheck used to report false unhealthy locally because it defaulted to `/var/lib/codex-fleet/chummer_design_supervisor` while local Fleet state is under `/docker/fleet/state/chummer_design_supervisor`.
+
+Updated:
+
+- `scripts/healthcheck_design_supervisor.py`
+- `tests/test_healthcheck_design_supervisor.py`
+
+Current behavior:
+
+- Default state root is derived from `FLEET_WORKSPACE_ROOT` or `/docker/fleet`.
+- Default watchdog shard is `shard-1`.
+- Default watchdog max silence is `900s`.
+- `python3 scripts/healthcheck_design_supervisor.py` passes without env overrides.
+
+### OODA Materialized Status Repair
+
+The stale `status-live-refresh.materialized.json` had old blocked/low-count values while live state was healthy. OODA now refreshes the materialized snapshot every cycle from current supervisor state plus active-shards evidence.
+
+Updated:
+
+- `scripts/ooda_design_supervisor.py`
+- `tests/test_ooda_design_supervisor.py`
+
+Current behavior:
+
+- `state/chummer_design_supervisor/status-live-refresh.materialized.json` is regenerated by OODA.
+- Active runs, shard rows, ETA aliases, and progress evidence are preserved.
+- `remaining_open_milestones` is derived correctly from `eta`, `successor_wave_eta`, or successor aliases.
+
+### Stale Overwatch Process Restart
+
+After patching OODA, `fleet-design-overwatch` still had the old Python module loaded and kept publishing `remaining_open_milestones=0`.
+
+Remedy applied:
+
+- Restarted only `fleet-design-overwatch`.
+- Confirmed new OODA state reports `remaining_open_milestones=27`.
+
+If this reappears, restart only overwatch:
+
+```bash
+docker restart fleet-design-overwatch
+```
+
+Then verify:
+
+```bash
+python3 scripts/ooda_design_supervisor.py --once
+python3 - <<'PY'
+import json
+from pathlib import Path
+p=json.loads(Path("state/design_supervisor_ooda/state.json").read_text())
+print(p.get("eta_status"), p.get("eta_human"), p.get("remaining_open_milestones"))
+PY
+```
+
+## Validation Commands Already Run
+
+These passed in the current state:
+
+```bash
+python3 scripts/healthcheck_design_supervisor.py
+python3 scripts/ooda_design_supervisor.py --once
+python3 -m pytest -q tests/test_ooda_design_supervisor.py tests/test_healthcheck_design_supervisor.py
+python3 -m py_compile scripts/ooda_design_supervisor.py scripts/healthcheck_design_supervisor.py scripts/chummer_design_supervisor.py
+python3 /docker/chummercomplete/chummer-design/scripts/ai/validate_product_invariants.py
+python3 /docker/chummercomplete/chummer-design/scripts/ai/validate_sync_manifest.py
+```
+
+Observed results:
+
+- Healthcheck: `ok`.
+- Focused pytest: `23 passed`.
+- Design validators: `ok`.
+- Pre-materialize temp artifact scan: clean.
+- Free space: about `55G` available on `/docker/fleet`, filesystem around `89%` used.
+
+## Pre-Materialize Readiness
+
+Before materializing generated artifacts, repeat these checks:
+
+```bash
+python3 scripts/healthcheck_design_supervisor.py
+python3 scripts/ooda_design_supervisor.py --once
+python3 -m py_compile scripts/ooda_design_supervisor.py scripts/healthcheck_design_supervisor.py scripts/chummer_design_supervisor.py
+python3 /docker/chummercomplete/chummer-design/scripts/ai/validate_product_invariants.py
+python3 /docker/chummercomplete/chummer-design/scripts/ai/validate_sync_manifest.py
+```
+
+Then check routing, shard progress, and temp files:
+
+```bash
+python3 - <<'PY'
+import json, datetime as dt
+from pathlib import Path
+UTC=dt.timezone.utc
+now=dt.datetime.now(UTC)
+def parse(value):
+    text=str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return dt.datetime.fromisoformat(text.replace("Z","+00:00")).astimezone(UTC)
+    except ValueError:
+        return None
+payload=json.loads(Path("state/chummer_design_supervisor/active_shards.json").read_text())
+rows=payload.get("active_shards") or []
+print("active_shards", len(rows), "configured", payload.get("configured_shard_count"))
+print("progress_evidence_counts", payload.get("progress_evidence_counts"))
+risks=[]
+for row in rows:
+    name=row.get("name") or row.get("shard_id")
+    last=parse(row.get("active_run_worker_last_output_at") or row.get("worker_last_output_at") or row.get("updated_at"))
+    age=int((now-last).total_seconds()) if last else None
+    evidence=row.get("active_run_progress_evidence")
+    state=row.get("active_run_progress_state")
+    alive=row.get("active_run_process_alive")
+    model=row.get("selected_model")
+    alias=row.get("selected_account_alias")
+    print(f"{name}: state={state} evidence={evidence} last_output_age_s={age} alive={alive} model={model} alias={alias}")
+    if age is None or age > 900 or state not in {"streaming","running_silent","container_scoped"} or evidence != "repo_work_detected":
+        risks.append((name,state,evidence,age,alive))
+print("progress_risks", len(risks))
+for item in risks:
+    print("risk", item)
+PY
+
+find .codex-studio/published -maxdepth 1 -type f \( -name '*.generated.*.json' -o -name 'compile.manifest.*.json' \) -printf '%p\n'
+find state/chummer_design_supervisor -maxdepth 3 -type f \( -name '*.tmp' -o -name '.*.tmp' \) -mmin +5 -printf '%p\n' 2>/dev/null
+```
+
+Avoid broad recursive `du -sh state/chummer_design_supervisor state/design_supervisor_ooda ...`; that traversal can hang on large state trees. Prefer bounded `find -maxdepth` checks.
+
+## Materialization Context
+
+The generated/published plane already has many dirty files from current and prior fleet materialization work. Do not reset or discard unrelated changes.
+
+Relevant currently dirty/generated areas include:
+
+- `.codex-studio/published/**`
+- `.codex-design/product/**`
+- `.codex-design/repo/IMPLEMENTATION_SCOPE.md`
+- `scripts/chummer_design_supervisor.py`
+- `scripts/healthcheck_design_supervisor.py`
+- `scripts/ooda_design_supervisor.py`
+- related `tests/**`
+- `LTDs.md`
+- runtime example/config files
+
+There are also untracked generated/feedback files. Treat them as existing work unless the user explicitly asks for cleanup.
+
+## Design Queue Context
+
+The design queue has been expanded to cover the Chummer6 design:
+
+- Queue: `178` items total.
+- Queue status summary at last known expansion: `40 complete`, `41 in_progress`, `97 not_started`.
+- Registry: `35` milestones.
+- Registry status summary at last known expansion: `8 complete`, `12 in_progress`, `15 not_started`.
+- Open milestones: `108`, `109`, `111` through `135`.
+- Critical path: `109 -> 114 -> 115 -> 116 -> 117 -> 119 -> 120 -> 125 -> 126 -> 132 -> 134 -> 135`.
+
+Canonical and mirror files touched during that expansion:
+
+- `/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml`
+- `/docker/fleet/.codex-design/product/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml`
+- `/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md`
+- `/docker/fleet/.codex-design/product/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md`
+- `/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml`
+- `/docker/fleet/.codex-design/product/NEXT_90_DAY_QUEUE_STAGING.generated.yaml`
+- `/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml`
+
+## Suggested Next Moves
+
+1. Run the pre-materialize checks above.
+2. If still green, materialize only the required generated artifacts for the user’s requested slice.
+3. Re-run health/OODA after materialization.
+4. Re-run focused tests for any scripts touched.
+5. Do not commit unless explicitly asked.
+
+## Known Non-Blockers
+
+- `/docker/fleet` filesystem is high but acceptable at about `89%` used with about `55G` free.
+- The fleet is intentionally using EA worker lanes; this Codex operator session may remain on OpenAI.
+- Some old generated and feedback files are dirty/untracked; they are not current blockers by themselves.

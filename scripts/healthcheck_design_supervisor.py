@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
@@ -11,8 +12,12 @@ from typing import Any
 
 
 UTC = timezone.utc
-DEFAULT_STATE_ROOT = Path("/var/lib/codex-fleet/chummer_design_supervisor")
+DEFAULT_WORKSPACE_ROOT = Path(os.environ.get("FLEET_WORKSPACE_ROOT", "/docker/fleet"))
+DEFAULT_STATE_ROOT = DEFAULT_WORKSPACE_ROOT / "state" / "chummer_design_supervisor"
 LOOP_PATTERN = "python3 scripts/chummer_design_supervisor.py loop"
+SUPERVISOR_SERVICE = "fleet-design-supervisor"
+DEFAULT_WATCHDOG_SHARD = "shard-1"
+DEFAULT_WATCHDOG_MAX_SILENT_SECONDS = 900
 
 
 def _parse_iso(text: str) -> datetime | None:
@@ -37,8 +42,42 @@ def _mapping_copy(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def _runtime_env_candidates() -> tuple[Path, ...]:
+    return (
+        DEFAULT_WORKSPACE_ROOT / "runtime.env",
+        DEFAULT_WORKSPACE_ROOT / "runtime.ea.env",
+        DEFAULT_WORKSPACE_ROOT / ".env",
+    )
+
+
+def _runtime_env_value(name: str, default: str = "") -> str:
+    direct = str(os.environ.get(name, "") or "").strip()
+    if direct:
+        return direct
+    for candidate in _runtime_env_candidates():
+        if not candidate.is_file():
+            continue
+        try:
+            lines = candidate.read_text(encoding="utf-8-sig", errors="ignore").splitlines()
+        except OSError:
+            continue
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[7:].strip()
+            key, value = line.split("=", 1)
+            if key.strip() != name:
+                continue
+            resolved = value.strip().strip("'").strip('"')
+            if resolved:
+                return resolved
+    return default
+
+
 def _env_int(name: str, default: int) -> int:
-    raw_value = str(os.environ.get(name, str(default)) or "").strip()
+    raw_value = str(_runtime_env_value(name, str(default)) or "").strip()
     try:
         return int(raw_value)
     except ValueError:
@@ -250,24 +289,63 @@ def _loop_process_running() -> tuple[bool, str]:
             check=False,
             capture_output=True,
             text=True,
+            timeout=8,
         )
     except Exception as exc:  # pragma: no cover
         return False, f"pgrep_error={exc}"
 
     pids = [line.strip() for line in str(completed.stdout or "").splitlines() if line.strip()]
     if completed.returncode != 0 or not pids:
-        return False, "loop_process_missing"
+        return _container_loop_process_running()
     return True, f"loop_pids={','.join(pids[:4])}"
 
 
-def main() -> int:
+def _container_loop_process_running() -> tuple[bool, str]:
+    try:
+        completed = subprocess.run(
+            ["docker", "compose", "exec", "-T", SUPERVISOR_SERVICE, "pgrep", "-f", LOOP_PATTERN],
+            cwd=str(DEFAULT_WORKSPACE_ROOT),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=12,
+        )
+    except FileNotFoundError:
+        return False, "loop_process_missing"
+    except subprocess.TimeoutExpired:
+        return False, "loop_process_missing container_probe_timeout"
+    except Exception as exc:  # pragma: no cover
+        return False, f"loop_process_missing container_probe_error={exc}"
+
+    pids = [line.strip() for line in str(completed.stdout or "").splitlines() if line.strip()]
+    if completed.returncode != 0 or not pids:
+        stderr = str(completed.stderr or "").strip().splitlines()
+        suffix = f" container_probe_stderr={stderr[-1][:180]}" if stderr else ""
+        return False, f"loop_process_missing{suffix}"
+    return True, f"loop_container_pids={','.join(pids[:4])}"
+
+
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Healthcheck the Chummer design supervisor loop.")
+    parser.add_argument("--json", action="store_true", help="Render machine-readable health details.")
+    args, _unknown = parser.parse_known_args(argv)
+    return args
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
     state_root = Path(
         str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT") or DEFAULT_STATE_ROOT).strip()
         or str(DEFAULT_STATE_ROOT)
     )
     max_age_seconds = _env_int("CHUMMER_DESIGN_SUPERVISOR_HEALTH_MAX_AGE_SECONDS", 900)
-    watchdog_shard = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD", "") or "").strip()
-    watchdog_max_silent_seconds = _env_int("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS", 0)
+    watchdog_shard = str(
+        os.environ.get("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD", DEFAULT_WATCHDOG_SHARD) or ""
+    ).strip()
+    watchdog_max_silent_seconds = _env_int(
+        "CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS",
+        DEFAULT_WATCHDOG_MAX_SILENT_SECONDS,
+    )
     watchdog_startup_grace_seconds = _env_int("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS", 900)
 
     loop_ok, loop_reason = _loop_process_running()
@@ -278,7 +356,33 @@ def main() -> int:
         watchdog_max_silent_seconds,
         watchdog_startup_grace_seconds,
     )
-    if loop_ok and state_ok and watchdog_ok:
+
+    ok = loop_ok and state_ok and watchdog_ok
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                    "ok": ok,
+                    "status": "ok" if ok else "unhealthy",
+                    "state_root": str(state_root),
+                    "max_age_seconds": max_age_seconds,
+                    "loop_ok": loop_ok,
+                    "loop_reason": loop_reason,
+                    "state_ok": state_ok,
+                    "state_reason": state_reason,
+                    "watchdog_ok": watchdog_ok,
+                    "watchdog_reason": watchdog_reason,
+                    "watchdog_shard": watchdog_shard,
+                    "watchdog_max_silent_seconds": watchdog_max_silent_seconds,
+                    "watchdog_startup_grace_seconds": watchdog_startup_grace_seconds,
+                },
+                sort_keys=True,
+            )
+        )
+        return 0 if ok else 1
+
+    if ok:
         print(f"ok ({loop_reason}; {state_reason}; {watchdog_reason})")
         return 0
 

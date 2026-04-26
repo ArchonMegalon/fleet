@@ -758,6 +758,27 @@ def _ea_api_token() -> str:
     return _auth_env_value("EA_MCP_API_TOKEN") or _auth_env_value("EA_API_TOKEN")
 
 
+def _operator_principal_id() -> str:
+    for env_name in ("EA_OPERATOR_PRINCIPAL_IDS", "EA_OPERATOR_PRINCIPALS"):
+        raw = _env_value(env_name)
+        if not raw:
+            continue
+        for item in raw.split(","):
+            normalized = str(item or "").strip()
+            if normalized:
+                return normalized
+    return ""
+
+
+def _ea_principal_id(*, operator_scope: bool = False) -> str:
+    explicit = _env_value("EA_MCP_PRINCIPAL_ID") or _env_value("EA_PRINCIPAL_ID")
+    if explicit:
+        return explicit
+    if operator_scope:
+        return _operator_principal_id() or "codex-fleet"
+    return _env_value("EA_DEFAULT_PRINCIPAL_ID") or "codexea-route"
+
+
 def _ea_http_error_detail(value: str) -> str:
     detail = str(value or "").strip()
     if detail == "missing_api_token":
@@ -845,13 +866,10 @@ def _ea_http_payload(
     method: str = "GET",
     payload: dict[str, Any] | None = None,
     timeout_seconds: float = 1.0,
+    operator_scope: bool = False,
 ) -> dict[str, Any] | None:
     global _LAST_EA_HTTP_ERROR
-    principal_id = (
-        _env_value("EA_MCP_PRINCIPAL_ID")
-        or _env_value("EA_PRINCIPAL_ID")
-        or "codexea-route"
-    )
+    principal_id = _ea_principal_id(operator_scope=operator_scope)
     headers = {"X-EA-Principal-ID": principal_id}
     api_token = _ea_api_token()
     if api_token:
@@ -1009,6 +1027,7 @@ def _ea_onemin_billing_refresh_payload(
             "provider_api_continue_on_rate_limit": provider_api_continue_on_rate_limit,
         },
         timeout_seconds=_onemin_billing_timeout_seconds(),
+        operator_scope=provider_api_all_accounts,
     )
 
 

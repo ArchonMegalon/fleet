@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-22T16:46:13Z'
+generated_at: '2026-04-26T15:17:48Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-13
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -56,9 +56,6 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
-  - mobile play shell
-  - ui kit and flagship polish
-  - media artifacts
   - desktop client
 quality_policy:
   bar: top_flagship_grade
@@ -68,12 +65,12 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: desktop executable exit gate proof is stale (92640s old)
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-22T16:45:55Z'
+  generated_at: '2026-04-26T15:15:42Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -106,8 +103,8 @@ frontier:
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Bind parity-lab evidence into veteran readiness truth''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-23T07:51:55Z'
+      desktop_client.'
+    predicted_completion_at: '2026-04-27T06:23:30Z'
     range_low_hours: 8.74
     range_high_hours: 21.45
     remaining_open_milestones: 1
@@ -120,7 +117,7 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-source_queue_fingerprint: next90-staging-20260415-next-big-wins-widening
+source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
 queue_package:
   repo: fleet
   package_id: next90-m103-fleet-parity-lab-readiness
@@ -135,3 +132,22 @@ queue_package:
   - .codex-design
   - .codex-studio
   - feedback
+eta:
+  status: blocked
+  eta_human: 9h-21h after unblock
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic+external_blocker
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: 'Error: 502: upstream_unavailable:onemin/gpt-5.4:onemin_exhausted_for_request:352564:ONEMIN_AI_API_KEY,ONEMIN_AI_API_KEY_FALLBACK_1,ONEMIN_AI_API_KEY_FALLBACK_10,ONEMIN_AI_API_KE...'
+  summary: 'Milestone ''Bind parity-lab evidence into veteran readiness truth'' remains
+    open under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.
+    Current external blocker: Error: 502: upstream_unavailable:onemin/gpt-5.4:onemin_exhausted_for_request:352564:ONEMIN_AI_API_KEY,ONEMIN_AI_API_KEY_FALLBACK_1,ONEMIN_AI_API_KEY_FALLBACK_10,ONEMIN_AI_API_KE...'
+  predicted_completion_at: ''
+  range_low_hours: 8.74
+  range_high_hours: 21.45
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 1.65

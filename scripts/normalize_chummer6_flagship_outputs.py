@@ -13,13 +13,13 @@ PARTICIPATE_URL = "https://chummer.run/participate"
 
 FLAGSHIP_PAGE_COPY: dict[str, dict[str, str]] = {
     "readme": {
-        "intro": "Chummer6 is a public preview for Shadowrun rulings that show their work instead of hiding the math.",
-        "body": "The project is building visible reasoning instead of trust-me table lore. The public surface already gives you the guide, the status readout, future lanes, support paths, and proof artifacts where they are ready to inspect.",
+        "intro": "Chummer6 is the human-facing Shadowrun campaign OS for rulings, prep, and campaign continuity that show their work instead of hiding the math.",
+        "body": "The project is building visible reasoning instead of trust-me table lore. The public surface gives you the guide, the status readout, future lanes, support paths, and proof artifacts where they are ready to inspect.",
         "kicker": "Start with the guide, inspect the visible surfaces, and decide whether the direction earns your trust.",
     },
     "what_chummer6_is": {
-        "intro": "Chummer6 is Shadowrun character software aimed at making the math inspectable instead of mystical.",
-        "body": "The pitch is visible reasoning, clearer modifier trails, and a more trustworthy prep-to-play surface. The public preview is early, but the value proposition is already concrete enough to judge on its merits instead of waiting for folklore or wishful thinking.",
+        "intro": "Chummer6 is Shadowrun campaign-OS tooling aimed at making rulings, prep, and table state inspectable instead of mystical.",
+        "body": "The pitch is visible reasoning, clearer modifier trails, grounded campaign artifacts, and a more trustworthy prep-to-play surface. The public preview is still moving, but the value proposition is concrete enough to judge on its merits instead of waiting for folklore or wishful thinking.",
         "kicker": "Judge the promise by the receipts, not by mystery or vibes.",
     },
     "current_phase": {

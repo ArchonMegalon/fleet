@@ -356,10 +356,12 @@ if output_path and output_path.exists():
         output_empty = True
 
 status_matches = re.findall(r"unexpected status (\d{3})", stderr_text)
+if not status_matches:
+    status_matches = re.findall(r"returned HTTP (\d{3})", stderr_text)
 http_status = int(status_matches[-1]) if status_matches else None
 cf_matches = re.findall(r"cf-ray:\s*([A-Za-z0-9-]+)", stderr_text, flags=re.I)
 cf_ray = cf_matches[-1] if cf_matches else ""
-retryable_codes = {500, 502, 503, 504, 520, 522, 523, 524}
+retryable_codes = {404, 429, 500, 502, 503, 504, 520, 522, 523, 524}
 reason = ""
 detail = ""
 retryable = False

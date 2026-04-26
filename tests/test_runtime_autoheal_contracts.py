@@ -8,6 +8,7 @@ DOCKER_COMPOSE = Path("/docker/fleet/docker-compose.yml")
 NGINX_CONF = Path("/docker/fleet/gateway/nginx.conf")
 REBUILD_LOOP = Path("/docker/fleet/scripts/rebuild-loop.sh")
 RUN_OODA_LOOP = Path("/docker/fleet/scripts/run_ooda_design_supervisor.sh")
+RUN_FLEET_OODA_CODEX_TIMER = Path("/docker/fleet/scripts/run_fleet_ooda_codex_timer.sh")
 RUNTIME_ENV_EXAMPLE = Path("/docker/fleet/runtime.env.example")
 README = Path("/docker/fleet/README.md")
 
@@ -18,6 +19,8 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn("python /opt/codex-fleet/scripts/healthcheck_controller.py", compose)
         self.assertIn("FLEET_CONTROLLER_HEARTBEAT_PATH: /var/lib/codex-fleet/controller-heartbeat.json", compose)
         self.assertIn('FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS: "45"', compose)
+        self.assertIn('FLEET_CONTROLLER_HEALTH_TIMEOUT_SECONDS: "10"', compose)
+        self.assertIn('FLEET_CONTROLLER_HEALTH_ALLOW_HEARTBEAT_ONLY: "1"', compose)
 
     def test_auditor_healthcheck_uses_dedicated_script_and_run_budget(self) -> None:
         compose = DOCKER_COMPOSE.read_text(encoding="utf-8")
@@ -83,6 +86,14 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn('ln -sfn "${current_alias}/state.json" "${state_root}/state.json"', script)
         self.assertIn("Path('/var/lib/codex-fleet/design_supervisor_ooda/current_8h/state.json')", compose)
 
+    def test_fleet_ooda_timer_prompt_bounds_live_refresh_commands(self) -> None:
+        script = RUN_FLEET_OODA_CODEX_TIMER.read_text(encoding="utf-8")
+        self.assertIn('timeout_seconds="${FLEET_OODA_CODEX_TIMEOUT_SECONDS:-1200}"', script)
+        self.assertIn('post_guard_timeout_seconds="${FLEET_OODA_CODEX_POST_GUARD_TIMEOUT_SECONDS:-120}"', script)
+        self.assertIn("Wrap status, live-refresh, guard, keeper, docker-log, and test commands in explicit timeouts", script)
+        self.assertIn("timeout 90s scripts/chummer_design_supervisor.py status --json --live-refresh", script)
+        self.assertIn('timeout "${post_guard_timeout_seconds}s" python3 scripts/fleet_ooda_timer_guard.py', script)
+
     def test_runtime_env_and_readme_document_autoheal(self) -> None:
         env_example = RUNTIME_ENV_EXAMPLE.read_text(encoding="utf-8")
         readme = README.read_text(encoding="utf-8")
@@ -102,9 +113,9 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn("FLEET_AUTOHEAL_ESCALATE_WINDOW_SECONDS=1800", env_example)
         self.assertIn("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_OWNER_IDS=", env_example)
         self.assertIn("CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER=", env_example)
-        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD=shard-13", env_example)
-        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS=900", env_example)
-        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=900", env_example)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD=shard-7", env_example)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS=240", env_example)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=90", env_example)
         self.assertIn("bounded auto-heal", readme)
         self.assertIn("FLEET_AUTOHEAL_ENABLED=true", readme)
         self.assertIn(
@@ -119,9 +130,9 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn("FLEET_AUDITOR_STARTUP_GRACE_SECONDS=180", readme)
         self.assertIn("FLEET_COMPOSE_PROJECT_NAME=fleet", readme)
         self.assertIn("FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS=3", readme)
-        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD=shard-13", readme)
-        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS=900", readme)
-        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=900", readme)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD=shard-7", readme)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS=240", readme)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=90", readme)
         self.assertIn("For EA / OneMinAI lanes, the supervisor now routes each shard dynamically", readme)
 
 

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import datetime as dt
 import hashlib
 import html
@@ -139,6 +141,7 @@ LOCAL_PROOF_FLOOR_COMMITS = (
     "fe4c621",
     "653380a",
     "b568034",
+    "a94dd245",
 )
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
@@ -154,6 +157,7 @@ REQUIRED_DECISION_SOURCE_GATES = {
     "launch_expand": (
         "package_authority",
         "weekly_input_health",
+        "weekly_launch_decision",
         "source_input_health",
         "decision_alignment",
         "successor_dependencies",
@@ -302,6 +306,8 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "local proof floor commit b568034 pinned for M106 closure-proof dependency package routing guard",
     "commit b568034 tightens the M106 governor packet closure proof",
     "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop",
+    "local proof floor commit a94dd245 pinned for M106 governor packet closure proof floor",
+    "commit a94dd245 tightens the M106 governor packet closure proof",
     "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -405,6 +411,8 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "local proof floor commit b568034",
     "commit b568034 tightens the M106 governor packet closure proof",
     "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop",
+    "local proof floor commit a94dd245",
+    "commit a94dd245 tightens the M106 governor packet closure proof",
     "do-not-reopen handoff routes remaining M106 work",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (
@@ -500,6 +508,9 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "run id:",
     "selected account",
     "selected model",
+    "started at:",
+    "first output at:",
+    "last output at:",
     "prompt path",
     "recent stderr tail",
     "active-run helper",
@@ -544,6 +555,8 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "chummer_design_supervisor.py",
     "chummer_design_supervisor.py status",
     "chummer_design_supervisor.py eta",
+    "Codex could not find system bubblewrap",
+    "vendored bubblewrap",
 )
 REQUIRED_LAUNCH_SIGNALS = (
     "journey_gate_state",
@@ -618,14 +631,55 @@ def _norm_list(value: Any) -> List[str]:
 def _disallowed_worker_proof_entries(entries: List[str]) -> List[str]:
     blocked: List[str] = []
     for entry in entries:
-        normalized_entry = entry.lower()
-        decoded_entry = urllib.parse.unquote(html.unescape(normalized_entry))
+        normalized_entries = _proof_text_variants(entry)
         for marker in DISALLOWED_WORKER_PROOF_COMMAND_MARKERS:
             normalized_marker = marker.lower()
-            if normalized_marker in normalized_entry or normalized_marker in decoded_entry:
+            if any(normalized_marker in candidate for candidate in normalized_entries):
                 blocked.append(entry)
                 break
     return blocked
+
+
+def _proof_text_variants(entry: str) -> List[str]:
+    raw = str(entry or "")
+    variants = {raw, raw.lower()}
+    current = raw
+    for _ in range(3):
+        decoded = urllib.parse.unquote(html.unescape(current))
+        if decoded == current:
+            break
+        variants.add(decoded)
+        variants.add(decoded.lower())
+        current = decoded
+    for candidate in list(variants):
+        variants.update(_encoded_text_variants(candidate))
+    return [variant.lower() for variant in variants if variant]
+
+
+def _encoded_text_variants(entry: str) -> List[str]:
+    compact = re.sub(r"\s+", "", str(entry or ""))
+    if len(compact) < 8:
+        return []
+    padded = compact + "=" * ((4 - len(compact) % 4) % 4)
+    decoded: List[str] = []
+    for decoder, value in (
+        (lambda text: base64.b64decode(text, validate=True), padded),
+        (base64.b32decode, padded.upper()),
+        (base64.a85decode, compact),
+        (base64.b85decode, compact),
+        (binascii.unhexlify, compact),
+    ):
+        try:
+            payload = decoder(value)
+        except (ValueError, binascii.Error):
+            continue
+        try:
+            text = payload.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        if text and sum(1 for char in text if char.isprintable() or char.isspace()) == len(text):
+            decoded.extend([text, urllib.parse.unquote(html.unescape(text))])
+    return decoded
 
 
 def _duplicate_proof_entries(entries: List[str]) -> List[str]:
@@ -691,6 +745,11 @@ def _local_commit_resolution(repo_root: Path) -> Dict[str, Any]:
 def _fleet_proof_path_scope_issues(entries: List[str]) -> List[str]:
     issues: List[str] = []
     allowed_prefixes = tuple(f"{root}/" for root in ALLOWED_PATHS)
+    relative_path_pattern = re.compile(
+        r"(?<![\w./-])((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+|"
+        r"README\.md|LTDs\.md|docker-compose\.yml|runtime(?:\.ea)?\.env\.example)"
+        r"(?![\w./-])"
+    )
     for entry in entries:
         text = str(entry or "").strip()
         first_token = text.split(maxsplit=1)[0] if text else ""
@@ -699,8 +758,10 @@ def _fleet_proof_path_scope_issues(entries: List[str]) -> List[str]:
             candidates.append(first_token)
         candidates.extend(re.findall(r"/docker/fleet/[^\s,;:]+", text))
         candidates.extend(re.findall(r"/docker/(?!fleet/)[^\s,;:]+", text))
+        candidates.extend(relative_path_pattern.findall(text))
         seen: set[str] = set()
         for candidate in candidates:
+            candidate = candidate.strip().rstrip(").]}'\".")
             if candidate in seen:
                 continue
             seen.add(candidate)
@@ -711,6 +772,14 @@ def _fleet_proof_path_scope_issues(entries: List[str]) -> List[str]:
                 issues.append(candidate)
                 continue
             elif candidate.startswith(tuple(f"{root}/" for root in ALLOWED_PATHS)):
+                relative = candidate
+            elif "/" in candidate or candidate in {
+                "README.md",
+                "LTDs.md",
+                "docker-compose.yml",
+                "runtime.env.example",
+                "runtime.ea.env.example",
+            }:
                 relative = candidate
             if relative and not relative.startswith(allowed_prefixes):
                 issues.append(candidate)
@@ -829,18 +898,46 @@ def _dependency_package_routes(
     design_queue: Dict[str, Any],
     queue: Dict[str, Any],
 ) -> Dict[str, Any]:
-    design_items_by_milestone: Dict[int, List[Dict[str, Any]]] = {}
-    queue_items_by_milestone: Dict[int, List[Dict[str, Any]]] = {}
-    for source, target in (
-        (design_queue.get("items") or [], design_items_by_milestone),
-        (queue.get("items") or [], queue_items_by_milestone),
-    ):
-        for item in source:
+    def _group_items_by_milestone_and_package(
+        source: Any,
+    ) -> tuple[Dict[int, Dict[str, Dict[str, Any]]], Dict[int, List[str]]]:
+        grouped: Dict[int, Dict[str, Dict[str, Any]]] = {}
+        duplicates: Dict[int, List[str]] = {}
+        for item in source or []:
             if not isinstance(item, dict):
                 continue
             milestone_id = _coerce_int(item.get("milestone_id"), -1)
-            if milestone_id >= 0:
-                target.setdefault(milestone_id, []).append(item)
+            if milestone_id < 0:
+                continue
+            package_id = str(item.get("package_id") or "").strip()
+            if not package_id:
+                continue
+            milestone_bucket = grouped.setdefault(milestone_id, {})
+            if package_id in milestone_bucket:
+                duplicates.setdefault(milestone_id, []).append(package_id)
+                continue
+            milestone_bucket[package_id] = item
+        return grouped, {
+            milestone_id: sorted(set(package_ids))
+            for milestone_id, package_ids in duplicates.items()
+        }
+
+    def _aggregate_route_value(values: List[str]) -> str:
+        normalized = [str(value).strip() or "missing" for value in values if value is not None]
+        if not normalized:
+            return "missing"
+        unique: List[str] = []
+        for value in normalized:
+            if value not in unique:
+                unique.append(value)
+        return unique[0] if len(unique) == 1 else "mixed:" + ", ".join(unique)
+
+    design_items_by_milestone, design_duplicate_package_ids = _group_items_by_milestone_and_package(
+        design_queue.get("items") or []
+    )
+    queue_items_by_milestone, queue_duplicate_package_ids = _group_items_by_milestone_and_package(
+        queue.get("items") or []
+    )
 
     rows: List[Dict[str, Any]] = []
     missing_package_milestone_ids: List[int] = []
@@ -852,36 +949,67 @@ def _dependency_package_routes(
         milestone_id = _coerce_int(dep.get("id"), -1)
         if milestone_id < 0:
             continue
-        design_matches = design_items_by_milestone.get(milestone_id) or []
-        queue_matches = queue_items_by_milestone.get(milestone_id) or []
-        design_item = design_matches[0] if len(design_matches) == 1 else {}
-        queue_item = queue_matches[0] if len(queue_matches) == 1 else {}
-        package_id = str(
-            queue_item.get("package_id")
-            or design_item.get("package_id")
-            or f"milestone-{milestone_id}"
-        ).strip()
-        queue_status = str(queue_item.get("status") or "").strip()
-        design_status = str(design_item.get("status") or "").strip()
-        completion_action = str(
-            queue_item.get("completion_action")
-            or design_item.get("completion_action")
-            or ""
-        ).strip()
-        queue_closed = queue_status.lower() in COMPLETE_STATUSES
-        design_closed = design_status.lower() in COMPLETE_STATUSES
-        mirror_in_sync = bool(design_item and queue_item) and _queue_mirror_drift(
-            design_item, queue_item
-        ) == []
+        design_matches = design_items_by_milestone.get(milestone_id) or {}
+        queue_matches = queue_items_by_milestone.get(milestone_id) or {}
+        package_ids = sorted(set(design_matches) | set(queue_matches))
+        package_id = package_ids[0] if len(package_ids) == 1 else f"milestone-{milestone_id}"
+        queue_statuses: List[str] = []
+        design_statuses: List[str] = []
+        completion_actions: List[str] = []
+        repos: List[str] = []
+        package_row_missing = False
+        package_row_drift = False
+        package_incomplete = False
+        package_set_drift = sorted(design_matches) != sorted(queue_matches)
+        duplicate_packages = sorted(
+            set(design_duplicate_package_ids.get(milestone_id, []))
+            | set(queue_duplicate_package_ids.get(milestone_id, []))
+        )
+        for current_package_id in package_ids:
+            design_item = design_matches.get(current_package_id) or {}
+            queue_item = queue_matches.get(current_package_id) or {}
+            if not design_item or not queue_item:
+                package_row_missing = True
+                continue
+            if _queue_mirror_drift(design_item, queue_item):
+                package_row_drift = True
+            queue_status = str(queue_item.get("status") or "").strip()
+            design_status = str(design_item.get("status") or "").strip()
+            completion_action = str(
+                queue_item.get("completion_action")
+                or design_item.get("completion_action")
+                or ""
+            ).strip()
+            repo = str(queue_item.get("repo") or design_item.get("repo") or "").strip()
+            queue_statuses.append(queue_status)
+            design_statuses.append(design_status)
+            completion_actions.append(completion_action)
+            if repo:
+                repos.append(repo)
+            if (
+                queue_status.lower() not in COMPLETE_STATUSES
+                or design_status.lower() not in COMPLETE_STATUSES
+                or completion_action != EXPECTED_COMPLETION_ACTION
+            ):
+                package_incomplete = True
+        queue_status = _aggregate_route_value(queue_statuses)
+        design_status = _aggregate_route_value(design_statuses)
+        completion_action = _aggregate_route_value(completion_actions)
+        mirror_in_sync = (
+            not package_set_drift
+            and not package_row_missing
+            and not package_row_drift
+            and not duplicate_packages
+        )
         registry_status = str(dep.get("status") or "").strip()
         registry_open = registry_status.lower() not in COMPLETE_STATUSES
-        if not design_item or not queue_item:
+        if not package_ids:
             route_state = "package_row_missing"
             missing_package_milestone_ids.append(milestone_id)
         elif not mirror_in_sync:
             route_state = "queue_mirror_drift"
             mirror_drift_milestone_ids.append(milestone_id)
-        elif queue_closed and design_closed and completion_action == EXPECTED_COMPLETION_ACTION:
+        elif not package_incomplete:
             route_state = (
                 "closed_package_verified_milestone_open"
                 if registry_open
@@ -895,7 +1023,8 @@ def _dependency_package_routes(
                 "milestone_id": milestone_id,
                 "registry_status": registry_status or "missing",
                 "package_id": package_id,
-                "repo": str(queue_item.get("repo") or design_item.get("repo") or "").strip(),
+                "package_ids": package_ids,
+                "repo": _aggregate_route_value(sorted(set(repos))),
                 "queue_status": queue_status or "missing",
                 "design_queue_status": design_status or "missing",
                 "completion_action": completion_action or "missing",
@@ -925,7 +1054,7 @@ def _dependency_package_routes(
         "incomplete_package_milestone_ids": incomplete_package_milestone_ids,
         "mirror_drift_milestone_ids": mirror_drift_milestone_ids,
         "closed_package_count": sum(
-            1
+            len(_dependency_route_package_ids(row))
             for row in rows
             if str(row.get("route_state") or "").startswith("closed_package_verified")
         ),
@@ -1200,8 +1329,9 @@ def verify_package(
     if milestone:
         if str(milestone.get("title") or "").strip() != EXPECTED_MILESTONE_TITLE:
             issues.append("milestone 106 title no longer matches package authority")
-        if str(milestone.get("status") or "").strip() != "in_progress":
-            issues.append("milestone 106 is not in_progress in successor registry")
+        milestone_status = str(milestone.get("status") or "").strip().lower()
+        if milestone_status not in COMPLETE_STATUSES and milestone_status != "in_progress":
+            issues.append("milestone 106 is neither in_progress nor complete in successor registry")
         owners = set(_norm_list(milestone.get("owners")))
         if "fleet" not in owners:
             issues.append("milestone 106 no longer names fleet as an owner")
@@ -2639,6 +2769,7 @@ def _decision_receipts(
                 "governor_gate_count": receipt_source["governor_gate_count"],
                 "blocking_gate_count": receipt_source["blocking_gate_count"],
                 "blocking_gates": receipt_source["blocking_gates"],
+                "gate_states": receipt_source["gate_states"],
                 "matrix_complete": receipt_source["matrix_complete"],
                 "ready_for_operator_packet": receipt_source["ready_for_operator_packet"],
             }
@@ -2667,6 +2798,10 @@ def _weekly_operator_handoff(
     launch_gate_summary: Dict[str, Any],
     decision_action_routes: Dict[str, Any],
     decision_receipts: Dict[str, Any],
+    remaining_dependency_package_ids: List[str] | None = None,
+    launch_blocking_dependency_package_ids: List[str] | None = None,
+    blocked_dependency_package_ids: List[str] | None = None,
+    remaining_sibling_work_task_ids: List[str] | None = None,
 ) -> Dict[str, Any]:
     receipt_by_action = {
         str(row.get("action") or "").strip(): row
@@ -2675,6 +2810,7 @@ def _weekly_operator_handoff(
     }
     rows: List[Dict[str, Any]] = []
     incomplete_actions: List[str] = []
+    next_review_due_at = str(schedule.get("next_packet_due_at") or "").strip()
     for route in decision_action_routes.get("rows") or []:
         if not isinstance(route, dict):
             continue
@@ -2689,10 +2825,12 @@ def _weekly_operator_handoff(
             "operator_action": str(route.get("operator_action") or "").strip() or "missing",
             "receipt_id": str(receipt.get("receipt_id") or "").strip() or "missing",
             "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
+            "next_review_due_at": next_review_due_at,
             "max_age_seconds": _coerce_int(route.get("max_age_seconds"), 0),
             "freshness_policy": str(route.get("freshness_policy") or "").strip() or "missing",
             "blocking_gate_count": _coerce_int(route.get("blocking_gate_count"), 0),
             "blocking_gates": _norm_list(route.get("blocking_gates")),
+            "gate_states": dict(route.get("gate_states") or {}),
             "next_decision": str(route.get("next_decision") or "").strip(),
         }
         if (
@@ -2700,8 +2838,10 @@ def _weekly_operator_handoff(
             or row["operator_action"] == "missing"
             or row["receipt_id"] == "missing"
             or row["next_review_due_ref"] != "governor_packet_schedule.next_packet_due_at"
+            or not row["next_review_due_at"]
             or row["max_age_seconds"] <= 0
             or row["freshness_policy"] == "missing"
+            or not row["gate_states"]
             or not row["next_decision"]
         ):
             incomplete_actions.append(action)
@@ -2714,7 +2854,26 @@ def _weekly_operator_handoff(
         "status": "pass" if not missing_actions and not incomplete_actions else "fail",
         "cadence": str(schedule.get("cadence") or "").strip() or "weekly",
         "schedule_ref": "governor_packet_schedule.next_packet_due_at",
+        "next_review_due_at": next_review_due_at,
         "source": "measured_rollout_loop.decision_action_routes+decision_receipts",
+        "routing_context": {
+            "remaining_dependency_package_ids": _norm_list(
+                remaining_dependency_package_ids or []
+            ),
+            "launch_blocking_dependency_package_ids": _norm_list(
+                launch_blocking_dependency_package_ids or []
+            ),
+            "blocked_dependency_package_ids": _norm_list(
+                blocked_dependency_package_ids or []
+            ),
+            "remaining_sibling_work_task_ids": _norm_list(
+                remaining_sibling_work_task_ids or []
+            ),
+            "route_rule": (
+                "Verify closed dependency packages instead of reopening them; "
+                "route sibling M106 work outside the closed Fleet packet slice."
+            ),
+        },
         "required_actions": list(REQUIRED_DECISION_ACTIONS),
         "action_count": len(rows),
         "missing_actions": missing_actions,
@@ -2758,6 +2917,14 @@ def _blocked_dependency_package_ids(source_input_health: Dict[str, Any]) -> List
     return blocked
 
 
+def _dependency_route_package_ids(row: Dict[str, Any]) -> List[str]:
+    package_ids = _norm_list(row.get("package_ids"))
+    if package_ids:
+        return package_ids
+    package_id = str(row.get("package_id") or "").strip()
+    return [package_id] if package_id else []
+
+
 def _remaining_dependency_package_ids(dependency_package_routes: Dict[str, Any]) -> List[str]:
     package_ids: List[str] = []
     for row in dependency_package_routes.get("rows") or []:
@@ -2765,14 +2932,26 @@ def _remaining_dependency_package_ids(dependency_package_routes: Dict[str, Any])
             continue
         route_state = str(row.get("route_state") or "").strip()
         launch_gate_contribution = str(row.get("launch_gate_contribution") or "").strip()
-        package_id = str(row.get("package_id") or "").strip()
-        if not package_id:
+        for package_id in _dependency_route_package_ids(row):
+            if (
+                launch_gate_contribution == "blocked_until_registry_milestone_complete"
+                or route_state in {"package_row_missing", "queue_mirror_drift", "package_incomplete"}
+            ) and package_id not in package_ids:
+                package_ids.append(package_id)
+    return package_ids
+
+
+def _launch_blocking_dependency_package_ids(dependency_package_routes: Dict[str, Any]) -> List[str]:
+    package_ids: List[str] = []
+    for row in dependency_package_routes.get("rows") or []:
+        if not isinstance(row, dict):
             continue
-        if (
-            launch_gate_contribution == "blocked_until_registry_milestone_complete"
-            or route_state in {"package_row_missing", "queue_mirror_drift", "package_incomplete"}
-        ) and package_id not in package_ids:
-            package_ids.append(package_id)
+        for package_id in _dependency_route_package_ids(row):
+            if (
+                row.get("launch_gate_contribution") == "blocked_until_registry_milestone_complete"
+                and package_id not in package_ids
+            ):
+                package_ids.append(package_id)
     return package_ids
 
 
@@ -2851,7 +3030,7 @@ def build_payload(
         queue=queue,
     )
     dependency_status = str(dependency_posture.get("status") or "open").strip()
-    launch_allowed = (
+    source_launch_allowed = (
         verification["status"] == "pass"
         and weekly_input_health["status"] == "pass"
         and source_input_health["status"] == "pass"
@@ -2873,6 +3052,8 @@ def build_payload(
         and support["followthrough_receipt_gates_blocked_receipt_mismatch_count"] == 0
     )
     launch_action = str(launch_decision.get("action") or "freeze_launch").strip()
+    launch_action_allows_expansion = launch_action == "launch_expand"
+    launch_allowed = source_launch_allowed and launch_action_allows_expansion
     decision_alignment = _decision_alignment(launch_action, launch_allowed)
     freeze_active = not launch_allowed
     rollback_watch = (
@@ -2900,6 +3081,12 @@ def build_payload(
             "pass" if weekly_input_health["status"] == "pass" else "fail",
             "pass",
             weekly_input_health["status"],
+        ),
+        _gate_row(
+            "weekly_launch_decision",
+            "pass" if launch_action_allows_expansion else "blocked",
+            "launch_expand",
+            launch_action,
         ),
         _gate_row(
             "source_input_health",
@@ -3078,6 +3265,9 @@ def build_payload(
     remaining_dependency_package_ids = _remaining_dependency_package_ids(
         dependency_package_routes
     )
+    launch_blocking_dependency_package_ids = _launch_blocking_dependency_package_ids(
+        dependency_package_routes
+    )
     repeat_prevention = {
         "status": "closed_for_fleet_package" if package_complete else "blocked",
         "closed_package_id": PACKAGE_ID,
@@ -3090,6 +3280,7 @@ def build_payload(
         "allowed_paths": list(ALLOWED_PATHS),
         "remaining_dependency_ids": remaining_dependency_ids,
         "remaining_dependency_package_ids": remaining_dependency_package_ids,
+        "launch_blocking_dependency_package_ids": launch_blocking_dependency_package_ids,
         "blocked_dependency_package_ids": blocked_dependency_package_ids,
         "dependency_package_routes": dependency_package_routes,
         "remaining_sibling_work_task_ids": open_sibling_work_task_ids,
@@ -3141,7 +3332,19 @@ def build_payload(
         "current_launch_reason": str(launch_decision.get("reason") or "").strip(),
         "launch_expand": {
             "state": "allowed" if launch_allowed else "blocked",
-            "reason": "All measured launch gates are green." if launch_allowed else "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
+            "reason": (
+                "All measured launch gates are green."
+                if launch_allowed
+                else (
+                    "Weekly pulse holds launch expansion: "
+                    + str(
+                        launch_decision.get("reason")
+                        or "freeze_launch remains the current weekly launch decision"
+                    ).strip()
+                )
+                if not launch_action_allows_expansion
+                else "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green."
+            ),
         },
         "freeze_launch": {
             "state": "active" if freeze_active else "available",
@@ -3236,6 +3439,10 @@ def build_payload(
         launch_gate_summary=launch_gate_summary,
         decision_action_routes=decision_action_routes,
         decision_receipts=decision_receipts,
+        remaining_dependency_package_ids=remaining_dependency_package_ids,
+        launch_blocking_dependency_package_ids=launch_blocking_dependency_package_ids,
+        blocked_dependency_package_ids=blocked_dependency_package_ids,
+        remaining_sibling_work_task_ids=open_sibling_work_task_ids,
     )
     return {
         "contract_name": "fleet.weekly_governor_packet",
@@ -3294,6 +3501,7 @@ def build_payload(
             ),
             "remaining_milestone_dependency_ids": remaining_dependency_ids,
             "remaining_dependency_package_ids": remaining_dependency_package_ids,
+            "launch_blocking_dependency_package_ids": launch_blocking_dependency_package_ids,
             "blocked_dependency_package_ids": blocked_dependency_package_ids,
             "dependency_package_routes": dependency_package_routes,
             "remaining_sibling_work_task_ids": open_sibling_work_task_ids,
@@ -3317,6 +3525,7 @@ def build_payload(
             "rollback_watch": rollback_watch,
             "blocked_dependency_package_ids": blocked_dependency_package_ids,
             "remaining_dependency_package_ids": remaining_dependency_package_ids,
+            "launch_blocking_dependency_package_ids": launch_blocking_dependency_package_ids,
             "dependency_package_routes": dependency_package_routes,
             "required_decision_actions": list(REQUIRED_DECISION_ACTIONS),
             "launch_gate_summary": launch_gate_summary,
@@ -3391,6 +3600,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
     source_coverage = dict(loop.get("decision_source_coverage") or {})
     action_routes = dict(loop.get("decision_action_routes") or {})
     operator_handoff = dict(loop.get("weekly_operator_handoff") or {})
+    handoff_routing_context = dict(operator_handoff.get("routing_context") or {})
     risk_clusters = payload.get("risk_clusters") if isinstance(payload.get("risk_clusters"), list) else []
 
     lines = [
@@ -3463,6 +3673,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Closed dependency packages verified: {dependency_routes.get('closed_package_count', 0)}",
             f"- Open registry dependency milestones: {dependency_routes.get('open_registry_milestone_count', 0)}",
             f"- Remaining dependency packages: {_markdown_list(closeout.get('remaining_dependency_package_ids'))}",
+            f"- Launch-blocking dependency packages: {_markdown_list(closeout.get('launch_blocking_dependency_package_ids'))}",
             f"- Remaining sibling work tasks: {_markdown_list(closeout.get('remaining_sibling_work_task_ids'))}",
             f"- Flagship readiness: {_markdown_status(truth.get('flagship_readiness_status'))}",
             f"- Flagship parity release truth: {_markdown_status(parity.get('release_truth_status'))}",
@@ -3503,6 +3714,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Allowed paths: {_markdown_list(repeat_prevention.get('allowed_paths'))}",
             f"- Remaining dependency milestones: {_markdown_list(repeat_prevention.get('remaining_dependency_ids'))}",
             f"- Remaining dependency packages: {_markdown_list(repeat_prevention.get('remaining_dependency_package_ids'))}",
+            f"- Launch-blocking dependency packages: {_markdown_list(repeat_prevention.get('launch_blocking_dependency_package_ids'))}",
             f"- Blocked dependency packages: {_markdown_list(repeat_prevention.get('blocked_dependency_package_ids'))}",
             f"- Dependency package route rule: {_markdown_status(dict(repeat_prevention.get('dependency_package_routes') or {}).get('rule'))}",
             f"- Remaining sibling work tasks: {_markdown_list(repeat_prevention.get('remaining_sibling_work_task_ids'))}",
@@ -3637,9 +3849,14 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Cadence: {_markdown_status(operator_handoff.get('cadence'))}",
             f"- Schedule ref: {_markdown_status(operator_handoff.get('schedule_ref'))}",
             f"- Launch gate blocking names: {_markdown_list(operator_handoff.get('launch_gate_blocking_names'))}",
+            f"- Handoff remaining dependency packages: {_markdown_list(handoff_routing_context.get('remaining_dependency_package_ids'))}",
+            f"- Handoff launch-blocking dependency packages: {_markdown_list(handoff_routing_context.get('launch_blocking_dependency_package_ids'))}",
+            f"- Handoff blocked dependency packages: {_markdown_list(handoff_routing_context.get('blocked_dependency_package_ids'))}",
+            f"- Handoff remaining sibling work tasks: {_markdown_list(handoff_routing_context.get('remaining_sibling_work_task_ids'))}",
+            f"- Handoff route rule: {_markdown_status(handoff_routing_context.get('route_rule'))}",
             "",
-            "| Action | State | Route | Operator action | Receipt | Next review due ref | Max age seconds | Freshness policy | Blocking gates | Next decision |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| Action | State | Route | Operator action | Receipt | Next review due | Next review due ref | Max age seconds | Freshness policy | Blocking gates | Next decision |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
     for row in operator_handoff.get("rows") or []:
@@ -3651,6 +3868,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"{_markdown_status(row.get('route'))} | "
             f"{_markdown_status(row.get('operator_action'))} | "
             f"{_markdown_status(row.get('receipt_id'))} | "
+            f"{_markdown_status(row.get('next_review_due_at'))} | "
             f"{_markdown_status(row.get('next_review_due_ref'))} | "
             f"{row.get('max_age_seconds', 0)} | "
             f"{_markdown_status(row.get('freshness_policy'))} | "
@@ -3658,7 +3876,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"{_markdown_status(row.get('next_decision'))} |"
         )
     if not operator_handoff.get("rows"):
-        lines.append("| none | unknown | unknown | unknown | missing | missing | 0 | unknown | none | none |")
+        lines.append("| none | unknown | unknown | unknown | missing | missing | missing | 0 | unknown | none | none |")
 
     lines.extend(["", "## Evidence Requirements", ""])
     for requirement in loop.get("evidence_requirements") or []:
@@ -3689,9 +3907,14 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
     for row in dependency_routes.get("rows") or []:
         if not isinstance(row, dict):
             continue
+        package_label = (
+            _markdown_list(row.get("package_ids"))
+            if row.get("package_ids")
+            else _markdown_status(row.get("package_id"))
+        )
         lines.append(
             f"| {row.get('milestone_id', 'unknown')} | "
-            f"{_markdown_status(row.get('package_id'))} | "
+            f"{package_label} | "
             f"{_markdown_status(row.get('registry_status'))} | "
             f"{_markdown_status(row.get('queue_status'))} | "
             f"{_markdown_status(row.get('design_queue_status'))} | "

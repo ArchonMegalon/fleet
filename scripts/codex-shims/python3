@@ -4,11 +4,16 @@ set -euo pipefail
 REAL_PYTHON3="${CHUMMER_DESIGN_SUPERVISOR_REAL_PYTHON3:-/usr/bin/python3}"
 ACTIVE_RUN_DIR="${CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR:-}"
 SUPERVISOR_SCRIPT="/docker/fleet/scripts/chummer_design_supervisor.py"
+REDIRECT_HELPER="/docker/fleet/scripts/codex-shims/render_status_helper_redirect.py"
 if [[ -n "${ACTIVE_RUN_DIR}" && $# -ge 2 ]]; then
   command_script="$1"
   command_name="$2"
   telemetry_path="${ACTIVE_RUN_DIR}/TASK_LOCAL_TELEMETRY.generated.json"
   if [[ -f "${telemetry_path}" && "${command_script}" == "${SUPERVISOR_SCRIPT}" && ( "${command_name}" == "status" || "${command_name}" == "eta" ) ]]; then
+    hit_counter_path="${ACTIVE_RUN_DIR}/.status_helper_direct_hits"
+    helper_stdout_path="${ACTIVE_RUN_DIR}/.status_helper_direct.stdout"
+    helper_stderr_path="${ACTIVE_RUN_DIR}/.status_helper_direct.stderr"
+    helper_status=0
     "${REAL_PYTHON3}" - "${telemetry_path}" "${command_name}" <<'PY'
 import json
 import sys
@@ -17,6 +22,15 @@ from pathlib import Path
 telemetry_path = Path(sys.argv[1])
 command_name = str(sys.argv[2] or "status").strip() or "status"
 payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+commands = [str(item).strip() for item in (payload.get("first_commands") or []) if str(item).strip()]
+summary = str(
+    payload.get("summary")
+    or payload.get("slice_summary")
+    or payload.get("guidance")
+    or ""
+).strip()
+direct_guidance = "Read TASK_LOCAL_TELEMETRY.generated.json and the listed repo files directly; do not call supervisor status again."
+summary = f"{summary} {direct_guidance}".strip()
 eta = {
     "status": "tracked",
     "scope_kind": "task_local_only",
@@ -25,7 +39,7 @@ eta = {
     "remaining_not_started_milestones": payload.get("remaining_not_started_milestones"),
     "remaining_in_progress_milestones": payload.get("remaining_in_progress_milestones"),
     "eta_human": payload.get("eta_human"),
-    "summary": payload.get("summary"),
+    "summary": summary,
 }
 if command_name == "eta":
     response = eta
@@ -38,10 +52,23 @@ else:
         "eta": eta,
         "warning": "task_local_telemetry_file",
         "guidance": "read TASK_LOCAL_TELEMETRY.generated.json directly inside the active worker run",
+        "first_commands": commands,
+        "next_command": commands[0] if commands else None,
     }
 print(json.dumps(response, separators=(",", ":")))
 PY
-    exit 0
+    set +e
+    "${REAL_PYTHON3}" "${REDIRECT_HELPER}" "${telemetry_path}" "${hit_counter_path}" >"${helper_stdout_path}" 2>"${helper_stderr_path}"
+    helper_status=$?
+    set -e
+    if [[ -s "${helper_stdout_path}" ]]; then
+      cat "${helper_stdout_path}" >&2
+    fi
+    if [[ -s "${helper_stderr_path}" ]]; then
+      cat "${helper_stderr_path}" >&2
+    fi
+    rm -f "${helper_stdout_path}" "${helper_stderr_path}"
+    exit "${helper_status}"
   fi
 fi
 
@@ -59,51 +86,8 @@ if [[ -n "${ACTIVE_RUN_DIR}" && $# -ge 2 && "$1" == "-c" ]]; then
       || "${parser_script}" == *"task_local_only"* ) ]]; then
     cat >/dev/null || true
     hit_counter_path="${ACTIVE_RUN_DIR}/.status_helper_pipeline_hits"
-    hit_count=0
-    if [[ -f "${hit_counter_path}" ]]; then
-      hit_count="$(cat "${hit_counter_path}" 2>/dev/null || printf '0')"
-    fi
-    case "${hit_count}" in
-      ''|*[!0-9]*)
-        hit_count=0
-        ;;
-    esac
-    hit_count="$((hit_count + 1))"
-    printf '%s\n' "${hit_count}" > "${hit_counter_path}"
-    "${REAL_PYTHON3}" - "${telemetry_path}" "${hit_count}" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-telemetry_path = Path(sys.argv[1])
-hit_count = int(sys.argv[2])
-payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
-commands = payload.get("first_commands") or []
-summary_parts = [
-    "Task-local telemetry already provided.",
-    "Do not rerun supervisor status inside this worker run.",
-]
-if hit_count > 1:
-    summary_parts.append("Repeated status helper request ignored.")
-if commands:
-    summary_parts.append(f"Next: {commands[0]}")
-    if len(commands) > 1:
-        summary_parts.append(f"Then: {commands[1]}")
-print(
-    json.dumps(
-        {
-            "active_runs_count": None,
-            "remaining_open_milestones": None,
-            "remaining_not_started_milestones": None,
-            "remaining_in_progress_milestones": None,
-            "eta_human": "implementation-only",
-            "summary": " ".join(summary_parts),
-        },
-        separators=(",", ":"),
-    )
-)
-PY
-    exit 0
+    "${REAL_PYTHON3}" "${REDIRECT_HELPER}" --summary-json "${telemetry_path}" "${hit_counter_path}"
+    exit $?
   fi
 fi
 

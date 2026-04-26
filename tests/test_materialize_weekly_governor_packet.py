@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import hashlib
 import importlib.util
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import yaml
@@ -98,6 +100,9 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "run id:",
     "selected account",
     "selected model",
+    "started at:",
+    "first output at:",
+    "last output at:",
     "prompt path",
     "recent stderr tail",
     "active-run helper",
@@ -142,6 +147,8 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "chummer_design_supervisor.py",
     "chummer_design_supervisor.py status",
     "chummer_design_supervisor.py eta",
+    "Codex could not find system bubblewrap",
+    "vendored bubblewrap",
 ]
 
 
@@ -311,6 +318,8 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "local proof floor commit b568034 pinned for M106 closure-proof dependency package routing guard.",
                                 "commit b568034 tightens the M106 governor packet closure proof.",
                                 "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop.",
+                                "local proof floor commit a94dd245 pinned for M106 governor packet closure proof floor.",
+                                "commit a94dd245 tightens the M106 governor packet closure proof.",
                                 "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages.",
                             ],
                         },
@@ -483,6 +492,8 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "local proof floor commit b568034 pinned for M106 closure-proof dependency package routing guard",
                         "commit b568034 tightens the M106 governor packet closure proof",
                         "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop",
+                        "local proof floor commit a94dd245 pinned for M106 governor packet closure proof floor",
+                        "commit a94dd245 tightens the M106 governor packet closure proof",
                         "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
                     ],
                     "allowed_paths": ["admin", "scripts", "tests", ".codex-studio"],
@@ -1089,6 +1100,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "fe4c621",
         "653380a",
         "b568034",
+        "a94dd245",
     ]
     assert payload["package_verification"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["package_closeout"]["status"] == "fleet_package_complete"
@@ -1102,6 +1114,13 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         105,
     ]
     assert payload["package_closeout"]["remaining_dependency_package_ids"] == [
+        "milestone-101",
+        "milestone-102",
+        "milestone-103",
+        "milestone-104",
+        "milestone-105",
+    ]
+    assert payload["package_closeout"]["launch_blocking_dependency_package_ids"] == [
         "milestone-101",
         "milestone-102",
         "milestone-103",
@@ -1178,6 +1197,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "fe4c621",
         "653380a",
         "b568034",
+        "a94dd245",
     ]
     assert payload["repeat_prevention"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is True
@@ -1193,9 +1213,23 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "milestone-104",
         "milestone-105",
     ]
+    assert payload["repeat_prevention"]["launch_blocking_dependency_package_ids"] == [
+        "milestone-101",
+        "milestone-102",
+        "milestone-103",
+        "milestone-104",
+        "milestone-105",
+    ]
     assert payload["repeat_prevention"]["blocked_dependency_package_ids"] == []
     assert payload["repeat_prevention"]["remaining_sibling_work_task_ids"] == ["106.3", "106.4"]
     assert payload["measured_rollout_loop"]["remaining_dependency_package_ids"] == [
+        "milestone-101",
+        "milestone-102",
+        "milestone-103",
+        "milestone-104",
+        "milestone-105",
+    ]
+    assert payload["measured_rollout_loop"]["launch_blocking_dependency_package_ids"] == [
         "milestone-101",
         "milestone-102",
         "milestone-103",
@@ -1403,14 +1437,15 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "status": "scheduled",
     }
     assert payload["measured_rollout_loop"]["launch_gate_summary"] == {
-        "gate_count": 16,
+        "gate_count": 17,
         "pass_count": 13,
-        "blocked_count": 3,
+        "blocked_count": 4,
         "fail_count": 0,
         "watch_count": 0,
         "accumulating_count": 0,
         "unknown_count": 0,
         "blocking_gate_names": [
+            "weekly_launch_decision",
             "successor_dependencies",
             "local_release_proof",
             "provider_canary",
@@ -1461,6 +1496,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert source_coverage["required_source_gates_by_action"]["launch_expand"] == [
         "package_authority",
         "weekly_input_health",
+        "weekly_launch_decision",
         "source_input_health",
         "decision_alignment",
         "successor_dependencies",
@@ -1524,11 +1560,13 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     )
     assert route_rows["launch_expand"]["next_decision"]
     assert route_rows["launch_expand"]["blocking_gates"] == [
+        "weekly_launch_decision",
         "successor_dependencies",
         "local_release_proof",
         "provider_canary",
     ]
-    assert route_rows["launch_expand"]["blocking_gate_count"] == 3
+    assert route_rows["launch_expand"]["blocking_gate_count"] == 4
+    assert route_rows["launch_expand"]["gate_states"]["weekly_launch_decision"] == "blocked"
     assert route_rows["launch_expand"]["gate_states"]["successor_dependencies"] == "blocked"
     assert route_rows["launch_expand"]["gate_states"]["local_release_proof"] == "blocked"
     assert route_rows["launch_expand"]["gate_states"]["provider_canary"] == "blocked"
@@ -1576,10 +1614,30 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         for row in decision_receipts["rows"]
     )
     assert receipt_rows["launch_expand"]["blocking_gates"] == [
+        "weekly_launch_decision",
         "successor_dependencies",
         "local_release_proof",
         "provider_canary",
     ]
+    assert receipt_rows["launch_expand"]["gate_states"] == {
+        "package_authority": "pass",
+        "weekly_input_health": "pass",
+        "weekly_launch_decision": "blocked",
+        "source_input_health": "pass",
+        "decision_alignment": "pass",
+        "successor_dependencies": "blocked",
+        "flagship_readiness": "pass",
+        "flagship_parity": "pass",
+        "flagship_quality": "pass",
+        "status_plane_final_claim": "pass",
+        "journey_gates": "pass",
+        "local_release_proof": "blocked",
+        "weekly_adoption_truth": "pass",
+        "provider_canary": "blocked",
+        "closure_health": "pass",
+        "support_packets": "pass",
+        "support_followthrough_receipts": "pass",
+    }
     assert all(row["matrix_complete"] is True for row in decision_receipts["rows"])
     assert all(row["ready_for_operator_packet"] is True for row in decision_receipts["rows"])
     assert all(
@@ -1591,12 +1649,36 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         for row in decision_receipts["rows"]
     )
     operator_handoff = payload["measured_rollout_loop"]["weekly_operator_handoff"]
+    next_packet_due = payload["governor_packet_schedule"]["next_packet_due_at"]
     assert operator_handoff["status"] == "pass"
     assert operator_handoff["cadence"] == "weekly"
     assert operator_handoff["schedule_ref"] == "governor_packet_schedule.next_packet_due_at"
+    assert operator_handoff["next_review_due_at"] == next_packet_due
     assert operator_handoff["source"] == (
         "measured_rollout_loop.decision_action_routes+decision_receipts"
     )
+    assert operator_handoff["routing_context"] == {
+        "remaining_dependency_package_ids": [
+            "milestone-101",
+            "milestone-102",
+            "milestone-103",
+            "milestone-104",
+            "milestone-105",
+        ],
+        "launch_blocking_dependency_package_ids": [
+            "milestone-101",
+            "milestone-102",
+            "milestone-103",
+            "milestone-104",
+            "milestone-105",
+        ],
+        "blocked_dependency_package_ids": [],
+        "remaining_sibling_work_task_ids": ["106.3", "106.4"],
+        "route_rule": (
+            "Verify closed dependency packages instead of reopening them; "
+            "route sibling M106 work outside the closed Fleet packet slice."
+        ),
+    }
     assert operator_handoff["required_actions"] == [
         "launch_expand",
         "freeze_launch",
@@ -1608,6 +1690,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert operator_handoff["missing_actions"] == []
     assert operator_handoff["incomplete_actions"] == []
     assert operator_handoff["launch_gate_blocking_names"] == [
+        "weekly_launch_decision",
         "successor_dependencies",
         "local_release_proof",
         "provider_canary",
@@ -1621,18 +1704,24 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         handoff_rows["launch_expand"]["next_review_due_ref"]
         == "governor_packet_schedule.next_packet_due_at"
     )
+    assert handoff_rows["launch_expand"]["next_review_due_at"] == next_packet_due
     assert handoff_rows["launch_expand"]["max_age_seconds"] == 604800
     assert (
         handoff_rows["launch_expand"]["freshness_policy"]
         == "refresh_before_operator_action_if_packet_is_overdue"
     )
+    assert handoff_rows["launch_expand"]["gate_states"] == route_rows["launch_expand"][
+        "gate_states"
+    ]
     assert all(row["max_age_seconds"] == 604800 for row in operator_handoff["rows"])
+    assert all(row["next_review_due_at"] == next_packet_due for row in operator_handoff["rows"])
     assert all(
         row["freshness_policy"] == "refresh_before_operator_action_if_packet_is_overdue"
         for row in operator_handoff["rows"]
     )
     assert handoff_rows["rollback"]["route"] == "measured_rollout_loop.rollback"
     assert handoff_rows["rollback"]["blocking_gates"] == []
+    assert handoff_rows["rollback"]["gate_states"] == route_rows["rollback"]["gate_states"]
 
 
 def test_weekly_support_summary_ignores_stale_queued_followthrough_counts(tmp_path: Path) -> None:
@@ -1928,10 +2017,10 @@ def test_weekly_support_summary_ignores_stale_followthrough_action_rows_without_
     assert "- Weekly operator handoff actions: 5 / 5" in markdown
     assert "- Launch gates green: False" in markdown
     assert "- Launch gate pass count: 13" in markdown
-    assert "- Launch gate blocked count: 3" in markdown
+    assert "- Launch gate blocked count: 4" in markdown
     assert "- Launch gate fail count: 0" in markdown
     assert (
-        "- Launch gate blocking names: successor_dependencies, local_release_proof, "
+        "- Launch gate blocking names: weekly_launch_decision, successor_dependencies, local_release_proof, "
         "provider_canary"
     ) in markdown
     assert "- Successor dependency posture: open" in markdown
@@ -1944,7 +2033,7 @@ def test_weekly_support_summary_ignores_stale_followthrough_action_rows_without_
     assert "- Closed package: next90-m106-fleet-governor-packet" in markdown
     assert "- Closed work task: 106.1" in markdown
     assert "- Closed successor frontier ids: 2376135131" in markdown
-    assert "- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282, 144eae5, 543dfd5, f16f13b, 999231f, 25836f6, 3e7ee9b, 17189be, 9d2ea4c, bb49fc1, 26679c7, ef50370, a1be389, 83d2d21, e74a7ec, 8fb8d40, dd5fdb5, 52fe086, 6c429cb, 5193bce, f662ad3, 5882234, 6c376e0, 00e870e, 81e1de8, 941c54d, 6981667, 4a13b47, d597376, 233a52a, fba96cc, 15efd7c, f3bfb8d, d15a7ae, ac1c4ac, b909cc5, 787d27a, b467c27, fe4c621, 653380a, b568034" in markdown
+    assert "- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282, 144eae5, 543dfd5, f16f13b, 999231f, 25836f6, 3e7ee9b, 17189be, 9d2ea4c, bb49fc1, 26679c7, ef50370, a1be389, 83d2d21, e74a7ec, 8fb8d40, dd5fdb5, 52fe086, 6c429cb, 5193bce, f662ad3, 5882234, 6c376e0, 00e870e, 81e1de8, 941c54d, 6981667, 4a13b47, d597376, 233a52a, fba96cc, 15efd7c, f3bfb8d, d15a7ae, ac1c4ac, b909cc5, 787d27a, b467c27, fe4c621, 653380a, b568034, a94dd245" in markdown
     assert "- Do not reopen owned surfaces: True" in markdown
     assert "- Worker command guard: active_run_helpers_forbidden" in markdown
     assert (
@@ -1981,10 +2070,10 @@ def test_weekly_support_summary_ignores_stale_followthrough_action_rows_without_
     assert "- design-owned queue staging and Fleet queue mirror both carry the completed package proof" in markdown
     assert "- status-plane final claim remains pass before launch expansion or measured rollout readiness" in markdown
     assert "## Decision Action Matrix" in markdown
-    assert "| launch_expand | blocked | 16 | blocked | 16 | True |" in markdown
+    assert "| launch_expand | blocked | 17 | blocked | 17 | True |" in markdown
     assert "## Decision Source Coverage" in markdown
     assert (
-        "| launch_expand | package_authority, weekly_input_health, source_input_health, "
+        "| launch_expand | package_authority, weekly_input_health, weekly_launch_decision, source_input_health, "
         "decision_alignment, successor_dependencies, flagship_readiness, flagship_parity, "
         "flagship_quality, status_plane_final_claim, journey_gates, local_release_proof, weekly_adoption_truth, "
         "provider_canary, closure_health, support_packets, support_followthrough_receipts | "
@@ -2104,10 +2193,8 @@ def test_weekly_support_summary_ignores_partial_ready_rows_even_when_receipt_gat
         "604800 | refresh_before_operator_action_if_packet_is_overdue | "
         "launch_gate_summary.all_green | True | do_not_expand_launch | "
         "do_not_expand_launch | promote_measured_launch_expansion | "
-        "successor_dependencies, local_release_proof, "
-        "provider_canary | Hold expansion until successor dependencies, "
-        "readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, "
-        "canary, closure, and support gates are all green. | True |"
+        "weekly_launch_decision, successor_dependencies, local_release_proof, "
+        "provider_canary | Weekly pulse holds launch expansion: Freeze launch expansion until fresh local release proof passes. | True |"
     ) in markdown
     assert (
         "| rollback | fleet | measured_rollout_loop.rollback | weekly | "
@@ -2123,8 +2210,26 @@ def test_weekly_support_summary_ignores_partial_ready_rows_even_when_receipt_gat
     ) in markdown
     assert "- Schedule ref: governor_packet_schedule.next_packet_due_at" in markdown
     assert (
-        "- Launch gate blocking names: successor_dependencies, local_release_proof, "
+        f"| {payload['governor_packet_schedule']['next_packet_due_at']} | "
+        "governor_packet_schedule.next_packet_due_at |"
+    ) in markdown
+    assert (
+        "- Launch gate blocking names: weekly_launch_decision, successor_dependencies, local_release_proof, "
         "provider_canary"
+    ) in markdown
+    assert (
+        "- Handoff remaining dependency packages: milestone-101, milestone-102, "
+        "milestone-103, milestone-104, milestone-105"
+    ) in markdown
+    assert (
+        "- Handoff launch-blocking dependency packages: milestone-101, milestone-102, "
+        "milestone-103, milestone-104, milestone-105"
+    ) in markdown
+    assert "- Handoff blocked dependency packages: none" in markdown
+    assert "- Handoff remaining sibling work tasks: 106.3, 106.4" in markdown
+    assert (
+        "- Handoff route rule: Verify closed dependency packages instead of reopening them; "
+        "route sibling M106 work outside the closed Fleet packet slice."
     ) in markdown
     assert (
         "| launch_expand | blocked | weekly_governor_packet.launch_expand | "
@@ -2132,7 +2237,7 @@ def test_weekly_support_summary_ignores_partial_ready_rows_even_when_receipt_gat
     ) in markdown
     assert (
         "604800 | refresh_before_operator_action_if_packet_is_overdue | "
-        "successor_dependencies, local_release_proof, provider_canary |"
+        "weekly_launch_decision, successor_dependencies, local_release_proof, provider_canary |"
     ) in markdown
     assert (
         "| rollback | armed | measured_rollout_loop.rollback | keep_rollback_armed | "
@@ -2924,6 +3029,7 @@ def test_verify_next90_m106_governor_packet_accepts_checked_in_closeout(tmp_path
         text=True,
     )
     assert materialize.returncode == 0, materialize.stderr
+    time.sleep(1.1)
 
     verifier = subprocess.run(
         _verifier_args(paths, out),
@@ -4060,6 +4166,41 @@ def test_weekly_governor_packet_rejects_sibling_repo_proof_paths(
     )
 
 
+def test_weekly_governor_packet_rejects_embedded_relative_out_of_scope_proof_paths(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["proof"].append(
+        "proof bundle cites README.md after scripts/materialize_weekly_governor_packet.py"
+    )
+    _write_yaml(paths["queue"], queue)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "registry note cites docs/chummer5a-oracle/README.md after scoped anchors"
+    )
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert any(
+        "queue item proof includes Fleet proof path(s) outside allowed package roots"
+        in issue
+        and "README.md" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes Fleet proof path(s) outside allowed package roots"
+        in issue
+        and "docs/chummer5a-oracle/README.md" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+
+
 def test_verify_next90_m106_governor_packet_rejects_flagship_reopen_guard_drift(
     tmp_path: Path,
 ) -> None:
@@ -4632,6 +4773,135 @@ def test_verify_next90_m106_governor_packet_accepts_missing_dependency_package_r
     assert verifier.returncode == 0, verifier.stderr
 
 
+def test_weekly_governor_packet_separates_remaining_from_launch_blocking_dependency_packages(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"].extend(
+        [
+            {"id": 101, "title": "Dependency 101", "status": "in_progress"},
+            {"id": 102, "title": "Dependency 102", "status": "in_progress"},
+            {"id": 103, "title": "Dependency 103", "status": "complete"},
+            {"id": 104, "title": "Dependency 104", "status": "in_progress"},
+            {"id": 105, "title": "Dependency 105", "status": "in_progress"},
+        ]
+    )
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert "milestone-103" in payload["package_closeout"]["remaining_dependency_package_ids"]
+    assert "milestone-103" not in payload["package_closeout"]["launch_blocking_dependency_package_ids"]
+    assert payload["package_closeout"]["launch_blocking_dependency_package_ids"] == [
+        "milestone-101",
+        "milestone-102",
+        "milestone-104",
+        "milestone-105",
+    ]
+    assert (
+        payload["repeat_prevention"]["launch_blocking_dependency_package_ids"]
+        == payload["package_closeout"]["launch_blocking_dependency_package_ids"]
+    )
+    assert (
+        payload["measured_rollout_loop"]["launch_blocking_dependency_package_ids"]
+        == payload["package_closeout"]["launch_blocking_dependency_package_ids"]
+    )
+    assert (
+        payload["measured_rollout_loop"]["weekly_operator_handoff"]["routing_context"][
+            "launch_blocking_dependency_package_ids"
+        ]
+        == payload["package_closeout"]["launch_blocking_dependency_package_ids"]
+    )
+
+
+def test_dependency_package_routes_accept_multiple_closed_package_rows_per_milestone() -> None:
+    previous_sys_path = list(sys.path)
+    sys.path.insert(0, str(SCRIPT.parent))
+    try:
+        module = _load_module_from_path(SCRIPT)
+    finally:
+        sys.path[:] = previous_sys_path
+    design_queue = {
+        "items": [
+            {
+                "package_id": "pkg-a",
+                "milestone_id": 101,
+                "repo": "repo-a",
+                "status": "complete",
+                "completion_action": module.EXPECTED_COMPLETION_ACTION,
+            },
+            {
+                "package_id": "pkg-b",
+                "milestone_id": 101,
+                "repo": "repo-b",
+                "status": "complete",
+                "completion_action": module.EXPECTED_COMPLETION_ACTION,
+            },
+        ]
+    }
+    queue = {
+        "items": [
+            {
+                "package_id": "pkg-a",
+                "milestone_id": 101,
+                "repo": "repo-a",
+                "status": "complete",
+                "completion_action": module.EXPECTED_COMPLETION_ACTION,
+            },
+            {
+                "package_id": "pkg-b",
+                "milestone_id": 101,
+                "repo": "repo-b",
+                "status": "complete",
+                "completion_action": module.EXPECTED_COMPLETION_ACTION,
+            },
+        ]
+    }
+
+    routes = module._dependency_package_routes(
+        dependency_posture={
+            "dependencies": [{"id": 101, "title": "Dependency 101", "status": "complete"}]
+        },
+        design_queue=design_queue,
+        queue=queue,
+    )
+
+    assert routes["status"] == "pass"
+    assert routes["closed_package_count"] == 2
+    assert routes["rows"][0]["route_state"] == "closed_package_verified"
+    assert routes["rows"][0]["package_ids"] == ["pkg-a", "pkg-b"]
+    assert module._remaining_dependency_package_ids(routes) == []
+    assert module._launch_blocking_dependency_package_ids(routes) == []
+
+
+def test_canonical_successor_registry_and_queue_yaml_are_parseable() -> None:
+    cases = [
+        (
+            Path("/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"),
+            ("program_wave", "milestones"),
+        ),
+        (
+            Path("/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml"),
+            ("program_wave", "items"),
+        ),
+        (
+            Path("/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml"),
+            ("program_wave", "items"),
+        ),
+    ]
+
+    for path, required_keys in cases:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+        assert isinstance(payload, dict), path
+        for key in required_keys:
+            assert key in payload, (path, key)
+
+
 def test_verify_next90_m106_governor_packet_rejects_missing_decision_action_ledger(
     tmp_path: Path,
 ) -> None:
@@ -4976,6 +5246,9 @@ def test_verify_next90_m106_governor_packet_rejects_decision_receipt_drift(
     packet["measured_rollout_loop"]["decision_receipts"]["rows"][0][
         "next_decision"
     ] = "stale next decision"
+    packet["measured_rollout_loop"]["decision_receipts"]["rows"][0]["gate_states"] = {
+        "local_release_proof": "pass"
+    }
     _write_json(out, packet)
 
     verifier = subprocess.run(
@@ -4994,6 +5267,7 @@ def test_verify_next90_m106_governor_packet_rejects_decision_receipt_drift(
     assert "measured rollout decision_receipts has invalid receipt field(s)" in verifier.stderr
     assert "launch_expand.reason" in verifier.stderr
     assert "launch_expand.next_decision" in verifier.stderr
+    assert "launch_expand.gate_states" in verifier.stderr
 
 
 def test_verify_next90_m106_governor_packet_rejects_weekly_operator_handoff_drift(
@@ -5009,13 +5283,16 @@ def test_verify_next90_m106_governor_packet_rejects_weekly_operator_handoff_drif
     handoff["status"] = "pass"
     handoff["required_actions"] = ["launch_expand"]
     handoff["schedule_ref"] = "stale.schedule"
+    handoff["next_review_due_at"] = "2026-01-01T00:00:00Z"
     handoff["source"] = "manual.operator.note"
     for row in handoff["rows"]:
         if row["action"] == "launch_expand":
             row["route"] = "manual.launch.route"
             row["operator_action"] = ""
             row["receipt_id"] = "missing"
+            row["next_review_due_at"] = "2026-01-01T00:00:00Z"
             row["blocking_gates"] = []
+            row["gate_states"] = {"local_release_proof": "pass"}
             row["blocking_gate_count"] = 0
             row["next_decision"] = ""
             break
@@ -5043,6 +5320,10 @@ def test_verify_next90_m106_governor_packet_rejects_weekly_operator_handoff_drif
         in verifier.stderr
     )
     assert (
+        "measured rollout weekly_operator_handoff due timestamp drifted"
+        in verifier.stderr
+    )
+    assert (
         "measured rollout weekly_operator_handoff source drifted"
         in verifier.stderr
     )
@@ -5050,6 +5331,7 @@ def test_verify_next90_m106_governor_packet_rejects_weekly_operator_handoff_drif
         "measured rollout weekly_operator_handoff has invalid action handoff field(s)"
         in verifier.stderr
     )
+    assert "launch_expand.gate_states" in verifier.stderr
 
 
 def test_verify_next90_m106_governor_packet_rejects_weekly_schedule_drift(
@@ -5335,6 +5617,35 @@ def test_verify_next90_m106_governor_packet_rejects_public_status_copy_reason_dr
     )
 
 
+def test_verify_next90_m106_governor_packet_accepts_missing_launch_reason_fallback(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    weekly = json.loads(paths["weekly"].read_text(encoding="utf-8"))
+    weekly["governor_decisions"][0]["reason"] = ""
+    _write_json(paths["weekly"], weekly)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = _run_materializer(paths, out)
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    assert packet["decision_board"]["current_launch_reason"] == ""
+    assert packet["public_status_copy"]["state"] == "freeze_launch"
+    assert packet["public_status_copy"]["body"] == (
+        "Measured launch gates are incomplete, so the weekly governor packet holds broad promotion."
+    )
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 0, verifier.stderr
+
+
 def test_verify_next90_m106_governor_packet_rejects_stale_markdown_packet(
     tmp_path: Path,
 ) -> None:
@@ -5531,8 +5842,8 @@ def test_weekly_governor_packet_allows_launch_expand_when_dependencies_and_gates
     }
     assert all(row["state"] == "pass" for row in launch_gates.values())
     assert payload["measured_rollout_loop"]["launch_gate_summary"] == {
-        "gate_count": 16,
-        "pass_count": 16,
+        "gate_count": 17,
+        "pass_count": 17,
         "blocked_count": 0,
         "fail_count": 0,
         "watch_count": 0,
@@ -5562,7 +5873,7 @@ def test_weekly_governor_packet_allows_launch_expand_when_dependencies_and_gates
     markdown = (paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md").read_text(encoding="utf-8")
     assert "| Launch expand | allowed |" in markdown
     assert "- Launch gates green: True" in markdown
-    assert "- Launch gate pass count: 16" in markdown
+    assert "- Launch gate pass count: 17" in markdown
     assert "- Launch gate blocking names: none" in markdown
     assert "- Successor dependency posture: satisfied" in markdown
 
@@ -5804,6 +6115,7 @@ def test_weekly_governor_packet_requires_closure_dependency_route_proof_floor(
     markers = (
         "local proof floor commit b568034 pinned for M106 closure-proof dependency package routing guard",
         "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop",
+        "local proof floor commit a94dd245 pinned for M106 governor packet closure proof floor",
     )
     for queue_path in (paths["queue"], paths["design_queue"]):
         queue = yaml.safe_load(queue_path.read_text(encoding="utf-8"))
@@ -5823,13 +6135,15 @@ def test_weekly_governor_packet_requires_closure_dependency_route_proof_floor(
     assert (
         "queue item proof is missing required weekly governor receipt(s): "
         "local proof floor commit b568034 pinned for M106 closure-proof dependency package routing guard, "
-        "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop"
+        "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop, "
+        "local proof floor commit a94dd245 pinned for M106 governor packet closure proof floor"
         in payload["package_verification"]["issues"]
     )
     assert (
         "design queue item proof is missing required weekly governor receipt(s): "
         "local proof floor commit b568034 pinned for M106 closure-proof dependency package routing guard, "
-        "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop"
+        "remaining dependency package ids stay projected through package closeout, repeat prevention, and measured rollout loop, "
+        "local proof floor commit a94dd245 pinned for M106 governor packet closure proof floor"
         in payload["package_verification"]["issues"]
     )
     assert payload["package_closeout"]["status"] == "blocked"
@@ -7518,6 +7832,12 @@ def test_weekly_governor_packet_rejects_worker_run_ooda_loop_proof(
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
         "Start by reading these files directly before using repo evidence."
     )
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "Started at: 2026-04-23T13:20:25Z, First output at: 2026-04-23T13:20:35Z, Last output at: 2026-04-23T13:21:09Z"
+    )
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "warning: Codex could not find system bubblewrap on PATH; Codex will use the vendored bubblewrap in the meantime."
+    )
     _write_yaml(paths["registry"], registry)
     out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
 
@@ -7639,6 +7959,20 @@ def test_weekly_governor_packet_rejects_worker_run_ooda_loop_proof(
         "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
         in issue
         and "Start by reading these files directly" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "First output at" in issue
+        and "Last output at" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "Codex could not find system bubblewrap" in issue
+        and "vendored bubblewrap" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
@@ -7825,6 +8159,96 @@ def test_weekly_governor_packet_rejects_operator_owned_helper_proof_language(
         "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
         in issue
         and "Operator-owned run-helper" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
+
+
+def test_weekly_governor_packet_rejects_encoded_worker_helper_proof(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    encoded_queue_proof = base64.b64encode(
+        b"TASK_LOCAL_TELEMETRY.generated.json proved the M106 closeout"
+    ).decode("ascii")
+    queue["items"][0]["proof"].append(encoded_queue_proof)
+    _write_yaml(paths["queue"], queue)
+    design_queue = yaml.safe_load(paths["design_queue"].read_text(encoding="utf-8"))
+    encoded_design_proof = base64.b32encode(
+        b"operator telemetry helper output proved the weekly governor packet"
+    ).decode("ascii")
+    design_queue["items"][0]["proof"].append(encoded_design_proof)
+    _write_yaml(paths["design_queue"], design_queue)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    encoded_registry_proof = base64.a85encode(
+        b"Do not query supervisor status or eta, but this copied prompt proves closure"
+    ).decode("ascii")
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(encoded_registry_proof)
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and encoded_queue_proof in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "design queue item proof includes active-run or operator-helper command evidence"
+        in issue
+        and encoded_design_proof in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and encoded_registry_proof in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
+
+
+def test_weekly_governor_packet_rejects_hex_encoded_worker_helper_proof(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    encoded_queue_proof = (
+        b"TASK_LOCAL_TELEMETRY.generated.json proved the M106 closeout"
+    ).hex()
+    queue["items"][0]["proof"].append(encoded_queue_proof)
+    _write_yaml(paths["queue"], queue)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    encoded_registry_proof = (
+        b"chummer_design_supervisor status proved the weekly governor packet"
+    ).hex()
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(encoded_registry_proof)
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and encoded_queue_proof in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and encoded_registry_proof in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS

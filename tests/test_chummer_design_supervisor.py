@@ -20713,6 +20713,101 @@ def test_statefile_shard_summaries_surfaces_codexliz_transport_reconnecting(
         module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
 
 
+def test_statefile_shard_summaries_ignores_stale_fallback_codexliz_failure(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_module()
+    root = tmp_path
+    previous_workspace_root = module.DEFAULT_WORKSPACE_ROOT
+    try:
+        module.DEFAULT_WORKSPACE_ROOT = root
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_root = aggregate_root / "shard-8"
+        run_dir = shard_root / "runs" / "20260426T094435Z-shard-8"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        stderr_path = run_dir / "worker.stderr.log"
+        stderr_path.write_text("Trace: lane=core waiting for upstream response (total_duration=1096s)\n", encoding="utf-8")
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-04-26T10:01:39Z",
+                "mode": "successor_wave",
+                "frontier_ids": [1542103988],
+                "open_milestone_ids": [1542103988],
+                "active_run_id": "20260426T094435Z-shard-8",
+                "active_run_started_at": "2026-04-26T09:44:35Z",
+                "active_run_worker_pid": 14831,
+                "worker_stderr_path": "/var/lib/codex-fleet/chummer_design_supervisor/shard-8/runs/20260426T094435Z-shard-8/worker.stderr.log",
+                "selected_account_alias": "core_rescue",
+                "selected_model": "ea-coder-hard",
+            },
+        )
+        module._write_json(
+            shard_root / "codex-homes" / "direct-core_rescue" / ".cache" / "codexliz" / "outage.json",
+            {
+                "updated_at": "2026-04-24T18:09:13Z",
+                "state": "failure",
+                "current_outage": False,
+                "outage_seconds": 0,
+                "last_http_status": 502,
+                "last_reason": "http_502",
+                "last_error": "HTTP 502",
+                "retry_count": 0,
+                "next_retry_at": "",
+            },
+        )
+
+        monkeypatch.setattr(module, "_running_inside_container", lambda: False)
+
+        summaries = module._statefile_shard_summaries(aggregate_root)
+
+        assert len(summaries) == 1
+        shard = summaries[0]
+        assert shard["active_run_progress_state"] == "streaming"
+        assert shard["worker_transport_state"] == ""
+        assert shard["worker_transport_current_outage"] is False
+        assert shard["worker_transport_last_http_status"] == 0
+        assert shard["worker_transport_state_path"] == ""
+    finally:
+        module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
+
+
+def test_active_shard_manifest_live_summaries_ignores_stale_codexliz_failure(tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    aggregate_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "name": "shard-8",
+                    "active_run_id": "20260426T094435Z-shard-8",
+                    "active_run_progress_state": "streaming",
+                    "worker_transport_state": "failure",
+                    "worker_transport_current_outage": False,
+                    "worker_transport_updated_at": "2026-04-24T18:09:13Z",
+                    "worker_transport_last_http_status": 502,
+                    "worker_transport_last_reason": "http_502",
+                    "worker_transport_last_error": "HTTP 502",
+                    "worker_transport_retry_count": 0,
+                    "worker_transport_next_retry_at": "",
+                    "worker_transport_state_path": "/var/lib/codex-fleet/chummer_design_supervisor/shard-8/codex-homes/direct-core_rescue/.cache/codexliz/outage.json",
+                }
+            ]
+        },
+    )
+
+    summaries = module._active_shard_manifest_live_summaries(aggregate_root)
+
+    assert len(summaries) == 1
+    shard = summaries[0]
+    assert shard["worker_transport_state"] == ""
+    assert shard["worker_transport_current_outage"] is False
+    assert shard["worker_transport_last_http_status"] == 0
+    assert shard["worker_transport_state_path"] == ""
+
+
 def test_live_state_with_current_completion_audit_overlays_fresh_completion_truth() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:

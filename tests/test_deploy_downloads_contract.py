@@ -12,8 +12,8 @@ class DeployDownloadsContractTests(unittest.TestCase):
         script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
 
         self.assertIn("docker exec fleet-admin curl -fsS", script)
-        self.assertIn("http://127.0.0.1:8092/api/admin/status", script)
-        self.assertIn("http://127.0.0.1:18090/api/admin/status", script)
+        self.assertIn("http://127.0.0.1:8092/api/admin/status-lite", script)
+        self.assertIn("http://127.0.0.1:18090/api/admin/status-lite", script)
         self.assertIn('mktemp /tmp/fleet_admin_status_wrapper.XXXXXX.json', script)
         self.assertNotIn('>/tmp/fleet_admin_status_wrapper.json', script)
 

@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import importlib.util
 import base64
+import gzip
+import io
 import json
 import os
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
+import zlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -392,8 +396,16 @@ def _closed_fixture(tmp_path: Path):
                 "- the zero-backlog command bundle still retains per-host preflight, capture, validate, bundle, ingest, and run entrypoints for Linux, macOS, and Windows",
                 "- the retained command bundle keeps `host-proof-bundles/linux`, `host-proof-bundles/macos`, and `host-proof-bundles/windows` present so ingest can resume without rebuilding the lane",
                 "- the finalize entrypoint still republishes after the per-host validate and ingest lanes remain available",
+                "- the retained Windows PowerShell host lane still enters the command bundle and runs preflight, capture, validate, and bundle in that order",
                 "- the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state",
                 "- root-level registry milestone, Fleet queue, and design queue metadata cannot cite worker-local telemetry or helper commands as closure proof",
+                "- OODA-owned telemetry prompt citations and hard-blocked run-helper command citations cannot close the completed package",
+                "- active-run orientation command prompts cannot close the completed package",
+                "- base85/ascii85 encoded worker-helper citations cannot close the completed package",
+                "- base32 encoded worker-helper citations cannot close the completed package",
+                "- compressed encoded worker-helper citations cannot close the completed package",
+                "- percent-encoded worker-helper citations cannot close the completed package",
+                "- whitespace-wrapped encoded worker-helper citations cannot close the completed package",
                 "",
             ]
         ),
@@ -465,6 +477,17 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             result = _run_verifier(fixture)
             self.assertEqual(result.returncode, 0, msg=result.stderr)
             self.assertIn("verified next90-m101-fleet-external-proof-lane", result.stdout)
+
+    def test_verifier_accepts_completed_registry_milestone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            registry = yaml.safe_load(fixture["registry"].read_text(encoding="utf-8"))
+            registry["milestones"][0]["status"] = "complete"
+            _write_yaml(fixture["registry"], registry)
+
+            result = _run_verifier(fixture)
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
 
     def test_verifier_fails_when_zero_backlog_ingest_loses_manifest_validation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -599,6 +622,146 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             self.assertIn("external proof command artifact is missing", result.stderr)
             self.assertIn("run-macos-proof-lane.sh", result.stderr)
 
+    def test_verifier_fails_when_host_lane_does_not_enter_retained_commands_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            lane_script = fixture["commands_dir"] / "run-linux-proof-lane.sh"
+            lane_payload = lane_script.read_text(encoding="utf-8")
+            lane_script.write_text(
+                lane_payload.replace(f"cd {fixture['commands_dir']}\n", "", 1),
+                encoding="utf-8",
+            )
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof host lane script does not enter retained commands dir for linux",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_host_lane_steps_are_out_of_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            lane_script = fixture["commands_dir"] / "run-windows-proof-lane.sh"
+            lane_script.write_text(
+                "\n".join(
+                    [
+                        "#!/usr/bin/env bash",
+                        "set -euo pipefail",
+                        f"cd {fixture['commands_dir']}",
+                        "./preflight-windows-proof.sh",
+                        "./validate-windows-proof.sh",
+                        "./capture-windows-proof.sh",
+                        "./bundle-windows-proof.sh",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof host lane script has out-of-order token for windows: ./validate-windows-proof.sh",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_windows_powershell_lane_steps_are_out_of_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            lane_script = fixture["commands_dir"] / "run-windows-proof-lane.ps1"
+            lane_script.write_text(
+                "\n".join(
+                    [
+                        "$ErrorActionPreference = 'Stop'",
+                        "Set-StrictMode -Version Latest",
+                        "",
+                        "bash -lc 'set -euo pipefail",
+                        f"cd {fixture['commands_dir']}",
+                        "./preflight-windows-proof.sh",
+                        "./validate-windows-proof.sh",
+                        "./capture-windows-proof.sh",
+                        "./bundle-windows-proof.sh'",
+                        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+                        "exit 0",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof Windows PowerShell host lane has out-of-order token: "
+                "./validate-windows-proof.sh",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_windows_powershell_lane_splits_bash_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            lane_script = fixture["commands_dir"] / "run-windows-proof-lane.ps1"
+            lane_script.write_text(
+                "\n".join(
+                    [
+                        "$ErrorActionPreference = 'Stop'",
+                        "Set-StrictMode -Version Latest",
+                        "",
+                        f"bash -lc 'cd {fixture['commands_dir']}'",
+                        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+                        "bash -lc './preflight-windows-proof.sh'",
+                        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+                        "bash -lc './capture-windows-proof.sh'",
+                        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+                        "bash -lc './validate-windows-proof.sh'",
+                        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+                        "bash -lc './bundle-windows-proof.sh'",
+                        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+                        "exit 0",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof Windows PowerShell host lane does not run a strict retained bash script",
+                result.stderr,
+            )
+            self.assertIn(
+                "external proof Windows PowerShell host lane must run exactly one retained bash lane",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_windows_powershell_lane_drops_exit_propagation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            lane_script = fixture["commands_dir"] / "run-windows-proof-lane.ps1"
+            lane_payload = lane_script.read_text(encoding="utf-8")
+            lane_script.write_text(
+                lane_payload.replace(
+                    "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n",
+                    "",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof Windows PowerShell host lane is missing bash exit-code propagation",
+                result.stderr,
+            )
+
     def test_verifier_fails_when_retained_host_bundle_directory_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fixture = _closed_fixture(Path(tmp))
@@ -647,6 +810,82 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(
                 "external proof retained host bundle manifest is not zero-backlog for windows",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_retained_host_bundle_archive_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            (fixture["commands_dir"] / "linux-proof-bundle.tgz").unlink()
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof retained host bundle archive is missing for linux",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_retained_host_bundle_archive_manifest_drifts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            archive_path = fixture["commands_dir"] / "macos-proof-bundle.tgz"
+            stale_root = Path(tmp) / "stale-archive-root"
+            stale_root.mkdir()
+            (stale_root / "external-proof-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "host": "macos",
+                        "request_count": 1,
+                        "requests": [{"tuple_id": "avalonia:osx-arm64:macos"}],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with tarfile.open(archive_path, "w:gz") as archive:
+                archive.add(stale_root / "external-proof-manifest.json", arcname="external-proof-manifest.json")
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof retained host bundle archive manifest is not zero-backlog for macos",
+                result.stderr,
+            )
+            self.assertIn(
+                "external proof retained host bundle archive manifest drifted from directory manifest for macos",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_retained_host_bundle_archive_uses_absolute_member_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            archive_path = fixture["commands_dir"] / "linux-proof-bundle.tgz"
+            manifest_path = (
+                fixture["commands_dir"]
+                / "host-proof-bundles"
+                / "linux"
+                / "external-proof-manifest.json"
+            )
+            with tarfile.open(archive_path, "w:gz") as archive:
+                manifest_bytes = manifest_path.read_bytes()
+                member = tarfile.TarInfo("/external-proof-manifest.json")
+                member.size = len(manifest_bytes)
+                archive.addfile(member, io.BytesIO(manifest_bytes))
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof retained host bundle archive has unsafe member for linux",
+                result.stderr,
+            )
+            self.assertIn(
+                "external proof retained host bundle archive manifest is missing for linux",
                 result.stderr,
             )
 
@@ -911,26 +1150,301 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("design queue proof has duplicate closure proof entry", result.stderr)
 
+    def test_verifier_fails_when_queue_proof_cites_blocked_telemetry_retry_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            queue["items"][0]["proof"].append(
+                "previous attempt burned time on blocked telemetry probes"
+            )
+            _write_yaml(fixture["queue"], queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue proof cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_queue_root_cites_task_local_control_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            queue["operator_context"] = {
+                "first_commands": [
+                    "cat task-local context before implementation",
+                ],
+                "polling_disabled": True,
+                "status_query_supported": False,
+            }
+            _write_yaml(fixture["queue"], queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue staging cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_design_queue_cites_worker_safe_resume_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
+            design_queue["operator_note"] = (
+                "Use the shard runtime handoff as the worker-safe resume context."
+            )
+            _write_yaml(fixture["design_queue"], design_queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("design queue staging cites active-run telemetry/helper proof", result.stderr)
+
+    def test_disallowed_entries_detects_encoded_task_local_control_fields(self) -> None:
+        module = _load_module()
+        encoded_first_commands = base64.b64encode(
+            b"copied first_commands from task-local telemetry file"
+        ).decode("ascii")
+        url_worker_safe = "copied%20worker-safe%20telemetry%20snippet"
+
+        self.assertEqual(
+            module._disallowed_entries([encoded_first_commands]),
+            [encoded_first_commands],
+        )
+        self.assertEqual(module._disallowed_entries([url_worker_safe]), [url_worker_safe])
+
+    def test_disallowed_entries_detects_ooda_owned_helper_instruction_proof(self) -> None:
+        module = _load_module()
+        hard_blocked_marker = "helpers are hard-blocked, count as run failure"
+        ooda_marker = "operator/OODA loop owns telemetry; keep working the assigned slice"
+        encoded_ooda_marker = base64.b64encode(ooda_marker.encode("utf-8")).decode("ascii")
+        url_active_run_marker = "do%20not%20invoke%20operator%20telemetry%20or%20active-run%20helper%20commands"
+
+        self.assertEqual(module._disallowed_entries([hard_blocked_marker]), [hard_blocked_marker])
+        self.assertEqual(module._disallowed_entries([ooda_marker]), [ooda_marker])
+        self.assertEqual(module._disallowed_entries([encoded_ooda_marker]), [encoded_ooda_marker])
+        self.assertEqual(module._disallowed_entries([url_active_run_marker]), [url_active_run_marker])
+
+    def test_disallowed_entries_detects_base85_encoded_worker_helper_markers(self) -> None:
+        module = _load_module()
+        b85_marker = base64.b85encode(
+            b"closed by chummer_design_supervisor.py status"
+        ).decode("ascii")
+        a85_marker = base64.a85encode(
+            b"operator/OODA loop owns telemetry"
+        ).decode("ascii")
+
+        self.assertEqual(module._disallowed_entries([b85_marker]), [b85_marker])
+        self.assertEqual(module._disallowed_entries([a85_marker]), [a85_marker])
+
+    def test_disallowed_entries_detects_base32_encoded_worker_helper_markers(self) -> None:
+        module = _load_module()
+        b32_marker = base64.b32encode(
+            b"closed by chummer_design_supervisor.py status"
+        ).decode("ascii").rstrip("=")
+
+        self.assertEqual(module._disallowed_entries([b32_marker]), [b32_marker])
+
+    def test_disallowed_entries_detects_compressed_encoded_worker_helper_markers(self) -> None:
+        module = _load_module()
+        gzip_marker = base64.b64encode(
+            gzip.compress(b"closed by TASK_LOCAL_TELEMETRY.generated.json")
+        ).decode("ascii")
+        zlib_marker = base64.b85encode(
+            zlib.compress(b"closed by chummer_design_supervisor.py status")
+        ).decode("ascii")
+
+        self.assertEqual(module._disallowed_entries([gzip_marker]), [gzip_marker])
+        self.assertEqual(module._disallowed_entries([zlib_marker]), [zlib_marker])
+
+    def test_disallowed_entries_detects_quoted_printable_worker_helper_markers(self) -> None:
+        module = _load_module()
+        quoted_printable_marker = "closed by TASK=5FLOCAL=5FTELEMETRY.generated.json"
+
+        self.assertEqual(
+            module._disallowed_entries([quoted_printable_marker]),
+            [quoted_printable_marker],
+        )
+
+    def test_verifier_fails_when_queue_proof_cites_quoted_printable_worker_helper_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
+            encoded_marker = "closed by TASK=5FLOCAL=5FTELEMETRY.generated.json"
+            queue["items"][0]["proof"].append(encoded_marker)
+            design_queue["items"][0]["proof"].append(encoded_marker)
+            _write_yaml(fixture["queue"], queue)
+            _write_yaml(fixture["design_queue"], design_queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue proof cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_queue_proof_cites_percent_encoded_worker_helper_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
+            encoded_marker = "closed%20by%20TASK_LOCAL_TELEMETRY.generated.json"
+            queue["items"][0]["proof"].append(encoded_marker)
+            design_queue["items"][0]["proof"].append(encoded_marker)
+            _write_yaml(fixture["queue"], queue)
+            _write_yaml(fixture["design_queue"], design_queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue proof cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_queue_proof_cites_base32_worker_helper_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
+            encoded_marker = base64.b32encode(
+                b"closed by chummer_design_supervisor.py status"
+            ).decode("ascii").rstrip("=")
+            queue["items"][0]["proof"].append(encoded_marker)
+            design_queue["items"][0]["proof"].append(encoded_marker)
+            _write_yaml(fixture["queue"], queue)
+            _write_yaml(fixture["design_queue"], design_queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue proof cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_queue_proof_cites_gzip_base64_worker_helper_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
+            encoded_marker = base64.b64encode(
+                gzip.compress(b"closed by TASK_LOCAL_TELEMETRY.generated.json")
+            ).decode("ascii")
+            queue["items"][0]["proof"].append(encoded_marker)
+            design_queue["items"][0]["proof"].append(encoded_marker)
+            _write_yaml(fixture["queue"], queue)
+            _write_yaml(fixture["design_queue"], design_queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue proof cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_queue_proof_cites_base85_worker_helper_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
+            encoded_marker = base64.b85encode(
+                b"closed by chummer_design_supervisor.py status"
+            ).decode("ascii")
+            queue["items"][0]["proof"].append(encoded_marker)
+            design_queue["items"][0]["proof"].append(encoded_marker)
+            _write_yaml(fixture["queue"], queue)
+            _write_yaml(fixture["design_queue"], design_queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue proof cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_queue_root_cites_ooda_telemetry_owner_instruction(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            queue["operator_note"] = (
+                "operator/OODA loop owns telemetry; keep working the assigned slice"
+            )
+            _write_yaml(fixture["queue"], queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue staging cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_registry_milestone_cites_active_run_orientation_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            registry = yaml.safe_load(fixture["registry"].read_text(encoding="utf-8"))
+            registry["milestones"][0]["operator_note"] = (
+                "Run these exact commands first and do not invent another orientation step."
+            )
+            _write_yaml(fixture["registry"], registry)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("registry milestone cites active-run telemetry/helper proof", result.stderr)
+
+    def test_disallowed_entries_detects_encoded_active_run_orientation_prompts(self) -> None:
+        module = _load_module()
+        encoded_prompt = base64.b64encode(
+            b"Run these exact commands first and read these files directly first."
+        ).decode("ascii")
+        url_stop_report = "If%20you%20stop%2C%20report%20only%3A%20What%20shipped%3A"
+
+        self.assertEqual(module._disallowed_entries([encoded_prompt]), [encoded_prompt])
+        self.assertEqual(module._disallowed_entries([url_stop_report]), [url_stop_report])
+
     def test_disallowed_entries_detects_encoded_worker_helper_markers(self) -> None:
         module = _load_module()
         base64_marker = base64.b64encode(b"closed by chummer_design_supervisor.py status").decode("ascii")
         nested_base64_marker = base64.b64encode(base64_marker.encode("ascii")).decode("ascii")
+        base64_url_marker = base64.b64encode(
+            b"closed%20by%20ACTIVE_RUN_HANDOFF.generated.md"
+        ).decode("ascii")
+        base64_html_marker = base64.b64encode(
+            b"closed by TASK_LOCAL_&#84;ELEMETRY.generated.json"
+        ).decode("ascii")
         hex_marker = b"closed by TASK_LOCAL_TELEMETRY.generated.json".hex()
+        hex_url_marker = b"closed%20by%20chummer_design_supervisor.py%20status".hex()
         url_marker = "closed%20by%20ACTIVE_RUN_HANDOFF.generated.md"
         html_marker = "closed by TASK_LOCAL_&#84;ELEMETRY.generated.json"
+        retry_prompt_marker = "do not run operator telemetry helpers inside this worker run"
+        retry_prompt_encoded_marker = base64.b64encode(
+            b"This retry is implementation-only"
+        ).decode("ascii")
 
         self.assertEqual(module._disallowed_entries([base64_marker]), [base64_marker])
         self.assertEqual(module._disallowed_entries([nested_base64_marker]), [nested_base64_marker])
+        self.assertEqual(module._disallowed_entries([base64_url_marker]), [base64_url_marker])
+        self.assertEqual(module._disallowed_entries([base64_html_marker]), [base64_html_marker])
         self.assertEqual(module._disallowed_entries([hex_marker]), [hex_marker])
+        self.assertEqual(module._disallowed_entries([hex_url_marker]), [hex_url_marker])
         self.assertEqual(module._disallowed_entries([url_marker]), [url_marker])
         self.assertEqual(module._disallowed_entries([html_marker]), [html_marker])
+        self.assertEqual(module._disallowed_entries([retry_prompt_marker]), [retry_prompt_marker])
+        self.assertEqual(
+            module._disallowed_entries([retry_prompt_encoded_marker]),
+            [retry_prompt_encoded_marker],
+        )
+
+    def test_disallowed_entries_detects_whitespace_wrapped_encoded_worker_helper_markers(self) -> None:
+        module = _load_module()
+        encoded_marker = base64.b64encode(
+            b"closed by TASK_LOCAL_TELEMETRY.generated.json"
+        ).decode("ascii")
+        wrapped_marker = " \n".join(
+            encoded_marker[index : index + 8] for index in range(0, len(encoded_marker), 8)
+        )
+        encoded_hex_marker = b"closed by chummer_design_supervisor.py status".hex()
+        wrapped_hex_marker = " ".join(
+            encoded_hex_marker[index : index + 10]
+            for index in range(0, len(encoded_hex_marker), 10)
+        )
+
+        self.assertEqual(module._disallowed_entries([wrapped_marker]), [wrapped_marker])
+        self.assertEqual(module._disallowed_entries([wrapped_hex_marker]), [wrapped_hex_marker])
 
     def test_verifier_fails_when_queue_proof_cites_html_entity_encoded_worker_helper_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fixture = _closed_fixture(Path(tmp))
             queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
             queue["items"][0]["proof"].append("closed by TASK_LOCAL_&#84;ELEMETRY.generated.json")
+            design_queue["items"][0]["proof"].append("closed by TASK_LOCAL_&#84;ELEMETRY.generated.json")
             _write_yaml(fixture["queue"], queue)
+            _write_yaml(fixture["design_queue"], design_queue)
 
             result = _run_verifier(fixture)
 
@@ -941,11 +1455,35 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             fixture = _closed_fixture(Path(tmp))
             queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
             encoded_marker = base64.b64encode(
                 b"closed by chummer_design_supervisor.py status"
             ).decode("ascii")
             queue["items"][0]["proof"].append(encoded_marker)
+            design_queue["items"][0]["proof"].append(encoded_marker)
             _write_yaml(fixture["queue"], queue)
+            _write_yaml(fixture["design_queue"], design_queue)
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("queue proof cites active-run telemetry/helper proof", result.stderr)
+
+    def test_verifier_fails_when_queue_proof_cites_whitespace_wrapped_encoded_worker_helper_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            queue = yaml.safe_load(fixture["queue"].read_text(encoding="utf-8"))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
+            encoded_marker = base64.b64encode(
+                b"closed by TASK_LOCAL_TELEMETRY.generated.json"
+            ).decode("ascii")
+            wrapped_marker = "\n".join(
+                encoded_marker[index : index + 12] for index in range(0, len(encoded_marker), 12)
+            )
+            queue["items"][0]["proof"].append(wrapped_marker)
+            design_queue["items"][0]["proof"].append(wrapped_marker)
+            _write_yaml(fixture["queue"], queue)
+            _write_yaml(fixture["design_queue"], design_queue)
 
             result = _run_verifier(fixture)
 

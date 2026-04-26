@@ -67,7 +67,7 @@ def test_published_fleet_workpackages_allow_package_compile_front_overlay() -> N
     package = _package_compile_front_package()
     if package is None:
         return
-    assert package["allowed_lanes"] == ["core_authority"]
+    assert package["allowed_lanes"] == ["core_booster", "core_authority"]
     assert package["required_reviewer_lane"] == "core_authority"
     assert package["final_reviewer_lane"] == "core_authority"
     assert package["landing_lane"] == "core_authority"

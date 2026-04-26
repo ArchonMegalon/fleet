@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -23,7 +24,10 @@ DEFAULT_STATE_ROOT = (
     if Path("/var/lib/codex-fleet").exists()
     else DEFAULT_WORKSPACE_ROOT / "state" / "fleet_ooda_keeper"
 )
-DEFAULT_CONTROLLER_URL = "http://127.0.0.1:8090" if RUNNING_IN_CONTROLLER_CONTAINER else "http://127.0.0.1:18090"
+DEFAULT_CONTROLLER_URL = os.environ.get(
+    "FLEET_CONTROLLER_URL",
+    "http://127.0.0.1:8090" if RUNNING_IN_CONTROLLER_CONTAINER else "http://127.0.0.1:8090",
+)
 DEFAULT_TARGET_ACTIVE = 13
 DEFAULT_READY_BACKLOG_FLOOR = 10
 DEFAULT_POLL_SECONDS = 10 * 60
@@ -109,8 +113,24 @@ def append_event(path: Path, payload: Dict[str, Any]) -> None:
         handle.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
+def set_host_controller_env_defaults(controller_dir: Path) -> None:
+    if RUNNING_IN_CONTROLLER_CONTAINER:
+        return
+    resolved = controller_dir.resolve()
+    workspace_root = resolved.parent if resolved.name == "controller" else DEFAULT_WORKSPACE_ROOT
+    state_dir = workspace_root / "state"
+    os.environ.setdefault("FLEET_DB_PATH", str(state_dir / "fleet.db"))
+    os.environ.setdefault("FLEET_LOG_DIR", str(state_dir / "logs"))
+    os.environ.setdefault("FLEET_QUEUE_RECOVERY_DIR", str(state_dir / "queue-recovery"))
+    os.environ.setdefault("FLEET_WORKTREE_ROOT", str(state_dir / "worktrees"))
+    os.environ.setdefault("FLEET_CONTROLLER_HEARTBEAT_PATH", str(state_dir / "controller-heartbeat.json"))
+    os.environ.setdefault("FLEET_CODEX_HOME_ROOT", str(state_dir / "codex-homes"))
+    os.environ.setdefault("FLEET_GROUP_ROOT", str(state_dir / "groups"))
+
+
 def load_controller_app(controller_dir: Path) -> Any:
     resolved = controller_dir.resolve()
+    set_host_controller_env_defaults(resolved)
     sys.path.insert(0, str(resolved))
     import app  # type: ignore
 
@@ -666,8 +686,6 @@ def release_stale_zero_finding_local_reviews(
         project_id = str(row["project_id"] or "").strip()
         package_id = str(row["package_id"] or "").strip()
         if not project_id or not package_id:
-            continue
-        if not app.project_uses_package_scheduler(config, project_id):
             continue
         latest_run_id = int(row["latest_run_id"] or 0) or None
         verify_exit_code = row["verify_exit_code"]

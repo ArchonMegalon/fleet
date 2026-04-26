@@ -39,7 +39,7 @@ credit_summary() {
 }
 
 run_refresh_pass() {
-  if onemin_credit_burn_allowed; then
+  if [[ "${CHUMMER6_ALLOW_ONEMIN_REFRESH:-0}" == "1" ]] && onemin_credit_burn_allowed; then
     export CHUMMER6_IMAGE_PROVIDER_ORDER="${CHUMMER6_FLAGSHIP_ONEMIN_PROVIDER_ORDER:-onemin,media_factory,magixai,browseract_prompting_systems,browseract_magixai}"
     export CHUMMER6_ONEMIN_MODEL="${CHUMMER6_FLAGSHIP_ONEMIN_MODEL:-gpt-image-1}"
     export CHUMMER6_ONEMIN_IMAGE_QUALITY="${CHUMMER6_FLAGSHIP_ONEMIN_IMAGE_QUALITY:-high}"
@@ -48,7 +48,10 @@ run_refresh_pass() {
     export CHUMMER6_PROVIDER_BUSY_DELAY_SECONDS="${CHUMMER6_FLAGSHIP_PROVIDER_BUSY_DELAY_SECONDS:-5}"
     log "1min flagship burn enabled ($(credit_summary))"
   else
-    log "1min flagship burn disabled ($(credit_summary)); keeping non-burn provider posture"
+    export CHUMMER6_IMAGE_PROVIDER_ORDER="${CHUMMER6_FLAGSHIP_NON_BURN_PROVIDER_ORDER:-magixai,browseract_magixai,browseract_prompting_systems}"
+    export CHUMMER6_ENABLE_ONEMIN_PROVIDER="${CHUMMER6_ENABLE_ONEMIN_PROVIDER:-0}"
+    export CHUMMER6_MEDIA_FACTORY_ALLOW_ONEMIN_FALLBACK="${CHUMMER6_MEDIA_FACTORY_ALLOW_ONEMIN_FALLBACK:-0}"
+    log "1min flagship burn disabled ($(credit_summary)); using non-burn providers: ${CHUMMER6_IMAGE_PROVIDER_ORDER}"
   fi
   if [[ -n "${model}" ]]; then
     python3 /docker/EA/scripts/chummer6_guide_worker.py --model "${model}"

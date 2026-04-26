@@ -136,6 +136,22 @@ normalize_ea_base_url() {
   printf '%s' "${base_url}"
 }
 
+normalize_codexea_home() {
+  local fallback_home=""
+  if [ -n "${HOME:-}" ] && [ "${HOME}" != "/" ] && [ -d "${HOME}" ] && [ -w "${HOME}" ]; then
+    return 0
+  fi
+  fallback_home="${CODEXEA_FALLBACK_HOME:-/tmp/codexea-home-$(id -u)}"
+  mkdir -p "${fallback_home}"
+  export HOME="${fallback_home}"
+}
+
+normalize_codexea_home
+: "${XDG_CACHE_HOME:=${HOME}/.cache}"
+: "${XDG_CONFIG_HOME:=${HOME}/.config}"
+mkdir -p "${XDG_CACHE_HOME}" "${XDG_CONFIG_HOME}"
+export XDG_CACHE_HOME XDG_CONFIG_HOME
+
 REAL_CODEX="${CODEXEA_REAL_CODEX:-${CODEX_REAL_BIN:-/usr/bin/codex}}"
 WATCHDOG_BIN="${CODEXEA_WATCHDOG_BIN:-${HOME}/.local/bin/codexea-watchdog}"
 BOOTSTRAP_PROMPT_FILE="${CODEXEA_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/ea_interactive_bootstrap.md}"
@@ -820,6 +836,8 @@ run_exec_session_with_clean_output() {
   local interrupted_exit=0
   local child_exit=0
   local tick_count=0
+  local elapsed_seconds=0
+  local heartbeat_started_at=0
 
   [ "${#cmd[@]}" -gt 0 ] || return 0
   mapfile -d '' json_cmd < <(append_exec_json_flag "${cmd[@]}")
@@ -829,6 +847,7 @@ run_exec_session_with_clean_output() {
   python3 "${CODEXEA_EXEC_JSON_RENDERER}" "$(pwd)" < "${fifo_path}" &
   renderer_pid=$!
 
+  heartbeat_started_at="$(date +%s)"
   emit_waiting_trace 0
   if [ -t 0 ]; then
     "${json_cmd[@]}" < /dev/null > "${fifo_path}" 2> >(
@@ -862,7 +881,8 @@ run_exec_session_with_clean_output() {
     kill -0 "${child_pid}" 2>/dev/null || break
     tick_count=$((tick_count + 1))
     if [ "${tick_count}" -ge 250 ]; then
-      emit_waiting_trace
+      elapsed_seconds="$(( $(date +%s) - heartbeat_started_at ))"
+      emit_waiting_trace "${elapsed_seconds}"
       tick_count=0
     fi
   done
@@ -931,13 +951,9 @@ emit_prelaunch_wait_trace() {
 }
 
 emit_waiting_trace() {
-  local elapsed_seconds="${1:-}"
+  local elapsed_seconds="${1:-0}"
   env_truthy "${CODEXEA_TRACE_STARTUP}" || return 0
-  if [ -n "${elapsed_seconds}" ]; then
-    printf 'Trace: lane=%s waiting for model output (%ss)\n' "${EFFECTIVE_LANE}" "${elapsed_seconds}" >&2
-  else
-    printf 'Trace: lane=%s waiting for model output\n' "${EFFECTIVE_LANE}" >&2
-  fi
+  printf 'Trace: lane=%s waiting for upstream response (total_duration=%ss)\n' "${EFFECTIVE_LANE}" "${elapsed_seconds}" >&2
 }
 
 run_with_trace_heartbeat() {
@@ -1005,6 +1021,7 @@ PY
     else
       cat > "${stdin_file}" || true
     fi
+    heartbeat_started_at="$(date +%s)"
     emit_waiting_trace 0
     "${effective_cmd[@]}" < "${stdin_file}" &
     child_pid=$!
@@ -1016,7 +1033,8 @@ PY
       kill -0 "${child_pid}" 2>/dev/null || break
       exit_code=$((exit_code + 1))
       if [ "${exit_code}" -ge 250 ]; then
-        emit_waiting_trace
+        elapsed_seconds="$(( $(date +%s) - heartbeat_started_at ))"
+        emit_waiting_trace "${elapsed_seconds}"
         exit_code=0
       fi
     done
@@ -1577,6 +1595,13 @@ case "${1:-}" in
     show_status "$@"
     exit 0
     ;;
+  --onemin-aggregate)
+    if [ -f "${ROUTE_HELPER}" ]; then
+      exec python3 "${ROUTE_HELPER}" "$@"
+    fi
+    echo "Missing CodexEA route helper for live 1min aggregate output" >&2
+    exit 1
+    ;;
   credits|onemin)
     shift
     if [ -f "${ROUTE_HELPER}" ]; then
@@ -1864,6 +1889,63 @@ if [ "${MODE}" = "responses" ] && [ "${EFFECTIVE_LANE}" != "easy" ] && [ -n "${M
   esac
 fi
 
+if [ "${MODE}" = "mcp" ] && ! env_truthy "${CODEXEA_ALLOW_MCP_WITHOUT_OPENAI:-0}" && [ -z "${OPENAI_API_KEY:-}" ]; then
+  MODE="responses"
+  case "${EFFECTIVE_LANE}" in
+    easy|repair)
+      EFFECTIVE_SUBMODE="responses_fast"
+      ;;
+    groundwork)
+      EFFECTIVE_SUBMODE="responses_groundwork"
+      ;;
+    core)
+      if [ "${CODEXEA_CORE_RESPONSES_PROFILE:-core}" = "core_batch" ]; then
+        EFFECTIVE_SUBMODE="responses_core_batch"
+      else
+        EFFECTIVE_SUBMODE="responses_core"
+      fi
+      ;;
+    core_rescue)
+      EFFECTIVE_SUBMODE="responses_core_rescue"
+      ;;
+    jury)
+      EFFECTIVE_SUBMODE="responses_audit"
+      ;;
+    review_light)
+      EFFECTIVE_SUBMODE="responses_review_light"
+      ;;
+    survival)
+      EFFECTIVE_SUBMODE="responses_survival"
+      ;;
+  esac
+fi
+
+if [ "${MODE}" = "responses" ] && [ "${EFFECTIVE_LANE}" != "easy" ] && [ -n "${MODEL}" ] && ! is_one_minai_model "${MODEL}"; then
+  case "${EFFECTIVE_LANE}" in
+    core)
+      MODEL="ea-coder-hard"
+      ;;
+    core_rescue)
+      MODEL="ea-coder-hard-rescue"
+      ;;
+    jury)
+      MODEL="ea-audit-jury"
+      ;;
+    review_light)
+      MODEL="ea-review-light"
+      ;;
+    survival)
+      MODEL="ea-coder-survival"
+      ;;
+    repair)
+      MODEL="ea-coder-fast"
+      ;;
+    groundwork)
+      MODEL="ea-groundwork-gemini"
+      ;;
+  esac
+fi
+
 export CODEXEA_LANE="${EFFECTIVE_LANE}"
 export CODEXEA_SUBMODE="${EFFECTIVE_SUBMODE}"
 EA_DEFAULT_ARGS=()
@@ -1892,7 +1974,7 @@ case "${MODE}" in
     fi
     ;;
   responses)
-    : "${CODEXEA_STREAM_IDLE_TIMEOUT_MS:=300000}"
+    : "${CODEXEA_STREAM_IDLE_TIMEOUT_MS:=1200000}"
     : "${CODEXEA_STREAM_MAX_RETRIES:=5}"
     EA_AUTH_TOKEN="${EA_MCP_API_TOKEN:-${EA_API_TOKEN:-}}"
     EA_CODEX_PROFILE="${EFFECTIVE_LANE}"

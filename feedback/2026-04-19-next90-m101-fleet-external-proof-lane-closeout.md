@@ -46,8 +46,17 @@ The repeat-prevention rules are:
 - the zero-backlog command bundle still retains per-host preflight, capture, validate, bundle, ingest, and run entrypoints for Linux, macOS, and Windows
 - the retained command bundle keeps `host-proof-bundles/linux`, `host-proof-bundles/macos`, and `host-proof-bundles/windows` present so ingest can resume without rebuilding the lane
 - the finalize entrypoint still republishes after the per-host validate and ingest lanes remain available
+- the retained Windows PowerShell host lane still enters the command bundle and runs preflight, capture, validate, and bundle in that order
 - the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state
 - root-level registry milestone, Fleet queue, and design queue metadata cannot cite worker-local telemetry or helper commands as closure proof
+- OODA-owned telemetry prompt citations and hard-blocked run-helper command citations cannot close the completed package
+- active-run orientation command prompts cannot close the completed package
+- base85/ascii85 encoded worker-helper citations cannot close the completed package
+- base32 encoded worker-helper citations cannot close the completed package
+- compressed encoded worker-helper citations cannot close the completed package
+- quoted-printable encoded worker-helper citations cannot close the completed package
+- percent-encoded worker-helper citations cannot close the completed package
+- whitespace-wrapped encoded worker-helper citations cannot close the completed package
 - commit `8dd79057` is the current proof floor for rejecting recursively encoded worker-helper citations in completed-package evidence
 - HTML-entity encoded worker-helper citations are rejected before any queue, registry, runbook, support, journey, readiness, or closeout proof can keep the package closed
 - commit `9bb8be5e` is the current proof floor for rejecting HTML-entity encoded worker-helper citations in completed-package evidence

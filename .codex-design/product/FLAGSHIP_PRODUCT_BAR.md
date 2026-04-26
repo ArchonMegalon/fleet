@@ -130,6 +130,21 @@ Flagship grade requires:
 * bounded enough to avoid overclaiming
 * aligned enough that install, update, help, and support routes never contradict each other
 
+### 8a. Public proof, preview, fallback, and flagship claims stay distinct
+
+Public trust language must keep four different promises separate:
+
+* proof shelf language can say what was posted, recently checked, and inspectable today
+* preview language can invite real use without implying flagship completeness
+* fallback language must name backup, recovery, or compatibility posture explicitly and must not read like the recommended route
+* flagship language is reserved for surfaces that independently clear `FLAGSHIP_RELEASE_ACCEPTANCE.yaml`
+
+When those promises appear on the same page, the install shelf remains the authority for what to start with.
+Proof cards, artifact explainers, captions, preview siblings, and packet-detail artifacts can support that page, but they must stay visibly secondary to the recommended route.
+
+Artifact-factory cards, preview siblings, captions, explainers, and packet-detail artifacts can make the product more inspectable.
+They do not by themselves turn a preview lane or fallback route into a flagship promise, and they do not become substitute route authority for the public install shelf.
+
 ### 9. Surface design must be systematized, not improvised
 
 Flagship grade requires a shared cross-surface design contract.

@@ -4,13 +4,17 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import gzip
 import hashlib
 import html
 import json
 import os
+import quopri
 import re
 import subprocess
 import sys
+import tarfile
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -75,12 +79,47 @@ DISALLOWED_WORKER_PROOF_MARKERS = (
     "/var/lib/codex-fleet",
     "ACTIVE_RUN_HANDOFF.generated.md",
     "TASK_LOCAL_TELEMETRY.generated.json",
+    "first_commands",
+    "status_query_supported",
+    "polling_disabled",
+    "worker-safe resume context",
+    "worker-safe telemetry",
+    "task-local telemetry file",
     "frontier ids:",
     "open milestone ids:",
     "successor frontier detail:",
+    "previous attempt burned time on blocked telemetry probes",
+    "blocked telemetry probes",
+    "do not run operator telemetry helpers inside this worker run",
+    "do not invoke operator telemetry",
+    "do not invoke operator telemetry or active-run helper commands from inside worker runs",
+    "operator/OODA loop owns telemetry",
+    "operator ooda loop owns telemetry",
+    "ooda loop owns telemetry",
+    "operator-owned telemetry",
+    "operator-owned run-helper",
+    "operator-owned helper",
+    "helpers are hard-blocked",
+    "implementation-only",
+    "implementation only",
+    "implementation-only retry",
+    "run these exact commands first",
+    "do not invent another orientation step",
+    "read these files directly first",
+    "historical operator status snippets",
+    "stale notes rather than commands",
+    "writable scope roots",
+    "if you stop, report only",
+    "what shipped:",
+    "what remains:",
+    "exact blocker:",
     "active-run telemetry",
     "active-run helper",
+    "active-run helper commands",
+    "active run helper",
+    "active-run status helper",
     "operator-telemetry",
+    "operator telemetry helper",
     "worker-run telemetry",
     "control-plane helper output",
     "run-state helper output",
@@ -122,6 +161,11 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = [
     "bind runbook generation, closure verification, and completed-package repeat prevention",
     "include the standalone M101 verifier in no-PYTHONPATH bootstrap proof",
     "rejects worker-local telemetry or helper-command citations in the M101 registry milestone, Fleet queue root, and design queue root metadata",
+    "rejects OODA-owned telemetry prompt citations and hard-blocked run-helper command citations",
+    "rejects base85/ascii85 encoded worker-helper citations",
+    "rejects base32 encoded worker-helper citations",
+    "rejects compressed encoded worker-helper citations",
+    "rejects percent-encoded worker-helper citations",
 ]
 REQUIRED_QUEUE_PROOF_MARKERS = [
     "/docker/fleet/scripts/materialize_external_proof_runbook.py",
@@ -148,6 +192,12 @@ REQUIRED_QUEUE_PROOF_MARKERS = [
     "design-owned queue source row matches the Fleet completed queue proof assignment",
     "completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason",
     "worker-local telemetry or helper-command citations in the M101 registry milestone, Fleet queue root, and design queue root metadata cannot close the completed package",
+    "OODA-owned telemetry prompt citations and hard-blocked run-helper command citations cannot close the completed package",
+    "base85/ascii85 encoded worker-helper citations cannot close the completed package",
+    "base32 encoded worker-helper citations cannot close the completed package",
+    "compressed encoded worker-helper citations cannot close the completed package",
+    "quoted-printable encoded worker-helper citations cannot close the completed package",
+    "percent-encoded worker-helper citations cannot close the completed package",
 ]
 REQUIRED_CLOSEOUT_NOTE_MARKERS = [
     f"Package: `{PACKAGE_ID}`",
@@ -163,8 +213,16 @@ REQUIRED_CLOSEOUT_NOTE_MARKERS = [
     "the zero-backlog command bundle still retains per-host preflight, capture, validate, bundle, ingest, and run entrypoints for Linux, macOS, and Windows",
     "the retained command bundle keeps `host-proof-bundles/linux`, `host-proof-bundles/macos`, and `host-proof-bundles/windows` present so ingest can resume without rebuilding the lane",
     "the finalize entrypoint still republishes after the per-host validate and ingest lanes remain available",
+    "the retained Windows PowerShell host lane still enters the command bundle and runs preflight, capture, validate, and bundle in that order",
     "the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state",
     "root-level registry milestone, Fleet queue, and design queue metadata cannot cite worker-local telemetry or helper commands as closure proof",
+    "OODA-owned telemetry prompt citations and hard-blocked run-helper command citations cannot close the completed package",
+    "active-run orientation command prompts cannot close the completed package",
+    "base85/ascii85 encoded worker-helper citations cannot close the completed package",
+    "base32 encoded worker-helper citations cannot close the completed package",
+    "compressed encoded worker-helper citations cannot close the completed package",
+    "percent-encoded worker-helper citations cannot close the completed package",
+    "whitespace-wrapped encoded worker-helper citations cannot close the completed package",
 ]
 REQUIRED_ANCHOR_PATHS = [
     ROOT / "scripts" / "materialize_external_proof_runbook.py",
@@ -236,8 +294,11 @@ REQUIRED_ZERO_BACKLOG_INGEST_TOKENS = (
     "external-proof-bundle-manifest-missing",
     "external-proof-bundle-manifest-mismatch",
     "external-proof-bundle-path-unsafe",
+    "external-proof-bundle-member-unsafe",
     "assert not bad",
-    'tar -xzf "$BUNDLE_ARCHIVE" -C "$TARGET_ROOT"',
+    "tarfile.open",
+    "member.isfile()",
+    "shutil.copyfileobj(source, handle)",
     "No expected host proof files were queued for ingest.",
     '"request_count": 0',
 )
@@ -369,21 +430,9 @@ def _disallowed_entries(entries: list[Any]) -> list[str]:
 
 
 def _worker_proof_text_variants(text: str) -> list[str]:
-    variants = [text]
-    url_decoded = unquote(text)
-    if url_decoded != text:
-        variants.append(url_decoded)
-    html_decoded = html.unescape(text)
-    if html_decoded != text:
-        variants.append(html_decoded)
-    if "\\" in text:
-        try:
-            escaped = text.encode("utf-8").decode("unicode_escape")
-        except UnicodeDecodeError:
-            escaped = ""
-        if escaped and escaped != text:
-            variants.append(escaped)
-    variants.extend(_decoded_worker_proof_tokens(text))
+    variants = _expanded_text_decodings([text])
+    variants.extend(_decoded_worker_proof_tokens(variants))
+    variants = _expanded_text_decodings(variants)
     deduped: list[str] = []
     seen: set[str] = set()
     for variant in variants:
@@ -393,41 +442,133 @@ def _worker_proof_text_variants(text: str) -> list[str]:
     return deduped
 
 
-def _decoded_worker_proof_tokens(text: str) -> list[str]:
-    decoded: list[str] = []
-    pending = [text]
-    seen = {text}
+def _expanded_text_decodings(values: list[str]) -> list[str]:
+    expanded: list[str] = []
+    pending = [value for value in values if value]
+    seen: set[str] = set()
     for _depth in range(3):
         next_pending: list[str] = []
         for value in pending:
-            for token in re.findall(r"\b[0-9A-Fa-f]{24,}\b", value):
-                if len(token) % 2:
-                    continue
+            if value not in seen:
+                expanded.append(value)
+                seen.add(value)
+            candidates = [unquote(value), html.unescape(value)]
+            if "=" in value:
                 try:
-                    decoded_token = bytes.fromhex(token).decode("utf-8")
-                except (UnicodeDecodeError, ValueError):
-                    continue
-                if decoded_token not in seen:
-                    decoded.append(decoded_token)
-                    next_pending.append(decoded_token)
-                    seen.add(decoded_token)
-            for token in re.findall(r"\b[A-Za-z0-9+/_-]{20,}={0,2}\b", value):
-                padded = token + ("=" * (-len(token) % 4))
-                decoded_token = ""
+                    candidates.append(quopri.decodestring(value).decode("utf-8"))
+                except UnicodeDecodeError:
+                    pass
+            if "\\" in value:
                 try:
-                    decoded_token = base64.b64decode(padded, validate=True).decode("utf-8")
-                except (binascii.Error, UnicodeDecodeError):
-                    try:
-                        decoded_token = base64.urlsafe_b64decode(padded).decode("utf-8")
-                    except (binascii.Error, UnicodeDecodeError):
-                        continue
-                if decoded_token not in seen:
-                    decoded.append(decoded_token)
-                    next_pending.append(decoded_token)
-                    seen.add(decoded_token)
+                    candidates.append(value.encode("utf-8").decode("unicode_escape"))
+                except UnicodeDecodeError:
+                    pass
+            for candidate in candidates:
+                if candidate and candidate not in seen:
+                    next_pending.append(candidate)
         pending = next_pending
         if not pending:
             break
+    return expanded
+
+
+def _decoded_worker_proof_tokens(values: list[str]) -> list[str]:
+    decoded: list[str] = []
+    pending = list(values)
+    seen = set(values)
+    for _depth in range(3):
+        next_pending: list[str] = []
+        for value in pending:
+            for token_source in _encoded_token_sources(value):
+                for token in re.findall(r"\b[0-9A-Fa-f]{24,}\b", token_source):
+                    if len(token) % 2:
+                        continue
+                    try:
+                        decoded_candidates = _decode_worker_proof_bytes(bytes.fromhex(token))
+                    except ValueError:
+                        continue
+                    for decoded_token in decoded_candidates:
+                        if decoded_token not in seen:
+                            decoded.append(decoded_token)
+                            next_pending.append(decoded_token)
+                            seen.add(decoded_token)
+                for token in re.findall(r"\b[A-Za-z0-9+/_-]{20,}={0,2}\b", token_source):
+                    padded = token + ("=" * (-len(token) % 4))
+                    try:
+                        decoded_bytes = base64.b64decode(padded, validate=True)
+                    except binascii.Error:
+                        try:
+                            decoded_bytes = base64.urlsafe_b64decode(padded)
+                        except binascii.Error:
+                            continue
+                    for decoded_token in _decode_worker_proof_bytes(decoded_bytes):
+                        if decoded_token not in seen:
+                            decoded.append(decoded_token)
+                            next_pending.append(decoded_token)
+                            seen.add(decoded_token)
+                for token in re.findall(r"(?<!\S)[!-~]{20,}(?!\S)", token_source):
+                    for decoder in (base64.b85decode, base64.a85decode):
+                        try:
+                            decoded_candidates = _decode_worker_proof_bytes(decoder(token.encode("ascii")))
+                        except (binascii.Error, ValueError):
+                            continue
+                        for decoded_token in decoded_candidates:
+                            if decoded_token not in seen:
+                                decoded.append(decoded_token)
+                                next_pending.append(decoded_token)
+                                seen.add(decoded_token)
+                for token in re.findall(r"\b[A-Z2-7]{20,}={0,6}\b", token_source.upper()):
+                    padded = token + ("=" * (-len(token) % 8))
+                    try:
+                        decoded_candidates = _decode_worker_proof_bytes(
+                            base64.b32decode(padded, casefold=True)
+                        )
+                    except binascii.Error:
+                        continue
+                    for decoded_token in decoded_candidates:
+                        if decoded_token not in seen:
+                            decoded.append(decoded_token)
+                            next_pending.append(decoded_token)
+                            seen.add(decoded_token)
+        pending = next_pending
+        if not pending:
+            break
+    return decoded
+
+
+def _encoded_token_sources(value: str) -> list[str]:
+    sources = [value]
+    compact = re.sub(r"\s+", "", value)
+    if compact and compact != value:
+        sources.append(compact)
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for source in sources:
+        if source not in seen:
+            deduped.append(source)
+            seen.add(source)
+    return deduped
+
+
+def _decode_worker_proof_bytes(payload: bytes) -> list[str]:
+    decoded: list[str] = []
+    candidates = [payload]
+    for decompressor in (
+        gzip.decompress,
+        zlib.decompress,
+        lambda value: zlib.decompress(value, -zlib.MAX_WBITS),
+    ):
+        try:
+            candidates.append(decompressor(payload))
+        except (OSError, zlib.error):
+            continue
+    for candidate in candidates:
+        try:
+            decoded_text = candidate.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        if decoded_text not in decoded:
+            decoded.append(decoded_text)
     return decoded
 
 
@@ -571,6 +712,35 @@ def _require_file_tokens(path: Path, tokens: tuple[str, ...], issues: list[str],
     _require_tokens(payload, tokens, issues, label=label)
 
 
+def _require_single_powershell_bash_lane(payload: str, issues: list[str], *, label: str) -> None:
+    effective_lines = [
+        line.strip()
+        for line in payload.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    effective_payload = "\n".join(effective_lines)
+    _require(
+        "$ErrorActionPreference = 'Stop'" in effective_payload,
+        issues,
+        f"{label} is missing fail-fast token: $ErrorActionPreference = 'Stop'",
+    )
+    _require(
+        effective_payload.count("bash -lc '") == 1,
+        issues,
+        f"{label} must run exactly one retained bash lane",
+    )
+    _require(
+        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }" in effective_payload,
+        issues,
+        f"{label} is missing bash exit-code propagation",
+    )
+    _require(
+        effective_payload.rstrip().endswith("exit 0"),
+        issues,
+        f"{label} is missing explicit success exit",
+    )
+
+
 def _expected_zero_backlog_manifest(host: str) -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -589,6 +759,65 @@ def _load_retained_bundle_manifest(bundle_dir: Path, issues: list[str], *, host:
         return {}
     if not isinstance(payload, dict):
         issues.append(f"external proof retained host bundle manifest is not an object for {host}: {manifest_path}")
+        return {}
+    return payload
+
+
+def _load_retained_bundle_archive_manifest(bundle_archive: Path, issues: list[str], *, host: str) -> dict[str, Any]:
+    if not bundle_archive.is_file():
+        issues.append(f"external proof retained host bundle archive is missing for {host}: {bundle_archive}")
+        return {}
+    try:
+        with tarfile.open(bundle_archive, "r:gz") as archive:
+            member_names = []
+            manifest_member = None
+            for member in archive.getmembers():
+                raw_name = member.name.strip().replace("\\", "/")
+                if raw_name.startswith("/") or re.match(r"^[A-Za-z]:/", raw_name):
+                    issues.append(
+                        f"external proof retained host bundle archive has unsafe member for {host}: {member.name}"
+                    )
+                    continue
+                normalized_name = raw_name
+                if normalized_name.startswith("./"):
+                    normalized_name = normalized_name[2:]
+                normalized_name = normalized_name.strip("/")
+                if normalized_name in {"", "."}:
+                    continue
+                member_names.append(normalized_name)
+                if normalized_name.startswith("/") or ".." in Path(normalized_name).parts:
+                    issues.append(
+                        f"external proof retained host bundle archive has unsafe member for {host}: {member.name}"
+                    )
+                if not member.isfile():
+                    issues.append(
+                        f"external proof retained host bundle archive has non-file member for {host}: {member.name}"
+                    )
+                    continue
+                if normalized_name == "external-proof-manifest.json":
+                    manifest_member = member
+            if sorted(member_names) != ["external-proof-manifest.json"]:
+                issues.append(
+                    f"external proof retained host bundle archive has unexpected members for {host}: "
+                    + ", ".join(sorted(member_names))
+                )
+            if manifest_member is None:
+                issues.append(
+                    f"external proof retained host bundle archive manifest is missing for {host}: {bundle_archive}"
+                )
+                return {}
+            manifest_file = archive.extractfile(manifest_member)
+            if manifest_file is None:
+                issues.append(
+                    f"external proof retained host bundle archive manifest is unreadable for {host}: {bundle_archive}"
+                )
+                return {}
+            payload = json.loads(manifest_file.read().decode("utf-8"))
+    except Exception as exc:
+        issues.append(f"external proof retained host bundle archive is invalid for {host}: {bundle_archive}: {exc}")
+        return {}
+    if not isinstance(payload, dict):
+        issues.append(f"external proof retained host bundle archive manifest is not an object for {host}: {bundle_archive}")
         return {}
     return payload
 
@@ -1107,6 +1336,7 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
             lane_path = commands_dir_path / f"run-{host}-proof-lane.sh"
             bundle_path = commands_dir_path / f"bundle-{host}-proof.sh"
             ingest_path = commands_dir_path / f"ingest-{host}-proof-bundle.sh"
+            retained_bundle_archive = commands_dir_path / f"{host}-proof-bundle.tgz"
             retained_bundle_dir = commands_dir_path / "host-proof-bundles" / host
             _require(
                 retained_bundle_dir.is_dir(),
@@ -1114,24 +1344,53 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
                 f"external proof retained host bundle directory is missing for {host}: {retained_bundle_dir}",
             )
             retained_manifest = _load_retained_bundle_manifest(retained_bundle_dir, issues, host=host)
+            retained_archive_manifest = _load_retained_bundle_archive_manifest(
+                retained_bundle_archive,
+                issues,
+                host=host,
+            )
             _require(
                 retained_manifest == _expected_zero_backlog_manifest(host),
                 issues,
                 f"external proof retained host bundle manifest is not zero-backlog for {host}",
             )
+            _require(
+                retained_archive_manifest == _expected_zero_backlog_manifest(host),
+                issues,
+                f"external proof retained host bundle archive manifest is not zero-backlog for {host}",
+            )
+            _require(
+                retained_archive_manifest == retained_manifest,
+                issues,
+                f"external proof retained host bundle archive manifest drifted from directory manifest for {host}",
+            )
             if lane_path.is_file():
                 lane_body = lane_path.read_text(encoding="utf-8")
+                _require(
+                    f"cd {commands_dir_path}" in lane_body,
+                    issues,
+                    f"external proof host lane script does not enter retained commands dir for {host}",
+                )
+                previous_index = -1
                 for token in (
                     f"./preflight-{host}-proof.sh",
                     f"./capture-{host}-proof.sh",
                     f"./validate-{host}-proof.sh",
                     f"./bundle-{host}-proof.sh",
                 ):
+                    token_index = lane_body.find(token)
                     _require(
-                        token in lane_body,
+                        token_index >= 0,
                         issues,
                         f"external proof host lane script is missing required token for {host}: {token}",
                     )
+                    if token_index >= 0:
+                        _require(
+                            token_index > previous_index,
+                            issues,
+                            f"external proof host lane script has out-of-order token for {host}: {token}",
+                        )
+                        previous_index = token_index
             if bundle_path.is_file():
                 bundle_body = bundle_path.read_text(encoding="utf-8")
                 _require_tokens(
@@ -1179,6 +1438,44 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
                     issues,
                     f"external proof finalize script must ingest {host} before republish",
                 )
+        windows_powershell_lane_path = commands_dir_path / "run-windows-proof-lane.ps1"
+        if windows_powershell_lane_path.is_file():
+            windows_powershell_lane_body = windows_powershell_lane_path.read_text(encoding="utf-8")
+            _require_single_powershell_bash_lane(
+                windows_powershell_lane_body,
+                issues,
+                label="external proof Windows PowerShell host lane",
+            )
+            _require(
+                "bash -lc 'set -euo pipefail" in windows_powershell_lane_body,
+                issues,
+                "external proof Windows PowerShell host lane does not run a strict retained bash script",
+            )
+            _require(
+                f"cd {commands_dir_path}" in windows_powershell_lane_body,
+                issues,
+                "external proof Windows PowerShell host lane does not enter retained commands dir",
+            )
+            previous_index = -1
+            for token in (
+                "./preflight-windows-proof.sh",
+                "./capture-windows-proof.sh",
+                "./validate-windows-proof.sh",
+                "./bundle-windows-proof.sh",
+            ):
+                token_index = windows_powershell_lane_body.find(token)
+                _require(
+                    token_index >= 0,
+                    issues,
+                    f"external proof Windows PowerShell host lane is missing required token: {token}",
+                )
+                if token_index >= 0:
+                    _require(
+                        token_index > previous_index,
+                        issues,
+                        f"external proof Windows PowerShell host lane has out-of-order token: {token}",
+                    )
+                    previous_index = token_index
 
     queue_item_matches, queue_item = _queue_item(queue, PACKAGE_ID)
     design_item_matches, design_item = _queue_item(design_queue, PACKAGE_ID)
@@ -1218,7 +1515,12 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
     if milestone:
         _require(_normalize_text(milestone.get("title")) == MILESTONE_TITLE, issues, "registry milestone title drifted")
         _require(_normalize_text(milestone.get("wave")) == WAVE, issues, "registry milestone wave drifted")
-        _require(_normalize_text(milestone.get("status")) == "in_progress", issues, "registry milestone status is not in_progress")
+        milestone_status = _normalize_text(milestone.get("status"))
+        _require(
+            milestone_status in {"in_progress", "complete"},
+            issues,
+            "registry milestone status is not in_progress or complete",
+        )
         owners = {_normalize_text(item) for item in _normalize_list(milestone.get("owners"))}
         _require("fleet" in owners, issues, "registry milestone owners do not include fleet")
 

@@ -50,9 +50,12 @@ account_policy:
   - acct-ea-review-light
   - acct-ea-jury
   - acct-ea-survival
-  emergency_chatgpt_fallback_accounts:
+  - acct-chatgpt-core
   - acct-chatgpt-archon
-  allow_chatgpt_accounts: false
+  emergency_chatgpt_fallback_accounts:
+  - acct-chatgpt-core
+  - acct-chatgpt-archon
+  allow_chatgpt_accounts: true
   allow_api_accounts: true
   spark_enabled: false
 booster_pool_contract:
@@ -134,11 +137,9 @@ supervisor_contract:
     worker_model: ea-coder-hard-batch
     fallback_lanes:
     - core_rescue
-    - codexliz
     fallback_models:
     - ea-coder-hard-batch
     - ea-coder-hard
-    - gpt-5.3-codex-spark
     resource_policy:
       operating_profile: standard
       memory_dispatch_reserve_gib: 2
@@ -575,7 +576,7 @@ supervisor_contract:
   - id: external_proof_runbook
     title: Materialize external proof runbook
     kind: parity_proof
-    command: python3 scripts/materialize_external_proof_runbook.py --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --external-proof-commands-dir .codex-studio/published/external-proof-commands
+    command: python3 scripts/materialize_external_proof_runbook.py --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --commands-dir .codex-studio/published/external-proof-commands
     freshness_window_minutes: 1440
     retry:
       max_attempts: 2

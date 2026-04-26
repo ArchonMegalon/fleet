@@ -1136,6 +1136,7 @@ class CodexEaRouteTests(unittest.TestCase):
             self.route_module._ea_onemin_billing_refresh_payload(include_members=False, capture_raw_text=False)
 
         self.assertEqual(mocked_http.call_args.kwargs["timeout_seconds"], 30.0)
+        self.assertFalse(mocked_http.call_args.kwargs["operator_scope"])
         self.assertEqual(
             mocked_http.call_args.kwargs["payload"],
             {
@@ -1145,6 +1146,38 @@ class CodexEaRouteTests(unittest.TestCase):
                 "provider_api_continue_on_rate_limit": False,
             },
         )
+
+    def test_onemin_billing_full_refresh_uses_operator_principal_from_runtime_env(self) -> None:
+        self.write_runtime_env(
+            {
+                "EA_API_TOKEN": "test-token",
+                "EA_OPERATOR_PRINCIPAL_IDS": "codex-fleet,other-operator",
+            }
+        )
+        captured: dict[str, str] = {}
+
+        class FakeResponse:
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return b'{"ok": true}'
+
+        def fake_urlopen(request: object, timeout: float) -> FakeResponse:
+            captured["principal"] = request.get_header("X-ea-principal-id")  # type: ignore[attr-defined]
+            captured["auth"] = request.get_header("Authorization")  # type: ignore[attr-defined]
+            return FakeResponse()
+
+        with mock.patch.dict(os.environ, {"EA_MCP_PRINCIPAL_ID": "", "EA_PRINCIPAL_ID": ""}, clear=False):
+            with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+                payload = self.route_module._ea_onemin_billing_refresh_payload(provider_api_all_accounts=True)
+
+        self.assertEqual(payload, {"ok": True})
+        self.assertEqual(captured["principal"], "codex-fleet")
+        self.assertEqual(captured["auth"], "Bearer test-token")
 
     def test_ea_status_payload_honors_explicit_timeout(self) -> None:
         with mock.patch.object(self.route_module, "_ea_http_payload", return_value={"providers_summary": []}) as mocked_http:
