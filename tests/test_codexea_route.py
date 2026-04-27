@@ -179,13 +179,13 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(routed["task_class"], "telemetry")
         self.assertEqual(routed["reason"], "telemetry_live_status")
 
-    def test_fleet_eta_and_shards_question_does_not_short_circuit_to_telemetry(self) -> None:
+    def test_fleet_eta_and_shards_question_routes_as_telemetry(self) -> None:
         self.write_config({})
 
         routed = self.route_module._route(["eta", "of", "the", "fleet?", "is", "it", "running?", "the", "shards?"])
 
-        self.assertNotEqual(routed["task_class"], "telemetry")
-        self.assertNotEqual(routed["reason"], "telemetry_live_status")
+        self.assertEqual(routed["task_class"], "telemetry")
+        self.assertEqual(routed["reason"], "telemetry_live_status")
 
     def test_telemetry_response_refreshes_live_status_and_formats_percent(self) -> None:
         self.write_config({})
@@ -236,11 +236,16 @@ class CodexEaRouteTests(unittest.TestCase):
             ],
             "active_run": {"run_id": "run-1"},
             "open_milestone_ids": [1001, 1002],
+            "eta": {
+                "status": "tracked",
+                "eta_human": "9h-22h",
+                "summary": "Parallelized across active shards.",
+            },
             "updated_at": "2026-04-06T10:00:00Z",
         }
 
         with mock.patch.object(self.route_module, "_fleet_runtime_status_payload", return_value=runtime_payload):
-            response = self.route_module._telemetry_response("How many active shards are running?")
+            response = self.route_module._telemetry_response("eta of the fleet? is it running? the shards?")
 
         self.assertTrue(response["matched"])
         self.assertTrue(response["ok"])
@@ -254,6 +259,8 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertLess(first_active_index, second_active_index)
         self.assertIn("aggregate active run run-1", response["message"])
         self.assertIn("2 open milestones", response["message"])
+        self.assertIn("ETA 9h-22h (tracked)", response["message"])
+        self.assertIn("Parallelized across active shards.", response["message"])
 
     def test_telemetry_response_reports_live_fleet_runtime_status_update_age(self) -> None:
         self.write_config({})

@@ -226,6 +226,7 @@ FLEET_RUNTIME_SIGNAL_TERMS: tuple[str, ...] = (
     "currently",
     "right now",
     "now",
+    "eta",
 )
 LANE_NAMES: tuple[str, ...] = ("easy", "repair", "groundwork", "review_light", "core", "jury", "survival")
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
@@ -1139,8 +1140,6 @@ def _looks_like_query_text(text: str) -> bool:
 def _looks_like_direct_fleet_runtime_query(text: str) -> bool:
     lowered = str(text or "").strip().lower()
     if not _looks_like_query_text(lowered):
-        return False
-    if "eta" in lowered:
         return False
     return _contains_any(lowered, FLEET_RUNTIME_TARGET_TERMS) and _contains_any(lowered, FLEET_RUNTIME_SIGNAL_TERMS)
 
@@ -2559,6 +2558,10 @@ def _render_fleet_runtime_status(payload: dict[str, Any]) -> str:
     open_milestones = list(payload.get("open_milestone_ids") or [])
     active_run = payload.get("active_run") if isinstance(payload.get("active_run"), dict) else {}
     active_run_id = str(active_run.get("run_id") or "").strip()
+    eta_payload = payload.get("eta") if isinstance(payload.get("eta"), dict) else {}
+    eta_human = str(eta_payload.get("eta_human") or payload.get("eta_human") or "").strip()
+    eta_status = str(eta_payload.get("status") or payload.get("eta_status") or "").strip()
+    eta_summary = str(eta_payload.get("summary") or "").strip()
     active_labels = [_render_active_fleet_shard_label(item) for item in active_shards]
     active_names = ", ".join(label for label in active_labels if label)
     active_label = "active shard" if active_count == 1 else "active shards"
@@ -2573,6 +2576,15 @@ def _render_fleet_runtime_status(payload: dict[str, Any]) -> str:
         fragments.append(f"aggregate active run {active_run_id}")
     if open_milestones:
         fragments.append(f"{len(open_milestones)} open milestones")
+    if eta_human:
+        eta_fragment = f"ETA {eta_human}"
+        if eta_status and eta_status.lower() not in {"unknown", eta_human.lower()}:
+            eta_fragment += f" ({eta_status})"
+        fragments.append(eta_fragment)
+    elif eta_status:
+        fragments.append(f"ETA status {eta_status}")
+    if eta_summary:
+        fragments.append(eta_summary)
     if updated_at:
         fragments.append(_fleet_runtime_updated_fragment(updated_at))
     return "; ".join(fragments) + "."
@@ -2728,6 +2740,8 @@ def _task_meta_from_text(config: dict[str, Any], text: str) -> dict[str, Any]:
 def _classify_tier(config: dict[str, Any], text: str) -> str:
     lowered = text.lower()
     patch_like = _contains_any(lowered, _keyword_set(config, "bounded_fix_keywords"))
+    if _looks_like_direct_fleet_runtime_query(lowered):
+        return "telemetry"
     if _looks_like_live_telemetry_query(config, lowered):
         return "telemetry"
     if _contains_any(lowered, _keyword_set(config, "groundwork_keywords")) and not patch_like:

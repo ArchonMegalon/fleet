@@ -17,25 +17,30 @@ CODEXLIZ_PROXY_PID_FILE="${CODEXLIZ_PROXY_PID_FILE:-${CODEXLIZ_STATE_DIR}/proxy.
 CODEXLIZ_PROXY_LOG_FILE="${CODEXLIZ_PROXY_LOG_FILE:-${CODEXLIZ_STATE_DIR}/proxy.log}"
 CODEXLIZ_PROXY_PORT_FILE="${CODEXLIZ_PROXY_PORT_FILE:-${CODEXLIZ_STATE_DIR}/proxy.port}"
 CODEXLIZ_PREFLIGHT_MODELS_PATH="${CODEXLIZ_PREFLIGHT_MODELS_PATH:-/v1/models}"
-CODEXLIZ_PREFLIGHT_TIMEOUT_SECONDS="${CODEXLIZ_PREFLIGHT_TIMEOUT_SECONDS:-10}"
+CODEXLIZ_PREFLIGHT_TIMEOUT_SECONDS="${CODEXLIZ_PREFLIGHT_TIMEOUT_SECONDS:-5}"
 CODEXLIZ_CF_ACCESS_FILE="${CODEXLIZ_CF_ACCESS_FILE:-/docker/fleet/secrets/codexliz-cf-access.env}"
 CODEXLIZ_CF_ACCESS_CLIENT_ID="${CODEXLIZ_CF_ACCESS_CLIENT_ID:-}"
 CODEXLIZ_CF_ACCESS_CLIENT_SECRET="${CODEXLIZ_CF_ACCESS_CLIENT_SECRET:-}"
 CODEXLIZ_TRANSPORT_RETRY_ENABLED="${CODEXLIZ_TRANSPORT_RETRY_ENABLED:-1}"
-CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS:-30}"
+CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS:-5}"
 CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS:-300}"
-CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS:-28800}"
-CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS="${CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS:-30}"
+CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS:-1800}"
+CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS="${CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS:-5}"
 CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY="${CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY:-1}"
 CODEXLIZ_OUTAGE_STATE_FILE="${CODEXLIZ_OUTAGE_STATE_FILE:-${CODEXLIZ_STATE_DIR}/outage.json}"
 
 if [ ! -x "${BASE_CODEX_SHIM}" ]; then
-  echo "Missing base codex shim at ${BASE_CODEX_SHIM}" >&2
-  exit 1
+  FALLBACK_CODEX_SHIM="${CODEXLIZ_FALLBACK_CODEX_SHIM:-${CODEX_REAL_BIN:-}}"
+  if [ -z "${FALLBACK_CODEX_SHIM}" ]; then
+    FALLBACK_CODEX_SHIM="$(command -v codex || true)"
+  fi
+  if [ -n "${FALLBACK_CODEX_SHIM}" ] && [ "${FALLBACK_CODEX_SHIM}" != "$0" ] && [ -x "${FALLBACK_CODEX_SHIM}" ]; then
+    BASE_CODEX_SHIM="${FALLBACK_CODEX_SHIM}"
+  fi
 fi
 
-if [ ! -f "${PROXY_SCRIPT}" ]; then
-  echo "Missing codexliz proxy script at ${PROXY_SCRIPT}" >&2
+if [ ! -x "${BASE_CODEX_SHIM}" ]; then
+  echo "Missing base codex shim at ${BASE_CODEX_SHIM}" >&2
   exit 1
 fi
 
@@ -310,6 +315,98 @@ detect_output_last_message_path() {
   done
 }
 
+is_codex_subcommand() {
+  case "${1:-}" in
+    exec|review|login|logout|mcp|mcp-server|app-server|completion|sandbox|debug|apply|resume|fork|cloud|features|help|marketplace)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+wrap_prompt_invocation_with_exec() {
+  local -a args=("$@")
+  local -a exec_prefix=(exec)
+  local -a exec_only_args=()
+  local -a prefix_args=()
+  local i=0
+
+  [ "${#args[@]}" -gt 0 ] || return 0
+  if [ "${args[0]}" = "exec" ]; then
+    printf '%s\0' "${args[@]}"
+    return
+  fi
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --json|--ephemeral)
+        exec_only_args+=("${args[$i]}")
+        i=$((i + 1))
+        ;;
+      -o|--output-last-message|--color|--output-schema)
+        exec_only_args+=("${args[$i]}")
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          exec_only_args+=("${args[$i]}")
+        fi
+        i=$((i + 1))
+        ;;
+      --)
+        if [ "${#prefix_args[@]}" -gt 0 ]; then
+          printf '%s\0' "${prefix_args[@]}"
+        fi
+        printf '%s\0' "${exec_prefix[@]}"
+        if [ "${#exec_only_args[@]}" -gt 0 ]; then
+          printf '%s\0' "${exec_only_args[@]}"
+        fi
+        printf '%s\0' "${args[@]:${i}}"
+        return
+        ;;
+      -c|--config|--enable|--disable|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir|--remote|--remote-auth-token-env)
+        prefix_args+=("${args[$i]}")
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          prefix_args+=("${args[$i]}")
+        fi
+        i=$((i + 1))
+        ;;
+      --oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|--no-alt-screen|-h|--help|-V|--version)
+        prefix_args+=("${args[$i]}")
+        i=$((i + 1))
+        ;;
+      -*)
+        prefix_args+=("${args[$i]}")
+        i=$((i + 1))
+        ;;
+      *)
+        if is_codex_subcommand "${args[$i]}"; then
+          printf '%s\0' "${args[@]}"
+          return
+        fi
+        if [ "${#prefix_args[@]}" -gt 0 ]; then
+          printf '%s\0' "${prefix_args[@]}"
+        fi
+        printf '%s\0' "${exec_prefix[@]}"
+        if [ "${#exec_only_args[@]}" -gt 0 ]; then
+          printf '%s\0' "${exec_only_args[@]}"
+        fi
+        printf '%s\0' "${args[@]:${i}}"
+        return
+        ;;
+    esac
+  done
+
+  if [ "${#prefix_args[@]}" -gt 0 ]; then
+    printf '%s\0' "${prefix_args[@]}"
+  fi
+  printf '%s\0' "${exec_prefix[@]}"
+  if [ "${#exec_only_args[@]}" -gt 0 ]; then
+    printf '%s\0' "${exec_only_args[@]}"
+  fi
+}
+
 iso_in_seconds() {
   local seconds="${1:-0}"
   "${PROXY_PYTHON}" - "${seconds}" <<'PY'
@@ -328,6 +425,80 @@ PY
 emit_transport_trace() {
   local detail="${1:-}"
   printf 'Trace: provider=%s transport=%s\n' "${CODEXLIZ_PROVIDER_KEY}" "${detail}" >&2
+}
+
+stderr_has_unsupported_input_item() {
+  local stderr_path="${1:-}"
+  [ -n "${stderr_path}" ] || return 1
+  [ -f "${stderr_path}" ] || return 1
+  grep -qi 'unsupported_input_item' "${stderr_path}"
+}
+
+UNSUPPORTED_INPUT_RETRY_PROMPT=""
+UNSUPPORTED_INPUT_RETRY_CMD=()
+
+build_exec_stdin_retry_command() {
+  local -a args=("$@")
+  local -a prefix_args=()
+  local -a exec_only_args=()
+  local -a prompt_args=()
+  local i=0
+  local saw_exec=0
+  local arg=""
+
+  UNSUPPORTED_INPUT_RETRY_PROMPT=""
+  UNSUPPORTED_INPUT_RETRY_CMD=()
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    arg="${args[$i]}"
+    if [ "${saw_exec}" -eq 0 ]; then
+      prefix_args+=("${arg}")
+      if [ "${arg}" = "exec" ]; then
+        saw_exec=1
+      fi
+      i=$((i + 1))
+      continue
+    fi
+
+    case "${arg}" in
+      --json|--ephemeral)
+        exec_only_args+=("${arg}")
+        i=$((i + 1))
+        ;;
+      -o|--output-last-message|--color|--output-schema)
+        exec_only_args+=("${arg}")
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          exec_only_args+=("${args[$i]}")
+        fi
+        i=$((i + 1))
+        ;;
+      --)
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          prompt_args=("${args[@]:${i}}")
+        fi
+        i="${#args[@]}"
+        ;;
+      -)
+        return 1
+        ;;
+      *)
+        prompt_args=("${args[@]:${i}}")
+        i="${#args[@]}"
+        ;;
+    esac
+  done
+
+  [ "${saw_exec}" -eq 1 ] || return 1
+  [ "${#prompt_args[@]}" -gt 0 ] || return 1
+  UNSUPPORTED_INPUT_RETRY_PROMPT="${prompt_args[*]}"
+  UNSUPPORTED_INPUT_RETRY_CMD=("${prefix_args[@]}" "${exec_only_args[@]}" -)
+  return 0
+}
+
+emit_unsupported_input_retry_trace() {
+  printf 'Trace: provider=%s compat=unsupported_input_item retry=stdin_exec\n' "${CODEXLIZ_PROVIDER_KEY}" >&2
 }
 
 classify_transport_failure() {
@@ -483,7 +654,7 @@ sleep_with_transport_trace() {
   local remaining
   local step
 
-  trace_interval="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS}" "30")"
+  trace_interval="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS}" "5")"
   remaining="$(positive_integer_or_default "${sleep_seconds}" "0")"
   already_waited_seconds="$(positive_integer_or_default "${already_waited_seconds}" "0")"
   if [ "${remaining}" -le 0 ]; then
@@ -528,6 +699,8 @@ run_codex_with_transport_retry() {
   local classification=""
   local key=""
   local value=""
+  local stdin_file=""
+  local unsupported_input_retry_attempted=0
 
   retry_enabled=0
   if env_truthy "${CODEXLIZ_TRANSPORT_RETRY_ENABLED}"; then
@@ -541,22 +714,37 @@ run_codex_with_transport_retry() {
   if env_truthy "${CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY}"; then
     require_empty_output=1
   fi
-  base_sleep_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS}" "30")"
+  base_sleep_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS}" "5")"
   max_backoff_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS}" "300")"
-  max_wait_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS}" "28800")"
+  max_wait_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS}" "1800")"
   sleep_seconds="${base_sleep_seconds}"
 
   while :; do
     stderr_file="$(mktemp "${TMPDIR:-/tmp}/codexliz-stderr.XXXXXX")"
     set +e
-    "${cmd[@]}" 2> >(tee "${stderr_file}" >&2)
+    if [ -n "${stdin_file}" ] && [ -f "${stdin_file}" ]; then
+      "${cmd[@]}" < "${stdin_file}" 2> >(tee "${stderr_file}" >&2)
+    else
+      "${cmd[@]}" 2> >(tee "${stderr_file}" >&2)
+    fi
     exit_code=$?
     set -e
 
     if [ "${exit_code}" -eq 0 ]; then
       write_transport_state "healthy" 0 "" "" "success" "" "${retry_count}" "${waited_seconds}" ""
+      rm -f "${stdin_file}"
       rm -f "${stderr_file}"
       return 0
+    fi
+
+    if [ "${unsupported_input_retry_attempted}" -eq 0 ] && stderr_has_unsupported_input_item "${stderr_file}" && build_exec_stdin_retry_command "${cmd[@]}"; then
+      unsupported_input_retry_attempted=1
+      stdin_file="$(mktemp "${TMPDIR:-/tmp}/codexliz-stdin.XXXXXX")"
+      printf '%s' "${UNSUPPORTED_INPUT_RETRY_PROMPT}" > "${stdin_file}"
+      cmd=("${UNSUPPORTED_INPUT_RETRY_CMD[@]}")
+      emit_unsupported_input_retry_trace
+      rm -f "${stderr_file}"
+      continue
     fi
 
     classification="$(classify_transport_failure "${stderr_file}" "${output_path}" "${require_empty_output}" "${LOCAL_PROVIDER_BASE_URL}" "${REMOTE_UPSTREAM_BASE_URL}")"
@@ -579,6 +767,7 @@ run_codex_with_transport_retry() {
 
     if [ "${retry_enabled}" -ne 1 ] || [ "${retryable}" != "1" ]; then
       write_transport_state "failure" 0 "${http_status}" "${cf_ray}" "${reason}" "${detail}" "${retry_count}" "${waited_seconds}" ""
+      rm -f "${stdin_file}"
       rm -f "${stderr_file}"
       return "${exit_code}"
     fi
@@ -586,6 +775,7 @@ run_codex_with_transport_retry() {
     if [ "${waited_seconds}" -ge "${max_wait_seconds}" ]; then
       emit_transport_trace "outage status=${http_status:-unknown} giving_up_after=${waited_seconds}s"
       write_transport_state "outage_timeout" 1 "${http_status}" "${cf_ray}" "${reason}" "${detail}" "${retry_count}" "${waited_seconds}" ""
+      rm -f "${stdin_file}"
       rm -f "${stderr_file}"
       return "${exit_code}"
     fi
@@ -631,7 +821,7 @@ import urllib.request
 target_url = sys.argv[1]
 target_label = sys.argv[2]
 expected_model = sys.argv[3].strip()
-timeout_seconds = float(sys.argv[4] or "10")
+timeout_seconds = float(sys.argv[4] or "5")
 api_key_value = sys.argv[5]
 cf_access_client_id = sys.argv[6].strip()
 cf_access_client_secret = sys.argv[7].strip()
@@ -739,7 +929,7 @@ start_proxy_if_needed() {
     printf '%s\n' "${started_pid}" > "${CODEXLIZ_PROXY_PID_FILE}"
 
     attempt=0
-    while [ "${attempt}" -lt 40 ]; do
+    while [ "${attempt}" -lt 15 ]; do
       if proxy_is_ready "${CODEXLIZ_PROXY_HOST}" "${selected_port}" >/dev/null 2>&1; then
         return 0
       fi
@@ -769,8 +959,17 @@ export CODEX_PREFER_EA_MCP="${CODEX_PREFER_EA_MCP:-0}"
 export CODEX_WRAPPER_DISABLE_BOOTSTRAP="${CODEX_WRAPPER_DISABLE_BOOTSTRAP:-1}"
 load_cf_access_env
 
-if is_providerless_command "${PRIMARY_COMMAND}" || has_explicit_provider_override "$@"; then
+if { [ "$#" -gt 0 ] && [ -z "${PRIMARY_COMMAND}" ]; } || is_providerless_command "${PRIMARY_COMMAND}" || has_explicit_provider_override "$@"; then
   exec "${BASE_CODEX_SHIM}" "$@"
+fi
+
+declare -a ADJUSTED_ARGS=()
+mapfile -d '' ADJUSTED_ARGS < <(wrap_prompt_invocation_with_exec "$@")
+PRIMARY_COMMAND="$(detect_primary_command "${ADJUSTED_ARGS[@]}")"
+
+if [ ! -f "${PROXY_SCRIPT}" ]; then
+  echo "Missing codexliz proxy script at ${PROXY_SCRIPT}" >&2
+  exit 1
 fi
 
 REMOTE_UPSTREAM_BASE_URL="$(normalize_remote_upstream_base_url "${CODEXLIZ_BASE_URL}")"
@@ -797,13 +996,13 @@ if [ -n "${CODEXLIZ_API_KEY_ENV_VAR}" ] && [ -n "${!CODEXLIZ_API_KEY_ENV_VAR:-}"
   )
 fi
 
-if [ -n "${CODEXLIZ_MODEL}" ] && ! has_explicit_model_override "$@"; then
+if [ -n "${CODEXLIZ_MODEL}" ] && ! has_explicit_model_override "${ADJUSTED_ARGS[@]}"; then
   provider_args+=(-c "model=\"${CODEXLIZ_MODEL}\"")
 fi
 
-OUTPUT_LAST_MESSAGE_PATH="$(detect_output_last_message_path "$@")"
+OUTPUT_LAST_MESSAGE_PATH="$(detect_output_last_message_path "${ADJUSTED_ARGS[@]}")"
 if [ "${CODEXLIZ_TRANSPORT_RETRY_ENABLED}" = "0" ]; then
-  exec "${BASE_CODEX_SHIM}" "${provider_args[@]}" "$@"
+  exec "${BASE_CODEX_SHIM}" "${provider_args[@]}" "${ADJUSTED_ARGS[@]}"
 fi
-run_codex_with_transport_retry "${OUTPUT_LAST_MESSAGE_PATH}" "${BASE_CODEX_SHIM}" "${provider_args[@]}" "$@"
+run_codex_with_transport_retry "${OUTPUT_LAST_MESSAGE_PATH}" "${BASE_CODEX_SHIM}" "${provider_args[@]}" "${ADJUSTED_ARGS[@]}"
 exit $?

@@ -158,8 +158,30 @@ class CodexLizShimTests(unittest.TestCase):
         payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
         self.assertIn('model_provider="liz"', payload["argv"])
         self.assertIn('model="qwen2.5-coder:32b"', payload["argv"])
+        self.assertIn("exec", payload["argv"])
         self.assertTrue(any(path == "/v1/models" for path in requests))
         self.assertGreaterEqual(requests.count("/v1/models"), 2)
+
+    def test_codexliz_wraps_bare_prompt_as_exec(self) -> None:
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server, _thread = self._server(Handler)
+        completed = self._run_shim(f"http://127.0.0.1:{server.server_port}")
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        self.assertIn("exec", payload["argv"])
+        self.assertIn("repair the queue stall", payload["argv"])
 
     def test_codexliz_fails_fast_when_models_canary_returns_524(self) -> None:
         class Handler(BaseHTTPRequestHandler):
@@ -397,3 +419,62 @@ class CodexLizShimTests(unittest.TestCase):
         self.assertEqual(outage_state["retry_count"], 1)
         self.assertEqual(outage_state["last_reason"], "success")
         self.assertEqual(output_path.read_text(encoding="utf-8").strip(), "transport recovered")
+
+    def test_codexliz_retries_unsupported_input_item_with_stdin_exec_fallback(self) -> None:
+        attempt_counter_path = self.root / "attempt-count.txt"
+        self.fake_codex.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env python3",
+                    "import json, os, sys",
+                    "from pathlib import Path",
+                    "counter_path = Path(os.environ['CODEXLIZ_TEST_ATTEMPT_COUNTER'])",
+                    "try:",
+                    "    attempt = int(counter_path.read_text(encoding='utf-8').strip())",
+                    "except Exception:",
+                    "    attempt = 0",
+                    "attempt += 1",
+                    "counter_path.write_text(str(attempt), encoding='utf-8')",
+                    "if attempt == 1 and '-' not in sys.argv[1:]:",
+                    "    sys.stderr.write('{\"error\":{\"code\":\"unsupported_input_item:17\",\"message\":\"unsupported_input_item:17\"}}\\n')",
+                    "    raise SystemExit(17)",
+                    "payload = {",
+                    "    'argv': sys.argv[1:],",
+                    "    'stdin': sys.stdin.read(),",
+                    "    'attempt': attempt,",
+                    "}",
+                    "with open(os.environ['CODEXLIZ_TEST_CAPTURE'], 'w', encoding='utf-8') as handle:",
+                    "    json.dump(payload, handle)",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        self.fake_codex.chmod(self.fake_codex.stat().st_mode | stat.S_IXUSR)
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server, _thread = self._server(Handler)
+        completed = self._run_shim(
+            f"http://127.0.0.1:{server.server_port}",
+            extra_env={
+                "CODEXLIZ_TEST_ATTEMPT_COUNTER": str(attempt_counter_path),
+            },
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["attempt"], 2)
+        self.assertIn("exec", payload["argv"])
+        self.assertIn("-", payload["argv"])
+        self.assertEqual(payload["stdin"], "repair the queue stall")
+        self.assertIn("compat=unsupported_input_item retry=stdin_exec", completed.stderr)
