@@ -88,8 +88,16 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
 
     def test_fleet_ooda_timer_prompt_bounds_live_refresh_commands(self) -> None:
         script = RUN_FLEET_OODA_CODEX_TIMER.read_text(encoding="utf-8")
-        self.assertIn('timeout_seconds="${FLEET_OODA_CODEX_TIMEOUT_SECONDS:-1200}"', script)
-        self.assertIn('post_guard_timeout_seconds="${FLEET_OODA_CODEX_POST_GUARD_TIMEOUT_SECONDS:-120}"', script)
+        self.assertIn('workspace_root="${FLEET_OODA_CODEXEA_WORKSPACE_ROOT:-${FLEET_OODA_CODEX_WORKSPACE_ROOT:-/docker/fleet}}"', script)
+        self.assertIn('state_root="${FLEET_OODA_CODEXEA_STATE_ROOT:-${FLEET_OODA_CODEX_STATE_ROOT:-${workspace_root}/state/fleet_ooda_codex_timer}}"', script)
+        self.assertIn('timeout_seconds="${FLEET_OODA_CODEXEA_TIMEOUT_SECONDS:-${FLEET_OODA_CODEX_TIMEOUT_SECONDS:-1200}}"', script)
+        self.assertIn('post_guard_timeout_seconds="${FLEET_OODA_CODEXEA_POST_GUARD_TIMEOUT_SECONDS:-${FLEET_OODA_CODEX_POST_GUARD_TIMEOUT_SECONDS:-120}}"', script)
+        self.assertIn('codexea_bin="${FLEET_OODA_CODEXEA_BIN:-${FLEET_OODA_CODEX_BIN:-}}"', script)
+        self.assertIn('codexea_model="${FLEET_OODA_CODEXEA_MODEL:-${FLEET_OODA_CODEX_MODEL:-}}"', script)
+        self.assertIn('codexea_lane="${FLEET_OODA_CODEXEA_LANE:-core}"', script)
+        self.assertIn('You are CodexEA running an unattended 30-minute Fleet OODA maintenance slice.', script)
+        self.assertIn("Keep Fleet workers and this scheduled operator pass on EA/codexea.", script)
+        self.assertIn('Chosen timer metadata for this run is in:', script)
         self.assertIn("Wrap status, live-refresh, guard, keeper, docker-log, and test commands in explicit timeouts", script)
         self.assertIn("timeout 90s scripts/chummer_design_supervisor.py status --json --live-refresh", script)
         self.assertIn('timeout "${post_guard_timeout_seconds}s" python3 scripts/fleet_ooda_timer_guard.py', script)
@@ -115,7 +123,7 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn("CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER=", env_example)
         self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD=shard-7", env_example)
         self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS=240", env_example)
-        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=90", env_example)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=1800", env_example)
         self.assertIn("bounded auto-heal", readme)
         self.assertIn("FLEET_AUTOHEAL_ENABLED=true", readme)
         self.assertIn(
@@ -132,7 +140,7 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn("FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS=3", readme)
         self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD=shard-7", readme)
         self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS=240", readme)
-        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=90", readme)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=1800", readme)
         self.assertIn("For EA / OneMinAI lanes, the supervisor now routes each shard dynamically", readme)
 
 

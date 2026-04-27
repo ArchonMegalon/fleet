@@ -109,7 +109,7 @@ bash scripts/run_chummer_design_supervisor.sh
 
 Fleet compose now includes `fleet-design-supervisor`, so a normal `docker compose up -d` boot owns restart-on-reboot for the loop instead of relying on a tmux shell.
 Restart-safe supervisor policy is centralized in `config/projects/fleet.yaml` under `supervisor_contract.restart_safe_runtime`, `supervisor_contract.resource_policy`, and the package queue: shard count, state root, resource budgets, queue posture, account routing, and worker defaults all hydrate from that contract on cold start. Environment variables remain local overrides for deliberate operator steering.
-The dedicated supervisor healthcheck can also watchdog one named shard. The current runtime defaults target `shard-13`, allow a 15-minute warmup window, and then mark the service unhealthy if that shard stays output-silent for more than 15 minutes while an active run is still in flight.
+The dedicated supervisor healthcheck can also watchdog one named shard. The current runtime defaults target `shard-13`, allow a 30-minute startup grace window, and then mark the service unhealthy if that shard stays output-silent for more than 15 minutes while an active run is still in flight.
 
 The helper also exposes steering and account rotation inputs from env:
 
@@ -281,11 +281,13 @@ FLEET_AUDITOR_RUN_MAX_AGE_SECONDS=900
 FLEET_AUDITOR_STARTUP_GRACE_SECONDS=180
 CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD=shard-7
 CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS=240
-CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=90
+CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=1800
 FLEET_COMPOSE_PROJECT_NAME=fleet
 FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS=3
 FLEET_AUTOHEAL_ESCALATE_WINDOW_SECONDS=1800
 ```
+
+The host-side unattended 30-minute fleet OODA timer now defaults to the repo-local `codexea` shim on the `core` lane and accepts canonical `FLEET_OODA_CODEXEA_*` overrides for the binary, lane, workspace, state root, shard targets, and timeout budget.
 
 Gateway `/health` is now a static gateway liveness response, while controller health uses a bounded
 local HTTP probe plus a recent heartbeat file. That keeps gateway health from collapsing just because
