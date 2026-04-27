@@ -2508,33 +2508,44 @@ def _fleet_runtime_status_payload() -> dict[str, Any] | None:
     state_path = Path(raw_state_root) if raw_state_root else (ROOT / "state" / "chummer_design_supervisor")
     if state_path.name != "state.json":
         state_path = state_path / "state.json"
+    file_payload: dict[str, Any] | None = None
     try:
-        payload = json.loads(state_path.read_text(encoding="utf-8"))
+        loaded = json.loads(state_path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            file_payload = loaded
     except Exception:
-        command = [
-            sys.executable,
-            str(ROOT / "scripts" / "chummer_design_supervisor.py"),
-            "status",
-            "--json",
-            "--ignore-nonlinux-desktop-host-proof-blockers",
-        ]
-        try:
-            completed = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=20,
-                check=False,
-            )
-        except Exception:
-            return None
-        if completed.returncode != 0:
-            return None
-        try:
-            payload = json.loads(completed.stdout)
-        except Exception:
-            return None
-    return payload if isinstance(payload, dict) else None
+        file_payload = None
+
+    if isinstance(file_payload, dict):
+        updated_at = str(file_payload.get("updated_at") or "").strip()
+        parsed = _parse_utc_datetime(updated_at)
+        if parsed is not None and (_utc_now() - parsed).total_seconds() <= FLEET_RUNTIME_STATUS_STALE_SECONDS:
+            return file_payload
+
+    command = [
+        sys.executable,
+        str(ROOT / "scripts" / "chummer_design_supervisor.py"),
+        "status",
+        "--json",
+        "--ignore-nonlinux-desktop-host-proof-blockers",
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except Exception:
+        return file_payload
+    if completed.returncode != 0:
+        return file_payload
+    try:
+        payload = json.loads(completed.stdout)
+    except Exception:
+        return file_payload
+    return payload if isinstance(payload, dict) else file_payload
 
 
 def _render_fleet_runtime_status(payload: dict[str, Any]) -> str:
@@ -2590,6 +2601,24 @@ def _render_fleet_runtime_status(payload: dict[str, Any]) -> str:
     return "; ".join(fragments) + "."
 
 
+def _query_requests_current_credits(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return False
+    return _contains_any(
+        lowered,
+        (
+            "credit",
+            "credits",
+            "balance",
+            "free credits",
+            "current credits",
+            "remaining percent",
+            "remaining %",
+        ),
+    )
+
+
 def _fleet_runtime_status_response() -> dict[str, Any]:
     payload = _fleet_runtime_status_payload()
     if not isinstance(payload, dict):
@@ -2607,23 +2636,19 @@ def _fleet_runtime_status_response() -> dict[str, Any]:
         "ok": True,
         "exit_code": 0,
         "message": _render_fleet_runtime_status(payload),
+        "data": payload,
     }
 
 
-def _telemetry_response(text: str) -> dict[str, Any]:
-    config = _load_config()
-    if _looks_like_direct_fleet_runtime_query(text):
-        return _fleet_runtime_status_response()
-    if not _looks_like_live_telemetry_query(config, text):
-        return {
-            "matched": False,
-            "ok": False,
-            "exit_code": TELEMETRY_EXIT_NOT_MATCHED,
-            "message": "Query did not match a live telemetry question.",
-            "error": "no_telemetry_match",
-        }
-
+def _provider_telemetry_response(
+    config: dict[str, Any],
+    text: str,
+    *,
+    default_provider: str = "",
+) -> dict[str, Any]:
     target = _telemetry_target(config, text)
+    if default_provider and not str(target.get("provider") or "").strip():
+        target["provider"] = default_provider
     payload = _ea_status_payload(refresh=True)
     payload_source = "status"
     payload_fetched_at = _LAST_EA_STATUS_FETCHED_AT
@@ -2707,6 +2732,41 @@ def _telemetry_response(text: str) -> dict[str, Any]:
         "profiles_error": profiles_error,
         "source_notice": source_notice,
     }
+
+
+def _telemetry_response(text: str) -> dict[str, Any]:
+    config = _load_config()
+    fleet_runtime_query = _looks_like_direct_fleet_runtime_query(text)
+    credit_query = _query_requests_current_credits(text)
+    if fleet_runtime_query and credit_query:
+        fleet_response = _fleet_runtime_status_response()
+        credits_response = _onemin_aggregate_response()
+        if fleet_response.get("ok") and credits_response.get("ok"):
+            combined_data = dict(credits_response.get("data") or {})
+            fleet_payload = fleet_response.get("data")
+            if isinstance(fleet_payload, dict):
+                combined_data["fleet_runtime"] = fleet_payload
+            return {
+                **credits_response,
+                "message": fleet_response["message"] + "\n\n" + credits_response["message"],
+                "data": combined_data,
+                "fleet_runtime_message": fleet_response["message"],
+                "fleet_runtime_ok": True,
+            }
+        if fleet_response.get("ok"):
+            return fleet_response
+        return credits_response
+    if fleet_runtime_query:
+        return _fleet_runtime_status_response()
+    if not _looks_like_live_telemetry_query(config, text):
+        return {
+            "matched": False,
+            "ok": False,
+            "exit_code": TELEMETRY_EXIT_NOT_MATCHED,
+            "message": "Query did not match a live telemetry question.",
+            "error": "no_telemetry_match",
+        }
+    return _provider_telemetry_response(config, text)
 
 
 def _task_meta_from_text(config: dict[str, Any], text: str) -> dict[str, Any]:

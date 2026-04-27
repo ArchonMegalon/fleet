@@ -262,6 +262,43 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("ETA 9h-22h (tracked)", response["message"])
         self.assertIn("Parallelized across active shards.", response["message"])
 
+    def test_telemetry_response_combines_fleet_runtime_and_current_credits(self) -> None:
+        self.write_config({})
+
+        runtime_payload = {
+            "mode": "active",
+            "shards": [
+                {"name": "shard-alpha", "active_run_id": "run-1"},
+                {"name": "shard-beta", "active_run_id": ""},
+            ],
+            "active_run": {"run_id": "run-1"},
+            "open_milestone_ids": [1001],
+            "eta": {"status": "tracked", "eta_human": "9h-22h"},
+            "updated_at": "2026-04-06T10:00:00Z",
+        }
+        credits_response = {
+            "matched": True,
+            "ok": True,
+            "exit_code": 0,
+            "message": "1min aggregate\nCredits: 131,019,644 free / 307,050,000 max (42.7% left)",
+            "data": {"sum_free_credits": 131_019_644, "sum_max_credits": 307_050_000},
+        }
+
+        with mock.patch.object(self.route_module, "_fleet_runtime_status_payload", return_value=runtime_payload):
+            with mock.patch.object(self.route_module, "_onemin_aggregate_response", return_value=credits_response):
+                response = self.route_module._telemetry_response(
+                    "check the fleet and the shards for healthy and get the eta and the current credits"
+                )
+
+        self.assertTrue(response["matched"])
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["exit_code"], 0)
+        self.assertIn("Live fleet status", response["message"])
+        self.assertIn("ETA 9h-22h (tracked)", response["message"])
+        self.assertIn("1min aggregate", response["message"])
+        self.assertIn("131,019,644 free / 307,050,000 max", response["message"])
+        self.assertIn("fleet_runtime", response["data"])
+
     def test_telemetry_response_reports_live_fleet_runtime_status_update_age(self) -> None:
         self.write_config({})
 
@@ -289,6 +326,39 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("at 2026-04-06T10:00:00Z", response["message"])
         self.assertIn("stale", response["message"])
         self.assertIn("run `chummer_design_supervisor status` to refresh this snapshot.", response["message"])
+
+    def test_fleet_runtime_status_payload_refreshes_stale_file_snapshot(self) -> None:
+        self.write_config({})
+        state_root = Path(self.tempdir.name) / "stale-runtime"
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "state.json").write_text(
+            json.dumps(
+                {
+                    "mode": "active",
+                    "updated_at": "2026-04-06T09:00:00Z",
+                    "shards": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        refreshed_payload = {"mode": "active", "updated_at": "2026-04-06T10:00:00Z", "shards": [{"name": "shard-a"}]}
+        completed = subprocess.CompletedProcess(
+            args=["python3", "scripts/chummer_design_supervisor.py", "status", "--json"],
+            returncode=0,
+            stdout=json.dumps(refreshed_payload),
+            stderr="",
+        )
+
+        with mock.patch.dict(
+            os.environ,
+            {"CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT": str(state_root)},
+            clear=False,
+        ):
+            with mock.patch.object(self.route_module.subprocess, "run", return_value=completed) as run_mock:
+                payload = self.route_module._fleet_runtime_status_payload()
+
+        self.assertEqual(payload, refreshed_payload)
+        run_mock.assert_called_once()
 
     def test_telemetry_answer_json_mode_includes_metadata(self) -> None:
         class Handler(BaseHTTPRequestHandler):
