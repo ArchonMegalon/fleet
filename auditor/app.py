@@ -34,6 +34,7 @@ UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8093"))
 APP_TITLE = "Codex Fleet Auditor"
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
+DEFAULT_AUDITOR_INTERVAL_SECONDS = 120
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 FLEET_MOUNT_ROOT = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet"))
 _DB_WAL_READY = False
@@ -2253,6 +2254,16 @@ async def run_audit_pass() -> None:
             )
 
 
+def auditor_interval_seconds(default: int = DEFAULT_AUDITOR_INTERVAL_SECONDS) -> int:
+    interval = default
+    try:
+        config = normalize_config()
+        interval = int((config.get("policies") or {}).get("auditor_interval_seconds", default))
+    except Exception:
+        traceback.print_exc()
+    return max(15, interval)
+
+
 class RuntimeState:
     def __init__(self) -> None:
         self.stop = asyncio.Event()
@@ -2266,9 +2277,11 @@ app = FastAPI(title=APP_TITLE)
 async def auditor_loop() -> None:
     while not state.stop.is_set():
         await run_audit_pass()
-        config = normalize_config()
-        interval = int((config.get("policies") or {}).get("auditor_interval_seconds", 120))
-        await asyncio.sleep(max(15, interval))
+        interval = auditor_interval_seconds()
+        try:
+            await asyncio.wait_for(state.stop.wait(), timeout=interval)
+        except asyncio.TimeoutError:
+            continue
 
 
 def auditor_status() -> Dict[str, Any]:

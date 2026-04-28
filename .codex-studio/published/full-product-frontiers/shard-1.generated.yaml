@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-28T05:29:00Z'
+generated_at: '2026-04-28T16:07:43Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -110,7 +110,7 @@ frontier:
       local design mirror bundle instead of reopening one-off mirror refresh work.''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
       mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-28T17:09:12Z'
+    predicted_completion_at: '2026-04-29T03:47:55Z'
     range_low_hours: 6.52
     range_high_hours: 16.82
     remaining_open_milestones: 1

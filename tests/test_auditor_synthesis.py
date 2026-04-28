@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import importlib.util
 import sys
@@ -7,6 +8,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 MODULE_PATH = Path("/docker/fleet/auditor/app.py")
@@ -58,6 +60,46 @@ def load_auditor_module():
 class AuditorSynthesisTests(unittest.TestCase):
     def setUp(self) -> None:
         self.auditor = load_auditor_module()
+
+    def test_auditor_loop_retries_after_interval_config_failure(self) -> None:
+        original_state = self.auditor.state
+        self.auditor.state = self.auditor.RuntimeState()
+        run_calls = {"count": 0}
+        normalize_calls = {"count": 0}
+        wait_calls = {"count": 0}
+
+        async def fake_run_audit_pass() -> None:
+            run_calls["count"] += 1
+            if run_calls["count"] >= 2:
+                self.auditor.state.stop.set()
+
+        def fake_normalize_config():
+            normalize_calls["count"] += 1
+            if normalize_calls["count"] == 1:
+                raise ValueError("broken config")
+            return {"policies": {"auditor_interval_seconds": 30}}
+
+        async def fake_wait_for(awaitable, timeout):
+            wait_calls["count"] += 1
+            if wait_calls["count"] == 1:
+                awaitable.close()
+                raise asyncio.TimeoutError
+            return await awaitable
+
+        try:
+            with mock.patch.object(self.auditor, "run_audit_pass", new=fake_run_audit_pass), mock.patch.object(
+                self.auditor, "normalize_config", new=fake_normalize_config
+            ), mock.patch.object(self.auditor.asyncio, "wait_for", new=fake_wait_for), mock.patch.object(
+                self.auditor.traceback, "print_exc"
+            ) as print_exc:
+                asyncio.run(self.auditor.auditor_loop())
+        finally:
+            self.auditor.state = original_state
+
+        self.assertEqual(run_calls["count"], 2)
+        self.assertEqual(normalize_calls["count"], 2)
+        self.assertEqual(wait_calls["count"], 2)
+        print_exc.assert_called_once()
 
     def test_synthesize_uncovered_scope_tasks_clusters_related_items(self) -> None:
         uncovered_scope = [
