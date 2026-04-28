@@ -2619,6 +2619,33 @@ def _query_requests_current_credits(text: str) -> bool:
     )
 
 
+def _query_requests_credit_howto(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered or not _query_requests_current_credits(lowered):
+        return False
+    return _contains_any(
+        lowered,
+        (
+            "how to get",
+            "how do i get",
+            "how can i get",
+            "how to fetch",
+            "how do i fetch",
+            "where do i get",
+            "where can i get",
+            "source",
+            "explain the source",
+        ),
+    )
+
+
+def _credit_howto_note() -> str:
+    return (
+        "How to fetch it: run `codexea credits` for the aggregate balance view, or "
+        "`codexea onemin --probe-all --billing` for slot-by-slot evidence plus billing refresh when live."
+    )
+
+
 def _fleet_runtime_status_response() -> dict[str, Any]:
     payload = _fleet_runtime_status_payload()
     if not isinstance(payload, dict):
@@ -2738,6 +2765,7 @@ def _telemetry_response(text: str) -> dict[str, Any]:
     config = _load_config()
     fleet_runtime_query = _looks_like_direct_fleet_runtime_query(text)
     credit_query = _query_requests_current_credits(text)
+    credit_howto_query = _query_requests_credit_howto(text)
     if fleet_runtime_query and credit_query:
         fleet_response = _fleet_runtime_status_response()
         credits_response = _onemin_aggregate_response()
@@ -2746,15 +2774,21 @@ def _telemetry_response(text: str) -> dict[str, Any]:
             fleet_payload = fleet_response.get("data")
             if isinstance(fleet_payload, dict):
                 combined_data["fleet_runtime"] = fleet_payload
+            combined_message = fleet_response["message"] + "\n\n" + credits_response["message"]
+            if credit_howto_query:
+                combined_message += "\n\n" + _credit_howto_note()
             return {
                 **credits_response,
-                "message": fleet_response["message"] + "\n\n" + credits_response["message"],
+                "message": combined_message,
                 "data": combined_data,
                 "fleet_runtime_message": fleet_response["message"],
                 "fleet_runtime_ok": True,
             }
         if fleet_response.get("ok"):
             return fleet_response
+        if credit_howto_query and credits_response.get("ok"):
+            credits_response = dict(credits_response)
+            credits_response["message"] = credits_response["message"] + "\n\n" + _credit_howto_note()
         return credits_response
     if fleet_runtime_query:
         return _fleet_runtime_status_response()
@@ -2766,7 +2800,11 @@ def _telemetry_response(text: str) -> dict[str, Any]:
             "message": "Query did not match a live telemetry question.",
             "error": "no_telemetry_match",
         }
-    return _provider_telemetry_response(config, text)
+    response = _provider_telemetry_response(config, text)
+    if credit_howto_query and response.get("ok"):
+        response = dict(response)
+        response["message"] = response["message"] + "\n\n" + _credit_howto_note()
+    return response
 
 
 def _task_meta_from_text(config: dict[str, Any], text: str) -> dict[str, Any]:

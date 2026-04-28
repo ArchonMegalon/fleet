@@ -18,6 +18,12 @@ The design and Fleet have been hardened so Chummer6 flagship readiness now requi
 
 That audit must be created by a separate tester shard or equivalent independent tester process that runs the promoted Linux desktop binary like a real user, does not use internal APIs, captures visible evidence, and reports blocking findings instead of fixing them.
 
+Operator watcher note (high-priority): the dedicated tester shard is now explicit as `shard-14` in fleet topology. Treat this shard as non-optional in health checks.
+Verify in the operator/runtime surface:
+
+- `/docker/fleet/state/chummer_design_supervisor/active_shards.json` contains `shard-14` with `worker_lane=audit_shard`.
+- `/docker/fleet/config/projects/fleet.yaml` remains aligned with `shard_count: 14` and `parallel_shards: 14`.
+
 ## Local Commits Not Yet Pushed
 
 Design repo:
@@ -171,6 +177,9 @@ These should be fixed in `/docker/chummercomplete/chummer6-ui`, then verified th
 1. If the user wants persistence first, push the local commits:
    - `/docker/chummercomplete/chummer-design`: `git push origin HEAD:main`
    - `/docker/fleet`: `git push origin main`
+2. Before normalizing queue intake, confirm live shard health in operator view includes:
+   - active shard-14 presence and lane (`audit_shard`).
+   - shard health age under policy max (`health_max_age_seconds`) and non-stale health in `/api/cockpit/operator-surface`.
 2. Commit/push mirror-only `.codex-design/product` updates in sibling repos as needed, while avoiding unrelated dirty files.
 3. In `chummer6-ui`, fix the Master Index focus loss and invisible New Character workspace.
 4. Build/run the Linux desktop binary and create `USER_JOURNEY_TESTER_AUDIT.generated.json` with:

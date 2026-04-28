@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import os
 import stat
 import subprocess
@@ -8,13 +9,25 @@ import tempfile
 import threading
 import textwrap
 import unittest
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 SHIM_PATH = Path("/docker/fleet/scripts/codex-shims/codexea")
+WATCHDOG_PATH = Path("/docker/fleet/scripts/codex-shims/codexea-watchdog")
 BOOTSTRAP_PATH = Path("/docker/fleet/scripts/codex-shims/ea_interactive_bootstrap.md")
 DEFAULT_EASY_INTERACTIVE_MODEL = "onemin:gpt-5.4"
+
+
+def _load_watchdog_module():
+    loader = SourceFileLoader("codexea_watchdog_under_test", str(WATCHDOG_PATH))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
 class CodexEaShimTests(unittest.TestCase):
@@ -240,6 +253,53 @@ class CodexEaShimTests(unittest.TestCase):
         completed = result["completed"]
         self.assertEqual(completed.returncode, 0)
         self.assertIn("Trace: lane=easy waiting for upstream response", completed.stderr)
+
+    def test_debug_mode_emits_route_and_launch_traces(self) -> None:
+        result = self.run_shim(
+            "continue the slice",
+            extra_env={"CODEXEA_DEBUG": "1"},
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIn("Trace: lane=easy debug=route requested=easy effective=easy mode=responses", completed.stderr)
+        self.assertIn("Trace: lane=easy debug=launch command=", completed.stderr)
+        debug_log = self.root / ".cache" / "codexea" / "debug.log"
+        self.assertTrue(debug_log.exists())
+        log_text = debug_log.read_text(encoding="utf-8")
+        self.assertIn("Trace: lane=easy debug=route requested=easy effective=easy mode=responses", log_text)
+
+    def test_debug_mode_emits_telemetry_shortcut_traces(self) -> None:
+        route_helper = self.root / "route-helper.py"
+        route_helper.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env python3",
+                    "import sys",
+                    "if len(sys.argv) > 1 and sys.argv[1] == '--telemetry-answer':",
+                    "    print('fleet telemetry ok')",
+                    "    raise SystemExit(0)",
+                    "raise SystemExit(10)",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        route_helper.chmod(route_helper.stat().st_mode | stat.S_IXUSR)
+
+        result = self.run_shim(
+            "eta? active shards?",
+            extra_env={
+                "CODEXEA_DEBUG": "1",
+                "CODEXEA_ROUTE_HELPER": str(route_helper),
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stdout.strip(), "fleet telemetry ok")
+        self.assertIsNone(result["payload"])
+        self.assertIn("Trace: lane=easy debug=telemetry probe source=prompt", completed.stderr)
+        self.assertIn("Trace: lane=easy debug=telemetry shortcut source=prompt lane=easy rc=0", completed.stderr)
 
     def test_noarg_non_tty_stdin_is_treated_as_prompt_session(self) -> None:
         result = self.run_shim(
@@ -1121,6 +1181,146 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertNotIn("", payload["argv"])
         self.assertEqual(payload["argv"].count("exec"), 1)
         self.assertNotIn("--no-alt-screen", payload["argv"])
+
+    def test_exec_hard_timeout_kills_stalled_child(self) -> None:
+        result = self.run_shim(
+            "exec",
+            "produce a result",
+            extra_env={
+                "CODEXEA_EXEC_HARD_TIMEOUT_SECONDS": "1",
+                "CODEXEA_TEST_FAKE_CODEX_SLEEP": "5",
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 124)
+        self.assertIn("terminating stalled", completed.stderr)
+        self.assertIsNone(result["payload"])
+
+    def test_watchdog_ignores_synthetic_wait_heartbeats_as_progress(self) -> None:
+        watchdog = _load_watchdog_module()
+
+        self.assertFalse(
+            watchdog._has_meaningful_progress(
+                b"Trace: lane=core waiting for upstream response (total_duration=30s)\n"
+            )
+        )
+        self.assertFalse(
+            watchdog._has_meaningful_progress(
+                b"Trace: provider=liz transport=outage status=502 retry_in=5s elapsed=30s\n"
+            )
+        )
+        self.assertTrue(watchdog._has_meaningful_progress(b"Trace: patching queue worker\n"))
+        self.assertEqual(
+            watchdog._activity_state(
+                b"Trace: lane=core waiting for upstream response (total_duration=30s)\n"
+            ),
+            "waiting",
+        )
+        self.assertEqual(
+            watchdog._activity_state(
+                b"Reconnecting... 4/5 (21m 51s \xe2\x80\xa2 esc to interrupt)\n"
+            ),
+            "waiting",
+        )
+        self.assertEqual(
+            watchdog._activity_state(b"\xe2\x80\xa2 Working (2m 14s \xe2\x80\xa2 esc to interrupt)\n"),
+            "waiting",
+        )
+        self.assertEqual(watchdog._activity_state(b"Trace: patching queue worker\n"), "meaningful")
+
+    def test_watchdog_holds_recent_wait_signals_within_grace_window(self) -> None:
+        watchdog = _load_watchdog_module()
+
+        self.assertTrue(
+            watchdog._should_hold_wait_session(
+                now=60.0,
+                wait_started_at=15.0,
+                last_wait_signal=52.0,
+                interval=15,
+                wait_grace_seconds=3600.0,
+            )
+        )
+        self.assertFalse(
+            watchdog._should_hold_wait_session(
+                now=60.0,
+                wait_started_at=15.0,
+                last_wait_signal=20.0,
+                interval=15,
+                wait_grace_seconds=3600.0,
+            )
+        )
+        self.assertFalse(
+            watchdog._should_hold_wait_session(
+                now=3700.0,
+                wait_started_at=15.0,
+                last_wait_signal=3695.0,
+                interval=15,
+                wait_grace_seconds=300.0,
+            )
+        )
+
+    def test_explicit_lane_exec_subcommand_skips_route_helper_telemetry(self) -> None:
+        route_helper = self.root / "route-helper.py"
+        route_helper.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env python3",
+                    "import json, os, sys",
+                    "with open(os.environ['CODEXEA_ROUTE_CAPTURE'], 'w', encoding='utf-8') as handle:",
+                    "    json.dump({'argv': sys.argv[1:]}, handle)",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        route_helper.chmod(route_helper.stat().st_mode | stat.S_IXUSR)
+
+        result = self.run_shim(
+            "core",
+            "exec",
+            "summarize recent commits",
+            extra_env={
+                "CODEXEA_ROUTE_HELPER": str(route_helper),
+                "CODEXEA_ROUTE_CAPTURE": str(self.route_capture_path),
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["argv"].count("exec"), 1)
+        self.assertNotIn("Telemetry", "".join(completed.stdout.splitlines()))
+        self.assertFalse(self.route_capture_path.exists())
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "core")
+
+    def test_plain_exec_subcommand_can_use_telemetry_shortcut_without_lane_override(self) -> None:
+        route_helper = self.root / "route-helper.py"
+        route_helper.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env python3",
+                    "import sys",
+                    "if len(sys.argv) > 1 and sys.argv[1] == '--telemetry-answer':",
+                    "    print('exec telemetry ok')",
+                    "    raise SystemExit(0)",
+                    "raise SystemExit(10)",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        route_helper.chmod(route_helper.stat().st_mode | stat.S_IXUSR)
+
+        result = self.run_shim(
+            "exec",
+            "eta? active shards?",
+            extra_env={"CODEXEA_ROUTE_HELPER": str(route_helper)},
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stdout.strip(), "exec telemetry ok")
+        self.assertIsNone(result["payload"])
 
     def test_resume_subcommand_stays_passthrough_under_bootstrap(self) -> None:
         result = self.run_shim(

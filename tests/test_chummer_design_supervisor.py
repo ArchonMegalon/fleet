@@ -5012,7 +5012,34 @@ def test_prepare_direct_worker_environment_applies_workspace_stream_budget_for_c
 
         assert env.get("CODEXEA_STREAM_IDLE_TIMEOUT_MS") == "900000"
         assert env.get("CODEXEA_STREAM_MAX_RETRIES") == "8"
+        assert env.get("CODEXEA_EXEC_HARD_TIMEOUT_SECONDS") == "9000"
         assert env.get("CODEXEA_CORE_RESPONSES_PROFILE") == "core_batch"
+
+
+def test_prepare_direct_worker_environment_aligns_codexea_hard_timeout_to_worker_timeout() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "runtime.env").write_text(
+            "\n".join(
+                [
+                    "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS=900000",
+                    "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES=8",
+                    "CHUMMER_DESIGN_SUPERVISOR_WORKER_TIMEOUT_SECONDS=28800",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        env = module._prepare_direct_worker_environment(
+            root / "state",
+            "core_rescue",
+            workspace_root=root,
+            worker_bin="codexea",
+        )
+
+        assert env.get("CODEXEA_EXEC_HARD_TIMEOUT_SECONDS") == "28800"
 
 
 def test_prepare_direct_worker_environment_caps_stream_budget_to_explicit_model_output_stall() -> None:
@@ -16797,6 +16824,70 @@ def test_fast_status_state_keeps_latest_worker_lane_and_audit_fields_from_shards
         assert updated["eta"]["scope_kind"] == "flagship_product_readiness"
 
 
+def test_fast_status_state_keeps_newer_aggregate_audits_over_older_shard_values() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        aggregate_root = Path(tmp) / "state" / "chummer_design_supervisor"
+        aggregate_root.mkdir(parents=True, exist_ok=True)
+        shard_root = aggregate_root / "shard-14"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            aggregate_root / "state.json",
+            {
+                "updated_at": "2026-04-27T13:36:08Z",
+                "mode": "sharded",
+                "completion_audit": {
+                    "status": "pass",
+                    "reason": "fresh aggregate live-refresh proof",
+                    "receipt_audit": {
+                        "status": "pass",
+                        "synthetic": True,
+                    },
+                },
+                "full_product_audit": {
+                    "status": "pass",
+                    "reason": "fresh aggregate flagship proof",
+                },
+            },
+        )
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-04-27T13:28:51Z",
+                "mode": "flagship_product",
+                "completion_audit": {
+                    "status": "fail",
+                    "reason": "linux desktop exit gate proof is missing a valid run_root",
+                },
+                "full_product_audit": {
+                    "status": "fail",
+                    "reason": "flagship product readiness proof is not green: fail",
+                },
+                "active_run": {
+                    "run_id": "run-14",
+                    "frontier_ids": [14],
+                    "started_at": "2026-04-27T12:13:03Z",
+                },
+            },
+        )
+        (aggregate_root / "active_shards.json").write_text(
+            json.dumps({"active_shards": [{"name": "shard-14", "frontier_ids": [14]}]}),
+            encoding="utf-8",
+        )
+
+        updated = module._fast_status_state(
+            Namespace(),
+            aggregate_root,
+            module._read_state(aggregate_root / "state.json"),
+            include_shards=True,
+        )
+
+        assert updated["completion_audit"]["status"] == "pass"
+        assert updated["completion_audit"]["reason"] == "fresh aggregate live-refresh proof"
+        assert updated["full_product_audit"]["status"] == "pass"
+        assert updated["full_product_audit"]["reason"] == "fresh aggregate flagship proof"
+
+
 def test_fast_status_state_surfaces_flagship_readiness_path_from_args() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -22866,6 +22957,37 @@ def test_synthetic_completion_receipt_accepts_silent_stall_when_proofs_are_green
     assert "worker_silent_stalled:240s" in synthetic["reason"]
 
 
+def test_synthetic_completion_receipt_accepts_plain_worker_timeout_when_proofs_are_green() -> None:
+    module = _load_module()
+    timed_out_run = {
+        "run_id": "run-plain-timeout",
+        "worker_exit_code": 124,
+        "accepted": False,
+        "acceptance_reason": "worker exit 124",
+        "blocker": "worker exit 124",
+        "final_message": (
+            "What shipped: \n\n"
+            "What remains: \n\n"
+            "Exact blocker: worker exit 124\n"
+        ),
+    }
+    receipt_audit = module._completion_audit([timed_out_run])
+    pass_audit = {"status": "pass"}
+
+    synthetic = module._synthetic_completion_receipt_audit(
+        receipt_audit,
+        pass_audit,
+        pass_audit,
+        pass_audit,
+        pass_audit,
+    )
+
+    assert synthetic is not None
+    assert synthetic["status"] == "pass"
+    assert synthetic["synthetic"] is True
+    assert "worker exit 124" in synthetic["reason"]
+
+
 def test_should_defer_external_blocker_probe_only_for_non_primary_shards() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -22964,6 +23086,50 @@ def test_memory_dispatch_snapshot_reuses_active_slots_before_parking_next_idle_s
             allowed_active_shards=2,
         )
         assert follow_on == ["shard-2", "shard-1"]
+
+
+def test_memory_dispatch_snapshot_skips_externally_deferred_idle_shard_for_next_slot() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        for index in range(1, 5):
+            shard_root = aggregate_root / f"shard-{index}"
+            shard_root.mkdir(parents=True, exist_ok=True)
+            payload = {"updated_at": "2026-04-27T09:00:00Z"}
+            if index in {1, 2}:
+                payload["active_run"] = {"run_id": f"active-{index}"}
+            if index == 3:
+                payload.update(
+                    {
+                        "active_run_progress_state": "idle_claimed_frontier_without_active_run",
+                        "idle_reason": "claimed_frontier_without_active_run",
+                        "eta": {
+                            "blocking_reason": "Error: 502: upstream_unavailable:onemin/gpt-5.4",
+                        },
+                    }
+                )
+            module._write_json(shard_root / "state.json", payload)
+
+        args = _args(root)
+        args.state_root = str(aggregate_root / "shard-4")
+        args.operating_profile = "standard"
+
+        snapshot = module._memory_dispatch_snapshot(
+            args,
+            Path(args.state_root),
+            meminfo_bytes={
+                "MemTotal": 64 * 1024**3,
+                "MemAvailable": 64 * 1024**3,
+                "SwapTotal": 8 * 1024**3,
+                "SwapFree": 8 * 1024**3,
+            },
+        )
+
+        assert snapshot["allowed_active_shards"] >= 3
+        assert snapshot["deferred_shard_names"] == ["shard-3"]
+        assert snapshot["eligible_shard_names"][:3] == ["shard-1", "shard-2", "shard-4"]
+        assert snapshot["dispatch_allowed"] is True
 
 
 def test_memory_dispatch_snapshot_ignores_stale_swap_pressure_when_ram_headroom_is_healthy() -> None:
@@ -25111,3 +25277,65 @@ def test_run_loop_defers_shard_when_memory_pressure_guard_is_active(monkeypatch)
         state = json.loads((Path(args.state_root) / "state.json").read_text(encoding="utf-8"))
         assert state["host_memory_pressure"]["status"] == "critical"
         assert state["host_memory_pressure"]["dispatch_allowed"] is False
+
+
+def test_main_active_shards_command_refreshes_manifest(monkeypatch, tmp_path: Path) -> None:
+    module = _load_module()
+    root = tmp_path
+    args = _args(root)
+    args.command = "active-shards"
+
+    manifest_calls: dict[str, str] = {}
+
+    aggregate_root = module._aggregate_state_root(Path(args.state_root).resolve())
+    manifest_path = module._active_shard_manifest_path(aggregate_root)
+
+    def fake_snapshot(state_root: Path) -> None:
+        manifest_calls["state_root"] = str(state_root)
+        state_root.mkdir(parents=True, exist_ok=True)
+        state_root = aggregate_root / "active_shards.json"
+        state_root.write_text(json.dumps({"written_by": "test"}) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(module, "_write_active_shard_manifest_snapshot", fake_snapshot)
+    monkeypatch.setattr(module, "parse_args", lambda: args)
+
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        module.main()
+
+    assert manifest_calls["state_root"] == str(aggregate_root)
+    assert stdout.getvalue().strip() == str(manifest_path)
+
+
+def test_main_active_shards_command_refreshes_manifest_json(monkeypatch, tmp_path: Path) -> None:
+    module = _load_module()
+    root = tmp_path
+    args = _args(root)
+    args.command = "active-shards"
+    args.json = True
+
+    aggregate_root = module._aggregate_state_root(Path(args.state_root).resolve())
+    expected_payload = {
+        "configured_shard_count": 14,
+        "active_shards": [
+            {
+                "name": "shard-14",
+                "worker_lane": "audit_shard",
+            }
+        ],
+    }
+
+    def fake_snapshot(state_root: Path) -> None:
+        module._write_json(state_root / "active_shards.json", expected_payload)
+
+    monkeypatch.setattr(module, "_write_active_shard_manifest_snapshot", fake_snapshot)
+    monkeypatch.setattr(module, "parse_args", lambda: args)
+
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        module.main()
+
+    payload = json.loads(stdout.getvalue())
+    assert payload["configured_shard_count"] == 14
+    assert payload["active_shards"][0]["name"] == "shard-14"
+    assert payload["active_shards"][0]["worker_lane"] == "audit_shard"

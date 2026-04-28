@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export CODEXEA2_CODEX_HOME="${CODEXEA2_CODEX_HOME:-/home/tibor/.codexea2}"
 export CODEX_HOME="${CODEXEA2_CODEX_HOME}"
-unset CODEX_CONFIG
-mkdir -p "${CODEX_HOME}"
-cat > "${CODEX_HOME}/config.toml" <<'EOF'
+CODEXEA2_CODEXEA_BIN="${CODEXEA2_CODEXEA_BIN:-${SCRIPT_DIR}/codexea}"
+
+write_codexea2_config() {
+  local target="${CODEX_HOME}/config.toml"
+  local tmp_file=""
+  mkdir -p "${CODEX_HOME}"
+  tmp_file="$(mktemp "${CODEX_HOME}/config.toml.XXXXXX")"
+  chmod 600 "${tmp_file}"
+  cat > "${tmp_file}" <<'EOF'
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 service_tier = "fast"
@@ -22,6 +29,11 @@ trust_level = "trusted"
 [projects."/home/tibor"]
 trust_level = "trusted"
 EOF
+  mv "${tmp_file}" "${target}"
+}
+
+unset CODEX_CONFIG
+write_codexea2_config
 
 export CODEXEA_DEFAULT_LANE="${CODEXEA_DEFAULT_LANE:-easy}"
 export CODEXEA_USE_LIVE_PROFILE_MODELS="${CODEXEA_USE_LIVE_PROFILE_MODELS:-0}"
@@ -43,4 +55,9 @@ export CODEXEA_CREDITS_INCLUDE_BILLING="${CODEXEA_CREDITS_INCLUDE_BILLING:-1}"
 export CODEXEA_SKIP_GIT_REPO_CHECK="${CODEXEA_SKIP_GIT_REPO_CHECK:-1}"
 export CODEXEA_PREFER_RUNTIME_AUTH="${CODEXEA_PREFER_RUNTIME_AUTH:-1}"
 
-exec /docker/fleet/scripts/codex-shims/codexea "$@"
+if [ ! -x "${CODEXEA2_CODEXEA_BIN}" ]; then
+  echo "Missing codexea launcher for codexea2 shim at ${CODEXEA2_CODEXEA_BIN}" >&2
+  exit 1
+fi
+
+exec "${CODEXEA2_CODEXEA_BIN}" "$@"

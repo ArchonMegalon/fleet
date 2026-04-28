@@ -183,6 +183,33 @@ class CodexLizShimTests(unittest.TestCase):
         self.assertIn("exec", payload["argv"])
         self.assertIn("repair the queue stall", payload["argv"])
 
+    def test_codexliz_debug_mode_emits_preflight_and_launch_traces(self) -> None:
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server, _thread = self._server(Handler)
+        completed = self._run_shim(
+            f"http://127.0.0.1:{server.server_port}",
+            extra_env={"CODEXLIZ_DEBUG": "1"},
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("Trace: provider=liz debug=preflight", completed.stderr)
+        self.assertIn("Trace: provider=liz debug=launch command=", completed.stderr)
+        debug_log = self.state_dir / "debug.log"
+        self.assertTrue(debug_log.exists())
+        log_text = debug_log.read_text(encoding="utf-8")
+        self.assertIn("Trace: provider=liz debug=preflight", log_text)
+
     def test_codexliz_fails_fast_when_models_canary_returns_524(self) -> None:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802

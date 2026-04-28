@@ -17,13 +17,19 @@ import tty
 from typing import Callable
 
 
-DEFAULT_INTERVAL = int(os.environ.get("CODEXEA_WATCHDOG_INTERVAL", "30"))
+DEFAULT_INTERVAL = int(os.environ.get("CODEXEA_WATCHDOG_INTERVAL", "15"))
 DEFAULT_PROMPT = os.environ.get(
     "CODEXEA_WATCHDOG_PROMPT",
     "",
 )
-DEFAULT_INTERRUPT_INTERVALS = int(os.environ.get("CODEXEA_WATCHDOG_INTERRUPT_INTERVALS", "2"))
-DEFAULT_RESTART_GRACE_SECONDS = float(os.environ.get("CODEXEA_WATCHDOG_RESTART_GRACE_SECONDS", "2.0"))
+DEFAULT_INTERRUPT_INTERVALS = int(os.environ.get("CODEXEA_WATCHDOG_INTERRUPT_INTERVALS", "1"))
+DEFAULT_RESTART_GRACE_SECONDS = float(os.environ.get("CODEXEA_WATCHDOG_RESTART_GRACE_SECONDS", "0.5"))
+DEFAULT_WAIT_GRACE_SECONDS = float(
+    os.environ.get(
+        "CODEXEA_WATCHDOG_WAIT_GRACE_SECONDS",
+        os.environ.get("CODEXEA_EXEC_HARD_TIMEOUT_SECONDS", "3600"),
+    )
+)
 STATE_DIR = os.path.expanduser(os.environ.get("CODEXEA_STATE_DIR", "~/.cache/codexea"))
 STOP_FILE = os.path.expanduser(os.environ.get("CODEXEA_STOP_FILE", os.path.join(STATE_DIR, "stop")))
 SESSIONS_DIR = os.path.expanduser("~/.codex/sessions")
@@ -34,6 +40,20 @@ ACTIVE_SESSION_RE = re.compile(
     re.IGNORECASE,
 )
 ANSI_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\].*?(?:\x07|\x1b\\))")
+SYNTHETIC_WAIT_RE = re.compile(
+    r"^(Trace:\s*)?(lane=[^\s]+\s+)?waiting for (upstream response|model output)\b",
+    re.IGNORECASE,
+)
+SYNTHETIC_TRANSPORT_RE = re.compile(
+    r"^Trace:\s*provider=[^\s]+\s+transport=(outage|reconnecting|waiting|retrying)\b",
+    re.IGNORECASE,
+)
+RECONNECTING_RE = re.compile(r"^Reconnecting\.\.\.\s+\d+/\d+\b", re.IGNORECASE)
+TRANSPORT_DETAIL_RE = re.compile(
+    r"(stream disconnected before completion|error sending request for url|proxy_upstream_failure|read operation timed out)",
+    re.IGNORECASE,
+)
+
 MEANINGFUL_MARKERS = (
     "Trace:",
     "Explored",
@@ -81,21 +101,61 @@ def _write_all(fd: int, data: bytes) -> None:
             raise
 
 
-def _has_meaningful_progress(data: bytes) -> bool:
+def _activity_state(data: bytes) -> str:
     text = data.decode("utf-8", "ignore")
     text = ANSI_RE.sub("", text)
     lines = [" ".join(line.split()) for line in text.splitlines()]
     visible = [line for line in lines if line]
     if not visible:
-        return False
+        return "none"
+    saw_wait = False
     for line in visible:
         if line.startswith(("• Working", "◦ Working", "Working (")):
+            saw_wait = True
             continue
         if "esc to interrupt" in line and "Working" in line:
+            saw_wait = True
+            continue
+        if SYNTHETIC_WAIT_RE.search(line):
+            saw_wait = True
+            continue
+        if SYNTHETIC_TRANSPORT_RE.search(line):
+            saw_wait = True
+            continue
+        if RECONNECTING_RE.search(line):
+            saw_wait = True
+            continue
+        if TRANSPORT_DETAIL_RE.search(line):
+            saw_wait = True
             continue
         if any(marker in line for marker in MEANINGFUL_MARKERS):
-            return True
-    return False
+            return "meaningful"
+    if saw_wait:
+        return "waiting"
+    return "none"
+
+
+def _has_meaningful_progress(data: bytes) -> bool:
+    return _activity_state(data) == "meaningful"
+
+
+def _wait_signal_freshness_seconds(interval: int | float) -> float:
+    return max(5.0, float(interval) * 2.0)
+
+
+def _should_hold_wait_session(
+    *,
+    now: float,
+    wait_started_at: float,
+    last_wait_signal: float,
+    interval: int | float,
+    wait_grace_seconds: float,
+) -> bool:
+    if wait_grace_seconds <= 0 or wait_started_at <= 0 or last_wait_signal <= 0:
+        return False
+    if (now - wait_started_at) > wait_grace_seconds:
+        return False
+    return (now - last_wait_signal) <= _wait_signal_freshness_seconds(interval)
 
 
 def _launch_child(argv: list[str], resume_prompt: str | None = None, resume_session_id: str | None = None) -> tuple[int, int]:
@@ -245,6 +305,8 @@ def main(argv: list[str]) -> int:
         previous_winch_handler = signal.signal(signal.SIGWINCH, _handle_winch)
 
     last_activity = time.monotonic()
+    last_wait_signal = 0.0
+    wait_started_at = 0.0
     idle_nudges = 0
 
     try:
@@ -276,9 +338,18 @@ def main(argv: list[str]) -> int:
                 observed_session_id = _extract_active_session_id(data)
                 if observed_session_id:
                     active_session_id = observed_session_id
-                if _has_meaningful_progress(data):
-                    last_activity = time.monotonic()
+                activity_state = _activity_state(data)
+                if activity_state == "meaningful":
+                    now = time.monotonic()
+                    last_activity = now
+                    last_wait_signal = 0.0
+                    wait_started_at = 0.0
                     idle_nudges = 0
+                elif activity_state == "waiting":
+                    now = time.monotonic()
+                    last_wait_signal = now
+                    if wait_started_at <= 0:
+                        wait_started_at = now
 
             if stdin_is_tty and stdin_fd in rlist:
                 try:
@@ -288,9 +359,20 @@ def main(argv: list[str]) -> int:
                 if user_data:
                     os.write(master_fd, user_data)
                     last_activity = time.monotonic()
+                    last_wait_signal = 0.0
+                    wait_started_at = 0.0
                     idle_nudges = 0
 
             now = time.monotonic()
+            if _should_hold_wait_session(
+                now=now,
+                wait_started_at=wait_started_at,
+                last_wait_signal=last_wait_signal,
+                interval=interval,
+                wait_grace_seconds=DEFAULT_WAIT_GRACE_SECONDS,
+            ):
+                last_activity = now
+                continue
             if now - last_activity >= interval:
                 idle_nudges += 1
                 if idle_nudges >= DEFAULT_INTERRUPT_INTERVALS:
@@ -301,6 +383,8 @@ def main(argv: list[str]) -> int:
                     _terminate_child(child_pid, master_fd)
                     master_fd, child_pid = _launch_child(child_argv, DEFAULT_PROMPT, active_session_id or None)
                     active_session_id = ""
+                    last_wait_signal = 0.0
+                    wait_started_at = 0.0
                     _prepare_master_fd()
                     _write_all(
                         sys.stdout.fileno(),

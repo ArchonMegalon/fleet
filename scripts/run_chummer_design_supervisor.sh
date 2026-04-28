@@ -393,6 +393,72 @@ primary_probe_shard_index() {
   printf '0\n'
 }
 
+deferred_shard_indexes_for_dispatch() {
+  local root="${1:-}"
+  local configured="${2:-0}"
+  if [[ -z "$root" || ! -d "$root" || ! "$configured" =~ ^[0-9]+$ || "$configured" -le 0 ]]; then
+    return 0
+  fi
+  python3 - "$root" "$configured" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+configured = int(sys.argv[2])
+external_markers = (
+    "external blocker",
+    "upstream_unavailable",
+    "onemin_exhausted",
+    "exhausted_for_request",
+    "no_backend_available",
+    "queue_timeout",
+    "release_upload_ticket",
+    "release_upload_token",
+    "api key",
+)
+for index in range(1, configured + 1):
+    state_path = root / f"shard-{index}" / "state.json"
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except Exception:
+        continue
+    active_run = payload.get("active_run") if isinstance(payload.get("active_run"), dict) else {}
+    if str(active_run.get("run_id") or "").strip():
+        continue
+    idle_reason = str(payload.get("idle_reason") or "").strip().lower()
+    progress = str(payload.get("active_run_progress_state") or "").strip().lower()
+    if idle_reason != "claimed_frontier_without_active_run" and progress != "idle_claimed_frontier_without_active_run":
+        continue
+    eta = payload.get("eta") if isinstance(payload.get("eta"), dict) else {}
+    reason = " ".join(
+        str(value or "")
+        for value in (
+            payload.get("current_blocker"),
+            payload.get("last_run_blocker"),
+            payload.get("historical_last_run_blocker"),
+            payload.get("eta_summary"),
+            eta.get("blocking_reason"),
+            eta.get("summary"),
+        )
+    ).lower()
+    if any(marker in reason for marker in external_markers):
+        print(index)
+PY
+}
+
+is_deferred_shard_index() {
+  local candidate="${1:-}"
+  local item=""
+  [[ "$candidate" =~ ^[0-9]+$ ]] || return 1
+  for item in "${deferred_shard_indexes[@]:-}"; do
+    if [[ "$item" == "$candidate" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 join_with_semicolons() {
   local -n values="$1"
   local joined=""
@@ -424,6 +490,9 @@ resolve_active_shard_indexes() {
     primary_index="$(primary_probe_shard_index)"
     append_unique_shard_index "$2" "$primary_index" "$configured"
     for ((idx = 1; idx <= configured; idx++)); do
+      if (( primary_index <= 0 || idx != primary_index )) && is_deferred_shard_index "$idx"; then
+        continue
+      fi
       effective_worker_bin="${shard_worker_bins[$((idx - 1))]:-${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-codex}}"
       if ! worker_bin_uses_codexea "$effective_worker_bin"; then
         append_unique_shard_index "$2" "$idx" "$configured"
@@ -434,6 +503,9 @@ resolve_active_shard_indexes() {
     done
   fi
   for ((idx = 1; idx <= configured; idx++)); do
+    if (( primary_index <= 0 || idx != primary_index )) && is_deferred_shard_index "$idx"; then
+      continue
+    fi
     append_unique_shard_index "$2" "$idx" "$configured"
     if (( ${#dest[@]} >= parallel_shards )); then
       return 0
@@ -523,6 +595,12 @@ fill_sparse_group_from_defaults shard_worker_lanes project_contract_shard_worker
 fill_sparse_group_from_defaults shard_worker_models project_contract_shard_worker_models
 
 resolved_configured_shard_slots="$(configured_shard_slots)"
+deferred_shard_indexes=()
+if [[ -n "$state_root_base" ]]; then
+  while IFS= read -r deferred_index; do
+    append_unique_shard_index deferred_shard_indexes "$deferred_index" "$resolved_configured_shard_slots"
+  done < <(deferred_shard_indexes_for_dispatch "$state_root_base" "$resolved_configured_shard_slots")
+fi
 resolved_active_shard_indexes=()
 resolve_active_shard_indexes "$resolved_configured_shard_slots" resolved_active_shard_indexes
 
@@ -532,6 +610,7 @@ if (( print_runtime_policy )); then
   printf 'parallel_shards=%s\n' "$parallel_shards"
   printf 'configured_shard_slots=%s\n' "$resolved_configured_shard_slots"
   printf 'selected_shard_indexes=%s\n' "$(IFS=,; printf '%s' "${resolved_active_shard_indexes[*]}")"
+  printf 'deferred_shard_indexes=%s\n' "$(IFS=,; printf '%s' "${deferred_shard_indexes[*]-}")"
   printf 'clear_lock_on_boot=%s\n' "$clear_lock_on_boot"
   printf 'health_max_age_seconds=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_HEALTH_MAX_AGE_SECONDS:-}"
   printf 'operating_profile=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_OPERATING_PROFILE:-}"

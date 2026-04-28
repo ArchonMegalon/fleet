@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import os
 import subprocess
@@ -50,7 +51,7 @@ def test_fleet_supervisor_contract_carries_shard_routing_and_proof_paths() -> No
     assert runtime["restart_safe"] is True
     assert runtime["state_root"] == "/docker/fleet/state/chummer_design_supervisor"
     assert runtime["clear_lock_on_boot"] is True
-    assert runtime["shard_count"] == 13
+    assert runtime["shard_count"] == 14
     assert runtime["dynamic_account_routing"] == "auto"
     assert runtime["worker_bin"].endswith("/scripts/codex-shims/codexea")
     assert runtime["worker_lane"] == "core"
@@ -58,7 +59,7 @@ def test_fleet_supervisor_contract_carries_shard_routing_and_proof_paths() -> No
     assert runtime["resource_policy"]["operating_profile"] == "standard"
     assert restart_safe["canonical_config_surface"].endswith("config/projects/fleet.yaml")
     assert restart_safe["documented_at"].endswith("docs/restart-safe-runtime-configuration.md")
-    assert restart_safe["launcher_defaults"]["parallel_shards"] == 13
+    assert restart_safe["launcher_defaults"]["parallel_shards"] == 14
     assert restart_safe["launcher_defaults"]["state_root"].endswith("chummer_design_supervisor")
     assert restart_safe["launcher_defaults"]["clear_lock_on_boot"] is True
     assert resource_policy["default_operating_profile"] == "standard"
@@ -69,8 +70,8 @@ def test_fleet_supervisor_contract_carries_shard_routing_and_proof_paths() -> No
     assert fleet["queue_sources"][0]["path"] == "WORKLIST.md"
     assert any(item["package_id"] == "fleet-postclient-restart-safe-config" for item in fleet["queue"])
     assert topology["primary_probe_shard"] == "shard-1"
-    assert len(shards) == 13
-    assert {shard["name"] for shard in shards} == {f"shard-{index}" for index in range(1, 14)}
+    assert len(shards) == 14
+    assert {shard["name"] for shard in shards} == {f"shard-{index}" for index in range(1, 15)}
     assert all(shard["focus_owner"] for shard in shards)
     assert all(shard["focus_text"] for shard in shards)
     assert shards[0]["focus_profile"] == ["top_flagship_grade", "whole_project_frontier"]
@@ -81,6 +82,14 @@ def test_fleet_supervisor_contract_carries_shard_routing_and_proof_paths() -> No
     assert "desktop_client" in contract["focus_profiles"]
     assert contract["proof_paths"]["completion_review_frontier"].endswith(
         "/COMPLETION_REVIEW_FRONTIER.generated.yaml"
+    )
+
+
+def test_verify_cmd_refreshes_active_shards_manifest() -> None:
+    fleet = _load_project("fleet")
+    assert (
+        "python3 scripts/chummer_design_supervisor.py active-shards --state-root /docker/fleet/state/chummer_design_supervisor"
+        in fleet["verify_cmd"]
     )
 
 
@@ -139,7 +148,28 @@ def test_launcher_cold_restart_policy_is_reproducible_from_project_contract() ->
     assert lines["fallback_lanes"] == "core_rescue"
     assert "codexliz" not in lines["resolved_shard_worker_bins"]
     assert "fleet,chummer6-design,chummer6-ui" in lines["shard_owner_groups"]
-    assert lines["selected_shard_indexes"] == "1,2,3,4,5,6,7,8,9,10,11,12,13"
+    assert lines["selected_shard_indexes"] == "1,2,3,4,5,6,7,8,9,10,11,12,13,14"
+
+
+def test_active_shards_manifest_includes_audit_shard() -> None:
+    fleet = _load_project("fleet")
+    contract_shards = fleet["supervisor_contract"]["shard_topology"]["configured_shards"]
+    required_shard = next(shard for shard in contract_shards if shard["name"] == "shard-14")
+    assert required_shard.get("worker_lane") == "audit_shard"
+
+    manifest = json.loads(
+        Path("/docker/fleet/state/chummer_design_supervisor/active_shards.json").read_text(encoding="utf-8")
+    )
+    active_shards = manifest.get("active_shards") or []
+    assert manifest.get("configured_shard_count") in (None, 14)
+    assert len(active_shards) >= 1
+
+    shard_names = [str(shard.get("name")) for shard in active_shards if shard.get("name")]
+    assert "shard-14" in shard_names
+
+    matched = [shard for shard in active_shards if shard.get("name") == "shard-14"]
+    assert len(matched) == 1
+    assert matched[0].get("worker_lane") == "audit_shard"
 
 
 def test_launcher_reduced_parallel_width_selects_ea_shards_in_order() -> None:

@@ -1514,6 +1514,17 @@ def parse_args() -> argparse.Namespace:
         help="Stop when the worker reports a non-empty Exact blocker field.",
     )
 
+    active_shards_parser = subparsers.add_parser(
+        "active-shards",
+        help="Write active_shards.json snapshot from current shard state without launching workers.",
+    )
+    add_shared_flags(active_shards_parser)
+    active_shards_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print manifest payload as JSON.",
+    )
+
     status_parser = subparsers.add_parser("status", help="Print the current supervisor state.")
     add_shared_flags(status_parser)
     status_parser.add_argument(
@@ -1714,11 +1725,49 @@ def _active_shard_names(aggregate_root: Path) -> List[str]:
     return names
 
 
+def _externally_deferred_idle_shard_names(aggregate_root: Path) -> List[str]:
+    names: List[str] = []
+    external_markers = (
+        "external blocker",
+        "upstream_unavailable",
+        "onemin_exhausted",
+        "no_backend_available",
+        "queue_timeout",
+        "release_upload_ticket",
+        "release_upload_token",
+    )
+    for shard_root in _configured_shard_roots(aggregate_root):
+        state = _read_state(_state_payload_path(shard_root))
+        active_run = (state.get("active_run") or {}) if isinstance(state.get("active_run"), dict) else {}
+        if str(active_run.get("run_id") or "").strip():
+            continue
+        idle_reason = str(state.get("idle_reason") or "").strip().lower()
+        progress_state = str(state.get("active_run_progress_state") or "").strip().lower()
+        if idle_reason != "claimed_frontier_without_active_run" and progress_state != "idle_claimed_frontier_without_active_run":
+            continue
+        eta = state.get("eta") if isinstance(state.get("eta"), dict) else {}
+        reason = " ".join(
+            str(value or "")
+            for value in (
+                state.get("current_blocker"),
+                state.get("last_run_blocker"),
+                state.get("historical_last_run_blocker"),
+                state.get("eta_summary"),
+                eta.get("blocking_reason"),
+                eta.get("summary"),
+            )
+        ).lower()
+        if any(marker in reason for marker in external_markers):
+            names.append(shard_root.name)
+    return names
+
+
 def _eligible_shard_names_for_dispatch(
     configured_shard_names: Sequence[str],
     active_shard_names: Sequence[str],
     *,
     allowed_active_shards: int,
+    deferred_shard_names: Sequence[str] = (),
 ) -> List[str]:
     limit = max(0, int(allowed_active_shards))
     if limit <= 0:
@@ -1727,6 +1776,7 @@ def _eligible_shard_names_for_dispatch(
     if not configured:
         return []
     active = {str(item).strip() for item in active_shard_names if str(item).strip()}
+    deferred = {str(item).strip() for item in deferred_shard_names if str(item).strip()}
     eligible: List[str] = []
     for name in configured:
         if name not in active:
@@ -1735,7 +1785,7 @@ def _eligible_shard_names_for_dispatch(
         if len(eligible) >= limit:
             return eligible
     for name in configured:
-        if name in active or name in eligible:
+        if name in active or name in eligible or name in deferred:
             continue
         eligible.append(name)
         if len(eligible) >= limit:
@@ -2144,10 +2194,12 @@ def _memory_dispatch_snapshot(
             reasons.append(provider_reason)
         allowed_active_shards = provider_allowed_active_shards
     active_shard_names = _active_shard_names(aggregate_root)
+    deferred_shard_names = _externally_deferred_idle_shard_names(aggregate_root)
     eligible_shard_names = _eligible_shard_names_for_dispatch(
         configured_shard_names,
         active_shard_names,
         allowed_active_shards=allowed_active_shards,
+        deferred_shard_names=deferred_shard_names,
     )
     dispatch_allowed = True
     if current_shard_name:
@@ -2182,6 +2234,7 @@ def _memory_dispatch_snapshot(
             "eligible_shard_names": eligible_shard_names,
             "active_shard_count": len(active_shard_names),
             "active_shard_names": active_shard_names,
+            "deferred_shard_names": deferred_shard_names,
             "dispatch_allowed": dispatch_allowed,
             "throttled": throttled,
             "provider_dispatch_capacity": provider_dispatch_capacity,
@@ -2201,6 +2254,11 @@ def _memory_pressure_notice(host_memory_pressure: Optional[Dict[str, Any]]) -> s
         for item in (host_memory_pressure.get("eligible_shard_names") or [])
         if str(item).strip()
     ]
+    deferred_shard_names = [
+        str(item).strip()
+        for item in (host_memory_pressure.get("deferred_shard_names") or [])
+        if str(item).strip()
+    ]
     current_shard_name = str(host_memory_pressure.get("current_shard_name") or "").strip()
     reason = str(host_memory_pressure.get("reason") or "").strip()
     segments = [
@@ -2211,6 +2269,8 @@ def _memory_pressure_notice(host_memory_pressure: Optional[Dict[str, Any]]) -> s
         segments.append(f"{current_shard_name} is parked")
     if eligible_shard_names:
         segments.append(f"eligible shards: {', '.join(eligible_shard_names)}")
+    if deferred_shard_names:
+        segments.append(f"externally deferred idle shards: {', '.join(deferred_shard_names)}")
     if reason:
         segments.append(reason)
     return "; ".join(segments)
@@ -10715,6 +10775,13 @@ def _shard_state_roots(state_root: Path) -> List[Path]:
 
 
 def _latest_nonempty_state_field(state_items: Sequence[Dict[str, Any]], field: str) -> Any:
+    item = _latest_nonempty_state_item(state_items, field)
+    if not item:
+        return {}
+    return dict(item.get("state") or {}).get(field, {})
+
+
+def _latest_nonempty_state_item(state_items: Sequence[Dict[str, Any]], field: str) -> Dict[str, Any]:
     default_time = dt.datetime.min.replace(tzinfo=dt.timezone.utc)
     rows = sorted(
         [item for item in state_items if item.get("state")],
@@ -10725,7 +10792,10 @@ def _latest_nonempty_state_field(state_items: Sequence[Dict[str, Any]], field: s
         state = dict(item.get("state") or {})
         value = state.get(field)
         if _state_field_has_meaningful_content(value):
-            return value
+            return {
+                **dict(item),
+                "state": state,
+            }
     return {}
 
 
@@ -14400,6 +14470,7 @@ def _fast_status_state(
     include_shards: bool = True,
 ) -> Dict[str, Any]:
     updated = dict(state)
+    aggregate_state_updated_at = _state_updated_at(updated)
     workspace_root = Path(str(getattr(args, "workspace_root", "") or _workspace_root_for_state_root(state_root))).resolve()
     updated["model_selection"] = _model_selection_snapshot(args, state_root)
     readiness_path = str(getattr(args, "flagship_product_readiness_path", "") or "").strip()
@@ -14467,9 +14538,21 @@ def _fast_status_state(
         "worker_lane_health",
         "flagship_product_readiness_path",
     ):
-        latest_field_value = _latest_nonempty_state_field(shard_state_items, field)
-        if latest_field_value:
-            updated[field] = latest_field_value
+        latest_field_item = _latest_nonempty_state_item(shard_state_items, field)
+        if not latest_field_item:
+            continue
+        latest_field_state = dict(latest_field_item.get("state") or {})
+        latest_field_value = latest_field_state.get(field)
+        if not _state_field_has_meaningful_content(latest_field_value):
+            continue
+        if _state_field_has_meaningful_content(updated.get(field)):
+            latest_field_updated_at = _state_updated_at(latest_field_state)
+            if (
+                aggregate_state_updated_at is not None
+                and (latest_field_updated_at is None or aggregate_state_updated_at > latest_field_updated_at)
+            ):
+                continue
+        updated[field] = latest_field_value
     updated["host_memory_pressure"] = _memory_dispatch_snapshot(args, state_root)
     if len(updated.get("shards") or []) > 1:
         shard_modes = {
@@ -15643,6 +15726,31 @@ def _stream_budget_timeout_seconds_for_workspace(workspace_root: Path) -> float:
     return max(3600.0, (stream_idle_ms / 1000.0) * float(stream_max_retries) + 1800.0)
 
 
+def _codexea_exec_hard_timeout_value_for_workspace(workspace_root: Path) -> str:
+    explicit_raw = _runtime_env_default_with_workspace("CODEXEA_EXEC_HARD_TIMEOUT_SECONDS", workspace_root, "")
+    if explicit_raw:
+        try:
+            return str(max(0, int(float(explicit_raw))))
+        except (TypeError, ValueError):
+            return ""
+    worker_timeout_raw = _runtime_env_default_with_workspace(
+        "CHUMMER_DESIGN_SUPERVISOR_WORKER_TIMEOUT_SECONDS",
+        workspace_root,
+        "",
+    )
+    if worker_timeout_raw:
+        try:
+            worker_timeout_seconds = max(0.0, float(worker_timeout_raw))
+        except (TypeError, ValueError):
+            worker_timeout_seconds = 0.0
+        if worker_timeout_seconds > 0.0:
+            return str(max(1, int(worker_timeout_seconds)))
+    stream_timeout_seconds = _stream_budget_timeout_seconds_for_workspace(workspace_root)
+    if stream_timeout_seconds > 0.0:
+        return str(max(1, int(stream_timeout_seconds)))
+    return ""
+
+
 def _prepare_direct_worker_environment(
     state_root: Path,
     worker_lane: str,
@@ -15732,6 +15840,9 @@ def _prepare_direct_worker_environment(
             env["CODEXEA_STREAM_IDLE_TIMEOUT_MS"] = stream_idle_ms
         if stream_max_retries:
             env["CODEXEA_STREAM_MAX_RETRIES"] = stream_max_retries
+        exec_hard_timeout = _codexea_exec_hard_timeout_value_for_workspace(workspace_root)
+        if exec_hard_timeout:
+            env["CODEXEA_EXEC_HARD_TIMEOUT_SECONDS"] = exec_hard_timeout
         if clean_lane == "core":
             core_profile = _runtime_env_default_with_workspace(
                 "CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE",
@@ -19192,6 +19303,7 @@ def _synthetic_completion_receipt_audit(
         "accepted receipt is missing structured closeout content" in normalized_reason
         or "missing structured closeout content" in normalized_reason
     )
+    allow_plain_worker_timeout = normalized_reason == "worker exit 124"
     allow_helper_loop_timeout = "worker_status_helper_loop" in normalized_reason
     allow_internal_worker_recycle = bool(receipt_audit.get("retryable_internal_worker_receipt")) or (
         _retryable_internal_worker_blocker_text(latest_reason)
@@ -19200,6 +19312,7 @@ def _synthetic_completion_receipt_audit(
         not is_external_blocker
         and not allow_noop_not_launched
         and not allow_receipt_shape_gap
+        and not allow_plain_worker_timeout
         and not allow_helper_loop_timeout
         and not allow_internal_worker_recycle
     ):
@@ -22091,6 +22204,15 @@ def main() -> None:
             print(json.dumps({"state": state, "history": history}, indent=2, sort_keys=True))
         else:
             print(_render_trace(state, history))
+        return
+    if args.command == "active-shards":
+        aggregate_root = _aggregate_state_root(Path(args.state_root).resolve())
+        _write_active_shard_manifest_snapshot(aggregate_root)
+        if getattr(args, "json", False):
+            payload = _read_state(_active_shard_manifest_path(aggregate_root))
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            print(_active_shard_manifest_path(aggregate_root))
         return
     if args.command in {"once", "derive"}:
         raise SystemExit(run_once(args))

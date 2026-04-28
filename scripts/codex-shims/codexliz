@@ -22,12 +22,14 @@ CODEXLIZ_CF_ACCESS_FILE="${CODEXLIZ_CF_ACCESS_FILE:-/docker/fleet/secrets/codexl
 CODEXLIZ_CF_ACCESS_CLIENT_ID="${CODEXLIZ_CF_ACCESS_CLIENT_ID:-}"
 CODEXLIZ_CF_ACCESS_CLIENT_SECRET="${CODEXLIZ_CF_ACCESS_CLIENT_SECRET:-}"
 CODEXLIZ_TRANSPORT_RETRY_ENABLED="${CODEXLIZ_TRANSPORT_RETRY_ENABLED:-1}"
-CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS:-5}"
+CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS:-60}"
 CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS:-300}"
-CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS:-1800}"
+CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS:-86400}"
 CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS="${CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS:-5}"
 CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY="${CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY:-1}"
 CODEXLIZ_OUTAGE_STATE_FILE="${CODEXLIZ_OUTAGE_STATE_FILE:-${CODEXLIZ_STATE_DIR}/outage.json}"
+CODEXLIZ_DEBUG="${CODEXLIZ_DEBUG:-0}"
+CODEXLIZ_DEBUG_LOG_FILE="${CODEXLIZ_DEBUG_LOG_FILE:-${CODEXLIZ_STATE_DIR}/debug.log}"
 
 if [ ! -x "${BASE_CODEX_SHIM}" ]; then
   FALLBACK_CODEX_SHIM="${CODEXLIZ_FALLBACK_CODEX_SHIM:-${CODEX_REAL_BIN:-}}"
@@ -58,6 +60,40 @@ env_truthy() {
       return 1
       ;;
   esac
+}
+
+debug_render_args() {
+  python3 - "$@" <<'PY'
+import shlex
+import sys
+
+parts = []
+for arg in sys.argv[1:]:
+    display = arg
+    if "\n" in display or len(display) > 120:
+        display = f"<arg:{len(arg)} chars>"
+    parts.append(shlex.quote(display))
+print(" ".join(parts))
+PY
+}
+
+emit_debug_trace() {
+  local detail="${1:-}"
+  local line=""
+  env_truthy "${CODEXLIZ_DEBUG}" || return 0
+  mkdir -p "${CODEXLIZ_STATE_DIR}" >/dev/null 2>&1 || true
+  line="Trace: provider=${CODEXLIZ_PROVIDER_KEY} debug=${detail}"
+  printf '%s\n' "${line}" >&2
+  printf '%s\n' "${line}" >> "${CODEXLIZ_DEBUG_LOG_FILE}" 2>/dev/null || true
+}
+
+emit_debug_command() {
+  local phase="${1:-launch}"
+  local rendered=""
+  shift || true
+  env_truthy "${CODEXLIZ_DEBUG}" || return 0
+  rendered="$(debug_render_args "$@")"
+  emit_debug_trace "${phase} command=${rendered}"
 }
 
 positive_integer_or_default() {
@@ -714,9 +750,9 @@ run_codex_with_transport_retry() {
   if env_truthy "${CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY}"; then
     require_empty_output=1
   fi
-  base_sleep_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS}" "5")"
+  base_sleep_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS}" "60"")"
   max_backoff_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS}" "300")"
-  max_wait_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS}" "1800")"
+  max_wait_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS}" "86400"")"
   sleep_seconds="${base_sleep_seconds}"
 
   while :; do
@@ -960,6 +996,8 @@ export CODEX_WRAPPER_DISABLE_BOOTSTRAP="${CODEX_WRAPPER_DISABLE_BOOTSTRAP:-1}"
 load_cf_access_env
 
 if { [ "$#" -gt 0 ] && [ -z "${PRIMARY_COMMAND}" ]; } || is_providerless_command "${PRIMARY_COMMAND}" || has_explicit_provider_override "$@"; then
+  emit_debug_trace "passthrough primary=${PRIMARY_COMMAND:-none} reason=providerless_or_override log=${CODEXLIZ_DEBUG_LOG_FILE}"
+  emit_debug_command "launch" "${BASE_CODEX_SHIM}" "$@"
   exec "${BASE_CODEX_SHIM}" "$@"
 fi
 
@@ -977,6 +1015,8 @@ CODEXLIZ_PROXY_PORT="$(resolve_proxy_port)"
 LOCAL_PROVIDER_BASE_URL="$(build_local_provider_base_url "${CODEXLIZ_PROXY_PORT}")"
 REMOTE_MODELS_URL="$(build_preflight_url "${REMOTE_UPSTREAM_BASE_URL}" "${CODEXLIZ_PREFLIGHT_MODELS_PATH}")"
 LOCAL_MODELS_URL="$(build_preflight_url "${LOCAL_PROVIDER_BASE_URL}" "${CODEXLIZ_PREFLIGHT_MODELS_PATH}")"
+
+emit_debug_trace "preflight primary=${PRIMARY_COMMAND:-none} remote=${REMOTE_MODELS_URL} local=${LOCAL_MODELS_URL} proxy_port=${CODEXLIZ_PROXY_PORT} retry=${CODEXLIZ_TRANSPORT_RETRY_ENABLED} log=${CODEXLIZ_DEBUG_LOG_FILE}"
 
 run_models_preflight "${REMOTE_MODELS_URL}" "remote /v1/models" "${CODEXLIZ_MODEL}"
 
@@ -1001,6 +1041,7 @@ if [ -n "${CODEXLIZ_MODEL}" ] && ! has_explicit_model_override "${ADJUSTED_ARGS[
 fi
 
 OUTPUT_LAST_MESSAGE_PATH="$(detect_output_last_message_path "${ADJUSTED_ARGS[@]}")"
+emit_debug_command "launch" "${BASE_CODEX_SHIM}" "${provider_args[@]}" "${ADJUSTED_ARGS[@]}"
 if [ "${CODEXLIZ_TRANSPORT_RETRY_ENABLED}" = "0" ]; then
   exec "${BASE_CODEX_SHIM}" "${provider_args[@]}" "${ADJUSTED_ARGS[@]}"
 fi

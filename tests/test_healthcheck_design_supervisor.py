@@ -222,6 +222,49 @@ class HealthcheckDesignSupervisorTests(unittest.TestCase):
             self.assertEqual(payload["watchdog_max_silent_seconds"], 1800)
             self.assertEqual(payload["watchdog_startup_grace_seconds"], 1700)
 
+    def test_main_uses_longer_watchdog_window_for_state_freshness(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace_root = Path(tmpdir) / "workspace"
+            state_root = workspace_root / "state" / "chummer_design_supervisor"
+            (state_root / "shard-1").mkdir(parents=True)
+            updated_at = (datetime.now(timezone.utc) - timedelta(minutes=25)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            (workspace_root / "runtime.env").write_text(
+                "CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS=1800\n",
+                encoding="utf-8",
+            )
+            (state_root / "active_shards.json").write_text(
+                json.dumps({"active_shards": [{"name": "shard-1"}]}),
+                encoding="utf-8",
+            )
+            (state_root / "shard-1" / "state.json").write_text(
+                json.dumps(
+                    {
+                        "updated_at": updated_at,
+                        "active_run": {
+                            "run_id": "run_1",
+                            "progress_state": "streaming",
+                            "worker_last_output_at": updated_at,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            env = {
+                "CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT": str(state_root),
+                "CHUMMER_DESIGN_SUPERVISOR_HEALTH_MAX_AGE_SECONDS": "900",
+            }
+            with mock.patch.object(self.module, "DEFAULT_WORKSPACE_ROOT", workspace_root):
+                with mock.patch.object(self.module, "_loop_process_running", return_value=(True, "loop_pids=42")):
+                    with mock.patch.dict(os.environ, env, clear=True):
+                        with mock.patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                            self.assertEqual(self.module.main(["--json"]), 0)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["configured_max_age_seconds"], 900)
+            self.assertEqual(payload["max_age_seconds"], 1800)
+            self.assertEqual(payload["state_reason"].split()[0], "state_fresh=1/1")
+
 
 if __name__ == "__main__":
     unittest.main()

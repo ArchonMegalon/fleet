@@ -22,9 +22,204 @@ SURVIVAL_DEFAULT_ARGS=(
   -c "model=\"${CODEXSURVIVAL_MODEL}\""
 )
 
+is_codex_subcommand() {
+  case "${1:-}" in
+    exec|review|login|logout|mcp|mcp-server|app-server|completion|sandbox|debug|apply|resume|fork|cloud|features|help|marketplace)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+wrap_prompt_invocation_with_exec() {
+  local -a args=("$@")
+  local -a prefix_args=()
+  local -a exec_only_args=()
+  local i=0
+
+  if [ "${#args[@]}" -eq 0 ]; then
+    return 0
+  fi
+  if [ "${args[0]}" = "exec" ]; then
+    printf '%s\0' "${args[@]}"
+    return 0
+  fi
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --json|--ephemeral)
+        exec_only_args+=("${args[$i]}")
+        i=$((i + 1))
+        ;;
+      -o|--output-last-message|--color|--output-schema)
+        exec_only_args+=("${args[$i]}")
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          exec_only_args+=("${args[$i]}")
+        fi
+        i=$((i + 1))
+        ;;
+      --)
+        if [ "${#prefix_args[@]}" -gt 0 ]; then
+          printf '%s\0' "${prefix_args[@]}"
+        fi
+        printf '%s\0' exec
+        if [ "${#exec_only_args[@]}" -gt 0 ]; then
+          printf '%s\0' "${exec_only_args[@]}"
+        fi
+        printf '%s\0' "${args[@]:${i}}"
+        return 0
+        ;;
+      -c|--config|--enable|--disable|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir)
+        prefix_args+=("${args[$i]}")
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          prefix_args+=("${args[$i]}")
+        fi
+        i=$((i + 1))
+        ;;
+      --interactive|--oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|--no-alt-screen|-h|--help|-V|--version)
+        prefix_args+=("${args[$i]}")
+        i=$((i + 1))
+        ;;
+      -*)
+        prefix_args+=("${args[$i]}")
+        i=$((i + 1))
+        ;;
+      *)
+        if is_codex_subcommand "${args[$i]}"; then
+          printf '%s\0' "${args[@]}"
+          return 0
+        fi
+        if [ "${#prefix_args[@]}" -gt 0 ]; then
+          printf '%s\0' "${prefix_args[@]}"
+        fi
+        printf '%s\0' exec
+        if [ "${#exec_only_args[@]}" -gt 0 ]; then
+          printf '%s\0' "${exec_only_args[@]}"
+        fi
+        printf '%s\0' "${args[@]:${i}}"
+        return 0
+        ;;
+    esac
+  done
+
+  printf '%s\0' "${args[@]}"
+}
+
+stderr_has_unsupported_input_item() {
+  local stderr_path="${1:-}"
+  [ -n "${stderr_path}" ] || return 1
+  [ -f "${stderr_path}" ] || return 1
+  grep -qi 'unsupported_input_item' "${stderr_path}"
+}
+
+UNSUPPORTED_INPUT_RETRY_PROMPT=""
+UNSUPPORTED_INPUT_RETRY_CMD=()
+
+build_exec_stdin_retry_command() {
+  local -a args=("$@")
+  local -a prefix_args=()
+  local -a exec_only_args=()
+  local -a prompt_args=()
+  local i=0
+  local saw_exec=0
+  local arg=""
+
+  UNSUPPORTED_INPUT_RETRY_PROMPT=""
+  UNSUPPORTED_INPUT_RETRY_CMD=()
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    arg="${args[$i]}"
+    if [ "${saw_exec}" -eq 0 ]; then
+      prefix_args+=("${arg}")
+      if [ "${arg}" = "exec" ]; then
+        saw_exec=1
+      fi
+      i=$((i + 1))
+      continue
+    fi
+
+    case "${arg}" in
+      --json|--ephemeral)
+        exec_only_args+=("${arg}")
+        i=$((i + 1))
+        ;;
+      -o|--output-last-message|--color|--output-schema)
+        exec_only_args+=("${arg}")
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          exec_only_args+=("${args[$i]}")
+        fi
+        i=$((i + 1))
+        ;;
+      --)
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          prompt_args=("${args[@]:${i}}")
+        fi
+        i="${#args[@]}"
+        ;;
+      -)
+        return 1
+        ;;
+      *)
+        prompt_args=("${args[@]:${i}}")
+        i="${#args[@]}"
+        ;;
+    esac
+  done
+
+  [ "${saw_exec}" -eq 1 ] || return 1
+  [ "${#prompt_args[@]}" -gt 0 ] || return 1
+  UNSUPPORTED_INPUT_RETRY_PROMPT="${prompt_args[*]}"
+  UNSUPPORTED_INPUT_RETRY_CMD=("${prefix_args[@]}" "${exec_only_args[@]}" -)
+  return 0
+}
+
+emit_unsupported_input_retry_trace() {
+  printf 'Trace: model=%s compat=unsupported_input_item retry=stdin_exec\n' "${CODEXSURVIVAL_MODEL}" >&2
+}
+
 if [ "$#" -eq 0 ] && [ "${CODEXSURVIVAL_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
   BOOTSTRAP_PROMPT="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
   exec "${REAL_CODEX}" "${SURVIVAL_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}"
 fi
 
-exec "${REAL_CODEX}" "${SURVIVAL_DEFAULT_ARGS[@]}" "$@"
+if [ "$#" -eq 0 ] && [ ! -t 0 ]; then
+  exec "${REAL_CODEX}" "${SURVIVAL_DEFAULT_ARGS[@]}" exec -
+fi
+
+mapfile -d '' SURVIVAL_ARGS < <(wrap_prompt_invocation_with_exec "$@")
+
+if build_exec_stdin_retry_command "${SURVIVAL_ARGS[@]}"; then
+  stdout_file="$(mktemp)"
+  stderr_file="$(mktemp)"
+  cleanup_retry_files() {
+    rm -f "${stdout_file}" "${stderr_file}"
+  }
+  trap cleanup_retry_files EXIT
+
+  set +e
+  "${REAL_CODEX}" "${SURVIVAL_DEFAULT_ARGS[@]}" "${SURVIVAL_ARGS[@]}" > "${stdout_file}" 2> "${stderr_file}"
+  status=$?
+  set -e
+
+  if [ "${status}" -ne 0 ] && stderr_has_unsupported_input_item "${stderr_file}"; then
+    emit_unsupported_input_retry_trace
+    : > "${stdout_file}"
+    : > "${stderr_file}"
+    set +e
+    printf '%s' "${UNSUPPORTED_INPUT_RETRY_PROMPT}" | "${REAL_CODEX}" "${SURVIVAL_DEFAULT_ARGS[@]}" "${UNSUPPORTED_INPUT_RETRY_CMD[@]}" > "${stdout_file}" 2> "${stderr_file}"
+    status=$?
+    set -e
+  fi
+
+  cat "${stdout_file}"
+  cat "${stderr_file}" >&2
+  exit "${status}"
+fi
+
+exec "${REAL_CODEX}" "${SURVIVAL_DEFAULT_ARGS[@]}" "${SURVIVAL_ARGS[@]}"

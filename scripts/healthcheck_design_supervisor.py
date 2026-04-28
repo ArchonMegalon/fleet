@@ -84,6 +84,24 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _effective_state_max_age_seconds(configured_max_age_seconds: int, watchdog_max_silent_seconds: int) -> int:
+    effective = configured_max_age_seconds
+    if watchdog_max_silent_seconds > 0:
+        effective = max(effective, watchdog_max_silent_seconds)
+    return effective
+
+
+def _payload_has_active_run(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    active_run = _mapping_copy(payload.get("active_run"))
+    active_run_id = str(payload.get("active_run_id") or active_run.get("run_id") or "").strip()
+    if not active_run_id:
+        return False
+    progress_state = str(payload.get("active_run_progress_state") or active_run.get("progress_state") or "").strip()
+    return progress_state not in {"completed", "complete", "succeeded", "failed", "idle"}
+
+
 def _discover_state_paths(state_root: Path) -> list[Path]:
     paths: list[Path] = []
     root_state = state_root / "state.json"
@@ -338,7 +356,7 @@ def main(argv: list[str] | None = None) -> int:
         str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT") or DEFAULT_STATE_ROOT).strip()
         or str(DEFAULT_STATE_ROOT)
     )
-    max_age_seconds = _env_int("CHUMMER_DESIGN_SUPERVISOR_HEALTH_MAX_AGE_SECONDS", 900)
+    configured_max_age_seconds = _env_int("CHUMMER_DESIGN_SUPERVISOR_HEALTH_MAX_AGE_SECONDS", 900)
     watchdog_shard = str(
         os.environ.get("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD", DEFAULT_WATCHDOG_SHARD) or ""
     ).strip()
@@ -347,6 +365,14 @@ def main(argv: list[str] | None = None) -> int:
         DEFAULT_WATCHDOG_MAX_SILENT_SECONDS,
     )
     watchdog_startup_grace_seconds = _env_int("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS", 900)
+    max_age_seconds = configured_max_age_seconds
+    if watchdog_max_silent_seconds > 0 and any(
+        _payload_has_active_run(_read_json(path)) for path in _discover_state_paths(state_root)
+    ):
+        max_age_seconds = _effective_state_max_age_seconds(
+            configured_max_age_seconds,
+            watchdog_max_silent_seconds,
+        )
 
     loop_ok, loop_reason = _loop_process_running()
     state_ok, state_reason = _fresh_state_ok(state_root, max_age_seconds)
@@ -367,6 +393,7 @@ def main(argv: list[str] | None = None) -> int:
                     "status": "ok" if ok else "unhealthy",
                     "state_root": str(state_root),
                     "max_age_seconds": max_age_seconds,
+                    "configured_max_age_seconds": configured_max_age_seconds,
                     "loop_ok": loop_ok,
                     "loop_reason": loop_reason,
                     "state_ok": state_ok,

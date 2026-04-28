@@ -287,7 +287,7 @@ FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS=3
 FLEET_AUTOHEAL_ESCALATE_WINDOW_SECONDS=1800
 ```
 
-The host-side unattended 30-minute fleet OODA timer now defaults to the repo-local `codexea` shim on the `core` lane and accepts canonical `FLEET_OODA_CODEXEA_*` overrides for the binary, lane, workspace, state root, shard targets, and timeout budget.
+The host-side unattended 30-minute fleet OODA timer now defaults to the repo-local `codexea` shim on the `core` lane, records its chosen runtime metadata per run, and falls back to `repair` if the primary lane produces no user-facing output within the first six minutes. It accepts canonical `FLEET_OODA_CODEXEA_*` overrides for the binary, lane, fallback lane, workspace, state root, shard targets, and timeout budget.
 
 Gateway `/health` is now a static gateway liveness response, while controller health uses a bounded
 local HTTP probe plus a recent heartbeat file. That keeps gateway health from collapsing just because

@@ -72,6 +72,29 @@ class CodexAuditShimTests(unittest.TestCase):
         self.assertTrue(str(payload["env"]["EA_PRINCIPAL_ID"]).endswith("-codex-audit"))
         self.assertEqual(payload["env"]["EA_MCP_PRINCIPAL_ID"], payload["env"]["EA_PRINCIPAL_ID"])
 
+    def test_codexaudit_exec_passthrough_does_not_hit_direct_audit_endpoint(self) -> None:
+        env = os.environ.copy()
+        env.update(
+            {
+                "CODEXAUDIT_CODEXEA_BIN": str(self.fake_codexea),
+                "CODEXAUDIT_TEST_CAPTURE": str(self.capture_path),
+                "CODEXAUDIT_PROBE_AUDIT_BACKEND": "0",
+                "HOME": str(self.root),
+            }
+        )
+
+        completed = subprocess.run(
+            ["bash", str(SHIM_PATH), "exec", "review", "the", "release", "packet"],
+            check=False,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0)
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["argv"], ["exec", "review", "the", "release", "packet"])
+
     def test_codexaudit_uses_direct_tool_endpoint_for_one_shot_prompt(self) -> None:
         requests: list[tuple[str, dict[str, object]]] = []
 

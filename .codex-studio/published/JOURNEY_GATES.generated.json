@@ -1,55 +1,55 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-26T16:44:56Z",
+  "generated_at": "2026-04-28T02:31:39Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
-    "overall_state": "ready",
+    "overall_state": "blocked",
     "total_journey_count": 6,
-    "ready_count": 6,
+    "ready_count": 0,
     "warning_count": 0,
-    "blocked_count": 0,
+    "blocked_count": 6,
     "blocked_external_only_count": 0,
-    "blocked_with_local_count": 0,
-    "blocking_mode": "none",
+    "blocked_with_local_count": 6,
+    "blocking_mode": "local",
     "blocked_external_only_hosts": [],
     "blocked_external_only_host_counts": {},
     "blocked_external_only_tuples": [],
-    "recommended_action": "Journey proof is steady on current published evidence."
+    "recommended_action": "Resolve the blocking golden-journey gaps before widening publish claims."
   },
   "artifact_freshness": {
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-26T16:44:56Z",
+      "at": "2026-04-28T02:31:39Z",
       "state": "fresh",
       "age_seconds": 0
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-04-26T16:44:08Z",
-      "state": "fresh",
-      "age_seconds": 48
+      "at": "2026-04-26T16:45:05Z",
+      "state": "stale",
+      "age_seconds": 121594
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-26T16:44:55Z",
       "state": "fresh",
-      "age_seconds": 1
+      "age_seconds": 121604
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-26T16:44:55Z",
       "state": "fresh",
-      "age_seconds": 1
+      "age_seconds": 121604
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-04-26T16:44:54Z",
+      "at": "2026-04-28T02:31:37Z",
       "state": "fresh",
       "age_seconds": 2
     }
@@ -59,12 +59,21 @@
       "id": "install_claim_restore_continue",
       "title": "Install, claim, restore, continue",
       "user_promise": "A person can install the flagship client, claim it, restore the right workspace, and continue safely on a known install.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
-      "blockers": [],
-      "blocking_reasons": [],
+      "state": "blocked",
+      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
+      "blockers": [
+        "status_plane is stale.",
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+      ],
+      "blocking_reasons": [
+        "status_plane is stale.",
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+      ],
       "external_blocking_reasons": [],
-      "local_blocking_reasons": [],
+      "local_blocking_reasons": [
+        "status_plane is stale.",
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+      ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
       "warning_reasons": [],
@@ -314,7 +323,7 @@
       },
       "evidence": {
         "history_snapshot_count": 19,
-        "support_packets_generated_at": "2026-04-26T16:44:54Z",
+        "support_packets_generated_at": "2026-04-28T02:31:37Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -328,7 +337,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 0,
+        "blocking_reason_count": 2,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -340,7 +349,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 0,
+        "local_blocking_reason_count": 2,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }
@@ -349,12 +358,18 @@
       "id": "build_explain_publish",
       "title": "Build, explain, publish",
       "user_promise": "A runner can be built, understood with receipts, and handed off into grounded publication without head-local shadow truth.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
-      "blockers": [],
-      "blocking_reasons": [],
+      "state": "blocked",
+      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
+      "blockers": [
+        "status_plane is stale."
+      ],
+      "blocking_reasons": [
+        "status_plane is stale."
+      ],
       "external_blocking_reasons": [],
-      "local_blocking_reasons": [],
+      "local_blocking_reasons": [
+        "status_plane is stale."
+      ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
       "warning_reasons": [],
@@ -648,6 +663,26 @@
               "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexHouseRuleLane\")",
               "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexSr6SuccessorReceipt\")"
             ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": ".codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json",
+            "json_must_equal": {
+              "contract_name": "chummer6-ui.user_journey_tester_audit",
+              "status": "pass",
+              "evidence.linux_binary_under_test": true,
+              "evidence.used_internal_apis": false,
+              "evidence.fix_shard_separate": true,
+              "evidence.open_blocking_findings_count": 0
+            },
+            "must_contain": [
+              "\"master_index_search_focus_stability\"",
+              "\"file_new_character_visible_workspace\"",
+              "\"minimal_character_build_save_reload\"",
+              "\"major_navigation_sanity\"",
+              "\"validation_or_export_smoke\"",
+              "\"screenshots\""
+            ]
           }
         ],
         "required_project_posture": [
@@ -679,7 +714,7 @@
       },
       "evidence": {
         "history_snapshot_count": 19,
-        "support_packets_generated_at": "2026-04-26T16:44:54Z",
+        "support_packets_generated_at": "2026-04-28T02:31:37Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -691,7 +726,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 0,
+        "blocking_reason_count": 1,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -703,7 +738,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 0,
+        "local_blocking_reason_count": 1,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }
@@ -712,12 +747,18 @@
       "id": "campaign_session_recover_recap",
       "title": "Campaign, session, recover, recap",
       "user_promise": "A table can prepare, run, reconnect, recover, and return without rebuilding campaign truth from memory.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
-      "blockers": [],
-      "blocking_reasons": [],
+      "state": "blocked",
+      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
+      "blockers": [
+        "status_plane is stale."
+      ],
+      "blocking_reasons": [
+        "status_plane is stale."
+      ],
       "external_blocking_reasons": [],
-      "local_blocking_reasons": [],
+      "local_blocking_reasons": [
+        "status_plane is stale."
+      ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
       "warning_reasons": [],
@@ -1123,7 +1164,7 @@
       },
       "evidence": {
         "history_snapshot_count": 19,
-        "support_packets_generated_at": "2026-04-26T16:44:54Z",
+        "support_packets_generated_at": "2026-04-28T02:31:37Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1135,7 +1176,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 0,
+        "blocking_reason_count": 1,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -1147,7 +1188,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 0,
+        "local_blocking_reason_count": 1,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }
@@ -1156,12 +1197,18 @@
       "id": "recover_from_sync_conflict",
       "title": "Recover from sync conflict",
       "user_promise": "Conflict and drift remain visible, branchable, and repairable instead of collapsing into silent last-write-wins.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
-      "blockers": [],
-      "blocking_reasons": [],
+      "state": "blocked",
+      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
+      "blockers": [
+        "status_plane is stale."
+      ],
+      "blocking_reasons": [
+        "status_plane is stale."
+      ],
       "external_blocking_reasons": [],
-      "local_blocking_reasons": [],
+      "local_blocking_reasons": [
+        "status_plane is stale."
+      ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
       "warning_reasons": [],
@@ -1236,7 +1283,7 @@
       },
       "evidence": {
         "history_snapshot_count": 19,
-        "support_packets_generated_at": "2026-04-26T16:44:54Z",
+        "support_packets_generated_at": "2026-04-28T02:31:37Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1248,7 +1295,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 0,
+        "blocking_reason_count": 1,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -1260,7 +1307,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 0,
+        "local_blocking_reason_count": 1,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }
@@ -1269,12 +1316,18 @@
       "id": "report_cluster_release_notify",
       "title": "Report, cluster, release, notify",
       "user_promise": "A user can report pain, follow honest case state, and only receive a fixed notice once the fix actually reaches their channel.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
-      "blockers": [],
-      "blocking_reasons": [],
+      "state": "blocked",
+      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
+      "blockers": [
+        "status_plane is stale."
+      ],
+      "blocking_reasons": [
+        "status_plane is stale."
+      ],
       "external_blocking_reasons": [],
-      "local_blocking_reasons": [],
+      "local_blocking_reasons": [
+        "status_plane is stale."
+      ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
       "warning_reasons": [],
@@ -1451,7 +1504,7 @@
       },
       "evidence": {
         "history_snapshot_count": 19,
-        "support_packets_generated_at": "2026-04-26T16:44:54Z",
+        "support_packets_generated_at": "2026-04-28T02:31:37Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1464,7 +1517,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 0,
+        "blocking_reason_count": 1,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -1476,7 +1529,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 0,
+        "local_blocking_reason_count": 1,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }
@@ -1485,12 +1538,21 @@
       "id": "organize_community_and_close_loop",
       "title": "Organize community and close the loop",
       "user_promise": "Organizer and community operation stays on the same account, campaign, and closure spine instead of splintering into side spreadsheets and oral tradition.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
-      "blockers": [],
-      "blocking_reasons": [],
+      "state": "blocked",
+      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
+      "blockers": [
+        "status_plane is stale.",
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+      ],
+      "blocking_reasons": [
+        "status_plane is stale.",
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+      ],
       "external_blocking_reasons": [],
-      "local_blocking_reasons": [],
+      "local_blocking_reasons": [
+        "status_plane is stale.",
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+      ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
       "warning_reasons": [],
@@ -1617,7 +1679,7 @@
       },
       "evidence": {
         "history_snapshot_count": 19,
-        "support_packets_generated_at": "2026-04-26T16:44:54Z",
+        "support_packets_generated_at": "2026-04-28T02:31:37Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1630,7 +1692,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 0,
+        "blocking_reason_count": 2,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -1642,7 +1704,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 0,
+        "local_blocking_reason_count": 2,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }

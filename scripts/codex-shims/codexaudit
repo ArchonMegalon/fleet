@@ -67,6 +67,71 @@ args_request_interactive() {
   return 1
 }
 
+detect_primary_command() {
+  local -a args=("$@")
+  local i=0
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --)
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          printf '%s' "${args[$i]}"
+        fi
+        return
+        ;;
+      -c|--config|--enable|--disable|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir)
+        i=$((i + 2))
+        ;;
+      --interactive|--oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|--no-alt-screen|-h|--help|-V|--version)
+        i=$((i + 1))
+        ;;
+      -*)
+        i=$((i + 1))
+        ;;
+      *)
+        printf '%s' "${args[$i]}"
+        return
+        ;;
+    esac
+  done
+}
+
+is_passthrough_command() {
+  case "${1:-}" in
+    exec|login|logout|mcp|mcp-server|app-server|completion|sandbox|debug|apply|resume|fork|cloud|features|help|marketplace)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+args_require_audit_backend() {
+  local primary_command=""
+  if args_request_help_or_version "$@"; then
+    return 1
+  fi
+
+  if [ "$#" -eq 0 ]; then
+    return 0
+  fi
+  primary_command="$(detect_primary_command "$@")"
+  [ -n "${primary_command}" ] || return 1
+  if is_passthrough_command "${primary_command}"; then
+    return 1
+  fi
+  return 0
+}
+
+args_request_direct_audit() {
+  if args_request_interactive "$@"; then
+    return 1
+  fi
+  args_require_audit_backend "$@"
+}
+
 run_direct_audit() {
   python3 -I - "$@" <<'PY'
 import json
@@ -227,7 +292,7 @@ export CODEXEA_LANE="jury"
 export CODEXEA_POST_AUDIT="${CODEXEA_POST_AUDIT:-0}"
 CODEXAUDIT_USE_DIRECT_TOOL=1
 
-if env_truthy "${CODEXAUDIT_PROBE_AUDIT_BACKEND}" && ! args_request_help_or_version "$@"; then
+if env_truthy "${CODEXAUDIT_PROBE_AUDIT_BACKEND}" && args_require_audit_backend "$@"; then
   PROBE_OUTPUT="$(probe_audit_backend_status 2>/dev/null || true)"
   case "${PROBE_OUTPUT}" in
     UNAVAILABLE:*)
@@ -260,7 +325,7 @@ if env_truthy "${CODEXAUDIT_PROBE_AUDIT_BACKEND}" && ! args_request_help_or_vers
   esac
 fi
 
-if [ "${CODEXAUDIT_USE_DIRECT_TOOL}" = "1" ] && ! args_request_help_or_version "$@" && ! args_request_interactive "$@"; then
+if [ "${CODEXAUDIT_USE_DIRECT_TOOL}" = "1" ] && args_request_direct_audit "$@"; then
   if run_direct_audit "$@"; then
     exit 0
   fi

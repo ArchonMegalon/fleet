@@ -299,6 +299,28 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("131,019,644 free / 307,050,000 max", response["message"])
         self.assertIn("fleet_runtime", response["data"])
 
+    def test_telemetry_response_explains_how_to_fetch_current_credits_when_asked(self) -> None:
+        self.write_config({})
+
+        credits_response = {
+            "matched": True,
+            "ok": True,
+            "exit_code": 0,
+            "message": "1min aggregate\nCredits: 131,019,644 free / 307,050,000 max (42.7% left)",
+            "data": {"sum_free_credits": 131_019_644, "sum_max_credits": 307_050_000},
+        }
+
+        with mock.patch.object(self.route_module, "_provider_telemetry_response", return_value=credits_response):
+            response = self.route_module._telemetry_response(
+                "OODA how to get the credits. Figure out the current credits and explain the source briefly."
+            )
+
+        self.assertTrue(response["matched"])
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["exit_code"], 0)
+        self.assertIn("131,019,644 free / 307,050,000 max", response["message"])
+        self.assertIn("How to fetch it: run `codexea credits`", response["message"])
+
     def test_telemetry_response_reports_live_fleet_runtime_status_update_age(self) -> None:
         self.write_config({})
 

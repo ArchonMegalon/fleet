@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-26T13:43:18Z'
+generated_at: '2026-04-28T05:29:00Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -56,6 +56,9 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
+  - mobile play shell
+  - ui kit and flagship polish
+  - media artifacts
   - desktop client
 quality_policy:
   bar: top_flagship_grade
@@ -65,12 +68,12 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: desktop executable exit gate proof is stale (87283s old)
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-26T13:32:23Z'
+  generated_at: '2026-04-28T02:31:40Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -82,7 +85,7 @@ frontier_ids:
 - 2299644700
 frontier:
 - id: 2299644700
-  title: Auto-detect and repair recurring `fleet` mirror drift after 14916 repeated
+  title: Auto-detect and repair recurring `fleet` mirror drift after 15037 repeated
     audit observations; keep one bounded queue slice for the affected local design
     mirror bundle instead of reopening one-off mirror refresh work.
   wave: flagship_product
@@ -90,7 +93,7 @@ frontier:
   owners: []
   dependencies: []
   exit_criteria:
-  - Auto-detect and repair recurring `fleet` mirror drift after 14916 repeated audit
+  - Auto-detect and repair recurring `fleet` mirror drift after 15037 repeated audit
     observations; keep one bounded queue slice for the affected local design mirror
     bundle instead of reopening one-off mirror refresh work.
   - 'Own and prove the surface slice(s): design_mirror:fleet'
@@ -103,11 +106,11 @@ frontier:
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Auto-detect and repair recurring `fleet` mirror drift after
-      14916 repeated audit observations; keep one bounded queue slice for the affected
+      15037 repeated audit observations; keep one bounded queue slice for the affected
       local design mirror bundle instead of reopening one-off mirror refresh work.''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      desktop_client.'
-    predicted_completion_at: '2026-04-27T01:23:30Z'
+      mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
+    predicted_completion_at: '2026-04-28T17:09:12Z'
     range_low_hours: 6.52
     range_high_hours: 16.82
     remaining_open_milestones: 1
@@ -124,7 +127,7 @@ source_queue_fingerprint: 7bd98f74031f7ba65a0f1ee36c1909f5296b46ae
 queue_package:
   repo: ''
   package_id: audit-task-3226027
-  title: Auto-detect and repair recurring `fleet` mirror drift after 14916 repeated
+  title: Auto-detect and repair recurring `fleet` mirror drift after 15037 repeated
     audit observations; keep one bounded queue slice for the affected local design
     mirror bundle instead of reopening one-off mirror refresh work.
   priority: 0

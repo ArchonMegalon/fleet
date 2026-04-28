@@ -42,6 +42,8 @@ minimum_productive_shards="${FLEET_OODA_CODEXEA_MIN_PRODUCTIVE_SHARDS:-${FLEET_O
 timeout_seconds="${FLEET_OODA_CODEXEA_TIMEOUT_SECONDS:-${FLEET_OODA_CODEX_TIMEOUT_SECONDS:-1200}}"
 post_guard_timeout_seconds="${FLEET_OODA_CODEXEA_POST_GUARD_TIMEOUT_SECONDS:-${FLEET_OODA_CODEX_POST_GUARD_TIMEOUT_SECONDS:-120}}"
 codexea_lane="${FLEET_OODA_CODEXEA_LANE:-core}"
+fallback_lane="${FLEET_OODA_CODEXEA_FALLBACK_LANE:-repair}"
+first_response_timeout_seconds="${FLEET_OODA_CODEXEA_FIRST_RESPONSE_TIMEOUT_SECONDS:-360}"
 model_arg=()
 codexea_model="${FLEET_OODA_CODEXEA_MODEL:-${FLEET_OODA_CODEX_MODEL:-}}"
 if [[ -n "$codexea_model" ]]; then
@@ -77,11 +79,11 @@ timeout 300s python3 scripts/fleet_ooda_timer_guard.py \
   printf '\n[status]\n'
   timeout 35s python3 scripts/chummer_design_supervisor.py status --json || true
   printf '\n[docker-ps]\n'
-  docker compose -f docker-compose.yml ps fleet-controller fleet-design-supervisor fleet-design-overwatch || true
+  timeout 20s docker compose -f docker-compose.yml ps fleet-controller fleet-design-supervisor fleet-design-overwatch || true
   printf '\n[disk]\n'
-  df -h / || true
+  timeout 10s df -h / || true
   printf '\n[memory]\n'
-  free -h || true
+  timeout 10s free -h || true
 } >"${current_run}/preflight.txt" 2>&1
 
 metadata_path="${current_run}/timer_run.env"
@@ -91,11 +93,13 @@ metadata_path="${current_run}/timer_run.env"
   printf 'state_root=%s\n' "$state_root"
   printf 'codexea_bin=%s\n' "$codexea_bin"
   printf 'codexea_lane=%s\n' "$codexea_lane"
+  printf 'fallback_lane=%s\n' "$fallback_lane"
   printf 'codexea_model=%s\n' "${codexea_model:-}"
   printf 'target_shards=%s\n' "$target_shards"
   printf 'minimum_productive_shards=%s\n' "$minimum_productive_shards"
   printf 'timeout_seconds=%s\n' "$timeout_seconds"
   printf 'post_guard_timeout_seconds=%s\n' "$post_guard_timeout_seconds"
+  printf 'first_response_timeout_seconds=%s\n' "$first_response_timeout_seconds"
 } >"$metadata_path"
 
 prompt_path="${current_run}/prompt.md"
@@ -141,7 +145,7 @@ Required OODA loop:
    - Run timeout 60s scripts/chummer_design_supervisor.py status --json and use timeout 90s scripts/chummer_design_supervisor.py status --json --live-refresh if completion proof fields are stale or missing.
    - Check docker compose ps for fleet-controller, fleet-design-supervisor, and fleet-design-overwatch.
    - Check recent supervisor logs, disk, and memory.
-   - Run scripts/fleet_ooda_keeper.py --once --target-active 13 when the controller queue needs more work scheduled.
+   - Run scripts/fleet_ooda_keeper.py --once --target-active ${target_shards} when the controller queue needs more work scheduled.
 2. Orient:
    - Identify current blockers: low active shards, stale status, repeated worker_silent_stalled, provider capacity, disk pressure, failing proof gates, review holds, or dead services.
 3. Decide and Act:
@@ -167,7 +171,7 @@ ${metadata_path}
 PROMPT
 
 if [[ "$timer_dry_run" == "1" ]]; then
-  printf 'codexea_bin=%s\ncodexea_lane=%s\ncodexea_model=%s\nprompt_path=%s\nrun_dir=%s\n' "$codexea_bin" "$codexea_lane" "${codexea_model:-}" "$prompt_path" "$current_run"
+  printf 'codexea_bin=%s\ncodexea_lane=%s\nfallback_lane=%s\ncodexea_model=%s\nprompt_path=%s\nrun_dir=%s\n' "$codexea_bin" "$codexea_lane" "$fallback_lane" "${codexea_model:-}" "$prompt_path" "$current_run"
   exit 0
 fi
 
@@ -176,20 +180,59 @@ export PATH="/home/tibor/bin:/home/tibor/.local/bin:/usr/local/bin:/usr/bin:/bin
 
 printf '%s started fleet OODA CodexEA run %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$current_run" >>"${state_root}/timer.log"
 
+run_codexea_attempt() {
+  local requested_lane="$1"
+  local start_epoch now elapsed
+  rm -f "${current_run}/stdout.log" "${current_run}/stderr.log" "${current_run}/last_message.txt"
+  printf '%s launch lane=%s fallback=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$requested_lane" "$fallback_lane" >>"${state_root}/timer.log"
+  setsid "$codexea_bin" "$requested_lane" exec \
+    --dangerously-bypass-approvals-and-sandbox \
+    --skip-git-repo-check \
+    --color never \
+    -C "$workspace_root" \
+    --add-dir /docker \
+    -o "${current_run}/last_message.txt" \
+    "${model_arg[@]}" \
+    - <"$prompt_path" \
+    >"${current_run}/stdout.log" \
+    2>"${current_run}/stderr.log" &
+  attempt_pid=$!
+  start_epoch="$(date +%s)"
+  while kill -0 "$attempt_pid" 2>/dev/null; do
+    now="$(date +%s)"
+    elapsed=$((now - start_epoch))
+    if (( elapsed >= first_response_timeout_seconds )) && [[ ! -s "${current_run}/stdout.log" && ! -s "${current_run}/last_message.txt" ]]; then
+      printf '%s first-response-timeout lane=%s elapsed=%ss; terminating stalled attempt\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$requested_lane" "$elapsed" >>"${state_root}/timer.log"
+      kill -TERM -- "-${attempt_pid}" 2>/dev/null || true
+      sleep 5
+      kill -KILL -- "-${attempt_pid}" 2>/dev/null || true
+      wait "$attempt_pid" || true
+      return 124
+    fi
+    if (( elapsed >= timeout_seconds )); then
+      printf '%s hard-timeout lane=%s elapsed=%ss; terminating attempt\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$requested_lane" "$elapsed" >>"${state_root}/timer.log"
+      kill -TERM -- "-${attempt_pid}" 2>/dev/null || true
+      sleep 5
+      kill -KILL -- "-${attempt_pid}" 2>/dev/null || true
+      wait "$attempt_pid" || true
+      return 124
+    fi
+    sleep 5
+  done
+  wait "$attempt_pid"
+}
+
 set +e
-timeout --foreground "${timeout_seconds}s" "$codexea_bin" "$codexea_lane" exec \
-  --dangerously-bypass-approvals-and-sandbox \
-  --skip-git-repo-check \
-  --color never \
-  -C "$workspace_root" \
-  --add-dir /docker \
-  -o "${current_run}/last_message.txt" \
-  "${model_arg[@]}" \
-  - <"$prompt_path" \
-  >"${current_run}/stdout.log" \
-  2>"${current_run}/stderr.log"
+run_codexea_attempt "$codexea_lane"
 rc=$?
 set -e
+if [[ "$rc" == "124" && -n "$fallback_lane" && "$fallback_lane" != "$codexea_lane" ]]; then
+  printf '%s retrying with fallback lane=%s after primary lane=%s stalled\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$fallback_lane" "$codexea_lane" >>"${state_root}/timer.log"
+  set +e
+  run_codexea_attempt "$fallback_lane"
+  rc=$?
+  set -e
+fi
 
 post_guard_path="${current_run}/post_codex_timer_guard.json"
 post_guard_stderr_path="${current_run}/post_codex_timer_guard.stderr.log"
