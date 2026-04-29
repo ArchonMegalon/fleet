@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-29T20:02:43Z'
+generated_at: '2026-04-29T20:10:23Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-5
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -74,7 +74,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-29T19:49:06Z'
+  generated_at: '2026-04-29T20:07:11Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -109,7 +109,7 @@ frontier:
       siblings from approved explain packets'' remains open under the flagship closeout
       frontier. Outstanding readiness coverage: mobile_play_shell, ui_kit_and_flagship_polish,
       media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T11:36:01Z'
+    predicted_completion_at: '2026-04-30T11:43:41Z'
     range_low_hours: 9.01
     range_high_hours: 22.1
     remaining_open_milestones: 1

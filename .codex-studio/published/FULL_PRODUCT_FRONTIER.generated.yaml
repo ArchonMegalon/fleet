@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-29T19:01:18Z'
+generated_at: '2026-04-29T20:07:43Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -29,64 +29,44 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-core
   - chummer6-design
-  - chummer6-hub
-  - chummer6-hub-registry
   - chummer6-ui
   - fleet
   - chummer6-mobile
+  - chummer6-core
   - chummer6-ui-kit
+  - chummer6-hub
+  - chummer6-hub-registry
   - executive-assistant
   - chummer6-media-factory
   texts:
   - accessibility
   - automatic bugfixing
-  - chummer5a
-  - claim
   - crash
-  - custom-data
-  - dedicated-tester
-  - desktop
+  - crash reporting
+  - desktop client
   - desktop-client
   - feedback
-  - flagship-readiness
-  - genesis
-  - grade-bar
-  - hero lab
-  - import
-  - install
-  - localization
-  - master index
-  - materializer
-  - oracle
-  - recovery
-  - release truth
-  - release-proof
-  - restore
-  - roster
-  - settings
-  - sourcebook
-  - translator
-  - update
-  - user-journey-tester-audit
-  - workbench
-  - xml
-  - top flagship grade
-  - whole-project frontier
-  - no lowered standards
   - feedback loop
-  - crash reporting
-  - support routing
+  - fit and finish
+  - flagship-readiness
+  - grade-bar
   - journey smoothness
-  - restore confidence
+  - localization
+  - materializer
+  - media artifacts
+  - mobile play shell
+  - no lowered standards
   - performance
   - proof shelf
-  - fit and finish
-  - mobile play shell
+  - release-proof
+  - restore confidence
+  - support
+  - support routing
+  - top flagship grade
   - ui kit and flagship polish
-  - media artifacts
-  - desktop client
+  - whole project frontier
+  - whole-project frontier
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -100,7 +80,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-29T19:01:17Z'
+  generated_at: '2026-04-29T20:07:11Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -141,7 +121,7 @@ frontier:
     summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open under
       the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
       ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T13:03:42Z'
+    predicted_completion_at: '2026-04-30T14:10:07Z'
     range_low_hours: 10.25
     range_high_hours: 25.83
     remaining_open_milestones: 1
@@ -178,7 +158,7 @@ frontier:
     summary: 'Milestone ''Hub, registry, and public front door flagship finish'' remains
       open under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
       ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T11:52:18Z'
+    predicted_completion_at: '2026-04-30T12:58:43Z'
     range_low_hours: 9.5
     range_high_hours: 24.2
     remaining_open_milestones: 1
@@ -217,7 +197,7 @@ frontier:
     summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
       the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
       ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T11:07:18Z'
+    predicted_completion_at: '2026-04-30T12:13:43Z'
     range_low_hours: 9.0
     range_high_hours: 23.2
     remaining_open_milestones: 1
@@ -252,7 +232,7 @@ frontier:
     summary: 'Milestone ''Rules engine parity, explain trust, and import certification''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
       mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T13:46:36Z'
+    predicted_completion_at: '2026-04-30T14:53:01Z'
     range_low_hours: 10.86
     range_high_hours: 26.65
     remaining_open_milestones: 1
@@ -288,7 +268,7 @@ frontier:
     summary: 'Milestone ''Shared design system, accessibility, localization, and flagship
       polish'' remains open under the flagship closeout frontier. Outstanding readiness
       coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T13:03:42Z'
+    predicted_completion_at: '2026-04-30T14:10:07Z'
     range_low_hours: 10.25
     range_high_hours: 25.83
     remaining_open_milestones: 1
@@ -324,7 +304,7 @@ frontier:
     summary: 'Milestone ''Media, artifacts, publication, and recap flagship finish''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
       mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T12:17:30Z'
+    predicted_completion_at: '2026-04-30T13:23:55Z'
     range_low_hours: 9.74
     range_high_hours: 24.8
     remaining_open_milestones: 1
@@ -362,7 +342,7 @@ frontier:
     summary: 'Milestone ''Horizons, public guide, and flagship future-lane posture''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
       mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T13:58:36Z'
+    predicted_completion_at: '2026-04-30T15:05:01Z'
     range_low_hours: 10.69
     range_high_hours: 27.22
     remaining_open_milestones: 1
