@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-29T20:18:02Z'
+generated_at: '2026-04-29T20:19:42Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-12
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -113,7 +113,7 @@ frontier:
     summary: 'Milestone ''Media, artifacts, publication, and recap flagship finish''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
       mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T13:34:14Z'
+    predicted_completion_at: '2026-04-30T13:35:54Z'
     range_low_hours: 9.74
     range_high_hours: 24.8
     remaining_open_milestones: 1
@@ -148,7 +148,7 @@ frontier:
     summary: 'Milestone ''Rules engine parity, explain trust, and import certification''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
       mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T15:03:20Z'
+    predicted_completion_at: '2026-04-30T15:05:00Z'
     range_low_hours: 10.86
     range_high_hours: 26.65
     remaining_open_milestones: 1
@@ -185,7 +185,7 @@ frontier:
     summary: 'Milestone ''Hub, registry, and public front door flagship finish'' remains
       open under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
       ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T13:09:02Z'
+    predicted_completion_at: '2026-04-30T13:10:42Z'
     range_low_hours: 9.5
     range_high_hours: 24.2
     remaining_open_milestones: 1
@@ -198,22 +198,3 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-eta:
-  status: flagship_delivery
-  eta_human: 1d-2.5d
-  eta_confidence: low
-  basis: full_product_frontier_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 'Current closeout gates are green, but flagship product work still remains
-    across 3 synthetic slices. Outstanding readiness coverage: mobile_play_shell,
-    ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-  predicted_completion_at: '2026-05-01T15:00:02Z'
-  range_low_hours: 24.4
-  range_high_hours: 61.0
-  remaining_open_milestones: 3
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 3
-  remaining_effort_units: 6.1

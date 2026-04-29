@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-29T20:18:42Z'
+generated_at: '2026-04-29T20:19:05Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-8
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -109,7 +109,7 @@ frontier:
     summary: 'Milestone ''Media, artifacts, publication, and recap flagship finish''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
       mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T13:34:54Z'
+    predicted_completion_at: '2026-04-30T13:35:17Z'
     range_low_hours: 9.74
     range_high_hours: 24.8
     remaining_open_milestones: 1
@@ -122,3 +122,40 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+eta:
+  status: blocked
+  eta_human: 10h-1d after unblock
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic+external_blocker
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
+    remaining_percent_of_max=0.00, estimated_remaining_credits_total=4464; survival:browseract:ready;
+    gemini_vortex:missing:command_not_found:gemini; onemin:unavailable; repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
+    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
+    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
+    https://www.aimagicx.com/api/v1/chat:http_402:{''error'': ''Chat token limit exceeded'',
+    ''tokens_remaining'': 1, ''tokens_needed'': 18, ''tokens_needed_raw'': 18, ''quota_multipliers'':
+    {''input'': 1, ''output'': 1}}; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
+    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
+  summary: 'Milestone ''Media, artifacts, publication, and recap flagship finish''
+    remains open under the flagship closeout frontier. Outstanding readiness coverage:
+    mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.
+    Current external blocker: provider-health preflight left no routable direct lanes:
+    core_rescue:onemin:unavailable; remaining_percent_of_max=0.00, estimated_remaining_credits_total=4464;
+    survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini; onemin:unavailable;
+    repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
+    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
+    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
+    https://www.aimagicx.com/api/v1/chat:http_402:{''error'': ''Chat token limit exceeded'',
+    ''tokens_remaining'': 1, ''tokens_needed'': 18, ''tokens_needed_raw'': 18, ''quota_multipliers'':
+    {''input'': 1, ''output'': 1}}; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
+    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
+  predicted_completion_at: ''
+  range_low_hours: 9.74
+  range_high_hours: 24.8
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 2.05
