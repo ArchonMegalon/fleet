@@ -7,7 +7,7 @@
     "feedback_forge_candidate_count": 0,
     "first_part_complete_count": 0,
     "first_part_routed_count": 0,
-    "generated_at": "2026-04-28T02:31:37Z",
+    "generated_at": "2026-04-29T19:49:03Z",
     "karma_forge_candidate_count": 0,
     "ltd_discovery_system_missing_tools": [
       "Signitic",
@@ -82,7 +82,7 @@
       "release_receipt_id_present": 0,
       "release_receipt_ready": 0
     },
-    "generated_at": "2026-04-28T02:31:37Z",
+    "generated_at": "2026-04-29T19:49:03Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -107,7 +107,7 @@
     "state_counts": {},
     "support_case_backed_count": 0
   },
-  "generated_at": "2026-04-28T02:31:37Z",
+  "generated_at": "2026-04-29T19:49:03Z",
   "packets": [],
   "reporter_followthrough_plan": {
     "action_groups": {
@@ -123,7 +123,7 @@
     "blocked_receipt_mismatch_count": 0,
     "feedback_ready_count": 0,
     "fix_available_ready_count": 0,
-    "generated_at": "2026-04-28T02:31:37Z",
+    "generated_at": "2026-04-29T19:49:03Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -342,7 +342,7 @@
     "capture_deadline_hours": 24,
     "capture_deadline_utc": "2026-04-27T17:02:10Z",
     "command_root": "/docker/fleet/.codex-studio/published/external-proof-commands",
-    "generated_at": "2026-04-28T02:31:37Z",
+    "generated_at": "2026-04-29T19:49:03Z",
     "host_groups": {},
     "hosts": [],
     "recommended_action": "No unresolved external desktop host-proof requests remain.",

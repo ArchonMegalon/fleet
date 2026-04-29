@@ -30,6 +30,7 @@ CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY="${CODEXLIZ_TRANSPORT_REQUIRE_
 CODEXLIZ_OUTAGE_STATE_FILE="${CODEXLIZ_OUTAGE_STATE_FILE:-${CODEXLIZ_STATE_DIR}/outage.json}"
 CODEXLIZ_DEBUG="${CODEXLIZ_DEBUG:-0}"
 CODEXLIZ_DEBUG_LOG_FILE="${CODEXLIZ_DEBUG_LOG_FILE:-${CODEXLIZ_STATE_DIR}/debug.log}"
+CODEXLIZ_ACTIVE_CHILD_PID=""
 
 if [ ! -x "${BASE_CODEX_SHIM}" ]; then
   FALLBACK_CODEX_SHIM="${CODEXLIZ_FALLBACK_CODEX_SHIM:-${CODEX_REAL_BIN:-}}"
@@ -270,6 +271,51 @@ process_is_running() {
   [ -n "${pid}" ] || return 1
   kill -0 "${pid}" 2>/dev/null
 }
+
+cleanup_active_codex_child() {
+  local pid="${CODEXLIZ_ACTIVE_CHILD_PID:-}"
+  local attempt=0
+  if [ -z "${pid}" ]; then
+    return 0
+  fi
+  CODEXLIZ_ACTIVE_CHILD_PID=""
+  if ! process_is_running "${pid}"; then
+    return 0
+  fi
+  kill "${pid}" >/dev/null 2>&1 || true
+  while [ "${attempt}" -lt 20 ] && process_is_running "${pid}"; do
+    sleep 0.1
+    attempt=$((attempt + 1))
+  done
+  if process_is_running "${pid}"; then
+    kill -KILL "${pid}" >/dev/null 2>&1 || true
+  fi
+}
+
+run_codex_child_with_stderr_capture() {
+  local stderr_file="${1:-}"
+  local stdin_path="${2:-}"
+  shift 2
+  local -a cmd=("$@")
+  local child_pid=""
+  local exit_code=0
+
+  if [ -n "${stdin_path}" ] && [ -f "${stdin_path}" ]; then
+    "${cmd[@]}" < "${stdin_path}" 2> >(tee "${stderr_file}" >&2) &
+  else
+    "${cmd[@]}" 2> >(tee "${stderr_file}" >&2) &
+  fi
+  child_pid="$!"
+  CODEXLIZ_ACTIVE_CHILD_PID="${child_pid}"
+  wait "${child_pid}"
+  exit_code=$?
+  if [ "${CODEXLIZ_ACTIVE_CHILD_PID:-}" = "${child_pid}" ]; then
+    CODEXLIZ_ACTIVE_CHILD_PID=""
+  fi
+  return "${exit_code}"
+}
+
+trap cleanup_active_codex_child EXIT HUP INT TERM
 
 proxy_is_ready() {
   local proxy_host="${1:-}"
@@ -750,19 +796,15 @@ run_codex_with_transport_retry() {
   if env_truthy "${CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY}"; then
     require_empty_output=1
   fi
-  base_sleep_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS}" "60"")"
+  base_sleep_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS}" "60")"
   max_backoff_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS}" "300")"
-  max_wait_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS}" "86400"")"
+  max_wait_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS}" "86400")"
   sleep_seconds="${base_sleep_seconds}"
 
   while :; do
     stderr_file="$(mktemp "${TMPDIR:-/tmp}/codexliz-stderr.XXXXXX")"
     set +e
-    if [ -n "${stdin_file}" ] && [ -f "${stdin_file}" ]; then
-      "${cmd[@]}" < "${stdin_file}" 2> >(tee "${stderr_file}" >&2)
-    else
-      "${cmd[@]}" 2> >(tee "${stderr_file}" >&2)
-    fi
+    run_codex_child_with_stderr_capture "${stderr_file}" "${stdin_file}" "${cmd[@]}"
     exit_code=$?
     set -e
 

@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-28T02:31:39Z",
+  "generated_at": "2026-04-29T19:49:04Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -21,7 +21,7 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-28T02:31:39Z",
+      "at": "2026-04-29T19:49:04Z",
       "state": "fresh",
       "age_seconds": 0
     },
@@ -30,28 +30,28 @@
       "available": true,
       "at": "2026-04-26T16:45:05Z",
       "state": "stale",
-      "age_seconds": 121594
+      "age_seconds": 270239
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-26T16:44:55Z",
       "state": "fresh",
-      "age_seconds": 121604
+      "age_seconds": 270249
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-26T16:44:55Z",
       "state": "fresh",
-      "age_seconds": 121604
+      "age_seconds": 270249
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-04-28T02:31:37Z",
+      "at": "2026-04-29T19:49:03Z",
       "state": "fresh",
-      "age_seconds": 2
+      "age_seconds": 1
     }
   },
   "journeys": [
@@ -63,16 +63,22 @@
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blockers": [
         "status_plane is stale.",
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (335164s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max).",
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (275520s old > 172800s max)."
       ],
       "blocking_reasons": [
         "status_plane is stale.",
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (335164s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max).",
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (275520s old > 172800s max)."
       ],
       "external_blocking_reasons": [],
       "local_blocking_reasons": [
         "status_plane is stale.",
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (335164s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max).",
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (275520s old > 172800s max)."
       ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
@@ -323,7 +329,7 @@
       },
       "evidence": {
         "history_snapshot_count": 19,
-        "support_packets_generated_at": "2026-04-28T02:31:37Z",
+        "support_packets_generated_at": "2026-04-29T19:49:03Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -337,7 +343,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 2,
+        "blocking_reason_count": 4,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -349,7 +355,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 2,
+        "local_blocking_reason_count": 4,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }
@@ -361,14 +367,26 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blockers": [
-        "status_plane is stale."
+        "status_plane is stale.",
+        "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'status' expected 'pass' but was 'fail'.",
+        "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.linux_binary_under_test' expected True but was False.",
+        "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.used_internal_apis' expected False but was None.",
+        "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.fix_shard_separate' expected True but was False."
       ],
       "blocking_reasons": [
-        "status_plane is stale."
+        "status_plane is stale.",
+        "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'status' expected 'pass' but was 'fail'.",
+        "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.linux_binary_under_test' expected True but was False.",
+        "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.used_internal_apis' expected False but was None.",
+        "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.fix_shard_separate' expected True but was False."
       ],
       "external_blocking_reasons": [],
       "local_blocking_reasons": [
-        "status_plane is stale."
+        "status_plane is stale.",
+        "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'status' expected 'pass' but was 'fail'.",
+        "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.linux_binary_under_test' expected True but was False.",
+        "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.used_internal_apis' expected False but was None.",
+        "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.fix_shard_separate' expected True but was False."
       ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
@@ -681,7 +699,11 @@
               "\"minimal_character_build_save_reload\"",
               "\"major_navigation_sanity\"",
               "\"validation_or_export_smoke\"",
-              "\"screenshots\""
+              "\"screenshots\"",
+              "\"screenshotReview\"",
+              "\"focus_preserved_after_typing\"",
+              "\"new_character_action_opened_visible_workspace\"",
+              "\"validation_or_export_action_completed\""
             ]
           }
         ],
@@ -714,7 +736,7 @@
       },
       "evidence": {
         "history_snapshot_count": 19,
-        "support_packets_generated_at": "2026-04-28T02:31:37Z",
+        "support_packets_generated_at": "2026-04-29T19:49:03Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -726,7 +748,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 1,
+        "blocking_reason_count": 5,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -738,7 +760,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 1,
+        "local_blocking_reason_count": 5,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }
@@ -1164,7 +1186,7 @@
       },
       "evidence": {
         "history_snapshot_count": 19,
-        "support_packets_generated_at": "2026-04-28T02:31:37Z",
+        "support_packets_generated_at": "2026-04-29T19:49:03Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1283,7 +1305,7 @@
       },
       "evidence": {
         "history_snapshot_count": 19,
-        "support_packets_generated_at": "2026-04-28T02:31:37Z",
+        "support_packets_generated_at": "2026-04-29T19:49:03Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1319,14 +1341,17 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blockers": [
-        "status_plane is stale."
+        "status_plane is stale.",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max)."
       ],
       "blocking_reasons": [
-        "status_plane is stale."
+        "status_plane is stale.",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max)."
       ],
       "external_blocking_reasons": [],
       "local_blocking_reasons": [
-        "status_plane is stale."
+        "status_plane is stale.",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max)."
       ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
@@ -1504,7 +1529,7 @@
       },
       "evidence": {
         "history_snapshot_count": 19,
-        "support_packets_generated_at": "2026-04-28T02:31:37Z",
+        "support_packets_generated_at": "2026-04-29T19:49:03Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1517,7 +1542,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 1,
+        "blocking_reason_count": 2,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -1529,7 +1554,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 1,
+        "local_blocking_reason_count": 2,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }
@@ -1542,16 +1567,19 @@
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blockers": [
         "status_plane is stale.",
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (335164s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max)."
       ],
       "blocking_reasons": [
         "status_plane is stale.",
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (335164s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max)."
       ],
       "external_blocking_reasons": [],
       "local_blocking_reasons": [
         "status_plane is stale.",
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (335164s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max)."
       ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
@@ -1679,7 +1707,7 @@
       },
       "evidence": {
         "history_snapshot_count": 19,
-        "support_packets_generated_at": "2026-04-28T02:31:37Z",
+        "support_packets_generated_at": "2026-04-29T19:49:03Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1692,7 +1720,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 2,
+        "blocking_reason_count": 3,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -1704,7 +1732,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 2,
+        "local_blocking_reason_count": 3,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }

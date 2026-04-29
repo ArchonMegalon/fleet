@@ -2,14 +2,19 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import http.client
 import http.server
 import json
 import os
 import re
+import select
+import socket
 import socketserver
 import ssl
 import sys
+import tempfile
+import time
 import urllib.parse
 
 
@@ -24,6 +29,63 @@ HOP_BY_HOP_HEADERS = {
     "upgrade",
     "proxy-connection",
 }
+
+RETRYABLE_UPSTREAM_STATUS_CODES = {
+    408,
+    429,
+    500,
+    502,
+    503,
+    504,
+    520,
+    521,
+    522,
+    523,
+    524,
+    525,
+    526,
+}
+
+RETRYABLE_UPSTREAM_ERRNOS = {
+    errno.ETIMEDOUT,
+    errno.ECONNRESET,
+    errno.ECONNREFUSED,
+    errno.EHOSTUNREACH,
+    errno.ENETUNREACH,
+}
+
+DOWNSTREAM_DISCONNECT_ERRNOS = {
+    errno.EPIPE,
+    errno.ECONNRESET,
+    errno.ECONNABORTED,
+}
+
+RETRYABLE_UPSTREAM_ERROR_FRAGMENTS = (
+    "timed out",
+    "timeout",
+    "temporarily unavailable",
+    "connection reset",
+    "connection refused",
+    "remote end closed connection",
+    "remote disconnected",
+    "eof occurred",
+)
+
+
+class ProxyErrorResponse(Exception):
+    def __init__(self, *, status: int, reason: str, payload: dict[str, object]) -> None:
+        super().__init__(str(payload.get("detail") or payload.get("body_excerpt") or reason or status))
+        self.status = int(status)
+        self.reason = str(reason or "Bad Gateway")
+        self.payload = payload
+
+
+class RetryableUpstreamHttpError(ProxyErrorResponse):
+    pass
+
+
+class DownstreamDisconnectError(Exception):
+    pass
 
 
 def _clean_access_value(value: str) -> str:
@@ -56,7 +118,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--listen-port", type=int, default=4141)
     parser.add_argument("--upstream-base-url", required=True)
     parser.add_argument("--connect-timeout-seconds", type=float, default=30.0)
+    parser.add_argument("--upstream-read-timeout-seconds", type=float, default=600.0)
     parser.add_argument("--read-chunk-bytes", type=int, default=65536)
+    parser.add_argument("--retry-interval-seconds", type=float, default=10.0)
+    parser.add_argument("--retry-max-wait-seconds", type=float, default=86400.0)
+    parser.add_argument("--response-spool-max-bytes", type=int, default=1048576)
     return parser.parse_args()
 
 
@@ -116,21 +182,12 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
 
         try:
             self._forward_request()
-        except Exception as exc:
-            body = json.dumps(
-                {
-                    "error": "proxy_upstream_failure",
-                    "detail": str(exc),
-                }
-            ).encode("utf-8")
-            self.send_response(502, "Bad Gateway")
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Connection", "close")
-            self.end_headers()
-            if self.command != "HEAD":
-                self.wfile.write(body)
+        except DownstreamDisconnectError:
             self.close_connection = True
+        except ProxyErrorResponse as exc:
+            self._send_json_error(exc.status, exc.reason, exc.payload)
+        except Exception as exc:
+            self._send_json_error(502, "Bad Gateway", self._build_proxy_upstream_failure_payload(exc))
 
     def _forward_request(self) -> None:
         upstream = urllib.parse.urlsplit(self.server.upstream_base_url)
@@ -142,37 +199,88 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
 
         body = self._read_request_body()
         headers = self._build_upstream_headers(upstream)
-        connection = self._open_upstream_connection(upstream)
-        try:
-            connection.request(self.command, target_path, body=body, headers=headers)
-            response = connection.getresponse()
-            if int(response.status or 0) >= 500:
-                self._send_upstream_http_error(response, target_path=target_path)
-                return
-            self.send_response(response.status, response.reason)
-            for name, value in response.getheaders():
-                lowered = name.lower()
-                if lowered in HOP_BY_HOP_HEADERS:
-                    continue
-                if lowered == "content-length":
-                    self.send_header(name, value)
-                    continue
-                self.send_header(name, value)
-            if response.getheader("Content-Length") is None:
-                self.send_header("Connection", "close")
-            self.end_headers()
-            if self.command != "HEAD":
-                while True:
-                    chunk = response.read(self.server.read_chunk_bytes)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
-                    self.wfile.flush()
-        finally:
-            connection.close()
-            self.close_connection = True
+        started_at = time.monotonic()
+        deadline = started_at + max(0.0, float(self.server.retry_max_wait_seconds))
+        attempt = 0
 
-    def _send_upstream_http_error(self, response: http.client.HTTPResponse, *, target_path: str) -> None:
+        while True:
+            attempt += 1
+            self._abort_if_downstream_gone(
+                attempt=attempt,
+                elapsed_seconds=time.monotonic() - started_at,
+                target_path=target_path,
+                detail="before upstream attempt",
+            )
+            try:
+                buffered = self._buffer_upstream_response(
+                    upstream,
+                    target_path=target_path,
+                    body=body,
+                    headers=headers,
+                )
+                if attempt > 1:
+                    self.log_message(
+                        'upstream recovered after %d attempts elapsed=%.1fs path="%s"',
+                        attempt,
+                        time.monotonic() - started_at,
+                        target_path,
+                    )
+                self._send_buffered_response(buffered)
+                return
+            except DownstreamDisconnectError:
+                raise
+            except RetryableUpstreamHttpError as exc:
+                elapsed = time.monotonic() - started_at
+                payload = dict(exc.payload)
+                payload["retry_attempts"] = attempt
+                payload["retry_elapsed_seconds"] = round(elapsed, 3)
+                wait_seconds = self._next_retry_wait_seconds(deadline)
+                if wait_seconds is None:
+                    raise ProxyErrorResponse(status=exc.status, reason=exc.reason, payload=payload) from exc
+                self._abort_if_downstream_gone(
+                    attempt=attempt,
+                    elapsed_seconds=elapsed,
+                    target_path=target_path,
+                    detail=f"{exc.status} {exc.reason}".strip(),
+                )
+                self._log_retry(
+                    attempt=attempt,
+                    elapsed_seconds=elapsed,
+                    wait_seconds=wait_seconds,
+                    target_path=target_path,
+                    detail=f"{exc.status} {exc.reason}".strip(),
+                )
+                time.sleep(wait_seconds)
+            except Exception as exc:
+                if not self._is_retryable_upstream_exception(exc):
+                    raise
+                elapsed = time.monotonic() - started_at
+                payload = self._build_proxy_upstream_failure_payload(
+                    exc,
+                    retry_attempts=attempt,
+                    elapsed_seconds=elapsed,
+                )
+                wait_seconds = self._next_retry_wait_seconds(deadline)
+                if wait_seconds is None:
+                    raise ProxyErrorResponse(status=502, reason="Bad Gateway", payload=payload) from exc
+                self._abort_if_downstream_gone(
+                    attempt=attempt,
+                    elapsed_seconds=elapsed,
+                    target_path=target_path,
+                    detail=str(exc),
+                )
+                self._log_retry(
+                    attempt=attempt,
+                    elapsed_seconds=elapsed,
+                    wait_seconds=wait_seconds,
+                    target_path=target_path,
+                    detail=str(exc),
+                )
+                time.sleep(wait_seconds)
+
+    def _build_upstream_http_error_payload(
+        self, response: http.client.HTTPResponse, *, target_path: str
+    ) -> dict[str, object]:
         body_limit = max(1024, int(getattr(self.server, "error_body_limit_bytes", 8192)))
         raw_body = response.read(body_limit)
         content_type = str(response.getheader("Content-Type") or "").strip()
@@ -194,15 +302,227 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
             "cf_ray": cf_ray,
             "body_excerpt": excerpt,
         }
+        return payload
+
+    def _buffer_upstream_response(
+        self,
+        upstream: urllib.parse.SplitResult,
+        *,
+        target_path: str,
+        body: bytes | None,
+        headers: dict[str, str],
+    ) -> dict[str, object]:
+        connection = self._open_upstream_connection(upstream)
+        try:
+            connection.request(self.command, target_path, body=body, headers=headers)
+            if connection.sock is not None:
+                connection.sock.settimeout(float(self.server.upstream_read_timeout_seconds))
+            response = connection.getresponse()
+            status = int(response.status or 0)
+            if status >= 500:
+                payload = self._build_upstream_http_error_payload(response, target_path=target_path)
+                reason = str(response.reason or "Bad Gateway")
+                if status in self.server.retryable_status_codes:
+                    raise RetryableUpstreamHttpError(status=status, reason=reason, payload=payload)
+                raise ProxyErrorResponse(status=status, reason=reason, payload=payload)
+
+            response_headers = [
+                (name, value)
+                for name, value in response.getheaders()
+                if name.lower() not in HOP_BY_HOP_HEADERS and name.lower() != "content-length"
+            ]
+            buffered_body = None
+            body_length = 0
+            if self.command == "HEAD":
+                content_length = str(response.getheader("Content-Length") or "").strip()
+                if content_length.isdigit():
+                    body_length = max(0, int(content_length))
+            else:
+                buffered_body = tempfile.SpooledTemporaryFile(
+                    max_size=max(1024, int(self.server.response_spool_max_bytes)),
+                    mode="w+b",
+                )
+                while True:
+                    chunk = response.read(self.server.read_chunk_bytes)
+                    if not chunk:
+                        break
+                    buffered_body.write(chunk)
+                    body_length += len(chunk)
+                buffered_body.seek(0)
+
+            return {
+                "status": status,
+                "reason": str(response.reason or "OK"),
+                "headers": response_headers,
+                "body_length": body_length,
+                "buffered_body": buffered_body,
+            }
+        finally:
+            connection.close()
+
+    def _send_buffered_response(self, buffered: dict[str, object]) -> None:
+        buffered_body = buffered.get("buffered_body")
+        try:
+            self.send_response(int(buffered["status"]), str(buffered["reason"]))
+            for name, value in buffered["headers"]:
+                self.send_header(str(name), str(value))
+            self.send_header("Content-Length", str(int(buffered["body_length"])))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            if self.command != "HEAD" and buffered_body is not None:
+                while True:
+                    chunk = buffered_body.read(self.server.read_chunk_bytes)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError) as exc:
+            raise DownstreamDisconnectError(str(exc)) from exc
+        except OSError as exc:
+            if getattr(exc, "errno", None) in DOWNSTREAM_DISCONNECT_ERRNOS:
+                raise DownstreamDisconnectError(str(exc)) from exc
+            raise
+        finally:
+            if buffered_body is not None:
+                buffered_body.close()
+            self.close_connection = True
+
+    def _send_json_error(self, status: int, reason: str, payload: dict[str, object]) -> None:
         encoded = json.dumps(payload).encode("utf-8")
-        self.send_response(int(response.status or 502), str(response.reason or "Bad Gateway"))
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(encoded)))
-        self.send_header("Connection", "close")
-        self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(encoded)
+        try:
+            self.send_response(int(status), str(reason or "Bad Gateway"))
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(encoded)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
+        except OSError as exc:
+            if getattr(exc, "errno", None) not in DOWNSTREAM_DISCONNECT_ERRNOS:
+                raise
         self.close_connection = True
+
+    def _build_proxy_upstream_failure_payload(
+        self,
+        exc: Exception,
+        *,
+        retry_attempts: int | None = None,
+        elapsed_seconds: float | None = None,
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "error": "proxy_upstream_failure",
+            "detail": str(exc),
+        }
+        if retry_attempts and retry_attempts > 0:
+            payload["retry_attempts"] = int(retry_attempts)
+        if elapsed_seconds and elapsed_seconds > 0:
+            payload["retry_elapsed_seconds"] = round(float(elapsed_seconds), 3)
+        return payload
+
+    def _next_retry_wait_seconds(self, deadline: float) -> float | None:
+        retry_interval = max(0.0, float(self.server.retry_interval_seconds))
+        if retry_interval <= 0:
+            return None
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        return min(retry_interval, remaining)
+
+    def _log_retry(
+        self,
+        *,
+        attempt: int,
+        elapsed_seconds: float,
+        wait_seconds: float,
+        target_path: str,
+        detail: str,
+    ) -> None:
+        self.log_message(
+            'retrying upstream attempt=%d elapsed=%.1fs wait=%.1fs path="%s" detail="%s"',
+            attempt,
+            elapsed_seconds,
+            wait_seconds,
+            target_path,
+            detail,
+        )
+
+    def _abort_if_downstream_gone(
+        self,
+        *,
+        attempt: int,
+        elapsed_seconds: float,
+        target_path: str,
+        detail: str,
+    ) -> None:
+        if self._is_downstream_connection_alive():
+            return
+        self.log_message(
+            'downstream disconnected; abandoning request attempt=%d elapsed=%.1fs path="%s" detail="%s"',
+            attempt,
+            elapsed_seconds,
+            target_path,
+            detail,
+        )
+        raise DownstreamDisconnectError(detail)
+
+    def _is_downstream_connection_alive(self) -> bool:
+        connection = getattr(self, "connection", None)
+        if connection is None:
+            return False
+        try:
+            if connection.fileno() < 0:
+                return False
+        except OSError:
+            return False
+
+        try:
+            readable, _writable, exceptional = select.select([connection], [], [connection], 0)
+        except (OSError, ValueError):
+            return False
+        if exceptional:
+            return False
+        if not readable:
+            return True
+
+        recv_flags = getattr(socket, "MSG_PEEK", 0) | getattr(socket, "MSG_DONTWAIT", 0)
+        try:
+            preview = connection.recv(1, recv_flags)
+        except BlockingIOError:
+            return True
+        except InterruptedError:
+            return True
+        except OSError as exc:
+            if getattr(exc, "errno", None) in {errno.EAGAIN, errno.EWOULDBLOCK}:
+                return True
+            return False
+        return bool(preview)
+
+    def _is_retryable_upstream_exception(self, exc: Exception) -> bool:
+        if isinstance(
+            exc,
+            (
+                TimeoutError,
+                socket.timeout,
+                ConnectionResetError,
+                ConnectionAbortedError,
+                BrokenPipeError,
+                ConnectionRefusedError,
+                http.client.RemoteDisconnected,
+            ),
+        ):
+            return True
+        if isinstance(exc, ssl.SSLError):
+            message = str(exc).lower()
+            return any(fragment in message for fragment in RETRYABLE_UPSTREAM_ERROR_FRAGMENTS)
+        if isinstance(exc, OSError):
+            if getattr(exc, "errno", None) in RETRYABLE_UPSTREAM_ERRNOS:
+                return True
+            message = str(exc).lower()
+            return any(fragment in message for fragment in RETRYABLE_UPSTREAM_ERROR_FRAGMENTS)
+        message = str(exc).lower()
+        return any(fragment in message for fragment in RETRYABLE_UPSTREAM_ERROR_FRAGMENTS)
 
     def _read_request_body(self) -> bytes | None:
         transfer_encoding = self.headers.get("Transfer-Encoding", "")
@@ -259,7 +579,15 @@ def main() -> int:
     server = ThreadingHTTPServer((args.listen_host, args.listen_port), ProxyHandler)
     server.upstream_base_url = upstream_base_url
     server.connect_timeout_seconds = float(args.connect_timeout_seconds)
+    server.upstream_read_timeout_seconds = max(
+        float(args.connect_timeout_seconds),
+        float(args.upstream_read_timeout_seconds),
+    )
     server.read_chunk_bytes = max(1024, int(args.read_chunk_bytes))
+    server.retry_interval_seconds = max(0.0, float(args.retry_interval_seconds))
+    server.retry_max_wait_seconds = max(0.0, float(args.retry_max_wait_seconds))
+    server.response_spool_max_bytes = max(1024, int(args.response_spool_max_bytes))
+    server.retryable_status_codes = set(RETRYABLE_UPSTREAM_STATUS_CODES)
     server.error_body_limit_bytes = 8192
     server.access_headers = _load_access_headers()
 

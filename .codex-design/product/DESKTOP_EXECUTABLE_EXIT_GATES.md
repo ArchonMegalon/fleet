@@ -113,7 +113,17 @@ Required workflow receipts:
 5. Validation or export smoke
    - Run validation or export from the UI path the product exposes and prove the result is visible to a user.
 
-Every required workflow must include at least two screenshots: before/action setup and after/visible result. Failure screenshots must include the focused control or missing workspace where possible.
+Every required workflow must include at least two real screenshot paths: before/action setup and after/visible result. Counter-only fields such as `screenshot_count: 2` do not count. Each screenshot must be reviewed as an existing PNG inside the UI repo proof tree, and the audit must include the workflow-specific visible assertions that were checked.
+
+Required assertion keys:
+
+- `master_index_search_focus_stability`: `focus_preserved_after_typing`, `search_text_accumulates_keyboard_input`
+- `file_new_character_visible_workspace`: `new_character_action_opened_visible_workspace`, `visible_workspace_nonblank`
+- `minimal_character_build_save_reload`: `character_created_saved_reloaded`, `reload_preserved_character_identity`
+- `major_navigation_sanity`: `primary_navigation_clicks_change_visible_content`, `no_unhandled_errors`
+- `validation_or_export_smoke`: `validation_or_export_action_completed`, `result_visible_or_file_created`
+
+Failure screenshots must include the focused control or missing workspace where possible.
 
 Hard separation rule: the tester shard writes the audit only. Fix shards consume the audit and rerun the exact repro after code changes. A tester audit that both fixes and tests the same bug does not close this gate.
 

@@ -454,6 +454,10 @@ journey_gates:
             - '"major_navigation_sanity"'
             - '"validation_or_export_smoke"'
             - '"screenshots"'
+            - '"screenshotReview"'
+            - '"focus_preserved_after_typing"'
+            - '"new_character_action_opened_visible_workspace"'
+            - '"validation_or_export_action_completed"'
       required_project_posture:
         - project_id: core
           minimum_stage: pre_repo_local_complete

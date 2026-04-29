@@ -152,8 +152,14 @@ normalize_codexea_home
 mkdir -p "${XDG_CACHE_HOME}" "${XDG_CONFIG_HOME}"
 export XDG_CACHE_HOME XDG_CONFIG_HOME
 
+default_operator_guard_direct_principal_id() {
+  local user_name=""
+  user_name="$(id -un 2>/dev/null || printf 'codexea')"
+  printf '%s-codexea-operator' "${user_name}"
+}
+
 REAL_CODEX="${CODEXEA_REAL_CODEX:-${CODEX_REAL_BIN:-/usr/bin/codex}}"
-WATCHDOG_BIN="${CODEXEA_WATCHDOG_BIN:-${HOME}/.local/bin/codexea-watchdog}"
+WATCHDOG_BIN="${CODEXEA_WATCHDOG_BIN:-${SCRIPT_DIR}/codexea-watchdog}"
 BOOTSTRAP_PROMPT_FILE="${CODEXEA_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/ea_interactive_bootstrap.md}"
 JURY_BOOTSTRAP_PROMPT_FILE="${CODEXEA_JURY_BOOTSTRAP_PROMPT_FILE:-${BOOTSTRAP_PROMPT_FILE}}"
 CODEXEA_EXEC_TRACE_PROMPT_FILE="${CODEXEA_EXEC_TRACE_PROMPT_FILE:-${SCRIPT_DIR}/ea_exec_trace_prompt.md}"
@@ -179,6 +185,7 @@ CODEXEA_INTERACTIVE_EASY_SUBMODE="${CODEXEA_INTERACTIVE_EASY_SUBMODE:-responses_
 CODEXEA_EASY_SUBMODE="${CODEXEA_EASY_SUBMODE:-responses_fast}"
 CODEXEA_EASY_MODEL="${CODEXEA_EASY_MODEL:-ea-coder-fast}"
 CODEXEA_EASY_SUPER_MODEL="${CODEXEA_EASY_SUPER_MODEL:-onemin:gpt-5.4}"
+CODEXEA_BACKLOG_AUDIT_AUTO_LANE="${CODEXEA_BACKLOG_AUDIT_AUTO_LANE:-core}"
 CODEXEA_DISABLE_MCP="${CODEXEA_DISABLE_MCP:-0}"
 CODEXEA_SKIP_GIT_REPO_CHECK="${CODEXEA_SKIP_GIT_REPO_CHECK:-1}"
 CODEXEA_NO_REPO_WORKDIR="${CODEXEA_NO_REPO_WORKDIR:-}"
@@ -190,6 +197,8 @@ CODEXEA_POST_AUDIT_ONLY_ON_DIFF="${CODEXEA_POST_AUDIT_ONLY_ON_DIFF:-1}"
 CODEXEA_POST_AUDIT_ONLY_ON_VERIFY="${CODEXEA_POST_AUDIT_ONLY_ON_VERIFY:-0}"
 CODEXEA_STATE_DIR="${CODEXEA_STATE_DIR:-${HOME}/.cache/codexea}"
 CODEXEA_STOP_FILE="${CODEXEA_STOP_FILE:-${CODEXEA_STATE_DIR}/stop}"
+CODEXEA_OPERATOR_GUARD_ENABLE="${CODEXEA_OPERATOR_GUARD_ENABLE:-1}"
+CODEXEA_OPERATOR_GUARD_DIR="${CODEXEA_OPERATOR_GUARD_DIR:-${CODEXEA_STATE_DIR}/operator-guard}"
 CODEXEA_DEBUG="${CODEXEA_DEBUG:-0}"
 CODEXEA_DEBUG_LOG_FILE="${CODEXEA_DEBUG_LOG_FILE:-${CODEXEA_STATE_DIR}/debug.log}"
 CODEXEA_EXEC_HARD_TIMEOUT_SECONDS="${CODEXEA_EXEC_HARD_TIMEOUT_SECONDS:-3600}"
@@ -217,6 +226,14 @@ fi
 
 export EA_PRINCIPAL_ID="${EA_PRINCIPAL_ID:-$(id -un)-codex-ea}"
 export EA_MCP_PRINCIPAL_ID="${EA_MCP_PRINCIPAL_ID:-${EA_PRINCIPAL_ID}}"
+case "${CODEXEA_OPERATOR_GUARD_ACTIVE:-0}" in
+  1|true|TRUE|yes|YES|on|ON)
+    if [ -n "${CODEXEA_OPERATOR_GUARD_DIRECT_PRINCIPAL_ID:-}" ]; then
+      export EA_PRINCIPAL_ID="${CODEXEA_OPERATOR_GUARD_DIRECT_PRINCIPAL_ID}"
+      export EA_MCP_PRINCIPAL_ID="${CODEXEA_OPERATOR_GUARD_DIRECT_PRINCIPAL_ID}"
+    fi
+    ;;
+esac
 export CODEX_WRAPPER_DISABLE_BOOTSTRAP=1
 export CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT=1
 
@@ -612,6 +629,10 @@ prepend_exec_trace_stdin_prompt() {
   [ -n "${CODEXEA_STDIN_PROMPT-}" ] || return 0
   prompt_prefix="$(build_exec_trace_prompt)"
   [ -n "${prompt_prefix}" ] || return 0
+  if env_truthy "${CODEXEA_OPERATOR_GUARD_ACTIVE:-0}" || [[ "${prompt_prefix}" == *"Operator-prepared "* ]]; then
+    CODEXEA_STDIN_PROMPT="${prompt_prefix}"
+    return 0
+  fi
   case "${CODEXEA_STDIN_PROMPT}" in
     "${prompt_prefix}"*)
       return 0
@@ -782,6 +803,1058 @@ extract_plain_exec_prompt_args() {
   printf '%s\0' "${args[@]:${i}}"
 }
 
+extract_exec_prompt_text() {
+  local -a args=("$@")
+  local -a prompt_parts=()
+  local i=0
+
+  [ "${#args[@]}" -gt 0 ] || return 1
+  [ "${args[0]}" = "exec" ] || return 1
+  if [ "${#args[@]}" -gt 1 ] && [ "${args[${#args[@]}-1]}" = "-" ] && [ -n "${CODEXEA_STDIN_PROMPT-}" ]; then
+    printf '%s' "${CODEXEA_STDIN_PROMPT}"
+    return 0
+  fi
+  i=1
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --)
+        i=$((i + 1))
+        break
+        ;;
+      --json|--ephemeral)
+        i=$((i + 1))
+        ;;
+      -o|--output-last-message|--color|--output-schema|-m|--model|-c|--config|--enable|--disable|-i|--image|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir|--remote|--remote-auth-token-env)
+        i=$((i + 2))
+        ;;
+      --oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|--no-alt-screen)
+        i=$((i + 1))
+        ;;
+      -*)
+        i=$((i + 1))
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  [ "${i}" -lt "${#args[@]}" ] || return 1
+  prompt_parts=("${args[@]:${i}}")
+  [ "${#prompt_parts[@]}" -gt 0 ] || return 1
+  printf '%s' "${prompt_parts[*]}"
+}
+
+strip_exec_prompt_from_exec_args() {
+  local -a args=("$@")
+  local i=0
+
+  [ "${#args[@]}" -gt 0 ] || return 1
+  [ "${args[0]}" = "exec" ] || return 1
+  i=1
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --)
+        i=$((i + 1))
+        break
+        ;;
+      --json|--ephemeral)
+        i=$((i + 1))
+        ;;
+      -o|--output-last-message|--color|--output-schema|-m|--model|-c|--config|--enable|--disable|-i|--image|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir|--remote|--remote-auth-token-env)
+        i=$((i + 2))
+        ;;
+      --oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|--no-alt-screen)
+        i=$((i + 1))
+        ;;
+      -*)
+        i=$((i + 1))
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  printf '%s\0' "${args[@]:0:${i}}"
+}
+
+prepend_exec_trace_prompt_to_exec_args() {
+  local -a args=("$@")
+  local prompt_prefix=""
+  local i=0
+  local idx=-1
+
+  [ "${#args[@]}" -gt 0 ] || return 1
+  [ "${args[0]}" = "exec" ] || {
+    printf '%s\0' "${args[@]}"
+    return
+  }
+  prompt_prefix="$(build_exec_trace_prompt)"
+  if [ -z "${prompt_prefix}" ]; then
+    printf '%s\0' "${args[@]}"
+    return
+  fi
+
+  i=1
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --)
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          idx="${i}"
+        fi
+        break
+        ;;
+      --json|--ephemeral)
+        i=$((i + 1))
+        ;;
+      -o|--output-last-message|--color|--output-schema|-m|--model|-c|--config|--enable|--disable|-i|--image|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir|--remote|--remote-auth-token-env)
+        i=$((i + 2))
+        ;;
+      --oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|--no-alt-screen)
+        i=$((i + 1))
+        ;;
+      -*)
+        i=$((i + 1))
+        ;;
+      *)
+        idx="${i}"
+        break
+        ;;
+    esac
+  done
+
+  if [ "${idx}" -lt 0 ] || [ "${idx}" -ge "${#args[@]}" ]; then
+    printf '%s\0' "${args[@]}"
+    return
+  fi
+  if [ "${args[$idx]}" = "-" ]; then
+    printf '%s\0' "${args[@]}"
+    return
+  fi
+  case "${args[$idx]}" in
+    "${prompt_prefix}"*)
+      printf '%s\0' "${args[@]}"
+      return
+      ;;
+  esac
+  if env_truthy "${CODEXEA_OPERATOR_GUARD_ACTIVE:-0}" || [[ "${prompt_prefix}" == *"Operator-prepared "* ]]; then
+    args[$idx]="${prompt_prefix}"
+    printf '%s\0' "${args[@]}"
+    return
+  fi
+  args[$idx]="${prompt_prefix}"$'\n\n'"${args[$idx]}"
+  printf '%s\0' "${args[@]}"
+}
+
+operator_guard_candidate_text() {
+  local primary_command=""
+  local -a args=("$@")
+
+  [ "$#" -gt 0 ] || return 1
+  primary_command="$(detect_primary_command "$@")"
+  if [ "${primary_command}" = "exec" ] || [ "${1:-}" = "exec" ]; then
+    if [ "${#args[@]}" -gt 0 ] && is_codexea_lane "${args[0]}"; then
+      args=("${args[@]:1}")
+    fi
+    extract_exec_prompt_text "${args[@]}"
+    return $?
+  fi
+  if [ -n "${primary_command}" ] && { is_codex_subcommand "${primary_command}" || is_codexea_lane "${primary_command}"; }; then
+    return 1
+  fi
+  printf '%s' "$*"
+}
+
+write_operator_guard_bash_env() {
+  local run_dir="$1"
+  local telemetry_path="$2"
+  local bash_env_path="${run_dir}/OPERATOR_GUARD_BASH_ENV.sh"
+  local redirect_helper_path="${SCRIPT_DIR}/render_status_helper_redirect.py"
+  local shim_path="${SCRIPT_DIR}/python3"
+  local exec_hit_counter_path="${run_dir}/.status_helper_exec_string_hits"
+  local quoted_redirect=""
+  local quoted_telemetry=""
+  local quoted_counter=""
+  local quoted_shim=""
+
+  printf -v quoted_redirect '%q' "${redirect_helper_path}"
+  printf -v quoted_telemetry '%q' "${telemetry_path}"
+  printf -v quoted_counter '%q' "${exec_hit_counter_path}"
+  printf -v quoted_shim '%q' "${shim_path}"
+  {
+    printf '%s\n' '# Auto-generated by codexea operator guard'
+    printf '%s\n' "export CHUMMER_DESIGN_SUPERVISOR_REDIRECT_HELPER=${quoted_redirect}"
+    printf '%s\n' "export CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_TELEMETRY_PATH=${quoted_telemetry}"
+    printf '%s\n' "export CHUMMER_DESIGN_SUPERVISOR_EXEC_STRING_HIT_COUNTER=${quoted_counter}"
+    printf '%s\n' 'if [[ -n "${BASH_EXECUTION_STRING:-}"'
+    printf '%s\n' '  && -f "${CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_TELEMETRY_PATH:-}"'
+    printf '%s\n' '  && ( "${BASH_EXECUTION_STRING}" == *"python3 /docker/fleet/scripts/chummer_design_supervisor.py status"*'
+    printf '%s\n' '    || "${BASH_EXECUTION_STRING}" == *"python3 /docker/fleet/scripts/chummer_design_supervisor.py eta"* )'
+    printf '%s\n' '  && "${BASH_EXECUTION_STRING}" == *"remaining_open_milestones"*'
+    printf '%s\n' '  && "${BASH_EXECUTION_STRING}" == *"eta_human"* ]]; then'
+    printf '%s\n' '  "${CHUMMER_DESIGN_SUPERVISOR_REAL_PYTHON3:-/usr/bin/python3}" "${CHUMMER_DESIGN_SUPERVISOR_REDIRECT_HELPER}" --summary-json "${CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_TELEMETRY_PATH}" "${CHUMMER_DESIGN_SUPERVISOR_EXEC_STRING_HIT_COUNTER}";'
+    printf '%s\n' '  exit $?;'
+    printf '%s\n' 'fi'
+    printf '%s\n' "python3() { \"${quoted_shim}\" \"\$@\"; }"
+    printf '%s\n' 'export -f python3'
+  } > "${bash_env_path}"
+  printf '%s' "${bash_env_path}"
+}
+
+write_operator_guard_home() {
+  local run_dir="$1"
+  local bash_env_path="$2"
+  local original_home="${3:-}"
+  local guard_home="${run_dir}/home"
+  local name=""
+  local source_path=""
+  local target_path=""
+  local quoted_bash_env=""
+
+  mkdir -p "${guard_home}" || return 1
+  for name in .codex .config .cache .local .gitconfig .ssh .openai; do
+    source_path="${original_home%/}/${name}"
+    target_path="${guard_home}/${name}"
+    [ -e "${source_path}" ] || continue
+    ln -s "${source_path}" "${target_path}" 2>/dev/null || true
+  done
+  printf -v quoted_bash_env '%q' "${bash_env_path}"
+  {
+    printf '%s\n' '# Auto-generated by codexea operator guard'
+    printf '%s\n' "source ${quoted_bash_env}"
+  } > "${guard_home}/.bash_profile"
+  cp "${guard_home}/.bash_profile" "${guard_home}/.profile" >/dev/null 2>&1 || true
+  printf '%s' "${guard_home}"
+}
+
+activate_fleet_operator_guard_from_prompt() {
+  local prompt_text="${1:-}"
+  local run_dir=""
+  local metadata=""
+  local prompt_path=""
+  local telemetry_path=""
+  local bash_env_path=""
+  local guard_home=""
+  local original_home="${HOME:-}"
+  local shim_dir="${SCRIPT_DIR}"
+  local real_python3=""
+
+  [ "${CODEXEA_OPERATOR_GUARD_ENABLE}" != "0" ] || return 1
+  [ -n "${prompt_text}" ] || return 1
+  mkdir -p "${CODEXEA_OPERATOR_GUARD_DIR}" >/dev/null 2>&1 || true
+  run_dir="$(mktemp -d "${CODEXEA_OPERATOR_GUARD_DIR%/}/direct-fleet-guard.XXXXXX")" || return 1
+  set +e
+  metadata="$(
+    python3 - "${prompt_text}" "${run_dir}" "${CODEXEA_EXEC_TRACE_PROMPT_FILE}" <<'PY'
+import json
+import os
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+
+
+ROOT = Path(os.environ.get("CODEXEA_OPERATOR_GUARD_FLEET_ROOT") or "/docker/fleet")
+STATE_PATH = ROOT / "state" / "chummer_design_supervisor" / "state.json"
+STATE_ROOT = ROOT / "state" / "chummer_design_supervisor"
+STATUS_COMMAND = [
+    sys.executable,
+    str(ROOT / "scripts" / "chummer_design_supervisor.py"),
+    "status",
+    "--json",
+    "--ignore-nonlinux-desktop-host-proof-blockers",
+]
+ACTION_TERMS = (
+    "unblock",
+    "ooda",
+    "debug",
+    "fix",
+    "patch",
+    "diagnos",
+    "remedy",
+    "enable",
+    "recover",
+    "stabil",
+    "route",
+    "routing",
+)
+INFRA_TERMS = (
+    "codexea",
+    "shim",
+    "1min",
+    "1minai",
+    "onemin",
+    "ea endpoint",
+    "ea endpoints",
+    "responses_upstream",
+    "provider health",
+    "provider-health",
+    "account routing",
+    "onemin manager",
+)
+READINESS_REMEDY_TERMS = (
+    "flagship readiness",
+    "readiness blocker",
+    "readiness blockers",
+    "desktop proof blocker",
+    "ui proof path",
+    "proof path",
+    "desktop_client",
+    "mobile_play_shell",
+    "ui_kit_and_flagship_polish",
+    "media_artifacts",
+    "desktop flagship proof",
+    "user-journey tester audit",
+    "user journey tester audit",
+    "user_journey_tester_audit.generated.json",
+    "release channel",
+    "build/explain/publish",
+    "build explain publish",
+    "recover-from-sync-conflict",
+    "recover from sync conflict",
+)
+UNBLOCK_SPECIFIC_TERMS = (
+    "unblock",
+    "active runs",
+    "productive",
+    "nonproductive",
+    "stalled",
+    "stuck",
+    "no routable direct lanes",
+    "provider-health preflight",
+    "provider health",
+    "routing",
+    "route",
+    "onemin_no_eligible_account",
+    "transport_reconnecting",
+    "stream disconnected",
+)
+BACKLOG_AUDIT_TERMS = (
+    "backlog",
+    "milestone",
+    "milestones",
+    "completion",
+    "complete",
+    "design",
+    "canon",
+    "gap",
+    "gaps",
+    "flagship",
+)
+
+
+def _load_status_payload() -> dict[str, object]:
+    try:
+        completed = subprocess.run(
+            STATUS_COMMAND,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        if completed.returncode == 0:
+            payload = json.loads(completed.stdout)
+            if isinstance(payload, dict):
+                return payload
+    except Exception:
+        pass
+    try:
+        payload = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        pass
+    return {}
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        cleaned = str(item or "").strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        result.append(cleaned)
+    return result
+
+
+def _trim_command_output(value: str, *, max_lines: int = 10, max_chars: int = 1600) -> str:
+    lines = str(value or "").splitlines()
+    if len(lines) > max_lines:
+        lines = lines[:max_lines] + [f"... output truncated to {max_lines} lines"]
+    compact = "\n".join(lines).strip()
+    if len(compact) > max_chars:
+        compact = compact[: max_chars - 32].rstrip() + "\n... output truncated"
+    return compact
+
+
+def _read_trimmed_file(path: Path | None, *, max_lines: int, max_chars: int) -> str:
+    if path is None:
+        return ""
+    try:
+        return _trim_command_output(path.read_text(encoding="utf-8"), max_lines=max_lines, max_chars=max_chars)
+    except Exception:
+        return ""
+
+
+def _latest_matching_path(pattern: str) -> Path | None:
+    latest_path: Path | None = None
+    latest_mtime = -1.0
+    try:
+        for candidate in STATE_ROOT.glob(pattern):
+            if not candidate.is_file():
+                continue
+            try:
+                mtime = float(candidate.stat().st_mtime)
+            except Exception:
+                continue
+            if mtime > latest_mtime:
+                latest_mtime = mtime
+                latest_path = candidate
+    except Exception:
+        return None
+    return latest_path
+
+
+def _latest_matching_paths(pattern: str, *, limit: int = 8) -> list[Path]:
+    ranked_paths: list[tuple[float, Path]] = []
+    try:
+        for candidate in STATE_ROOT.glob(pattern):
+            if not candidate.is_file():
+                continue
+            try:
+                mtime = float(candidate.stat().st_mtime)
+            except Exception:
+                continue
+            ranked_paths.append((mtime, candidate))
+    except Exception:
+        return []
+    ranked_paths.sort(key=lambda item: item[0], reverse=True)
+    return [candidate for _, candidate in ranked_paths[: max(1, int(limit or 0))]]
+
+
+def _non_trace_lines(text: str) -> list[str]:
+    result: list[str] = []
+    for raw_line in str(text or "").splitlines():
+        line = str(raw_line or "").strip()
+        if not line:
+            continue
+        if line.lower().startswith("trace:"):
+            continue
+        result.append(line)
+    return result
+
+
+def _first_matching_line(text: str, needles: tuple[str, ...]) -> str:
+    lowered_needles = tuple(str(item or "").lower() for item in needles if str(item or "").strip())
+    lines = _non_trace_lines(text) or [str(raw_line or "").strip() for raw_line in str(text or "").splitlines() if str(raw_line or "").strip()]
+    for line in lines:
+        lowered = line.lower()
+        if any(needle in lowered for needle in lowered_needles):
+            return line
+    return ""
+
+
+def _compact_worker_stderr_excerpt(path: Path | None) -> str:
+    if path is None:
+        return ""
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception:
+        return ""
+    out: list[str] = []
+    primary_blocker_needles = (
+        "provider-health preflight left no routable direct lanes",
+        "no runnable full routed accounts",
+        "upstream_unavailable",
+        "onemin_no_eligible_account",
+    )
+    fallback_blocker_needles = (
+        "attempt ",
+    )
+    stage_needle = "Safe first commands if you need orientation"
+    blocker_index = next(
+        (
+            index
+            for index, raw_line in enumerate(lines)
+            if str(raw_line or "").strip()
+            and any(needle in str(raw_line or "").lower() for needle in primary_blocker_needles)
+        ),
+        None,
+    )
+    if blocker_index is None:
+        blocker_index = next(
+            (
+                index
+                for index, raw_line in enumerate(lines)
+                if str(raw_line or "").strip()
+                and any(needle in str(raw_line or "").lower() for needle in fallback_blocker_needles)
+            ),
+            None,
+        )
+    if blocker_index is not None:
+        out.extend(lines[max(0, blocker_index - 2) : min(len(lines), blocker_index + 3)])
+    stage_index = next(
+        (
+            index
+            for index, raw_line in enumerate(lines)
+            if stage_needle.lower() in str(raw_line or "").lower()
+        ),
+        None,
+    )
+    if stage_index is not None:
+        if out:
+            out.append("")
+        out.extend(lines[stage_index : min(len(lines), stage_index + 20)])
+    if not out:
+        out = lines[:18]
+    return _trim_command_output("\n".join(out), max_lines=24, max_chars=2600)
+
+
+def _latest_shard_execution_context() -> dict[str, object]:
+    blocker_needles = (
+        "provider-health preflight left no routable direct lanes",
+        "no runnable full routed accounts",
+        "upstream_unavailable",
+        "onemin_no_eligible_account",
+    )
+    stderr_path = None
+    stderr_excerpt = ""
+    for candidate in _latest_matching_paths("shard-*/runs/*/worker.stderr.log", limit=12):
+        candidate_excerpt = _compact_worker_stderr_excerpt(candidate)
+        if _first_matching_line(candidate_excerpt, blocker_needles):
+            stderr_path = candidate
+            stderr_excerpt = candidate_excerpt
+            break
+        if stderr_path is None:
+            stderr_path = candidate
+            stderr_excerpt = candidate_excerpt
+    if stderr_path is None:
+        stderr_path = _latest_matching_path("shard-*/runs/*/worker.stderr.log")
+        if stderr_path is not None:
+            stderr_excerpt = _compact_worker_stderr_excerpt(stderr_path)
+    prompt_path = None
+    telemetry_path = None
+    latest_run_dir = None
+    if stderr_path is not None:
+        latest_run_dir = stderr_path.parent
+    else:
+        prompt_candidate = _latest_matching_path("shard-*/runs/*/WORKER_EXEC_TRACE_PROMPT.md")
+        if prompt_candidate is not None:
+            latest_run_dir = prompt_candidate.parent
+    if latest_run_dir is not None:
+        stderr_candidate = latest_run_dir / "worker.stderr.log"
+        prompt_candidate = latest_run_dir / "WORKER_EXEC_TRACE_PROMPT.md"
+        telemetry_candidate = latest_run_dir / "TASK_LOCAL_TELEMETRY.generated.json"
+        if stderr_candidate.is_file():
+            stderr_path = stderr_candidate
+        if prompt_candidate.is_file():
+            prompt_path = prompt_candidate
+        if telemetry_candidate.is_file():
+            telemetry_path = telemetry_candidate
+    if not stderr_excerpt and stderr_path is not None:
+        stderr_excerpt = _compact_worker_stderr_excerpt(stderr_path)
+    prompt_excerpt = _read_trimmed_file(prompt_path, max_lines=26, max_chars=3600)
+    blocker_summary = ""
+    for blocker_needle in blocker_needles:
+        blocker_summary = _first_matching_line(stderr_excerpt, (blocker_needle,))
+        if blocker_summary:
+            break
+    if not blocker_summary:
+        non_trace_lines = _non_trace_lines(stderr_excerpt)
+        if non_trace_lines:
+            blocker_summary = non_trace_lines[0]
+        elif stderr_excerpt:
+            blocker_summary = stderr_excerpt.splitlines()[0].strip()
+    return {
+        "run_dir": str(latest_run_dir) if latest_run_dir is not None else "",
+        "run_id": str(latest_run_dir.name) if latest_run_dir is not None else "",
+        "stderr_path": str(stderr_path) if stderr_path is not None else "",
+        "prompt_path": str(prompt_path) if prompt_path is not None else "",
+        "telemetry_path": str(telemetry_path) if telemetry_path is not None else "",
+        "blocker_summary": blocker_summary,
+        "stderr_excerpt": stderr_excerpt,
+        "prompt_excerpt": prompt_excerpt,
+        "prompt_available": bool(prompt_path and prompt_path.is_file()),
+        "telemetry_available": bool(telemetry_path and telemetry_path.is_file()),
+    }
+
+
+def _repo_root_for_path(path: Path) -> Path | None:
+    current = path.parent if path.is_file() else path
+    for candidate in (current, *current.parents):
+        git_marker = candidate / ".git"
+        if git_marker.exists():
+            return candidate
+    return None
+
+
+def _build_repo_diff_commands(commands: list[str]) -> list[str]:
+    path_groups: dict[str, list[str]] = {}
+    seen_paths: set[str] = set()
+    for command in commands:
+        for match in __import__("re").findall(r"(/[A-Za-z0-9._/\-]+)", str(command or "")):
+            raw_path = str(match or "").strip()
+            if not raw_path or raw_path in seen_paths:
+                continue
+            path = Path(raw_path)
+            if not path.exists() or not path.is_file():
+                continue
+            repo_root_path = _repo_root_for_path(path)
+            if repo_root_path is None:
+                continue
+            try:
+                rel_path = str(path.relative_to(repo_root_path))
+            except Exception:
+                continue
+            repo_root = str(repo_root_path)
+            if not repo_root:
+                continue
+            path_groups.setdefault(repo_root, []).append(rel_path)
+            seen_paths.add(raw_path)
+    result: list[str] = []
+    for repo_root, rel_paths in path_groups.items():
+        unique_rel_paths = _dedupe(rel_paths)
+        if not unique_rel_paths:
+            continue
+        quoted_root = subprocess.list2cmdline([repo_root])
+        quoted_paths = " ".join(subprocess.list2cmdline([item]) for item in unique_rel_paths)
+        result.append(f"git -C {quoted_root} status --short -- {quoted_paths}")
+        result.append(f"git -C {quoted_root} diff --stat -- {quoted_paths}")
+    return result
+
+
+def _staged_prompt_commands(text: str) -> list[str]:
+    prompt = str(text or "")
+    if not prompt:
+        return []
+    stage_markers = (
+        "Run these exact commands first:",
+        "Safe first commands if you need orientation",
+        "Read these files directly first:",
+    )
+    commands: list[str] = []
+    collecting = False
+    for raw_line in prompt.splitlines():
+        line = str(raw_line or "").rstrip()
+        stripped = line.strip()
+        if not collecting:
+            if any(marker in stripped for marker in stage_markers):
+                collecting = True
+            continue
+        if not stripped:
+            if commands:
+                break
+            continue
+        if stripped.startswith("$ "):
+            commands.append(stripped[2:].strip())
+            continue
+        if commands:
+            break
+    return _dedupe([command for command in commands if command])[:8]
+
+
+def _compact_prepared_section(text: str, *, max_lines: int = 8, max_chars: int = 900) -> str:
+    value = str(text or "").strip()
+    if not value:
+        return ""
+    lines = value.splitlines()
+    if len(lines) > max_lines:
+        value = "\n".join(lines[:max_lines] + ["... output truncated"])
+    if len(value) > max_chars:
+        value = value[: max_chars - 3].rstrip() + "..."
+    return value
+
+
+def _readiness_probe_summary_command() -> str:
+    return "python3 /docker/fleet/scripts/codex-shims/codexea_readiness_probe.py"
+
+
+prompt_text = str(sys.argv[1] or "").strip()
+run_dir = Path(sys.argv[2]).expanduser().resolve()
+base_prompt_path = Path(sys.argv[3]).expanduser() if len(sys.argv) > 3 and str(sys.argv[3] or "").strip() else None
+lowered = prompt_text.lower()
+staged_prompt_commands = _staged_prompt_commands(prompt_text)
+readiness_direct_commands: list[str] = []
+has_action = any(term in lowered for term in ACTION_TERMS)
+has_infra_scope = any(term in lowered for term in INFRA_TERMS)
+has_readiness_remedy = any(term in lowered for term in READINESS_REMEDY_TERMS)
+has_unblock_specific = any(term in lowered for term in UNBLOCK_SPECIFIC_TERMS)
+has_fleet_unblock = "fleet" in lowered and has_unblock_specific
+has_backlog_audit = (
+    not has_readiness_remedy
+    and
+    any(term in lowered for term in BACKLOG_AUDIT_TERMS)
+    and any(term in lowered for term in ("chummer", "chummer6", "fleet"))
+)
+guard_mode = ""
+if has_fleet_unblock or (
+    has_action
+    and has_infra_scope
+    and (has_unblock_specific or not has_readiness_remedy)
+):
+    guard_mode = "unblock"
+elif has_backlog_audit:
+    guard_mode = "backlog_audit"
+elif has_readiness_remedy:
+    guard_mode = "readiness_remedy"
+if not guard_mode:
+    raise SystemExit(10)
+
+status_payload = _load_status_payload()
+live_shard_execution = _latest_shard_execution_context()
+current_blocker = str(live_shard_execution.get("blocker_summary") or "").strip()
+eta_payload = status_payload.get("eta") if isinstance(status_payload.get("eta"), dict) else {}
+active_runs_count = status_payload.get("active_runs_count")
+if active_runs_count is None:
+    shards = [item for item in (status_payload.get("shards") or []) if isinstance(item, dict)]
+    active_runs_count = sum(1 for item in shards if str(item.get("active_run_id") or "").strip())
+remaining_open = status_payload.get("remaining_open_milestones")
+if remaining_open is None:
+    remaining_open = len(status_payload.get("open_milestone_ids") or [])
+remaining_not_started = status_payload.get("remaining_not_started_milestones")
+if remaining_not_started is None:
+    remaining_not_started = eta_payload.get("remaining_not_started_milestones")
+remaining_in_progress = status_payload.get("remaining_in_progress_milestones")
+if remaining_in_progress is None:
+    remaining_in_progress = eta_payload.get("remaining_in_progress_milestones")
+eta_human = str(eta_payload.get("eta_human") or status_payload.get("eta_human") or "unknown").strip() or "unknown"
+mode = str(status_payload.get("mode") or "unknown").strip() or "unknown"
+updated_at = str(status_payload.get("updated_at") or "").strip()
+
+if guard_mode == "backlog_audit":
+    first_commands = [
+        "sed -n '1,220p' /docker/fleet/.codex-design/product/README.md",
+        "sed -n '1,240p' /docker/fleet/.codex-design/repo/IMPLEMENTATION_SCOPE.md",
+        "sed -n '1,240p' /docker/fleet/.codex-design/review/REVIEW_CONTEXT.md",
+        "rg -n \"desktop_client|mobile_play_shell|ui_kit_and_flagship_polish|media_artifacts|release-proof|operational|gap|missing|milestone\" /docker/fleet/.codex-design /docker/fleet/.codex-studio/published",
+        "sed -n '1,240p' /docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
+    ]
+elif guard_mode == "readiness_remedy":
+    readiness_probe_command = _readiness_probe_summary_command()
+    first_commands = staged_prompt_commands or [
+        readiness_probe_command,
+        "sed -n '1,260p' /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/user-journey-tester-audit.sh ; sed -n '1,220p' /docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/UserJourneyTesterAuditComplianceTests.cs",
+        "rg -n 'desktop_client:user_journey_tester|WL-221|B16|USER_JOURNEY_TESTER_AUDIT.generated.json|USER_JOURNEY_TESTER_TRACE.generated.json' /docker/chummercomplete/chummer-presentation/WORKLIST.md /docker/chummercomplete/chummer-presentation/.codex-studio/published/QUEUE.generated.yaml /docker/chummercomplete/chummer-design/products/chummer/DESKTOP_EXECUTABLE_EXIT_GATES.md /docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
+    ]
+    readiness_direct_commands = [
+        readiness_probe_command,
+    ]
+else:
+    first_commands = [
+        "sed -n '2410,2505p' /docker/fleet/scripts/codex-shims/codexea",
+        "sed -n '1,140p' /docker/fleet/scripts/codex-shims/python3",
+    ]
+    if any(token in lowered for token in ("1min", "1minai", "onemin", "credit", "credits", "account", "routing")):
+        first_commands.extend(
+            [
+                "rg -n \"_candidate_budget_signal|remaining_credits|required_credits|quarantine|cooldown\" /docker/EA/ea/app/services/onemin_manager.py",
+                "rg -n \"_onemin_required_credits_for_selection|_onemin_code_models|remaining_credits|required_credits|_recent_onemin_dispatch_credit_estimate\" /docker/EA/ea/app/services/responses_upstream.py",
+            ]
+        )
+    else:
+        first_commands.append(
+            "rg -n \"_onemin_required_credits_for_selection|_onemin_code_models|remaining_credits|required_credits|_recent_onemin_dispatch_credit_estimate\" /docker/EA/ea/app/services/responses_upstream.py | head -n 80"
+        )
+    if any(token in lowered for token in ("endpoint", "endpoints", "route", "routing", "response", "responses", "ea")):
+        first_commands.append(
+            "rg -n \"_resolve_prompt_route|coding_task_requires_core|ea-coder-fast|ea-coder-hard\" /docker/EA/ea/app/api/routes/responses.py"
+        )
+first_commands = _dedupe(first_commands)[:5]
+readiness_direct_commands = _dedupe(readiness_direct_commands)[:7]
+prepared_context_sections: list[str] = []
+if guard_mode != "backlog_audit":
+    for command in first_commands:
+        try:
+            completed = subprocess.run(
+                ["/bin/bash", "-lc", command],
+                capture_output=True,
+                text=True,
+                timeout=12,
+                check=False,
+            )
+        except Exception as exc:
+            prepared_context_sections.append(f"$ {command}\n[context unavailable: {type(exc).__name__}]")
+            continue
+        rendered_parts = []
+        stdout = _trim_command_output(completed.stdout)
+        stderr = _trim_command_output(completed.stderr)
+        if stdout:
+            rendered_parts.append(stdout)
+        if stderr:
+            rendered_parts.append(stderr)
+        if int(completed.returncode or 0) != 0 and not rendered_parts:
+            rendered_parts.append(f"[exit {completed.returncode}]")
+        if not rendered_parts:
+            rendered_parts.append("[no output]")
+        prepared_context_sections.append(f"$ {command}\n" + "\n".join(rendered_parts))
+    for command in _build_repo_diff_commands(first_commands):
+        try:
+            completed = subprocess.run(
+                ["/bin/bash", "-lc", command],
+                capture_output=True,
+                text=True,
+                timeout=12,
+                check=False,
+            )
+        except Exception as exc:
+            prepared_context_sections.append(f"$ {command}\n[context unavailable: {type(exc).__name__}]")
+            continue
+        rendered_parts = []
+        stdout = _trim_command_output(completed.stdout, max_lines=14, max_chars=1800)
+        stderr = _trim_command_output(completed.stderr, max_lines=14, max_chars=1200)
+        if stdout:
+            rendered_parts.append(stdout)
+        if stderr:
+            rendered_parts.append(stderr)
+        if int(completed.returncode or 0) != 0 and not rendered_parts:
+            rendered_parts.append(f"[exit {completed.returncode}]")
+        if not rendered_parts:
+            rendered_parts.append("[no output]")
+        prepared_context_sections.append(f"$ {command}\n" + "\n".join(rendered_parts))
+if guard_mode == "readiness_remedy":
+    compacted_sections: list[str] = []
+    for section in prepared_context_sections:
+        stripped = str(section or "").strip()
+        if not stripped:
+            continue
+        if stripped.startswith(f"$ {readiness_probe_command}"):
+            compacted_sections.append(_compact_prepared_section(stripped, max_lines=6, max_chars=900))
+            continue
+        if stripped.startswith("$ sed -n '1,260p' /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/user-journey-tester-audit.sh ;"):
+            compacted_sections.append(_compact_prepared_section(stripped, max_lines=8, max_chars=900))
+            continue
+        if stripped.startswith("$ rg -n 'desktop_client:user_journey_tester|WL-221|B16|USER_JOURNEY_TESTER_AUDIT.generated.json|USER_JOURNEY_TESTER_TRACE.generated.json'"):
+            compacted_sections.append(_compact_prepared_section(stripped, max_lines=6, max_chars=700))
+            continue
+    prepared_context_sections = compacted_sections[:3]
+prepared_context = "\n\n".join(section.strip() for section in prepared_context_sections if section.strip())
+context_limit = 5000 if guard_mode == "readiness_remedy" else 9000
+if len(prepared_context) > context_limit:
+    prepared_context = prepared_context[: context_limit - 3].rstrip() + "..."
+
+if guard_mode == "backlog_audit":
+    summary = (
+        "Operator-prepared backlog audit: compare Chummer design canon against Fleet backlog and staged truth, "
+        "add only genuinely missing backlog or canon items, and distinguish design gaps from release-proof or "
+        "operational gaps."
+    )
+elif guard_mode == "readiness_remedy":
+    summary = (
+        "Operator-prepared readiness remedy: close flagship product proof gaps from the staged product evidence, "
+        "starting with the explicit first-command outputs already captured below."
+    )
+else:
+    summary = (
+        f"Operator-prepared fleet snapshot: {active_runs_count or 0} active runs, "
+        f"{remaining_open or 0} open milestones, ETA {eta_human}, mode {mode}. "
+        "Direct unblock scope only: codexea shim, EA endpoints, and the 1min manager; "
+        "do not work shard backlog content."
+    )
+    if current_blocker:
+        summary = f"{summary} Current live shard blocker: {current_blocker}"
+if updated_at:
+    summary = f"{summary} Snapshot updated {updated_at}."
+
+telemetry_path = run_dir / "TASK_LOCAL_TELEMETRY.generated.json"
+telemetry_payload = {
+    "summary": summary,
+    "guidance": summary,
+    "active_runs_count": active_runs_count or 0,
+    "remaining_open_milestones": remaining_open or 0,
+    "remaining_not_started_milestones": remaining_not_started or 0,
+    "remaining_in_progress_milestones": remaining_in_progress or 0,
+    "eta_human": eta_human,
+    "mode": mode,
+    "guard_mode": guard_mode,
+    "updated_at": updated_at,
+    "first_commands": first_commands,
+    "prepared_context": prepared_context,
+    "current_blocker": current_blocker,
+    "live_shard_execution": live_shard_execution,
+    "status_helper_redirect_lookahead": len(first_commands),
+}
+telemetry_path.write_text(json.dumps(telemetry_payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+
+base_prompt = ""
+if base_prompt_path is not None and base_prompt_path.is_file():
+    try:
+        base_prompt = base_prompt_path.read_text(encoding="utf-8").strip()
+    except Exception:
+        base_prompt = ""
+if not base_prompt:
+    base_prompt = (
+        "You are Codex running through the Fleet `codexea` worker shim.\n\n"
+        "Operating contract:\n"
+        "- Behave like a pragmatic senior coding agent and work the assigned slice through to completion or a concrete blocker.\n"
+        "- Do the work instead of announcing that you will do it.\n"
+        "- Before each meaningful work unit, emit one short `Trace:` line naming the action.\n"
+        "- Prefer concise final answers.\n"
+    ).strip()
+
+command_lines = "\n".join(f"- {command}" for command in first_commands)
+readiness_direct_lines = "\n".join(f"$ {command}" for command in readiness_direct_commands)
+snapshot_lines = [
+    f"- active runs: {active_runs_count or 0}",
+    f"- remaining open milestones: {remaining_open or 0}",
+    f"- remaining in-progress milestones: {remaining_in_progress or 0}",
+    f"- ETA: {eta_human}",
+]
+if updated_at:
+    snapshot_lines.append(f"- updated_at: {updated_at}")
+if current_blocker:
+    snapshot_lines.append(f"- current_blocker: {current_blocker}")
+
+live_shard_lines = []
+if live_shard_execution:
+    run_id = str(live_shard_execution.get("run_id") or "").strip()
+    stderr_path = str(live_shard_execution.get("stderr_path") or "").strip()
+    prompt_path = str(live_shard_execution.get("prompt_path") or "").strip()
+    live_telemetry_path = str(live_shard_execution.get("telemetry_path") or "").strip()
+    prompt_available = bool(live_shard_execution.get("prompt_available"))
+    telemetry_available = bool(live_shard_execution.get("telemetry_available"))
+    live_shard_lines.extend(
+        [
+            f"- latest_run_id: {run_id or 'unknown'}",
+            f"- latest_worker_stderr: {stderr_path or 'unavailable'}",
+            f"- latest_worker_telemetry: {live_telemetry_path if telemetry_available and live_telemetry_path else 'unavailable'}",
+            f"- latest_worker_prompt: {prompt_path if prompt_available and prompt_path else 'unavailable'}",
+        ]
+    )
+    if current_blocker:
+        live_shard_lines.append(f"- blocker: {current_blocker}")
+live_shard_block = "\n".join(live_shard_lines).strip()
+live_shard_stderr_excerpt = str(live_shard_execution.get("stderr_excerpt") or "").strip()
+live_shard_prompt_excerpt = str(live_shard_execution.get("prompt_excerpt") or "").strip()
+
+if guard_mode == "backlog_audit":
+    operator_prompt = (
+        f"{base_prompt}\n\n"
+        "Operator-prepared backlog audit context:\n"
+        f"- Task-local telemetry file: {telemetry_path}\n"
+        "- Scope: audit and patch only the Fleet backlog or canon artifacts needed to answer the completion question.\n"
+        "- Do not patch EA routing, CodexEA runtime, or shard execution paths in this run.\n"
+        "- Run these exact commands first:\n"
+        f"{command_lines}\n"
+        "- Never replace those first commands with supervisor status, ETA, or other operator telemetry helpers.\n"
+        "- Use direct file reads from the staged design and backlog artifacts before any broader exploration.\n"
+        "- After reading the staged files, answer whether all completion milestones are already represented in the backlog. If not, add the missing backlog or canon items in the correct place, verify the new coverage, and distinguish design gaps from release-proof or operational gaps.\n\n"
+        "Live fleet snapshot:\n"
+        f"{chr(10).join(snapshot_lines)}\n"
+    )
+elif guard_mode == "readiness_remedy":
+    operator_prompt = (
+        f"{base_prompt}\n\n"
+        "Operator-prepared readiness remedy context:\n"
+        f"- Task-local telemetry file: {telemetry_path}\n"
+        "- Scope: patch only the targeted product proof surface implied by the prompt.\n"
+        "- The exact staged commands below were already executed locally and their outputs were captured in prepared context.\n"
+        "- Do not spend the first turns rerunning those staged reads unless a narrower line window is missing.\n"
+        "- Bootstrap command set that was already captured:\n"
+        f"{command_lines}\n"
+        "- Read these files directly first:\n"
+        f"{readiness_direct_lines}\n"
+        "- Stay on product proof generation, verification, and the minimal contract/tests needed to close the readiness blocker.\n\n"
+        "Prepared repo context:\n"
+        f"{prepared_context}\n\n"
+        "Objective:\n"
+        "- Patch the missing or broken product-side proof producer path implied by the prepared context.\n"
+        "- Re-run the narrow audit/verify path after patching.\n"
+        "- If no dedicated patch tool is exposed in this lane, use exec_command with a focused shell/Python in-place edit.\n"
+        "- Keep changes scoped to the targeted product proof surface.\n\n"
+        "Live fleet snapshot:\n"
+        f"{chr(10).join(snapshot_lines)}\n"
+    )
+else:
+    operator_prompt = (
+        f"{base_prompt}\n\n"
+        "Operator-prepared fleet unblock context:\n"
+        f"- Task-local telemetry file: {telemetry_path}\n"
+        "- Scope: patch only the codexea shim, EA endpoints, and the 1min manager.\n"
+        "- Do not work shard backlog content or slice-specific implementation tasks.\n"
+        "- Treat the live shard execution context below as the current reproduction target; prefer the freshest blocker over older assumptions.\n"
+        "- Bootstrap repo context from the orientation commands has already been captured below.\n"
+        "- Do not spend the first turns rerunning those orientation reads unless you need fresher lines or a missing file window.\n"
+        "- Bootstrap command set that was already captured:\n"
+        f"{command_lines}\n"
+        "- Never replace that captured bootstrap with supervisor status, ETA, or other operator telemetry helpers.\n"
+        "- The first supervisor status or ETA probe will be redirected to the task-local telemetry file; repeated probes will hard-fail this operator run.\n"
+        "- Start at diagnosis or patching inside the allowed scope using the prepared context below; verify with a real codexea fleet-facing attempt and continue until routing/execution is unblocked or the remaining blocker is proven external.\n\n"
+        "Prepared repo context:\n"
+        f"{prepared_context}\n\n"
+        "Live shard execution context:\n"
+        f"{live_shard_block or '- unavailable'}\n\n"
+        "Latest shard stderr excerpt:\n"
+        f"{live_shard_stderr_excerpt or '[unavailable]'}\n\n"
+        "Latest shard prompt excerpt:\n"
+        f"{live_shard_prompt_excerpt or '[unavailable]'}\n\n"
+        "Live fleet snapshot:\n"
+        f"{chr(10).join(snapshot_lines)}\n"
+    )
+prompt_path = run_dir / "EXEC_TRACE_PROMPT.generated.md"
+prompt_path.write_text(operator_prompt, encoding="utf-8")
+print(str(prompt_path))
+print(str(telemetry_path))
+print(guard_mode)
+PY
+  )"
+  local status=$?
+  set -e
+  if [ "${status}" -ne 0 ]; then
+    rm -rf "${run_dir}" >/dev/null 2>&1 || true
+    return 1
+  fi
+  prompt_path="$(printf '%s\n' "${metadata}" | sed -n '1p')"
+  telemetry_path="$(printf '%s\n' "${metadata}" | sed -n '2p')"
+  guard_mode="$(printf '%s\n' "${metadata}" | sed -n '3p')"
+  [ -n "${prompt_path}" ] && [ -f "${prompt_path}" ] || {
+    rm -rf "${run_dir}" >/dev/null 2>&1 || true
+    return 1
+  }
+  [ -n "${telemetry_path}" ] && [ -f "${telemetry_path}" ] || {
+    rm -rf "${run_dir}" >/dev/null 2>&1 || true
+    return 1
+  }
+  real_python3="$(command -v python3 || true)"
+  export CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR="${run_dir}"
+  if [ -n "${real_python3}" ]; then
+    export CHUMMER_DESIGN_SUPERVISOR_REAL_PYTHON3="${CHUMMER_DESIGN_SUPERVISOR_REAL_PYTHON3:-${real_python3}}"
+  fi
+  export CHUMMER_DESIGN_SUPERVISOR_STATUS_HELPER_REDIRECT_LIMIT="${CHUMMER_DESIGN_SUPERVISOR_STATUS_HELPER_REDIRECT_LIMIT:-1}"
+  export CHUMMER_DESIGN_SUPERVISOR_STATUS_HELPER_FATAL=1
+  export CODEXEA_OPERATOR_GUARD_ACTIVE=1
+  export CODEXEA_OPERATOR_GUARD_MODE="${guard_mode}"
+  export CODEXEA_OPERATOR_GUARD_DIRECT_PRINCIPAL_ID="${CODEXEA_OPERATOR_GUARD_DIRECT_PRINCIPAL_ID:-$(default_operator_guard_direct_principal_id)}"
+  export CODEXEA_EXEC_TRACE_PROMPT_FILE="${prompt_path}"
+  CODEXEA_STDIN_PROMPT="$(cat "${prompt_path}")"
+  export CODEXEA_DISABLE_MCP=1
+  bash_env_path="$(write_operator_guard_bash_env "${run_dir}" "${telemetry_path}")"
+  if [ -n "${bash_env_path}" ]; then
+    export BASH_ENV="${bash_env_path}"
+  fi
+  if [ -n "${original_home}" ]; then
+    guard_home="$(write_operator_guard_home "${run_dir}" "${bash_env_path}" "${original_home}")"
+    if [ -n "${guard_home}" ]; then
+      export CODEXEA_OPERATOR_GUARD_ORIGINAL_HOME="${original_home}"
+      export HOME="${guard_home}"
+    fi
+  fi
+  case ":${PATH}:" in
+    *":${shim_dir}:"*)
+      ;;
+    *)
+      export PATH="${shim_dir}:${PATH}"
+      ;;
+  esac
+  emit_debug_trace "operator_guard active run_dir=${run_dir} telemetry=${telemetry_path}"
+  return 0
+}
+
 wrap_prompt_invocation_with_exec() {
   local -a args=("$@")
   local -a exec_prefix=()
@@ -915,6 +1988,20 @@ args_request_raw_exec_output() {
   return 1
 }
 
+args_request_output_last_message() {
+  local -a args=("$@")
+  local arg
+
+  for arg in "${args[@]}"; do
+    case "${arg}" in
+      -o|--output-last-message)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
 run_exec_session_with_clean_output() {
   local -a cmd=("$@")
   local -a json_cmd=()
@@ -928,79 +2015,178 @@ run_exec_session_with_clean_output() {
   local elapsed_seconds=0
   local heartbeat_started_at=0
   local hard_timeout_seconds=0
+  local monitor_reason_file=""
+  local monitor_reason=""
+  local retry_sleep_seconds=0
+  local retry_window_seconds=0
+  local retry_deadline=0
+  local retry_attempt=0
+  local attempt_log=""
+  local output_last_message_path=""
 
   [ "${#cmd[@]}" -gt 0 ] || return 0
   mapfile -d '' json_cmd < <(append_exec_json_flag "${cmd[@]}")
-  fifo_path="$(mktemp -u)"
-  mkfifo "${fifo_path}"
-
-  python3 "${CODEXEA_EXEC_JSON_RENDERER}" "$(pwd)" < "${fifo_path}" &
-  renderer_pid=$!
-
-  heartbeat_started_at="$(date +%s)"
+  output_last_message_path="$(extract_output_last_message_path "${cmd[@]}" || true)"
   hard_timeout_seconds="$(positive_integer_or_default "${CODEXEA_EXEC_HARD_TIMEOUT_SECONDS:-0}" "3600")"
-  emit_waiting_trace 0
-  if [ -t 0 ]; then
-    "${json_cmd[@]}" < /dev/null > "${fifo_path}" 2> >(
-      while IFS= read -r line; do
-        if [ "${line}" != "Reading additional input from stdin..." ]; then
-          printf '%s\n' "${line}" >&2
-        fi
-      done
-    ) &
-  else
-    stdin_file="$(mktemp)"
-    if [ -n "${CODEXEA_STDIN_PROMPT-}" ]; then
-      printf '%s' "${CODEXEA_STDIN_PROMPT}" > "${stdin_file}"
-    else
-      : > "${stdin_file}"
-    fi
-    "${json_cmd[@]}" < "${stdin_file}" > "${fifo_path}" 2> >(
-      while IFS= read -r line; do
-        if [ "${line}" != "Reading additional input from stdin..." ]; then
-          printf '%s\n' "${line}" >&2
-        fi
-      done
-    ) &
-  fi
-  child_pid=$!
-  trap 'interrupted_exit=130; kill -INT "${child_pid}" 2>/dev/null || true' INT
-  trap 'interrupted_exit=143; kill -TERM "${child_pid}" 2>/dev/null || true' TERM
+  retry_sleep_seconds="$(positive_integer_or_default "${CODEXEA_OPERATOR_GUARD_TRANSPORT_RETRY_SLEEP_SECONDS:-10}" "10")"
+  retry_window_seconds="$(positive_integer_or_default "${CODEXEA_OPERATOR_GUARD_TRANSPORT_RETRY_WINDOW_SECONDS:-86400}" "86400")"
+  retry_deadline="$(( $(date +%s) + retry_window_seconds ))"
 
-  while kill -0 "${child_pid}" 2>/dev/null; do
-    sleep 0.1 || break
-    kill -0 "${child_pid}" 2>/dev/null || break
-    tick_count=$((tick_count + 1))
-    if [ "${tick_count}" -ge 100 ]; then
-      elapsed_seconds="$(( $(date +%s) - heartbeat_started_at ))"
-      emit_waiting_trace "${elapsed_seconds}"
-      tick_count=0
+  while true; do
+    retry_attempt=$((retry_attempt + 1))
+    fifo_path="$(mktemp -u)"
+    mkfifo "${fifo_path}"
+    monitor_reason_file="$(mktemp)"
+    attempt_log="$(mktemp)"
+    stdin_file=""
+    child_pid=0
+    renderer_pid=0
+    child_exit=0
+    tick_count=0
+    heartbeat_started_at="$(date +%s)"
+
+    CODEXEA_EXEC_JSON_MONITOR_REASON_FILE="${monitor_reason_file}" python3 "${CODEXEA_EXEC_JSON_RENDERER}" "$(pwd)" < "${fifo_path}" &
+    renderer_pid=$!
+
+    emit_waiting_trace 0
+    if [ -t 0 ]; then
+      "${json_cmd[@]}" < /dev/null > "${fifo_path}" 2> >(
+        last_status_loop_command=""
+        status_loop_hits=0
+        while IFS= read -r line; do
+          printf '%s\n' "${line}" >> "${attempt_log}"
+          if [ "${line}" != "Reading additional input from stdin..." ]; then
+            printf '%s\n' "${line}" >&2
+          fi
+          normalized_status_loop_command="${line% in /*}"
+          case "${normalized_status_loop_command}" in
+            *"python3 /docker/fleet/scripts/chummer_design_supervisor.py status"*|*"python3 /docker/fleet/scripts/chummer_design_supervisor.py eta"*)
+              case "${normalized_status_loop_command}" in
+                *"remaining_open_milestones"* )
+                  case "${normalized_status_loop_command}" in
+                    *"eta_human"* )
+                      if [ "${normalized_status_loop_command}" = "${last_status_loop_command}" ]; then
+                        status_loop_hits=$((status_loop_hits + 1))
+                      else
+                        last_status_loop_command="${normalized_status_loop_command}"
+                        status_loop_hits=1
+                      fi
+                      if [ "${status_loop_hits}" -ge 2 ] && [ ! -s "${monitor_reason_file}" ]; then
+                        printf '%s\n' "supervisor_status_loop_stderr" > "${monitor_reason_file}"
+                      fi
+                      ;;
+                  esac
+                  ;;
+              esac
+              ;;
+          esac
+        done
+      ) &
+    else
+      stdin_file="$(mktemp)"
+      if [ -n "${CODEXEA_STDIN_PROMPT-}" ]; then
+        printf '%s' "${CODEXEA_STDIN_PROMPT}" > "${stdin_file}"
+      else
+        : > "${stdin_file}"
+      fi
+      "${json_cmd[@]}" < "${stdin_file}" > "${fifo_path}" 2> >(
+        last_status_loop_command=""
+        status_loop_hits=0
+        while IFS= read -r line; do
+          printf '%s\n' "${line}" >> "${attempt_log}"
+          if [ "${line}" != "Reading additional input from stdin..." ]; then
+            printf '%s\n' "${line}" >&2
+          fi
+          normalized_status_loop_command="${line% in /*}"
+          case "${normalized_status_loop_command}" in
+            *"python3 /docker/fleet/scripts/chummer_design_supervisor.py status"*|*"python3 /docker/fleet/scripts/chummer_design_supervisor.py eta"*)
+              case "${normalized_status_loop_command}" in
+                *"remaining_open_milestones"* )
+                  case "${normalized_status_loop_command}" in
+                    *"eta_human"* )
+                      if [ "${normalized_status_loop_command}" = "${last_status_loop_command}" ]; then
+                        status_loop_hits=$((status_loop_hits + 1))
+                      else
+                        last_status_loop_command="${normalized_status_loop_command}"
+                        status_loop_hits=1
+                      fi
+                      if [ "${status_loop_hits}" -ge 2 ] && [ ! -s "${monitor_reason_file}" ]; then
+                        printf '%s\n' "supervisor_status_loop_stderr" > "${monitor_reason_file}"
+                      fi
+                      ;;
+                  esac
+                  ;;
+              esac
+              ;;
+          esac
+        done
+      ) &
     fi
-    elapsed_seconds="$(( $(date +%s) - heartbeat_started_at ))"
-    if [ "${hard_timeout_seconds}" -gt 0 ] && [ "${elapsed_seconds}" -ge "${hard_timeout_seconds}" ]; then
-      printf 'Trace: lane=%s terminating stalled exec after %ss\n' "${EFFECTIVE_LANE}" "${elapsed_seconds}" >&2
-      kill -TERM "${child_pid}" 2>/dev/null || true
-      sleep 1
-      kill -KILL "${child_pid}" 2>/dev/null || true
-      child_exit=124
+    child_pid=$!
+    trap 'interrupted_exit=130; kill -INT "${child_pid}" 2>/dev/null || true' INT
+    trap 'interrupted_exit=143; kill -TERM "${child_pid}" 2>/dev/null || true' TERM
+
+    while kill -0 "${child_pid}" 2>/dev/null; do
+      sleep 0.1 || break
+      kill -0 "${child_pid}" 2>/dev/null || break
+      tick_count=$((tick_count + 1))
+      if [ "${tick_count}" -ge 100 ]; then
+        elapsed_seconds="$(( $(date +%s) - heartbeat_started_at ))"
+        emit_waiting_trace "${elapsed_seconds}"
+        tick_count=0
+      fi
+      elapsed_seconds="$(( $(date +%s) - heartbeat_started_at ))"
+      if [ -s "${monitor_reason_file}" ]; then
+        monitor_reason="$(head -n 1 "${monitor_reason_file}" | tr -d '\r\n')"
+        if [ -n "${monitor_reason}" ]; then
+          printf 'Trace: lane=%s terminating exec after monitor reason=%s\n' "${EFFECTIVE_LANE}" "${monitor_reason}" >&2
+          kill -TERM "${child_pid}" 2>/dev/null || true
+          sleep 1
+          kill -KILL "${child_pid}" 2>/dev/null || true
+          child_exit=125
+          break
+        fi
+      fi
+      if [ "${hard_timeout_seconds}" -gt 0 ] && [ "${elapsed_seconds}" -ge "${hard_timeout_seconds}" ]; then
+        printf 'Trace: lane=%s terminating stalled exec after %ss\n' "${EFFECTIVE_LANE}" "${elapsed_seconds}" >&2
+        kill -TERM "${child_pid}" 2>/dev/null || true
+        sleep 1
+        kill -KILL "${child_pid}" 2>/dev/null || true
+        child_exit=124
+        break
+      fi
+    done
+
+    set +e
+    wait "${child_pid}"
+    if [ "${child_exit}" -eq 0 ]; then
+      child_exit=$?
+    else
+      wait "${child_pid}" 2>/dev/null || true
+    fi
+    wait "${renderer_pid}" 2>/dev/null
+    set -e
+    if [ -n "${stdin_file}" ]; then
+      rm -f "${stdin_file}"
+    fi
+    rm -f "${fifo_path}"
+    rm -f "${monitor_reason_file}"
+
+    if ! retryable_transport_failure_log "${attempt_log}" "${child_exit}" "${output_last_message_path}"; then
+      rm -f "${attempt_log}"
       break
     fi
+    if [ "$(date +%s)" -ge "${retry_deadline}" ]; then
+      printf 'Trace: lane=%s clean-exec retry window exhausted after attempt=%s exit=%s\n' "${EFFECTIVE_LANE}" "${retry_attempt}" "${child_exit}" >&2
+      rm -f "${attempt_log}"
+      break
+    fi
+    printf 'Trace: lane=%s retrying clean-exec transport failure in %ss (attempt=%s exit=%s)\n' "${EFFECTIVE_LANE}" "${retry_sleep_seconds}" "${retry_attempt}" "${child_exit}" >&2
+    rm -f "${attempt_log}"
+    sleep "${retry_sleep_seconds}"
   done
 
-  set +e
-  wait "${child_pid}"
-  if [ "${child_exit}" -eq 0 ]; then
-    child_exit=$?
-  else
-    wait "${child_pid}" 2>/dev/null || true
-  fi
-  wait "${renderer_pid}" 2>/dev/null
-  set -e
-  if [ -n "${stdin_file}" ]; then
-    rm -f "${stdin_file}"
-  fi
   trap - INT TERM
-  rm -f "${fifo_path}"
 
   if [ "${interrupted_exit}" -ne 0 ]; then
     return "${interrupted_exit}"
@@ -1060,6 +2246,54 @@ emit_waiting_trace() {
   printf 'Trace: lane=%s waiting for upstream response (total_duration=%ss)\n' "${EFFECTIVE_LANE}" "${elapsed_seconds}" >&2
 }
 
+operator_guard_transport_retry_enabled() {
+  env_truthy "${CODEXEA_OPERATOR_GUARD_ACTIVE:-0}" || return 1
+  env_truthy "${CODEXEA_OPERATOR_GUARD_TRANSPORT_RETRY:-1}"
+}
+
+retryable_transport_failure_log() {
+  local log_path="${1:-}"
+  local exit_code="${2:-0}"
+  local output_last_message_path="${3:-}"
+  [ -n "${log_path}" ] || return 1
+  [ -f "${log_path}" ] || return 1
+  grep -Eiq \
+    'stream disconnected before completion|transport=reconnecting|transport=recovered|error sending request for url \((http://127\.0\.0\.1:8090|http://host\.docker\.internal:8090)/v1/responses\)|unexpected status 502 bad gateway|proxy_upstream_failure|the read operation timed out' \
+    "${log_path}" || return 1
+  case "${exit_code}" in
+    130|143)
+      return 1
+      ;;
+  esac
+  if [ "${exit_code}" -ne 0 ]; then
+    return 0
+  fi
+  [ -n "${output_last_message_path}" ] || return 1
+  [ -f "${output_last_message_path}" ] || return 0
+  [ -s "${output_last_message_path}" ] || return 0
+  return 1
+}
+
+extract_output_last_message_path() {
+  local -a args=("$@")
+  local i=0
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      -o|--output-last-message)
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          printf '%s' "${args[$i]}"
+          return 0
+        fi
+        break
+        ;;
+    esac
+    i=$((i + 1))
+  done
+  return 1
+}
+
 run_with_trace_heartbeat() {
   local interval="${CODEXEA_TRACE_HEARTBEAT_SECONDS:-2}"
   local -a cmd=("$@")
@@ -1076,6 +2310,12 @@ run_with_trace_heartbeat() {
   local script_trace_log=""
   local child_exit=0
   local hard_timeout_seconds=0
+  local retry_sleep_seconds=0
+  local retry_window_seconds=0
+  local retry_deadline=0
+  local retry_attempt=0
+  local attempt_log=""
+  local -a run_cmd=()
 
   [ "${#cmd[@]}" -gt 0 ] || return 0
   env_truthy "${CODEXEA_TRACE_STARTUP}" || {
@@ -1181,10 +2421,36 @@ PY
   ) &
   tracer_pid=$!
 
-  set +e
-  "${effective_cmd[@]}"
-  child_exit=$?
-  set -e
+  retry_sleep_seconds="$(positive_integer_or_default "${CODEXEA_OPERATOR_GUARD_TRANSPORT_RETRY_SLEEP_SECONDS:-10}" "10")"
+  retry_window_seconds="$(positive_integer_or_default "${CODEXEA_OPERATOR_GUARD_TRANSPORT_RETRY_WINDOW_SECONDS:-86400}" "86400")"
+  retry_deadline="$(( $(date +%s) + retry_window_seconds ))"
+
+  while true; do
+    retry_attempt=$((retry_attempt + 1))
+    attempt_log=""
+    run_cmd=("${effective_cmd[@]}")
+    if operator_guard_transport_retry_enabled && script_supports_tty_wrapper && [ "${SCRIPT_TTY_WRAPPER_STYLE:-}" = "long" ]; then
+      attempt_log="${CODEXEA_STATE_DIR}/transport-retry-attempt-${retry_attempt}.log"
+      printf -v script_cmd_line '%q ' "${effective_cmd[@]}"
+      script_cmd_line="${script_cmd_line% }"
+      run_cmd=(env CODEXEA_SCRIPT_WRAPPED=1 script --quiet --return --command "${script_cmd_line}" "${attempt_log}")
+    fi
+
+    set +e
+    "${run_cmd[@]}"
+    child_exit=$?
+    set -e
+
+    if ! retryable_transport_failure_log "${attempt_log}" "${child_exit}"; then
+      break
+    fi
+    if [ "$(date +%s)" -ge "${retry_deadline}" ]; then
+      printf 'Trace: lane=%s transport retry window exhausted after attempt=%s exit=%s\n' "${EFFECTIVE_LANE}" "${retry_attempt}" "${child_exit}" >&2
+      break
+    fi
+    printf 'Trace: lane=%s retrying transient transport failure in %ss (attempt=%s exit=%s)\n' "${EFFECTIVE_LANE}" "${retry_sleep_seconds}" "${retry_attempt}" "${child_exit}" >&2
+    sleep "${retry_sleep_seconds}"
+  done
 
   if [ "${tracer_pid}" -ne 0 ]; then
     kill "${tracer_pid}" 2>/dev/null || true
@@ -1688,7 +2954,7 @@ if billing:
 PY
 }
 
-CODEXEA_STDIN_PROMPT=""
+CODEXEA_STDIN_PROMPT="${CODEXEA_STDIN_PROMPT-}"
 if [ "$#" -eq 0 ] && [ ! -t 0 ]; then
   CODEXEA_STDIN_PROMPT="$(head -c 1048576 || true)"
   if [ -n "${CODEXEA_STDIN_PROMPT}" ]; then
@@ -1805,6 +3071,13 @@ if [ -z "${CODEXEA_STDIN_PROMPT}" ] && [ ! -t 0 ] && [ "$#" -gt 0 ] && [ "${1}" 
   prepend_exec_trace_stdin_prompt
 fi
 
+if [ "$#" -gt 0 ] && ! args_request_interactive_session "$@"; then
+  OPERATOR_GUARD_PROMPT_TEXT="$(operator_guard_candidate_text "$@" || true)"
+  if [ -n "${OPERATOR_GUARD_PROMPT_TEXT}" ]; then
+    activate_fleet_operator_guard_from_prompt "${OPERATOR_GUARD_PROMPT_TEXT}" || true
+  fi
+fi
+
 RAW_INTERACTIVE_SESSION_REQUEST=0
 NON_TTY_NOARG_INTERACTIVE_FALLBACK=0
 INTERACTIVE_REQUEST_ARGS=()
@@ -1836,6 +3109,36 @@ if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && ! env_truthy "${CODEXEA_INTERACTIVE_ALWAY
   if [ -n "${INTERACTIVE_ROUTE_LANE}" ]; then
     REQUESTED_LANE="${INTERACTIVE_ROUTE_LANE}"
   fi
+fi
+
+if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "backlog_audit" ]; then
+  backlog_audit_auto_lane="${CODEXEA_BACKLOG_AUDIT_AUTO_LANE:-core}"
+  case "${backlog_audit_auto_lane}" in
+    easy|auto|"")
+      REQUESTED_LANE="core"
+      ;;
+    repair|groundwork|core|core_rescue|jury|review_light|survival)
+      REQUESTED_LANE="${backlog_audit_auto_lane}"
+      ;;
+    *)
+      REQUESTED_LANE="core"
+      ;;
+  esac
+fi
+
+if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "unblock" ]; then
+  unblock_auto_lane="${CODEXEA_UNBLOCK_AUTO_LANE:-core}"
+  case "${unblock_auto_lane}" in
+    easy|auto|"")
+      REQUESTED_LANE="core"
+      ;;
+    repair|groundwork|core|core_rescue|jury|review_light|survival)
+      REQUESTED_LANE="${unblock_auto_lane}"
+      ;;
+    *)
+      REQUESTED_LANE="core"
+      ;;
+  esac
 fi
 
 EFFECTIVE_LANE="${REQUESTED_LANE}"
@@ -2087,6 +3390,10 @@ fi
 
 export CODEXEA_LANE="${EFFECTIVE_LANE}"
 export CODEXEA_SUBMODE="${EFFECTIVE_SUBMODE}"
+if env_truthy "${CODEXEA_OPERATOR_GUARD_ACTIVE:-0}" && [ -n "${CODEXEA_OPERATOR_GUARD_DIRECT_PRINCIPAL_ID:-}" ]; then
+  export EA_PRINCIPAL_ID="${CODEXEA_OPERATOR_GUARD_DIRECT_PRINCIPAL_ID}"
+  export EA_MCP_PRINCIPAL_ID="${CODEXEA_OPERATOR_GUARD_DIRECT_PRINCIPAL_ID}"
+fi
 EA_DEFAULT_ARGS=()
 BASE_PROFILE_ARGS=()
 INTERACTIVE_ARGS=()
@@ -2166,6 +3473,13 @@ fi
 
 mapfile -d '' BASE_PROFILE_ARGS < <(build_base_profile_args "$@")
 mapfile -d '' ADJUSTED_ARGS < <(inject_bootstrap_prompt "$@")
+if [ "${#ADJUSTED_ARGS[@]}" -gt 0 ] && [ "${ADJUSTED_ARGS[0]}" = "exec" ]; then
+  mapfile -d '' ADJUSTED_ARGS < <(prepend_exec_trace_prompt_to_exec_args "${ADJUSTED_ARGS[@]}")
+elif [ "${#ADJUSTED_ARGS[@]}" -gt 1 ] && is_codexea_lane "${ADJUSTED_ARGS[0]}" && [ "${ADJUSTED_ARGS[1]}" = "exec" ]; then
+  lane_wrapper_arg="${ADJUSTED_ARGS[0]}"
+  mapfile -d '' ADJUSTED_EXEC_ARGS < <(prepend_exec_trace_prompt_to_exec_args "${ADJUSTED_ARGS[@]:1}")
+  ADJUSTED_ARGS=("${lane_wrapper_arg}" "${ADJUSTED_EXEC_ARGS[@]}")
+fi
 if [ "${NON_TTY_NOARG_INTERACTIVE_FALLBACK}" -eq 1 ]; then
   ADJUSTED_ARGS=(exec -)
 fi
@@ -2187,6 +3501,7 @@ EXEC_SESSION_REQUEST=0
 if args_request_exec_session "${ADJUSTED_ARGS[@]}"; then
   EXEC_SESSION_REQUEST=1
   mapfile -d '' EXEC_SESSION_ARGS < <(wrap_prompt_invocation_with_exec "${ADJUSTED_ARGS[@]}")
+  mapfile -d '' EXEC_SESSION_ARGS < <(prepend_exec_trace_prompt_to_exec_args "${EXEC_SESSION_ARGS[@]}")
 else
   EXEC_SESSION_ARGS=()
 fi
@@ -2194,11 +3509,29 @@ if [ "${NON_TTY_NOARG_INTERACTIVE_FALLBACK}" -eq 1 ]; then
   EXEC_SESSION_REQUEST=1
   if [ "${#EXEC_SESSION_ARGS[@]}" -eq 0 ]; then
     mapfile -d '' EXEC_SESSION_ARGS < <(wrap_prompt_invocation_with_exec "${ADJUSTED_ARGS[@]}")
+    mapfile -d '' EXEC_SESSION_ARGS < <(prepend_exec_trace_prompt_to_exec_args "${EXEC_SESSION_ARGS[@]}")
   fi
 fi
 EXPLICIT_EXEC_SUBCOMMAND_REQUEST=0
 if [ "${PRIMARY_COMMAND}" = "exec" ]; then
   EXPLICIT_EXEC_SUBCOMMAND_REQUEST=1
+fi
+if [ "${#ADJUSTED_ARGS[@]}" -gt 1 ] && is_codexea_lane "${ADJUSTED_ARGS[0]}" && [ "${ADJUSTED_ARGS[1]}" = "exec" ]; then
+  EXPLICIT_EXEC_SUBCOMMAND_REQUEST=1
+fi
+if env_truthy "${CODEXEA_OPERATOR_GUARD_ACTIVE:-0}" && [ "${EXPLICIT_EXEC_SUBCOMMAND_REQUEST}" -eq 1 ]; then
+  if [ "${#EXEC_SESSION_ARGS[@]}" -gt 0 ] && [ "${EXEC_SESSION_ARGS[${#EXEC_SESSION_ARGS[@]}-1]}" != "-" ]; then
+    mapfile -d '' EXEC_SESSION_ARGS < <(strip_exec_prompt_from_exec_args "${EXEC_SESSION_ARGS[@]}")
+  fi
+  if [ "${#ADJUSTED_ARGS[@]}" -gt 0 ]; then
+    if [ "${ADJUSTED_ARGS[0]}" = "exec" ] && [ "${ADJUSTED_ARGS[${#ADJUSTED_ARGS[@]}-1]}" != "-" ]; then
+      mapfile -d '' ADJUSTED_ARGS < <(strip_exec_prompt_from_exec_args "${ADJUSTED_ARGS[@]}")
+    elif [ "${#ADJUSTED_ARGS[@]}" -gt 1 ] && is_codexea_lane "${ADJUSTED_ARGS[0]}" && [ "${ADJUSTED_ARGS[1]}" = "exec" ] && [ "${ADJUSTED_ARGS[${#ADJUSTED_ARGS[@]}-1]}" != "-" ]; then
+      lane_wrapper_arg="${ADJUSTED_ARGS[0]}"
+      mapfile -d '' ADJUSTED_EXEC_ARGS < <(strip_exec_prompt_from_exec_args "${ADJUSTED_ARGS[@]:1}")
+      ADJUSTED_ARGS=("${lane_wrapper_arg}" "${ADJUSTED_EXEC_ARGS[@]}")
+    fi
+  fi
 fi
 INTERACTIVE_SESSION_WITH_FLAGS=0
 if [ "${#ADJUSTED_ARGS[@]}" -gt 0 ] && args_request_interactive_session "${ADJUSTED_ARGS[@]}"; then
@@ -2278,12 +3611,15 @@ emit_startup_trace "$(
 )"
 
 USE_CLEAN_EXEC_OUTPUT=0
-if [ "${CODEXEA_CLEAN_EXEC_OUTPUT:-1}" = "1" ] && ! args_request_raw_exec_output "${ADJUSTED_ARGS[@]}"; then
+if [ "${CODEXEA_CLEAN_EXEC_OUTPUT:-1}" = "1" ] && args_request_raw_exec_output "${ADJUSTED_ARGS[@]}"; then
   if [ "${EXEC_SESSION_REQUEST}" -eq 1 ] || [ "${EXPLICIT_EXEC_SUBCOMMAND_REQUEST}" -eq 1 ]; then
     if [ "${INTERACTIVE_SESSION_REQUEST}" -eq 0 ]; then
       USE_CLEAN_EXEC_OUTPUT=1
     fi
   fi
+fi
+if [ "${USE_CLEAN_EXEC_OUTPUT}" -eq 1 ] && env_truthy "${CODEXEA_OPERATOR_GUARD_ACTIVE:-0}" && ! args_request_output_last_message "${ADJUSTED_ARGS[@]}"; then
+  USE_CLEAN_EXEC_OUTPUT=0
 fi
 
 emit_debug_trace "route requested=${REQUESTED_LANE} effective=${EFFECTIVE_LANE} mode=${MODE} submode=${EFFECTIVE_SUBMODE:-none} primary=${PRIMARY_COMMAND:-interactive} interactive=${INTERACTIVE_SESSION_REQUEST} exec=${EXEC_SESSION_REQUEST} explicit_exec=${EXPLICIT_EXEC_SUBCOMMAND_REQUEST} resume=${RESUME_SESSION_REQUEST} heartbeat=${PROMPT_TRACE_HEARTBEAT_REQUEST} clean_exec=${USE_CLEAN_EXEC_OUTPUT} log=${CODEXEA_DEBUG_LOG_FILE}"

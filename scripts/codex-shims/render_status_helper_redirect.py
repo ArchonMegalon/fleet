@@ -38,6 +38,11 @@ def _redirect_limit() -> int | None:
     return limit
 
 
+def _fatal_repeat_block_enabled() -> bool:
+    raw = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_STATUS_HELPER_FATAL", "") or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def _trim_output_lines(value: str, *, max_lines: int = 12, max_chars: int = 4096) -> list[str]:
     text = str(value or "").splitlines()
     if max_lines <= 0 or max_chars <= 0:
@@ -204,6 +209,8 @@ def _render_repeat_block(
         print(json.dumps(_summary_json_payload(payload, telemetry_path, hit_count), separators=(",", ":")))
     print("status_blocked_inside_worker_run", file=sys.stderr)
     print("worker_status_budget_exhausted: task_local_telemetry_file", file=sys.stderr)
+    if _fatal_repeat_block_enabled():
+        print("Error: worker_status_helper_loop:repeated_blocked_status_polling", file=sys.stderr)
     if telemetry_path is not None and hit_counter_path is not None:
         _emit_context_progress_once(payload, telemetry_path, hit_counter_path, hit_count, lookahead=0)
     parts = [
@@ -218,7 +225,7 @@ def _render_repeat_block(
         if len(commands) > 1:
             parts.append(f"Then: {commands[1]}")
     print(" ".join(parts), file=sys.stderr)
-    return 0
+    return 97 if _fatal_repeat_block_enabled() else 0
 
 
 def _summary_json_payload(payload: dict[str, object], telemetry_path: Path, hit_count: int) -> dict[str, object]:

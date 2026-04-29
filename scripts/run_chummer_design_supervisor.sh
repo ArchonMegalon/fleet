@@ -386,6 +386,10 @@ configured_shard_slots() {
 }
 
 primary_probe_shard_index() {
+  if [[ "${CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD:-}" =~ ^shard-([0-9]+)$ ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
   if [[ "$project_contract_primary_probe_shard" =~ ^shard-([0-9]+)$ ]]; then
     printf '%s\n' "${BASH_REMATCH[1]}"
     return 0

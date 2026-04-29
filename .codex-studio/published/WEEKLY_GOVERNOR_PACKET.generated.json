@@ -190,7 +190,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-28T02:31:41Z",
+  "generated_at": "2026-04-29T19:49:06Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -226,9 +226,9 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-04-28T02:31:41Z",
+    "generated_at": "2026-04-29T19:49:06Z",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-05-05T02:31:41Z",
+    "next_packet_due_at": "2026-05-06T19:49:06Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -919,7 +919,7 @@
         "journey_gates"
       ],
       "missing_actions": [],
-      "next_review_due_at": "2026-05-05T02:31:41Z",
+      "next_review_due_at": "2026-05-06T19:49:06Z",
       "required_actions": [
         "launch_expand",
         "freeze_launch",
@@ -967,7 +967,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
-          "next_review_due_at": "2026-05-05T02:31:41Z",
+          "next_review_due_at": "2026-05-06T19:49:06Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "do_not_expand_launch",
           "receipt_id": "m106-launch_expand-519f08c3416e18b1",
@@ -986,7 +986,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Launch expansion is approved for the next bounded window while canaries and support closure remain clear.",
-          "next_review_due_at": "2026-05-05T02:31:41Z",
+          "next_review_due_at": "2026-05-06T19:49:06Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_launch_frozen",
           "receipt_id": "m106-freeze_launch-d065d646f3b801a1",
@@ -1003,7 +1003,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Canary green on all active lanes",
-          "next_review_due_at": "2026-05-05T02:31:41Z",
+          "next_review_due_at": "2026-05-06T19:49:06Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_canary_ready",
           "receipt_id": "m106-canary-afc3d2be95960739",
@@ -1023,7 +1023,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "next_review_due_at": "2026-05-05T02:31:41Z",
+          "next_review_due_at": "2026-05-06T19:49:06Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_rollback_armed",
           "receipt_id": "m106-rollback-fcedde06369bab3d",
@@ -1040,7 +1040,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
-          "next_review_due_at": "2026-05-05T02:31:41Z",
+          "next_review_due_at": "2026-05-06T19:49:06Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "route_remaining_work_to_dependency_or_sibling_packages",
           "receipt_id": "m106-focus_shift-9e0a36a10f3ebf57",
@@ -2010,7 +2010,7 @@
     "freshness_policy": "refresh_before_public_status_or_operator_action_if_packet_is_overdue",
     "headline": "Launch expansion remains frozen.",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-05-05T02:31:41Z",
+    "next_packet_due_at": "2026-05-06T19:49:06Z",
     "schedule_ref": "governor_packet_schedule.next_packet_due_at",
     "state": "freeze_launch"
   },
@@ -2672,7 +2672,7 @@
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "99fe3d60b6d272d4a83188ea2ce027771fa7f696c7f7e9edd2f5ef4e2ec79fcc",
+    "combined_source_sha256": "7bb3a36a33921f3c0f96aea8b8ded7b3600fdb04bc102b3f07ba7c6c2f82e3ec",
     "missing_inputs": [],
     "rows": [
       {
@@ -2703,17 +2703,17 @@
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "bfefa378f2a634c04df4cd7615ba1bdd44a161900832d707755bd8cd20f6cab0"
+        "source_sha256": "dcdc939134444b6b8cec87eb241763b91ebca3ee89c5a0df18dcd6b996f5c27e"
       },
       {
         "name": "journey_gates",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "d0df4df65350b033e1c0db5030f2e601ce7d623b6cc137432258be5b6924d05c"
+        "source_sha256": "d6ab3c44acee46b5467de25b9d082466e537695c2c4bde10056217687695d26c"
       },
       {
         "name": "support_packets",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "6cc882a306fd0d855a013606b8d6977bdfde72be1338a0dacfddff9723bcd62a"
+        "source_sha256": "c77349487d5d408ff86504a1d5f421d439af2de0acac52436a72815a8965c05d"
       },
       {
         "name": "status_plane",
@@ -2748,19 +2748,19 @@
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-04-28T02:31:40Z",
+        "generated_at": "2026-04-29T19:49:06Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "bfefa378f2a634c04df4cd7615ba1bdd44a161900832d707755bd8cd20f6cab0",
+        "source_sha256": "dcdc939134444b6b8cec87eb241763b91ebca3ee89c5a0df18dcd6b996f5c27e",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-04-28T02:31:39Z",
+        "generated_at": "2026-04-29T19:49:04Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "d0df4df65350b033e1c0db5030f2e601ce7d623b6cc137432258be5b6924d05c",
+        "source_sha256": "d6ab3c44acee46b5467de25b9d082466e537695c2c4bde10056217687695d26c",
         "state": "present"
       },
       "launch_signal_truth_alignment": {
@@ -2965,11 +2965,11 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-28T02:31:37Z",
+        "generated_at": "2026-04-29T19:49:03Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "6cc882a306fd0d855a013606b8d6977bdfde72be1338a0dacfddff9723bcd62a",
+        "source_sha256": "c77349487d5d408ff86504a1d5f421d439af2de0acac52436a72815a8965c05d",
         "state": "present",
         "successor_package_verification_status": "pass"
       },

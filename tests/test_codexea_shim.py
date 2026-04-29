@@ -5,6 +5,7 @@ import importlib.util
 import os
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import textwrap
@@ -58,6 +59,9 @@ class CodexEaShimTests(unittest.TestCase):
                     "        'CODEXEA_LANE': os.environ.get('CODEXEA_LANE'),",
                     "        'CODEXEA_SUBMODE': os.environ.get('CODEXEA_SUBMODE'),",
                     "        'CODEXEA_RESPONSES_AUTH_TOKEN': os.environ.get('CODEXEA_RESPONSES_AUTH_TOKEN'),",
+                    "        'CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR': os.environ.get('CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR'),",
+                    "        'CHUMMER_DESIGN_SUPERVISOR_STATUS_HELPER_FATAL': os.environ.get('CHUMMER_DESIGN_SUPERVISOR_STATUS_HELPER_FATAL'),",
+                    "        'BASH_ENV': os.environ.get('BASH_ENV'),",
                     "        'EA_MCP_MODEL': os.environ.get('EA_MCP_MODEL'),",
                     "        'HOME': os.environ.get('HOME'),",
                     "        'XDG_CACHE_HOME': os.environ.get('XDG_CACHE_HOME'),",
@@ -240,6 +244,437 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIn("SENTINEL_EXEC_TRACE_PROMPT", payload["argv"][-1])
         self.assertIn("eta of the fleet? is it running? the shards?", payload["argv"][-1])
 
+    def test_fleet_unblock_prompt_activates_operator_guard_and_injects_operator_trace_prompt(self) -> None:
+        result = self.run_shim(
+            "core",
+            "exec",
+            "-C",
+            "/docker/fleet",
+            "--add-dir",
+            "/docker/EA",
+            "Unblock the fleet infrastructure. OODA it. Work only on CodexEA shim, EA endpoints, and the 1min manager.",
+            extra_env={"CODEXEA_BOOTSTRAP": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        active_run_dir = str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] or "").strip()
+        self.assertTrue(active_run_dir)
+        self.assertEqual(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_STATUS_HELPER_FATAL"], "1")
+        telemetry_path = Path(active_run_dir) / "TASK_LOCAL_TELEMETRY.generated.json"
+        self.assertTrue(telemetry_path.exists())
+        bash_env_path = Path(str(payload["env"]["BASH_ENV"] or ""))
+        self.assertTrue(bash_env_path.exists())
+        telemetry_payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        self.assertIn("Direct unblock scope only", telemetry_payload["summary"])
+        self.assertTrue(telemetry_payload["first_commands"])
+        self.assertIn("current_blocker", telemetry_payload)
+        self.assertIn("live_shard_execution", telemetry_payload)
+        self.assertIn("telemetry_path", telemetry_payload["live_shard_execution"])
+        prompt = payload["argv"][-1]
+        self.assertIn(str(telemetry_path), prompt)
+        self.assertIn("Prepared repo context:", prompt)
+        self.assertIn("Live shard execution context:", prompt)
+        self.assertIn("Latest shard stderr excerpt:", prompt)
+        self.assertIn("Latest shard prompt excerpt:", prompt)
+        self.assertIn("latest_worker_telemetry:", prompt)
+        self.assertIn("Bootstrap command set that was already captured:", prompt)
+        self.assertIn("$ sed -n '2410,2505p' /docker/fleet/scripts/codex-shims/codexea", prompt)
+        self.assertIn("git -C /docker/fleet status --short -- scripts/codex-shims/codexea scripts/codex-shims/python3", prompt)
+        self.assertIn("repeated probes will hard-fail this operator run", prompt)
+        self.assertNotIn("Run these exact commands first:", prompt)
+        self.assertIn('mcp_servers={}', payload["argv"])
+        self.assertNotIn("--json", payload["argv"])
+
+    def test_fleet_unblock_stdin_exec_activates_operator_guard(self) -> None:
+        result = self.run_shim(
+            "core",
+            "exec",
+            "-C",
+            "/docker/fleet",
+            "--add-dir",
+            "/docker/EA",
+            "-",
+            extra_env={"CODEXEA_BOOTSTRAP": "1"},
+            input_text=(
+                "Unblock the fleet infrastructure. OODA it. "
+                "Work only on CodexEA shim, EA endpoints, and the 1min manager."
+            ),
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        active_run_dir = str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] or "").strip()
+        self.assertTrue(active_run_dir)
+        self.assertEqual(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_STATUS_HELPER_FATAL"], "1")
+        telemetry_path = Path(active_run_dir) / "TASK_LOCAL_TELEMETRY.generated.json"
+        self.assertTrue(telemetry_path.exists())
+        self.assertIn("Unblock the fleet infrastructure. OODA it.", payload["stdin"])
+        self.assertIn("Work only on CodexEA shim, EA endpoints, and the 1min manager.", payload["stdin"])
+        self.assertIn("Operator-prepared fleet unblock context:", payload["stdin"])
+        self.assertIn("Original operator ask:", payload["stdin"])
+        self.assertIn(str(telemetry_path), payload["stdin"])
+        self.assertIn("Bootstrap command set that was already captured:", payload["stdin"])
+        self.assertNotIn("Run these exact commands first:", payload["stdin"])
+
+    def test_readiness_remedy_prompt_does_not_misclassify_as_fleet_unblock_operator_guard(self) -> None:
+        prompt_text = (
+            "Remedy the remaining flagship readiness blockers until they are closed or you hit one exact blocker. "
+            "Current remaining readiness blockers: desktop_client, mobile_play_shell, "
+            "ui_kit_and_flagship_polish, media_artifacts. "
+            "If the blocker is in CodexEA/EA/shim infrastructure, patch that path. "
+            "If the blocker is in product proof or release artifacts, do that work instead. "
+            "Do not wander into unrelated backlog."
+        )
+
+        result = self.run_shim(
+            "core",
+            "exec",
+            "-C",
+            "/docker/fleet",
+            "--add-dir",
+            "/docker/EA",
+            prompt_text,
+            extra_env={"CODEXEA_BOOTSTRAP": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertFalse(str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] or "").strip())
+        self.assertNotIn("Operator-prepared fleet unblock context:", payload["argv"][-1])
+        self.assertIn("desktop_client", payload["argv"][-1])
+        self.assertIn("media_artifacts", payload["argv"][-1])
+
+    def test_clean_exec_retries_transport_failure_when_last_message_is_missing(self) -> None:
+        output_path = self.root / "last_message.txt"
+        attempt_path = self.root / "attempt.txt"
+        renderer = self.write_executable(
+            self.root / "renderer.py",
+            """
+            #!/usr/bin/env python3
+            import sys
+            sys.stdin.read()
+            """,
+        )
+        fake_codex = self.write_executable(
+            self.root / "codex-transport.py",
+            f"""
+            #!/usr/bin/env python3
+            import pathlib
+            import sys
+
+            output_path = ""
+            argv = sys.argv[1:]
+            if "exec" not in argv:
+                raise SystemExit(0)
+            attempt_path = pathlib.Path({str(attempt_path)!r})
+            attempt = 0
+            if attempt_path.exists():
+                attempt = int((attempt_path.read_text(encoding="utf-8") or "0").strip() or "0")
+            attempt += 1
+            attempt_path.write_text(str(attempt), encoding="utf-8")
+            for index, arg in enumerate(argv):
+                if arg in ("-o", "--output-last-message") and index + 1 < len(argv):
+                    output_path = argv[index + 1]
+                    break
+
+            if attempt == 1:
+                print("ERROR: Reconnecting... 1/2", file=sys.stderr)
+                print("Trace: provider=liz transport=reconnecting attempt=1/2 elapsed=0s", file=sys.stderr)
+                print(
+                    "ERROR: stream disconnected before completion: error sending request for url "
+                    "(http://host.docker.internal:8090/v1/responses)",
+                    file=sys.stderr,
+                )
+                raise SystemExit(0)
+
+            if output_path:
+                pathlib.Path(output_path).write_text(
+                    "What shipped: ok\\nWhat remains: none\\nExact blocker: none\\n",
+                    encoding="utf-8",
+                )
+            print('{{"type":"message","message":{{"role":"assistant","content":[{{"type":"output_text","text":"ok"}}]}}}}')
+            """,
+        )
+
+        result = self.run_shim(
+            "core",
+            "exec",
+            "-o",
+            str(output_path),
+            "Reply with exactly ok.",
+            extra_env={
+                "CODEXEA_REAL_CODEX": str(fake_codex),
+                "CODEXEA_EXEC_JSON_RENDERER": str(renderer),
+                "CODEXEA_OPERATOR_GUARD_ACTIVE": "1",
+                "CODEXEA_OPERATOR_GUARD_TRANSPORT_RETRY": "1",
+                "CODEXEA_OPERATOR_GUARD_TRANSPORT_RETRY_SLEEP_SECONDS": "0",
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIn("retrying clean-exec transport failure", completed.stderr)
+        self.assertEqual(attempt_path.read_text(encoding="utf-8").strip(), "2")
+        self.assertIn("What shipped: ok", output_path.read_text(encoding="utf-8"))
+
+    def test_fleet_unblock_prompt_filters_trace_only_blocker_lines_from_live_shard_snapshot(self) -> None:
+        fleet_root = self.root / "fleet"
+        state_root = fleet_root / "state" / "chummer_design_supervisor"
+        run_dir = state_root / "shard-7" / "runs" / "20260429T111700Z-shard-7"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "worker.stderr.log").write_text(
+            "\n".join(
+                [
+                    "Trace: lane=review_light waiting for upstream response (total_duration=0s)",
+                    "[fleet-supervisor] provider-health preflight left no routable direct lanes: core:onemin:unavailable",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (run_dir / "WORKER_EXEC_TRACE_PROMPT.md").write_text("worker prompt", encoding="utf-8")
+        (run_dir / "TASK_LOCAL_TELEMETRY.generated.json").write_text(
+            json.dumps({"summary": "demo", "first_commands": [], "source_paths": []}),
+            encoding="utf-8",
+        )
+        (state_root / "state.json").write_text(
+            json.dumps(
+                {
+                    "active_runs_count": 1,
+                    "updated_at": "2026-04-29T11:17:00Z",
+                    "eta": {
+                        "remaining_open_milestones": 6,
+                        "remaining_in_progress_milestones": 6,
+                        "eta_human": "1d-2.5d after unblock",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_shim(
+            "core",
+            "exec",
+            "Unblock the fleet. OODA it. Patch only the codexea shim, EA endpoints, and the 1min manager.",
+            extra_env={
+                "CODEXEA_BOOTSTRAP": "1",
+                "CODEXEA_OPERATOR_GUARD_FLEET_ROOT": str(fleet_root),
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        active_run_dir = str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] or "").strip()
+        telemetry_path = Path(active_run_dir) / "TASK_LOCAL_TELEMETRY.generated.json"
+        telemetry_payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            telemetry_payload["current_blocker"],
+            "[fleet-supervisor] provider-health preflight left no routable direct lanes: core:onemin:unavailable",
+        )
+        prompt = payload["argv"][-1]
+        self.assertIn(
+            "- current_blocker: [fleet-supervisor] provider-health preflight left no routable direct lanes: core:onemin:unavailable",
+            prompt,
+        )
+        self.assertNotIn("current_blocker: Trace:", prompt)
+
+    def test_fleet_unblock_prompt_scans_full_worker_stderr_for_real_blocker(self) -> None:
+        fleet_root = self.root / "fleet"
+        state_root = fleet_root / "state" / "chummer_design_supervisor"
+        run_dir = state_root / "shard-8" / "runs" / "20260429T112300Z-shard-8"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        noisy_lines = [f"[fleet-supervisor] attempt {i}/25 account=acct-ea-jury owner= model=ea-coder-hard-batch" for i in range(1, 23)]
+        noisy_lines.append("[fleet-supervisor] provider-health preflight left no routable direct lanes: core:onemin:unavailable")
+        (run_dir / "worker.stderr.log").write_text("\n".join(noisy_lines), encoding="utf-8")
+        (run_dir / "WORKER_EXEC_TRACE_PROMPT.md").write_text("worker prompt", encoding="utf-8")
+        (run_dir / "TASK_LOCAL_TELEMETRY.generated.json").write_text(
+            json.dumps({"summary": "demo", "first_commands": [], "source_paths": []}),
+            encoding="utf-8",
+        )
+        (state_root / "state.json").write_text(
+            json.dumps(
+                {
+                    "active_runs_count": 0,
+                    "updated_at": "2026-04-29T11:23:00Z",
+                    "eta": {
+                        "remaining_open_milestones": 6,
+                        "remaining_in_progress_milestones": 6,
+                        "eta_human": "1d-2.5d after unblock",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_shim(
+            "core",
+            "exec",
+            "Unblock the fleet. OODA it. Patch only the codexea shim, EA endpoints, and the 1min manager.",
+            extra_env={
+                "CODEXEA_BOOTSTRAP": "1",
+                "CODEXEA_OPERATOR_GUARD_FLEET_ROOT": str(fleet_root),
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        active_run_dir = str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] or "").strip()
+        telemetry_path = Path(active_run_dir) / "TASK_LOCAL_TELEMETRY.generated.json"
+        telemetry_payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            telemetry_payload["current_blocker"],
+            "[fleet-supervisor] provider-health preflight left no routable direct lanes: core:onemin:unavailable",
+        )
+        prompt = payload["argv"][-1]
+        self.assertIn(
+            "[fleet-supervisor] provider-health preflight left no routable direct lanes: core:onemin:unavailable",
+            prompt,
+        )
+
+    def test_fleet_unblock_prompt_prefers_newer_real_blocker_run_over_latest_attempt_only_run(self) -> None:
+        fleet_root = self.root / "fleet"
+        state_root = fleet_root / "state" / "chummer_design_supervisor"
+        blocker_run_dir = state_root / "shard-4" / "runs" / "20260429T113513Z-shard-4"
+        attempt_run_dir = state_root / "shard-9" / "runs" / "20260429T113540Z-shard-9"
+        blocker_run_dir.mkdir(parents=True, exist_ok=True)
+        attempt_run_dir.mkdir(parents=True, exist_ok=True)
+        (blocker_run_dir / "worker.stderr.log").write_text(
+            "\n".join(
+                [
+                    "[fleet-supervisor] no runnable full routed accounts; trying anonymous full-lane fallback first",
+                    "[fleet-supervisor] provider-health preflight left no routable direct lanes: core:onemin:unavailable",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (attempt_run_dir / "worker.stderr.log").write_text(
+            "[fleet-supervisor] attempt 1/7 account=acct-ea-jury owner= model=ea-coder-hard-batch\n",
+            encoding="utf-8",
+        )
+        (blocker_run_dir / "WORKER_EXEC_TRACE_PROMPT.md").write_text("blocker prompt", encoding="utf-8")
+        (attempt_run_dir / "WORKER_EXEC_TRACE_PROMPT.md").write_text("attempt prompt", encoding="utf-8")
+        (blocker_run_dir / "TASK_LOCAL_TELEMETRY.generated.json").write_text(
+            json.dumps({"summary": "blocker", "first_commands": [], "source_paths": []}),
+            encoding="utf-8",
+        )
+        (attempt_run_dir / "TASK_LOCAL_TELEMETRY.generated.json").write_text(
+            json.dumps({"summary": "attempt", "first_commands": [], "source_paths": []}),
+            encoding="utf-8",
+        )
+        blocker_mtime = 1_777_462_200
+        attempt_mtime = blocker_mtime + 90
+        os.utime(blocker_run_dir / "worker.stderr.log", (blocker_mtime, blocker_mtime))
+        os.utime(blocker_run_dir / "WORKER_EXEC_TRACE_PROMPT.md", (blocker_mtime, blocker_mtime))
+        os.utime(blocker_run_dir / "TASK_LOCAL_TELEMETRY.generated.json", (blocker_mtime, blocker_mtime))
+        os.utime(attempt_run_dir / "worker.stderr.log", (attempt_mtime, attempt_mtime))
+        os.utime(attempt_run_dir / "WORKER_EXEC_TRACE_PROMPT.md", (attempt_mtime, attempt_mtime))
+        os.utime(attempt_run_dir / "TASK_LOCAL_TELEMETRY.generated.json", (attempt_mtime, attempt_mtime))
+        (state_root / "state.json").write_text(
+            json.dumps(
+                {
+                    "active_runs_count": 0,
+                    "updated_at": "2026-04-29T11:35:40Z",
+                    "eta": {
+                        "remaining_open_milestones": 6,
+                        "remaining_in_progress_milestones": 6,
+                        "eta_human": "1d-2.5d after unblock",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_shim(
+            "core",
+            "exec",
+            "Unblock the fleet. OODA it. Patch only the codexea shim, EA endpoints, and the 1min manager.",
+            extra_env={
+                "CODEXEA_BOOTSTRAP": "1",
+                "CODEXEA_OPERATOR_GUARD_FLEET_ROOT": str(fleet_root),
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        active_run_dir = str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] or "").strip()
+        telemetry_path = Path(active_run_dir) / "TASK_LOCAL_TELEMETRY.generated.json"
+        telemetry_payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            telemetry_payload["current_blocker"],
+            "[fleet-supervisor] provider-health preflight left no routable direct lanes: core:onemin:unavailable",
+        )
+        self.assertEqual(
+            telemetry_payload["live_shard_execution"]["run_id"],
+            blocker_run_dir.name,
+        )
+        self.assertEqual(
+            telemetry_payload["live_shard_execution"]["stderr_path"],
+            str(blocker_run_dir / "worker.stderr.log"),
+        )
+
+    def test_unblock_prompt_auto_promotes_plain_exec_to_core_lane(self) -> None:
+        result = self.run_shim(
+            "exec",
+            "Unblock CodexEA itself. OODA it. Work only on the CodexEA shim, EA endpoints, and the 1min manager.",
+            extra_env={"CODEXEA_BOOTSTRAP": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertTrue(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"])
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "core")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_core")
+
+    def test_backlog_audit_prompt_activates_operator_guard_and_disables_mcp(self) -> None:
+        prompt_text = (
+            "Audit whether every remaining milestone or task needed to complete the "
+            "Chummer6 flagship design is already represented in the Fleet backlog. "
+            "If not, add the gaps to the backlog and distinguish design gaps from "
+            "release-proof or operational gaps."
+        )
+
+        result = self.run_shim(
+            "exec",
+            prompt_text,
+            extra_env={"CODEXEA_BOOTSTRAP": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        active_run_dir = str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] or "").strip()
+        self.assertTrue(active_run_dir)
+        telemetry_path = Path(active_run_dir) / "TASK_LOCAL_TELEMETRY.generated.json"
+        self.assertTrue(telemetry_path.exists())
+        telemetry_payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        self.assertEqual(telemetry_payload["guard_mode"], "backlog_audit")
+        self.assertIn("backlog audit", telemetry_payload["summary"].lower())
+        self.assertTrue(telemetry_payload["first_commands"])
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "core")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_core")
+        prompt = payload["argv"][-1]
+        self.assertIn("Operator-prepared backlog audit context:", prompt)
+        self.assertIn("Run these exact commands first:", prompt)
+        self.assertIn("Do not patch EA routing, CodexEA runtime, or shard execution paths", prompt)
+        self.assertIn(str(telemetry_path), prompt)
+        self.assertNotIn("Prepared repo context:", prompt)
+        self.assertIn('mcp_servers={}', payload["argv"])
+
     def test_prompt_session_emits_waiting_trace_while_provider_is_quiet(self) -> None:
         result = self.run_shim(
             "eta of the fleet? is it running? the shards?",
@@ -375,6 +810,113 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIsNotNone(payload)
         self.assertEqual(payload["stdin"], "fleet worker stdin prompt")
         self.assertIn("Trace: lane=core waiting for upstream response", completed.stderr)
+
+    def test_exec_session_uses_preseeded_stdin_prompt_env(self) -> None:
+        result = self.run_shim(
+            "core",
+            "exec",
+            "-",
+            extra_env={
+                "CODEXEA_STDIN_PROMPT": "seeded readiness prompt",
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["stdin"], "seeded readiness prompt")
+
+    def test_readiness_remedy_prompt_activates_prepared_context_without_fleet_unblock_mode(self) -> None:
+        prompt = textwrap.dedent(
+            """
+            Fix the remaining flagship readiness proof gaps, starting with desktop_client in /docker/chummercomplete/chummer-presentation.
+
+            Scope:
+            - Work only in /docker/chummercomplete/chummer-presentation.
+            - Stay on product proof and verification.
+
+            Run these exact commands first:
+            $ sed -n '1,2p' /docker/chummercomplete/chummer-presentation/WORKLIST.md
+            $ sed -n '1,2p' /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/user-journey-tester-audit.sh
+            """
+        ).strip()
+
+        result = self.run_shim(
+            "core",
+            "exec",
+            "-o",
+            str(self.root / "last-message.txt"),
+            prompt,
+            extra_env={"CODEXEA_BOOTSTRAP": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertIn("exec", payload["argv"])
+        self.assertNotIn("Operator-prepared readiness remedy context:", payload["argv"][-1])
+        self.assertIn("Operator-prepared readiness remedy context:", payload["stdin"])
+        self.assertIn("Read these files directly first:", payload["stdin"])
+        self.assertIn(
+            "Read these files directly first:\n$ python3 /docker/fleet/scripts/codex-shims/codexea_readiness_probe.py",
+            payload["stdin"],
+        )
+        self.assertIn("Prepared repo context:", payload["stdin"])
+        self.assertNotIn(
+            "Run these exact commands first:\n$ sed -n '1,2p' /docker/chummercomplete/chummer-presentation/WORKLIST.md",
+            payload["stdin"],
+        )
+        self.assertNotIn("Operator-prepared fleet unblock context:", payload["stdin"])
+
+    def test_status_helper_repeat_block_can_fail_direct_operator_pipeline(self) -> None:
+        run_dir = self.root / "operator-guard"
+        run_dir.mkdir()
+        telemetry_path = run_dir / "TASK_LOCAL_TELEMETRY.generated.json"
+        telemetry_path.write_text(
+            json.dumps(
+                {
+                    "summary": "Direct operator guard test.",
+                    "active_runs_count": 1,
+                    "remaining_open_milestones": 2,
+                    "remaining_not_started_milestones": 0,
+                    "remaining_in_progress_milestones": 2,
+                    "eta_human": "tracked",
+                    "first_commands": ["sed -n '1,3p' /docker/fleet/scripts/codex-shims/codexea"],
+                    "status_helper_redirect_lookahead": 1,
+                },
+                ensure_ascii=True,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        env = os.environ.copy()
+        env.update(
+            {
+                "CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR": str(run_dir),
+                "CHUMMER_DESIGN_SUPERVISOR_REAL_PYTHON3": sys.executable,
+                "CHUMMER_DESIGN_SUPERVISOR_STATUS_HELPER_REDIRECT_LIMIT": "1",
+                "CHUMMER_DESIGN_SUPERVISOR_STATUS_HELPER_FATAL": "1",
+                "PATH": f"/docker/fleet/scripts/codex-shims:{os.environ.get('PATH', '')}",
+            }
+        )
+        command = (
+            "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --json "
+            "| python3 -c 'import json,sys; payload=json.load(sys.stdin); eta=payload.get(\"eta\") or payload; "
+            "print(json.dumps({\"remaining_open_milestones\": payload.get(\"remaining_open_milestones\"), "
+            "\"eta_human\": eta.get(\"eta_human\"), \"summary\": payload.get(\"summary\")}))'"
+        )
+
+        first = subprocess.run(["bash", "-lc", command], env=env, capture_output=True, text=True, check=False)
+        second = subprocess.run(["bash", "-lc", command], env=env, capture_output=True, text=True, check=False)
+
+        self.assertEqual(first.returncode, 0)
+        self.assertIn("task-local JSON summary", first.stderr)
+        self.assertNotEqual(second.returncode, 0)
+        self.assertIn("worker_status_helper_loop:repeated_blocked_status_polling", second.stderr)
+        self.assertIn("Repeated helper loop denied", second.stderr)
 
     def test_prompt_session_bootstrap_zero_disables_exec_trace_injection(self) -> None:
         trace_file = self.root / "exec-trace.md"

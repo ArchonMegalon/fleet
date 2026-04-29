@@ -8,6 +8,7 @@ import stat
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -505,3 +506,83 @@ class CodexLizShimTests(unittest.TestCase):
         self.assertIn("-", payload["argv"])
         self.assertEqual(payload["stdin"], "repair the queue stall")
         self.assertIn("compat=unsupported_input_item retry=stdin_exec", completed.stderr)
+
+    def test_codexliz_kills_active_child_when_wrapper_is_terminated(self) -> None:
+        child_pid_path = self.root / "child.pid"
+        self.fake_codex.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env python3",
+                    "import os, signal, sys, time",
+                    "from pathlib import Path",
+                    "Path(os.environ['CODEXLIZ_CHILD_PID_PATH']).write_text(str(os.getpid()), encoding='utf-8')",
+                    "signal.signal(signal.SIGTERM, lambda *_args: sys.exit(0))",
+                    "while True:",
+                    "    time.sleep(1.0)",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        self.fake_codex.chmod(self.fake_codex.stat().st_mode | stat.S_IXUSR)
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server, _thread = self._server(Handler)
+        env = os.environ.copy()
+        env.update(
+            {
+                "CODEXLIZ_BASE_CODEX_SHIM": str(self.fake_codex),
+                "CODEXLIZ_TEST_CAPTURE": str(self.capture_path),
+                "CODEXLIZ_BASE_URL": f"http://127.0.0.1:{server.server_port}",
+                "CODEXLIZ_MODEL": "qwen2.5-coder:32b",
+                "CODEXLIZ_STATE_DIR": str(self.state_dir),
+                "CODEXLIZ_PROXY_PID_FILE": str(self.proxy_pid_file),
+                "CODEXLIZ_PROXY_LOG_FILE": str(self.proxy_log_file),
+                "CODEXLIZ_PROXY_PORT": str(_pick_free_port()),
+                "CODEXLIZ_CHILD_PID_PATH": str(child_pid_path),
+                "HOME": str(self.root),
+            }
+        )
+
+        process = subprocess.Popen(
+            ["bash", str(SHIM_PATH), "repair the queue stall"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+        )
+
+        def cleanup_process() -> None:
+            if process.poll() is None:
+                process.terminate()
+                process.wait(5)
+
+        self.addCleanup(cleanup_process)
+
+        deadline = time.time() + 10.0
+        while time.time() < deadline and not child_pid_path.exists():
+            time.sleep(0.05)
+        self.assertTrue(child_pid_path.exists(), "child codex process did not start")
+        child_pid = int(child_pid_path.read_text(encoding="utf-8").strip())
+        process.terminate()
+        process.wait(5)
+
+        child_deadline = time.time() + 3.0
+        while time.time() < child_deadline:
+            try:
+                os.kill(child_pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.05)
+        else:
+            self.fail(f"child codex process {child_pid} was not terminated with the wrapper")

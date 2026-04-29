@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-28T02:31:40Z",
+  "generated_at": "2026-04-29T19:49:06Z",
   "status": "fail",
   "scoped_status": "fail",
   "ready_keys": [
@@ -75,8 +75,8 @@
     "unresolved_hosts": [],
     "unresolved_tuples": [],
     "runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-    "runbook_generated_at": "2026-04-28T02:31:40Z",
-    "runbook_plan_generated_at": "2026-04-28T02:31:37Z",
+    "runbook_generated_at": "2026-04-29T19:49:05Z",
+    "runbook_plan_generated_at": "2026-04-29T19:49:03Z",
     "runbook_release_channel_generated_at": "2026-04-26T17:02:10Z",
     "commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
     "command_bundle_sha256": "a2909d7ddb08cd259eba9856d0de76003d29ce1430e967490f63f907c4e96329",
@@ -105,22 +105,23 @@
   "autofix_routing": {
     "status": "ready",
     "summary": "Local journey blockers are routed to owner repos.",
-    "total_local_blocker_count": 8,
-    "routed_local_blocker_count": 8,
+    "total_local_blocker_count": 16,
+    "routed_local_blocker_count": 16,
     "unrouted_local_blocker_count": 0,
     "owner_repo_counts": {
-      "chummer6-ui": 1,
+      "chummer6-ui": 6,
       "chummer6-hub": 5,
+      "chummer6-hub-registry": 3,
       "chummer6-core": 1,
       "chummer6-design": 1
     },
     "journey_local_blocker_counts": {
-      "install_claim_restore_continue": 2,
-      "build_explain_publish": 1,
+      "install_claim_restore_continue": 4,
+      "build_explain_publish": 5,
       "campaign_session_recover_recap": 1,
       "recover_from_sync_conflict": 1,
-      "report_cluster_release_notify": 1,
-      "organize_community_and_close_loop": 2
+      "report_cluster_release_notify": 2,
+      "organize_community_and_close_loop": 3
     },
     "routes": [
       {
@@ -157,7 +158,7 @@
         "reason": "status_plane is stale."
       },
       {
-        "route_id": "route-80df531a0463",
+        "route_id": "route-c4695e35bb86",
         "journey_id": "install_claim_restore_continue",
         "journey_state": "blocked",
         "owner_repo": "chummer6-hub",
@@ -165,10 +166,10 @@
         "package_id": "autofix-install-claim-restore-continue-chummer6-hub-2",
         "category_id": "",
         "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-        "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+        "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (335164s old > 172800s max)."
       },
       {
-        "route_id": "route-7c5789c6b5c9",
+        "route_id": "route-4c599d4658b1",
         "journey_id": "organize_community_and_close_loop",
         "journey_state": "blocked",
         "owner_repo": "chummer6-hub",
@@ -176,7 +177,7 @@
         "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-2",
         "category_id": "",
         "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-        "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+        "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (335164s old > 172800s max)."
       },
       {
         "route_id": "route-8919ae892a63",
@@ -201,6 +202,83 @@
         "reason": "status_plane is stale."
       },
       {
+        "route_id": "route-c6ea452eda3b",
+        "journey_id": "install_claim_restore_continue",
+        "journey_state": "blocked",
+        "owner_repo": "chummer6-hub-registry",
+        "primary_lane": "repo_fix",
+        "package_id": "autofix-install-claim-restore-continue-chummer6-hub-registry-3",
+        "category_id": "",
+        "evidence_path": ".codex-studio/published/RELEASE_CHANNEL.generated.json",
+        "reason": "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max)."
+      },
+      {
+        "route_id": "route-9ecec7b3e0e9",
+        "journey_id": "organize_community_and_close_loop",
+        "journey_state": "blocked",
+        "owner_repo": "chummer6-hub-registry",
+        "primary_lane": "repo_fix",
+        "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-registry-3",
+        "category_id": "",
+        "evidence_path": ".codex-studio/published/RELEASE_CHANNEL.generated.json",
+        "reason": "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max)."
+      },
+      {
+        "route_id": "route-48750fafce3e",
+        "journey_id": "report_cluster_release_notify",
+        "journey_state": "blocked",
+        "owner_repo": "chummer6-hub-registry",
+        "primary_lane": "repo_fix",
+        "package_id": "autofix-report-cluster-release-notify-chummer6-hub-registry-2",
+        "category_id": "",
+        "evidence_path": ".codex-studio/published/RELEASE_CHANNEL.generated.json",
+        "reason": "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max)."
+      },
+      {
+        "route_id": "route-3bb181649d39",
+        "journey_id": "build_explain_publish",
+        "journey_state": "blocked",
+        "owner_repo": "chummer6-ui",
+        "primary_lane": "repo_fix",
+        "package_id": "autofix-build-explain-publish-chummer6-ui-5",
+        "category_id": "",
+        "evidence_path": ".codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json",
+        "reason": "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.fix_shard_separate' expected True but was False."
+      },
+      {
+        "route_id": "route-9b411709606b",
+        "journey_id": "build_explain_publish",
+        "journey_state": "blocked",
+        "owner_repo": "chummer6-ui",
+        "primary_lane": "repo_fix",
+        "package_id": "autofix-build-explain-publish-chummer6-ui-4",
+        "category_id": "",
+        "evidence_path": ".codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json",
+        "reason": "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.used_internal_apis' expected False but was None."
+      },
+      {
+        "route_id": "route-c56e7d428b48",
+        "journey_id": "build_explain_publish",
+        "journey_state": "blocked",
+        "owner_repo": "chummer6-ui",
+        "primary_lane": "repo_fix",
+        "package_id": "autofix-build-explain-publish-chummer6-ui-2",
+        "category_id": "",
+        "evidence_path": ".codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json",
+        "reason": "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'status' expected 'pass' but was 'fail'."
+      },
+      {
+        "route_id": "route-ff89f67681d8",
+        "journey_id": "build_explain_publish",
+        "journey_state": "blocked",
+        "owner_repo": "chummer6-ui",
+        "primary_lane": "repo_fix",
+        "package_id": "autofix-build-explain-publish-chummer6-ui-3",
+        "category_id": "",
+        "evidence_path": ".codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json",
+        "reason": "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.linux_binary_under_test' expected True but was False."
+      },
+      {
         "route_id": "route-3c04c5507bb2",
         "journey_id": "install_claim_restore_continue",
         "journey_state": "blocked",
@@ -210,6 +288,17 @@
         "category_id": "",
         "evidence_path": "",
         "reason": "status_plane is stale."
+      },
+      {
+        "route_id": "route-cda16633ef1d",
+        "journey_id": "install_claim_restore_continue",
+        "journey_state": "blocked",
+        "owner_repo": "chummer6-ui",
+        "primary_lane": "repo_fix",
+        "package_id": "autofix-install-claim-restore-continue-chummer6-ui-4",
+        "category_id": "",
+        "evidence_path": ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+        "reason": "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (275520s old > 172800s max)."
       }
     ],
     "unrouted_reasons": []
@@ -441,7 +530,7 @@
           "signitic",
           "teable"
         ],
-        "support_generated_at": "2026-04-28T02:31:37Z",
+        "support_generated_at": "2026-04-29T19:49:03Z",
         "support_generated_age_seconds": 3,
         "support_source_refresh_mode": "",
         "support_open_packet_count": 0,
@@ -558,14 +647,14 @@
       "status": "missing",
       "summary": "Desktop flagship proof is still incomplete.",
       "reasons": [
-        "Executable desktop exit gate receipt is stale (126876s old; max 86400s).",
+        "Executable desktop exit gate receipt is stale (275522s old; max 86400s).",
         "Dedicated user-journey tester audit is missing or not passed. A separate tester shard must run the Linux binary like a user and prove visible workflow results.",
+        "User-journey tester audit reports non-passing workflows: file_new_character_visible_workspace, major_navigation_sanity, master_index_search_focus_stability, minimal_character_build_save_reload, validation_or_export_smoke.",
         "User-journey tester audit lacks multiple screenshots for workflows: file_new_character_visible_workspace, major_navigation_sanity, master_index_search_focus_stability, minimal_character_build_save_reload, validation_or_export_smoke.",
-        "User-journey tester audit uses screenshot counters without actual screenshot paths for workflows: file_new_character_visible_workspace, major_navigation_sanity, master_index_search_focus_stability, minimal_character_build_save_reload, validation_or_export_smoke.",
         "User-journey tester audit lacks verified existing PNG screenshot review for workflows: file_new_character_visible_workspace, major_navigation_sanity, master_index_search_focus_stability, minimal_character_build_save_reload, validation_or_export_smoke.",
         "User-journey tester audit lacks required user-visible assertions: file_new_character_visible_workspace: new_character_action_opened_visible_workspace, visible_workspace_nonblank; major_navigation_sanity: primary_navigation_clicks_change_visible_content, no_unhandled_errors; master_index_search_focus_stability: focus_preserved_after_typing, search_text_accumulates_keyboard_input; minimal_character_build_save_reload: character_created_saved_reloaded, reload_preserved_character_identity; validation_or_export_smoke: validation_or_export_action_completed, result_visible_or_file_created.",
-        "User-journey tester audit lacks required execution discipline: workflow_screenshots_must_be_paths_not_counters, workflow_screenshot_review_must_prove_existing_pngs, workflow_assertions_must_prove_visible_user_results.",
-        "Release channel receipt is stale (120570s old; max 86400s).",
+        "User-journey tester audit lacks required execution discipline: linux_binary_under_test, used_internal_apis_false, fix_shard_separate_true, workflow_screenshot_review_must_prove_existing_pngs, workflow_assertions_must_prove_visible_user_results.",
+        "Release channel receipt is stale (269216s old; max 86400s).",
         "Release channel is not simultaneously published, release-proven, and Avalonia-desktop-backed."
       ],
       "evidence": {
@@ -586,7 +675,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-26T15:17:04Z",
-        "ui_executable_gate_age_seconds": 126876,
+        "ui_executable_gate_age_seconds": 275522,
         "ui_linux_exit_gate_status": "passed",
         "ui_linux_exit_gate_recovered_from_executable_gate": true,
         "ui_linux_exit_gate_effective_ready": true,
@@ -606,7 +695,7 @@
         "ui_workflow_execution_gate_unresolved_receipts": [],
         "ui_workflow_execution_gate_unresolved_receipts_sr4_sr6_only": false,
         "ui_user_journey_tester_audit_required": true,
-        "ui_user_journey_tester_audit_status": "pass",
+        "ui_user_journey_tester_audit_status": "fail",
         "ui_user_journey_tester_audit_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json",
         "ui_user_journey_tester_audit_required_workflows": [
           "master_index_search_focus_stability",
@@ -639,7 +728,13 @@
         },
         "ui_user_journey_tester_audit_workflow_count": 5,
         "ui_user_journey_tester_audit_missing_workflows": [],
-        "ui_user_journey_tester_audit_nonpassing_workflows": [],
+        "ui_user_journey_tester_audit_nonpassing_workflows": [
+          "file_new_character_visible_workspace",
+          "major_navigation_sanity",
+          "master_index_search_focus_stability",
+          "minimal_character_build_save_reload",
+          "validation_or_export_smoke"
+        ],
         "ui_user_journey_tester_audit_insufficient_screenshot_workflows": [
           "file_new_character_visible_workspace",
           "major_navigation_sanity",
@@ -647,13 +742,7 @@
           "minimal_character_build_save_reload",
           "validation_or_export_smoke"
         ],
-        "ui_user_journey_tester_audit_counter_only_screenshot_workflows": [
-          "file_new_character_visible_workspace",
-          "major_navigation_sanity",
-          "master_index_search_focus_stability",
-          "minimal_character_build_save_reload",
-          "validation_or_export_smoke"
-        ],
+        "ui_user_journey_tester_audit_counter_only_screenshot_workflows": [],
         "ui_user_journey_tester_audit_unverified_screenshot_workflows": [
           "file_new_character_visible_workspace",
           "major_navigation_sanity",
@@ -684,7 +773,9 @@
           ]
         },
         "ui_user_journey_tester_audit_missing_execution_discipline": [
-          "workflow_screenshots_must_be_paths_not_counters",
+          "linux_binary_under_test",
+          "used_internal_apis_false",
+          "fix_shard_separate_true",
           "workflow_screenshot_review_must_prove_existing_pngs",
           "workflow_assertions_must_prove_visible_user_results"
         ],
@@ -797,7 +888,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-26T17:02:10Z",
-        "release_channel_age_seconds": 120570,
+        "release_channel_age_seconds": 269216,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": false,
         "release_channel_id": "docker",
@@ -931,7 +1022,7 @@
         "build_explain_publish": "blocked",
         "build_explain_publish_effective": "ready",
         "install_claim_restore_continue_external_blocking_reason_count": 0,
-        "install_claim_restore_continue_local_blocking_reason_count": 2,
+        "install_claim_restore_continue_local_blocking_reason_count": 4,
         "install_claim_restore_continue_external_proof_request_count": 0,
         "install_claim_restore_continue_external_proof_request_hosts": [],
         "install_claim_restore_continue_external_proof_request_tuples": [],
@@ -956,7 +1047,7 @@
         "ui_executable_exit_gate_effective_local_blocking_findings_count": 0,
         "install_claim_restore_continue_blocked_by_external_constraints_only": false,
         "build_explain_publish_external_blocking_reason_count": 0,
-        "build_explain_publish_local_blocking_reason_count": 1,
+        "build_explain_publish_local_blocking_reason_count": 5,
         "build_explain_publish_blocked_by_external_constraints_only": false
       }
     },
@@ -967,7 +1058,7 @@
       "evidence": {
         "core_stage": "boundary_pure",
         "build_explain_publish": "blocked",
-        "build_explain_publish_local_blocking_reason_count": 1,
+        "build_explain_publish_local_blocking_reason_count": 5,
         "build_explain_publish_external_blocking_reason_count": 0,
         "build_explain_publish_rules_scope_blocking_reason_count": 0,
         "build_explain_publish_rules_scope_blocking_reasons": [],
@@ -1007,7 +1098,7 @@
         "report_cluster_release_notify_release_proof_override": true,
         "report_cluster_release_notify_blocked_by_external_constraints_only": false,
         "report_cluster_release_notify_external_blocking_reason_count": 0,
-        "report_cluster_release_notify_local_blocking_reason_count": 1,
+        "report_cluster_release_notify_local_blocking_reason_count": 2,
         "report_cluster_release_notify_external_proof_request_count": 0
       }
     },
@@ -1081,7 +1172,7 @@
         "report_cluster_release_notify_release_proof_override": true,
         "report_cluster_release_notify_blocked_by_external_constraints_only": false,
         "report_cluster_release_notify_external_blocking_reason_count": 0,
-        "report_cluster_release_notify_local_blocking_reason_count": 1,
+        "report_cluster_release_notify_local_blocking_reason_count": 2,
         "report_cluster_release_notify_external_proof_request_count": 0,
         "acceptance_path": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml",
         "flagship_bar_mirror_path": "/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_BAR.md",
@@ -1120,23 +1211,24 @@
         "journey_effective_blocked_with_local_count": 0,
         "journey_overall_desktop_scoped_blocked": false,
         "journey_overall_routed_local_only": true,
-        "journey_local_blocker_count_total": 8,
-        "journey_local_blocker_routed_count": 8,
+        "journey_local_blocker_count_total": 16,
+        "journey_local_blocker_routed_count": 16,
         "journey_local_blocker_unrouted_count": 0,
         "journey_local_blocker_autofix_routing_ready": true,
         "journey_local_blocker_owner_repo_counts": {
-          "chummer6-ui": 1,
+          "chummer6-ui": 6,
           "chummer6-hub": 5,
+          "chummer6-hub-registry": 3,
           "chummer6-core": 1,
           "chummer6-design": 1
         },
         "journey_local_blocker_counts": {
-          "install_claim_restore_continue": 2,
-          "build_explain_publish": 1,
+          "install_claim_restore_continue": 4,
+          "build_explain_publish": 5,
           "campaign_session_recover_recap": 1,
           "recover_from_sync_conflict": 1,
-          "report_cluster_release_notify": 1,
-          "organize_community_and_close_loop": 2
+          "report_cluster_release_notify": 2,
+          "organize_community_and_close_loop": 3
         },
         "journey_local_blocker_route_sample": [
           {
@@ -1173,7 +1265,7 @@
             "reason": "status_plane is stale."
           },
           {
-            "route_id": "route-80df531a0463",
+            "route_id": "route-c4695e35bb86",
             "journey_id": "install_claim_restore_continue",
             "journey_state": "blocked",
             "owner_repo": "chummer6-hub",
@@ -1181,10 +1273,10 @@
             "package_id": "autofix-install-claim-restore-continue-chummer6-hub-2",
             "category_id": "",
             "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-            "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+            "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (335164s old > 172800s max)."
           },
           {
-            "route_id": "route-7c5789c6b5c9",
+            "route_id": "route-4c599d4658b1",
             "journey_id": "organize_community_and_close_loop",
             "journey_state": "blocked",
             "owner_repo": "chummer6-hub",
@@ -1192,7 +1284,7 @@
             "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-2",
             "category_id": "",
             "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-            "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (186519s old > 172800s max)."
+            "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (335164s old > 172800s max)."
           },
           {
             "route_id": "route-8919ae892a63",
@@ -1217,6 +1309,83 @@
             "reason": "status_plane is stale."
           },
           {
+            "route_id": "route-c6ea452eda3b",
+            "journey_id": "install_claim_restore_continue",
+            "journey_state": "blocked",
+            "owner_repo": "chummer6-hub-registry",
+            "primary_lane": "repo_fix",
+            "package_id": "autofix-install-claim-restore-continue-chummer6-hub-registry-3",
+            "category_id": "",
+            "evidence_path": ".codex-studio/published/RELEASE_CHANNEL.generated.json",
+            "reason": "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max)."
+          },
+          {
+            "route_id": "route-9ecec7b3e0e9",
+            "journey_id": "organize_community_and_close_loop",
+            "journey_state": "blocked",
+            "owner_repo": "chummer6-hub-registry",
+            "primary_lane": "repo_fix",
+            "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-registry-3",
+            "category_id": "",
+            "evidence_path": ".codex-studio/published/RELEASE_CHANNEL.generated.json",
+            "reason": "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max)."
+          },
+          {
+            "route_id": "route-48750fafce3e",
+            "journey_id": "report_cluster_release_notify",
+            "journey_state": "blocked",
+            "owner_repo": "chummer6-hub-registry",
+            "primary_lane": "repo_fix",
+            "package_id": "autofix-report-cluster-release-notify-chummer6-hub-registry-2",
+            "category_id": "",
+            "evidence_path": ".codex-studio/published/RELEASE_CHANNEL.generated.json",
+            "reason": "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (269214s old > 172800s max)."
+          },
+          {
+            "route_id": "route-3bb181649d39",
+            "journey_id": "build_explain_publish",
+            "journey_state": "blocked",
+            "owner_repo": "chummer6-ui",
+            "primary_lane": "repo_fix",
+            "package_id": "autofix-build-explain-publish-chummer6-ui-5",
+            "category_id": "",
+            "evidence_path": ".codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json",
+            "reason": "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.fix_shard_separate' expected True but was False."
+          },
+          {
+            "route_id": "route-9b411709606b",
+            "journey_id": "build_explain_publish",
+            "journey_state": "blocked",
+            "owner_repo": "chummer6-ui",
+            "primary_lane": "repo_fix",
+            "package_id": "autofix-build-explain-publish-chummer6-ui-4",
+            "category_id": "",
+            "evidence_path": ".codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json",
+            "reason": "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.used_internal_apis' expected False but was None."
+          },
+          {
+            "route_id": "route-c56e7d428b48",
+            "journey_id": "build_explain_publish",
+            "journey_state": "blocked",
+            "owner_repo": "chummer6-ui",
+            "primary_lane": "repo_fix",
+            "package_id": "autofix-build-explain-publish-chummer6-ui-2",
+            "category_id": "",
+            "evidence_path": ".codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json",
+            "reason": "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'status' expected 'pass' but was 'fail'."
+          },
+          {
+            "route_id": "route-ff89f67681d8",
+            "journey_id": "build_explain_publish",
+            "journey_state": "blocked",
+            "owner_repo": "chummer6-ui",
+            "primary_lane": "repo_fix",
+            "package_id": "autofix-build-explain-publish-chummer6-ui-3",
+            "category_id": "",
+            "evidence_path": ".codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json",
+            "reason": "repo proof chummer6-ui:.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json field 'evidence.linux_binary_under_test' expected True but was False."
+          },
+          {
             "route_id": "route-3c04c5507bb2",
             "journey_id": "install_claim_restore_continue",
             "journey_state": "blocked",
@@ -1226,11 +1395,22 @@
             "category_id": "",
             "evidence_path": "",
             "reason": "status_plane is stale."
+          },
+          {
+            "route_id": "route-cda16633ef1d",
+            "journey_id": "install_claim_restore_continue",
+            "journey_state": "blocked",
+            "owner_repo": "chummer6-ui",
+            "primary_lane": "repo_fix",
+            "package_id": "autofix-install-claim-restore-continue-chummer6-ui-4",
+            "category_id": "",
+            "evidence_path": ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+            "reason": "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (275520s old > 172800s max)."
           }
         ],
         "journey_local_blocker_unrouted_reason_sample": [],
         "history_snapshot_count": 19,
-        "support_packets_generated_at": "2026-04-28T02:31:37Z",
+        "support_packets_generated_at": "2026-04-29T19:49:03Z",
         "support_packets_generated_age_seconds": 3,
         "support_packets_refresh_mode": "",
         "support_open_packet_count": 0,
@@ -1244,8 +1424,8 @@
         "external_proof_backlog_request_observation_count": 0,
         "external_proof_backlog_duplicate_observation_count": 0,
         "external_proof_runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-        "external_proof_runbook_generated_at": "2026-04-28T02:31:40Z",
-        "external_proof_runbook_plan_generated_at": "2026-04-28T02:31:37Z",
+        "external_proof_runbook_generated_at": "2026-04-29T19:49:05Z",
+        "external_proof_runbook_plan_generated_at": "2026-04-29T19:49:03Z",
         "external_proof_runbook_release_channel_generated_at": "2026-04-26T17:02:10Z",
         "external_proof_commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
         "external_proof_command_bundle_sha256": "a2909d7ddb08cd259eba9856d0de76003d29ce1430e967490f63f907c4e96329",
@@ -1255,7 +1435,7 @@
         "external_proof_runbook_synced": true,
         "external_proof_runbook_sync_issue_count": 0,
         "dispatchable_truth_ready": true,
-        "active_shards_generated_at": "2026-04-28T02:31:39Z",
+        "active_shards_generated_at": "2026-04-29T19:49:04Z",
         "active_shards_manifest_kind": "configured_shard_topology",
         "active_shards_count": 0,
         "configured_shards_count": 7,
@@ -1268,7 +1448,7 @@
         "supervisor_completion_desktop_scoped": false,
         "supervisor_completion_routed_local_only": true,
         "supervisor_successor_wave_steering_ready": false,
-        "supervisor_updated_at": "2026-04-28T02:31:24Z",
+        "supervisor_updated_at": "2026-04-29T19:48:34Z",
         "supervisor_recent_enough": true,
         "supervisor_focus_profiles": [
           "top_flagship_grade",
@@ -1287,7 +1467,7 @@
         "ooda_aggregate_stale": false,
         "ooda_timestamp_stale": false,
         "ooda_steady_complete_quiet": false,
-        "ooda_live_active_progress": true,
+        "ooda_live_active_progress": false,
         "ooda_recovered_from_current_supervisor_topology": false
       }
     }

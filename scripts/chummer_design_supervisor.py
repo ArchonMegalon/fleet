@@ -496,6 +496,13 @@ OPENAI_ESCAPE_HATCH_TRIGGER_SIGNALS = (
 PROVIDER_HEALTH_READY_STATES = {"ready", "ok", "healthy", "available"}
 PROVIDER_HEALTH_DEGRADED_STATES = {"degraded", "warning", "limited"}
 PROVIDER_HEALTH_UNAVAILABLE_STATES = {"unavailable", "failed", "error", "disabled", "offline", "missing"}
+PROVIDER_HEALTH_QUARANTINE_STATES = {"quarantine", "blocked", "depleted", "exhausted", "suspended"}
+EA_PROVIDER_ACCOUNT_ROUTING_ORDER = {
+    "ready": 0,
+    "degraded": 1,
+    "unknown": 2,
+    "blocked": 3,
+}
 LOCK_TTL_SECONDS = 300.0
 LOCK_ACQUIRE_RETRIES = 12
 LOCK_RETRY_SECONDS = 0.25
@@ -1871,11 +1878,31 @@ def _provider_dispatch_capacity_snapshot(
         configured_slots = len(slot_states)
 
     hard_lane_capacity = hard_ea_shard_count
+    credit_budget_capacity = 0
+    credit_budget_floor = _runtime_env_int_default(
+        "CHUMMER_DESIGN_SUPERVISOR_PROVIDER_DISPATCH_HARD_LANE_ABSOLUTE_CREDITS",
+        50000,
+    )
+    if (
+        estimated_remaining_credits_total is not None
+        and estimated_remaining_credits_total > 0
+        and credit_budget_floor > 0
+    ):
+        credit_budget_capacity = min(
+            hard_ea_shard_count,
+            max(0, int(float(estimated_remaining_credits_total) // float(credit_budget_floor))),
+        )
     capacity_limits: List[int] = []
-    if ready_slots > 0:
-        capacity_limits.append(ready_slots)
-    if hard_max_active_requests > 0:
-        capacity_limits.append(hard_max_active_requests)
+    effective_ready_capacity = ready_slots
+    effective_hard_max_active_requests = hard_max_active_requests
+    if ready_slots <= 0 and credit_budget_capacity > 0:
+        effective_ready_capacity = credit_budget_capacity
+        if effective_hard_max_active_requests <= 0 or effective_hard_max_active_requests < credit_budget_capacity:
+            effective_hard_max_active_requests = credit_budget_capacity
+    if effective_ready_capacity > 0:
+        capacity_limits.append(effective_ready_capacity)
+    if effective_hard_max_active_requests > 0:
+        capacity_limits.append(effective_hard_max_active_requests)
     if capacity_limits:
         hard_lane_capacity = min(hard_lane_capacity, min(capacity_limits))
     if recent_live_fetch_failure and hard_lane_capacity > 1:
@@ -1893,8 +1920,13 @@ def _provider_dispatch_capacity_snapshot(
     reason_bits = []
     if ready_slots > 0:
         reason_bits.append(f"ready 1min slots={ready_slots}")
-    if hard_max_active_requests > 0:
-        reason_bits.append(f"ea hard request cap={hard_max_active_requests}")
+    elif credit_budget_capacity > 0:
+        reason_bits.append(
+            "credit-derived hard lane capacity="
+            f"{credit_budget_capacity} from estimated_remaining_credits_total={estimated_remaining_credits_total:.0f}"
+        )
+    if effective_hard_max_active_requests > 0:
+        reason_bits.append(f"ea hard request cap={effective_hard_max_active_requests}")
     if recent_live_fetch_failure:
         reason_bits.append("recent provider-health probe failure forces EA canary dispatch")
     elif recent_live_fetch_failure_overridden:
@@ -2542,6 +2574,116 @@ def _load_ea_provider_health_cache(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def _ea_provider_health_payload_for_routing(args: argparse.Namespace) -> Dict[str, Any]:
+    cached = _load_ea_provider_health_cache(args)
+    payload = dict(cached.get("payload") or {})
+    if not payload:
+        return {}
+    age_seconds = _coerce_float(cached.get("age_seconds"))
+    if age_seconds is None or age_seconds > _ea_provider_health_cache_max_age_seconds():
+        return {}
+    return payload
+
+
+def _ea_provider_slot_health_index(args: argparse.Namespace) -> Dict[str, Dict[str, Any]]:
+    payload = _ea_provider_health_payload_for_routing(args)
+    if not payload:
+        return {}
+    providers = payload.get("providers")
+    if not isinstance(providers, dict) or not providers:
+        providers = ((payload.get("provider_health") or {}).get("providers") or {})
+    onemin = (providers or {}).get("onemin") or {}
+    if not isinstance(onemin, dict) or not onemin:
+        return {}
+    index: Dict[str, Dict[str, Any]] = {}
+    for raw_slot in (onemin.get("slots") or []):
+        if not isinstance(raw_slot, dict) or not raw_slot:
+            continue
+        slot = dict(raw_slot)
+        for candidate_key in (slot.get("slot_env_name"), slot.get("account_name")):
+            clean_key = str(candidate_key or "").strip().upper()
+            if clean_key and clean_key not in index:
+                index[clean_key] = slot
+    return index
+
+
+def _ea_provider_slot_error_text(slot: Dict[str, Any]) -> str:
+    parts: List[str] = []
+    clean_error = str(slot.get("last_error") or "").strip()
+    if clean_error:
+        parts.append(clean_error)
+    probe = slot.get("probe")
+    if isinstance(probe, dict):
+        clean_probe_error = str(probe.get("error") or "").strip()
+        if clean_probe_error:
+            parts.append(clean_probe_error)
+    deduped: List[str] = []
+    seen: Set[str] = set()
+    for part in parts:
+        if part in seen:
+            continue
+        seen.add(part)
+        deduped.append(part)
+    return " | ".join(deduped)
+
+
+def _ea_provider_slot_required_credits(error_text: str) -> Optional[int]:
+    match = re.search(r"requires\s+([0-9][0-9,]*)\s+credits", str(error_text or ""), re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        return int(match.group(1).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _ea_provider_slot_remaining_credits(slot: Dict[str, Any]) -> Optional[float]:
+    for key in ("estimated_remaining_credits", "billing_remaining_credits"):
+        value = _coerce_float(slot.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _ea_provider_slot_routing_state(slot: Dict[str, Any]) -> str:
+    if not isinstance(slot, dict) or not slot:
+        return "unknown"
+    if not bool(slot.get("configured", True)):
+        return "blocked"
+    state = str(slot.get("state") or slot.get("health_status") or slot.get("probe_result") or "").strip().lower()
+    error_text = _ea_provider_slot_error_text(slot)
+    if error_text and _is_usage_limit_backoff_reason(error_text):
+        return "blocked"
+    if state in PROVIDER_HEALTH_READY_STATES:
+        return "ready"
+    if state in PROVIDER_HEALTH_UNAVAILABLE_STATES or state in PROVIDER_HEALTH_QUARANTINE_STATES:
+        return "blocked"
+    if state in PROVIDER_HEALTH_DEGRADED_STATES:
+        remaining_credits = _ea_provider_slot_remaining_credits(slot)
+        required_credits = _ea_provider_slot_required_credits(error_text)
+        if remaining_credits is not None and remaining_credits <= 0:
+            return "blocked"
+        if required_credits is not None and remaining_credits is not None and remaining_credits < required_credits:
+            return "blocked"
+        return "degraded"
+    return "unknown"
+
+
+def _ea_provider_account_routing_state(
+    account: WorkerAccount,
+    slot_health_index: Optional[Dict[str, Dict[str, Any]]],
+) -> str:
+    if account.auth_kind != "ea" or not isinstance(slot_health_index, dict) or not slot_health_index:
+        return "unknown"
+    candidate_key = str(account.api_key_env or "").strip().upper()
+    if not candidate_key:
+        return "unknown"
+    slot = slot_health_index.get(candidate_key)
+    if not isinstance(slot, dict) or not slot:
+        return "unknown"
+    return _ea_provider_slot_routing_state(slot)
+
+
 def _write_ea_provider_health_cache(
     args: argparse.Namespace,
     *,
@@ -2824,6 +2966,12 @@ def _assess_direct_worker_lane_health(
     if len(providers) > 3:
         reason_segments.append(f"+{len(providers) - 3} more")
     reason = "; ".join(segment for segment in reason_segments if segment)
+    credit_floor = _direct_worker_lane_low_capacity_credit_floor(lane)
+    has_absolute_credit_headroom = (
+        credit_floor is not None
+        and estimated_remaining_credits_total is not None
+        and estimated_remaining_credits_total >= credit_floor
+    )
 
     routable = True
     if not providers:
@@ -2839,7 +2987,7 @@ def _assess_direct_worker_lane_health(
         elif state in PROVIDER_HEALTH_READY_STATES:
             routable = True
         elif state in PROVIDER_HEALTH_DEGRADED_STATES:
-            routable = ready_slots > 0 or (
+            routable = ready_slots > 0 or has_absolute_credit_headroom or (
                 synthetic_local_onemin
                 and (
                     remaining_percent is None
@@ -2869,6 +3017,7 @@ def _assess_direct_worker_lane_health(
         and ready_slots <= 0
         and remaining_percent is not None
         and remaining_percent <= LOW_CAPACITY_RESERVE_PERCENT
+        and not has_absolute_credit_headroom
     ):
         routable = False
         state = "degraded"
@@ -2894,6 +3043,27 @@ def _assess_direct_worker_lane_health(
         "estimated_remaining_credits_total": estimated_remaining_credits_total,
         "reason": reason or f"profile={profile or lane} state={state}",
     }
+
+
+def _direct_worker_lane_low_capacity_credit_floor(worker_lane: str) -> Optional[float]:
+    lane = str(worker_lane or "").strip().lower()
+    if not lane:
+        return None
+    if lane in CORE_BATCH_WORKER_LANES or lane == "audit_shard":
+        return float(
+            _runtime_env_int_default(
+                "CHUMMER_DESIGN_SUPERVISOR_LOW_CAPACITY_HARD_LANE_ABSOLUTE_CREDITS",
+                50000,
+            )
+        )
+    if lane in {"core_rescue", "survival", "repair", "review_light"}:
+        return float(
+            _runtime_env_int_default(
+                "CHUMMER_DESIGN_SUPERVISOR_LOW_CAPACITY_LIGHT_LANE_ABSOLUTE_CREDITS",
+                4000,
+            )
+        )
+    return None
 
 
 def _direct_worker_lane_health_snapshot(
@@ -3042,6 +3212,8 @@ def _direct_worker_lane_health_snapshot(
                 return snapshot
 
     workspace_root = Path(getattr(args, "workspace_root", DEFAULT_WORKSPACE_ROOT)).resolve()
+    state_root_raw = str(getattr(args, "state_root", "") or "").strip()
+    state_root = Path(state_root_raw or DEFAULT_STATE_ROOT).resolve()
     lane_rows = _provider_registry_lane_rows(dict(payload or {}))
     for profile, row in _synthetic_onemin_provider_registry_lane_rows(
         dict(payload or {}),
@@ -3052,7 +3224,22 @@ def _direct_worker_lane_health_snapshot(
     lane_payloads: Dict[str, Dict[str, Any]] = {}
     for worker_lane in lanes:
         profile = _codexea_profile_for_lane(worker_lane, workspace_root=workspace_root)
-        lane_payloads[worker_lane] = _assess_direct_worker_lane_health(worker_lane, profile, lane_rows.get(profile))
+        lane_payload = _assess_direct_worker_lane_health(worker_lane, profile, lane_rows.get(profile))
+        recent_provider_failure = _recent_direct_lane_provider_failure(state_root, worker_lane)
+        if recent_provider_failure:
+            reason_parts = [
+                str(lane_payload.get("reason") or "").strip(),
+                (
+                    "recent direct-lane backend failure "
+                    f"until={recent_provider_failure.get('cooldown_until') or 'unknown'} "
+                    f"reason={recent_provider_failure.get('reason') or 'backend unavailable'}"
+                ),
+            ]
+            lane_payload["routable"] = False
+            lane_payload["state"] = "degraded"
+            lane_payload["cooldown_until"] = str(recent_provider_failure.get("cooldown_until") or "")
+            lane_payload["reason"] = "; ".join(part for part in reason_parts if part)
+        lane_payloads[worker_lane] = lane_payload
     snapshot["lanes"] = lane_payloads
     snapshot["routable_lanes"] = [
         lane for lane in lanes if bool((lane_payloads.get(lane) or {}).get("routable", True))
@@ -7958,6 +8145,7 @@ def _account_can_attempt_candidate_model(
     requested_worker_lane: str = "",
     active_account_claims: Optional[Dict[str, int]] = None,
     now: Optional[dt.datetime] = None,
+    ea_provider_slot_health_index: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> bool:
     clean_candidate = str(candidate_model or "").strip()
     if not clean_candidate:
@@ -7972,6 +8160,7 @@ def _account_can_attempt_candidate_model(
         account_runtime,
         requested_worker_lane=requested_worker_lane,
         now=current,
+        ea_provider_slot_health_index=ea_provider_slot_health_index,
     )
     return clean_candidate in account_candidates
 
@@ -7984,6 +8173,7 @@ def _partition_model_candidates_by_runnability(
     requested_worker_lane: str = "",
     active_account_claims: Optional[Dict[str, int]] = None,
     now: Optional[dt.datetime] = None,
+    ea_provider_slot_health_index: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> tuple[List[str], List[str]]:
     current = now or _utc_now()
     available: List[str] = []
@@ -7997,6 +8187,7 @@ def _partition_model_candidates_by_runnability(
                 requested_worker_lane=requested_worker_lane,
                 active_account_claims=active_account_claims,
                 now=current,
+                ea_provider_slot_health_index=ea_provider_slot_health_index,
             )
             for account in accounts
         )
@@ -8013,6 +8204,7 @@ def _preferred_ea_core_model_candidates(
     account_runtime: Dict[str, Any],
     *,
     worker_lane_health: Optional[Dict[str, Any]] = None,
+    ea_provider_slot_health_index: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[str]:
     configured_models = _worker_model_candidates(args)
     if not _worker_bin_uses_codexea(str(getattr(args, "worker_bin", "") or "")):
@@ -8029,6 +8221,11 @@ def _preferred_ea_core_model_candidates(
     accounts = [account for account in _load_worker_accounts(args) if account.auth_kind == "ea"]
     if not accounts:
         return configured_models
+    current_ea_provider_slot_health_index = (
+        _ea_provider_slot_health_index(args)
+        if ea_provider_slot_health_index is None
+        else dict(ea_provider_slot_health_index or {})
+    )
     extra_preferences = EA_CORE_MODEL_PREFERENCE if _prefer_core_batch_model_aliases_enabled() else ()
     ordered_candidates = _ordered_unique_models(configured_models, extra_preferences)
     if not ordered_candidates:
@@ -8039,6 +8236,7 @@ def _preferred_ea_core_model_candidates(
         account_runtime,
         requested_worker_lane=requested_worker_lane,
         active_account_claims=_active_account_claim_counts(state_root),
+        ea_provider_slot_health_index=current_ea_provider_slot_health_index,
     )
     return available + unavailable or configured_models
 
@@ -8188,6 +8386,62 @@ def _rotate_model_candidates_after_recent_stall(state_root: Path, model_candidat
     if not stalled_model or stalled_model not in candidates:
         return candidates
     return [candidate for candidate in candidates if candidate != stalled_model] + [stalled_model]
+
+
+def _direct_lane_provider_failure_cooldown_seconds() -> float:
+    raw = _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_DIRECT_LANE_PROVIDER_FAILURE_COOLDOWN_SECONDS", "900")
+    try:
+        return max(60.0, float(raw))
+    except (TypeError, ValueError):
+        return 900.0
+
+
+def _recent_direct_lane_provider_failure(
+    state_root: Path,
+    worker_lane: str,
+    *,
+    now: Optional[dt.datetime] = None,
+    limit: int = 12,
+) -> Dict[str, Any]:
+    lane = str(worker_lane or "").strip().lower()
+    if not lane:
+        return {}
+    recent_history = _read_history(_history_payload_path(state_root), limit=max(1, int(limit)))
+    if not recent_history:
+        return {}
+    current = now or _utc_now()
+    cooldown_seconds = _direct_lane_provider_failure_cooldown_seconds()
+    lane_alias = f"lane:{lane}"
+    failure_markers = ("no_backend_available", "upstream_unavailable", "exhausted_for_request")
+    for row in reversed(recent_history):
+        selected_account_alias = str(row.get("selected_account_alias") or "").strip().lower()
+        if selected_account_alias != lane_alias:
+            continue
+        accepted = bool(row.get("accepted"))
+        blocker_text = " ".join(
+            [
+                str(row.get("blocker") or "").strip(),
+                str(row.get("acceptance_reason") or "").strip(),
+                str(_run_receipt_status(row)[1] or "").strip(),
+            ]
+        ).lower()
+        if accepted:
+            return {}
+        if not any(marker in blocker_text for marker in failure_markers):
+            continue
+        finished_at = _parse_iso(
+            str(row.get("finished_at") or row.get("updated_at") or row.get("started_at") or "")
+        ) or current
+        cooldown_until = finished_at + dt.timedelta(seconds=cooldown_seconds)
+        if cooldown_until <= current:
+            return {}
+        return {
+            "worker_lane": lane,
+            "cooldown_until": _iso(cooldown_until),
+            "seconds_remaining": max(0, int((cooldown_until - current).total_seconds())),
+            "reason": blocker_text or "recent direct-lane provider failure",
+        }
+    return {}
 
 
 def _dedupe_preferred_core_batch_aliases(
@@ -9573,6 +9827,24 @@ def _tail_progress_line_is_helper_noise(line: str) -> bool:
         return True
     if _status_helper_payload_is_nonprogress_noise(compact):
         return True
+    if compact.startswith("/usr/bin/bash -lc ") and "TASK_LOCAL_TELEMETRY.generated.json" in compact:
+        command_text = compact
+        cwd_suffix_index = command_text.rfind(" in /")
+        if cwd_suffix_index > 0:
+            command_text = command_text[:cwd_suffix_index]
+        if (
+            "payload=json.loads(Path(sys.argv[1]).read_text" in command_text
+            and "'first_commands'" in command_text
+            and "'source_paths'" in command_text
+            and "; sed -n " not in command_text
+            and "; cat " not in command_text
+        ):
+            return True
+        telemetry_paths = re.findall(r"(/(?:docker|var)/[^ \t\n'\"`]+)", command_text)
+        if telemetry_paths and all(
+            path.endswith("/TASK_LOCAL_TELEMETRY.generated.json") for path in telemetry_paths
+        ):
+            return True
     if (
         compact.startswith("{")
         and '"active_runs_count"' in compact
@@ -15477,7 +15749,12 @@ def _write_worker_bash_env(run_dir: Path) -> Path:
     return bash_env_path
 
 
-def _materialize_task_local_telemetry_prompt(prompt: str, telemetry_path: Path) -> str:
+def _materialize_task_local_telemetry_prompt(
+    prompt: str,
+    telemetry_path: Path,
+    *,
+    materialized_first_commands: Optional[Sequence[str]] = None,
+) -> str:
     rendered = str(prompt or "")
     telemetry_text = str(telemetry_path)
     read_markers = ("Read these files directly first:\n", "Start by reading these files directly:\n")
@@ -15508,6 +15785,20 @@ def _materialize_task_local_telemetry_prompt(prompt: str, telemetry_path: Path) 
         f"`cat {TASK_LOCAL_TELEMETRY_FILENAME}`",
         f"`cat {telemetry_text}`",
     )
+    commands = [str(item or "").strip() for item in (materialized_first_commands or []) if str(item or "").strip()]
+    if commands and " ; " in commands[0]:
+        first_step, _, second_step = commands[0].partition(" ; ")
+        if first_step and second_step:
+            rendered = rendered.replace(
+                f"- `{first_step}`\n- `{second_step}`",
+                f"- `{commands[0]}`",
+                1,
+            )
+            rendered = rendered.replace(
+                f"1. `{first_step}`\n2. `{second_step}`",
+                f"1. `{commands[0]}`",
+                1,
+            )
     return rendered
 
 
@@ -15536,18 +15827,36 @@ def _prepare_run_prompt(
     task_local_telemetry_payload: Optional[Dict[str, Any]] = None,
 ) -> str:
     rendered = str(prompt or "")
+    materialized_first_commands: List[str] = []
     if task_local_telemetry_payload is not None:
         telemetry_path = _task_local_telemetry_path(run_dir)
         telemetry_payload = dict(task_local_telemetry_payload or {})
         first_commands = telemetry_payload.get("first_commands")
         if isinstance(first_commands, list):
-            telemetry_payload["first_commands"] = [
+            materialized_first_commands = [
                 str(item or "").replace(TASK_LOCAL_TELEMETRY_FILENAME, str(telemetry_path))
                 for item in first_commands
                 if str(item or "").strip()
             ]
+            if (
+                len(materialized_first_commands) >= 2
+                and materialized_first_commands[0].startswith(f"cat {telemetry_path}")
+                and any(
+                    materialized_first_commands[1].startswith(prefix)
+                    for prefix in ("sed -n ", "cat ", "rg ", "grep ")
+                )
+            ):
+                materialized_first_commands = [
+                    f"{materialized_first_commands[0]} ; {materialized_first_commands[1]}",
+                    *materialized_first_commands[2:],
+                ]
+            telemetry_payload["first_commands"] = materialized_first_commands
         _write_json(telemetry_path, telemetry_payload)
-        rendered = _materialize_task_local_telemetry_prompt(rendered, telemetry_path)
+        rendered = _materialize_task_local_telemetry_prompt(
+            rendered,
+            telemetry_path,
+            materialized_first_commands=materialized_first_commands,
+        )
     rendered = _materialize_worker_tooling_prompt(rendered, worker_bin=worker_bin)
     return rendered
 
@@ -16252,10 +16561,16 @@ def _resolve_routed_worker_account_plan(
     worker_lane_health: Optional[Dict[str, Any]] = None,
     explicit_account_targets: bool = False,
     route_model_candidates: Optional[Sequence[str]] = None,
+    ea_provider_slot_health_index: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> RoutedWorkerAccountPlan:
     worker_lane_candidates = _worker_lane_candidates(args)
     direct_worker_lane = worker_lane_candidates[0] if worker_lane_candidates else ""
     worker_bin = str(args.worker_bin or "")
+    routed_ea_provider_slot_health_index = (
+        _ea_provider_slot_health_index(args)
+        if ea_provider_slot_health_index is None and _worker_bin_uses_codexea(worker_bin)
+        else dict(ea_provider_slot_health_index or {})
+    )
     account_candidates = (
         _load_worker_accounts(args)
         if _worker_bin_uses_codexea(worker_bin) or explicit_account_targets
@@ -16272,6 +16587,7 @@ def _resolve_routed_worker_account_plan(
             state_root,
             account_runtime,
             worker_lane_health=worker_lane_health,
+            ea_provider_slot_health_index=routed_ea_provider_slot_health_index,
         )
         routed_account_model_candidates = _rotate_model_candidates_after_recent_stall(
             state_root,
@@ -16294,8 +16610,8 @@ def _resolve_routed_worker_account_plan(
         active_account_claims = _active_account_claim_counts(state_root)
         prefer_full_ea_lanes = _prefer_full_ea_lanes_enabled()
         current = _utc_now()
-        preferred_routed_accounts: List[tuple[int, int, int, int, str, WorkerAccount]] = []
-        rescue_routed_accounts: List[tuple[int, int, int, int, str, WorkerAccount]] = []
+        preferred_routed_accounts: List[tuple[int, int, int, int, int, str, WorkerAccount]] = []
+        rescue_routed_accounts: List[tuple[int, int, int, int, int, str, WorkerAccount]] = []
         preferred_runnable_account_found = False
         restore_probe_candidates: List[tuple[dt.datetime, int, int, str, WorkerAccount]] = []
         for account in account_candidates:
@@ -16308,9 +16624,14 @@ def _resolve_routed_worker_account_plan(
                 account_runtime,
                 requested_worker_lane=direct_worker_lane,
                 now=current,
+                ea_provider_slot_health_index=routed_ea_provider_slot_health_index,
             )
             if not account_model_candidates:
                 continue
+            provider_health_rank = EA_PROVIDER_ACCOUNT_ROUTING_ORDER.get(
+                _ea_provider_account_routing_state(account, routed_ea_provider_slot_health_index),
+                EA_PROVIDER_ACCOUNT_ROUTING_ORDER["unknown"],
+            )
             priority = 0 if account_lane == str(direct_worker_lane or "").strip().lower() else 1
             if priority and account_lane not in {"jury", "review_light"}:
                 priority = 2
@@ -16337,6 +16658,7 @@ def _resolve_routed_worker_account_plan(
                 else 0
             )
             routing_row = (
+                provider_health_rank,
                 priority,
                 model_priority,
                 int(active_account_claims.get(account.alias, 0)),
@@ -16374,17 +16696,18 @@ def _resolve_routed_worker_account_plan(
                 requested_worker_lane=direct_worker_lane,
                 active_account_claims=active_account_claims,
                 now=current,
+                ea_provider_slot_health_index=routed_ea_provider_slot_health_index,
             )
         if not preferred_runnable_account_found and restore_probe_candidates:
             restore_probe_account_aliases.add(sorted(restore_probe_candidates)[0][3])
         preferred_account_candidates = [
             account
-            for _priority, _model_rank, _claims, _rank, _alias, account in sorted(preferred_routed_accounts)
+            for _health_rank, _priority, _model_rank, _claims, _rank, _alias, account in sorted(preferred_routed_accounts)
         ]
         if rescue_routed_accounts and (not prefer_full_ea_lanes or not preferred_runnable_account_found):
             rescue_account_candidates = [
                 account
-                for _priority, _model_rank, _claims, _rank, _alias, account in sorted(rescue_routed_accounts)
+                for _health_rank, _priority, _model_rank, _claims, _rank, _alias, account in sorted(rescue_routed_accounts)
             ]
         if prefer_full_ea_lanes:
             account_candidates = list(preferred_account_candidates)
@@ -16590,6 +16913,7 @@ def _is_usage_limit_backoff_reason(reason: str) -> bool:
     return (
         "usage-limited" in lower
         or "usage limit" in lower
+        or "insufficient_credits" in lower
         or "insufficient credits" in lower
         or "credit balance" in lower
         or "send a request to your admin" in lower
@@ -16733,12 +17057,15 @@ def _candidate_models_for_account(
     requested_worker_lane: str = "",
     ignore_active_backoff: bool = False,
     now: Optional[dt.datetime] = None,
+    ea_provider_slot_health_index: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[str]:
     current = now or _utc_now()
     rows: List[str] = []
     seen: set[str] = set()
     requested_lane = str(requested_worker_lane or "").strip().lower()
     account_lane = str(account.lane or "").strip().lower()
+    if _ea_provider_account_routing_state(account, ea_provider_slot_health_index) == "blocked":
+        return []
     allowed_models = {str(item or "").strip() for item in (account.allowed_models or []) if str(item or "").strip()}
     prefer_core_batch_aliases = _prefer_core_batch_model_aliases_enabled()
     for candidate in model_candidates:
@@ -16786,6 +17113,7 @@ def _account_has_runnable_candidate_models(
     ignore_active_backoff: bool = False,
     active_account_claims: Optional[Dict[str, int]] = None,
     now: Optional[dt.datetime] = None,
+    ea_provider_slot_health_index: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> bool:
     current = now or _utc_now()
     claims = active_account_claims or {}
@@ -16803,6 +17131,7 @@ def _account_has_runnable_candidate_models(
             requested_worker_lane=requested_worker_lane,
             ignore_active_backoff=ignore_active_backoff,
             now=current,
+            ea_provider_slot_health_index=ea_provider_slot_health_index,
         )
     )
 
@@ -16839,6 +17168,11 @@ def launch_worker(
     account_runtime = _read_account_runtime(account_runtime_path)
     workspace_root = Path(args.workspace_root).resolve()
     worker_workspace_root = Path(str(context.get("worker_workspace_root") or workspace_root)).resolve()
+    ea_provider_slot_health_index = (
+        _ea_provider_slot_health_index(args)
+        if _worker_bin_uses_codexea(str(getattr(args, "worker_bin", "") or ""))
+        else {}
+    )
     if model_selection is None:
         model_selection = _model_selection_snapshot(
             args,
@@ -16851,6 +17185,7 @@ def launch_worker(
         state_root,
         account_runtime,
         worker_lane_health=worker_lane_health,
+        ea_provider_slot_health_index=ea_provider_slot_health_index,
     )
     model_candidates = _rotate_model_candidates_after_recent_stall(state_root, model_candidates)
     route_model_candidates = list(model_candidates)
@@ -16922,6 +17257,7 @@ def launch_worker(
         worker_lane_health=worker_lane_health,
         explicit_account_targets=explicit_account_targets,
         route_model_candidates=route_model_candidates,
+        ea_provider_slot_health_index=ea_provider_slot_health_index,
     )
     direct_worker_lane = account_plan.direct_worker_lane
     account_candidates = list(account_plan.account_candidates)
@@ -16989,7 +17325,18 @@ def launch_worker(
                     _write_account_runtime(account_runtime_path, account_runtime)
                 attempt_offset = len(attempted_accounts)
                 phase_total_attempts = sum(
-                    max(1, len(_candidate_models_for_account(account, phase_models, account_runtime, requested_worker_lane=worker_lane)))
+                    max(
+                        1,
+                        len(
+                            _candidate_models_for_account(
+                                account,
+                                phase_models,
+                                account_runtime,
+                                requested_worker_lane=worker_lane,
+                                ea_provider_slot_health_index=ea_provider_slot_health_index,
+                            )
+                        ),
+                    )
                     for account in accounts
                 )
                 display_total_attempts = max(attempt_offset + max(1, phase_total_attempts), attempt_offset + 1)
@@ -17054,6 +17401,7 @@ def launch_worker(
                             account_runtime,
                             requested_worker_lane=worker_lane,
                             ignore_active_backoff=allow_restore_probe,
+                            ea_provider_slot_health_index=ea_provider_slot_health_index,
                         )
                         if not candidate_models:
                             stderr_handle.write(
@@ -17389,6 +17737,7 @@ def launch_worker(
                                         account_runtime,
                                         requested_worker_lane=direct_worker_lane,
                                         now=now,
+                                        ea_provider_slot_health_index=ea_provider_slot_health_index,
                                     ):
                                         restore_accounts.append(account)
                                 if account_runtime_dirty:

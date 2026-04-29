@@ -297,6 +297,31 @@ def _args(root: Path) -> Namespace:
     )
 
 
+def _write_ea_provider_health_cache(
+    module,
+    state_root: Path,
+    *,
+    cached_at: str,
+    slots: list[dict[str, object]],
+) -> None:
+    state_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        state_root / "ea_provider_health_cache.json",
+        {
+            "cached_at": cached_at,
+            "source_url": "http://provider-health.internal:8090/v1/responses/_provider_health",
+            "payload": {
+                "providers": {
+                    "onemin": {
+                        "configured_slots": len(slots),
+                        "slots": slots,
+                    }
+                }
+            },
+        },
+    )
+
+
 def test_successor_wave_queue_prefers_open_rows_for_in_progress_milestones() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -757,6 +782,43 @@ def test_candidate_models_for_account_prefers_hard_batch_for_core_lane(monkeypat
     assert models == ["ea-coder-hard-batch"]
 
 
+def test_candidate_models_for_account_skips_live_usage_limited_provider_slot() -> None:
+    module = _load_module()
+    core_account = module.WorkerAccount(
+        alias="acct-ea-core",
+        owner_id="tibor.girschele",
+        lane="core",
+        auth_kind="ea",
+        auth_json_file="",
+        api_key_env="ONEMIN_AI_API_KEY",
+        api_key_file="",
+        allowed_models=["ea-coder-hard-batch", "ea-coder-hard"],
+        health_state="ready",
+        spark_enabled=False,
+        bridge_priority=0,
+        forced_login_method="",
+        forced_chatgpt_workspace_id="",
+        openai_base_url="",
+        home_dir="",
+    )
+
+    models = module._candidate_models_for_account(
+        core_account,
+        ["ea-coder-hard"],
+        {},
+        requested_worker_lane="core",
+        ea_provider_slot_health_index={
+            "ONEMIN_AI_API_KEY": {
+                "configured": True,
+                "state": "degraded",
+                "last_error": "INSUFFICIENT_CREDITS:The feature requires 75630 credits, but the Tibor team only has 219 credits",
+            }
+        },
+    )
+
+    assert models == []
+
+
 def test_worker_status_helper_loop_sets_account_backoff_for_routing(monkeypatch) -> None:
     module = _load_module()
     monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
@@ -871,6 +933,68 @@ def test_preferred_ea_core_model_candidates_filters_batch_alias_when_disabled(mo
     models = module._preferred_ea_core_model_candidates(args, state_root, {})
 
     assert models == ["ea-coder-hard"]
+
+
+def test_preferred_ea_core_model_candidates_demotes_models_backed_only_by_blocked_slots(monkeypatch, tmp_path: Path) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setattr(
+        module,
+        "_utc_now",
+        lambda: dt.datetime(2026, 4, 28, 16, 5, tzinfo=dt.timezone.utc),
+    )
+    root = tmp_path
+    (root / "accounts.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "accounts": {
+                    "acct-ea-core-batch": {
+                        "auth_kind": "ea",
+                        "lane": "core",
+                        "api_key_env": "ONEMIN_AI_API_KEY_BATCH",
+                        "allowed_models": ["ea-coder-hard-batch"],
+                        "health_state": "ready",
+                    },
+                    "acct-ea-core-hard": {
+                        "auth_kind": "ea",
+                        "lane": "core",
+                        "api_key_env": "ONEMIN_AI_API_KEY_HARD",
+                        "allowed_models": ["ea-coder-hard"],
+                        "health_state": "ready",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = _args(root)
+    args.worker_bin = "codexea"
+    args.worker_lane = "core"
+    args.worker_model = "ea-coder-hard-batch"
+    args.fallback_worker_model = ["ea-coder-hard"]
+    state_root = root / "state"
+    _write_ea_provider_health_cache(
+        module,
+        state_root,
+        cached_at="2026-04-28T16:00:00Z",
+        slots=[
+            {
+                "slot_env_name": "ONEMIN_AI_API_KEY_BATCH",
+                "configured": True,
+                "state": "degraded",
+                "last_error": "INSUFFICIENT_CREDITS:The feature requires 77993 credits, but the Batch team only has 0 credits",
+            },
+            {
+                "slot_env_name": "ONEMIN_AI_API_KEY_HARD",
+                "configured": True,
+                "state": "ready",
+            },
+        ],
+    )
+
+    models = module._preferred_ea_core_model_candidates(args, state_root, {})
+
+    assert models[:2] == ["ea-coder-hard", "ea-coder-hard-batch"]
 
 
 def test_worker_model_candidates_ignores_fallback_for_codexliz_with_primary_model(monkeypatch, tmp_path: Path) -> None:
@@ -1448,8 +1572,79 @@ def test_write_active_run_state_refreshes_runtime_handoff_snapshot(monkeypatch, 
     assert "Last output at: 2026-04-08T19:20:15Z" in handoff_text
     assert "Latest shipped note: kept the shard warm" in handoff_text
     assert "stdout line one" in handoff_text
-    assert "line one" in handoff_text
     assert active_shard_snapshot_calls == [state_root, state_root]
+
+
+def test_resolve_routed_worker_account_plan_prefers_live_ready_core_account_for_audit_shard(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setattr(
+        module,
+        "_utc_now",
+        lambda: dt.datetime(2026, 4, 28, 16, 5, tzinfo=dt.timezone.utc),
+    )
+    root = tmp_path
+    (root / "accounts.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "account_policy": {"protected_owner_ids": ["tibor.girschele"]},
+                "accounts": {
+                    "acct-ea-review-light": {
+                        "auth_kind": "ea",
+                        "owner_id": "tibor.girschele",
+                        "lane": "review_light",
+                        "api_key_env": "ONEMIN_AI_API_KEY_REVIEW",
+                        "allowed_models": ["ea-coder-hard-batch"],
+                        "health_state": "ready",
+                    },
+                    "acct-ea-core": {
+                        "auth_kind": "ea",
+                        "owner_id": "tibor.girschele",
+                        "lane": "core",
+                        "api_key_env": "ONEMIN_AI_API_KEY_CORE",
+                        "allowed_models": ["ea-coder-hard-batch", "ea-coder-hard"],
+                        "health_state": "ready",
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = _args(root)
+    args.worker_bin = "codexea"
+    args.worker_lane = "audit_shard"
+    args.worker_model = "ea-audit-jury"
+    state_root = root / "state"
+    _write_ea_provider_health_cache(
+        module,
+        state_root,
+        cached_at="2026-04-28T16:00:00Z",
+        slots=[
+            {
+                "slot_env_name": "ONEMIN_AI_API_KEY_REVIEW",
+                "configured": True,
+                "state": "quarantine",
+                "last_error": "INSUFFICIENT_CREDITS:The feature requires 76973 credits, but the Review team only has 1235 credits",
+            },
+            {
+                "slot_env_name": "ONEMIN_AI_API_KEY_CORE",
+                "configured": True,
+                "state": "ready",
+            },
+        ],
+    )
+
+    plan = module._resolve_routed_worker_account_plan(
+        args,
+        state_root,
+        {},
+        route_model_candidates=["ea-audit-jury"],
+    )
+
+    assert [account.alias for account in plan.account_candidates] == ["acct-ea-core"]
 
 
 def test_run_worker_attempt_refreshes_runtime_handoff_during_quiet_runs(monkeypatch, tmp_path: Path) -> None:
@@ -1578,7 +1773,39 @@ def test_prepare_run_prompt_materializes_task_local_telemetry_file(tmp_path: Pat
     assert json.loads(telemetry_path.read_text(encoding="utf-8")) == telemetry_payload
     assert f"- {telemetry_path}" in rendered
     assert f"- {telemetry_path}" in rendered_text
-    assert "use the task-local telemetry file at" in rendered_text
+
+
+def test_prepare_run_prompt_batches_first_worker_repo_read_into_materialized_telemetry(tmp_path: Path) -> None:
+    module = _load_module()
+    run_dir = tmp_path / "runs" / "run-456"
+    prompt = (
+        "Safe first commands if you need orientation, copy them exactly instead of inventing telemetry queries:\n"
+        f"- `cat {module.TASK_LOCAL_TELEMETRY_FILENAME}`\n"
+        "- `sed -n '1,220p' /tmp/frontier.yaml`\n"
+        "- `sed -n '1,220p' /tmp/registry.yaml`\n"
+    )
+    telemetry_payload = {
+        "first_commands": [
+            f"cat {module.TASK_LOCAL_TELEMETRY_FILENAME}",
+            "sed -n '1,220p' /tmp/frontier.yaml",
+            "sed -n '1,220p' /tmp/registry.yaml",
+        ]
+    }
+
+    rendered_text = module._prepare_run_prompt(
+        run_dir,
+        prompt,
+        task_local_telemetry_payload=telemetry_payload,
+    )
+
+    telemetry_path = run_dir / module.TASK_LOCAL_TELEMETRY_FILENAME
+    written = json.loads(telemetry_path.read_text(encoding="utf-8"))
+
+    assert written["first_commands"][0] == (
+        f"cat {telemetry_path} ; sed -n '1,220p' /tmp/frontier.yaml"
+    )
+    assert written["first_commands"][1] == "sed -n '1,220p' /tmp/registry.yaml"
+    assert f"- `{written['first_commands'][0]}`" in rendered_text
 
 
 def test_prepare_run_prompt_adds_codexliz_shell_tooling_constraints(tmp_path: Path) -> None:
@@ -9591,6 +9818,144 @@ def test_direct_worker_lane_health_snapshot_flags_unroutable_repair_profile(monk
         assert snapshot["lanes"]["repair"]["profile"] == "repair"
         assert snapshot["lanes"]["repair"]["routable"] is False
         assert snapshot["lanes"]["repair"]["state"] == "degraded"
+
+
+def test_direct_worker_lane_health_snapshot_keeps_degraded_core_routable_with_absolute_credit_headroom(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE", "core_batch")
+
+        def fake_urlopen(request, timeout=0):
+            payload = {
+                "provider_registry": {
+                    "lanes": [
+                        {
+                            "profile": "core_batch",
+                            "primary_provider_key": "onemin",
+                            "primary_state": "degraded",
+                            "capacity_summary": {
+                                "state": "degraded",
+                                "configured_slots": 69,
+                                "ready_slots": 0,
+                                "degraded_slots": 69,
+                                "unavailable_slots": 0,
+                                "remaining_percent_of_max": 0.05,
+                                "estimated_remaining_credits_total": 157051,
+                            },
+                            "providers": [
+                                {
+                                    "provider_key": "onemin",
+                                    "state": "degraded",
+                                    "detail": "",
+                                    "enabled": True,
+                                    "executable": True,
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+
+            class _Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+                def read(self):
+                    return json.dumps(payload).encode("utf-8")
+
+            return _Response()
+
+        monkeypatch.setattr(module.urllib.request, "urlopen", fake_urlopen)
+
+        snapshot = module._direct_worker_lane_health_snapshot(args, ["core"])
+
+        assert snapshot["status"] == "pass"
+        assert snapshot["routable_lanes"] == ["core"]
+        assert snapshot["unroutable_lanes"] == []
+        assert snapshot["lanes"]["core"]["profile"] == "core_batch"
+        assert snapshot["lanes"]["core"]["routable"] is True
+        assert snapshot["lanes"]["core"]["state"] == "degraded"
+        assert snapshot["lanes"]["core"]["estimated_remaining_credits_total"] == 157051
+
+
+def test_direct_worker_lane_health_snapshot_cools_recent_backend_failure(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        shard_root = aggregate_root / "shard-1"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "survival"
+        args.state_root = str(shard_root)
+        monkeypatch.setattr(
+            module,
+            "_utc_now",
+            lambda: dt.datetime(2026, 4, 28, 17, 41, tzinfo=dt.timezone.utc),
+        )
+        module._write_json(
+            aggregate_root / "ea_provider_health_cache.json",
+            {
+                "cached_at": "2026-04-28T17:40:30Z",
+                "source_url": "http://host.docker.internal:8090/v1/responses/_provider_health",
+                "payload": {
+                    "provider_registry": {
+                        "lanes": [
+                            {
+                                "profile": "survival",
+                                "primary_provider_key": "browseract",
+                                "primary_state": "ready",
+                                "capacity_summary": {
+                                    "state": "ready",
+                                    "configured_slots": 1,
+                                    "ready_slots": 1,
+                                    "degraded_slots": 0,
+                                    "unavailable_slots": 0,
+                                },
+                                "providers": [
+                                    {
+                                        "provider_key": "browseract",
+                                        "state": "ready",
+                                        "detail": "",
+                                        "enabled": True,
+                                        "executable": True,
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                },
+            },
+        )
+        module._append_jsonl(
+            module._history_payload_path(shard_root),
+            {
+                "run_id": "run-survival",
+                "selected_account_alias": "lane:survival",
+                "accepted": False,
+                "acceptance_reason": "Error: survival_no_backend_available",
+                "blocker": "Error: survival_no_backend_available",
+                "finished_at": "2026-04-28T17:40:00Z",
+            },
+        )
+
+        snapshot = module._direct_worker_lane_health_snapshot(args, ["survival"])
+
+        assert snapshot["status"] == "pass"
+        assert snapshot["routable_lanes"] == []
+        assert snapshot["unroutable_lanes"] == ["survival"]
+        assert snapshot["lanes"]["survival"]["routable"] is False
+        assert snapshot["lanes"]["survival"]["state"] == "degraded"
+        assert snapshot["lanes"]["survival"]["cooldown_until"] == "2026-04-28T17:55:00Z"
+        assert "recent direct-lane backend failure" in snapshot["lanes"]["survival"]["reason"]
 
 
 def test_direct_worker_lane_health_snapshot_sends_runtime_ea_auth_headers(monkeypatch) -> None:
@@ -20265,6 +20630,115 @@ def test_statefile_shard_summaries_marks_repo_work_detected_progress_evidence(
         module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
 
 
+def test_statefile_shard_summaries_ignores_task_local_telemetry_probe_stdout_as_repo_work(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_module()
+    root = tmp_path
+    previous_workspace_root = module.DEFAULT_WORKSPACE_ROOT
+    try:
+        module.DEFAULT_WORKSPACE_ROOT = root
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_root = aggregate_root / "shard-1"
+        run_dir = shard_root / "runs" / "20260429T143141Z-shard-1"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        stderr_path = run_dir / "worker.stderr.log"
+        stdout_path = run_dir / "worker.stdout.log"
+        last_message_path = run_dir / "last_message.txt"
+        stderr_path.write_text(
+            "Trace: lane=core waiting for upstream response (total_duration=94s)\n",
+            encoding="utf-8",
+        )
+        stdout_path.write_text(
+            "/usr/bin/bash -lc 'cat /var/lib/codex-fleet/chummer_design_supervisor/shard-1/runs/20260429T143141Z-shard-1/TASK_LOCAL_TELEMETRY.generated.json' in /docker/fleet\n",
+            encoding="utf-8",
+        )
+        last_message_path.write_text("", encoding="utf-8")
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-04-29T14:31:41Z",
+                "mode": "completion_review",
+                "frontier_ids": [123],
+                "open_milestone_ids": [123],
+                "active_run_id": "20260429T143141Z-shard-1",
+                "active_run_started_at": "2026-04-29T14:31:41Z",
+                "active_run_worker_pid": 69178,
+                "active_run_worker_first_output_at": "2026-04-29T14:31:41Z",
+                "active_run_worker_last_output_at": "2026-04-29T14:33:15Z",
+                "active_run_progress_state": "streaming",
+                "worker_stderr_path": str(stderr_path.resolve()),
+                "worker_stdout_path": str(stdout_path.resolve()),
+                "worker_last_message_path": str(last_message_path.resolve()),
+            },
+        )
+
+        monkeypatch.setattr(module, "_running_inside_container", lambda: True)
+        monkeypatch.setattr(module, "_pid_alive", lambda pid: True)
+
+        summaries = module._statefile_shard_summaries(aggregate_root)
+
+        assert summaries[0]["active_run_progress_evidence"] == "worker_output_only"
+        assert "no repo command/test/edit evidence yet" in summaries[0]["active_run_progress_reason"]
+    finally:
+        module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
+
+
+def test_statefile_shard_summaries_ignores_compact_task_local_telemetry_probe_stdout_as_repo_work(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_module()
+    root = tmp_path
+    previous_workspace_root = module.DEFAULT_WORKSPACE_ROOT
+    try:
+        module.DEFAULT_WORKSPACE_ROOT = root
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_root = aggregate_root / "shard-2"
+        run_dir = shard_root / "runs" / "20260429T145621Z-shard-2"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        stderr_path = run_dir / "worker.stderr.log"
+        stdout_path = run_dir / "worker.stdout.log"
+        last_message_path = run_dir / "last_message.txt"
+        stderr_path.write_text(
+            "Trace: lane=core waiting for upstream response (total_duration=54s)\n",
+            encoding="utf-8",
+        )
+        stdout_path.write_text(
+            """/usr/bin/bash -lc "python3 -c 'from pathlib import Path; import json, sys; payload=json.loads(Path(sys.argv[1]).read_text(encoding='\"'\"'utf-8'\"'\"', errors='\"'\"'replace'\"'\"')); preferred={'\"'\"'/docker/fleet/WORKLIST.md'\"'\"','\"'\"'/docker/fleet/README.md'\"'\"'}; all_source_paths=[str(item).strip() for item in (payload.get('\"'\"'source_paths'\"'\"') or []) if str(item).strip()]; source_paths=list(dict.fromkeys(all_source_paths))[:12]; first_commands=[str(item).strip() for item in (payload.get('\"'\"'first_commands'\"'\"') or []) if str(item).strip()][:6]; out={'\"'\"'first_commands'\"'\"': first_commands,'\"'\"'source_paths'\"'\"': source_paths}; print(json.dumps(out, ensure_ascii=True, separators=('\"'\"','\"'\"','\"'\"':'\"'\"')))' /docker/fleet/state/chummer_design_supervisor/shard-2/runs/20260429T145621Z-shard-2/TASK_LOCAL_TELEMETRY.generated.json" in /docker/fleet
+""",
+            encoding="utf-8",
+        )
+        last_message_path.write_text("", encoding="utf-8")
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-04-29T14:56:21Z",
+                "mode": "completion_review",
+                "frontier_ids": [123],
+                "open_milestone_ids": [123],
+                "active_run_id": "20260429T145621Z-shard-2",
+                "active_run_started_at": "2026-04-29T14:56:21Z",
+                "active_run_worker_pid": 69179,
+                "active_run_worker_first_output_at": "2026-04-29T14:56:21Z",
+                "active_run_worker_last_output_at": "2026-04-29T14:57:15Z",
+                "active_run_progress_state": "streaming",
+                "worker_stderr_path": str(stderr_path.resolve()),
+                "worker_stdout_path": str(stdout_path.resolve()),
+                "worker_last_message_path": str(last_message_path.resolve()),
+            },
+        )
+
+        monkeypatch.setattr(module, "_running_inside_container", lambda: True)
+        monkeypatch.setattr(module, "_pid_alive", lambda pid: True)
+
+        summaries = module._statefile_shard_summaries(aggregate_root)
+
+        assert summaries[0]["active_run_progress_evidence"] == "worker_output_only"
+        assert "no repo command/test/edit evidence yet" in summaries[0]["active_run_progress_reason"]
+    finally:
+        module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
+
+
 def test_statefile_shard_summaries_counts_redirected_repo_file_output_as_repo_context(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -23339,6 +23813,94 @@ def test_memory_dispatch_snapshot_caps_dispatch_to_live_provider_capacity(monkey
         assert snapshot["provider_dispatch_capacity"]["estimated_remaining_credits_total"] == 44198385
         assert snapshot["provider_dispatch_capacity"]["balance_basis_summary"] == "actual"
         assert "live provider capacity caps shard dispatch at 9/13" in snapshot["reason"]
+
+
+def test_memory_dispatch_snapshot_uses_credit_budget_when_ready_slots_drop_to_zero(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setattr(module, "_container_local_active_run_records", lambda: {})
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        for index in range(1, 14):
+            shard_root = aggregate_root / f"shard-{index}"
+            shard_root.mkdir(parents=True, exist_ok=True)
+            module._write_json(shard_root / "state.json", {"updated_at": "2026-04-29T12:00:00Z"})
+
+        configured_shards = [
+            {
+                "name": f"shard-{index}",
+                "index": index,
+                "worker_bin": "/docker/fleet/scripts/codex-shims/codexea",
+                "worker_lane": "core",
+                "worker_model": "ea-coder-hard",
+            }
+            for index in range(1, 14)
+        ]
+        module._write_json(
+            aggregate_root / "active_shards.json",
+            {
+                "generated_at": "2026-04-29T12:00:00Z",
+                "updated_at": "2026-04-29T12:00:00Z",
+                "manifest_kind": "configured_shard_topology",
+                "configured_shard_count": 13,
+                "configured_shards": configured_shards,
+                "active_run_count": 0,
+                "active_shards": [],
+            },
+        )
+        module._write_json(
+            aggregate_root / "ea_provider_health_cache.json",
+            {
+                "cached_at": module._iso_now(),
+                "source_url": "http://provider-health.internal:8090/v1/responses/_provider_health",
+                "payload": {
+                    "provider_registry": {
+                        "provider_config": {
+                            "hard_max_active_requests": 3,
+                        }
+                    },
+                    "providers": {
+                        "onemin": {
+                            "balance_basis_summary": "actual",
+                            "estimated_remaining_credits_total": 12208566,
+                            "remaining_percent_of_max": 3.98,
+                            "configured_slots": 69,
+                            "slots": [
+                                {"configured": True, "state": "degraded"} for _ in range(69)
+                            ],
+                        }
+                    },
+                },
+            },
+        )
+
+        args = _args(root)
+        args.state_root = str(aggregate_root)
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+        args.worker_model = "ea-coder-hard"
+        args.memory_dispatch_reserve_gib = module.DEFAULT_MEMORY_DISPATCH_RESERVE_GIB
+        args.memory_dispatch_shard_budget_gib = module.DEFAULT_MEMORY_DISPATCH_SHARD_BUDGET_GIB
+        args.memory_dispatch_warning_available_percent = module.DEFAULT_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT
+        args.memory_dispatch_critical_available_percent = module.DEFAULT_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT
+        args.memory_dispatch_warning_swap_used_percent = module.DEFAULT_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT
+        args.memory_dispatch_critical_swap_used_percent = module.DEFAULT_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT
+
+        snapshot = module._memory_dispatch_snapshot(
+            args,
+            Path(args.state_root),
+            meminfo_bytes={
+                "MemTotal": 64 * 1024**3,
+                "MemAvailable": 48 * 1024**3,
+                "SwapTotal": 32 * 1024**3,
+                "SwapFree": 31 * 1024**3,
+            },
+        )
+
+        assert snapshot["status"] == "ok"
+        assert snapshot["allowed_active_shards"] == 13
+        assert snapshot["throttled"] is False
+        assert snapshot["provider_dispatch_capacity"] == {}
 
 
 def test_memory_dispatch_snapshot_halves_ea_dispatch_after_recent_provider_probe_failure(monkeypatch) -> None:
