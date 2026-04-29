@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-29T20:06:41Z'
+generated_at: '2026-04-29T20:17:55Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-10
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -68,12 +68,12 @@ completion_audit:
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260429T200523Z-shard-10 is not trusted: provider-health
+  reason: 'latest worker receipt 20260429T201624Z-shard-10 is not trusted: provider-health
     preflight left no routable direct lanes: core_rescue:onemin:unavailable; remaining_percent_of_max=0.00,
     estimated_remaining_credits_total=4464; core:onemin:unavailable; remaining_percent_of_max=0.00,
     estimated_remaining_credits_total=4464; survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini;
     onemin:unavailable'
-  latest_run_id: 20260429T200523Z-shard-10
+  latest_run_id: 20260429T201624Z-shard-10
   latest_run_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
     remaining_percent_of_max=0.00, estimated_remaining_credits_total=4464; core:onemin:unavailable;
     remaining_percent_of_max=0.00, estimated_remaining_credits_total=4464; survival:browseract:ready;
@@ -85,7 +85,7 @@ journey_gate_audit:
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
   status: fail
-  reason: linux desktop exit gate proof is stale (200757s old)
+  reason: linux desktop exit gate proof is stale (201429s old)
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
   generated_at: '2026-04-27T12:20:33Z'
 weekly_pulse_audit:
@@ -106,13 +106,13 @@ blocking_audits:
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 - component: linux_desktop_exit_gate
   title: Linux desktop exit-gate gaps
-  reason: linux desktop exit gate proof is stale (200757s old)
+  reason: linux desktop exit gate proof is stale (201429s old)
 - component: desktop_executable_exit_gate
   title: Desktop executable exit-gate gaps
-  reason: desktop executable exit gate proof is stale (276566s old)
+  reason: desktop executable exit gate proof is stale (277238s old)
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: 'latest worker receipt 20260429T200523Z-shard-10 is not trusted: provider-health
+  reason: 'latest worker receipt 20260429T201624Z-shard-10 is not trusted: provider-health
     preflight left no routable direct lanes: core_rescue:onemin:unavailable; remaining_percent_of_max=0.00,
     estimated_remaining_credits_total=4464; core:onemin:unavailable; remaining_percent_of_max=0.00,
     estimated_remaining_credits_total=4464; survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini;

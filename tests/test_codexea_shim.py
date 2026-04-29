@@ -244,6 +244,63 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIn("SENTINEL_EXEC_TRACE_PROMPT", payload["argv"][-1])
         self.assertIn("eta of the fleet? is it running? the shards?", payload["argv"][-1])
 
+    def test_exec_git_commit_push_fast_path_commits_and_pushes_without_launching_codex(self) -> None:
+        repo_root = self.root / "repo"
+        remote_root = self.root / "remote.git"
+        subprocess.run(
+            ["git", "init", "--bare", "--initial-branch=main", str(remote_root)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            ["git", "init", "--initial-branch=main", str(repo_root)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(["git", "-C", str(repo_root), "config", "user.name", "CodexEA"], check=True)
+        subprocess.run(["git", "-C", str(repo_root), "config", "user.email", "codexea@example.com"], check=True)
+        (repo_root / "note.txt").write_text("before\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo_root), "add", "note.txt"], check=True)
+        subprocess.run(["git", "-C", str(repo_root), "commit", "-m", "initial"], check=True, capture_output=True, text=True)
+        subprocess.run(["git", "-C", str(repo_root), "remote", "add", "origin", str(remote_root)], check=True)
+        subprocess.run(["git", "-C", str(repo_root), "push", "-u", "origin", "HEAD"], check=True, capture_output=True, text=True)
+        (repo_root / "note.txt").write_text("after\n", encoding="utf-8")
+
+        prompt = (
+            "Run these exact commands first:\n"
+            "$ git status --short\n"
+            "$ git add -A\n"
+            "$ git commit -m 'Stabilize CodexEA and fleet readiness routing'\n"
+            "$ git push origin HEAD\n\n"
+            "After the push, report the pushed commit hash only.\n"
+        )
+        result = self.run_shim(
+            "easy",
+            "exec",
+            "-C",
+            str(repo_root),
+            prompt,
+            extra_env={
+                "CODEXEA_TRACE_STARTUP": "1",
+                "CODEXEA_OPERATOR_GUARD_ENABLE": "0",
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNone(payload)
+        self.assertIn("Pushed commit ", completed.stdout)
+        head = subprocess.check_output(["git", "-C", str(repo_root), "rev-parse", "HEAD"], text=True).strip()
+        upstream = subprocess.check_output(["git", "-C", str(repo_root), "rev-parse", "@{u}"], text=True).strip()
+        self.assertEqual(head, upstream)
+        self.assertEqual(
+            subprocess.check_output(["git", "-C", str(repo_root), "status", "--short"], text=True).strip(),
+            "",
+        )
+
     def test_fleet_unblock_prompt_activates_operator_guard_and_injects_operator_trace_prompt(self) -> None:
         result = self.run_shim(
             "core",

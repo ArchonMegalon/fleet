@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GIT_WORKFLOW_HELPER="${SCRIPT_DIR}/codexea_git_workflow.py"
 
 runtime_env_candidates() {
   local path
@@ -844,6 +845,88 @@ extract_exec_prompt_text() {
   prompt_parts=("${args[@]:${i}}")
   [ "${#prompt_parts[@]}" -gt 0 ] || return 1
   printf '%s' "${prompt_parts[*]}"
+}
+
+extract_exec_workdir() {
+  local -a args=("$@")
+  local i=0
+
+  [ "${#args[@]}" -gt 0 ] || return 1
+  [ "${args[0]}" = "exec" ] || return 1
+  i=1
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      -C|--cd)
+        i=$((i + 1))
+        [ "${i}" -lt "${#args[@]}" ] || return 1
+        printf '%s' "${args[$i]}"
+        return 0
+        ;;
+      --)
+        break
+        ;;
+    esac
+    i=$((i + 1))
+  done
+  pwd
+}
+
+extract_exec_output_last_message_path() {
+  local -a args=("$@")
+  local i=0
+
+  [ "${#args[@]}" -gt 0 ] || return 1
+  [ "${args[0]}" = "exec" ] || return 1
+  i=1
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      -o|--output-last-message)
+        i=$((i + 1))
+        [ "${i}" -lt "${#args[@]}" ] || return 1
+        printf '%s' "${args[$i]}"
+        return 0
+        ;;
+    esac
+    i=$((i + 1))
+  done
+  return 1
+}
+
+maybe_run_local_git_commit_push_fast_path() {
+  local -a args=("$@")
+  local prompt_text=""
+  local workdir=""
+  local output_last_message_path=""
+  local prompt_file=""
+  local -a helper_cmd=()
+  local helper_rc=0
+
+  [ -f "${GIT_WORKFLOW_HELPER}" ] || return 1
+  [ "${#args[@]}" -gt 0 ] || return 1
+  [ "${args[0]}" = "exec" ] || return 1
+
+  prompt_text="$(extract_exec_prompt_text "${args[@]}" || true)"
+  [ -n "${prompt_text}" ] || return 1
+  workdir="$(extract_exec_workdir "${args[@]}" || pwd)"
+  output_last_message_path="$(extract_exec_output_last_message_path "${args[@]}" || true)"
+  prompt_file="$(mktemp)"
+  printf '%s' "${prompt_text}" > "${prompt_file}"
+  helper_cmd=(python3 "${GIT_WORKFLOW_HELPER}" --cwd "${workdir}" --prompt-file "${prompt_file}")
+  if [ -n "${output_last_message_path}" ]; then
+    helper_cmd+=(--output-last-message "${output_last_message_path}")
+  fi
+  emit_debug_trace "local_git_workflow_fast_path cwd=${workdir}"
+  set +e
+  "${helper_cmd[@]}"
+  helper_rc=$?
+  set -e
+  rm -f "${prompt_file}"
+  if [ "${helper_rc}" -eq 10 ]; then
+    return 1
+  fi
+  return "${helper_rc}"
 }
 
 strip_exec_prompt_from_exec_args() {
@@ -3609,6 +3692,12 @@ emit_startup_trace "$(
     printf '%s' "start_prompt_session"
   fi
 )"
+
+if [ "${EXEC_SESSION_REQUEST}" -eq 1 ] || [ "${EXPLICIT_EXEC_SUBCOMMAND_REQUEST}" -eq 1 ]; then
+  if maybe_run_local_git_commit_push_fast_path "${ADJUSTED_ARGS[@]}"; then
+    exit 0
+  fi
+fi
 
 USE_CLEAN_EXEC_OUTPUT=0
 if [ "${CODEXEA_CLEAN_EXEC_OUTPUT:-1}" = "1" ] && args_request_raw_exec_output "${ADJUSTED_ARGS[@]}"; then
