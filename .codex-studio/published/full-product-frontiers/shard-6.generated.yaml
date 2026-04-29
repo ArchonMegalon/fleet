@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-29T20:17:34Z'
+generated_at: '2026-04-29T20:18:44Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-6
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -110,7 +110,7 @@ frontier:
     summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open under
       the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
       ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T14:19:58Z'
+    predicted_completion_at: '2026-04-30T14:21:08Z'
     range_low_hours: 10.25
     range_high_hours: 25.83
     remaining_open_milestones: 1
