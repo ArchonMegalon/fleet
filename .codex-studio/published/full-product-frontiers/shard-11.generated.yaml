@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-30T15:32:29Z'
+generated_at: '2026-04-30T16:19:37Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-11
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,7 +32,7 @@ focus:
   - fleet
   - chummer6-hub
   - chummer6-design
-  - chummer6-ui
+  - executive-assistant
   texts:
   - top flagship grade
   - whole project frontier
@@ -74,7 +74,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-30T15:30:07Z'
+  generated_at: '2026-04-30T15:54:57Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -83,55 +83,77 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1416961433
+- 3109832007
 frontier:
-- id: 1416961433
-  title: Surface campaign memory and consequences on desktop
+- id: 3109832007
+  title: Fleet and operator loop flagship finish
   wave: flagship_product
   status: blocked_external_host_proof
   owners:
-  - chummer6-ui
+  - fleet
+  - executive-assistant
+  - chummer6-design
+  - chummer6-hub
   dependencies: []
   exit_criteria:
-  - Make campaign consequences, stale state, and next-session return actions visible
-    on the promoted desktop route.
-  - 'Own and prove the surface slice(s): campaign_workspace:memory, campaign_return_loop:desktop'
-  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
-    Chummer.Tests, scripts'
-  - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-ui` (next90-m112-ui-campaign-memory).
+  - Keep the product-governor, support, signal, and operator loop durable enough to
+    steer the full multi-repo product, not just the current milestone wave, with trustworthy
+    proofs, traces, ETAs, handoffs, and fail-closed anti-false-complete posture.
+  - Ensure the loop can keep decomposing full-product work across shards until flagship
+    readiness proof is current and trusted, and that actionable feedback, crash, and
+    support signals can auto-materialize into routed bugfix work without operator
+    babysitting.
   eta:
     status: flagship_delivery
     eta_human: 9h-22h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Surface campaign memory and consequences on desktop'' remains
-      open under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+    summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
+      the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
       ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-01T06:45:05Z'
-    range_low_hours: 8.64
-    range_high_hours: 21.78
+    predicted_completion_at: '2026-05-01T07:43:37Z'
+    range_low_hours: 8.6
+    range_high_hours: 22.2
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.8
+    remaining_effort_units: 2.0
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
-queue_package:
-  repo: chummer6-ui
-  package_id: next90-m112-ui-campaign-memory
-  title: Surface campaign memory and consequences on desktop
-  priority: 0
-  owned_surfaces:
-  - campaign_workspace:memory
-  - campaign_return_loop:desktop
-  allowed_paths:
-  - Chummer.Avalonia
-  - Chummer.Desktop.Runtime
-  - Chummer.Tests
-  - scripts
+eta:
+  status: blocked
+  eta_human: 9h-22h after unblock
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic+external_blocker
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
+    remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262; survival:browseract:ready;
+    gemini_vortex:missing:command_not_found:gemini; onemin:unavailable; repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
+    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
+    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
+    https://www.aimagicx.com/api/v1/chat:request_timeout:5s; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
+    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
+  summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
+    the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+    ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.
+    Current external blocker: provider-health preflight left no routable direct lanes:
+    core_rescue:onemin:unavailable; remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262;
+    survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini; onemin:unavailable;
+    repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
+    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
+    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
+    https://www.aimagicx.com/api/v1/chat:request_timeout:5s; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
+    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
+  predicted_completion_at: ''
+  range_low_hours: 8.6
+  range_high_hours: 22.2
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 2.0

@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-30T15:53:24Z'
+generated_at: '2026-04-30T16:18:52Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-13
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,7 +32,7 @@ focus:
   - chummer6-ui
   - chummer6-hub
   - fleet
-  - chummer6-core
+  - chummer6-media-factory
   texts:
   - top flagship grade
   - whole project frontier
@@ -75,7 +75,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-30T15:52:43Z'
+  generated_at: '2026-04-30T15:54:57Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -84,32 +84,34 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 3770604205
+- 2642013094
 frontier:
-- id: 3770604205
-  title: Define opposition and scene packet contracts with rules-backed stats
+- id: 2642013094
+  title: Render release explainer, support closure, and public concierge companion
+    bundles with captions, previews, and sibling notes
   wave: flagship_product
   status: blocked_external_host_proof
   owners:
-  - chummer6-core
+  - chummer6-media-factory
   dependencies: []
   exit_criteria:
-  - Define opposition and scene packet contracts with rules-backed stats and bounded-loss
-    receipts.
-  - 'Own and prove the surface slice(s): gm_prep_packets, opposition_contracts'
+  - Render install-aware release, support, and public concierge companions with captions,
+    previews, and bounded sibling notes.
+  - 'Own and prove the surface slice(s): release_explainer_artifacts, support_closure_artifacts,
+    public_concierge_companions'
   - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-core` (next90-m113-core-opposition-packet-contracts).
+    is landed for `chummer6-media-factory` (next90-m111-media-factory-concierge-bundles).
   eta:
     status: flagship_delivery
     eta_human: 9h-21h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Define opposition and scene packet contracts with rules-backed
-      stats'' remains open under the flagship closeout frontier. Outstanding readiness
-      coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
-      desktop_client.'
-    predicted_completion_at: '2026-05-01T06:51:00Z'
+    summary: 'Milestone ''Render release explainer, support closure, and public concierge
+      companion bundles with captions, previews, and sibling notes'' remains open
+      under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+      ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
+    predicted_completion_at: '2026-05-01T07:16:28Z'
     range_low_hours: 8.67
     range_high_hours: 21.25
     remaining_open_milestones: 1
@@ -124,32 +126,48 @@ frontier:
     scope_warning: ''
 source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
 queue_package:
-  repo: chummer6-core
-  package_id: next90-m113-core-opposition-packet-contracts
-  title: Define opposition and scene packet contracts with rules-backed stats
+  repo: chummer6-media-factory
+  package_id: next90-m111-media-factory-concierge-bundles
+  title: Render release explainer, support closure, and public concierge companion
+    bundles with captions, previews, and sibling notes
   priority: 0
   owned_surfaces:
-  - gm_prep_packets
-  - opposition_contracts
+  - release_explainer_artifacts
+  - support_closure_artifacts
+  - public_concierge_companions
   allowed_paths:
   - src
   - tests
   - docs
   - scripts
 eta:
-  status: flagship_delivery
-  eta_human: 9h-21h
+  status: blocked
+  eta_human: 9h-21h after unblock
   eta_confidence: low
-  basis: full_product_single_milestone_heuristic
+  basis: full_product_single_milestone_heuristic+external_blocker
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Define opposition and scene packet contracts with rules-backed
-    stats'' remains open under the flagship closeout frontier. Outstanding readiness
-    coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
-    desktop_client.'
-  predicted_completion_at: '2026-05-01T06:50:59Z'
+  blocking_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
+    remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262; survival:browseract:ready;
+    gemini_vortex:missing:command_not_found:gemini; onemin:unavailable; repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
+    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
+    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
+    https://www.aimagicx.com/api/v1/chat:request_timeout:5s; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
+    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
+  summary: 'Milestone ''Render release explainer, support closure, and public concierge
+    companion bundles with captions, previews, and sibling notes'' remains open under
+    the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+    ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.
+    Current external blocker: provider-health preflight left no routable direct lanes:
+    core_rescue:onemin:unavailable; remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262;
+    survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini; onemin:unavailable;
+    repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
+    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
+    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
+    https://www.aimagicx.com/api/v1/chat:request_timeout:5s; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
+    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
+  predicted_completion_at: ''
   range_low_hours: 8.67
   range_high_hours: 21.25
   remaining_open_milestones: 1

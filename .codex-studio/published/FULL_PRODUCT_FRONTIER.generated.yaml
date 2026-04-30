@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-30T15:52:46Z'
+generated_at: '2026-04-30T15:54:59Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -67,7 +67,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-30T15:52:43Z'
+  generated_at: '2026-04-30T15:54:57Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -105,7 +105,7 @@ frontier:
     summary: 'Milestone ''Flagship desktop client and workbench finish'' remains open
       under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
       ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-01T09:54:52Z'
+    predicted_completion_at: '2026-05-01T09:57:05Z'
     range_low_hours: 10.45
     range_high_hours: 25.62
     remaining_open_milestones: 1
@@ -142,7 +142,7 @@ frontier:
     summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open under
       the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
       ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-01T09:11:58Z'
+    predicted_completion_at: '2026-05-01T09:14:11Z'
     range_low_hours: 9.84
     range_high_hours: 24.8
     remaining_open_milestones: 1
@@ -179,7 +179,7 @@ frontier:
       polish'' remains open under the flagship closeout frontier. Outstanding readiness
       coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
       desktop_client.'
-    predicted_completion_at: '2026-05-01T09:11:58Z'
+    predicted_completion_at: '2026-05-01T09:14:11Z'
     range_low_hours: 9.84
     range_high_hours: 24.8
     remaining_open_milestones: 1

@@ -1,10 +1,10 @@
 # Chummer6 Product Vision Audit
 
-- generated_at: 2026-04-30T15:46:23.767308Z
-- active_runs_count: 13
-- productive_active_runs_count: 13
+- generated_at: 2026-04-30T16:19:22.331179Z
+- active_runs_count: 0
+- productive_active_runs_count: 0
 - nonproductive_active_runs_count: 0
-- remaining_open_milestones: 13
+- remaining_open_milestones: 11
 - missing_frontier_ids: []
 - ui_parity_visual_yes_no: 74/10
 - ui_parity_behavioral_yes_no: 74/10
@@ -24,7 +24,7 @@
 
 - severity: high
 - category: lost_potential
-- owner_shards: ['shard-7', 'shard-3', 'shard-6', 'shard-8']
+- owner_shards: ['shard-7', 'shard-1', 'shard-4', 'shard-6']
 - milestone_area: Living campaign loop / lost-potential wave / mobile play shell
 - reason: The canon explicitly says Chummer should feel like an explainable campaign OS with action help, local rule anchors, campaign adoption, runner goals, prep packets, and BLACK LEDGER consequence loops, but those loops still sit in open readiness or successor-wave posture rather than feeling closed in flagship truth.
 - user_impact: Players and GMs do not yet get the calm-under-pressure payoff: what can I do right now, why, and what changed because of the last run.
@@ -36,7 +36,7 @@
 
 - severity: high
 - category: visual_and_behavioral_parity
-- owner_shards: ['shard-4', 'shard-5', 'shard-6', 'shard-9']
+- owner_shards: ['shard-4', 'shard-6', 'shard-9', 'shard-13']
 - milestone_area: Chummer5A parity closure and veteran replacement
 - reason: The current parity matrix is still visual 74/10 and behavioral 74/10, with open families around translator/XML, dense builder and career flows, dice and initiative, import oracles, Hero Lab, contacts, lifestyles, history, and print/export surfaces.
 - user_impact: A veteran Chummer5A user can still hit moments where the flow is slower, less familiar, or less trusted than the old tool.
@@ -48,7 +48,7 @@
 
 - severity: high
 - category: trust_and_release_proof
-- owner_shards: ['shard-1', 'shard-3', 'shard-11', 'shard-12']
+- owner_shards: ['shard-7', 'shard-1', 'shard-4', 'shard-6']
 - milestone_area: Desktop release proof, installer truth, and restore confidence
 - reason: The product canon emphasizes confidence, boring trust, and public proof shelf discipline, but desktop release closure still depends on stale or mismatched Windows startup-smoke proof and a still-open desktop-client readiness key.
 - user_impact: Users may believe the product promise less at exactly the moments where they need confidence most: install, update, restore, and first-launch recovery.
@@ -60,7 +60,7 @@
 
 - severity: medium
 - category: mobile_continuity
-- owner_shards: ['shard-3', 'shard-8']
+- owner_shards: ['shard-7', 'shard-1', 'shard-4', 'shard-6']
 - milestone_area: Mobile play shell and return-moment continuity
 - reason: Readiness still carries `mobile_play_shell=warning` while the canon says mobile should become the player and GM shell for table return, recap, continuity, and travel moments. Current leading reason: Recover-from-sync-conflict journey is blocked, not ready..
 - user_impact: The product is still strongest at the desk, not in the between-session and at-table moments that actually drive habit and return.
@@ -84,7 +84,7 @@
 
 - severity: medium
 - category: workflow_gate_discipline
-- owner_shards: ['shard-1', 'shard-3', 'shard-12']
+- owner_shards: ['shard-7', 'shard-1', 'shard-4', 'shard-6']
 - milestone_area: Journey gates, screenshot packs, runtime-backed parity contracts
 - reason: The repo now has real parity and readiness gates, but the remaining UI families are still unproven because those exact sub-dialogs and workflow moments are not all under direct screenshot/runtime contract yet.
 - user_impact: A product manager or veteran tester can still feel that something is off even while the global readiness story looks healthier.
@@ -97,7 +97,7 @@
 ### 1. Community scheduling or roster-formation LTD
 
 - repo_grounded: False
-- owner_shards: ['shard-7', 'shard-2', 'shard-6', 'shard-11']
+- owner_shards: ['shard-7', 'shard-6', 'shard-11']
 - thesis: An acquisition or deeper integration around scheduling, campaign-group movement, and community roster formation would slot cleanly into Open Runs and Community Hub.
 - why_fit: The canon already defines Open Runs, Community Hub, campaign-group movement, and organizer operations; what is missing is a truly great social and logistics layer around them.
 - evidence_paths: ['/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml', '/docker/chummercomplete/chummer-design/products/chummer/CONFIDENCE_READINESS_AND_CONTINUITY_GUIDE.md']
@@ -113,7 +113,7 @@
 ### 3. Travel, route, or venue-intelligence LTD
 
 - repo_grounded: False
-- owner_shards: ['shard-3', 'shard-8']
+- owner_shards: ['shard-7', 'shard-1', 'shard-4', 'shard-6']
 - thesis: A route-pack or travel-operations acquisition would strengthen RUNSITE and mobile travel continuity.
 - why_fit: The canon already names route packs, travel moments, mobile continuity, and observer views; the missing leverage is a stronger real-world travel and location intelligence substrate.
 - evidence_paths: ['/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml', '/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md']
@@ -121,7 +121,7 @@
 ### 4. Privacy-safe coaching or post-session analytics LTD
 
 - repo_grounded: False
-- owner_shards: ['shard-3', 'shard-11', 'shard-13']
+- owner_shards: ['shard-7', 'shard-1', 'shard-4', 'shard-6']
 - thesis: A bounded coaching or after-action analytics asset would accelerate TABLE PULSE without making it a second campaign truth source.
 - why_fit: The canon explicitly wants bounded, privacy-safe post-session coaching; the hard part is productizing that loop without becoming creepy or authoritative.
 - evidence_paths: ['/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md', '/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml', '/docker/chummercomplete/chummer-design/products/chummer/CONFIDENCE_READINESS_AND_CONTINUITY_GUIDE.md']
@@ -129,7 +129,7 @@
 ### 5. Manual-intake or migration-confidence LTD
 
 - repo_grounded: False
-- owner_shards: ['shard-4', 'shard-5']
+- owner_shards: ['shard-4']
 - thesis: A scanning, migration, or import-normalization asset would make manual intake and veteran migration much less expensive.
 - why_fit: Confidence guide canon makes manual intake and migration confidence a core promise, and the current parity matrix still shows import/oracle and Hero Lab proof gaps.
 - evidence_paths: ['/docker/chummercomplete/chummer-design/products/chummer/CONFIDENCE_READINESS_AND_CONTINUITY_GUIDE.md', '/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json', '/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md']

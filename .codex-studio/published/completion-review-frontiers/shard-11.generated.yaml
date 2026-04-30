@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-30T15:23:14Z'
+generated_at: '2026-04-30T16:19:38Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-11
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -33,7 +33,7 @@ focus:
   - fleet
   - chummer6-hub
   - chummer6-design
-  - chummer6-ui
+  - executive-assistant
   texts:
   - top flagship grade
   - whole project frontier
@@ -67,10 +67,16 @@ completion_audit:
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260430T150220Z-shard-11 is not trusted: missing
-    final message'
-  latest_run_id: 20260430T150220Z-shard-11
-  latest_run_reason: missing final message
+  reason: 'latest worker receipt 20260430T161816Z-shard-11 is not trusted: provider-health
+    preflight left no routable direct lanes: core_rescue:onemin:unavailable; remaining_percent_of_max=0.00,
+    estimated_remaining_credits_total=3262; core:onemin:unavailable; remaining_percent_of_max=0.00,
+    estimated_remaining_credits_total=3262; survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini;
+    onemin:unavailable'
+  latest_run_id: 20260430T161816Z-shard-11
+  latest_run_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
+    remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262; core:onemin:unavailable;
+    remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262; survival:browseract:ready;
+    gemini_vortex:missing:command_not_found:gemini; onemin:unavailable'
 journey_gate_audit:
   status: fail
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
@@ -105,20 +111,37 @@ blocking_audits:
   reason: desktop executable exit gate proof did not pass
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: 'latest worker receipt 20260430T150220Z-shard-11 is not trusted: missing
-    final message'
+  reason: 'latest worker receipt 20260430T161816Z-shard-11 is not trusted: provider-health
+    preflight left no routable direct lanes: core_rescue:onemin:unavailable; remaining_percent_of_max=0.00,
+    estimated_remaining_credits_total=3262; core:onemin:unavailable; remaining_percent_of_max=0.00,
+    estimated_remaining_credits_total=3262; survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini;
+    onemin:unavailable'
 frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
-  status: flagship_delivery
-  eta_human: 9h-22h
+  status: blocked
+  eta_human: 9h-22h after unblock
   eta_confidence: low
-  basis: full_product_single_milestone_heuristic
+  basis: full_product_single_milestone_heuristic+external_blocker
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Surface campaign memory and consequences on desktop'' remains
-    open under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
-    ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
+  blocking_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
+    remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262; survival:browseract:ready;
+    gemini_vortex:missing:command_not_found:gemini; onemin:unavailable; repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
+    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
+    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
+    https://www.aimagicx.com/api/v1/chat:request_timeout:5s; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
+    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
+  summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
+    the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+    ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.
+    Current external blocker: provider-health preflight left no routable direct lanes:
+    core_rescue:onemin:unavailable; remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262;
+    survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini; onemin:unavailable;
+    repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
+    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
+    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
+    https://www.aimagicx.com/api/v1/chat:request_timeout:5s; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
+    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'

@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-30T14:51:44Z'
+generated_at: '2026-04-30T16:19:33Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-9
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -33,7 +33,8 @@ focus:
   - chummer6-core
   - chummer6-ui
   - chummer6-hub
-  - chummer6-media-factory
+  - chummer6-mobile
+  - chummer6-ui-kit
   texts:
   - top flagship grade
   - whole project frontier
@@ -68,21 +69,26 @@ completion_audit:
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260430T142932Z-shard-9 is not trusted: missing
-    final message'
-  latest_run_id: 20260430T142932Z-shard-9
-  latest_run_reason: missing final message
+  reason: 'latest worker receipt 20260430T161809Z-shard-9 is not trusted: provider-health
+    preflight left no routable direct lanes: core_rescue:onemin:unavailable; remaining_percent_of_max=0.00,
+    estimated_remaining_credits_total=3262; core:onemin:unavailable; remaining_percent_of_max=0.00,
+    estimated_remaining_credits_total=3262; survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini;
+    onemin:unavailable'
+  latest_run_id: 20260430T161809Z-shard-9
+  latest_run_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
+    remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262; core:onemin:unavailable;
+    remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262; survival:browseract:ready;
+    gemini_vortex:missing:command_not_found:gemini; onemin:unavailable'
 journey_gate_audit:
   status: fail
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
   blocked_journey_count: 6
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
-  status: pass
-  reason: linux desktop binary build/start/test proof is ready on current repo-local
-    evidence
+  status: fail
+  reason: stage flagship_ui_screenshot_gate failed
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-  generated_at: '2026-04-30T12:27:18Z'
+  generated_at: '2026-04-30T15:09:57Z'
 weekly_pulse_audit:
   status: pass
   reason: weekly product pulse is fresh and reports no remaining drift or blocker
@@ -99,26 +105,45 @@ blocking_audits:
 - component: journey_gate
   title: Golden journey release-proof gaps
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
+- component: linux_desktop_exit_gate
+  title: Linux desktop exit-gate gaps
+  reason: stage flagship_ui_screenshot_gate failed
 - component: desktop_executable_exit_gate
   title: Desktop executable exit-gate gaps
   reason: desktop executable exit gate proof did not pass
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: 'latest worker receipt 20260430T142932Z-shard-9 is not trusted: missing
-    final message'
+  reason: 'latest worker receipt 20260430T161809Z-shard-9 is not trusted: provider-health
+    preflight left no routable direct lanes: core_rescue:onemin:unavailable; remaining_percent_of_max=0.00,
+    estimated_remaining_credits_total=3262; core:onemin:unavailable; remaining_percent_of_max=0.00,
+    estimated_remaining_credits_total=3262; survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini;
+    onemin:unavailable'
 frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
-  status: flagship_delivery
-  eta_human: 9h-21h
+  status: blocked
+  eta_human: 10h-1d after unblock
   eta_confidence: low
-  basis: full_product_single_milestone_heuristic
+  basis: full_product_single_milestone_heuristic+external_blocker
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Render build explainer video, audio, preview-card, and packet
-    siblings from approved explain packets'' remains open under the flagship closeout
-    frontier. Outstanding readiness coverage: mobile_play_shell, ui_kit_and_flagship_polish,
-    media_artifacts, fleet_and_operator_loop, desktop_client.'
+  blocking_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
+    remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262; survival:browseract:ready;
+    gemini_vortex:missing:command_not_found:gemini; onemin:unavailable; repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
+    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
+    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
+    https://www.aimagicx.com/api/v1/chat:request_timeout:5s; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
+    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
+  summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open under
+    the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+    ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.
+    Current external blocker: provider-health preflight left no routable direct lanes:
+    core_rescue:onemin:unavailable; remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262;
+    survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini; onemin:unavailable;
+    repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
+    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
+    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
+    https://www.aimagicx.com/api/v1/chat:request_timeout:5s; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
+    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
