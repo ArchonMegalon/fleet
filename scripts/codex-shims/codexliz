@@ -30,7 +30,10 @@ CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY="${CODEXLIZ_TRANSPORT_REQUIRE_
 CODEXLIZ_OUTAGE_STATE_FILE="${CODEXLIZ_OUTAGE_STATE_FILE:-${CODEXLIZ_STATE_DIR}/outage.json}"
 CODEXLIZ_DEBUG="${CODEXLIZ_DEBUG:-0}"
 CODEXLIZ_DEBUG_LOG_FILE="${CODEXLIZ_DEBUG_LOG_FILE:-${CODEXLIZ_STATE_DIR}/debug.log}"
+CODEXLIZ_BOOTSTRAP="${CODEXLIZ_BOOTSTRAP:-1}"
+CODEXLIZ_EXEC_TRACE_PROMPT_FILE="${CODEXLIZ_EXEC_TRACE_PROMPT_FILE:-${SCRIPT_DIR}/liz_exec_trace_prompt.md}"
 CODEXLIZ_ACTIVE_CHILD_PID=""
+CODEXLIZ_STDIN_PROMPT="${CODEXLIZ_STDIN_PROMPT-}"
 
 if [ ! -x "${BASE_CODEX_SHIM}" ]; then
   FALLBACK_CODEX_SHIM="${CODEXLIZ_FALLBACK_CODEX_SHIM:-${CODEX_REAL_BIN:-}}"
@@ -395,6 +398,95 @@ detect_output_last_message_path() {
         ;;
     esac
   done
+}
+
+build_exec_trace_prompt() {
+  local prefix=""
+
+  if [ "${CODEXLIZ_BOOTSTRAP}" = "0" ]; then
+    return 0
+  fi
+
+  if [ -r "${CODEXLIZ_EXEC_TRACE_PROMPT_FILE}" ]; then
+    prefix="$(cat "${CODEXLIZ_EXEC_TRACE_PROMPT_FILE}")"
+  else
+    prefix=$'You are Codex running through the Fleet `codexliz` shim.\nOperating contract:\n- Behave like a pragmatic senior coding agent and work toward a tested landed result or a concrete blocker.\n- It is fine to fix adjacent issues when they materially improve the product, but each run must converge on a concrete code or verification result.\n- Prefer the first concrete failing test, assertion, traceback, or source contract over broad repo audits.\n- After at most two exploration steps, pick the most concrete failing edge and patch it.\n- Do the work instead of announcing that you will do it.\n- Keep command output compact. Use targeted `rg`, `sed`, and focused test invocations instead of dumping large files.\n- Do not emit raw tool-call markup, XML tool envelopes, or literal tags such as `</tool_call>` or `</function>` in plain text.\n- Before each meaningful work unit, emit one short `Trace:` line naming the action.\n- Prefer concise final answers.'
+  fi
+
+  printf '%s' "${prefix}"
+}
+
+prepend_exec_trace_stdin_prompt() {
+  local prompt_prefix=""
+
+  [ -n "${CODEXLIZ_STDIN_PROMPT-}" ] || return 0
+  prompt_prefix="$(build_exec_trace_prompt)"
+  [ -n "${prompt_prefix}" ] || return 0
+  case "${CODEXLIZ_STDIN_PROMPT}" in
+    "${prompt_prefix}"*)
+      return 0
+      ;;
+  esac
+  CODEXLIZ_STDIN_PROMPT="${prompt_prefix}"$'\n\n'"${CODEXLIZ_STDIN_PROMPT}"
+}
+
+prepend_exec_trace_inline_prompt_args() {
+  local -n args_ref=$1
+  local prompt_prefix=""
+  local i=0
+  local saw_exec=0
+  local prompt_idx=-1
+  local arg=""
+
+  prompt_prefix="$(build_exec_trace_prompt)"
+  [ -n "${prompt_prefix}" ] || return 0
+
+  while [ "${i}" -lt "${#args_ref[@]}" ]; do
+    arg="${args_ref[$i]}"
+    if [ "${saw_exec}" -eq 0 ]; then
+      if [ "${arg}" = "exec" ]; then
+        saw_exec=1
+      fi
+      i=$((i + 1))
+      continue
+    fi
+
+    case "${arg}" in
+      --json|--ephemeral)
+        i=$((i + 1))
+        ;;
+      -o|--output-last-message|--color|--output-schema)
+        i=$((i + 2))
+        ;;
+      --)
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args_ref[@]}" ]; then
+          prompt_idx="${i}"
+        fi
+        i="${#args_ref[@]}"
+        ;;
+      -)
+        return 0
+        ;;
+      -*)
+        i=$((i + 1))
+        ;;
+      *)
+        prompt_idx="${i}"
+        i="${#args_ref[@]}"
+        ;;
+    esac
+  done
+
+  if [ "${prompt_idx}" -ge 0 ]; then
+    case "${args_ref[$prompt_idx]}" in
+      "${prompt_prefix}"*)
+        ;;
+      *)
+        args_ref[$prompt_idx]="${prompt_prefix}"$'\n\n'"${args_ref[$prompt_idx]}"
+        ;;
+    esac
+  fi
 }
 
 is_codex_subcommand() {
@@ -800,6 +892,10 @@ run_codex_with_transport_retry() {
   max_backoff_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS}" "300")"
   max_wait_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS}" "86400")"
   sleep_seconds="${base_sleep_seconds}"
+  if [ -n "${CODEXLIZ_STDIN_PROMPT-}" ]; then
+    stdin_file="$(mktemp "${TMPDIR:-/tmp}/codexliz-stdin.XXXXXX")"
+    printf '%s' "${CODEXLIZ_STDIN_PROMPT}" > "${stdin_file}"
+  fi
 
   while :; do
     stderr_file="$(mktemp "${TMPDIR:-/tmp}/codexliz-stderr.XXXXXX")"
@@ -1035,6 +1131,7 @@ PRIMARY_COMMAND="$(detect_primary_command "$@")"
 
 export CODEX_PREFER_EA_MCP="${CODEX_PREFER_EA_MCP:-0}"
 export CODEX_WRAPPER_DISABLE_BOOTSTRAP="${CODEX_WRAPPER_DISABLE_BOOTSTRAP:-1}"
+export CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT="${CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT:-1}"
 load_cf_access_env
 
 if { [ "$#" -gt 0 ] && [ -z "${PRIMARY_COMMAND}" ]; } || is_providerless_command "${PRIMARY_COMMAND}" || has_explicit_provider_override "$@"; then
@@ -1046,6 +1143,16 @@ fi
 declare -a ADJUSTED_ARGS=()
 mapfile -d '' ADJUSTED_ARGS < <(wrap_prompt_invocation_with_exec "$@")
 PRIMARY_COMMAND="$(detect_primary_command "${ADJUSTED_ARGS[@]}")"
+if [ "${PRIMARY_COMMAND}" = "exec" ]; then
+  prepend_exec_trace_inline_prompt_args ADJUSTED_ARGS
+fi
+if [ -z "${CODEXLIZ_STDIN_PROMPT}" ] && [ ! -t 0 ] && [ "${PRIMARY_COMMAND}" = "exec" ] && [ "${#ADJUSTED_ARGS[@]}" -gt 0 ]; then
+  last_arg_index=$(( ${#ADJUSTED_ARGS[@]} - 1 ))
+  if [ "${ADJUSTED_ARGS[$last_arg_index]}" = "-" ]; then
+    CODEXLIZ_STDIN_PROMPT="$(head -c 1048576 || true)"
+    prepend_exec_trace_stdin_prompt
+  fi
+fi
 
 if [ ! -f "${PROXY_SCRIPT}" ]; then
   echo "Missing codexliz proxy script at ${PROXY_SCRIPT}" >&2

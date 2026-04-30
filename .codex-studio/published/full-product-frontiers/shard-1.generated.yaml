@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-29T20:19:33Z'
+generated_at: '2026-04-30T13:02:02Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -59,6 +59,7 @@ focus:
   - mobile play shell
   - ui kit and flagship polish
   - media artifacts
+  - fleet and operator loop
   - desktop client
 quality_policy:
   bar: top_flagship_grade
@@ -73,7 +74,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-29T20:07:11Z'
+  generated_at: '2026-04-30T13:00:41Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -89,7 +90,7 @@ frontier:
     audit observations; keep one bounded queue slice for the affected local design
     mirror bundle instead of reopening one-off mirror refresh work.
   wave: flagship_product
-  status: not_started
+  status: blocked_external_host_proof
   owners: []
   dependencies: []
   exit_criteria:
@@ -102,17 +103,18 @@ frontier:
     is landed (audit-task-3226027).
   eta:
     status: flagship_delivery
-    eta_human: 7h-17h
+    eta_human: 6h-16h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Auto-detect and repair recurring `fleet` mirror drift after
       15037 repeated audit observations; keep one bounded queue slice for the affected
       local design mirror bundle instead of reopening one-off mirror refresh work.''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T07:59:45Z'
-    range_low_hours: 6.52
-    range_high_hours: 16.82
+      mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
+      desktop_client.'
+    predicted_completion_at: '2026-05-01T00:11:38Z'
+    range_low_hours: 6.23
+    range_high_hours: 16.09
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
@@ -135,24 +137,3 @@ queue_package:
   - design_mirror:fleet
   allowed_paths:
   - .codex-design
-eta:
-  status: flagship_delivery
-  eta_human: 7h-17h
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Auto-detect and repair recurring `fleet` mirror drift after
-    15037 repeated audit observations; keep one bounded queue slice for the affected
-    local design mirror bundle instead of reopening one-off mirror refresh work.''
-    remains open under the flagship closeout frontier. Outstanding readiness coverage:
-    mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-  predicted_completion_at: '2026-04-30T07:59:45Z'
-  range_low_hours: 6.52
-  range_high_hours: 16.82
-  remaining_open_milestones: 1
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 1
-  remaining_effort_units: 1.45

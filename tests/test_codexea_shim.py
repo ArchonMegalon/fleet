@@ -63,6 +63,7 @@ class CodexEaShimTests(unittest.TestCase):
                     "        'CHUMMER_DESIGN_SUPERVISOR_STATUS_HELPER_FATAL': os.environ.get('CHUMMER_DESIGN_SUPERVISOR_STATUS_HELPER_FATAL'),",
                     "        'BASH_ENV': os.environ.get('BASH_ENV'),",
                     "        'EA_MCP_MODEL': os.environ.get('EA_MCP_MODEL'),",
+                    "        'CODEX_HOME': os.environ.get('CODEX_HOME'),",
                     "        'HOME': os.environ.get('HOME'),",
                     "        'XDG_CACHE_HOME': os.environ.get('XDG_CACHE_HOME'),",
                     "    },",
@@ -87,6 +88,7 @@ class CodexEaShimTests(unittest.TestCase):
                 "CODEXEA_REAL_CODEX": str(self.fake_codex),
                 "CODEXEA_ROUTE_HELPER": str(self.root / "missing-route-helper.py"),
                 "CODEXEA_BOOTSTRAP": "0",
+                "CODEXEA_OPERATOR_GUARD_LOCAL_SHORTCUTS": "0",
                 "CODEXEA_STARTUP_STATUS": "0",
                 "CODEXEA_USE_LIVE_PROFILE_MODELS": "0",
                 "CODEXEA_TEST_CAPTURE": str(self.capture_path),
@@ -330,7 +332,7 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIn("current_blocker", telemetry_payload)
         self.assertIn("live_shard_execution", telemetry_payload)
         self.assertIn("telemetry_path", telemetry_payload["live_shard_execution"])
-        prompt = payload["argv"][-1]
+        prompt = str(payload.get("stdin") or payload["argv"][-1])
         self.assertIn(str(telemetry_path), prompt)
         self.assertIn("Prepared repo context:", prompt)
         self.assertIn("Live shard execution context:", prompt)
@@ -536,7 +538,7 @@ class CodexEaShimTests(unittest.TestCase):
             telemetry_payload["current_blocker"],
             "[fleet-supervisor] provider-health preflight left no routable direct lanes: core:onemin:unavailable",
         )
-        prompt = payload["argv"][-1]
+        prompt = str(payload.get("stdin") or payload["argv"][-1])
         self.assertIn(
             "- current_blocker: [fleet-supervisor] provider-health preflight left no routable direct lanes: core:onemin:unavailable",
             prompt,
@@ -592,7 +594,7 @@ class CodexEaShimTests(unittest.TestCase):
             telemetry_payload["current_blocker"],
             "[fleet-supervisor] provider-health preflight left no routable direct lanes: core:onemin:unavailable",
         )
-        prompt = payload["argv"][-1]
+        prompt = str(payload.get("stdin") or payload["argv"][-1])
         self.assertIn(
             "[fleet-supervisor] provider-health preflight left no routable direct lanes: core:onemin:unavailable",
             prompt,
@@ -696,6 +698,28 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertEqual(payload["env"]["CODEXEA_LANE"], "core")
         self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_core")
 
+    def test_unblock_diagnostic_prompt_forces_easy_lane_even_when_core_was_requested(self) -> None:
+        result = self.run_shim(
+            "core",
+            "exec",
+            "Investigate why EA global 1min aggregate reports ready_account_count=0 while Fleet is running 13/13 productive. OODA the fleet and patch only CodexEA shim, EA endpoints, or the 1min manager.",
+            extra_env={"CODEXEA_BOOTSTRAP": "1", "CODEXEA_TRACE_STARTUP": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertTrue(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"])
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "easy")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_fast")
+        self.assertIn('model="ea-coder-fast"', payload["argv"])
+        self.assertIn("Operator-prepared fleet unblock context:", str(payload.get("stdin") or ""))
+        self.assertIn(
+            "Trace: lane=easy provider=ea model=ea-coder-fast mode=responses next=start_exec_session",
+            completed.stderr,
+        )
+
     def test_backlog_audit_prompt_activates_operator_guard_and_disables_mcp(self) -> None:
         prompt_text = (
             "Audit whether every remaining milestone or task needed to complete the "
@@ -707,7 +731,7 @@ class CodexEaShimTests(unittest.TestCase):
         result = self.run_shim(
             "exec",
             prompt_text,
-            extra_env={"CODEXEA_BOOTSTRAP": "1"},
+            extra_env={"CODEXEA_BOOTSTRAP": "1", "CODEXEA_DEBUG": "1"},
         )
 
         completed = result["completed"]
@@ -724,13 +748,247 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertTrue(telemetry_payload["first_commands"])
         self.assertEqual(payload["env"]["CODEXEA_LANE"], "core")
         self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_core")
-        prompt = payload["argv"][-1]
+        prompt = str(payload.get("stdin") or payload["argv"][-1])
         self.assertIn("Operator-prepared backlog audit context:", prompt)
         self.assertIn("Run these exact commands first:", prompt)
         self.assertIn("Do not patch EA routing, CodexEA runtime, or shard execution paths", prompt)
         self.assertIn(str(telemetry_path), prompt)
         self.assertNotIn("Prepared repo context:", prompt)
         self.assertIn('mcp_servers={}', payload["argv"])
+
+    def test_generic_fleet_unblock_prompt_does_not_activate_infra_operator_guard(self) -> None:
+        prompt_text = (
+            "OODA the fleet and unblock it. Fix the current blocker in /docker/fleet and verify it."
+        )
+
+        result = self.run_shim(
+            "exec",
+            prompt_text,
+            extra_env={"CODEXEA_BOOTSTRAP": "1", "CODEXEA_DEBUG": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertFalse(str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] or "").strip())
+        prompt = str(payload.get("stdin") or payload["argv"][-1])
+        self.assertNotIn("Operator-prepared backlog audit context:", prompt)
+        self.assertNotIn("Operator-prepared fleet unblock context:", prompt)
+        self.assertIn("OODA the fleet and unblock it.", prompt)
+
+    def test_preconfigured_codex_home_is_created_before_launch(self) -> None:
+        codex_home = self.root / "missing-codex-home"
+
+        result = self.run_shim(
+            "exec",
+            "Reply with exactly ok.",
+            extra_env={"CODEX_HOME": str(codex_home)},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertTrue(codex_home.is_dir())
+        self.assertEqual(payload["env"]["CODEX_HOME"], str(codex_home))
+
+    def test_gap_audit_prompt_activates_gap_audit_operator_guard(self) -> None:
+        prompt_text = (
+            "Spawn CodexEA in debug mode and find gaps in both the design, the milestones, "
+            "the shards implementing them, and the workflow to gate the result, with special "
+            "attention to visual parity and sub-workflow behavior."
+        )
+
+        result = self.run_shim(
+            "exec",
+            prompt_text,
+            extra_env={"CODEXEA_BOOTSTRAP": "1", "CODEXEA_DEBUG": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        active_run_dir = str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] or "").strip()
+        self.assertTrue(active_run_dir)
+        telemetry_path = Path(active_run_dir) / "TASK_LOCAL_TELEMETRY.generated.json"
+        self.assertTrue(telemetry_path.exists())
+        telemetry_payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        self.assertEqual(telemetry_payload["guard_mode"], "gap_audit")
+        self.assertIn("gap audit", telemetry_payload["summary"].lower())
+        self.assertEqual(len(telemetry_payload["first_commands"]), 1)
+        self.assertIn("codexea_gap_audit_probe.py", telemetry_payload["first_commands"][0])
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "easy")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_fast")
+        prompt = str(payload.get("stdin") or payload["argv"][-1])
+        self.assertIn("Operator-prepared gap audit context:", prompt)
+        self.assertIn("Prepared repo context:", prompt)
+        self.assertIn("visual parity", prompt)
+        self.assertNotIn("Operator-prepared fleet unblock context:", prompt)
+        self.assertIn("clean_exec=0", completed.stderr)
+
+    def test_gap_fix_prompt_activates_gap_fix_operator_guard(self) -> None:
+        prompt_text = "Make CodexEA fix the things found in the audit around parity, workflow gates, and stale proof."
+
+        result = self.run_shim(
+            "exec",
+            prompt_text,
+            extra_env={"CODEXEA_BOOTSTRAP": "1", "CODEXEA_DEBUG": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        active_run_dir = str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] or "").strip()
+        self.assertTrue(active_run_dir)
+        telemetry_path = Path(active_run_dir) / "TASK_LOCAL_TELEMETRY.generated.json"
+        telemetry_payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        self.assertEqual(telemetry_payload["guard_mode"], "gap_fix")
+        self.assertIn("gap fix", telemetry_payload["summary"].lower())
+        self.assertEqual(len(telemetry_payload["first_commands"]), 1)
+        self.assertIn("codexea_gap_fix_workflow.py", telemetry_payload["first_commands"][0])
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "easy")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_fast")
+        prompt = str(payload.get("stdin") or payload["argv"][-1])
+        self.assertIn("Operator-prepared gap fix context:", prompt)
+        self.assertNotIn("Prepared repo context:", prompt)
+        self.assertIn("Run these exact commands first:", prompt)
+        self.assertIn("probe_kind=gap_fix", prompt)
+        self.assertIn("do not run `git status`", prompt)
+        self.assertIn("clean_exec=0", completed.stderr)
+
+    def test_repo_local_visual_parity_gap_prompt_activates_gap_audit_operator_guard(self) -> None:
+        prompt_text = (
+            "Find gaps in the design, the milestones, the shards implementing them, and the workflow "
+            "that gates the result. Focus especially on visual parity across sub-workflows and behavior "
+            "mismatches versus the repo-described product."
+        )
+
+        result = self.run_shim(
+            "exec",
+            prompt_text,
+            extra_env={"CODEXEA_BOOTSTRAP": "1", "CODEXEA_DEBUG": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        telemetry_path = Path(str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"]).strip()) / "TASK_LOCAL_TELEMETRY.generated.json"
+        telemetry_payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        self.assertEqual(telemetry_payload["guard_mode"], "gap_audit")
+        prompt = str(payload.get("stdin") or payload["argv"][-1])
+        self.assertIn("Operator-prepared gap audit context:", prompt)
+        self.assertIn("visual parity", prompt)
+
+    def test_every_ui_element_prompt_activates_ui_parity_audit_operator_guard(self) -> None:
+        prompt_text = (
+            "Audit Chummer6 against Chummer5A like a human tester, almost pixel level. "
+            "List every UI element, every subdialog, and every visible workflow surface with yes/no parity."
+        )
+
+        result = self.run_shim(
+            "exec",
+            prompt_text,
+            extra_env={"CODEXEA_BOOTSTRAP": "1", "CODEXEA_DEBUG": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        telemetry_path = Path(str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"]).strip()) / "TASK_LOCAL_TELEMETRY.generated.json"
+        telemetry_payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        self.assertEqual(telemetry_payload["guard_mode"], "ui_parity_audit")
+        self.assertIn("ui parity audit", telemetry_payload["summary"].lower())
+        self.assertEqual(len(telemetry_payload["first_commands"]), 1)
+        self.assertIn("codexea_ui_parity_audit_probe.py", telemetry_payload["first_commands"][0])
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "easy")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_fast")
+        prompt = str(payload.get("stdin") or payload["argv"][-1])
+        self.assertIn("Operator-prepared UI parity audit context:", prompt)
+        self.assertIn("probe_kind=ui_parity_audit", prompt)
+        self.assertIn("clean_exec=0", completed.stderr)
+
+    def test_vision_lost_potential_prompt_activates_vision_audit_operator_guard(self) -> None:
+        prompt_text = (
+            "Analyze Chummer6 design for lost potential for our vision of the product. "
+            "What would users want or miss? Also analyze missed integration potential of my LTDs or not yet purchased LTDs."
+        )
+
+        result = self.run_shim(
+            "exec",
+            prompt_text,
+            extra_env={"CODEXEA_BOOTSTRAP": "1", "CODEXEA_DEBUG": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        telemetry_path = Path(str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"]).strip()) / "TASK_LOCAL_TELEMETRY.generated.json"
+        telemetry_payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        self.assertEqual(telemetry_payload["guard_mode"], "vision_audit")
+        self.assertIn("vision audit", telemetry_payload["summary"].lower())
+        self.assertEqual(len(telemetry_payload["first_commands"]), 1)
+        self.assertIn("codexea_vision_audit_probe.py", telemetry_payload["first_commands"][0])
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "easy")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_fast")
+        prompt = str(payload.get("stdin") or payload["argv"][-1])
+        self.assertIn("Operator-prepared vision audit context:", prompt)
+        self.assertIn("probe_kind=vision_audit", prompt)
+        self.assertIn("clean_exec=0", completed.stderr)
+
+    def test_full_parity_build_prompt_activates_parity_build_operator_guard(self) -> None:
+        prompt_text = "OODA and make CodexEA materialize a full parity build."
+
+        result = self.run_shim(
+            "exec",
+            prompt_text,
+            extra_env={"CODEXEA_BOOTSTRAP": "1", "CODEXEA_DEBUG": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        telemetry_path = Path(str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"]).strip()) / "TASK_LOCAL_TELEMETRY.generated.json"
+        telemetry_payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        self.assertEqual(telemetry_payload["guard_mode"], "parity_build")
+        self.assertIn("parity build", telemetry_payload["summary"].lower())
+        self.assertEqual(len(telemetry_payload["first_commands"]), 1)
+        self.assertIn("codexea_parity_build_workflow.py", telemetry_payload["first_commands"][0])
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "easy")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_fast")
+        prompt = str(payload.get("stdin") or payload["argv"][-1])
+        self.assertIn("Operator-prepared parity build context:", prompt)
+        self.assertIn("probe_kind=parity_build", prompt)
+        self.assertIn("clean_exec=0", completed.stderr)
+
+    def test_true_chummer5a_parity_materialize_prompt_activates_parity_build_operator_guard(self) -> None:
+        prompt_text = (
+            "OODA and materialize true Chummer5A parity end to end. "
+            "Promote it into the live portal, hub registry, and UI release roots, "
+            "then refresh proofs against the promoted bytes."
+        )
+
+        result = self.run_shim(
+            "exec",
+            prompt_text,
+            extra_env={"CODEXEA_BOOTSTRAP": "1", "CODEXEA_DEBUG": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        telemetry_path = Path(str(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"]).strip()) / "TASK_LOCAL_TELEMETRY.generated.json"
+        telemetry_payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        self.assertEqual(telemetry_payload["guard_mode"], "parity_build")
+        prompt = str(payload.get("stdin") or payload["argv"][-1])
+        self.assertIn("Operator-prepared parity build context:", prompt)
 
     def test_prompt_session_emits_waiting_trace_while_provider_is_quiet(self) -> None:
         result = self.run_shim(
@@ -1382,7 +1640,7 @@ class CodexEaShimTests(unittest.TestCase):
         argv = payload["argv"]
         self.assertIn('model_provider="ea"', argv)
         self.assertIn('model="ea-coder-hard-batch"', argv)
-        self.assertTrue(any('X-EA-Codex-Profile"="core_batch"' in arg for arg in argv))
+        self.assertTrue(any('X-EA-Codex-Profile"="CODEXEA_RESPONSES_HEADER_EA_CODEX_PROFILE"' in arg for arg in argv))
         self.assertEqual(payload["env"]["CODEXEA_LANE"], "core")
         self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_core_batch")
         self.assertIn(
@@ -1404,7 +1662,7 @@ class CodexEaShimTests(unittest.TestCase):
         argv = payload["argv"]
         self.assertIn('model_provider="ea"', argv)
         self.assertIn('model="ea-coder-hard-rescue"', argv)
-        self.assertTrue(any('X-EA-Codex-Profile"="core_rescue"' in arg for arg in argv))
+        self.assertTrue(any('X-EA-Codex-Profile"="CODEXEA_RESPONSES_HEADER_EA_CODEX_PROFILE"' in arg for arg in argv))
         self.assertEqual(payload["env"]["CODEXEA_LANE"], "core_rescue")
         self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_core_rescue")
         self.assertIn(
@@ -1987,7 +2245,7 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertFalse(any("Authorization" in arg for arg in argv))
         self.assertIn('model_providers.ea.bearer_token_env_var="CODEXEA_RESPONSES_AUTH_TOKEN"', argv)
         self.assertIn(
-            'model_providers.ea.env_http_headers={"x-api-token"="CODEXEA_RESPONSES_AUTH_TOKEN","X-EA-Api-Token"="CODEXEA_RESPONSES_AUTH_TOKEN"}',
+            'model_providers.ea.env_http_headers={"X-EA-Principal-ID"="CODEXEA_RESPONSES_HEADER_EA_PRINCIPAL_ID","X-EA-Codex-Profile"="CODEXEA_RESPONSES_HEADER_EA_CODEX_PROFILE","x-api-token"="CODEXEA_RESPONSES_AUTH_TOKEN","X-EA-Api-Token"="CODEXEA_RESPONSES_AUTH_TOKEN"}',
             argv,
         )
         self.assertEqual(payload["env"]["CODEXEA_RESPONSES_AUTH_TOKEN"], "super-secret-token")

@@ -1,0 +1,355 @@
+{
+  "generated_at": "2026-04-30T13:13:02.185874Z",
+  "probe_kind": "vision_audit",
+  "summary": {
+    "repo_grounded_findings_count": 6,
+    "speculative_integration_opportunity_count": 5,
+    "active_runs_count": 11,
+    "productive_active_runs_count": 10,
+    "nonproductive_active_runs_count": 1,
+    "remaining_open_milestones": 12,
+    "missing_frontier_ids": [],
+    "coverage_gap_keys": [
+      "desktop_client",
+      "mobile_play_shell",
+      "ui_kit_and_flagship_polish",
+      "media_artifacts"
+    ],
+    "visual_yes_count": 74,
+    "visual_no_count": 10,
+    "behavioral_yes_count": 74,
+    "behavioral_no_count": 10,
+    "removable_extra_present_count": 0,
+    "desktop_client_status": "missing"
+  },
+  "repo_grounded_findings": [
+    {
+      "rank": 1,
+      "severity": "high",
+      "category": "lost_potential",
+      "repo_grounded": true,
+      "title": "The campaign OS promise still does not land at the table in the moments the canon says should feel magical.",
+      "reason": "The canon explicitly says Chummer should feel like an explainable campaign OS with action help, local rule anchors, campaign adoption, runner goals, prep packets, and BLACK LEDGER consequence loops, but those loops still sit in open readiness or successor-wave posture rather than feeling closed in flagship truth.",
+      "user_impact": "Players and GMs do not yet get the calm-under-pressure payoff: what can I do right now, why, and what changed because of the last run.",
+      "what_users_want_or_miss": [
+        "tell me what I can still do right now",
+        "open the exact source or rule anchor without breaking flow",
+        "adopt my existing campaign without rebuilding everything",
+        "close a run and immediately see approved consequences"
+      ],
+      "owner_shards": [
+        "shard-7",
+        "shard-3",
+        "shard-5",
+        "shard-6"
+      ],
+      "milestone_area": "Living campaign loop / lost-potential wave / mobile play shell",
+      "evidence_paths": [
+        "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md",
+        "/docker/chummercomplete/chummer-design/products/chummer/CONFIDENCE_READINESS_AND_CONTINUITY_GUIDE.md",
+        "/docker/chummercomplete/chummer-design/products/chummer/LIVING_CAMPAIGN_LOOP_MATERIALIZATION_GUIDE.md",
+        "/docker/chummercomplete/chummer-design/products/chummer/LOST_POTENTIAL_MATERIALIZATION_WAVE.md",
+        "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+        "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json"
+      ],
+      "workflow_gates": [
+        "live combat round with action budgets",
+        "local source or rule anchor open",
+        "existing campaign adoption",
+        "runner goal update",
+        "GM prep packet",
+        "ResolutionReport to WorldTick to player-safe news"
+      ]
+    },
+    {
+      "rank": 2,
+      "severity": "high",
+      "category": "visual_and_behavioral_parity",
+      "repo_grounded": true,
+      "title": "Veteran replacement still leaks on dense sub-workflows, so trust is broader than it is deep.",
+      "reason": "The current parity matrix is still visual 74/10 and behavioral 74/10, with open families around translator/XML, dense builder and career flows, dice and initiative, import oracles, Hero Lab, contacts, lifestyles, history, and print/export surfaces.",
+      "user_impact": "A veteran Chummer5A user can still hit moments where the flow is slower, less familiar, or less trusted than the old tool.",
+      "what_users_want_or_miss": [
+        "the same dense builder rhythm as Chummer5A",
+        "fast import and migration rails",
+        "trusted dice, initiative, and table utility moments",
+        "full roster, contacts, lifestyles, and history comfort"
+      ],
+      "owner_shards": [
+        "shard-4",
+        "shard-5",
+        "shard-6",
+        "shard-9"
+      ],
+      "milestone_area": "Chummer5A parity closure and veteran replacement",
+      "evidence_paths": [
+        "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
+        "/docker/chummercomplete/chummer-design/products/chummer/CONFIDENCE_READINESS_AND_CONTINUITY_GUIDE.md",
+        "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md"
+      ],
+      "workflow_gates": [
+        "translator route screenshot/runtime proof",
+        "xml amendment editor screenshot/runtime proof",
+        "dense builder and career workflow proof",
+        "dice and initiative workflow proof",
+        "contacts and lifestyles proof",
+        "import oracles and Hero Lab proof"
+      ]
+    },
+    {
+      "rank": 3,
+      "severity": "high",
+      "category": "trust_and_release_proof",
+      "repo_grounded": true,
+      "title": "The trust story is stronger in canon than in the executable proof shelf.",
+      "reason": "The product canon emphasizes confidence, boring trust, and public proof shelf discipline, but desktop release closure still depends on stale or mismatched Windows startup-smoke proof and a still-open desktop-client readiness key.",
+      "user_impact": "Users may believe the product promise less at exactly the moments where they need confidence most: install, update, restore, and first-launch recovery.",
+      "what_users_want_or_miss": [
+        "a boring installer and update path",
+        "honest proof that the promoted build actually launches",
+        "confidence that recovery and restore really work"
+      ],
+      "owner_shards": [
+        "shard-1",
+        "shard-3",
+        "shard-5",
+        "shard-6"
+      ],
+      "milestone_area": "Desktop release proof, installer truth, and restore confidence",
+      "evidence_paths": [
+        "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+        "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md",
+        "/docker/chummercomplete/chummer-design/products/chummer/CONFIDENCE_READINESS_AND_CONTINUITY_GUIDE.md"
+      ],
+      "workflow_gates": [
+        "Windows startup smoke against promoted bytes",
+        "desktop executable exit gate",
+        "release-channel and proof-shelf freshness"
+      ]
+    },
+    {
+      "rank": 4,
+      "severity": "medium",
+      "category": "mobile_continuity",
+      "repo_grounded": true,
+      "title": "Mobile and companion continuity are still warnings even though the canon makes them part of the moat.",
+      "reason": "Readiness still carries `mobile_play_shell=warning` while the canon says mobile should become the player and GM shell for table return, recap, continuity, and travel moments. Current leading reason: Recover-from-sync-conflict journey is blocked, not ready..",
+      "user_impact": "The product is still strongest at the desk, not in the between-session and at-table moments that actually drive habit and return.",
+      "what_users_want_or_miss": [
+        "phone-safe recap and next-step continuity",
+        "player-safe consequence feed",
+        "offline or degraded-network companion moments"
+      ],
+      "owner_shards": [
+        "shard-3",
+        "shard-5",
+        "shard-6",
+        "shard-8"
+      ],
+      "milestone_area": "Mobile play shell and return-moment continuity",
+      "evidence_paths": [
+        "/docker/chummercomplete/chummer-design/products/chummer/CONFIDENCE_READINESS_AND_CONTINUITY_GUIDE.md",
+        "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md",
+        "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+        "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
+      ],
+      "workflow_gates": [
+        "mobile recap and briefing continuity",
+        "player-safe consequence feed",
+        "travel and degraded-network companion views"
+      ]
+    },
+    {
+      "rank": 5,
+      "severity": "medium",
+      "category": "horizon_integration",
+      "repo_grounded": true,
+      "title": "The horizon brands and community surfaces are named, but they are not yet woven back into the core product loop.",
+      "reason": "The successor wave explicitly defines JACKPOINT, RUNBOOK PRESS, GHOSTWIRE, RUNSITE, TABLE PULSE, and Community Hub, but today they still read more like deferred horizons than like emotional extensions of build, play, campaign, recap, and trust.",
+      "user_impact": "Users miss the feeling that campaign artifacts, recaps, prep packets, route packs, and community moments belong to one coherent ecosystem.",
+      "what_users_want_or_miss": [
+        "shareable recap and publication artifacts",
+        "community-safe open-run and roster formation loops",
+        "route, travel, and observer moments tied to real campaign truth"
+      ],
+      "owner_shards": [
+        "shard-10",
+        "shard-11"
+      ],
+      "milestone_area": "Media and social horizon tranche / artifact and community loop",
+      "evidence_paths": [
+        "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md",
+        "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+        "/docker/chummercomplete/chummer-design/products/chummer/projects/hub-registry.md",
+        "/docker/fleet/repos/chummer-media-factory/docs/chummer-media-factory.design.v1.md"
+      ],
+      "workflow_gates": [
+        "artifact studio and press workflow",
+        "open runs and Community Hub formation",
+        "route pack and travel continuity proof",
+        "bounded table-pulse and replay surfaces"
+      ]
+    },
+    {
+      "rank": 6,
+      "severity": "medium",
+      "category": "workflow_gate_discipline",
+      "repo_grounded": true,
+      "title": "The gating workflow still proves broad readiness more easily than the exact sub-flows that matter to humans.",
+      "reason": "The repo now has real parity and readiness gates, but the remaining UI families are still unproven because those exact sub-dialogs and workflow moments are not all under direct screenshot/runtime contract yet.",
+      "user_impact": "A product manager or veteran tester can still feel that something is off even while the global readiness story looks healthier.",
+      "what_users_want_or_miss": [
+        "proof for the exact dialogs they actually use",
+        "behavioral parity, not just route existence",
+        "fewer places where visual drift hides behind aggregate green status"
+      ],
+      "owner_shards": [
+        "shard-1",
+        "shard-3",
+        "shard-5",
+        "shard-6"
+      ],
+      "milestone_area": "Journey gates, screenshot packs, runtime-backed parity contracts",
+      "evidence_paths": [
+        "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
+        "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+        "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md"
+      ],
+      "workflow_gates": [
+        "sub-dialog screenshot packs",
+        "behavioral parity assertions for veteran flows",
+        "proof-shelf freshness for promoted artifacts"
+      ]
+    }
+  ],
+  "speculative_integration_opportunities": [
+    {
+      "rank": 1,
+      "repo_grounded": false,
+      "title": "Community scheduling or roster-formation LTD",
+      "thesis": "An acquisition or deeper integration around scheduling, campaign-group movement, and community roster formation would slot cleanly into Open Runs and Community Hub.",
+      "why_fit": "The canon already defines Open Runs, Community Hub, campaign-group movement, and organizer operations; what is missing is a truly great social and logistics layer around them.",
+      "owner_shards": [
+        "shard-7",
+        "shard-2",
+        "shard-6",
+        "shard-11"
+      ],
+      "evidence_paths": [
+        "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+        "/docker/chummercomplete/chummer-design/products/chummer/CONFIDENCE_READINESS_AND_CONTINUITY_GUIDE.md"
+      ]
+    },
+    {
+      "rank": 2,
+      "repo_grounded": false,
+      "title": "Creator publication or editorial LTD",
+      "thesis": "A creator-publication, editorial, or print-oriented acquisition would fit RUNBOOK PRESS, JACKPOINT, and artifact shelf v2.",
+      "why_fit": "The repo already wants discovery, lineage, moderation, trust ranking, publication, and press-like artifact flows; an existing publishing asset could accelerate that lane materially.",
+      "owner_shards": [
+        "shard-10",
+        "shard-11"
+      ],
+      "evidence_paths": [
+        "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+        "/docker/chummercomplete/chummer-design/products/chummer/projects/hub-registry.md",
+        "/docker/fleet/repos/chummer-media-factory/docs/chummer-media-factory.design.v1.md"
+      ]
+    },
+    {
+      "rank": 3,
+      "repo_grounded": false,
+      "title": "Travel, route, or venue-intelligence LTD",
+      "thesis": "A route-pack or travel-operations acquisition would strengthen RUNSITE and mobile travel continuity.",
+      "why_fit": "The canon already names route packs, travel moments, mobile continuity, and observer views; the missing leverage is a stronger real-world travel and location intelligence substrate.",
+      "owner_shards": [
+        "shard-3",
+        "shard-5",
+        "shard-6",
+        "shard-8"
+      ],
+      "evidence_paths": [
+        "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+        "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md"
+      ]
+    },
+    {
+      "rank": 4,
+      "repo_grounded": false,
+      "title": "Privacy-safe coaching or post-session analytics LTD",
+      "thesis": "A bounded coaching or after-action analytics asset would accelerate TABLE PULSE without making it a second campaign truth source.",
+      "why_fit": "The canon explicitly wants bounded, privacy-safe post-session coaching; the hard part is productizing that loop without becoming creepy or authoritative.",
+      "owner_shards": [
+        "shard-3",
+        "shard-5",
+        "shard-6",
+        "shard-8"
+      ],
+      "evidence_paths": [
+        "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md",
+        "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+        "/docker/chummercomplete/chummer-design/products/chummer/CONFIDENCE_READINESS_AND_CONTINUITY_GUIDE.md"
+      ]
+    },
+    {
+      "rank": 5,
+      "repo_grounded": false,
+      "title": "Manual-intake or migration-confidence LTD",
+      "thesis": "A scanning, migration, or import-normalization asset would make manual intake and veteran migration much less expensive.",
+      "why_fit": "Confidence guide canon makes manual intake and migration confidence a core promise, and the current parity matrix still shows import/oracle and Hero Lab proof gaps.",
+      "owner_shards": [
+        "shard-4",
+        "shard-5"
+      ],
+      "evidence_paths": [
+        "/docker/chummercomplete/chummer-design/products/chummer/CONFIDENCE_READINESS_AND_CONTINUITY_GUIDE.md",
+        "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
+        "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md"
+      ]
+    }
+  ],
+  "user_wants_or_misses": [
+    "Tell me what I can do right now, why, and what rule or source backs it.",
+    "Adopt my current campaign without rebuilding my table from scratch.",
+    "Keep campaign memory, consequences, and runner goals alive between sessions.",
+    "Make the dense veteran workflows feel as fast and familiar as Chummer5A.",
+    "Give me trusted mobile or companion continuity for travel, recap, and return moments.",
+    "Let me publish, recap, share, and form tables from the same canonical campaign truth."
+  ],
+  "gate_recommendations": [
+    {
+      "title": "Materialize the lost-potential wave as real screenshot and runtime journeys",
+      "reason": "The canon already names eight concrete loops; they should become visible release gates, not just roadmap language."
+    },
+    {
+      "title": "Split parity proof by family instead of one broad veteran-replacement story",
+      "reason": "Translator/XML, import/oracles, dense builder, dice, contacts/lifestyles, and print/export need independent screenshot/runtime proof."
+    },
+    {
+      "title": "Make promoted Windows bytes the only allowed desktop-proof target",
+      "reason": "That removes the stale-proof class of failure and aligns install truth with what users actually download."
+    },
+    {
+      "title": "Gate community and horizon surfaces against core campaign truth",
+      "reason": "JACKPOINT, RUNBOOK PRESS, RUNSITE, TABLE PULSE, GHOSTWIRE, and Community Hub should enrich campaign truth, never fork it."
+    }
+  ],
+  "notes": [
+    "No missing flagship frontier milestone IDs were found in the live open milestone aggregate.",
+    "The current parity audit reports zero currently-present removable Chummer6-only extras.",
+    "Desktop readiness remains `missing`. Leading reason: Executable desktop exit gate proof is missing or not passed. Desktop shell/install/support liveliness must be proven from shipped artifacts.",
+    "Other current readiness warnings: mobile=warning, ui_kit_and_flagship_polish=warning, media_artifacts=warning. mobile reason: Recover-from-sync-conflict journey is blocked, not ready.. polish reason: Build/explain/publish journey is blocked, not ready.. media reason: Build/explain/publish journey is blocked, not ready..",
+    "The current opportunity audit is repo-grounded first and marks speculative acquisition or integration ideas explicitly as speculative."
+  ],
+  "supporting_signals": {
+    "readiness_status": "fail",
+    "roadmap_loaded": true,
+    "confidence_guide_loaded": true,
+    "living_campaign_guide_loaded": true,
+    "lost_potential_wave_loaded": true,
+    "next90_registry_loaded": true,
+    "hub_registry_loaded": true,
+    "media_factory_design_loaded": true,
+    "ui_parity_findings_count": 11
+  }
+}

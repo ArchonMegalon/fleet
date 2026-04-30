@@ -41,11 +41,14 @@ class CodexLizShimTests(unittest.TestCase):
                     "import json, os, sys",
                     "payload = {",
                     "    'argv': sys.argv[1:],",
+                    "    'stdin': sys.stdin.read(),",
                     "    'env': {",
                     "        'HOME': os.environ.get('HOME'),",
                     "        'CODEX_HOME': os.environ.get('CODEX_HOME'),",
                     "        'CODEXLIZ_PROXY_PORT': os.environ.get('CODEXLIZ_PROXY_PORT'),",
                     "        'CODEXLIZ_STATE_DIR': os.environ.get('CODEXLIZ_STATE_DIR'),",
+                    "        'CODEX_WRAPPER_DISABLE_BOOTSTRAP': os.environ.get('CODEX_WRAPPER_DISABLE_BOOTSTRAP'),",
+                    "        'CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT': os.environ.get('CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT'),",
                     "    },",
                     "}",
                     "with open(os.environ['CODEXLIZ_TEST_CAPTURE'], 'w', encoding='utf-8') as handle:",
@@ -86,6 +89,8 @@ class CodexLizShimTests(unittest.TestCase):
         include_proxy_port: bool = True,
         extra_args: list[str] | None = None,
         extra_env: dict[str, str] | None = None,
+        default_prompt: str | None = "repair the queue stall",
+        input_text: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         active_state_dir = state_dir or self.state_dir
         active_capture_path = capture_path or self.capture_path
@@ -111,13 +116,15 @@ class CodexLizShimTests(unittest.TestCase):
         args = ["bash", str(SHIM_PATH)]
         if extra_args:
             args.extend(extra_args)
-        args.append("repair the queue stall")
+        if default_prompt is not None:
+            args.append(default_prompt)
         return subprocess.run(
             args,
             check=False,
             capture_output=True,
             text=True,
             env=env,
+            input=input_text,
         )
 
     def _server(self, handler_type: type[BaseHTTPRequestHandler]) -> tuple[ThreadingHTTPServer, threading.Thread]:
@@ -182,7 +189,62 @@ class CodexLizShimTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
         self.assertIn("exec", payload["argv"])
-        self.assertIn("repair the queue stall", payload["argv"])
+        self.assertIn("repair the queue stall", payload["argv"][-1])
+        self.assertEqual(payload["env"]["CODEX_WRAPPER_DISABLE_BOOTSTRAP"], "1")
+        self.assertEqual(payload["env"]["CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT"], "1")
+
+    def test_codexliz_prepends_exec_trace_prompt_to_inline_exec_prompt(self) -> None:
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server, _thread = self._server(Handler)
+        completed = self._run_shim(
+            f"http://127.0.0.1:{server.server_port}",
+            extra_args=["exec"],
+            default_prompt="repair the queue stall",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        prompt_arg = payload["argv"][-1]
+        self.assertIn("You are Codex running through the Fleet `codexliz` shim.", prompt_arg)
+        self.assertIn("repair the queue stall", prompt_arg)
+
+    def test_codexliz_prepends_exec_trace_prompt_to_stdin_exec_prompt(self) -> None:
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server, _thread = self._server(Handler)
+        completed = self._run_shim(
+            f"http://127.0.0.1:{server.server_port}",
+            extra_args=["exec", "-"],
+            default_prompt=None,
+            input_text="repair the queue stall",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["argv"][-1], "-")
+        self.assertIn("You are Codex running through the Fleet `codexliz` shim.", payload["stdin"])
+        self.assertIn("repair the queue stall", payload["stdin"])
 
     def test_codexliz_debug_mode_emits_preflight_and_launch_traces(self) -> None:
         class Handler(BaseHTTPRequestHandler):
@@ -504,7 +566,8 @@ class CodexLizShimTests(unittest.TestCase):
         self.assertEqual(payload["attempt"], 2)
         self.assertIn("exec", payload["argv"])
         self.assertIn("-", payload["argv"])
-        self.assertEqual(payload["stdin"], "repair the queue stall")
+        self.assertIn("You are Codex running through the Fleet `codexliz` shim.", payload["stdin"])
+        self.assertIn("repair the queue stall", payload["stdin"])
         self.assertIn("compat=unsupported_input_item retry=stdin_exec", completed.stderr)
 
     def test_codexliz_kills_active_child_when_wrapper_is_terminated(self) -> None:

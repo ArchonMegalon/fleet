@@ -126,7 +126,7 @@ supervisor_contract:
     state_root: /docker/fleet/state/chummer_design_supervisor
     clear_lock_on_boot: true
     health_max_age_seconds: 900
-    shard_count: 14
+    shard_count: 13
     shard_start_stagger_seconds: 3
     frontier_derive_mode: auto
     dynamic_account_routing: auto
@@ -395,7 +395,7 @@ supervisor_contract:
     - /docker/fleet/runtime.ea.env
     - /docker/fleet/runtime.env
     launcher_defaults:
-      parallel_shards: 14
+      parallel_shards: 13
       state_root: /docker/fleet/state/chummer_design_supervisor
       clear_lock_on_boot: true
     generated_state:
@@ -425,7 +425,7 @@ supervisor_contract:
         demotion_rule: demote here when memory is critical, credits are guarded, or external providers are unstable
       standard:
         description: Default steady-state mode for closeout plus successor-wave work without exhausting host headroom.
-        max_active_shards: 14
+        max_active_shards: 13
         memory_dispatch_reserve_gib: 2.0
         memory_dispatch_shard_budget_gib: 0.28
         memory_dispatch_warning_available_percent: 10.0

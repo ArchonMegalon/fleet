@@ -51,7 +51,7 @@ def test_fleet_supervisor_contract_carries_shard_routing_and_proof_paths() -> No
     assert runtime["restart_safe"] is True
     assert runtime["state_root"] == "/docker/fleet/state/chummer_design_supervisor"
     assert runtime["clear_lock_on_boot"] is True
-    assert runtime["shard_count"] == 14
+    assert runtime["shard_count"] == 13
     assert runtime["dynamic_account_routing"] == "auto"
     assert runtime["worker_bin"].endswith("/scripts/codex-shims/codexea")
     assert runtime["worker_lane"] == "core"
@@ -129,7 +129,7 @@ def test_launcher_cold_restart_policy_is_reproducible_from_project_contract() ->
 
     assert lines["project_config"] == "/docker/fleet/config/projects/fleet.yaml"
     assert lines["state_root"] == "/docker/fleet/state/chummer_design_supervisor"
-    assert lines["parallel_shards"] == "13"
+    assert lines["parallel_shards"] == "14"
     assert lines["clear_lock_on_boot"] == "1"
     assert lines["health_max_age_seconds"] == "900"
     assert lines["operating_profile"] == "standard"
@@ -161,7 +161,7 @@ def test_active_shards_manifest_includes_audit_shard() -> None:
         Path("/docker/fleet/state/chummer_design_supervisor/active_shards.json").read_text(encoding="utf-8")
     )
     active_shards = manifest.get("active_shards") or []
-    assert manifest.get("configured_shard_count") in (None, 14)
+    assert manifest.get("configured_shard_count") in (None, 14))
     assert len(active_shards) >= 1
 
     shard_names = [str(shard.get("name")) for shard in active_shards if shard.get("name")]

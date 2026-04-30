@@ -153,10 +153,30 @@ normalize_codexea_home
 mkdir -p "${XDG_CACHE_HOME}" "${XDG_CONFIG_HOME}"
 export XDG_CACHE_HOME XDG_CONFIG_HOME
 
+ensure_codex_home_dir() {
+  local codex_home="${CODEX_HOME:-}"
+  [ -n "${codex_home}" ] || return 0
+  mkdir -p "${codex_home}"
+}
+
+ensure_codex_home_dir
+
 default_operator_guard_direct_principal_id() {
   local user_name=""
   user_name="$(id -un 2>/dev/null || printf 'codexea')"
   printf '%s-codexea-operator' "${user_name}"
+}
+
+sanitize_single_line() {
+  local value="${1-}"
+  value="${value//$'\r'/ }"
+  value="${value//$'\n'/ }"
+  while [[ "${value}" == *"  "* ]]; do
+    value="${value//  / }"
+  done
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "${value}"
 }
 
 REAL_CODEX="${CODEXEA_REAL_CODEX:-${CODEX_REAL_BIN:-/usr/bin/codex}}"
@@ -1216,6 +1236,21 @@ UNBLOCK_SPECIFIC_TERMS = (
     "transport_reconnecting",
     "stream disconnected",
 )
+DIAGNOSTIC_TERMS = (
+    "investigate",
+    "diagnose",
+    "diagnosis",
+    "why",
+    "oddity",
+    "credit",
+    "credits",
+    "provider health",
+    "provider-health",
+    "aggregate",
+    "ready_account_count",
+    "quarantine",
+    "reconcile",
+)
 BACKLOG_AUDIT_TERMS = (
     "backlog",
     "milestone",
@@ -1227,6 +1262,72 @@ BACKLOG_AUDIT_TERMS = (
     "gap",
     "gaps",
     "flagship",
+)
+GAP_FIX_TERMS = (
+    "fix the things found in the audit",
+    "fix things found in the audit",
+    "fix the findings from the audit",
+    "fix the audit findings",
+    "remediate the audit findings",
+    "close the audit findings",
+    "gap fix",
+    "fix gaps",
+    "tighten the parity",
+)
+GAP_AUDIT_TERMS = (
+    "gap audit",
+    "find gaps",
+    "remaining gaps",
+    "visual parity",
+    "behavior mismatch",
+    "behaviour mismatch",
+    "behavior problem",
+    "behaviour problem",
+    "behavioral parity",
+    "sub-workflow",
+    "sub workflow",
+    "workflow gate",
+    "workflow/gate",
+    "screenshot workflow",
+    "workflow proof",
+    "gate the result",
+)
+UI_PARITY_AUDIT_TERMS = (
+    "every ui element",
+    "every single ui element",
+    "almost pixel level",
+    "pixel level",
+    "human tester",
+    "screenshot-backed parity",
+    "screenshot backed parity",
+    "every subdialog",
+    "every sub dialog",
+    "every visible ui element",
+)
+VISION_AUDIT_TERMS = (
+    "lost potential",
+    "vision of the product",
+    "what would users want or miss",
+    "what users would want or miss",
+    "integration potential",
+    "my ltds",
+    "not yet purchased ltds",
+    "emotional payoff",
+    "tabletop utility",
+    "users would want",
+    "users would miss",
+)
+PARITY_BUILD_TERMS = (
+    "full parity build",
+    "materialize a full parity build",
+    "materialize full parity build",
+    "parity build",
+    "build parity",
+    "true chummer5a parity",
+    "materialize true chummer5a parity",
+    "promote it into the live portal",
+    "refresh proofs against the promoted bytes",
+    "release roots",
 )
 
 
@@ -1566,17 +1667,56 @@ staged_prompt_commands = _staged_prompt_commands(prompt_text)
 readiness_direct_commands: list[str] = []
 has_action = any(term in lowered for term in ACTION_TERMS)
 has_infra_scope = any(term in lowered for term in INFRA_TERMS)
-has_readiness_remedy = any(term in lowered for term in READINESS_REMEDY_TERMS)
+has_parity_build_language = any(term in lowered for term in PARITY_BUILD_TERMS)
+has_readiness_remedy = (not has_parity_build_language) and any(term in lowered for term in READINESS_REMEDY_TERMS)
 has_unblock_specific = any(term in lowered for term in UNBLOCK_SPECIFIC_TERMS)
-has_fleet_unblock = "fleet" in lowered and has_unblock_specific
+has_fleet_unblock = "fleet" in lowered and has_unblock_specific and has_infra_scope
+has_operator_diagnostic = any(term in lowered for term in DIAGNOSTIC_TERMS)
 has_backlog_audit = (
     not has_readiness_remedy
     and
     any(term in lowered for term in BACKLOG_AUDIT_TERMS)
     and any(term in lowered for term in ("chummer", "chummer6", "fleet"))
 )
+has_gap_fix = (
+    not has_readiness_remedy
+    and any(term in lowered for term in GAP_FIX_TERMS)
+    and any(term in lowered for term in ("audit", "gap", "gaps", "workflow", "gate", "parity", "desktop_client", "readiness"))
+    and any(term in lowered for term in ("chummer", "chummer6", "fleet", "codexea", "xodexea"))
+)
+has_gap_audit = (
+    not has_readiness_remedy
+    and any(term in lowered for term in GAP_AUDIT_TERMS)
+    and any(term in lowered for term in ("design", "milestone", "milestones", "workflow", "gate", "shard", "parity"))
+    and any(term in lowered for term in ("chummer", "chummer6", "fleet", "codexea", "repo", "workspace", "product"))
+)
+has_ui_parity_audit = (
+    not has_readiness_remedy
+    and any(term in lowered for term in UI_PARITY_AUDIT_TERMS)
+    and any(term in lowered for term in ("chummer", "chummer5a", "chummer6", "fleet", "codexea", "ui", "workflow", "parity", "dialog"))
+)
+has_vision_audit = (
+    not has_readiness_remedy
+    and any(term in lowered for term in VISION_AUDIT_TERMS)
+    and any(term in lowered for term in ("chummer", "chummer6", "fleet", "codexea", "product", "design", "vision", "campaign"))
+)
+has_parity_build = (
+    not has_readiness_remedy
+    and has_parity_build_language
+    and any(term in lowered for term in ("chummer", "chummer5a", "chummer6", "fleet", "codexea", "parity"))
+)
 guard_mode = ""
-if has_fleet_unblock or (
+if has_gap_fix:
+    guard_mode = "gap_fix"
+elif has_parity_build:
+    guard_mode = "parity_build"
+elif has_ui_parity_audit:
+    guard_mode = "ui_parity_audit"
+elif has_vision_audit:
+    guard_mode = "vision_audit"
+elif has_gap_audit:
+    guard_mode = "gap_audit"
+elif has_fleet_unblock or (
     has_action
     and has_infra_scope
     and (has_unblock_specific or not has_readiness_remedy)
@@ -1588,6 +1728,7 @@ elif has_readiness_remedy:
     guard_mode = "readiness_remedy"
 if not guard_mode:
     raise SystemExit(10)
+diagnostic_mode = bool(guard_mode == "unblock" and has_operator_diagnostic)
 
 status_payload = _load_status_payload()
 live_shard_execution = _latest_shard_execution_context()
@@ -1610,7 +1751,27 @@ eta_human = str(eta_payload.get("eta_human") or status_payload.get("eta_human") 
 mode = str(status_payload.get("mode") or "unknown").strip() or "unknown"
 updated_at = str(status_payload.get("updated_at") or "").strip()
 
-if guard_mode == "backlog_audit":
+if guard_mode == "gap_fix":
+    first_commands = [
+        "python3 /docker/fleet/scripts/codex-shims/codexea_gap_fix_workflow.py",
+    ]
+elif guard_mode == "parity_build":
+    first_commands = [
+        "python3 /docker/fleet/scripts/codex-shims/codexea_parity_build_workflow.py",
+    ]
+elif guard_mode == "ui_parity_audit":
+    first_commands = [
+        "python3 /docker/fleet/scripts/codex-shims/codexea_ui_parity_audit_probe.py",
+    ]
+elif guard_mode == "vision_audit":
+    first_commands = [
+        "python3 /docker/fleet/scripts/codex-shims/codexea_vision_audit_probe.py",
+    ]
+elif guard_mode == "gap_audit":
+    first_commands = [
+        "python3 /docker/fleet/scripts/codex-shims/codexea_gap_audit_probe.py",
+    ]
+elif guard_mode == "backlog_audit":
     first_commands = [
         "sed -n '1,220p' /docker/fleet/.codex-design/product/README.md",
         "sed -n '1,240p' /docker/fleet/.codex-design/repo/IMPLEMENTATION_SCOPE.md",
@@ -1651,7 +1812,7 @@ else:
 first_commands = _dedupe(first_commands)[:5]
 readiness_direct_commands = _dedupe(readiness_direct_commands)[:7]
 prepared_context_sections: list[str] = []
-if guard_mode != "backlog_audit":
+if guard_mode not in {"backlog_audit", "gap_fix", "ui_parity_audit", "vision_audit", "parity_build"}:
     for command in first_commands:
         try:
             completed = subprocess.run(
@@ -1721,7 +1882,33 @@ context_limit = 5000 if guard_mode == "readiness_remedy" else 9000
 if len(prepared_context) > context_limit:
     prepared_context = prepared_context[: context_limit - 3].rstrip() + "..."
 
-if guard_mode == "backlog_audit":
+if guard_mode == "gap_fix":
+    summary = (
+        "Operator-prepared gap fix: materialize the control-plane and proof surfaces that can close stale audit findings, "
+        "then report which remaining blockers are still real product or platform proof gaps."
+    )
+elif guard_mode == "parity_build":
+    summary = (
+        "Operator-prepared parity build: build and publish the current Avalonia Windows artifact, rerun parity and release-proof materializers, "
+        "and report the remaining honest blockers to full parity closure."
+    )
+elif guard_mode == "ui_parity_audit":
+    summary = (
+        "Operator-prepared UI parity audit: inventory every parity-tracked Chummer5A surface and every currently-present "
+        "Chummer6-only extra against screenshot-backed and runtime-backed proof, then report visual yes/no, behavioral yes/no, "
+        "and removability."
+    )
+elif guard_mode == "vision_audit":
+    summary = (
+        "Operator-prepared vision audit: analyze lost product potential versus canon, what users would still want or miss, "
+        "and repo-grounded plus speculative integration opportunities, including LTD or acquisition-fit surfaces."
+    )
+elif guard_mode == "gap_audit":
+    summary = (
+        "Operator-prepared gap audit: compare Chummer design canon, live flagship frontier, shard implementation slices, "
+        "and workflow/gate proof with special attention to visual parity and sub-workflow behavior."
+    )
+elif guard_mode == "backlog_audit":
     summary = (
         "Operator-prepared backlog audit: compare Chummer design canon against Fleet backlog and staged truth, "
         "add only genuinely missing backlog or canon items, and distinguish design gaps from release-proof or "
@@ -1815,7 +2002,88 @@ live_shard_block = "\n".join(live_shard_lines).strip()
 live_shard_stderr_excerpt = str(live_shard_execution.get("stderr_excerpt") or "").strip()
 live_shard_prompt_excerpt = str(live_shard_execution.get("prompt_excerpt") or "").strip()
 
-if guard_mode == "backlog_audit":
+if guard_mode == "gap_fix":
+    operator_prompt = (
+        f"{base_prompt}\n\n"
+        "Operator-prepared gap fix context:\n"
+        f"- Task-local telemetry file: {telemetry_path}\n"
+        "- Scope: fix the control-plane, proof-materialization, shelf-mirror, and workflow-gate issues surfaced by the audit.\n"
+        "- You may patch Fleet, CodexEA, EA, release-channel mirrors, proof materializers, and gating workflow glue.\n"
+        "- Do not manually implement unfinished product milestone content itself in this run.\n"
+        "- Run these exact commands first:\n"
+        f"{command_lines}\n"
+        "- Never replace that first command with status-only or ETA-only helpers.\n"
+        "- Materialize fresh proof where the repo already has the producer path; distinguish what was auto-fixed from what remains a true design or platform-proof blocker.\n\n"
+        "- If the first command returns a JSON object with `probe_kind=gap_fix`, treat it as the authoritative operator result.\n"
+        "- After a `probe_kind=gap_fix` result, do not inspect `codexea_gap_fix_workflow.py`, do not run `git status`, and do not diff the helper itself.\n"
+        "- Summarize the applied fixes and the remaining true blockers immediately after the `gap_fix` JSON result.\n\n"
+        "Live fleet snapshot:\n"
+        f"{chr(10).join(snapshot_lines)}\n"
+    )
+elif guard_mode == "gap_audit":
+    operator_prompt = (
+        f"{base_prompt}\n\n"
+        "Operator-prepared gap audit context:\n"
+        f"- Task-local telemetry file: {telemetry_path}\n"
+        "- Scope: audit design implementation, milestone materialization, shard execution slices, and workflow/proof gates.\n"
+        "- You may patch Fleet, CodexEA, EA, or gating/workflow control-plane issues when they block truthful parity or closure.\n"
+        "- Do not manually implement product milestone content itself unless the blocker is specifically in Fleet/CodexEA/EA/gating.\n"
+        "- Run these exact commands first:\n"
+        f"{command_lines}\n"
+        "- Never replace those first commands with supervisor status, ETA, or other operator telemetry helpers.\n"
+        "- After the staged reads, distinguish clearly between design gap, missing milestone, stale proof, stale shard claim, shard routing bug, and workflow/gate bug.\n"
+        "- Treat visual parity and behavioral sub-workflow drift as first-class findings.\n\n"
+        "Prepared repo context:\n"
+        f"{prepared_context}\n\n"
+        "Live fleet snapshot:\n"
+        f"{chr(10).join(snapshot_lines)}\n"
+    )
+elif guard_mode == "parity_build":
+    operator_prompt = (
+        f"{base_prompt}\n\n"
+        "Operator-prepared parity build context:\n"
+        f"- Task-local telemetry file: {telemetry_path}\n"
+        "- Scope: materialize the current parity build and refresh parity/proof receipts through the canonical build and gate lanes.\n"
+        "- Run these exact commands first:\n"
+        f"{command_lines}\n"
+        "- If the first command returns a JSON object with `probe_kind=parity_build`, treat it as the authoritative operator result.\n"
+        "- After a `probe_kind=parity_build` result, summarize the release version, applied steps, parity report path, and the remaining honest blockers immediately.\n"
+        "- Do not detour into generic git status or the generic gap audit after the helper JSON.\n\n"
+        "Live fleet snapshot:\n"
+        f"{chr(10).join(snapshot_lines)}\n"
+    )
+elif guard_mode == "ui_parity_audit":
+    operator_prompt = (
+        f"{base_prompt}\n\n"
+        "Operator-prepared UI parity audit context:\n"
+        f"- Task-local telemetry file: {telemetry_path}\n"
+        "- Scope: audit every parity-tracked Chummer5A desktop surface, dialog, route, and behavior contract plus any current Chummer6-only extra that looks removable.\n"
+        "- Use screenshot-backed and runtime-backed proof first. If a surface lacks direct proof, score it `no` rather than inferring from broad readiness pass/fail.\n"
+        "- Run these exact commands first:\n"
+        f"{command_lines}\n"
+        "- Never replace that first command with supervisor status, ETA, or the generic gap audit helper.\n"
+        "- If the first command returns a JSON object with `probe_kind=ui_parity_audit`, treat it as the authoritative operator result.\n"
+        "- After a `probe_kind=ui_parity_audit` result, do not rerun the generic gap audit. Summarize the element-matrix counts, the report paths, the top parity failures, and any Chummer6-only extras that look removable.\n\n"
+        "Live fleet snapshot:\n"
+        f"{chr(10).join(snapshot_lines)}\n"
+    )
+elif guard_mode == "vision_audit":
+    operator_prompt = (
+        f"{base_prompt}\n\n"
+        "Operator-prepared vision audit context:\n"
+        f"- Task-local telemetry file: {telemetry_path}\n"
+        "- Scope: analyze the Chummer6 product vision for lost potential, what users would still want or miss, and missed integration or acquisition-fit opportunities.\n"
+        "- Ground repo findings in canon, current readiness, current parity proof, current frontier, and live shard ownership.\n"
+        "- Separate repo-grounded findings from speculative acquisition or LTD opportunities explicitly.\n"
+        "- Run these exact commands first:\n"
+        f"{command_lines}\n"
+        "- If the first command returns a JSON object with `probe_kind=vision_audit`, treat it as the authoritative operator result.\n"
+        "- After a `probe_kind=vision_audit` result, summarize the ranked findings, the user-want or miss list, the integration opportunities, and the owner shards immediately.\n"
+        "- Do not collapse this into the generic flagship gap audit or a simple readiness summary.\n\n"
+        "Live fleet snapshot:\n"
+        f"{chr(10).join(snapshot_lines)}\n"
+    )
+elif guard_mode == "backlog_audit":
     operator_prompt = (
         f"{base_prompt}\n\n"
         "Operator-prepared backlog audit context:\n"
@@ -1884,6 +2152,7 @@ prompt_path.write_text(operator_prompt, encoding="utf-8")
 print(str(prompt_path))
 print(str(telemetry_path))
 print(guard_mode)
+print("1" if diagnostic_mode else "0")
 PY
   )"
   local status=$?
@@ -1895,6 +2164,7 @@ PY
   prompt_path="$(printf '%s\n' "${metadata}" | sed -n '1p')"
   telemetry_path="$(printf '%s\n' "${metadata}" | sed -n '2p')"
   guard_mode="$(printf '%s\n' "${metadata}" | sed -n '3p')"
+  diagnostic_mode="$(printf '%s\n' "${metadata}" | sed -n '4p')"
   [ -n "${prompt_path}" ] && [ -f "${prompt_path}" ] || {
     rm -rf "${run_dir}" >/dev/null 2>&1 || true
     return 1
@@ -1912,6 +2182,8 @@ PY
   export CHUMMER_DESIGN_SUPERVISOR_STATUS_HELPER_FATAL=1
   export CODEXEA_OPERATOR_GUARD_ACTIVE=1
   export CODEXEA_OPERATOR_GUARD_MODE="${guard_mode}"
+  export CODEXEA_OPERATOR_GUARD_DIAGNOSTIC="${diagnostic_mode:-0}"
+  export CODEXEA_SKIP_GIT_REPO_CHECK=1
   export CODEXEA_OPERATOR_GUARD_DIRECT_PRINCIPAL_ID="${CODEXEA_OPERATOR_GUARD_DIRECT_PRINCIPAL_ID:-$(default_operator_guard_direct_principal_id)}"
   export CODEXEA_EXEC_TRACE_PROMPT_FILE="${prompt_path}"
   CODEXEA_STDIN_PROMPT="$(cat "${prompt_path}")"
@@ -1934,6 +2206,12 @@ PY
       export PATH="${shim_dir}:${PATH}"
       ;;
   esac
+  if ! inside_git_repository; then
+    guard_workdir="$(select_default_workdir || true)"
+    if [ -n "${guard_workdir}" ] && [ -d "${guard_workdir}" ]; then
+      cd "${guard_workdir}"
+    fi
+  fi
   emit_debug_trace "operator_guard active run_dir=${run_dir} telemetry=${telemetry_path}"
   return 0
 }
@@ -1945,9 +2223,16 @@ wrap_prompt_invocation_with_exec() {
   local -a prefix_args=()
   local arg
   local has_skip_git_repo_check=0
+  local prompt_exec_workdir=""
   local i=0
 
   exec_prefix=(exec)
+  if env_truthy "${CODEXEA_OPERATOR_GUARD_ACTIVE:-0}" && ! inside_git_repository; then
+    prompt_exec_workdir="$(select_default_workdir || true)"
+    if [ -n "${prompt_exec_workdir}" ]; then
+      prefix_args+=(-C "${prompt_exec_workdir}")
+    fi
+  fi
   if env_truthy "${CODEXEA_SKIP_GIT_REPO_CHECK:-0}" && real_codex_supports_skip_git_repo_check; then
     for arg in "${args[@]}"; do
       if [ "${arg}" = "--skip-git-repo-check" ]; then
@@ -1961,6 +2246,9 @@ wrap_prompt_invocation_with_exec() {
   fi
 
   if [ "${#args[@]}" -gt 0 ] && [ "${args[0]}" = "exec" ]; then
+    if [ "${#prefix_args[@]}" -gt 0 ]; then
+      printf '%s\0' "${prefix_args[@]}"
+    fi
     printf '%s\0' "${exec_prefix[@]}"
     if [ "${#exec_only_args[@]}" -gt 0 ]; then
       printf '%s\0' "${exec_only_args[@]}"
@@ -2031,6 +2319,108 @@ wrap_prompt_invocation_with_exec() {
   if [ "${#exec_only_args[@]}" -gt 0 ]; then
     printf '%s\0' "${exec_only_args[@]}"
   fi
+}
+
+maybe_run_gap_fix_local_shortcut() {
+  case "${CODEXEA_OPERATOR_GUARD_MODE:-}
+${CODEXEA_STDIN_PROMPT:-}
+${OPERATOR_GUARD_PROMPT_TEXT:-}" in
+    *"gap_fix"*|*"Operator-prepared gap fix context:"*|*"probe_kind=gap_fix"*)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  case "${CODEXEA_OPERATOR_GUARD_LOCAL_SHORTCUTS:-1}" in
+    0|false|FALSE|no|NO|off|OFF)
+      return 1
+      ;;
+  esac
+  local summary_json=""
+  local render_script="/docker/fleet/scripts/codex-shims/codexea_gap_fix_render.py"
+  emit_debug_trace "gap_fix local shortcut start"
+  set +e
+  summary_json="$(python3 /docker/fleet/scripts/codex-shims/codexea_gap_fix_workflow.py)"
+  local summary_rc=$?
+  set -e
+  if [ "${summary_rc}" -ne 0 ]; then
+    [ -n "${summary_json}" ] && printf '%s\n' "${summary_json}"
+    return "${summary_rc}"
+  fi
+  if [ -f "${render_script}" ]; then
+    printf '%s' "${summary_json}" | python3 "${render_script}"
+  else
+    printf '%s\n' "${summary_json}"
+  fi
+  return $?
+}
+
+maybe_run_parity_build_local_shortcut() {
+  case "${CODEXEA_OPERATOR_GUARD_MODE:-}
+${CODEXEA_STDIN_PROMPT:-}
+${OPERATOR_GUARD_PROMPT_TEXT:-}" in
+    *"parity_build"*|*"Operator-prepared parity build context:"*|*"probe_kind=parity_build"*)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  case "${CODEXEA_OPERATOR_GUARD_LOCAL_SHORTCUTS:-1}" in
+    0|false|FALSE|no|NO|off|OFF)
+      return 1
+      ;;
+  esac
+  local summary_json=""
+  local render_script="/docker/fleet/scripts/codex-shims/codexea_parity_build_render.py"
+  emit_debug_trace "parity_build local shortcut start"
+  set +e
+  summary_json="$(python3 /docker/fleet/scripts/codex-shims/codexea_parity_build_workflow.py)"
+  local summary_rc=$?
+  set -e
+  if [ "${summary_rc}" -ne 0 ]; then
+    [ -n "${summary_json}" ] && printf '%s\n' "${summary_json}"
+    return "${summary_rc}"
+  fi
+  if [ -f "${render_script}" ]; then
+    printf '%s' "${summary_json}" | python3 "${render_script}"
+  else
+    printf '%s\n' "${summary_json}"
+  fi
+  return $?
+}
+
+maybe_run_vision_audit_local_shortcut() {
+  case "${CODEXEA_OPERATOR_GUARD_MODE:-}
+${CODEXEA_STDIN_PROMPT:-}
+${OPERATOR_GUARD_PROMPT_TEXT:-}" in
+    *"vision_audit"*|*"Operator-prepared vision audit context:"*|*"probe_kind=vision_audit"*)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  case "${CODEXEA_OPERATOR_GUARD_LOCAL_SHORTCUTS:-1}" in
+    0|false|FALSE|no|NO|off|OFF)
+      return 1
+      ;;
+  esac
+  local summary_json=""
+  local render_script="/docker/fleet/scripts/codex-shims/codexea_vision_audit_render.py"
+  emit_debug_trace "vision_audit local shortcut start"
+  set +e
+  summary_json="$(python3 /docker/fleet/scripts/codex-shims/codexea_vision_audit_probe.py)"
+  local summary_rc=$?
+  set -e
+  if [ "${summary_rc}" -ne 0 ]; then
+    [ -n "${summary_json}" ] && printf '%s\n' "${summary_json}"
+    return "${summary_rc}"
+  fi
+  if [ -f "${render_script}" ]; then
+    printf '%s' "${summary_json}" | python3 "${render_script}"
+  else
+    printf '%s\n' "${summary_json}"
+  fi
+  return $?
 }
 
 append_exec_json_flag() {
@@ -3158,6 +3548,17 @@ if [ "$#" -gt 0 ] && ! args_request_interactive_session "$@"; then
   OPERATOR_GUARD_PROMPT_TEXT="$(operator_guard_candidate_text "$@" || true)"
   if [ -n "${OPERATOR_GUARD_PROMPT_TEXT}" ]; then
     activate_fleet_operator_guard_from_prompt "${OPERATOR_GUARD_PROMPT_TEXT}" || true
+    if env_truthy "${CODEXEA_OPERATOR_GUARD_ACTIVE:-0}"; then
+      if maybe_run_vision_audit_local_shortcut; then
+        exit 0
+      fi
+      if maybe_run_parity_build_local_shortcut; then
+        exit 0
+      fi
+      if maybe_run_gap_fix_local_shortcut; then
+        exit 0
+      fi
+    fi
   fi
 fi
 
@@ -3209,6 +3610,81 @@ if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "b
   esac
 fi
 
+if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "gap_fix" ]; then
+  gap_fix_auto_lane="${CODEXEA_GAP_FIX_AUTO_LANE:-easy}"
+  case "${gap_fix_auto_lane}" in
+    auto|"")
+      REQUESTED_LANE="easy"
+      ;;
+    easy|repair|groundwork|core|core_rescue|jury|review_light|survival)
+      REQUESTED_LANE="${gap_fix_auto_lane}"
+      ;;
+    *)
+      REQUESTED_LANE="easy"
+      ;;
+  esac
+fi
+
+if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "parity_build" ]; then
+  parity_build_auto_lane="${CODEXEA_PARITY_BUILD_AUTO_LANE:-easy}"
+  case "${parity_build_auto_lane}" in
+    auto|"")
+      REQUESTED_LANE="easy"
+      ;;
+    easy|repair|groundwork|core|core_rescue|jury|review_light|survival)
+      REQUESTED_LANE="${parity_build_auto_lane}"
+      ;;
+    *)
+      REQUESTED_LANE="easy"
+      ;;
+  esac
+fi
+
+if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "gap_audit" ]; then
+  gap_audit_auto_lane="${CODEXEA_GAP_AUDIT_AUTO_LANE:-easy}"
+  case "${gap_audit_auto_lane}" in
+    auto|"")
+      REQUESTED_LANE="easy"
+      ;;
+    easy|repair|groundwork|core|core_rescue|jury|review_light|survival)
+      REQUESTED_LANE="${gap_audit_auto_lane}"
+      ;;
+    *)
+      REQUESTED_LANE="easy"
+      ;;
+  esac
+fi
+
+if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "ui_parity_audit" ]; then
+  ui_parity_audit_auto_lane="${CODEXEA_UI_PARITY_AUDIT_AUTO_LANE:-easy}"
+  case "${ui_parity_audit_auto_lane}" in
+    auto|"")
+      REQUESTED_LANE="easy"
+      ;;
+    easy|repair|groundwork|core|core_rescue|jury|review_light|survival)
+      REQUESTED_LANE="${ui_parity_audit_auto_lane}"
+      ;;
+    *)
+      REQUESTED_LANE="easy"
+      ;;
+  esac
+fi
+
+if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "vision_audit" ]; then
+  vision_audit_auto_lane="${CODEXEA_VISION_AUDIT_AUTO_LANE:-easy}"
+  case "${vision_audit_auto_lane}" in
+    auto|"")
+      REQUESTED_LANE="easy"
+      ;;
+    easy|repair|groundwork|core|core_rescue|jury|review_light|survival)
+      REQUESTED_LANE="${vision_audit_auto_lane}"
+      ;;
+    *)
+      REQUESTED_LANE="easy"
+      ;;
+  esac
+fi
+
 if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "unblock" ]; then
   unblock_auto_lane="${CODEXEA_UNBLOCK_AUTO_LANE:-core}"
   case "${unblock_auto_lane}" in
@@ -3222,6 +3698,10 @@ if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "u
       REQUESTED_LANE="core"
       ;;
   esac
+fi
+
+if env_truthy "${CODEXEA_OPERATOR_GUARD_DIAGNOSTIC:-0}"; then
+  REQUESTED_LANE="easy"
 fi
 
 EFFECTIVE_LANE="${REQUESTED_LANE}"
@@ -3514,32 +3994,37 @@ case "${MODE}" in
     if [ "${EA_CODEX_PROFILE}" = "jury" ]; then
       EA_CODEX_PROFILE="audit"
     fi
-    EA_HEADERS="{\"X-EA-Principal-ID\"=\"${EA_PRINCIPAL_ID}\",\"X-EA-Codex-Profile\"=\"${EA_CODEX_PROFILE}\""
+    CODEXEA_RESPONSES_HEADER_EA_PRINCIPAL_ID="$(sanitize_single_line "${EA_PRINCIPAL_ID}")"
+    CODEXEA_RESPONSES_HEADER_EA_CODEX_PROFILE="$(sanitize_single_line "${EA_CODEX_PROFILE}")"
+    export CODEXEA_RESPONSES_HEADER_EA_PRINCIPAL_ID CODEXEA_RESPONSES_HEADER_EA_CODEX_PROFILE
+    EA_ENV_HEADERS='{"X-EA-Principal-ID"="CODEXEA_RESPONSES_HEADER_EA_PRINCIPAL_ID","X-EA-Codex-Profile"="CODEXEA_RESPONSES_HEADER_EA_CODEX_PROFILE"'
     if [ -n "${EA_ONEMIN_ACCOUNT_ALIAS:-}" ]; then
-      EA_HEADERS="${EA_HEADERS},\"X-EA-Onemin-Account-Alias\"=\"${EA_ONEMIN_ACCOUNT_ALIAS}\""
+      CODEXEA_RESPONSES_HEADER_EA_ONEMIN_ACCOUNT_ALIAS="$(sanitize_single_line "${EA_ONEMIN_ACCOUNT_ALIAS}")"
+      export CODEXEA_RESPONSES_HEADER_EA_ONEMIN_ACCOUNT_ALIAS
+      EA_ENV_HEADERS="${EA_ENV_HEADERS},\"X-EA-Onemin-Account-Alias\"=\"CODEXEA_RESPONSES_HEADER_EA_ONEMIN_ACCOUNT_ALIAS\""
     fi
     if [ -n "${EA_ONEMIN_ACCOUNT_ENV_NAME:-}" ]; then
-      EA_HEADERS="${EA_HEADERS},\"X-EA-Onemin-Account-Env\"=\"${EA_ONEMIN_ACCOUNT_ENV_NAME}\""
+      CODEXEA_RESPONSES_HEADER_EA_ONEMIN_ACCOUNT_ENV_NAME="$(sanitize_single_line "${EA_ONEMIN_ACCOUNT_ENV_NAME}")"
+      export CODEXEA_RESPONSES_HEADER_EA_ONEMIN_ACCOUNT_ENV_NAME
+      EA_ENV_HEADERS="${EA_ENV_HEADERS},\"X-EA-Onemin-Account-Env\"=\"CODEXEA_RESPONSES_HEADER_EA_ONEMIN_ACCOUNT_ENV_NAME\""
     fi
-    EA_HEADERS="${EA_HEADERS}}"
     EA_DEFAULT_ARGS+=(
       -c 'model_provider="ea"'
       -c "model=\"${MODEL}\""
       -c 'model_providers.ea.name="Executive Assistant"'
       -c "model_providers.ea.base_url=\"${EA_BASE_URL%/}/v1\""
       -c 'model_providers.ea.wire_api="responses"'
-      -c "model_providers.ea.http_headers=${EA_HEADERS}"
       -c "model_providers.ea.stream_idle_timeout_ms=${CODEXEA_STREAM_IDLE_TIMEOUT_MS}"
       -c "model_providers.ea.stream_max_retries=${CODEXEA_STREAM_MAX_RETRIES}"
       -c "model_providers.ea.stream_keepalive_interval_ms=${CODEXEA_STREAM_KEEPALIVE_INTERVAL_MS}"
     )
     if [ -n "${EA_AUTH_TOKEN:-}" ]; then
       export CODEXEA_RESPONSES_AUTH_TOKEN="${EA_AUTH_TOKEN}"
-      EA_DEFAULT_ARGS+=(
-        -c 'model_providers.ea.bearer_token_env_var="CODEXEA_RESPONSES_AUTH_TOKEN"'
-        -c 'model_providers.ea.env_http_headers={"x-api-token"="CODEXEA_RESPONSES_AUTH_TOKEN","X-EA-Api-Token"="CODEXEA_RESPONSES_AUTH_TOKEN"}'
-      )
+      EA_ENV_HEADERS="${EA_ENV_HEADERS},\"x-api-token\"=\"CODEXEA_RESPONSES_AUTH_TOKEN\",\"X-EA-Api-Token\"=\"CODEXEA_RESPONSES_AUTH_TOKEN\""
+      EA_DEFAULT_ARGS+=(-c 'model_providers.ea.bearer_token_env_var="CODEXEA_RESPONSES_AUTH_TOKEN"')
     fi
+    EA_ENV_HEADERS="${EA_ENV_HEADERS}}"
+    EA_DEFAULT_ARGS+=(-c "model_providers.ea.env_http_headers=${EA_ENV_HEADERS}")
     ;;
   *)
     echo "Unsupported CODEXEA mode: ${MODE} (expected: mcp or responses)" >&2
@@ -3694,6 +4179,15 @@ emit_startup_trace "$(
 )"
 
 if [ "${EXEC_SESSION_REQUEST}" -eq 1 ] || [ "${EXPLICIT_EXEC_SUBCOMMAND_REQUEST}" -eq 1 ]; then
+  if maybe_run_vision_audit_local_shortcut; then
+    exit 0
+  fi
+  if maybe_run_parity_build_local_shortcut; then
+    exit 0
+  fi
+  if maybe_run_gap_fix_local_shortcut; then
+    exit 0
+  fi
   if maybe_run_local_git_commit_push_fast_path "${ADJUSTED_ARGS[@]}"; then
     exit 0
   fi
@@ -3708,6 +4202,9 @@ if [ "${CODEXEA_CLEAN_EXEC_OUTPUT:-1}" = "1" ] && args_request_raw_exec_output "
   fi
 fi
 if [ "${USE_CLEAN_EXEC_OUTPUT}" -eq 1 ] && env_truthy "${CODEXEA_OPERATOR_GUARD_ACTIVE:-0}" && ! args_request_output_last_message "${ADJUSTED_ARGS[@]}"; then
+  USE_CLEAN_EXEC_OUTPUT=0
+fi
+if [ "${USE_CLEAN_EXEC_OUTPUT}" -eq 1 ] && { [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "gap_audit" ] || [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "gap_fix" ] || [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "ui_parity_audit" ] || [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "vision_audit" ] || [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "parity_build" ]; }; then
   USE_CLEAN_EXEC_OUTPUT=0
 fi
 

@@ -1,8 +1,8 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-29T20:13:13Z'
+generated_at: '2026-04-30T08:03:02Z'
 mode: flagship_product
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-2
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-2
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 projects_dir: /docker/fleet/config/projects
@@ -33,35 +33,29 @@ focus:
   - chummer6-ui
   - chummer6-core
   - chummer6-design
-  - chummer6-ui-kit
-  - chummer6-mobile
   - chummer6-media-factory
   - chummer6-hub
   - chummer6-hub-registry
   texts:
-  - top flagship grade
-  - whole project frontier
-  - feedback
-  - automatic bugfixing
-  - crash
-  - support
-  - accessibility
-  - localization
-  - restore confidence
-  - fit and finish
   - desktop
   - workbench
   - master index
   - roster
   - restore
+  - top flagship grade
   - whole-project frontier
   - no lowered standards
   - feedback loop
+  - automatic bugfixing
   - crash reporting
   - support routing
   - journey smoothness
+  - restore confidence
+  - accessibility
+  - localization
   - performance
   - proof shelf
+  - fit and finish
   - mobile play shell
   - ui kit and flagship polish
   - media artifacts
@@ -71,22 +65,10 @@ completion_audit:
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260429T201131Z-shard-2 is not trusted: provider-health
-    preflight left no routable direct lanes: core_rescue:onemin:unknown; remaining_percent_of_max=0.00,
-    estimated_remaining_credits_total=4464; core_rescue has no ready 1min slots and
-    low remaining balance while remaining_percent_of_max=0.00; prefer lighter rescue
-    lanes/models; core:onemin:unknown; remaining_percent_of_max=0.00, estimated_remaining_credits_total=4464;
-    core has no ready 1min slots and low remaining balance while remaining_percent_of_max=0.00;
-    prefer lighter rescue lanes/models; survival:onemin:unknown; chatplayground:ready;
-    gemini_vortex:missing'
-  latest_run_id: 20260429T201131Z-shard-2
-  latest_run_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unknown;
-    remaining_percent_of_max=0.00, estimated_remaining_credits_total=4464; core_rescue
-    has no ready 1min slots and low remaining balance while remaining_percent_of_max=0.00;
-    prefer lighter rescue lanes/models; core:onemin:unknown; remaining_percent_of_max=0.00,
-    estimated_remaining_credits_total=4464; core has no ready 1min slots and low remaining
-    balance while remaining_percent_of_max=0.00; prefer lighter rescue lanes/models;
-    survival:onemin:unknown; chatplayground:ready; gemini_vortex:missing'
+  reason: 'latest worker receipt 20260430T061922Z-shard-2 is not trusted: missing
+    final message'
+  latest_run_id: 20260430T061922Z-shard-2
+  latest_run_reason: missing final message
 journey_gate_audit:
   status: fail
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
@@ -94,7 +76,7 @@ journey_gate_audit:
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
   status: fail
-  reason: linux desktop exit gate proof is stale (201140s old)
+  reason: linux desktop exit gate proof is stale (243743s old)
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
   generated_at: '2026-04-27T12:20:33Z'
 weekly_pulse_audit:
@@ -115,41 +97,26 @@ blocking_audits:
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 - component: linux_desktop_exit_gate
   title: Linux desktop exit-gate gaps
-  reason: linux desktop exit gate proof is stale (201140s old)
+  reason: linux desktop exit gate proof is stale (243743s old)
 - component: desktop_executable_exit_gate
   title: Desktop executable exit-gate gaps
-  reason: desktop executable exit gate proof is stale (276949s old)
+  reason: desktop executable exit gate proof is stale (319552s old)
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: 'latest worker receipt 20260429T201131Z-shard-2 is not trusted: provider-health
-    preflight left no routable direct lanes: core_rescue:onemin:unknown; remaining_percent_of_max=0.00,
-    estimated_remaining_credits_total=4464; core_rescue has no ready 1min slots and
-    low remaining balance while remaining_percent_of_max=0.00; prefer lighter rescue
-    lanes/models; core:onemin:unknown; remaining_percent_of_max=0.00, estimated_remaining_credits_total=4464;
-    core has no ready 1min slots and low remaining balance while remaining_percent_of_max=0.00;
-    prefer lighter rescue lanes/models; survival:onemin:unknown; chatplayground:ready;
-    gemini_vortex:missing'
+  reason: 'latest worker receipt 20260430T061922Z-shard-2 is not trusted: missing
+    final message'
 frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
-  status: blocked
-  eta_human: 16h-1.7d after unblock
+  status: flagship_delivery
+  eta_human: 10h-1d
   eta_confidence: low
-  basis: full_product_frontier_heuristic+external_blocker
+  basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
-  blocking_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unknown;
-    remaining_percent_of_max=0.00, estimated_remaining_credits_total=4464; core_rescue
-    has no ready 1min slots and low remaining balance while remaining_percent_of_max=0.00;
-    prefer lighter rescue lanes/models; survival:onemin:unknown; chatplayground:ready;
-    gemini_vortex:missing; repair:onemin:unknown; magixai:unknown; gemini_vortex:missing'
-  summary: 'Current closeout gates are green, but flagship product work still remains
-    across 2 synthetic slices. Outstanding readiness coverage: mobile_play_shell,
-    ui_kit_and_flagship_polish, media_artifacts, desktop_client. Current external
-    blocker: provider-health preflight left no routable direct lanes: core_rescue:onemin:unknown;
-    remaining_percent_of_max=0.00, estimated_remaining_credits_total=4464; core_rescue
-    has no ready 1min slots and low remaining balance while remaining_percent_of_max=0.00;
-    prefer lighter rescue lanes/models; survival:onemin:unknown; chatplayground:ready;
-    gemini_vortex:missing; repair:onemin:unknown; magixai:unknown; gemini_vortex:missing'
+  blocking_reason: ''
+  summary: 'Milestone ''Media, artifacts, publication, and recap flagship finish''
+    remains open under the flagship closeout frontier. Outstanding readiness coverage:
+    mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'

@@ -2638,26 +2638,10 @@ def _ea_provider_slot_required_credits(error_text: str) -> Optional[int]:
 
 
 def _ea_provider_slot_remaining_credits(slot: Dict[str, Any]) -> Optional[float]:
-    estimated_remaining = _coerce_float(slot.get("estimated_remaining_credits"))
-    billing_remaining = _coerce_float(slot.get("billing_remaining_credits"))
-    state = str(slot.get("state") or "").strip().lower()
-    raw_state = str(slot.get("raw_state") or "").strip().lower()
-    if (
-        state in PROVIDER_HEALTH_DEGRADED_STATES
-        and billing_remaining is not None
-        and billing_remaining > 0
-        and estimated_remaining is not None
-        and estimated_remaining <= 0
-        and (
-            raw_state in PROVIDER_HEALTH_QUARANTINE_STATES
-            or bool(slot.get("upstream_reset_unknown"))
-        )
-    ):
-        return billing_remaining
-    if estimated_remaining is not None:
-        return estimated_remaining
-    if billing_remaining is not None:
-        return billing_remaining
+    for key in ("estimated_remaining_credits", "billing_remaining_credits"):
+        value = _coerce_float(slot.get(key))
+        if value is not None:
+            return value
     return None
 
 
@@ -2667,25 +2651,15 @@ def _ea_provider_slot_routing_state(slot: Dict[str, Any]) -> str:
     if not bool(slot.get("configured", True)):
         return "blocked"
     state = str(slot.get("state") or slot.get("health_status") or slot.get("probe_result") or "").strip().lower()
-    raw_state = str(slot.get("raw_state") or "").strip().lower()
     error_text = _ea_provider_slot_error_text(slot)
-    remaining_credits = _ea_provider_slot_remaining_credits(slot)
-    recoverable_usage_limited_slot = (
-        state in PROVIDER_HEALTH_DEGRADED_STATES
-        and remaining_credits is not None
-        and remaining_credits > 0
-        and (
-            raw_state in PROVIDER_HEALTH_QUARANTINE_STATES
-            or bool(slot.get("upstream_reset_unknown"))
-        )
-    )
-    if error_text and _is_usage_limit_backoff_reason(error_text) and not recoverable_usage_limited_slot:
+    if error_text and _is_usage_limit_backoff_reason(error_text):
         return "blocked"
     if state in PROVIDER_HEALTH_READY_STATES:
         return "ready"
     if state in PROVIDER_HEALTH_UNAVAILABLE_STATES or state in PROVIDER_HEALTH_QUARANTINE_STATES:
         return "blocked"
     if state in PROVIDER_HEALTH_DEGRADED_STATES:
+        remaining_credits = _ea_provider_slot_remaining_credits(slot)
         required_credits = _ea_provider_slot_required_credits(error_text)
         if remaining_credits is not None and remaining_credits <= 0:
             return "blocked"
@@ -4151,18 +4125,10 @@ def _active_shard_manifest_entries(aggregate_root: Path) -> List[Dict[str, Any]]
             return _project_configured_shard_entries()
         return []
     rows: Any = []
-    row_source = ""
-    configured_topology_manifest = False
     if isinstance(payload, dict):
-        configured_topology_manifest = (
-            str(payload.get("manifest_kind") or "").strip().lower() == "configured_shard_topology"
-        )
         rows = payload.get("configured_shards")
         if not isinstance(rows, list) or not rows:
             rows = payload.get("active_shards")
-            row_source = "active_shards"
-        else:
-            row_source = "configured_shards"
     entries: List[Dict[str, Any]] = []
     for row in rows if isinstance(rows, list) else []:
         if isinstance(row, str):
@@ -4179,14 +4145,10 @@ def _active_shard_manifest_entries(aggregate_root: Path) -> List[Dict[str, Any]]
         index = _coerce_int(row.get("index"), 0)
         if index > 0:
             entry["index"] = index
-        allow_manifest_frontier_ids = not (
-            configured_topology_manifest and row_source == "configured_shards"
-        )
-        if allow_manifest_frontier_ids:
-            frontier_ids = [_coerce_int(value, 0) for value in (row.get("frontier_ids") or [])]
-            frontier_ids = [value for value in frontier_ids if value > 0]
-            if frontier_ids:
-                entry["frontier_ids"] = frontier_ids
+        frontier_ids = [_coerce_int(value, 0) for value in (row.get("frontier_ids") or [])]
+        frontier_ids = [value for value in frontier_ids if value > 0]
+        if frontier_ids:
+            entry["frontier_ids"] = frontier_ids
         for field in ("focus_owner", "account_alias", "focus_text"):
             values = _manifest_text_list(row.get(field))
             if values:
@@ -14035,17 +13997,12 @@ def derive_flagship_product_context(
         if queue_item:
             frontier = _bounded_frontier(focused_full_frontier, limit=frontier_limit)
         else:
-            available_frontier = _exclude_frontier_ids(focused_full_frontier, prior_claimed_ids)
             frontier = _open_milestone_shard_primary_frontier(
                 state_root,
-                available_frontier,
+                focused_full_frontier,
                 default_limit=frontier_limit,
             )
-            # When earlier shards already claimed part of the flagship frontier, the primary
-            # shard index can point past the shrunken remainder. In that case, keep the
-            # remaining open milestone materialized instead of silently dropping it.
-            if not frontier and available_frontier:
-                frontier = _bounded_frontier(available_frontier, limit=frontier_limit)
+            frontier = _exclude_frontier_ids(frontier, prior_claimed_ids)
     else:
         prior_claimed_ids = _prior_active_shard_frontier_ids(state_root)
         available_frontier = _exclude_frontier_ids(focused_full_frontier, prior_claimed_ids)
@@ -14057,13 +14014,8 @@ def derive_flagship_product_context(
             frontier = _bounded_frontier(focused_full_frontier, limit=frontier_limit)
     pinned_frontier_ids = [int(value) for value in (args.frontier_id or []) if int(value or 0) > 0]
     if not pinned_frontier_ids:
-        state_payload = _read_state(_state_payload_path(resolved_state_root))
-        runtime_handoff_can_pin = bool(str(state_payload.get("active_run_id") or "").strip())
-        if not runtime_handoff_can_pin:
-            active_run_payload = state_payload.get("active_run")
-            runtime_handoff_can_pin = isinstance(active_run_payload, dict) and bool(active_run_payload)
         runtime_handoff_path_raw = str(context.get("runtime_handoff_path") or "").strip()
-        if runtime_handoff_can_pin and runtime_handoff_path_raw:
+        if runtime_handoff_path_raw:
             runtime_handoff_path = Path(runtime_handoff_path_raw).resolve()
             if runtime_handoff_path.is_file():
                 runtime_handoff_text = _read_text(runtime_handoff_path)
@@ -15651,9 +15603,6 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                 "worker_transport_retry_count": worker_transport_retry_count,
                 "worker_transport_next_retry_at": str(worker_transport.get("next_retry_at") or "").strip(),
                 "worker_transport_state_path": str(worker_transport.get("state_path") or "").strip(),
-                "worker_bin": str(configured_entry.get("worker_bin") or "").strip(),
-                "worker_lane": str(configured_entry.get("worker_lane") or "").strip(),
-                "worker_model": str(configured_entry.get("worker_model") or "").strip(),
             }
         )
     return summaries

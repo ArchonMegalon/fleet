@@ -190,7 +190,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-29T20:07:12Z",
+  "generated_at": "2026-04-30T13:12:24Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -226,9 +226,9 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-04-29T20:07:12Z",
+    "generated_at": "2026-04-30T13:12:24Z",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-05-06T20:07:12Z",
+    "next_packet_due_at": "2026-05-07T13:12:24Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -919,7 +919,7 @@
         "journey_gates"
       ],
       "missing_actions": [],
-      "next_review_due_at": "2026-05-06T20:07:12Z",
+      "next_review_due_at": "2026-05-07T13:12:24Z",
       "required_actions": [
         "launch_expand",
         "freeze_launch",
@@ -967,7 +967,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
-          "next_review_due_at": "2026-05-06T20:07:12Z",
+          "next_review_due_at": "2026-05-07T13:12:24Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "do_not_expand_launch",
           "receipt_id": "m106-launch_expand-519f08c3416e18b1",
@@ -986,7 +986,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Launch expansion is approved for the next bounded window while canaries and support closure remain clear.",
-          "next_review_due_at": "2026-05-06T20:07:12Z",
+          "next_review_due_at": "2026-05-07T13:12:24Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_launch_frozen",
           "receipt_id": "m106-freeze_launch-d065d646f3b801a1",
@@ -1003,7 +1003,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Canary green on all active lanes",
-          "next_review_due_at": "2026-05-06T20:07:12Z",
+          "next_review_due_at": "2026-05-07T13:12:24Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_canary_ready",
           "receipt_id": "m106-canary-afc3d2be95960739",
@@ -1023,7 +1023,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "next_review_due_at": "2026-05-06T20:07:12Z",
+          "next_review_due_at": "2026-05-07T13:12:24Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_rollback_armed",
           "receipt_id": "m106-rollback-fcedde06369bab3d",
@@ -1040,7 +1040,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
-          "next_review_due_at": "2026-05-06T20:07:12Z",
+          "next_review_due_at": "2026-05-07T13:12:24Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "route_remaining_work_to_dependency_or_sibling_packages",
           "receipt_id": "m106-focus_shift-9e0a36a10f3ebf57",
@@ -2010,7 +2010,7 @@
     "freshness_policy": "refresh_before_public_status_or_operator_action_if_packet_is_overdue",
     "headline": "Launch expansion remains frozen.",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-05-06T20:07:12Z",
+    "next_packet_due_at": "2026-05-07T13:12:24Z",
     "schedule_ref": "governor_packet_schedule.next_packet_due_at",
     "state": "freeze_launch"
   },
@@ -2672,13 +2672,13 @@
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "cda64eb597fcee527b75092ef89702f0cbe54be0ada7275a427d595f0e2de1da",
+    "combined_source_sha256": "9b785cb02a2307b365db7d1cc9c918032dd471a8ca9546ea63ad1286d58062c9",
     "missing_inputs": [],
     "rows": [
       {
         "name": "successor_registry",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "d4f12c610af1e0d41f1061d3aa6051d1b0e4a3573468c1cbf308bff765702517"
+        "source_sha256": "f2af01dcfbca0ebede32b901a5c8888c9bc645fdbb9462fa3dc08ea284c700ee"
       },
       {
         "name": "closed_flagship_registry",
@@ -2703,17 +2703,17 @@
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "eee657b5e8f627a0c0874fa8469dee3803d763e7c9024e8bc751543d5a6c4786"
+        "source_sha256": "496a4458724352fcfdf0ed415f99327841bbcf3801651d4274ee083fa3087438"
       },
       {
         "name": "journey_gates",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "d5de6ff1a977d4072f9e271502f0532c7b864e830fceb2032a54d754d122dc12"
+        "source_sha256": "0762288883fe3d551b673f0ddc91f6fe2a902eb520ba0afc2c45a85ae4d37a03"
       },
       {
         "name": "support_packets",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "4fa2e630f044c65080b072c67495a8ca06503eff6e72856a97f9c7015637564f"
+        "source_sha256": "431c7aead11046f97cbd70daeef6d1b41b6aae0330d4e3732280cf3b67e55f32"
       },
       {
         "name": "status_plane",
@@ -2748,19 +2748,19 @@
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-04-29T20:07:11Z",
+        "generated_at": "2026-04-30T13:12:23Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "eee657b5e8f627a0c0874fa8469dee3803d763e7c9024e8bc751543d5a6c4786",
+        "source_sha256": "496a4458724352fcfdf0ed415f99327841bbcf3801651d4274ee083fa3087438",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-04-29T20:07:10Z",
+        "generated_at": "2026-04-30T13:00:40Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "d5de6ff1a977d4072f9e271502f0532c7b864e830fceb2032a54d754d122dc12",
+        "source_sha256": "0762288883fe3d551b673f0ddc91f6fe2a902eb520ba0afc2c45a85ae4d37a03",
         "state": "present"
       },
       "launch_signal_truth_alignment": {
@@ -2961,15 +2961,15 @@
       "successor_registry": {
         "required_key": "program_wave",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "d4f12c610af1e0d41f1061d3aa6051d1b0e4a3573468c1cbf308bff765702517",
+        "source_sha256": "f2af01dcfbca0ebede32b901a5c8888c9bc645fdbb9462fa3dc08ea284c700ee",
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-29T20:07:08Z",
+        "generated_at": "2026-04-30T13:00:38Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "4fa2e630f044c65080b072c67495a8ca06503eff6e72856a97f9c7015637564f",
+        "source_sha256": "431c7aead11046f97cbd70daeef6d1b41b6aae0330d4e3732280cf3b67e55f32",
         "state": "present",
         "successor_package_verification_status": "pass"
       },
@@ -3197,7 +3197,7 @@
       "followthrough_receipt_gates_installed_build_receipted_count": 0,
       "followthrough_receipt_gates_ready_count": 0,
       "open_non_external_packet_count": 0,
-      "open_packet_count": 0,
+      "open_packet_count": 2,
       "please_test_ready_count": 0,
       "recovery_loop_ready_count": 0,
       "reporter_followthrough_blocked_missing_install_receipts_count": 0,

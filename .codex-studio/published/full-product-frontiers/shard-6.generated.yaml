@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-29T20:18:44Z'
+generated_at: '2026-04-30T13:10:07Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-6
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,8 +32,8 @@ focus:
   - chummer6-hub
   - chummer6-ui
   - chummer6-core
-  - chummer6-mobile
   - chummer6-ui-kit
+  - chummer6-mobile
   texts:
   - top flagship grade
   - whole project frontier
@@ -61,6 +61,7 @@ focus:
   - mobile play shell
   - ui kit and flagship polish
   - media artifacts
+  - fleet and operator loop
   - desktop client
 quality_policy:
   bar: top_flagship_grade
@@ -75,7 +76,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-29T20:07:11Z'
+  generated_at: '2026-04-30T13:07:23Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -84,35 +85,35 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1300044932
+- 4182074715
 frontier:
-- id: 1300044932
-  title: Mobile and play-shell flagship finish
+- id: 4182074715
+  title: Shared design system, accessibility, localization, and flagship polish
   wave: flagship_product
-  status: not_started
+  status: blocked_external_host_proof
   owners:
-  - chummer6-mobile
-  - chummer6-core
   - chummer6-ui-kit
-  - chummer6-hub
+  - chummer6-ui
+  - chummer6-mobile
   dependencies: []
   exit_criteria:
-  - Deliver the dedicated player/GM/session shell described in `projects/mobile.md`,
-    including local-first play, replay/resume, reconnect confidence, installable mobile
-    posture, and cross-device continuity.
-  - Keep mobile grounded on package-only engine/play/UI-kit seams rather than cloning
-    workbench or orchestration logic.
+  - Make shared tokens, dense-data primitives, accessibility primitives, localization
+    readiness, and flagship-grade visual polish real across workbench and play surfaces
+    as described in `projects/ui-kit.md`.
+  - Keep package-only shared UI discipline intact while raising the product to a flagship
+    quality bar instead of repo-local one-off chrome.
   eta:
     status: flagship_delivery
-    eta_human: 10h-1.1d
+    eta_human: 10h-1d
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open under
-      the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
-      ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
-    predicted_completion_at: '2026-04-30T14:21:08Z'
-    range_low_hours: 10.25
-    range_high_hours: 25.83
+    summary: 'Milestone ''Shared design system, accessibility, localization, and flagship
+      polish'' remains open under the flagship closeout frontier. Outstanding readiness
+      coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
+      desktop_client.'
+    predicted_completion_at: '2026-05-01T06:29:19Z'
+    range_low_hours: 9.84
+    range_high_hours: 24.8
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
@@ -123,39 +124,3 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-eta:
-  status: blocked
-  eta_human: 10h-1.1d after unblock
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic+external_blocker
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
-    remaining_percent_of_max=0.00, estimated_remaining_credits_total=4464; survival:browseract:ready;
-    gemini_vortex:missing:command_not_found:gemini; onemin:unavailable; repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
-    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
-    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
-    https://www.aimagicx.com/api/v1/chat:http_402:{''error'': ''Chat token limit exceeded'',
-    ''tokens_remaining'': 1, ''tokens_needed'': 18, ''tokens_needed_raw'': 18, ''quota_multipliers'':
-    {''input'': 1, ''output'': 1}}; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
-    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
-  summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open under
-    the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
-    ui_kit_and_flagship_polish, media_artifacts, desktop_client. Current external
-    blocker: provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
-    remaining_percent_of_max=0.00, estimated_remaining_credits_total=4464; survival:browseract:ready;
-    gemini_vortex:missing:command_not_found:gemini; onemin:unavailable; repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
-    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
-    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
-    https://www.aimagicx.com/api/v1/chat:http_402:{''error'': ''Chat token limit exceeded'',
-    ''tokens_remaining'': 1, ''tokens_needed'': 18, ''tokens_needed_raw'': 18, ''quota_multipliers'':
-    {''input'': 1, ''output'': 1}}; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
-    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
-  predicted_completion_at: ''
-  range_low_hours: 10.25
-  range_high_hours: 25.83
-  remaining_open_milestones: 1
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 1
-  remaining_effort_units: 2.05

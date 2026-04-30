@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh EA 1min billing credits
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/docker/fleet
+ExecStart=/docker/fleet/scripts/refresh_onemin_billing_daily.sh

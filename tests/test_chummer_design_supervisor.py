@@ -10013,6 +10013,23 @@ def test_direct_worker_lane_health_snapshot_sends_runtime_ea_auth_headers(monkey
         assert seen_headers["x-ea-principal-id"] == "codex-fleet"
 
 
+def test_ea_provider_slot_routing_state_recovers_degraded_slot_from_positive_billing_when_estimate_is_stale_zero() -> None:
+    module = _load_module()
+
+    slot = {
+        "configured": True,
+        "state": "degraded",
+        "raw_state": "quarantine",
+        "estimated_remaining_credits": 0,
+        "billing_remaining_credits": 4255550,
+        "last_error": "INSUFFICIENT_CREDITS:The feature requires 1078 credits, but the Team only has 0 credits",
+        "upstream_reset_unknown": True,
+    }
+
+    assert module._ea_provider_slot_remaining_credits(slot) == 4255550
+    assert module._ea_provider_slot_routing_state(slot) == "degraded"
+
+
 def test_codexea_profile_for_lane_uses_dedicated_repair_profile(monkeypatch) -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -22521,6 +22538,13 @@ def test_derive_flagship_product_context_honors_runtime_handoff_frontier_ids(mon
         _write_flagship_product_readiness(root, status="fail")
         shard_root = root / "state" / "chummer_design_supervisor" / "shard-8"
         shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "active_run_id": "20260430T070000Z-shard-8",
+                "active_run": {"run_id": "20260430T070000Z-shard-8"},
+            },
+        )
         (shard_root / module.DEFAULT_SHARD_RUNTIME_HANDOFF_FILENAME).write_text(
             "Frontier ids: 3109832007\n",
             encoding="utf-8",
@@ -22576,6 +22600,13 @@ def test_derive_flagship_product_context_uses_registry_milestone_for_runtime_han
         _write_flagship_product_readiness(root, status="fail")
         shard_root = root / "state" / "chummer_design_supervisor" / "shard-8"
         shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "active_run_id": "20260430T070000Z-shard-8",
+                "active_run": {"run_id": "20260430T070000Z-shard-8"},
+            },
+        )
         (shard_root / module.DEFAULT_SHARD_RUNTIME_HANDOFF_FILENAME).write_text(
             "Frontier ids: 1300044932\n",
             encoding="utf-8",
@@ -22604,6 +22635,63 @@ def test_derive_flagship_product_context_uses_registry_milestone_for_runtime_han
         assert context["frontier_ids"] == [1300044932]
         assert [item.id for item in context["frontier"]] == [1300044932]
         assert context["frontier"][0].title == "Mobile and play-shell flagship finish"
+
+
+def test_derive_flagship_product_context_ignores_stale_runtime_handoff_without_active_run(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Flagship frontier remains open.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        _write_flagship_product_readiness(root, status="fail")
+        for index in range(1, 9):
+            (root / "state" / "chummer_design_supervisor" / f"shard-{index}").mkdir(parents=True, exist_ok=True)
+        shard_root = root / "state" / "chummer_design_supervisor" / "shard-8"
+        module._write_json(shard_root / "state.json", {"updated_at": "2026-04-30T07:00:00Z"})
+        (shard_root / module.DEFAULT_SHARD_RUNTIME_HANDOFF_FILENAME).write_text(
+            "Frontier ids: 3109832007\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.focus_profile = ["top_flagship_grade", "whole_project_frontier"]
+        args.focus_owner = ["chummer6-mobile", "chummer6-hub", "chummer6-ui"]
+        args.focus_text = ["travel", "offline", "mobile", "companion", "continuity"]
+
+        frontier = [
+            module.Milestone(
+                id=1300044932,
+                title="Mobile and play-shell flagship finish",
+                wave="flagship_product",
+                status="not_started",
+                owners=["chummer6-mobile"],
+                exit_criteria=["mobile"],
+                dependencies=[],
+            ),
+            module.Milestone(
+                id=3109832007,
+                title="Fleet and operator loop flagship finish",
+                wave="flagship_product",
+                status="not_started",
+                owners=["fleet"],
+                exit_criteria=["fleet"],
+                dependencies=[],
+            ),
+        ]
+        monkeypatch.setattr(module, "_full_product_frontier", lambda _args: frontier)
+        monkeypatch.setattr(module, "_full_product_readiness_audit", lambda _args: {"status": "fail"})
+        monkeypatch.setattr(module, "_design_completion_audit", lambda _args, _history: {"status": "pass"})
+
+        context = module.derive_flagship_product_context(
+            args,
+            shard_root,
+            base_context=module.derive_context(args, state_root=shard_root),
+        )
+
+        assert context["frontier_ids"] == [1300044932]
+        assert [item.id for item in context["frontier"]] == [1300044932]
 
 
 def test_derive_flagship_product_context_returns_empty_slice_when_prior_shards_claim_all_frontier(monkeypatch) -> None:
@@ -22682,6 +22770,56 @@ def test_derive_flagship_product_context_uses_deterministic_shard_slice(monkeypa
 
         assert [item.id for item in context["frontier"]] == [3449507998]
         assert context["frontier_ids"] == [3449507998]
+
+
+def test_derive_flagship_product_context_preserves_remaining_full_frontier_after_prior_claims(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Flagship frontier remains open.\n", encoding="utf-8")
+        for index in range(1, 15):
+            (root / "state" / "chummer_design_supervisor" / f"shard-{index}").mkdir(parents=True, exist_ok=True)
+        shard_root = root / "state" / "chummer_design_supervisor" / "shard-6"
+        args = _args(root)
+        args.focus_profile = ["top_flagship_grade", "whole_project_frontier"]
+
+        frontier = [
+            module.Milestone(id=1300044932, title="Mobile", wave="W1", status="pending", owners=["chummer6-mobile"], exit_criteria=["mobile"], dependencies=[]),
+            module.Milestone(id=2541792707, title="Hub", wave="W1", status="pending", owners=["chummer6-hub"], exit_criteria=["hub"], dependencies=[]),
+            module.Milestone(id=3109832007, title="Fleet", wave="W1", status="pending", owners=["fleet"], exit_criteria=["fleet"], dependencies=[]),
+            module.Milestone(id=3449507998, title="Rules", wave="W1", status="pending", owners=["chummer6-core"], exit_criteria=["rules"], dependencies=[]),
+            module.Milestone(id=4182074715, title="UI Kit", wave="W1", status="pending", owners=["chummer6-ui-kit"], exit_criteria=["ui-kit"], dependencies=[]),
+            module.Milestone(id=4355602193, title="Media", wave="W1", status="pending", owners=["chummer6-media-factory"], exit_criteria=["media"], dependencies=[]),
+            module.Milestone(id=4575045159, title="Horizons", wave="W1", status="pending", owners=["chummer6-design"], exit_criteria=["horizons"], dependencies=[]),
+        ]
+        monkeypatch.setattr(module, "_full_product_frontier", lambda _args: frontier)
+        monkeypatch.setattr(module, "_full_product_readiness_audit", lambda _args: {"status": "fail"})
+        monkeypatch.setattr(module, "_design_completion_audit", lambda _args, _history: {"status": "pass"})
+
+        claimed_frontiers = {
+            1: [2299644700],
+            2: [4182074715],
+            3: [4355602193],
+            4: [3449507998],
+            5: [2541792707],
+        }
+        for index, frontier_ids in claimed_frontiers.items():
+            module._write_json(
+                root / "state" / "chummer_design_supervisor" / f"shard-{index}" / "state.json",
+                {"active_run": {"run_id": f"run-{index}", "frontier_ids": frontier_ids}},
+            )
+
+        context = module.derive_flagship_product_context(
+            args,
+            shard_root,
+            base_context=module.derive_context(args),
+        )
+
+        assert context["frontier_ids"] == [1300044932]
+        assert [item.id for item in context["frontier"]] == [1300044932]
 
 
 def test_whole_project_frontier_profile_keeps_full_flagship_frontier_for_shard_slicing(monkeypatch) -> None:
@@ -23901,6 +24039,51 @@ def test_memory_dispatch_snapshot_uses_credit_budget_when_ready_slots_drop_to_ze
         assert snapshot["allowed_active_shards"] == 13
         assert snapshot["throttled"] is False
         assert snapshot["provider_dispatch_capacity"] == {}
+
+
+def test_active_shard_manifest_entries_ignore_stale_topology_frontier_ids() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        aggregate_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            aggregate_root / "active_shards.json",
+            {
+                "generated_at": "2026-04-30T07:00:00Z",
+                "updated_at": "2026-04-30T07:00:00Z",
+                "manifest_kind": "configured_shard_topology",
+                "configured_shard_count": 2,
+                "configured_shards": [
+                    {
+                        "name": "shard-6",
+                        "index": 6,
+                        "frontier_ids": [4066417069],
+                        "focus_owner": ["chummer6-ui"],
+                        "focus_text": ["desktop"],
+                        "worker_bin": "/docker/fleet/scripts/codex-shims/codexea",
+                    },
+                    {
+                        "name": "shard-7",
+                        "index": 7,
+                        "frontier_ids": [1300044932],
+                        "focus_owner": ["chummer6-mobile"],
+                        "focus_text": ["mobile"],
+                        "worker_bin": "/docker/fleet/scripts/codex-shims/codexea",
+                    },
+                ],
+                "active_run_count": 0,
+                "active_shards": [],
+            },
+        )
+
+        entries = module._active_shard_manifest_entries(aggregate_root)
+
+        by_name = {str(entry.get("name")): entry for entry in entries}
+        assert by_name["shard-6"]["focus_owner"] == ["chummer6-ui"]
+        assert by_name["shard-7"]["focus_text"] == ["mobile"]
+        assert "frontier_ids" not in by_name["shard-6"]
+        assert "frontier_ids" not in by_name["shard-7"]
 
 
 def test_memory_dispatch_snapshot_halves_ea_dispatch_after_recent_provider_probe_failure(monkeypatch) -> None:

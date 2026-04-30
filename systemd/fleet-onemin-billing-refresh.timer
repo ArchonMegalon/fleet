@@ -1,0 +1,10 @@
+[Unit]
+Description=Run EA 1min billing refresh daily at 01:00
+
+[Timer]
+OnCalendar=*-*-* 01:00:00
+Persistent=true
+Unit=fleet-onemin-billing-refresh.service
+
+[Install]
+WantedBy=timers.target
