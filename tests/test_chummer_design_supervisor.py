@@ -9883,6 +9883,7 @@ def test_direct_worker_lane_health_snapshot_keeps_degraded_core_routable_with_ab
         assert snapshot["lanes"]["core"]["routable"] is True
         assert snapshot["lanes"]["core"]["state"] == "degraded"
         assert snapshot["lanes"]["core"]["estimated_remaining_credits_total"] == 157051
+        assert snapshot["lanes"]["core"]["live_remaining_credits_total"] == 157051
 
 
 def test_direct_worker_lane_health_snapshot_cools_recent_backend_failure(monkeypatch) -> None:
@@ -23949,8 +23950,73 @@ def test_memory_dispatch_snapshot_caps_dispatch_to_live_provider_capacity(monkey
         assert snapshot["provider_dispatch_capacity"]["ready_slots"] == 10
         assert snapshot["provider_dispatch_capacity"]["hard_max_active_requests"] == 8
         assert snapshot["provider_dispatch_capacity"]["estimated_remaining_credits_total"] == 44198385
+        assert snapshot["provider_dispatch_capacity"]["live_remaining_credits_total"] == 44198385
         assert snapshot["provider_dispatch_capacity"]["balance_basis_summary"] == "actual"
         assert "live provider capacity caps shard dispatch at 9/13" in snapshot["reason"]
+
+
+def test_direct_worker_lane_health_snapshot_prefers_lane_detail_and_live_credit_fields(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "survival"
+
+        def fake_urlopen(request, timeout=0):
+            payload = {
+                "provider_registry": {
+                    "lanes": [
+                        {
+                            "profile": "survival",
+                            "primary_provider_key": "browseract",
+                            "primary_state": "degraded",
+                            "detail": "browseract_binding_unavailable",
+                            "capacity_summary": {
+                                "state": "degraded",
+                                "configured_slots": 1,
+                                "ready_slots": 1,
+                                "degraded_slots": 0,
+                                "unavailable_slots": 0,
+                                "live_ready_slot_count": 0,
+                                "live_remaining_credits_total": 345,
+                                "actual_remaining_credits_total": 4255550,
+                                "live_remaining_percent_of_max": 0.01,
+                            },
+                            "providers": [
+                                {
+                                    "provider_key": "browseract",
+                                    "state": "ready",
+                                    "detail": "",
+                                    "enabled": True,
+                                    "executable": True,
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+
+            class _Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+                def read(self):
+                    return json.dumps(payload).encode("utf-8")
+
+            return _Response()
+
+        monkeypatch.setattr(module.urllib.request, "urlopen", fake_urlopen)
+
+        snapshot = module._direct_worker_lane_health_snapshot(args, ["survival"])
+
+        assert snapshot["lanes"]["survival"]["ready_slots"] == 0
+        assert snapshot["lanes"]["survival"]["live_remaining_credits_total"] == 345
+        assert snapshot["lanes"]["survival"]["actual_remaining_credits_total"] == 4255550
+        assert "browseract_binding_unavailable" in snapshot["lanes"]["survival"]["reason"]
 
 
 def test_memory_dispatch_snapshot_uses_credit_budget_when_ready_slots_drop_to_zero(monkeypatch) -> None:

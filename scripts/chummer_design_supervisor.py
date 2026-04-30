@@ -1864,15 +1864,23 @@ def _provider_dispatch_capacity_snapshot(
     onemin = (providers or {}).get("onemin") or {}
     if not isinstance(onemin, dict) or not onemin:
         return {}
-    estimated_remaining_credits_total = _coerce_float(onemin.get("estimated_remaining_credits_total"))
+    live_remaining_credits_total = _coerce_float(onemin.get("live_remaining_credits_total"))
+    if live_remaining_credits_total is None:
+        live_remaining_credits_total = _coerce_float(onemin.get("estimated_remaining_credits_total"))
+    actual_remaining_credits_total = _coerce_float(onemin.get("actual_remaining_credits_total"))
     balance_basis_summary = str(onemin.get("balance_basis_summary") or "").strip()
-    remaining_percent_of_max = _coerce_float(onemin.get("remaining_percent_of_max"))
+    remaining_percent_of_max = _coerce_float(onemin.get("live_remaining_percent_of_max"))
+    if remaining_percent_of_max is None:
+        remaining_percent_of_max = _coerce_float(onemin.get("remaining_percent_of_max"))
     slot_states = [
         str(slot.get("state") or "").strip().lower()
         for slot in (onemin.get("slots") or [])
         if isinstance(slot, dict) and bool(slot.get("configured", True))
     ]
-    ready_slots = sum(1 for state in slot_states if state in PROVIDER_HEALTH_READY_STATES)
+    if onemin.get("live_ready_slot_count") not in (None, ""):
+        ready_slots = max(0, _coerce_int(onemin.get("live_ready_slot_count"), 0))
+    else:
+        ready_slots = sum(1 for state in slot_states if state in PROVIDER_HEALTH_READY_STATES)
     configured_slots = max(0, _coerce_int(onemin.get("configured_slots"), 0))
     if configured_slots <= 0:
         configured_slots = len(slot_states)
@@ -1884,13 +1892,13 @@ def _provider_dispatch_capacity_snapshot(
         50000,
     )
     if (
-        estimated_remaining_credits_total is not None
-        and estimated_remaining_credits_total > 0
+        live_remaining_credits_total is not None
+        and live_remaining_credits_total > 0
         and credit_budget_floor > 0
     ):
         credit_budget_capacity = min(
             hard_ea_shard_count,
-            max(0, int(float(estimated_remaining_credits_total) // float(credit_budget_floor))),
+            max(0, int(float(live_remaining_credits_total) // float(credit_budget_floor))),
         )
     capacity_limits: List[int] = []
     effective_ready_capacity = ready_slots
@@ -1923,7 +1931,16 @@ def _provider_dispatch_capacity_snapshot(
     elif credit_budget_capacity > 0:
         reason_bits.append(
             "credit-derived hard lane capacity="
-            f"{credit_budget_capacity} from estimated_remaining_credits_total={estimated_remaining_credits_total:.0f}"
+            f"{credit_budget_capacity} from live_remaining_credits_total={live_remaining_credits_total:.0f}"
+        )
+    if (
+        actual_remaining_credits_total is not None
+        and live_remaining_credits_total is not None
+        and actual_remaining_credits_total > live_remaining_credits_total
+    ):
+        reason_bits.append(
+            "billed_vs_live="
+            f"{actual_remaining_credits_total:.0f}/{live_remaining_credits_total:.0f}"
         )
     if effective_hard_max_active_requests > 0:
         reason_bits.append(f"ea hard request cap={effective_hard_max_active_requests}")
@@ -1943,9 +1960,13 @@ def _provider_dispatch_capacity_snapshot(
         "ready_slots": ready_slots,
         "configured_slots": configured_slots,
         "hard_max_active_requests": hard_max_active_requests,
-        "estimated_remaining_credits_total": estimated_remaining_credits_total,
+        "estimated_remaining_credits_total": live_remaining_credits_total,
+        "live_remaining_credits_total": live_remaining_credits_total,
+        "actual_remaining_credits_total": actual_remaining_credits_total,
         "balance_basis_summary": balance_basis_summary,
         "remaining_percent_of_max": remaining_percent_of_max,
+        "live_remaining_percent_of_max": remaining_percent_of_max,
+        "actual_remaining_percent_of_max": _coerce_float(onemin.get("actual_remaining_percent_of_max")),
         "recent_live_fetch_failure": recent_live_fetch_failure,
         "recent_live_fetch_failure_overridden": recent_live_fetch_failure_overridden,
         "recent_live_fetch_failure_age_seconds": cached_failure_age_seconds,
@@ -1980,6 +2001,18 @@ def _provider_capacity_summary_from_host_memory_pressure(host_memory_pressure: D
     estimated_remaining_credits_total = _coerce_float(capacity.get("estimated_remaining_credits_total"))
     if estimated_remaining_credits_total is not None:
         summary["estimated_remaining_credits_total"] = estimated_remaining_credits_total
+    live_remaining_credits_total = _coerce_float(capacity.get("live_remaining_credits_total"))
+    if live_remaining_credits_total is not None:
+        summary["live_remaining_credits_total"] = live_remaining_credits_total
+    actual_remaining_credits_total = _coerce_float(capacity.get("actual_remaining_credits_total"))
+    if actual_remaining_credits_total is not None:
+        summary["actual_remaining_credits_total"] = actual_remaining_credits_total
+    live_remaining_percent_of_max = _coerce_float(capacity.get("live_remaining_percent_of_max"))
+    if live_remaining_percent_of_max is not None:
+        summary["live_remaining_percent_of_max"] = live_remaining_percent_of_max
+    actual_remaining_percent_of_max = _coerce_float(capacity.get("actual_remaining_percent_of_max"))
+    if actual_remaining_percent_of_max is not None:
+        summary["actual_remaining_percent_of_max"] = actual_remaining_percent_of_max
     balance_basis_summary = str(capacity.get("balance_basis_summary") or "").strip()
     if balance_basis_summary:
         summary["balance_basis_summary"] = balance_basis_summary
@@ -2977,13 +3010,21 @@ def _assess_direct_worker_lane_health(
     synthetic_local_onemin = bool(row.get("synthetic")) and str(row.get("source") or "").strip() == "direct_local_onemin"
     state = str(row.get("primary_state") or capacity.get("state") or "").strip().lower() or "unknown"
     primary_provider_key = str(row.get("primary_provider_key") or "").strip()
-    ready_slots = _coerce_int(capacity.get("ready_slots") or 0)
+    if capacity.get("live_ready_slot_count") not in (None, ""):
+        ready_slots = max(0, _coerce_int(capacity.get("live_ready_slot_count"), 0))
+    else:
+        ready_slots = _coerce_int(capacity.get("ready_slots") or 0)
     degraded_slots = _coerce_int(capacity.get("degraded_slots") or 0)
     unavailable_slots = _coerce_int(capacity.get("unavailable_slots") or 0)
     configured_slots = _coerce_int(capacity.get("configured_slots") or 0)
     leased_slots = _coerce_int(capacity.get("leased_slots") or 0)
-    remaining_percent = _coerce_float(capacity.get("remaining_percent_of_max"))
-    estimated_remaining_credits_total = _coerce_float(capacity.get("estimated_remaining_credits_total"))
+    remaining_percent = _coerce_float(capacity.get("live_remaining_percent_of_max"))
+    if remaining_percent is None:
+        remaining_percent = _coerce_float(capacity.get("remaining_percent_of_max"))
+    estimated_remaining_credits_total = _coerce_float(capacity.get("live_remaining_credits_total"))
+    if estimated_remaining_credits_total is None:
+        estimated_remaining_credits_total = _coerce_float(capacity.get("estimated_remaining_credits_total"))
+    actual_remaining_credits_total = _coerce_float(capacity.get("actual_remaining_credits_total"))
     executable_provider_count = sum(
         1 for provider in providers if bool(provider.get("enabled", True)) and bool(provider.get("executable", True))
     )
@@ -2991,6 +3032,9 @@ def _assess_direct_worker_lane_health(
     reason_segments = [_lane_provider_detail(provider) for provider in providers[:3]]
     if len(providers) > 3:
         reason_segments.append(f"+{len(providers) - 3} more")
+    lane_detail = " ".join(str(row.get("detail") or capacity.get("detail") or "").split()).strip()
+    if lane_detail and lane_detail not in reason_segments:
+        reason_segments.append(f"lane:{lane_detail}")
     reason = "; ".join(segment for segment in reason_segments if segment)
     credit_floor = _direct_worker_lane_low_capacity_credit_floor(lane)
     has_absolute_credit_headroom = (
@@ -3031,9 +3075,11 @@ def _assess_direct_worker_lane_health(
 
     advisory_parts: List[str] = []
     if remaining_percent is not None:
-        advisory_parts.append(f"remaining_percent_of_max={remaining_percent:.2f}")
+        advisory_parts.append(f"live_remaining_percent_of_max={remaining_percent:.2f}")
     if estimated_remaining_credits_total is not None:
-        advisory_parts.append(f"estimated_remaining_credits_total={estimated_remaining_credits_total:.0f}")
+        advisory_parts.append(f"live_remaining_credits_total={estimated_remaining_credits_total:.0f}")
+    if actual_remaining_credits_total is not None:
+        advisory_parts.append(f"actual_remaining_credits_total={actual_remaining_credits_total:.0f}")
     if advisory_parts:
         reason = "; ".join([part for part in [reason, ", ".join(advisory_parts)] if part])
     if (
@@ -3048,7 +3094,7 @@ def _assess_direct_worker_lane_health(
         routable = False
         state = "degraded"
         reserve_reason = (
-            f"{lane} has no ready 1min slots and low remaining balance while remaining_percent_of_max="
+            f"{lane} has no ready 1min slots and low remaining balance while live_remaining_percent_of_max="
             f"{remaining_percent:.2f}; prefer lighter rescue lanes/models"
         )
         reason = "; ".join(part for part in [reason, reserve_reason] if part)
@@ -3067,6 +3113,10 @@ def _assess_direct_worker_lane_health(
         "leased_slots": leased_slots,
         "remaining_percent_of_max": remaining_percent,
         "estimated_remaining_credits_total": estimated_remaining_credits_total,
+        "live_remaining_percent_of_max": remaining_percent,
+        "live_remaining_credits_total": estimated_remaining_credits_total,
+        "actual_remaining_credits_total": actual_remaining_credits_total,
+        "actual_remaining_percent_of_max": _coerce_float(capacity.get("actual_remaining_percent_of_max")),
         "reason": reason or f"profile={profile or lane} state={state}",
     }
 
@@ -3086,7 +3136,7 @@ def _direct_worker_lane_low_capacity_credit_floor(worker_lane: str) -> Optional[
         return float(
             _runtime_env_int_default(
                 "CHUMMER_DESIGN_SUPERVISOR_LOW_CAPACITY_LIGHT_LANE_ABSOLUTE_CREDITS",
-                4000,
+                300,
             )
         )
     return None

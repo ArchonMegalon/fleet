@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-30T16:19:06Z'
+generated_at: '2026-04-30T16:30:38Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-6
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -74,7 +74,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-30T15:54:57Z'
+  generated_at: '2026-04-30T16:30:23Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -108,7 +108,7 @@ frontier:
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
       mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
       desktop_client.'
-    predicted_completion_at: '2026-05-01T10:21:12Z'
+    predicted_completion_at: '2026-05-01T10:32:44Z'
     range_low_hours: 10.45
     range_high_hours: 25.62
     remaining_open_milestones: 1
@@ -129,24 +129,28 @@ eta:
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
-  blocking_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
+  blocking_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:degraded;
     remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262; survival:browseract:ready;
-    gemini_vortex:missing:command_not_found:gemini; onemin:unavailable; repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
+    gemini_vortex:missing:command_not_found:gemini; onemin:degraded; repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
     ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
     ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
-    https://www.aimagicx.com/api/v1/chat:request_timeout:5s; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
-    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
+    https://www.aimagicx.com/api/v1/chat:http_402:{''error'': ''Chat token limit exceeded'',
+    ''tokens_remaining'': 1, ''tokens_needed'': 18, ''tokens_needed_raw'': 18, ''quota_multipliers'':
+    {''input'': 1, ''output'': 1}}; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
+    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:degraded'
   summary: 'Milestone ''Rules engine parity, explain trust, and import certification''
     remains open under the flagship closeout frontier. Outstanding readiness coverage:
     mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
     desktop_client. Current external blocker: provider-health preflight left no routable
-    direct lanes: core_rescue:onemin:unavailable; remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262;
-    survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini; onemin:unavailable;
+    direct lanes: core_rescue:onemin:degraded; remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262;
+    survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini; onemin:degraded;
     repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
     ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
     ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
-    https://www.aimagicx.com/api/v1/chat:request_timeout:5s; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
-    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
+    https://www.aimagicx.com/api/v1/chat:http_402:{''error'': ''Chat token limit exceeded'',
+    ''tokens_remaining'': 1, ''tokens_needed'': 18, ''tokens_needed_raw'': 18, ''quota_multipliers'':
+    {''input'': 1, ''output'': 1}}; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
+    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:degraded'
   predicted_completion_at: ''
   range_low_hours: 10.45
   range_high_hours: 25.62
