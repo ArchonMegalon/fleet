@@ -793,6 +793,18 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertTrue(codex_home.is_dir())
         self.assertEqual(payload["env"]["CODEX_HOME"], str(codex_home))
 
+    def test_responses_mode_defaults_to_single_stream_retry(self) -> None:
+        result = self.run_shim(
+            "exec",
+            "Reply with exactly ok.",
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertIn("model_providers.ea.stream_max_retries=1", payload["argv"])
+
     def test_gap_audit_prompt_activates_gap_audit_operator_guard(self) -> None:
         prompt_text = (
             "Spawn CodexEA in debug mode and find gaps in both the design, the milestones, "
