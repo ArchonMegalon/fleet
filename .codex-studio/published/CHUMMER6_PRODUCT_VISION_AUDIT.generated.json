@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-04-30T14:18:04.489841Z",
+  "generated_at": "2026-04-30T15:46:23.767308Z",
   "probe_kind": "vision_audit",
   "summary": {
     "repo_grounded_findings_count": 6,
     "speculative_integration_opportunity_count": 5,
-    "active_runs_count": 6,
-    "productive_active_runs_count": 6,
+    "active_runs_count": 13,
+    "productive_active_runs_count": 13,
     "nonproductive_active_runs_count": 0,
     "remaining_open_milestones": 13,
     "missing_frontier_ids": [],
@@ -39,9 +39,9 @@
       ],
       "owner_shards": [
         "shard-7",
-        "shard-1",
-        "shard-2",
-        "shard-4"
+        "shard-3",
+        "shard-6",
+        "shard-8"
       ],
       "milestone_area": "Living campaign loop / lost-potential wave / mobile play shell",
       "evidence_paths": [
@@ -110,10 +110,10 @@
         "confidence that recovery and restore really work"
       ],
       "owner_shards": [
-        "shard-7",
         "shard-1",
-        "shard-2",
-        "shard-3"
+        "shard-3",
+        "shard-11",
+        "shard-12"
       ],
       "milestone_area": "Desktop release proof, installer truth, and restore confidence",
       "evidence_paths": [
@@ -141,10 +141,8 @@
         "offline or degraded-network companion moments"
       ],
       "owner_shards": [
-        "shard-7",
-        "shard-1",
-        "shard-2",
-        "shard-4"
+        "shard-3",
+        "shard-8"
       ],
       "milestone_area": "Mobile play shell and return-moment continuity",
       "evidence_paths": [
@@ -204,10 +202,9 @@
         "fewer places where visual drift hides behind aggregate green status"
       ],
       "owner_shards": [
-        "shard-7",
         "shard-1",
-        "shard-2",
-        "shard-4"
+        "shard-3",
+        "shard-12"
       ],
       "milestone_area": "Journey gates, screenshot packs, runtime-backed parity contracts",
       "evidence_paths": [
@@ -263,10 +260,8 @@
       "thesis": "A route-pack or travel-operations acquisition would strengthen RUNSITE and mobile travel continuity.",
       "why_fit": "The canon already names route packs, travel moments, mobile continuity, and observer views; the missing leverage is a stronger real-world travel and location intelligence substrate.",
       "owner_shards": [
-        "shard-7",
-        "shard-1",
-        "shard-2",
-        "shard-4"
+        "shard-3",
+        "shard-8"
       ],
       "evidence_paths": [
         "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
@@ -280,10 +275,9 @@
       "thesis": "A bounded coaching or after-action analytics asset would accelerate TABLE PULSE without making it a second campaign truth source.",
       "why_fit": "The canon explicitly wants bounded, privacy-safe post-session coaching; the hard part is productizing that loop without becoming creepy or authoritative.",
       "owner_shards": [
-        "shard-7",
-        "shard-1",
-        "shard-2",
-        "shard-4"
+        "shard-3",
+        "shard-11",
+        "shard-13"
       ],
       "evidence_paths": [
         "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md",

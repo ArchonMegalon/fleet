@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-30T14:16:41Z'
+generated_at: '2026-04-30T15:21:08Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-13
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -68,9 +68,9 @@ completion_audit:
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260430T141326Z-shard-13 is not trusted: missing
+  reason: 'latest worker receipt 20260430T150222Z-shard-13 is not trusted: missing
     final message'
-  latest_run_id: 20260430T141326Z-shard-13
+  latest_run_id: 20260430T150222Z-shard-13
   latest_run_reason: missing final message
 journey_gate_audit:
   status: fail
@@ -78,11 +78,10 @@ journey_gate_audit:
   blocked_journey_count: 6
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
-  status: pass
-  reason: linux desktop binary build/start/test proof is ready on current repo-local
-    evidence
+  status: fail
+  reason: stage flagship_ui_screenshot_gate failed
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-  generated_at: '2026-04-30T12:27:18Z'
+  generated_at: '2026-04-30T15:09:57Z'
 weekly_pulse_audit:
   status: pass
   reason: weekly product pulse is fresh and reports no remaining drift or blocker
@@ -99,12 +98,15 @@ blocking_audits:
 - component: journey_gate
   title: Golden journey release-proof gaps
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
+- component: linux_desktop_exit_gate
+  title: Linux desktop exit-gate gaps
+  reason: stage flagship_ui_screenshot_gate failed
 - component: desktop_executable_exit_gate
   title: Desktop executable exit-gate gaps
   reason: desktop executable exit gate proof did not pass
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: 'latest worker receipt 20260430T141326Z-shard-13 is not trusted: missing
+  reason: 'latest worker receipt 20260430T150222Z-shard-13 is not trusted: missing
     final message'
 frontier_count: 0
 frontier_ids: []

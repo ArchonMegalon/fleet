@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-30T14:17:04Z'
+generated_at: '2026-04-30T15:32:11Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-6
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,8 +32,10 @@ focus:
   - chummer6-hub
   - chummer6-ui
   - chummer6-core
-  - chummer6-ui-kit
+  - chummer6-hub-registry
+  - chummer6-design
   - chummer6-mobile
+  - chummer6-ui-kit
   texts:
   - top flagship grade
   - whole project frontier
@@ -76,7 +78,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-30T14:13:46Z'
+  generated_at: '2026-04-30T15:30:07Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -111,7 +113,7 @@ frontier:
       polish'' remains open under the flagship closeout frontier. Outstanding readiness
       coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
       desktop_client.'
-    predicted_completion_at: '2026-05-01T07:36:16Z'
+    predicted_completion_at: '2026-05-01T08:51:23Z'
     range_low_hours: 9.84
     range_high_hours: 24.8
     remaining_open_milestones: 1

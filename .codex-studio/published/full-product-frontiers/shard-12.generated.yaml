@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-30T14:17:27Z'
+generated_at: '2026-04-30T15:32:32Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-12
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -75,7 +75,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-30T14:13:46Z'
+  generated_at: '2026-04-30T15:30:07Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -109,7 +109,7 @@ frontier:
       campaign state'' remains open under the flagship closeout frontier. Outstanding
       readiness coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts,
       fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-01T04:09:03Z'
+    predicted_completion_at: '2026-05-01T05:24:08Z'
     range_low_hours: 7.74
     range_high_hours: 19.98
     remaining_open_milestones: 1
@@ -136,23 +136,3 @@ queue_package:
   - tests
   - docs
   - scripts
-eta:
-  status: flagship_delivery
-  eta_human: 8h-20h
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Make mobile travel campaign continuity explicit for stale
-    campaign state'' remains open under the flagship closeout frontier. Outstanding
-    readiness coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts,
-    fleet_and_operator_loop, desktop_client.'
-  predicted_completion_at: '2026-05-01T04:09:03Z'
-  range_low_hours: 7.74
-  range_high_hours: 19.98
-  remaining_open_milestones: 1
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 1
-  remaining_effort_units: 1.8

@@ -698,9 +698,30 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertEqual(payload["env"]["CODEXEA_LANE"], "core")
         self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_core")
 
-    def test_unblock_diagnostic_prompt_forces_easy_lane_even_when_core_was_requested(self) -> None:
+    def test_unblock_diagnostic_prompt_preserves_explicit_core_lane(self) -> None:
         result = self.run_shim(
             "core",
+            "exec",
+            "Investigate why EA global 1min aggregate reports ready_account_count=0 while Fleet is running 13/13 productive. OODA the fleet and patch only CodexEA shim, EA endpoints, or the 1min manager.",
+            extra_env={"CODEXEA_BOOTSTRAP": "1", "CODEXEA_TRACE_STARTUP": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertTrue(payload["env"]["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"])
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "core")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_core")
+        self.assertIn('model="ea-coder-hard"', payload["argv"])
+        self.assertIn("Operator-prepared fleet unblock context:", str(payload.get("stdin") or ""))
+        self.assertIn(
+            "Trace: lane=core provider=ea model=ea-coder-hard mode=responses next=start_exec_session",
+            completed.stderr,
+        )
+
+    def test_unblock_diagnostic_plain_exec_still_auto_demotes_to_easy_lane(self) -> None:
+        result = self.run_shim(
             "exec",
             "Investigate why EA global 1min aggregate reports ready_account_count=0 while Fleet is running 13/13 productive. OODA the fleet and patch only CodexEA shim, EA endpoints, or the 1min manager.",
             extra_env={"CODEXEA_BOOTSTRAP": "1", "CODEXEA_TRACE_STARTUP": "1"},
@@ -714,11 +735,6 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertEqual(payload["env"]["CODEXEA_LANE"], "easy")
         self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_fast")
         self.assertIn('model="ea-coder-fast"', payload["argv"])
-        self.assertIn("Operator-prepared fleet unblock context:", str(payload.get("stdin") or ""))
-        self.assertIn(
-            "Trace: lane=easy provider=ea model=ea-coder-fast mode=responses next=start_exec_session",
-            completed.stderr,
-        )
 
     def test_backlog_audit_prompt_activates_operator_guard_and_disables_mcp(self) -> None:
         prompt_text = (
@@ -952,6 +968,24 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIn("Operator-prepared vision audit context:", prompt)
         self.assertIn("probe_kind=vision_audit", prompt)
         self.assertIn("clean_exec=0", completed.stderr)
+
+    def test_non_vision_operator_guard_mode_does_not_trigger_vision_shortcut_from_stdin_context(self) -> None:
+        result = self.run_shim(
+            "exec",
+            "Refresh current 1min billing credits and inspect stale depleted-probe routing.",
+            extra_env={
+                "CODEXEA_OPERATOR_GUARD_ACTIVE": "1",
+                "CODEXEA_OPERATOR_GUARD_MODE": "unblock",
+                "CODEXEA_OPERATOR_GUARD_LOCAL_SHORTCUTS": "1",
+                "CODEXEA_STDIN_PROMPT": "probe_kind=vision_audit",
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertNotIn("Vision audit result:", completed.stdout)
 
     def test_full_parity_build_prompt_activates_parity_build_operator_guard(self) -> None:
         prompt_text = "OODA and make CodexEA materialize a full parity build."

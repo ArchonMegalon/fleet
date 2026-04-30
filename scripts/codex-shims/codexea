@@ -2390,13 +2390,17 @@ ${OPERATOR_GUARD_PROMPT_TEXT:-}" in
 }
 
 maybe_run_vision_audit_local_shortcut() {
-  case "${CODEXEA_OPERATOR_GUARD_MODE:-}
-${CODEXEA_STDIN_PROMPT:-}
-${OPERATOR_GUARD_PROMPT_TEXT:-}" in
-    *"vision_audit"*|*"Operator-prepared vision audit context:"*|*"probe_kind=vision_audit"*)
+  case "${CODEXEA_OPERATOR_GUARD_MODE:-}" in
+    vision_audit)
       ;;
     *)
-      return 1
+      case "${OPERATOR_GUARD_PROMPT_TEXT:-}" in
+        *"Operator-prepared vision audit context:"*|*"probe_kind=vision_audit"*)
+          ;;
+        *)
+          return 1
+          ;;
+      esac
       ;;
   esac
   case "${CODEXEA_OPERATOR_GUARD_LOCAL_SHORTCUTS:-1}" in
@@ -3700,7 +3704,7 @@ if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && [ "${CODEXEA_OPERATOR_GUARD_MODE:-}" = "u
   esac
 fi
 
-if env_truthy "${CODEXEA_OPERATOR_GUARD_DIAGNOSTIC:-0}"; then
+if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && env_truthy "${CODEXEA_OPERATOR_GUARD_DIAGNOSTIC:-0}"; then
   REQUESTED_LANE="easy"
 fi
 

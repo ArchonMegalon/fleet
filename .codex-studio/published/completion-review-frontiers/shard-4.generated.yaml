@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-30T14:15:39Z'
+generated_at: '2026-04-30T14:28:50Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-4
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -69,9 +69,9 @@ completion_audit:
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260430T141251Z-shard-4 is not trusted: missing
+  reason: 'latest worker receipt 20260430T142528Z-shard-4 is not trusted: missing
     final message'
-  latest_run_id: 20260430T141251Z-shard-4
+  latest_run_id: 20260430T142528Z-shard-4
   latest_run_reason: missing final message
 journey_gate_audit:
   status: fail
@@ -105,7 +105,7 @@ blocking_audits:
   reason: desktop executable exit gate proof did not pass
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: 'latest worker receipt 20260430T141251Z-shard-4 is not trusted: missing
+  reason: 'latest worker receipt 20260430T142528Z-shard-4 is not trusted: missing
     final message'
 frontier_count: 0
 frontier_ids: []

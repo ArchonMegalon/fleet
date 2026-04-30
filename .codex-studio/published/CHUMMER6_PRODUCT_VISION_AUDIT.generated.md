@@ -1,8 +1,8 @@
 # Chummer6 Product Vision Audit
 
-- generated_at: 2026-04-30T14:18:04.489841Z
-- active_runs_count: 6
-- productive_active_runs_count: 6
+- generated_at: 2026-04-30T15:46:23.767308Z
+- active_runs_count: 13
+- productive_active_runs_count: 13
 - nonproductive_active_runs_count: 0
 - remaining_open_milestones: 13
 - missing_frontier_ids: []
@@ -24,7 +24,7 @@
 
 - severity: high
 - category: lost_potential
-- owner_shards: ['shard-7', 'shard-1', 'shard-2', 'shard-4']
+- owner_shards: ['shard-7', 'shard-3', 'shard-6', 'shard-8']
 - milestone_area: Living campaign loop / lost-potential wave / mobile play shell
 - reason: The canon explicitly says Chummer should feel like an explainable campaign OS with action help, local rule anchors, campaign adoption, runner goals, prep packets, and BLACK LEDGER consequence loops, but those loops still sit in open readiness or successor-wave posture rather than feeling closed in flagship truth.
 - user_impact: Players and GMs do not yet get the calm-under-pressure payoff: what can I do right now, why, and what changed because of the last run.
@@ -48,7 +48,7 @@
 
 - severity: high
 - category: trust_and_release_proof
-- owner_shards: ['shard-7', 'shard-1', 'shard-2', 'shard-3']
+- owner_shards: ['shard-1', 'shard-3', 'shard-11', 'shard-12']
 - milestone_area: Desktop release proof, installer truth, and restore confidence
 - reason: The product canon emphasizes confidence, boring trust, and public proof shelf discipline, but desktop release closure still depends on stale or mismatched Windows startup-smoke proof and a still-open desktop-client readiness key.
 - user_impact: Users may believe the product promise less at exactly the moments where they need confidence most: install, update, restore, and first-launch recovery.
@@ -60,7 +60,7 @@
 
 - severity: medium
 - category: mobile_continuity
-- owner_shards: ['shard-7', 'shard-1', 'shard-2', 'shard-4']
+- owner_shards: ['shard-3', 'shard-8']
 - milestone_area: Mobile play shell and return-moment continuity
 - reason: Readiness still carries `mobile_play_shell=warning` while the canon says mobile should become the player and GM shell for table return, recap, continuity, and travel moments. Current leading reason: Recover-from-sync-conflict journey is blocked, not ready..
 - user_impact: The product is still strongest at the desk, not in the between-session and at-table moments that actually drive habit and return.
@@ -84,7 +84,7 @@
 
 - severity: medium
 - category: workflow_gate_discipline
-- owner_shards: ['shard-7', 'shard-1', 'shard-2', 'shard-4']
+- owner_shards: ['shard-1', 'shard-3', 'shard-12']
 - milestone_area: Journey gates, screenshot packs, runtime-backed parity contracts
 - reason: The repo now has real parity and readiness gates, but the remaining UI families are still unproven because those exact sub-dialogs and workflow moments are not all under direct screenshot/runtime contract yet.
 - user_impact: A product manager or veteran tester can still feel that something is off even while the global readiness story looks healthier.
@@ -113,7 +113,7 @@
 ### 3. Travel, route, or venue-intelligence LTD
 
 - repo_grounded: False
-- owner_shards: ['shard-7', 'shard-1', 'shard-2', 'shard-4']
+- owner_shards: ['shard-3', 'shard-8']
 - thesis: A route-pack or travel-operations acquisition would strengthen RUNSITE and mobile travel continuity.
 - why_fit: The canon already names route packs, travel moments, mobile continuity, and observer views; the missing leverage is a stronger real-world travel and location intelligence substrate.
 - evidence_paths: ['/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml', '/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md']
@@ -121,7 +121,7 @@
 ### 4. Privacy-safe coaching or post-session analytics LTD
 
 - repo_grounded: False
-- owner_shards: ['shard-7', 'shard-1', 'shard-2', 'shard-4']
+- owner_shards: ['shard-3', 'shard-11', 'shard-13']
 - thesis: A bounded coaching or after-action analytics asset would accelerate TABLE PULSE without making it a second campaign truth source.
 - why_fit: The canon explicitly wants bounded, privacy-safe post-session coaching; the hard part is productizing that loop without becoming creepy or authoritative.
 - evidence_paths: ['/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md', '/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml', '/docker/chummercomplete/chummer-design/products/chummer/CONFIDENCE_READINESS_AND_CONTINUITY_GUIDE.md']
