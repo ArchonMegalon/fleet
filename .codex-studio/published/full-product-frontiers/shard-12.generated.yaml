@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-30T16:25:41Z'
+generated_at: '2026-04-30T16:32:09Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-12
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,7 +32,6 @@ focus:
   - fleet
   - chummer6-design
   - chummer6-ui
-  - chummer6-media-factory
   texts:
   - top flagship grade
   - whole project frontier
@@ -75,7 +74,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-30T15:54:57Z'
+  generated_at: '2026-04-30T16:30:23Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -84,39 +83,38 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 2541246989
+- 1416961433
 frontier:
-- id: 2541246989
-  title: Render build explainer video, audio, preview-card, and packet siblings from
-    approved explain packets
+- id: 1416961433
+  title: Surface campaign memory and consequences on desktop
   wave: flagship_product
   status: blocked_external_host_proof
   owners:
-  - chummer6-media-factory
+  - chummer6-ui
   dependencies: []
   exit_criteria:
-  - Render approved Build Lab explain packets into video, audio, preview-card, and
-    packet companions without mutating engine truth.
-  - 'Own and prove the surface slice(s): build_explain_companion_rendering, explain_artifact_receipts'
-  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
+  - Make campaign consequences, stale state, and next-session return actions visible
+    on the promoted desktop route.
+  - 'Own and prove the surface slice(s): campaign_workspace:memory, campaign_return_loop:desktop'
+  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
+    Chummer.Tests, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-media-factory` (next90-m109-media-factory-build-explain-bundles).
+    is landed for `chummer6-ui` (next90-m112-ui-campaign-memory).
   eta:
     status: flagship_delivery
-    eta_human: 9h-21h
+    eta_human: 9h-22h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Render build explainer video, audio, preview-card, and packet
-      siblings from approved explain packets'' remains open under the flagship closeout
-      frontier. Outstanding readiness coverage: mobile_play_shell, ui_kit_and_flagship_polish,
-      media_artifacts, fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-01T07:23:17Z'
-    range_low_hours: 8.67
-    range_high_hours: 21.25
+    summary: 'Milestone ''Surface campaign memory and consequences on desktop'' remains
+      open under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+      ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
+    predicted_completion_at: '2026-05-01T07:44:45Z'
+    range_low_hours: 8.64
+    range_high_hours: 21.78
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.7
+    remaining_effort_units: 1.8
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
@@ -125,16 +123,15 @@ frontier:
     scope_warning: ''
 source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
 queue_package:
-  repo: chummer6-media-factory
-  package_id: next90-m109-media-factory-build-explain-bundles
-  title: Render build explainer video, audio, preview-card, and packet siblings from
-    approved explain packets
+  repo: chummer6-ui
+  package_id: next90-m112-ui-campaign-memory
+  title: Surface campaign memory and consequences on desktop
   priority: 0
   owned_surfaces:
-  - build_explain_companion_rendering
-  - explain_artifact_receipts
+  - campaign_workspace:memory
+  - campaign_return_loop:desktop
   allowed_paths:
-  - src
-  - tests
-  - docs
+  - Chummer.Avalonia
+  - Chummer.Desktop.Runtime
+  - Chummer.Tests
   - scripts

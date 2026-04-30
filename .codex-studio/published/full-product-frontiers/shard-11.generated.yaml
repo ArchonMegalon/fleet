@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-30T16:25:38Z'
+generated_at: '2026-04-30T16:32:07Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-11
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,7 +32,7 @@ focus:
   - fleet
   - chummer6-hub
   - chummer6-design
-  - executive-assistant
+  - chummer6-media-factory
   texts:
   - top flagship grade
   - whole project frontier
@@ -74,7 +74,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-30T15:54:57Z'
+  generated_at: '2026-04-30T16:30:23Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -83,44 +83,59 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 3109832007
+- 2642013094
 frontier:
-- id: 3109832007
-  title: Fleet and operator loop flagship finish
+- id: 2642013094
+  title: Render release explainer, support closure, and public concierge companion
+    bundles with captions, previews, and sibling notes
   wave: flagship_product
   status: blocked_external_host_proof
   owners:
-  - fleet
-  - executive-assistant
-  - chummer6-design
-  - chummer6-hub
+  - chummer6-media-factory
   dependencies: []
   exit_criteria:
-  - Keep the product-governor, support, signal, and operator loop durable enough to
-    steer the full multi-repo product, not just the current milestone wave, with trustworthy
-    proofs, traces, ETAs, handoffs, and fail-closed anti-false-complete posture.
-  - Ensure the loop can keep decomposing full-product work across shards until flagship
-    readiness proof is current and trusted, and that actionable feedback, crash, and
-    support signals can auto-materialize into routed bugfix work without operator
-    babysitting.
+  - Render install-aware release, support, and public concierge companions with captions,
+    previews, and bounded sibling notes.
+  - 'Own and prove the surface slice(s): release_explainer_artifacts, support_closure_artifacts,
+    public_concierge_companions'
+  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
+  - Refresh flagship proof and close out the queue slice honestly when this package
+    is landed for `chummer6-media-factory` (next90-m111-media-factory-concierge-bundles).
   eta:
     status: flagship_delivery
-    eta_human: 9h-22h
+    eta_human: 9h-21h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
-      the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+    summary: 'Milestone ''Render release explainer, support closure, and public concierge
+      companion bundles with captions, previews, and sibling notes'' remains open
+      under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
       ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-01T07:49:38Z'
-    range_low_hours: 8.6
-    range_high_hours: 22.2
+    predicted_completion_at: '2026-05-01T07:29:43Z'
+    range_low_hours: 8.67
+    range_high_hours: 21.25
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 2.0
+    remaining_effort_units: 1.7
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
+queue_package:
+  repo: chummer6-media-factory
+  package_id: next90-m111-media-factory-concierge-bundles
+  title: Render release explainer, support closure, and public concierge companion
+    bundles with captions, previews, and sibling notes
+  priority: 0
+  owned_surfaces:
+  - release_explainer_artifacts
+  - support_closure_artifacts
+  - public_concierge_companions
+  allowed_paths:
+  - src
+  - tests
+  - docs
+  - scripts
