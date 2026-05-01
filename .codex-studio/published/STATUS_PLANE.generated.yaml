@@ -1,15 +1,15 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-05-01T09:56:32Z'
-source_public_status_generated_at: '2026-05-01T09:56:26Z'
+generated_at: '2026-05-01T10:00:45Z'
+source_public_status_generated_at: '2026-05-01T10:00:39Z'
 mission_snapshot:
   headline: 'Working now: title: Publish or append runnable backlog for Catalog, visual-regression,
     and release discipline for the shared kit are not yet materialized.. | difficulty:
-    auto | risk_level: auto. ETA: 51m 44s. Next: {''Execute WL-D014-01'': ''compute
+    auto | risk_level: auto. ETA: 47m 31s. Next: {''Execute WL-D014-01'': ''compute
     source and destination SHA-256 checksums for all WL-D007 review-template mirror
     targets and append the cycle block in `products/chummer/sync/REVIEW_TEMPLATE_MIRROR_PUBLISH_EVIDENCE.md`.''}.
     Vision: 0s. Capacity: Core 1%, Easy 1%, Jury n/a. Stop risk: none.'
-  current_eta: 51m 44s
+  current_eta: 47m 31s
   next_title: '{''Execute WL-D014-01'': ''compute source and destination SHA-256 checksums
     for all WL-D007 review-template mirror targets and append the cycle block in `products/chummer/sync/REVIEW_TEMPLATE_MIRROR_PUBLISH_EVIDENCE.md`.''}'
   vision_eta: 0s
@@ -30,10 +30,10 @@ queue_forecast:
     provider: EA
     brain: EA backend / ea-coder-hard-batch
     reason: interactive_or_first_pass
-    elapsed_seconds: 496
-    elapsed_human: 8m 16s
-    remaining_seconds: 3104
-    remaining_human: 51m 44s
+    elapsed_seconds: 749
+    elapsed_human: 12m 29s
+    remaining_seconds: 2851
+    remaining_human: 47m 31s
     total_seconds: 3600
     total_human: 1h
     verify_or_review_ahead: false
@@ -918,23 +918,25 @@ support_summary:
   freshness:
     available: true
     at: '2026-05-01T09:55:50Z'
-    age_seconds: 42
-    age_human: 42s
+    age_seconds: 295
+    age_human: 4m 55s
     state: fresh
     label: fresh
 publish_readiness:
-  state: warning
-  blocking_reason_count: 0
+  state: blocked
+  blocking_reason_count: 1
   warning_reason_count: 2
-  blocking_reasons: []
+  blocking_reasons:
+  - public guide/progress is stale.
   warning_reasons:
   - Live source state is 4d 17h newer than the published campaign OS continuity monitor.
   - Provider-route fallback coverage is still thin for the current release posture.
-  recommended_action: Review the warning signals before claiming the surface is steady.
+  recommended_action: Resolve the blocking publish-readiness issues before promoting
+    public truth.
   signals:
     runtime_healing_alert_state: healthy
     status_plane_freshness_state: fresh
-    progress_report_freshness_state: fresh
+    progress_report_freshness_state: stale
     journey_gates_freshness_state: fresh
     release_channel_freshness_state: fresh
     support_freshness_state: fresh
@@ -1026,30 +1028,22 @@ runtime_healing:
     escalation_threshold: 3
 external_proof_autoingest:
   enabled: true
-  current_state: failed
+  current_state: cooldown
   commands_dir: /docker/fleet/.codex-studio/published/external-proof-commands
   observed_bundle_count: 3
-  last_attempt_at: '2026-05-01T09:56:14Z'
+  last_attempt_at: '2026-05-01T09:58:19Z'
   last_success_at: ''
-  last_result: failed
-  last_detail: '"channel": "docker", "version": "run-20260501-083446" } verified public
-    release manifest: /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json
-    status-plane materialization failed: failed to load live admin status via deploy.sh
-    admin-status: fleet admin status is unavailable via canonical internal admin or
-    gateway fallback'
+  last_result: cooldown
+  last_detail: cooldown_active
   summary:
-    alert_state: action_needed
-    alert_reason: '"channel": "docker", "version": "run-20260501-083446" } verified
-      public release manifest: /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json
-      status-plane materialization failed: failed to load live admin status via deploy.sh
-      admin-status: fleet admin status is unavailable via canonical internal admin
-      or gateway fallback'
-    recommended_action: Inspect the rebuilder external-proof-autoingest status and
-      rerun finalize-external-host-proof.sh after fixing the blocker.
+    alert_state: tracking
+    alert_reason: cooldown_active
+    recommended_action: Wait for the retry window or inspect the last failure detail
+      in the rebuilder state.
 projects:
 - id: core
   lifecycle: live
-  runtime_status: running
+  runtime_status: verifying
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1079,7 +1073,7 @@ projects:
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: running
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1168,7 +1162,7 @@ groups:
   blocking_owner_projects: []
 - id: control-plane
   lifecycle: live
-  phase: running
+  phase: proposed_tasks
   deployment_status: internal
   deployment_promotion_stage: internal
   deployment_access_posture: ''
