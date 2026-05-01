@@ -288,10 +288,34 @@ def build_payload(
             "publication refs do not share one public as_of date across pulse, governor, and progress report"
         )
 
+    overall_pass = mail_gate_pass and public_proof_gate_pass
+    overall_reason = _gate_reason(
+        passed=overall_pass,
+        reasons=public_hold_reasons,
+        positive=(
+            "Install-aware followthrough is clear: install receipts, weekly governor truth, "
+            "and promoted public proof all agree."
+        ),
+    )
+
     return {
         "contract_name": "fleet.install_aware_followthrough_gate",
         "schema_version": 1,
         "generated_at": generated_at or _utc_now_iso(),
+        "status": "pass" if overall_pass else "blocked",
+        "reason": overall_reason,
+        "summary": {
+            "followthrough_mail_state": _gate_state(mail_gate_pass),
+            "public_proof_promotion_state": _gate_state(public_proof_gate_pass),
+            "mail_hold_reason_count": len(mail_hold_reasons),
+            "public_hold_reason_count": len(public_hold_reasons),
+            "publication_ref_count": len(publication_refs),
+            "publication_ref_as_of_aligned": publication_ref_as_of_aligned,
+        },
+        "gate_summary": {
+            "followthrough_mail": _gate_state(mail_gate_pass),
+            "public_proof_promotion": _gate_state(public_proof_gate_pass),
+        },
         "package_id": PACKAGE_ID,
         "frontier_id": FRONTIER_ID,
         "milestone_id": MILESTONE_ID,

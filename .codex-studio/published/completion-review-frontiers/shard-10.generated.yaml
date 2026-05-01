@@ -1,7 +1,7 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-30T16:24:25Z'
-mode: flagship_product
+generated_at: '2026-05-01T09:19:48Z'
+mode: completion_review
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-10
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -34,8 +34,6 @@ focus:
   - chummer6-hub
   - chummer6-hub-registry
   - chummer6-ui
-  - chummer6-ui-kit
-  - chummer6-mobile
   texts:
   - top flagship grade
   - whole project frontier
@@ -52,38 +50,19 @@ focus:
   - replay
   - recap
   - export
-  - whole-project frontier
-  - no lowered standards
-  - feedback loop
-  - crash reporting
-  - support routing
-  - journey smoothness
-  - performance
-  - proof shelf
-  - mobile play shell
-  - ui kit and flagship polish
-  - media artifacts
-  - fleet and operator loop
-  - desktop client
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: stage flagship_ui_screenshot_gate failed
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260430T162302Z-shard-10 is not trusted: provider-health
-    preflight left no routable direct lanes: core_rescue:onemin:unavailable; remaining_percent_of_max=0.00,
-    estimated_remaining_credits_total=3262; core:onemin:unavailable; remaining_percent_of_max=0.00,
-    estimated_remaining_credits_total=3262; survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini;
-    onemin:unavailable'
-  latest_run_id: 20260430T162302Z-shard-10
-  latest_run_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
-    remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262; core:onemin:unavailable;
-    remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262; survival:browseract:ready;
-    gemini_vortex:missing:command_not_found:gemini; onemin:unavailable'
+  reason: 'latest worker receipt 20260501T091006Z-shard-10 is not trusted: worker
+    exit 124'
+  latest_run_id: 20260501T091006Z-shard-10
+  latest_run_reason: worker exit 124
 journey_gate_audit:
-  status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
-  blocked_journey_count: 6
+  status: pass
+  reason: golden journey proof is ready
+  blocked_journey_count: 0
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
   status: fail
@@ -95,7 +74,7 @@ weekly_pulse_audit:
   reason: weekly product pulse is fresh and reports no remaining drift or blocker
     pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-04-26T15:52:08Z'
+  generated_at: '2026-05-01T08:58:46Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -103,52 +82,27 @@ repo_backlog_audit:
   open_project_count: 0
   open_items: []
 blocking_audits:
-- component: journey_gate
-  title: Golden journey release-proof gaps
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 - component: linux_desktop_exit_gate
   title: Linux desktop exit-gate gaps
   reason: stage flagship_ui_screenshot_gate failed
-- component: desktop_executable_exit_gate
-  title: Desktop executable exit-gate gaps
-  reason: desktop executable exit gate proof did not pass
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: 'latest worker receipt 20260430T162302Z-shard-10 is not trusted: provider-health
-    preflight left no routable direct lanes: core_rescue:onemin:unavailable; remaining_percent_of_max=0.00,
-    estimated_remaining_credits_total=3262; core:onemin:unavailable; remaining_percent_of_max=0.00,
-    estimated_remaining_credits_total=3262; survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini;
-    onemin:unavailable'
-frontier_count: 0
-frontier_ids: []
-frontier: []
-eta:
-  status: blocked
-  eta_human: 10h-1d after unblock
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic+external_blocker
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
-    remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262; survival:browseract:ready;
-    gemini_vortex:missing:command_not_found:gemini; onemin:unavailable; repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
-    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
-    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
-    https://www.aimagicx.com/api/v1/chat:http_402:{''error'': ''Chat token limit exceeded'',
-    ''tokens_remaining'': 1, ''tokens_needed'': 18, ''tokens_needed_raw'': 18, ''quota_multipliers'':
-    {''input'': 1, ''output'': 1}}; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
-    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
-  summary: 'Milestone ''Shared design system, accessibility, localization, and flagship
-    polish'' remains open under the flagship closeout frontier. Outstanding readiness
-    coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
-    desktop_client. Current external blocker: provider-health preflight left no routable
-    direct lanes: core_rescue:onemin:unavailable; remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262;
-    survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini; onemin:unavailable;
-    repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
-    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
-    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
-    https://www.aimagicx.com/api/v1/chat:http_402:{''error'': ''Chat token limit exceeded'',
-    ''tokens_remaining'': 1, ''tokens_needed'': 18, ''tokens_needed_raw'': 18, ''quota_multipliers'':
-    {''input'': 1, ''output'': 1}}; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
-    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:unavailable'
+  reason: 'latest worker receipt 20260501T091006Z-shard-10 is not trusted: worker
+    exit 124'
+frontier_count: 1
+frontier_ids:
+- 1239074135
+frontier:
+- id: 1239074135
+  title: 'Completion gate: Linux desktop exit gate'
+  wave: completion_review
+  status: review_required
+  owners:
+  - chummer6-ui
+  - fleet
+  dependencies: []
+  exit_criteria:
+  - stage flagship_ui_screenshot_gate failed
+  - Build the Linux desktop binary, package the primary .deb plus fallback archive,
+    run startup smoke on both packaged outputs, run desktop runtime unit tests, and
+    refresh UI_LINUX_DESKTOP_EXIT_GATE.generated.json.

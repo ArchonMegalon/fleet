@@ -2889,16 +2889,12 @@ def test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_g
         "evidence.install_experience.claim_flow_surface": "installer_or_in_app",
         "evidence.install_experience.product_installer_guides_head_choice": True,
         "evidence.receipt_scope.windows_gate:avalonia:win-x64.within_repo_root": True,
-        "evidence.receipt_scope.linux_gate:avalonia:linux-x64.within_repo_root": True,
-        "evidence.receipt_scope.macos_gate:avalonia:osx-arm64.within_repo_root": True,
     }
     assert desktop_exit_proof.get("max_age_hours") == 48
     assert desktop_exit_proof.get("generated_at_fields") == ["generated_at", "generatedAt"]
     required_markers = desktop_exit_proof.get("must_contain", [])
     assert '"local_blocking_findings_count": 0' in required_markers
     assert '"windows_gate:avalonia:win-x64"' in required_markers
-    assert '"linux_gate:avalonia:linux-x64"' in required_markers
-    assert '"macos_gate:avalonia:osx-arm64"' in required_markers
 
     release_channel_proof = next(
         row

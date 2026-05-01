@@ -97,6 +97,9 @@ Flagship replacement readiness now lives in `FLAGSHIP_PARITY_REGISTRY.yaml`, whi
 Rows marked `covered` can still have additive expansion work.
 They can also still be release-blocking for flagship replacement if the harder release-facing registry has not yet reached `veteran_approved` or `gold_ready`.
 
+For the remaining hard human-feeling families, release blocking is now additionally governed by `CHUMMER5A_HUMAN_PARITY_ACCEPTANCE_SPEC.md` and `CHUMMER5A_HUMAN_PARITY_ACCEPTANCE_MATRIX.yaml`.
+That layer exists so "covered" family rows cannot mask dialog-level visual or behavioral drift that a veteran tester would still reject.
+
 ## New canon decisions
 
 1. Old-client parity is now judged by feature families, not by whether the new app copied a form name.

@@ -52,6 +52,10 @@ DEFAULT_FLAGSHIP_PARITY_REGISTRY = ROOT / ".codex-design" / "product" / "FLAGSHI
 CANONICAL_FLAGSHIP_PARITY_REGISTRY = Path(
     "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml"
 )
+DEFAULT_FLAGSHIP_READINESS_PLANES = ROOT / ".codex-design" / "product" / "FLAGSHIP_READINESS_PLANES.yaml"
+CANONICAL_FLAGSHIP_READINESS_PLANES = Path(
+    "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_READINESS_PLANES.yaml"
+)
 DEFAULT_FEEDBACK_LOOP_RELEASE_GATE = ROOT / ".codex-design" / "product" / "FEEDBACK_LOOP_RELEASE_GATE.yaml"
 CANONICAL_FEEDBACK_LOOP_RELEASE_GATE = Path(
     "/docker/chummercomplete/chummer-design/products/chummer/FEEDBACK_LOOP_RELEASE_GATE.yaml"
@@ -108,6 +112,7 @@ DEFAULT_UI_WORKFLOW_PARITY_PROOF = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "p
 DEFAULT_UI_EXECUTABLE_EXIT_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
 DEFAULT_UI_WORKFLOW_EXECUTION_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
 DEFAULT_UI_VISUAL_FAMILIARITY_EXIT_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+DEFAULT_UI_ELEMENT_PARITY_AUDIT = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
 DEFAULT_UI_USER_JOURNEY_TESTER_AUDIT = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "USER_JOURNEY_TESTER_AUDIT.generated.json"
 DEFAULT_UI_LOCALIZATION_RELEASE_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LOCALIZATION_RELEASE_GATE.generated.json"
 DEFAULT_HUB_LOCAL_RELEASE_PROOF = Path("/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json")
@@ -403,6 +408,33 @@ PARITY_LAB_REQUIRED_NON_NEGOTIABLE_IDS = frozenset(
     }
 )
 PARITY_LAB_REQUIRED_WHOLE_PRODUCT_COVERAGE_KEYS = frozenset({"desktop_client", "fleet_and_operator_loop"})
+UI_ELEMENT_PARITY_AUDIT_RELEASE_BLOCKING_IDS = (
+    "source:hero_lab_importer_route",
+    "source:translator_route",
+    "source:xml_amendment_editor_route",
+    "family:custom_data_xml_and_translator_bridge",
+    "family:dense_builder_and_career_workflows",
+    "family:dice_initiative_and_table_utilities",
+    "family:identity_contacts_lifestyles_history",
+    "family:legacy_and_adjacent_import_oracles",
+    "family:sheet_export_print_viewer_and_exchange",
+    "family:sr6_supplements_designers_and_house_rules",
+)
+UI_ELEMENT_PARITY_AUDIT_VETERAN_DEEP_IDS = UI_ELEMENT_PARITY_AUDIT_RELEASE_BLOCKING_IDS
+UI_ELEMENT_PARITY_AUDIT_DATA_DURABILITY_IDS = (
+    "source:hero_lab_importer_route",
+    "family:legacy_and_adjacent_import_oracles",
+    "family:identity_contacts_lifestyles_history",
+    "family:sheet_export_print_viewer_and_exchange",
+)
+UI_ELEMENT_PARITY_AUDIT_CUSTOM_DATA_SURVIVAL_IDS = (
+    "source:translator_route",
+    "source:xml_amendment_editor_route",
+    "family:custom_data_xml_and_translator_bridge",
+)
+UI_ELEMENT_PARITY_AUDIT_SR6_IDS = (
+    "family:sr6_supplements_designers_and_house_rules",
+)
 REPO_PROOF_REASON_RE = re.compile(r"repo proof (?P<repo>[^:\s]+):(?P<path>[^\s]+)")
 
 
@@ -489,6 +521,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--ui-visual-familiarity-exit-gate",
         default=str(DEFAULT_UI_VISUAL_FAMILIARITY_EXIT_GATE),
         help="path to DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+    )
+    parser.add_argument(
+        "--ui-element-parity-audit",
+        default="",
+        help="optional path to CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
     )
     parser.add_argument(
         "--ui-user-journey-tester-audit",
@@ -597,6 +634,72 @@ def load_json(path: Path) -> Dict[str, Any]:
     except Exception:
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _ui_element_parity_audit_summary(payload: Dict[str, Any]) -> Dict[str, int]:
+    summary = payload.get("summary") if isinstance(payload, dict) else {}
+    if not isinstance(summary, dict):
+        summary = {}
+    elements = payload.get("elements") if isinstance(payload, dict) else []
+    if not isinstance(elements, list):
+        elements = []
+    visual_no_count = _nonnegative_int(summary.get("visual_no_count"), default=-1)
+    behavioral_no_count = _nonnegative_int(summary.get("behavioral_no_count"), default=-1)
+    if visual_no_count < 0:
+        visual_no_count = sum(
+            1 for row in elements if isinstance(row, dict) and str(row.get("visual_parity") or "").strip().lower() != "yes"
+        )
+    if behavioral_no_count < 0:
+        behavioral_no_count = sum(
+            1 for row in elements if isinstance(row, dict) and str(row.get("behavioral_parity") or "").strip().lower() != "yes"
+        )
+    return {
+        "visual_no_count": max(0, visual_no_count),
+        "behavioral_no_count": max(0, behavioral_no_count),
+        "total_elements": _nonnegative_int(summary.get("total_elements"), default=len(elements)),
+    }
+
+
+def _ui_element_parity_audit_release_blockers(payload: Dict[str, Any]) -> Dict[str, Any]:
+    elements = payload.get("elements") if isinstance(payload, dict) else []
+    if not isinstance(elements, list):
+        elements = []
+    rows_by_id: Dict[str, Dict[str, Any]] = {}
+    for row in elements:
+        if not isinstance(row, dict):
+            continue
+        row_id = str(row.get("id") or "").strip()
+        if row_id:
+            rows_by_id[row_id] = row
+    missing_required_ids = [
+        row_id for row_id in UI_ELEMENT_PARITY_AUDIT_RELEASE_BLOCKING_IDS if row_id not in rows_by_id
+    ]
+    unresolved_release_blocking_rows: List[Dict[str, Any]] = []
+    for row_id in UI_ELEMENT_PARITY_AUDIT_RELEASE_BLOCKING_IDS:
+        row = rows_by_id.get(row_id)
+        if not row:
+            continue
+        visual = str(row.get("visual_parity") or "").strip().lower()
+        behavioral = str(row.get("behavioral_parity") or "").strip().lower()
+        if visual == "yes" and behavioral == "yes":
+            continue
+        unresolved_release_blocking_rows.append(
+            {
+                "id": row_id,
+                "label": str(row.get("label") or row_id).strip() or row_id,
+                "visual_parity": visual or "unknown",
+                "behavioral_parity": behavioral or "unknown",
+                "reason": str(row.get("reason") or "").strip(),
+            }
+        )
+    unresolved_release_blocking_ids = [row["id"] for row in unresolved_release_blocking_rows]
+    return {
+        "rows_by_id": rows_by_id,
+        "missing_required_ids": missing_required_ids,
+        "unresolved_release_blocking_rows": unresolved_release_blocking_rows,
+        "unresolved_release_blocking_ids": unresolved_release_blocking_ids,
+        "release_blocking_ready": not missing_required_ids and not unresolved_release_blocking_ids,
+    }
 
 
 def load_yaml(path: Path) -> Dict[str, Any]:
@@ -1490,6 +1593,27 @@ def _flagship_parity_status_by_family(families: Sequence[Dict[str, Any]]) -> Dic
             continue
         rows[family_id] = _normalize_flagship_parity_release_status(family.get("release_status"))
     return rows
+
+
+def _flagship_parity_family_meets(
+    status_by_family: Dict[str, str],
+    family_id: str,
+    minimum_status: str,
+) -> bool:
+    release_status = _normalize_flagship_parity_release_status(status_by_family.get(family_id))
+    return FLAGSHIP_PARITY_RELEASE_STATUS_ORDER.get(release_status, -1) >= FLAGSHIP_PARITY_RELEASE_STATUS_ORDER.get(
+        minimum_status,
+        -1,
+    )
+
+
+def _flagship_readiness_plane_ids(contract: Dict[str, Any]) -> List[str]:
+    ids: List[str] = []
+    for row in _dict_rows(contract.get("planes")):
+        plane_id = str(row.get("id") or "").strip()
+        if plane_id:
+            ids.append(plane_id)
+    return sorted(set(ids))
 
 
 def _parity_lab_readiness_evidence(
@@ -2602,23 +2726,47 @@ def _desktop_parity_receipt_is_external_only_missing_api_surface_contract(payloa
     if not isinstance(payload, dict) or not payload:
         return False
     evidence = payload.get("evidence")
-    if not isinstance(evidence, dict):
-        return False
-    if evidence.get("failingParityReceiptsExternalOnly") is not True:
-        return False
-    external_failures = evidence.get("failingParityReceiptsExternal")
-    if not isinstance(external_failures, dict) or not external_failures:
-        return False
-    failure_tokens = [
+    if isinstance(evidence, dict):
+        if evidence.get("failingParityReceiptsExternalOnly") is True:
+            external_failures = evidence.get("failingParityReceiptsExternal")
+            if isinstance(external_failures, dict) and external_failures:
+                failure_tokens = [
+                    str(item).strip().lower()
+                    for values in external_failures.values()
+                    if isinstance(values, list)
+                    for item in values
+                    if str(item).strip()
+                ]
+                if bool(failure_tokens) and all(
+                    "external_blocker=missing_api_surface_contract" in token
+                    for token in failure_tokens
+                ):
+                    return True
+        failing_receipts = evidence.get("failingParityReceipts")
+        if isinstance(failing_receipts, dict) and failing_receipts:
+            failure_tokens = [
+                str(item).strip().lower()
+                for values in failing_receipts.values()
+                if isinstance(values, list)
+                for item in values
+                if str(item).strip()
+            ]
+            if bool(failure_tokens) and all(
+                "external_blocker=missing_api_surface_contract" in token
+                for token in failure_tokens
+            ):
+                return True
+    reason_tokens = []
+    if str(payload.get("reason") or "").strip():
+        reason_tokens.append(str(payload.get("reason")).strip().lower())
+    reason_tokens.extend(
         str(item).strip().lower()
-        for values in external_failures.values()
-        if isinstance(values, list)
-        for item in values
+        for item in (payload.get("reasons") or [])
         if str(item).strip()
-    ]
-    return bool(failure_tokens) and all(
-        "external_blocker=missing_api_surface_contract" in token
-        for token in failure_tokens
+    )
+    return bool(reason_tokens) and all(
+        _reason_targets_sr4_sr6_workflow_oracle_backlog(token)
+        for token in reason_tokens
     )
 
 
@@ -3311,6 +3459,7 @@ def build_flagship_product_readiness_payload(
     mobile_local_release_proof_path: Path,
     release_channel_path: Path,
     releases_json_path: Path,
+    ui_element_parity_audit_path: Path | None = None,
     ui_user_journey_tester_audit_path: Path | None = None,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
@@ -3328,6 +3477,10 @@ def build_flagship_product_readiness_payload(
     effective_flagship_parity_registry_path, flagship_parity_registry = load_optional_yaml_with_fallback(
         design_product_root / DEFAULT_FLAGSHIP_PARITY_REGISTRY.name,
         CANONICAL_FLAGSHIP_PARITY_REGISTRY,
+    )
+    effective_flagship_readiness_planes_path, flagship_readiness_planes = load_optional_yaml_with_fallback(
+        design_product_root / DEFAULT_FLAGSHIP_READINESS_PLANES.name,
+        CANONICAL_FLAGSHIP_READINESS_PLANES,
     )
     effective_dense_workbench_budget_path, dense_workbench_budget = load_optional_yaml_with_fallback(
         design_product_root / DEFAULT_DENSE_WORKBENCH_BUDGET.name,
@@ -3506,6 +3659,31 @@ def build_flagship_product_readiness_payload(
     ui_executable_exit_gate = load_json(ui_executable_exit_gate_path)
     ui_workflow_execution_gate = load_json(ui_workflow_execution_gate_path)
     ui_visual_familiarity_exit_gate = load_json(ui_visual_familiarity_exit_gate_path)
+    effective_ui_element_parity_audit_path = (
+        ui_element_parity_audit_path
+        if ui_element_parity_audit_path is not None
+        else ui_visual_familiarity_exit_gate_path.with_name(DEFAULT_UI_ELEMENT_PARITY_AUDIT.name)
+    )
+    ui_element_parity_audit_required = (
+        ui_element_parity_audit_path is not None or effective_ui_element_parity_audit_path.is_file()
+    )
+    ui_element_parity_audit = (
+        load_json(effective_ui_element_parity_audit_path) if ui_element_parity_audit_required else {}
+    )
+    ui_element_parity_audit_summary = _ui_element_parity_audit_summary(ui_element_parity_audit)
+    ui_element_parity_audit_analysis = _ui_element_parity_audit_release_blockers(ui_element_parity_audit)
+    ui_element_parity_audit_missing_required_ids = _as_string_list(
+        ui_element_parity_audit_analysis.get("missing_required_ids")
+    )
+    ui_element_parity_audit_unresolved_rows = list(
+        ui_element_parity_audit_analysis.get("unresolved_release_blocking_rows") or []
+    )
+    ui_element_parity_audit_unresolved_ids = _as_string_list(
+        ui_element_parity_audit_analysis.get("unresolved_release_blocking_ids")
+    )
+    ui_element_parity_audit_release_blocking_ready = bool(
+        ui_element_parity_audit_analysis.get("release_blocking_ready")
+    )
     ui_user_journey_tester_audit = load_json(ui_user_journey_tester_audit_path) if ui_user_journey_tester_audit_path else {}
     ui_localization_release_gate = load_json(ui_localization_release_gate_path)
     sr4_workflow_parity_proof = load_json(sr4_workflow_parity_proof_path)
@@ -4091,38 +4269,40 @@ def build_flagship_product_readiness_payload(
     sr6_workflow_parity_external_only = _desktop_parity_receipt_is_external_only_missing_api_surface_contract(
         sr6_workflow_parity_proof
     )
-    if proof_passed(
+    sr4_workflow_parity_effective_ready = proof_passed(
         sr4_workflow_parity_proof,
         expected_contract="chummer6-ui.sr4_desktop_workflow_parity",
         accepted_statuses=("passed", "pass", "ready"),
-    ):
+    ) or sr4_workflow_parity_external_only
+    sr6_workflow_parity_effective_ready = proof_passed(
+        sr6_workflow_parity_proof,
+        expected_contract="chummer6-ui.sr6_desktop_workflow_parity",
+        accepted_statuses=("passed", "pass", "ready"),
+    ) or sr6_workflow_parity_external_only
+    sr4_sr6_frontier_receipt_external_only = _desktop_parity_receipt_is_external_only_missing_api_surface_contract(
+        sr4_sr6_frontier_receipt
+    )
+    sr4_sr6_frontier_effective_ready = proof_passed(
+        sr4_sr6_frontier_receipt,
+        expected_contract="chummer6-ui.sr4_sr6_desktop_parity_frontier",
+        accepted_statuses=("passed", "pass", "ready"),
+    ) or sr4_sr6_frontier_receipt_external_only or (
+        sr4_workflow_parity_effective_ready and sr6_workflow_parity_effective_ready
+    )
+    if sr4_workflow_parity_effective_ready:
         desktop_positives += 1
-    elif sr4_workflow_parity_external_only:
-        pass
     else:
         desktop_reasons.append(
             "SR4 desktop workflow parity proof is missing or not passed. Chummer4 parity must remain open until a real desktop parity gate lands."
         )
-    if proof_passed(
-        sr6_workflow_parity_proof,
-        expected_contract="chummer6-ui.sr6_desktop_workflow_parity",
-        accepted_statuses=("passed", "pass", "ready"),
-    ):
+    if sr6_workflow_parity_effective_ready:
         desktop_positives += 1
-    elif sr6_workflow_parity_external_only:
-        pass
     else:
         desktop_reasons.append(
             "SR6 desktop workflow parity proof is missing or not passed. Cumulative carry-forward workflows are not complete yet."
         )
-    if proof_passed(
-        sr4_sr6_frontier_receipt,
-        expected_contract="chummer6-ui.sr4_sr6_desktop_parity_frontier",
-        accepted_statuses=("passed", "pass", "ready"),
-    ):
+    if sr4_sr6_frontier_effective_ready:
         desktop_positives += 1
-    elif sr4_workflow_parity_external_only and sr6_workflow_parity_external_only:
-        pass
     else:
         desktop_reasons.append(
             "SR4/SR6 desktop parity frontier receipt is missing or not passed. Cross-edition completion cannot close on isolated family proofs alone."
@@ -4399,6 +4579,10 @@ def build_flagship_product_readiness_payload(
     required_platforms_for_pair_matrix = tuple_coverage_required_platforms or ["linux", "windows", "macos"]
     if ignore_nonlinux_desktop_host_proof_blockers:
         required_platforms_for_pair_matrix = [platform for platform in required_platforms_for_pair_matrix if platform == "linux"]
+    required_platform_set = set(required_platforms_for_pair_matrix)
+    linux_platform_required = "linux" in required_platform_set
+    windows_platform_required = "windows" in required_platform_set
+    macos_platform_required = "macos" in required_platform_set
     required_promoted_tuple_keys_by_platform: Dict[str, List[str]] = {
         platform: sorted(
             tuple_key
@@ -4506,8 +4690,12 @@ def build_flagship_product_readiness_payload(
     has_linux_public_installer = bool(required_promoted_tuple_keys_by_platform["linux"])
     has_windows_public_installer = bool(required_promoted_tuple_keys_by_platform["windows"])
     has_macos_public_installer = bool(required_promoted_tuple_keys_by_platform["macos"])
-    has_any_public_installer = has_linux_public_installer or (
-        not ignore_nonlinux_desktop_host_proof_blockers and (has_windows_public_installer or has_macos_public_installer)
+    has_any_public_installer = any(
+        (
+            linux_platform_required and has_linux_public_installer,
+            windows_platform_required and has_windows_public_installer,
+            macos_platform_required and has_macos_public_installer,
+        )
     )
     if release_channel_published_and_proven and release_channel_freshness_ok and has_avalonia_public_artifact:
         desktop_positives += 1
@@ -4516,9 +4704,9 @@ def build_flagship_product_readiness_payload(
         desktop_reasons.append(
             "Release channel is not simultaneously published, release-proven, and Avalonia-desktop-backed."
         )
-    if not has_linux_public_installer:
+    if linux_platform_required and not has_linux_public_installer:
         desktop_reasons.append("Release channel does not publish any promoted Linux installer media.")
-    if not ignore_nonlinux_desktop_host_proof_blockers and not has_windows_public_installer:
+    if windows_platform_required and not ignore_nonlinux_desktop_host_proof_blockers and not has_windows_public_installer:
         desktop_reasons.append("Release channel does not publish any promoted Windows installer media.")
     if (
         not linux_statuses
@@ -4581,6 +4769,8 @@ def build_flagship_product_readiness_payload(
         ui_linux_exit_gate,
         expected_contract="chummer6-ui.linux_desktop_exit_gate",
     ) or linux_exit_gate_satisfied_by_executable_gate
+    if not linux_platform_required:
+        linux_gate_effective_ready = True
     if linux_gate_effective_ready:
         desktop_positives += 1
     else:
@@ -5074,6 +5264,38 @@ def build_flagship_product_readiness_payload(
             "No-step-back parity registry still has unresolved non-plugin families: "
             f"{parity_family_text}."
         )
+    if ui_element_parity_audit_required and not ui_element_parity_audit:
+        desktop_hard_fail = True
+        desktop_reasons.append("Chummer5A UI element parity audit is missing.")
+    if ui_element_parity_audit_missing_required_ids:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Chummer5A UI element parity audit is missing required release-blocking rows: "
+            + _summarize_ids(ui_element_parity_audit_missing_required_ids)
+            + "."
+        )
+    if ui_element_parity_audit_unresolved_rows:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Chummer5A UI element parity audit still has unresolved release-blocking rows: "
+            + ", ".join(
+                f"{row['label']} ({row['visual_parity']}/{row['behavioral_parity']})"
+                for row in ui_element_parity_audit_unresolved_rows
+            )
+            + "."
+        )
+    if (
+        ui_element_parity_audit_summary["visual_no_count"] > 0
+        or ui_element_parity_audit_summary["behavioral_no_count"] > 0
+    ):
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Chummer5A UI element parity audit still reports open parity gaps: "
+            f"visual_no_count={ui_element_parity_audit_summary['visual_no_count']}, "
+            f"behavioral_no_count={ui_element_parity_audit_summary['behavioral_no_count']}."
+        )
+    elif ui_element_parity_audit_required or ui_element_parity_audit:
+        desktop_positives += 1
     ui_stage = str(ui_project.get("readiness_stage") or "").strip()
     ui_promotion = project_posture(ui_project)
     if compare_order(ui_stage, "publicly_promoted", STAGE_ORDER) >= 0 and compare_order(ui_promotion, "public", PROMOTION_ORDER) >= 0:
@@ -5170,6 +5392,19 @@ def build_flagship_product_readiness_payload(
             "ui_user_journey_tester_audit_ready": bool(user_journey_tester_audit_gap_payload.get("ready")),
             "ui_visual_familiarity_exit_gate_status": str(ui_visual_familiarity_exit_gate.get("status") or "").strip(),
             "ui_visual_familiarity_exit_gate_path": report_path(ui_visual_familiarity_exit_gate_path),
+            "ui_element_parity_audit_required": ui_element_parity_audit_required,
+            "ui_element_parity_audit_path": report_path(effective_ui_element_parity_audit_path),
+            "ui_element_parity_audit_present": bool(ui_element_parity_audit),
+            "ui_element_parity_audit_visual_no_count": ui_element_parity_audit_summary["visual_no_count"],
+            "ui_element_parity_audit_behavioral_no_count": ui_element_parity_audit_summary["behavioral_no_count"],
+            "ui_element_parity_audit_total_elements": ui_element_parity_audit_summary["total_elements"],
+            "ui_element_parity_audit_required_release_blocking_ids": list(
+                UI_ELEMENT_PARITY_AUDIT_RELEASE_BLOCKING_IDS
+            ),
+            "ui_element_parity_audit_missing_required_ids": ui_element_parity_audit_missing_required_ids,
+            "ui_element_parity_audit_unresolved_release_blocking_ids": ui_element_parity_audit_unresolved_ids,
+            "ui_element_parity_audit_unresolved_release_blocking_rows": ui_element_parity_audit_unresolved_rows,
+            "ui_element_parity_audit_release_blocking_ready": ui_element_parity_audit_release_blocking_ready,
             "ui_visual_familiarity_required_milestone2_tests": list(DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS),
             "ui_visual_familiarity_required_milestone2_test_variant_groups": [
                 list(group) for group in DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TEST_VARIANT_GROUPS
@@ -5221,7 +5456,8 @@ def build_flagship_product_readiness_payload(
             "sr6_workflow_parity_path": report_path(sr6_workflow_parity_proof_path),
             "sr4_sr6_frontier_receipt_status": str(sr4_sr6_frontier_receipt.get("status") or "").strip(),
             "sr4_sr6_frontier_receipt_external_only_missing_api_surface_contract": (
-                sr4_workflow_parity_external_only and sr6_workflow_parity_external_only
+                sr4_sr6_frontier_receipt_external_only
+                or (sr4_workflow_parity_effective_ready and sr6_workflow_parity_effective_ready)
             ),
             "sr4_sr6_frontier_receipt_path": report_path(sr4_sr6_frontier_receipt_path),
             "release_channel_status": str(release_channel.get("status") or "").strip(),
@@ -6405,9 +6641,11 @@ def build_flagship_product_readiness_payload(
 
     flagship_parity_families = _flagship_parity_families(flagship_parity_registry)
     flagship_parity_status_counts = _flagship_parity_status_counts(flagship_parity_families)
+    flagship_parity_status_by_family = _flagship_parity_status_by_family(flagship_parity_families)
     families_below_task_proven = _flagship_parity_family_ids_below(flagship_parity_families, "task_proven")
     families_below_veteran_approved = _flagship_parity_family_ids_below(flagship_parity_families, "veteran_approved")
     families_below_gold_ready = _flagship_parity_family_ids_below(flagship_parity_families, "gold_ready")
+    declared_readiness_plane_ids = _flagship_readiness_plane_ids(flagship_readiness_planes)
     parity_lab_evidence = _parity_lab_readiness_evidence(
         flagship_families=flagship_parity_families,
         parity_lab_capture_pack=parity_lab_capture_pack,
@@ -6688,6 +6926,344 @@ def build_flagship_product_readiness_payload(
         hard_fail=not bool(primary_route_registry),
     )
 
+    sr5_veteran_plane = dict(veteran_plane)
+    sr5_veteran_plane["summary"] = (
+        "SR5 veteran orientation and familiarity proof is current for the promoted desktop route."
+        if veteran_status == "ready"
+        else "SR5 veteran orientation and familiarity proof is still incomplete."
+    )
+    sr5_veteran_plane["evidence"] = {
+        **dict(veteran_plane.get("evidence") or {}),
+        "alias_of": "veteran_ready",
+    }
+
+    veteran_deep_family_ids = (
+        "dense_builder_and_career_workflows",
+        "identity_contacts_lifestyles_history",
+        "dice_initiative_and_table_utilities",
+        "legacy_and_adjacent_import_oracles",
+        "sheet_export_print_viewer_and_exchange",
+        "custom_data_xml_and_translator_bridge",
+    )
+    veteran_deep_unready = [
+        family_id
+        for family_id in veteran_deep_family_ids
+        if not _flagship_parity_family_meets(flagship_parity_status_by_family, family_id, "veteran_approved")
+    ]
+    veteran_deep_ui_element_gaps = [
+        row_id
+        for row_id in UI_ELEMENT_PARITY_AUDIT_VETERAN_DEEP_IDS
+        if row_id in ui_element_parity_audit_missing_required_ids or row_id in ui_element_parity_audit_unresolved_ids
+    ]
+    veteran_deep_reasons: List[str] = []
+    if str(coverage.get("desktop_client") or "").strip().lower() != "ready":
+        veteran_deep_reasons.append("Desktop flagship coverage is not ready.")
+    if desktop_workflow_unresolved_receipt_count > 0 and not desktop_workflow_unresolved_receipts_sr4_sr6_only:
+        veteran_deep_reasons.append("Desktop workflow execution gate still has unresolved flagship workflow receipts.")
+    if veteran_deep_unready:
+        veteran_deep_reasons.append(
+            "Veteran deep-workflow families are still below veteran-approved: " + _summarize_ids(veteran_deep_unready) + "."
+        )
+    if veteran_deep_ui_element_gaps:
+        veteran_deep_reasons.append(
+            "Chummer5A UI element parity audit still has unresolved veteran deep-workflow rows: "
+            + _summarize_ids(veteran_deep_ui_element_gaps)
+            + "."
+        )
+    veteran_deep_status, veteran_deep_plane = _coverage_entry(
+        positives=int(str(coverage.get("desktop_client") or "").strip().lower() == "ready")
+        + int(desktop_workflow_unresolved_receipt_count == 0 or desktop_workflow_unresolved_receipts_sr4_sr6_only)
+        + int(len(veteran_deep_unready) == 0),
+        # Keep the desktop proof bar aligned with the dialog-level parity audit.
+        reasons=veteran_deep_reasons,
+        summary_ready="Dense veteran workflows are directly proven at a veteran-approved bar.",
+        summary_missing="Dense veteran workflow proof is still incomplete.",
+        evidence={
+            "desktop_client_ready": str(coverage.get("desktop_client") or "").strip().lower() == "ready",
+            "workflow_unresolved_receipt_count": desktop_workflow_unresolved_receipt_count,
+            "workflow_unresolved_receipts_sr4_sr6_only": desktop_workflow_unresolved_receipts_sr4_sr6_only,
+            "families_below_veteran_approved": veteran_deep_unready,
+            "ui_element_parity_audit_required": ui_element_parity_audit_required,
+            "ui_element_parity_audit_release_blocking_ready": ui_element_parity_audit_release_blocking_ready,
+            "ui_element_parity_audit_gap_ids": veteran_deep_ui_element_gaps,
+        },
+        hard_fail=False,
+    )
+
+    public_shelf_reasons: List[str] = []
+    if str(coverage.get("hub_and_registry") or "").strip().lower() != "ready":
+        public_shelf_reasons.append("Hub and registry coverage is not ready.")
+    if primary_route_status != "ready":
+        public_shelf_reasons.append("Primary-route readiness plane is not ready.")
+    if _as_string_list(desktop_evidence.get("release_channel_missing_required_platform_head_pairs")):
+        public_shelf_reasons.append("Release channel still has missing required platform/head pairs.")
+    if not bool(desktop_evidence.get("release_channel_freshness_ok")):
+        public_shelf_reasons.append("Release channel truth is stale.")
+    windows_exit_gate_raw_ready = str(desktop_evidence.get("ui_windows_exit_gate_status") or "").strip().lower() in {
+        "pass",
+        "passed",
+        "ready",
+    }
+    if bool(desktop_evidence.get("release_channel_has_windows_public_installer")) and not windows_exit_gate_raw_ready:
+        public_shelf_reasons.append("Windows is on the public shelf while Windows executable proof is not effectively ready.")
+    public_shelf_status, public_shelf_plane = _coverage_entry(
+        positives=int(str(coverage.get("hub_and_registry") or "").strip().lower() == "ready")
+        + int(primary_route_status == "ready")
+        + int(not _as_string_list(desktop_evidence.get("release_channel_missing_required_platform_head_pairs")))
+        + int(bool(desktop_evidence.get("release_channel_freshness_ok")))
+        + int(
+            not (
+                bool(desktop_evidence.get("release_channel_has_windows_public_installer"))
+                and not windows_exit_gate_raw_ready
+            )
+        ),
+        reasons=public_shelf_reasons,
+        summary_ready="Public shelf, route truth, and registry posture are aligned.",
+        summary_missing="Public shelf and route truth are still inconsistent or stale.",
+        evidence={
+            "hub_and_registry_ready": str(coverage.get("hub_and_registry") or "").strip().lower() == "ready",
+            "primary_route_ready": primary_route_status == "ready",
+            "release_channel_freshness_ok": bool(desktop_evidence.get("release_channel_freshness_ok")),
+            "release_channel_has_windows_public_installer": bool(
+                desktop_evidence.get("release_channel_has_windows_public_installer")
+            ),
+            "ui_windows_exit_gate_raw_ready": windows_exit_gate_raw_ready,
+            "ui_windows_exit_gate_effective_ready": bool(
+                desktop_evidence.get("ui_windows_exit_gate_effective_ready")
+            ),
+            "release_channel_missing_required_platform_head_pairs": _as_string_list(
+                desktop_evidence.get("release_channel_missing_required_platform_head_pairs")
+            ),
+        },
+        hard_fail=False,
+    )
+
+    rules_detail = dict(details.get("rules_engine_and_import") or {})
+    rules_evidence = dict(rules_detail.get("evidence") or {})
+    rules_cert_ready = str(rules_evidence.get("rules_certification_status") or "").strip().lower() in {"pass", "passed", "ready"}
+
+    data_durability_family_ids = (
+        "legacy_and_adjacent_import_oracles",
+        "sheet_export_print_viewer_and_exchange",
+        "identity_contacts_lifestyles_history",
+    )
+    data_durability_unready = [
+        family_id
+        for family_id in data_durability_family_ids
+        if not _flagship_parity_family_meets(flagship_parity_status_by_family, family_id, "task_proven")
+    ]
+    data_durability_ui_element_gaps = [
+        row_id
+        for row_id in UI_ELEMENT_PARITY_AUDIT_DATA_DURABILITY_IDS
+        if row_id in ui_element_parity_audit_missing_required_ids or row_id in ui_element_parity_audit_unresolved_ids
+    ]
+    data_durability_reasons: List[str] = []
+    if str(coverage.get("rules_engine_and_import") or "").strip().lower() != "ready":
+        data_durability_reasons.append("Rules/import coverage is not ready.")
+    if str(desktop_evidence.get("install_claim_restore_continue_effective") or "").strip().lower() != "ready":
+        data_durability_reasons.append("Install/claim/restore continuity is not ready.")
+    if data_durability_unready:
+        data_durability_reasons.append(
+            "Durability-critical parity families are still below task-proven: " + _summarize_ids(data_durability_unready) + "."
+        )
+    if data_durability_ui_element_gaps:
+        data_durability_reasons.append(
+            "Chummer5A UI element parity audit still has unresolved durability-critical rows: "
+            + _summarize_ids(data_durability_ui_element_gaps)
+            + "."
+        )
+    data_durability_status, data_durability_plane = _coverage_entry(
+        positives=int(str(coverage.get("rules_engine_and_import") or "").strip().lower() == "ready")
+        + int(str(desktop_evidence.get("install_claim_restore_continue_effective") or "").strip().lower() == "ready")
+        + int(len(data_durability_unready) == 0),
+        reasons=data_durability_reasons,
+        summary_ready="Data durability and reversible migration proof are current.",
+        summary_missing="Data durability or reversible migration proof is still incomplete.",
+        evidence={
+            "rules_engine_and_import_ready": str(coverage.get("rules_engine_and_import") or "").strip().lower() == "ready",
+            "install_claim_restore_continue_effective": str(
+                desktop_evidence.get("install_claim_restore_continue_effective") or ""
+            ).strip(),
+            "families_below_task_proven": data_durability_unready,
+            "ui_element_parity_audit_gap_ids": data_durability_ui_element_gaps,
+        },
+        hard_fail=False,
+    )
+
+    recovery_trust_reasons: List[str] = []
+    if str(coverage.get("desktop_client") or "").strip().lower() != "ready":
+        recovery_trust_reasons.append("Desktop flagship coverage is not ready.")
+    if str(desktop_evidence.get("install_claim_restore_continue_effective") or "").strip().lower() != "ready":
+        recovery_trust_reasons.append("Install/claim/restore continuity is not ready.")
+    if str(desktop_evidence.get("ui_executable_exit_gate_status") or "").strip().lower() not in {"pass", "passed", "ready"}:
+        recovery_trust_reasons.append("Desktop executable exit gate is not ready.")
+    if not windows_exit_gate_raw_ready:
+        recovery_trust_reasons.append("Windows executable proof is not effectively ready.")
+    if feedback_loop_status != "ready":
+        recovery_trust_reasons.append("Feedback-loop readiness plane is not ready.")
+    recovery_trust_status, recovery_trust_plane = _coverage_entry(
+        positives=int(str(coverage.get("desktop_client") or "").strip().lower() == "ready")
+        + int(str(desktop_evidence.get("install_claim_restore_continue_effective") or "").strip().lower() == "ready")
+        + int(str(desktop_evidence.get("ui_executable_exit_gate_status") or "").strip().lower() in {"pass", "passed", "ready"})
+        + int(windows_exit_gate_raw_ready)
+        + int(feedback_loop_status == "ready"),
+        reasons=recovery_trust_reasons,
+        summary_ready="Install, update, restore, and recovery trust proof is current.",
+        summary_missing="Install, update, restore, or recovery trust proof is still incomplete.",
+        evidence={
+            "desktop_client_ready": str(coverage.get("desktop_client") or "").strip().lower() == "ready",
+            "install_claim_restore_continue_effective": str(
+                desktop_evidence.get("install_claim_restore_continue_effective") or ""
+            ).strip(),
+            "ui_executable_exit_gate_status": str(desktop_evidence.get("ui_executable_exit_gate_status") or "").strip(),
+            "ui_windows_exit_gate_raw_ready": windows_exit_gate_raw_ready,
+            "ui_windows_exit_gate_effective_ready": bool(
+                desktop_evidence.get("ui_windows_exit_gate_effective_ready")
+            ),
+            "feedback_loop_ready": feedback_loop_status == "ready",
+        },
+        hard_fail=False,
+    )
+
+    rules_explainability_reasons: List[str] = []
+    if str(coverage.get("rules_engine_and_import") or "").strip().lower() != "ready":
+        rules_explainability_reasons.append("Rules/import coverage is not ready.")
+    if str(rules_evidence.get("build_explain_publish") or "").strip().lower() != "ready":
+        rules_explainability_reasons.append("Build/explain/publish journey is not ready.")
+    if not rules_cert_ready:
+        rules_explainability_reasons.append("Rules/import certification artifact is not ready.")
+    rules_explainability_status, rules_explainability_plane = _coverage_entry(
+        positives=int(str(coverage.get("rules_engine_and_import") or "").strip().lower() == "ready")
+        + int(str(rules_evidence.get("build_explain_publish") or "").strip().lower() == "ready")
+        + int(rules_cert_ready),
+        reasons=rules_explainability_reasons,
+        summary_ready="Rules explainability and import-certification proof is current.",
+        summary_missing="Rules explainability or import-certification proof is still incomplete.",
+        evidence={
+            "rules_engine_and_import_ready": str(coverage.get("rules_engine_and_import") or "").strip().lower() == "ready",
+            "build_explain_publish": str(rules_evidence.get("build_explain_publish") or "").strip(),
+            "rules_certification_status": str(rules_evidence.get("rules_certification_status") or "").strip(),
+        },
+        hard_fail=False,
+    )
+
+    custom_data_survival_family_ids = (
+        "custom_data_xml_and_translator_bridge",
+        "settings_and_rules_environment_authoring",
+    )
+    custom_data_survival_unready = [
+        family_id
+        for family_id in custom_data_survival_family_ids
+        if not _flagship_parity_family_meets(flagship_parity_status_by_family, family_id, "task_proven")
+    ]
+    custom_data_survival_ui_element_gaps = [
+        row_id
+        for row_id in UI_ELEMENT_PARITY_AUDIT_CUSTOM_DATA_SURVIVAL_IDS
+        if row_id in ui_element_parity_audit_missing_required_ids or row_id in ui_element_parity_audit_unresolved_ids
+    ]
+    custom_data_survival_reasons: List[str] = []
+    if str(coverage.get("rules_engine_and_import") or "").strip().lower() != "ready":
+        custom_data_survival_reasons.append("Rules/import coverage is not ready.")
+    if custom_data_survival_unready:
+        custom_data_survival_reasons.append(
+            "Custom-data survival families are still below task-proven: " + _summarize_ids(custom_data_survival_unready) + "."
+        )
+    if custom_data_survival_ui_element_gaps:
+        custom_data_survival_reasons.append(
+            "Chummer5A UI element parity audit still has unresolved custom-data or translator rows: "
+            + _summarize_ids(custom_data_survival_ui_element_gaps)
+            + "."
+        )
+    custom_data_survival_status, custom_data_survival_plane = _coverage_entry(
+        positives=int(str(coverage.get("rules_engine_and_import") or "").strip().lower() == "ready")
+        + int(len(custom_data_survival_unready) == 0),
+        reasons=custom_data_survival_reasons,
+        summary_ready="Custom-data, translator, and rule-environment survival proof is current.",
+        summary_missing="Custom-data, translator, or rule-environment survival proof is still incomplete.",
+        evidence={
+            "rules_engine_and_import_ready": str(coverage.get("rules_engine_and_import") or "").strip().lower() == "ready",
+            "families_below_task_proven": custom_data_survival_unready,
+            "ui_element_parity_audit_gap_ids": custom_data_survival_ui_element_gaps,
+        },
+        hard_fail=False,
+    )
+
+    large_sheet_performance_reasons: List[str] = []
+    if str(coverage.get("rules_engine_and_import") or "").strip().lower() != "ready":
+        large_sheet_performance_reasons.append("Rules/import coverage is not ready.")
+    if not rules_cert_ready:
+        large_sheet_performance_reasons.append("Rules/import certification artifact is not ready.")
+    if int(rules_evidence.get("build_explain_publish_rules_scope_blocking_reason_count") or 0) > 0:
+        large_sheet_performance_reasons.append("Rules-scope blockers are still open in build/explain/publish.")
+    large_sheet_performance_status, large_sheet_performance_plane = _coverage_entry(
+        positives=int(str(coverage.get("rules_engine_and_import") or "").strip().lower() == "ready")
+        + int(rules_cert_ready)
+        + int(int(rules_evidence.get("build_explain_publish_rules_scope_blocking_reason_count") or 0) == 0),
+        reasons=large_sheet_performance_reasons,
+        summary_ready="Large-sheet and dense-roster performance proof is current.",
+        summary_missing="Large-sheet or dense-roster performance proof is still incomplete.",
+        evidence={
+            "rules_engine_and_import_ready": str(coverage.get("rules_engine_and_import") or "").strip().lower() == "ready",
+            "rules_certification_status": str(rules_evidence.get("rules_certification_status") or "").strip(),
+            "build_explain_publish_rules_scope_blocking_reason_count": int(
+                rules_evidence.get("build_explain_publish_rules_scope_blocking_reason_count") or 0
+            ),
+        },
+        hard_fail=False,
+    )
+
+    sr4_parity_reasons: List[str] = []
+    if not desktop_sr4_parity_ready:
+        sr4_parity_reasons.append("SR4 desktop workflow parity proof is not ready.")
+    if not desktop_sr4_sr6_frontier_ready:
+        sr4_parity_reasons.append("SR4/SR6 desktop parity frontier receipt is not ready.")
+    sr4_parity_status, sr4_parity_plane = _coverage_entry(
+        positives=int(desktop_sr4_parity_ready) + int(desktop_sr4_sr6_frontier_ready),
+        reasons=sr4_parity_reasons,
+        summary_ready="SR4 parity proof is explicit and current.",
+        summary_missing="SR4 parity proof is still incomplete.",
+        evidence={
+            "sr4_workflow_parity_status": str(desktop_evidence.get("sr4_workflow_parity_status") or "").strip(),
+            "sr4_workflow_parity_external_only_missing_api_surface_contract": bool(
+                desktop_evidence.get("sr4_workflow_parity_external_only_missing_api_surface_contract")
+            ),
+            "sr4_sr6_frontier_receipt_status": str(desktop_evidence.get("sr4_sr6_frontier_receipt_status") or "").strip(),
+        },
+        hard_fail=False,
+    )
+
+    sr6_parity_reasons: List[str] = []
+    if not desktop_sr6_parity_ready:
+        sr6_parity_reasons.append("SR6 desktop workflow parity proof is not ready.")
+    if not desktop_sr4_sr6_frontier_ready:
+        sr6_parity_reasons.append("SR4/SR6 desktop parity frontier receipt is not ready.")
+    sr6_ui_element_gaps = [
+        row_id
+        for row_id in UI_ELEMENT_PARITY_AUDIT_SR6_IDS
+        if row_id in ui_element_parity_audit_missing_required_ids or row_id in ui_element_parity_audit_unresolved_ids
+    ]
+    if sr6_ui_element_gaps:
+        sr6_parity_reasons.append(
+            "Chummer5A UI element parity audit still has unresolved SR6 parity rows: "
+            + _summarize_ids(sr6_ui_element_gaps)
+            + "."
+        )
+    sr6_parity_status, sr6_parity_plane = _coverage_entry(
+        positives=int(desktop_sr6_parity_ready) + int(desktop_sr4_sr6_frontier_ready),
+        reasons=sr6_parity_reasons,
+        summary_ready="SR6 parity proof is explicit and current.",
+        summary_missing="SR6 parity proof is still incomplete.",
+        evidence={
+            "sr6_workflow_parity_status": str(desktop_evidence.get("sr6_workflow_parity_status") or "").strip(),
+            "sr6_workflow_parity_external_only_missing_api_surface_contract": bool(
+                desktop_evidence.get("sr6_workflow_parity_external_only_missing_api_surface_contract")
+            ),
+            "sr4_sr6_frontier_receipt_status": str(desktop_evidence.get("sr4_sr6_frontier_receipt_status") or "").strip(),
+            "ui_element_parity_audit_gap_ids": sr6_ui_element_gaps,
+        },
+        hard_fail=False,
+    )
+
     flagship_plane_reasons: List[str] = []
     if coverage_gap_keys:
         flagship_plane_reasons.append("Whole-product coverage still has open flagship gaps: " + ", ".join(coverage_gap_keys) + ".")
@@ -6709,6 +7285,24 @@ def build_flagship_product_readiness_payload(
         flagship_plane_reasons.append("Dense-workbench readiness plane is not ready.")
     if feedback_loop_status != "ready":
         flagship_plane_reasons.append("Feedback-loop readiness plane is not ready.")
+    if veteran_deep_status != "ready":
+        flagship_plane_reasons.append("Veteran deep-workflow readiness plane is not ready.")
+    if public_shelf_status != "ready":
+        flagship_plane_reasons.append("Public-shelf readiness plane is not ready.")
+    if data_durability_status != "ready":
+        flagship_plane_reasons.append("Data-durability readiness plane is not ready.")
+    if recovery_trust_status != "ready":
+        flagship_plane_reasons.append("Recovery-trust readiness plane is not ready.")
+    if rules_explainability_status != "ready":
+        flagship_plane_reasons.append("Rules-explainability readiness plane is not ready.")
+    if custom_data_survival_status != "ready":
+        flagship_plane_reasons.append("Custom-data-survival readiness plane is not ready.")
+    if large_sheet_performance_status != "ready":
+        flagship_plane_reasons.append("Large-sheet-performance readiness plane is not ready.")
+    if sr4_parity_status != "ready":
+        flagship_plane_reasons.append("SR4 parity readiness plane is not ready.")
+    if sr6_parity_status != "ready":
+        flagship_plane_reasons.append("SR6 parity readiness plane is not ready.")
     flagship_plane_status, flagship_plane = _coverage_entry(
         positives=(
             int(len(coverage_gap_keys) == 0)
@@ -6720,6 +7314,15 @@ def build_flagship_product_readiness_payload(
             + int(primary_route_status == "ready")
             + int(dense_status == "ready")
             + int(feedback_loop_status == "ready")
+            + int(veteran_deep_status == "ready")
+            + int(public_shelf_status == "ready")
+            + int(data_durability_status == "ready")
+            + int(recovery_trust_status == "ready")
+            + int(rules_explainability_status == "ready")
+            + int(custom_data_survival_status == "ready")
+            + int(large_sheet_performance_status == "ready")
+            + int(sr4_parity_status == "ready")
+            + int(sr6_parity_status == "ready")
         ),
         reasons=flagship_plane_reasons,
         summary_ready="Flagship replacement truth is fully green.",
@@ -6751,6 +7354,18 @@ def build_flagship_product_readiness_payload(
             "primary_route_ready": primary_route_status == "ready",
             "dense_workbench_ready": dense_status == "ready",
             "feedback_loop_ready": feedback_loop_status == "ready",
+            "veteran_deep_workflow_ready": veteran_deep_status == "ready",
+            "public_shelf_ready": public_shelf_status == "ready",
+            "data_durability_ready": data_durability_status == "ready",
+            "recovery_trust_ready": recovery_trust_status == "ready",
+            "rules_explainability_ready": rules_explainability_status == "ready",
+            "custom_data_survival_ready": custom_data_survival_status == "ready",
+            "large_sheet_performance_ready": large_sheet_performance_status == "ready",
+            "sr4_parity_ready": sr4_parity_status == "ready",
+            "sr6_parity_ready": sr6_parity_status == "ready",
+            "readiness_plane_contract_path": str(effective_flagship_readiness_planes_path),
+            "readiness_plane_contract_present": bool(flagship_readiness_planes),
+            "readiness_plane_contract_ids": declared_readiness_plane_ids,
         },
         hard_fail=not bool(flagship_parity_registry) or str(coverage.get("desktop_client") or "").strip().lower() == "missing",
     )
@@ -6759,9 +7374,19 @@ def build_flagship_product_readiness_payload(
         "structural_ready": structural_plane,
         "flagship_ready": flagship_plane,
         "veteran_ready": veteran_plane,
+        "sr5_veteran_ready": sr5_veteran_plane,
+        "veteran_deep_workflow_ready": veteran_deep_plane,
         "primary_route_ready": primary_route_plane,
         "dense_workbench_ready": dense_plane,
         "feedback_loop_ready": feedback_loop_plane,
+        "public_shelf_ready": public_shelf_plane,
+        "data_durability_ready": data_durability_plane,
+        "recovery_trust_ready": recovery_trust_plane,
+        "rules_explainability_ready": rules_explainability_plane,
+        "custom_data_survival_ready": custom_data_survival_plane,
+        "large_sheet_performance_ready": large_sheet_performance_plane,
+        "sr4_parity_ready": sr4_parity_plane,
+        "sr6_parity_ready": sr6_parity_plane,
     }
     readiness_plane_summary = {
         "ready_count": sum(1 for plane in readiness_planes.values() if str(plane.get("status") or "") == "ready"),
@@ -6939,6 +7564,7 @@ def build_flagship_product_readiness_payload(
             "acceptance": str(effective_acceptance_path),
             "parity_registry": str(effective_parity_registry_path),
             "flagship_parity_registry": str(effective_flagship_parity_registry_path),
+            "flagship_readiness_planes": str(effective_flagship_readiness_planes_path),
             "dense_workbench_budget": str(effective_dense_workbench_budget_path),
             "veteran_first_minute_gate": str(effective_veteran_first_minute_gate_path),
             "primary_route_registry": str(effective_primary_route_registry_path),
@@ -7033,6 +7659,7 @@ def materialize_flagship_product_readiness(
     mobile_local_release_proof_path: Path,
     release_channel_path: Path,
     releases_json_path: Path,
+    ui_element_parity_audit_path: Path | None = None,
     ui_user_journey_tester_audit_path: Path | None = None,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
@@ -7055,6 +7682,7 @@ def materialize_flagship_product_readiness(
         ui_executable_exit_gate_path=ui_executable_exit_gate_path,
         ui_workflow_execution_gate_path=ui_workflow_execution_gate_path,
         ui_visual_familiarity_exit_gate_path=ui_visual_familiarity_exit_gate_path,
+        ui_element_parity_audit_path=ui_element_parity_audit_path,
         ui_localization_release_gate_path=ui_localization_release_gate_path,
         sr4_workflow_parity_proof_path=sr4_workflow_parity_proof_path,
         sr6_workflow_parity_proof_path=sr6_workflow_parity_proof_path,
@@ -7118,6 +7746,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         ui_executable_exit_gate_path=Path(args.ui_executable_exit_gate).resolve(),
         ui_workflow_execution_gate_path=Path(args.ui_workflow_execution_gate).resolve(),
         ui_visual_familiarity_exit_gate_path=Path(args.ui_visual_familiarity_exit_gate).resolve(),
+        ui_element_parity_audit_path=(
+            Path(args.ui_element_parity_audit).resolve()
+            if str(args.ui_element_parity_audit or "").strip()
+            else None
+        ),
         ui_user_journey_tester_audit_path=(
             Path(args.ui_user_journey_tester_audit).resolve()
             if str(args.ui_user_journey_tester_audit or "").strip()

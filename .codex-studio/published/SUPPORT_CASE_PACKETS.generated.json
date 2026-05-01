@@ -7,24 +7,23 @@
     "feedback_forge_candidate_count": 0,
     "first_part_complete_count": 0,
     "first_part_routed_count": 0,
-    "generated_at": "2026-04-30T13:00:38Z",
+    "generated_at": "2026-05-01T08:46:32Z",
     "karma_forge_candidate_count": 0,
-    "ltd_discovery_system_missing_tools": [
-      "Signitic",
-      "FacePop",
-      "NextStep",
-      "chummer6-design",
-      "Emailit"
-    ],
-    "ltd_discovery_system_ready": false,
+    "ltd_discovery_system_missing_tools": [],
+    "ltd_discovery_system_ready": true,
     "ltd_discovery_system_tools": [
       "ProductLift",
+      "Signitic",
+      "FacePop",
       "Deftform",
       "Icanpreneur",
       "MetaSurvey",
       "Lunacal",
       "Teable",
-      "Product Governor"
+      "NextStep",
+      "Product Governor",
+      "chummer6-design",
+      "Emailit"
     ],
     "ltd_product_system": "discovery_system",
     "ltd_registry_key": "ltd_runtime_and_projection_registry",
@@ -82,7 +81,7 @@
       "release_receipt_id_present": 0,
       "release_receipt_ready": 0
     },
-    "generated_at": "2026-04-30T13:00:38Z",
+    "generated_at": "2026-05-01T08:46:32Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -107,225 +106,8 @@
     "state_counts": {},
     "support_case_backed_count": 0
   },
-  "generated_at": "2026-04-30T13:00:38Z",
-  "packets": [
-    {
-      "affected_canon_files": [],
-      "arch": "",
-      "change_class": "type_b",
-      "design_impact_suspected": false,
-      "exit_condition": "Publish the promoted installer artifact and a passing startup-smoke receipt for the tuple, then regenerate release-channel truth.",
-      "fix_confirmation": {
-        "fixed_channel": "",
-        "fixed_version": "",
-        "installed_version": "",
-        "reporter_verification_state": "",
-        "state": "no_fix_recorded",
-        "update_required": false
-      },
-      "fixed_channel": "",
-      "fixed_version": "",
-      "head_id": "avalonia",
-      "install_diagnosis": {
-        "case_channel_matches_registry": true,
-        "case_fixed_version_matches_registry_release": false,
-        "case_installed_version": "",
-        "case_tuple_id": "avalonia:linux-x64:linux",
-        "case_version_matches_registry_release": false,
-        "external_proof_request": {
-          "channel_id": "preview",
-          "expected_artifact_id": "avalonia-linux-x64-installer",
-          "expected_installer_file_name": "chummer-avalonia-linux-x64-installer.deb",
-          "expected_installer_relative_path": "files/chummer-avalonia-linux-x64-installer.deb",
-          "expected_installer_sha256": "84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643",
-          "expected_public_install_route": "/downloads/install/avalonia-linux-x64-installer",
-          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json",
-          "local_evidence": {
-            "installer_artifact": {
-              "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb",
-              "present": true,
-              "sha256": "84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643",
-              "sha256_matches_expected": true,
-              "state": "present_sha256_match"
-            },
-            "startup_smoke_receipt": {
-              "age_seconds": 884112,
-              "contract_matches_expected": true,
-              "max_age_seconds": 604800,
-              "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json",
-              "present": true,
-              "recorded_at_utc": "2026-04-20T07:25:25.2958729+00:00",
-              "state": "stale"
-            }
-          },
-          "proof_capture_commands": [
-            "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb\" && EXPECTED_INSTALLER_SHA256=84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643 && EXPECTED_INSTALLER_MAGIC='!<arch>\\n' && export INSTALLER_PATH EXPECTED_INSTALLER_SHA256 EXPECTED_INSTALLER_MAGIC && cd \"$REPO_ROOT\" && mkdir -p \"$(dirname \"$INSTALLER_PATH\")\" && python3 -c 'import hashlib, os, pathlib; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; import sys; sys.exit(0) if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); sys.exit(0) if digest==expected else print(f'\"'\"'installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}'\"'\"') or p.unlink()' && if [ ! -s \"$INSTALLER_PATH\" ]; then if [ -z \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ] && [ \"${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}\" != \"1\" ]; then echo 'external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER, CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR (or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; exit 1; fi; curl_auth_args=(); if [ -n \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ]; then curl_auth_args+=( -H \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ]; then curl_auth_args+=( -H \"Cookie: ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ]; then curl_auth_args+=( --cookie \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ); fi; curl -fL --retry 3 --retry-delay 2 \"${curl_auth_args[@]}\" \"${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-linux-x64-installer\" -o \"$INSTALLER_PATH\"; fi; python3 -c 'import os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected_magic=os.environ['\"'\"'EXPECTED_INSTALLER_MAGIC'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; probe=p.read_bytes()[:8192]; probe_text=probe.decode('\"'\"'latin-1'\"'\"', errors='\"'\"'ignore'\"'\"').lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); html_like=('\"'\"'<!doctype html'\"'\"' in probe_text) or ('\"'\"'<html'\"'\"' in probe_text) or ('\"'\"'<head'\"'\"' in probe_text); sys.exit(f'\"'\"'installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-missing-auth'\"'\"') if html_like else None; sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode('\"'\"'latin-1'\"'\"'))) else sys.exit(f'\"'\"'installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=unexpected-binary-format-or-route-response'\"'\"')'; python3 -c 'import hashlib, os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); sys.exit(0) if digest==expected else sys.exit(f'\"'\"'installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-bytes-drift'\"'\"')'",
-            "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb\" && STARTUP_SMOKE_DIR=\"$REPO_ROOT/Docker/Downloads/startup-smoke\" && cd \"$REPO_ROOT\" && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=linux-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Linux ./scripts/run-desktop-startup-smoke.sh \"$INSTALLER_PATH\" avalonia linux-x64 Chummer.Avalonia \"$STARTUP_SMOKE_DIR\" run-20260430-123311",
-            "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && cd \"$REPO_ROOT\" && ./scripts/generate-releases-manifest.sh"
-          ],
-          "required_host": "linux",
-          "required_proofs": [
-            "promoted_installer_artifact",
-            "startup_smoke_receipt"
-          ],
-          "startup_smoke_receipt_contract": {
-            "head_id": "avalonia",
-            "host_class_contains": "linux",
-            "platform": "linux",
-            "ready_checkpoint": "pre_ui_event_loop",
-            "rid": "linux-x64",
-            "status_any_of": [
-              "pass",
-              "passed",
-              "ready"
-            ]
-          },
-          "tuple_entry_count": 1,
-          "tuple_id": "avalonia:linux-x64:linux",
-          "tuple_unique": true
-        },
-        "external_proof_required": true,
-        "fix_availability_summary": "Do not send fixed notices until required desktop tuple coverage is complete for the promoted shelf.",
-        "promoted_artifact_id": "",
-        "promoted_tuple_id": "",
-        "registry_channel_id": "preview",
-        "registry_release_channel_status": "published",
-        "registry_release_proof_status": "passed",
-        "registry_release_version": "run-20260430-123311",
-        "registry_rollout_state": "coverage_incomplete",
-        "registry_supportability_state": "review_required",
-        "tuple_present_on_promoted_shelf": false
-      },
-      "install_truth_state": "tuple_not_on_promoted_shelf",
-      "installation_id": "",
-      "installed_version": "",
-      "kind": "external_proof_request",
-      "packet_id": "support_packet_1e7cc73c9675",
-      "packet_kind": "external_proof_request",
-      "platform": "linux",
-      "primary_lane": "ops",
-      "reason": "Release-blocking desktop tuple proof is waiting on promoted installer bytes and startup-smoke evidence from a linux host. Current local startup-smoke receipt state: stale.",
-      "recovery_path": {
-        "action_id": "open_downloads",
-        "href": "/downloads",
-        "reason": "The promoted desktop tuple proof is incomplete; stay on the published downloads lane until the required host receipts land."
-      },
-      "release_channel": "preview",
-      "status": "awaiting_evidence",
-      "summary": "Missing promoted installer/startup-smoke proof for avalonia:linux-x64:linux. Local receipt state: stale. Last recorded at 2026-04-20T07:25:25.2958729+00:00.",
-      "support_case_backed": false,
-      "target_repo": "chummer6-ui",
-      "title": "Capture desktop tuple proof for avalonia:linux-x64:linux"
-    },
-    {
-      "affected_canon_files": [],
-      "arch": "",
-      "change_class": "type_b",
-      "design_impact_suspected": false,
-      "exit_condition": "Publish the promoted installer artifact and a passing startup-smoke receipt for the tuple, then regenerate release-channel truth.",
-      "fix_confirmation": {
-        "fixed_channel": "",
-        "fixed_version": "",
-        "installed_version": "",
-        "reporter_verification_state": "",
-        "state": "no_fix_recorded",
-        "update_required": false
-      },
-      "fixed_channel": "",
-      "fixed_version": "",
-      "head_id": "avalonia",
-      "install_diagnosis": {
-        "case_channel_matches_registry": true,
-        "case_fixed_version_matches_registry_release": false,
-        "case_installed_version": "",
-        "case_tuple_id": "avalonia:osx-arm64:macos",
-        "case_version_matches_registry_release": false,
-        "external_proof_request": {
-          "channel_id": "preview",
-          "expected_artifact_id": "avalonia-osx-arm64-installer",
-          "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
-          "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
-          "expected_installer_sha256": "ca6c25f0cdaf48bddfe83e3e983ff87b8763d973e671100165248c9edcd044bd",
-          "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
-          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
-          "local_evidence": {
-            "installer_artifact": {
-              "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg",
-              "present": true,
-              "sha256": "62e410197697915a84b011cc3b15293fa98a5f2852613fa59a930b910a55d354",
-              "sha256_matches_expected": false,
-              "state": "present_sha256_mismatch"
-            },
-            "startup_smoke_receipt": {
-              "age_seconds": 328339,
-              "contract_matches_expected": true,
-              "max_age_seconds": 604800,
-              "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
-              "present": true,
-              "recorded_at_utc": "2026-04-26T17:48:19.106806+00:00",
-              "state": "fresh"
-            }
-          },
-          "proof_capture_commands": [
-            "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg\" && EXPECTED_INSTALLER_SHA256=ca6c25f0cdaf48bddfe83e3e983ff87b8763d973e671100165248c9edcd044bd && EXPECTED_INSTALLER_MAGIC='' && export INSTALLER_PATH EXPECTED_INSTALLER_SHA256 EXPECTED_INSTALLER_MAGIC && cd \"$REPO_ROOT\" && mkdir -p \"$(dirname \"$INSTALLER_PATH\")\" && python3 -c 'import hashlib, os, pathlib; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; import sys; sys.exit(0) if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); sys.exit(0) if digest==expected else print(f'\"'\"'installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}'\"'\"') or p.unlink()' && if [ ! -s \"$INSTALLER_PATH\" ]; then if [ -z \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ] && [ \"${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}\" != \"1\" ]; then echo 'external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER, CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR (or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; exit 1; fi; curl_auth_args=(); if [ -n \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ]; then curl_auth_args+=( -H \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ]; then curl_auth_args+=( -H \"Cookie: ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ]; then curl_auth_args+=( --cookie \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ); fi; curl -fL --retry 3 --retry-delay 2 \"${curl_auth_args[@]}\" \"${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-osx-arm64-installer\" -o \"$INSTALLER_PATH\"; fi; python3 -c 'import os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected_magic=os.environ['\"'\"'EXPECTED_INSTALLER_MAGIC'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; probe=p.read_bytes()[:8192]; probe_text=probe.decode('\"'\"'latin-1'\"'\"', errors='\"'\"'ignore'\"'\"').lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); html_like=('\"'\"'<!doctype html'\"'\"' in probe_text) or ('\"'\"'<html'\"'\"' in probe_text) or ('\"'\"'<head'\"'\"' in probe_text); sys.exit(f'\"'\"'installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-missing-auth'\"'\"') if html_like else None; sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode('\"'\"'latin-1'\"'\"'))) else sys.exit(f'\"'\"'installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=unexpected-binary-format-or-route-response'\"'\"')'; python3 -c 'import hashlib, os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); sys.exit(0) if digest==expected else sys.exit(f'\"'\"'installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-bytes-drift'\"'\"')'",
-            "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg\" && STARTUP_SMOKE_DIR=\"$REPO_ROOT/Docker/Downloads/startup-smoke\" && cd \"$REPO_ROOT\" && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=macOS ./scripts/run-desktop-startup-smoke.sh \"$INSTALLER_PATH\" avalonia osx-arm64 Chummer.Avalonia \"$STARTUP_SMOKE_DIR\" run-20260430-123311",
-            "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && cd \"$REPO_ROOT\" && ./scripts/generate-releases-manifest.sh"
-          ],
-          "required_host": "macos",
-          "required_proofs": [
-            "promoted_installer_artifact",
-            "startup_smoke_receipt"
-          ],
-          "startup_smoke_receipt_contract": {
-            "head_id": "avalonia",
-            "host_class_contains": "macos",
-            "platform": "macos",
-            "ready_checkpoint": "pre_ui_event_loop",
-            "rid": "osx-arm64",
-            "status_any_of": [
-              "pass",
-              "passed",
-              "ready"
-            ]
-          },
-          "tuple_entry_count": 1,
-          "tuple_id": "avalonia:osx-arm64:macos",
-          "tuple_unique": true
-        },
-        "external_proof_required": true,
-        "fix_availability_summary": "Do not send fixed notices until required desktop tuple coverage is complete for the promoted shelf.",
-        "promoted_artifact_id": "",
-        "promoted_tuple_id": "",
-        "registry_channel_id": "preview",
-        "registry_release_channel_status": "published",
-        "registry_release_proof_status": "passed",
-        "registry_release_version": "run-20260430-123311",
-        "registry_rollout_state": "coverage_incomplete",
-        "registry_supportability_state": "review_required",
-        "tuple_present_on_promoted_shelf": false
-      },
-      "install_truth_state": "tuple_not_on_promoted_shelf",
-      "installation_id": "",
-      "installed_version": "",
-      "kind": "external_proof_request",
-      "packet_id": "support_packet_978c4c2dd3a2",
-      "packet_kind": "external_proof_request",
-      "platform": "macos",
-      "primary_lane": "ops",
-      "reason": "Release-blocking desktop tuple proof is waiting on promoted installer bytes and startup-smoke evidence from a macos host. Current local startup-smoke receipt state: fresh.",
-      "recovery_path": {
-        "action_id": "open_downloads",
-        "href": "/downloads",
-        "reason": "The promoted desktop tuple proof is incomplete; stay on the published downloads lane until the required host receipts land."
-      },
-      "release_channel": "preview",
-      "status": "awaiting_evidence",
-      "summary": "Missing promoted installer/startup-smoke proof for avalonia:osx-arm64:macos. Local receipt state: fresh. Last recorded at 2026-04-26T17:48:19.106806+00:00.",
-      "support_case_backed": false,
-      "target_repo": "chummer6-ui",
-      "title": "Capture desktop tuple proof for avalonia:osx-arm64:macos"
-    }
-  ],
+  "generated_at": "2026-05-01T08:46:32Z",
+  "packets": [],
   "reporter_followthrough_plan": {
     "action_groups": {
       "blocked_missing_install_receipts": [],
@@ -340,7 +122,7 @@
     "blocked_receipt_mismatch_count": 0,
     "feedback_ready_count": 0,
     "fix_available_ready_count": 0,
-    "generated_at": "2026-04-30T13:00:38Z",
+    "generated_at": "2026-05-01T08:46:32Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -366,8 +148,8 @@
     "install_receipt_indexed_count": 0,
     "install_receipt_missing_case_count": 0,
     "install_receipt_source_count": 0,
-    "materialized_count": 2,
-    "operator_packet_count": 2,
+    "materialized_count": 0,
+    "operator_packet_count": 0,
     "reported_count": 0,
     "source_kind": "remote_url"
   },
@@ -518,436 +300,52 @@
     "feedback_discovery_missing_route_count": 0,
     "feedback_followthrough_ready_count": 0,
     "fix_available_ready_count": 0,
-    "install_truth_state_counts": {
-      "tuple_not_on_promoted_shelf": 2
-    },
-    "lane_counts": {
-      "ops": 2
-    },
-    "needs_human_response": 2,
+    "install_truth_state_counts": {},
+    "lane_counts": {},
+    "needs_human_response": 0,
     "non_external_needs_human_response": 0,
     "non_external_packets_without_lane": 0,
     "non_external_packets_without_named_owner": 0,
     "open_case_count": 0,
     "open_non_external_packet_count": 0,
-    "open_packet_count": 2,
-    "operator_packet_count": 2,
-    "owner_repo_counts": {
-      "chummer6-ui": 2
-    },
+    "open_packet_count": 0,
+    "operator_packet_count": 0,
+    "owner_repo_counts": {},
     "please_test_ready_count": 0,
     "recovery_loop_ready_count": 0,
     "reporter_followthrough_blocked_missing_install_receipts_count": 0,
     "reporter_followthrough_blocked_receipt_mismatch_count": 0,
     "reporter_followthrough_hold_until_fix_receipt_count": 0,
     "reporter_followthrough_ready_count": 0,
-    "status_counts": {
-      "awaiting_evidence": 2
-    },
+    "status_counts": {},
     "support_case_backed_open_count": 0,
-    "unresolved_external_proof_request_count": 2,
-    "unresolved_external_proof_request_host_counts": {
-      "linux": 1,
-      "macos": 1
-    },
-    "unresolved_external_proof_request_hosts": [
-      "linux",
-      "macos"
-    ],
-    "unresolved_external_proof_request_specs": {
-      "avalonia:linux-x64:linux": {
-        "channel_id": "preview",
-        "expected_artifact_id": "avalonia-linux-x64-installer",
-        "expected_installer_file_name": "chummer-avalonia-linux-x64-installer.deb",
-        "expected_installer_relative_path": "files/chummer-avalonia-linux-x64-installer.deb",
-        "expected_installer_sha256": "84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643",
-        "expected_public_install_route": "/downloads/install/avalonia-linux-x64-installer",
-        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json",
-        "local_evidence": {
-          "installer_artifact": {
-            "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb",
-            "present": true,
-            "sha256": "84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643",
-            "sha256_matches_expected": true,
-            "state": "present_sha256_match"
-          },
-          "startup_smoke_receipt": {
-            "age_seconds": 884112,
-            "contract_matches_expected": true,
-            "max_age_seconds": 604800,
-            "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json",
-            "present": true,
-            "recorded_at_utc": "2026-04-20T07:25:25.2958729+00:00",
-            "state": "stale"
-          }
-        },
-        "proof_capture_commands": [
-          "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb\" && EXPECTED_INSTALLER_SHA256=84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643 && EXPECTED_INSTALLER_MAGIC='!<arch>\\n' && export INSTALLER_PATH EXPECTED_INSTALLER_SHA256 EXPECTED_INSTALLER_MAGIC && cd \"$REPO_ROOT\" && mkdir -p \"$(dirname \"$INSTALLER_PATH\")\" && python3 -c 'import hashlib, os, pathlib; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; import sys; sys.exit(0) if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); sys.exit(0) if digest==expected else print(f'\"'\"'installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}'\"'\"') or p.unlink()' && if [ ! -s \"$INSTALLER_PATH\" ]; then if [ -z \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ] && [ \"${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}\" != \"1\" ]; then echo 'external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER, CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR (or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; exit 1; fi; curl_auth_args=(); if [ -n \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ]; then curl_auth_args+=( -H \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ]; then curl_auth_args+=( -H \"Cookie: ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ]; then curl_auth_args+=( --cookie \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ); fi; curl -fL --retry 3 --retry-delay 2 \"${curl_auth_args[@]}\" \"${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-linux-x64-installer\" -o \"$INSTALLER_PATH\"; fi; python3 -c 'import os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected_magic=os.environ['\"'\"'EXPECTED_INSTALLER_MAGIC'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; probe=p.read_bytes()[:8192]; probe_text=probe.decode('\"'\"'latin-1'\"'\"', errors='\"'\"'ignore'\"'\"').lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); html_like=('\"'\"'<!doctype html'\"'\"' in probe_text) or ('\"'\"'<html'\"'\"' in probe_text) or ('\"'\"'<head'\"'\"' in probe_text); sys.exit(f'\"'\"'installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-missing-auth'\"'\"') if html_like else None; sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode('\"'\"'latin-1'\"'\"'))) else sys.exit(f'\"'\"'installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=unexpected-binary-format-or-route-response'\"'\"')'; python3 -c 'import hashlib, os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); sys.exit(0) if digest==expected else sys.exit(f'\"'\"'installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-bytes-drift'\"'\"')'",
-          "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb\" && STARTUP_SMOKE_DIR=\"$REPO_ROOT/Docker/Downloads/startup-smoke\" && cd \"$REPO_ROOT\" && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=linux-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Linux ./scripts/run-desktop-startup-smoke.sh \"$INSTALLER_PATH\" avalonia linux-x64 Chummer.Avalonia \"$STARTUP_SMOKE_DIR\" run-20260430-123311",
-          "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && cd \"$REPO_ROOT\" && ./scripts/generate-releases-manifest.sh"
-        ],
-        "required_host": "linux",
-        "required_proofs": [
-          "promoted_installer_artifact",
-          "startup_smoke_receipt"
-        ],
-        "startup_smoke_receipt_contract": {
-          "head_id": "avalonia",
-          "host_class_contains": "linux",
-          "platform": "linux",
-          "ready_checkpoint": "pre_ui_event_loop",
-          "rid": "linux-x64",
-          "status_any_of": [
-            "pass",
-            "passed",
-            "ready"
-          ]
-        },
-        "tuple_entry_count": 1,
-        "tuple_unique": true
-      },
-      "avalonia:osx-arm64:macos": {
-        "channel_id": "preview",
-        "expected_artifact_id": "avalonia-osx-arm64-installer",
-        "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
-        "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
-        "expected_installer_sha256": "ca6c25f0cdaf48bddfe83e3e983ff87b8763d973e671100165248c9edcd044bd",
-        "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
-        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
-        "local_evidence": {
-          "installer_artifact": {
-            "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg",
-            "present": true,
-            "sha256": "62e410197697915a84b011cc3b15293fa98a5f2852613fa59a930b910a55d354",
-            "sha256_matches_expected": false,
-            "state": "present_sha256_mismatch"
-          },
-          "startup_smoke_receipt": {
-            "age_seconds": 328339,
-            "contract_matches_expected": true,
-            "max_age_seconds": 604800,
-            "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
-            "present": true,
-            "recorded_at_utc": "2026-04-26T17:48:19.106806+00:00",
-            "state": "fresh"
-          }
-        },
-        "proof_capture_commands": [
-          "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg\" && EXPECTED_INSTALLER_SHA256=ca6c25f0cdaf48bddfe83e3e983ff87b8763d973e671100165248c9edcd044bd && EXPECTED_INSTALLER_MAGIC='' && export INSTALLER_PATH EXPECTED_INSTALLER_SHA256 EXPECTED_INSTALLER_MAGIC && cd \"$REPO_ROOT\" && mkdir -p \"$(dirname \"$INSTALLER_PATH\")\" && python3 -c 'import hashlib, os, pathlib; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; import sys; sys.exit(0) if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); sys.exit(0) if digest==expected else print(f'\"'\"'installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}'\"'\"') or p.unlink()' && if [ ! -s \"$INSTALLER_PATH\" ]; then if [ -z \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ] && [ \"${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}\" != \"1\" ]; then echo 'external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER, CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR (or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; exit 1; fi; curl_auth_args=(); if [ -n \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ]; then curl_auth_args+=( -H \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ]; then curl_auth_args+=( -H \"Cookie: ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ]; then curl_auth_args+=( --cookie \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ); fi; curl -fL --retry 3 --retry-delay 2 \"${curl_auth_args[@]}\" \"${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-osx-arm64-installer\" -o \"$INSTALLER_PATH\"; fi; python3 -c 'import os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected_magic=os.environ['\"'\"'EXPECTED_INSTALLER_MAGIC'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; probe=p.read_bytes()[:8192]; probe_text=probe.decode('\"'\"'latin-1'\"'\"', errors='\"'\"'ignore'\"'\"').lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); html_like=('\"'\"'<!doctype html'\"'\"' in probe_text) or ('\"'\"'<html'\"'\"' in probe_text) or ('\"'\"'<head'\"'\"' in probe_text); sys.exit(f'\"'\"'installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-missing-auth'\"'\"') if html_like else None; sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode('\"'\"'latin-1'\"'\"'))) else sys.exit(f'\"'\"'installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=unexpected-binary-format-or-route-response'\"'\"')'; python3 -c 'import hashlib, os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); sys.exit(0) if digest==expected else sys.exit(f'\"'\"'installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-bytes-drift'\"'\"')'",
-          "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg\" && STARTUP_SMOKE_DIR=\"$REPO_ROOT/Docker/Downloads/startup-smoke\" && cd \"$REPO_ROOT\" && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=macOS ./scripts/run-desktop-startup-smoke.sh \"$INSTALLER_PATH\" avalonia osx-arm64 Chummer.Avalonia \"$STARTUP_SMOKE_DIR\" run-20260430-123311",
-          "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && cd \"$REPO_ROOT\" && ./scripts/generate-releases-manifest.sh"
-        ],
-        "required_host": "macos",
-        "required_proofs": [
-          "promoted_installer_artifact",
-          "startup_smoke_receipt"
-        ],
-        "startup_smoke_receipt_contract": {
-          "head_id": "avalonia",
-          "host_class_contains": "macos",
-          "platform": "macos",
-          "ready_checkpoint": "pre_ui_event_loop",
-          "rid": "osx-arm64",
-          "status_any_of": [
-            "pass",
-            "passed",
-            "ready"
-          ]
-        },
-        "tuple_entry_count": 1,
-        "tuple_unique": true
-      }
-    },
-    "unresolved_external_proof_request_tuple_counts": {
-      "avalonia:linux-x64:linux": 1,
-      "avalonia:osx-arm64:macos": 1
-    },
-    "unresolved_external_proof_request_tuples": [
-      "avalonia:linux-x64:linux",
-      "avalonia:osx-arm64:macos"
-    ],
+    "unresolved_external_proof_request_count": 0,
+    "unresolved_external_proof_request_host_counts": {},
+    "unresolved_external_proof_request_hosts": [],
+    "unresolved_external_proof_request_specs": {},
+    "unresolved_external_proof_request_tuple_counts": {},
+    "unresolved_external_proof_request_tuples": [],
     "update_required_case_count": 0,
     "update_required_misrouted_case_count": 0,
     "update_required_routed_to_downloads_count": 0
   },
   "unresolved_external_proof": {
-    "count": 2,
-    "host_counts": {
-      "linux": 1,
-      "macos": 1
-    },
-    "hosts": [
-      "linux",
-      "macos"
-    ],
-    "specs": {
-      "avalonia:linux-x64:linux": {
-        "channel_id": "preview",
-        "expected_artifact_id": "avalonia-linux-x64-installer",
-        "expected_installer_file_name": "chummer-avalonia-linux-x64-installer.deb",
-        "expected_installer_relative_path": "files/chummer-avalonia-linux-x64-installer.deb",
-        "expected_installer_sha256": "84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643",
-        "expected_public_install_route": "/downloads/install/avalonia-linux-x64-installer",
-        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json",
-        "local_evidence": {
-          "installer_artifact": {
-            "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb",
-            "present": true,
-            "sha256": "84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643",
-            "sha256_matches_expected": true,
-            "state": "present_sha256_match"
-          },
-          "startup_smoke_receipt": {
-            "age_seconds": 884112,
-            "contract_matches_expected": true,
-            "max_age_seconds": 604800,
-            "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json",
-            "present": true,
-            "recorded_at_utc": "2026-04-20T07:25:25.2958729+00:00",
-            "state": "stale"
-          }
-        },
-        "proof_capture_commands": [
-          "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb\" && EXPECTED_INSTALLER_SHA256=84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643 && EXPECTED_INSTALLER_MAGIC='!<arch>\\n' && export INSTALLER_PATH EXPECTED_INSTALLER_SHA256 EXPECTED_INSTALLER_MAGIC && cd \"$REPO_ROOT\" && mkdir -p \"$(dirname \"$INSTALLER_PATH\")\" && python3 -c 'import hashlib, os, pathlib; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; import sys; sys.exit(0) if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); sys.exit(0) if digest==expected else print(f'\"'\"'installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}'\"'\"') or p.unlink()' && if [ ! -s \"$INSTALLER_PATH\" ]; then if [ -z \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ] && [ \"${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}\" != \"1\" ]; then echo 'external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER, CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR (or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; exit 1; fi; curl_auth_args=(); if [ -n \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ]; then curl_auth_args+=( -H \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ]; then curl_auth_args+=( -H \"Cookie: ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ]; then curl_auth_args+=( --cookie \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ); fi; curl -fL --retry 3 --retry-delay 2 \"${curl_auth_args[@]}\" \"${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-linux-x64-installer\" -o \"$INSTALLER_PATH\"; fi; python3 -c 'import os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected_magic=os.environ['\"'\"'EXPECTED_INSTALLER_MAGIC'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; probe=p.read_bytes()[:8192]; probe_text=probe.decode('\"'\"'latin-1'\"'\"', errors='\"'\"'ignore'\"'\"').lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); html_like=('\"'\"'<!doctype html'\"'\"' in probe_text) or ('\"'\"'<html'\"'\"' in probe_text) or ('\"'\"'<head'\"'\"' in probe_text); sys.exit(f'\"'\"'installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-missing-auth'\"'\"') if html_like else None; sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode('\"'\"'latin-1'\"'\"'))) else sys.exit(f'\"'\"'installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=unexpected-binary-format-or-route-response'\"'\"')'; python3 -c 'import hashlib, os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); sys.exit(0) if digest==expected else sys.exit(f'\"'\"'installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-bytes-drift'\"'\"')'",
-          "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb\" && STARTUP_SMOKE_DIR=\"$REPO_ROOT/Docker/Downloads/startup-smoke\" && cd \"$REPO_ROOT\" && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=linux-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Linux ./scripts/run-desktop-startup-smoke.sh \"$INSTALLER_PATH\" avalonia linux-x64 Chummer.Avalonia \"$STARTUP_SMOKE_DIR\" run-20260430-123311",
-          "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && cd \"$REPO_ROOT\" && ./scripts/generate-releases-manifest.sh"
-        ],
-        "required_host": "linux",
-        "required_proofs": [
-          "promoted_installer_artifact",
-          "startup_smoke_receipt"
-        ],
-        "startup_smoke_receipt_contract": {
-          "head_id": "avalonia",
-          "host_class_contains": "linux",
-          "platform": "linux",
-          "ready_checkpoint": "pre_ui_event_loop",
-          "rid": "linux-x64",
-          "status_any_of": [
-            "pass",
-            "passed",
-            "ready"
-          ]
-        },
-        "tuple_entry_count": 1,
-        "tuple_unique": true
-      },
-      "avalonia:osx-arm64:macos": {
-        "channel_id": "preview",
-        "expected_artifact_id": "avalonia-osx-arm64-installer",
-        "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
-        "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
-        "expected_installer_sha256": "ca6c25f0cdaf48bddfe83e3e983ff87b8763d973e671100165248c9edcd044bd",
-        "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
-        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
-        "local_evidence": {
-          "installer_artifact": {
-            "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg",
-            "present": true,
-            "sha256": "62e410197697915a84b011cc3b15293fa98a5f2852613fa59a930b910a55d354",
-            "sha256_matches_expected": false,
-            "state": "present_sha256_mismatch"
-          },
-          "startup_smoke_receipt": {
-            "age_seconds": 328339,
-            "contract_matches_expected": true,
-            "max_age_seconds": 604800,
-            "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
-            "present": true,
-            "recorded_at_utc": "2026-04-26T17:48:19.106806+00:00",
-            "state": "fresh"
-          }
-        },
-        "proof_capture_commands": [
-          "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg\" && EXPECTED_INSTALLER_SHA256=ca6c25f0cdaf48bddfe83e3e983ff87b8763d973e671100165248c9edcd044bd && EXPECTED_INSTALLER_MAGIC='' && export INSTALLER_PATH EXPECTED_INSTALLER_SHA256 EXPECTED_INSTALLER_MAGIC && cd \"$REPO_ROOT\" && mkdir -p \"$(dirname \"$INSTALLER_PATH\")\" && python3 -c 'import hashlib, os, pathlib; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; import sys; sys.exit(0) if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); sys.exit(0) if digest==expected else print(f'\"'\"'installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}'\"'\"') or p.unlink()' && if [ ! -s \"$INSTALLER_PATH\" ]; then if [ -z \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ] && [ \"${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}\" != \"1\" ]; then echo 'external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER, CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR (or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; exit 1; fi; curl_auth_args=(); if [ -n \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ]; then curl_auth_args+=( -H \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ]; then curl_auth_args+=( -H \"Cookie: ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ]; then curl_auth_args+=( --cookie \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ); fi; curl -fL --retry 3 --retry-delay 2 \"${curl_auth_args[@]}\" \"${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-osx-arm64-installer\" -o \"$INSTALLER_PATH\"; fi; python3 -c 'import os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected_magic=os.environ['\"'\"'EXPECTED_INSTALLER_MAGIC'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; probe=p.read_bytes()[:8192]; probe_text=probe.decode('\"'\"'latin-1'\"'\"', errors='\"'\"'ignore'\"'\"').lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); html_like=('\"'\"'<!doctype html'\"'\"' in probe_text) or ('\"'\"'<html'\"'\"' in probe_text) or ('\"'\"'<head'\"'\"' in probe_text); sys.exit(f'\"'\"'installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-missing-auth'\"'\"') if html_like else None; sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode('\"'\"'latin-1'\"'\"'))) else sys.exit(f'\"'\"'installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=unexpected-binary-format-or-route-response'\"'\"')'; python3 -c 'import hashlib, os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); sys.exit(0) if digest==expected else sys.exit(f'\"'\"'installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-bytes-drift'\"'\"')'",
-          "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg\" && STARTUP_SMOKE_DIR=\"$REPO_ROOT/Docker/Downloads/startup-smoke\" && cd \"$REPO_ROOT\" && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=macOS ./scripts/run-desktop-startup-smoke.sh \"$INSTALLER_PATH\" avalonia osx-arm64 Chummer.Avalonia \"$STARTUP_SMOKE_DIR\" run-20260430-123311",
-          "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && cd \"$REPO_ROOT\" && ./scripts/generate-releases-manifest.sh"
-        ],
-        "required_host": "macos",
-        "required_proofs": [
-          "promoted_installer_artifact",
-          "startup_smoke_receipt"
-        ],
-        "startup_smoke_receipt_contract": {
-          "head_id": "avalonia",
-          "host_class_contains": "macos",
-          "platform": "macos",
-          "ready_checkpoint": "pre_ui_event_loop",
-          "rid": "osx-arm64",
-          "status_any_of": [
-            "pass",
-            "passed",
-            "ready"
-          ]
-        },
-        "tuple_entry_count": 1,
-        "tuple_unique": true
-      }
-    },
-    "tuple_counts": {
-      "avalonia:linux-x64:linux": 1,
-      "avalonia:osx-arm64:macos": 1
-    },
-    "tuples": [
-      "avalonia:linux-x64:linux",
-      "avalonia:osx-arm64:macos"
-    ]
+    "count": 0,
+    "host_counts": {},
+    "hosts": [],
+    "specs": {},
+    "tuple_counts": {},
+    "tuples": []
   },
   "unresolved_external_proof_execution_plan": {
     "capture_deadline_hours": 24,
-    "capture_deadline_utc": "2026-05-01T12:35:10Z",
+    "capture_deadline_utc": "2026-05-02T08:37:08Z",
     "command_root": "/docker/fleet/.codex-studio/published/external-proof-commands",
-    "generated_at": "2026-04-30T13:00:38Z",
-    "host_groups": {
-      "linux": {
-        "command_pack_path": "/docker/fleet/.codex-studio/published/external-proof-commands/linux-proof-command-pack.tgz",
-        "operator_commands": {
-          "bundle": "bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-linux-proof.sh",
-          "capture": "bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-linux-proof.sh",
-          "ingest": "bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-linux-proof-bundle.sh",
-          "preflight": "bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-linux-proof.sh",
-          "validate": "bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-linux-proof.sh"
-        },
-        "request_count": 1,
-        "requests": [
-          {
-            "capture_deadline_utc": "2026-05-01T12:35:10Z",
-            "channel_id": "preview",
-            "expected_artifact_id": "avalonia-linux-x64-installer",
-            "expected_installer_file_name": "chummer-avalonia-linux-x64-installer.deb",
-            "expected_installer_relative_path": "files/chummer-avalonia-linux-x64-installer.deb",
-            "expected_installer_sha256": "84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643",
-            "expected_public_install_route": "/downloads/install/avalonia-linux-x64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json",
-            "head_id": "avalonia",
-            "local_evidence": {
-              "installer_artifact": {
-                "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb",
-                "present": true,
-                "sha256": "84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643",
-                "sha256_matches_expected": true,
-                "state": "present_sha256_match"
-              },
-              "startup_smoke_receipt": {
-                "age_seconds": 884112,
-                "contract_matches_expected": true,
-                "max_age_seconds": 604800,
-                "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json",
-                "present": true,
-                "recorded_at_utc": "2026-04-20T07:25:25.2958729+00:00",
-                "state": "stale"
-              }
-            },
-            "platform": "linux",
-            "proof_capture_commands": [
-              "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb\" && EXPECTED_INSTALLER_SHA256=84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643 && EXPECTED_INSTALLER_MAGIC='!<arch>\\n' && export INSTALLER_PATH EXPECTED_INSTALLER_SHA256 EXPECTED_INSTALLER_MAGIC && cd \"$REPO_ROOT\" && mkdir -p \"$(dirname \"$INSTALLER_PATH\")\" && python3 -c 'import hashlib, os, pathlib; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; import sys; sys.exit(0) if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); sys.exit(0) if digest==expected else print(f'\"'\"'installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}'\"'\"') or p.unlink()' && if [ ! -s \"$INSTALLER_PATH\" ]; then if [ -z \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ] && [ \"${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}\" != \"1\" ]; then echo 'external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER, CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR (or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; exit 1; fi; curl_auth_args=(); if [ -n \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ]; then curl_auth_args+=( -H \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ]; then curl_auth_args+=( -H \"Cookie: ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ]; then curl_auth_args+=( --cookie \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ); fi; curl -fL --retry 3 --retry-delay 2 \"${curl_auth_args[@]}\" \"${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-linux-x64-installer\" -o \"$INSTALLER_PATH\"; fi; python3 -c 'import os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected_magic=os.environ['\"'\"'EXPECTED_INSTALLER_MAGIC'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; probe=p.read_bytes()[:8192]; probe_text=probe.decode('\"'\"'latin-1'\"'\"', errors='\"'\"'ignore'\"'\"').lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); html_like=('\"'\"'<!doctype html'\"'\"' in probe_text) or ('\"'\"'<html'\"'\"' in probe_text) or ('\"'\"'<head'\"'\"' in probe_text); sys.exit(f'\"'\"'installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-missing-auth'\"'\"') if html_like else None; sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode('\"'\"'latin-1'\"'\"'))) else sys.exit(f'\"'\"'installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=unexpected-binary-format-or-route-response'\"'\"')'; python3 -c 'import hashlib, os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); sys.exit(0) if digest==expected else sys.exit(f'\"'\"'installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-bytes-drift'\"'\"')'",
-              "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb\" && STARTUP_SMOKE_DIR=\"$REPO_ROOT/Docker/Downloads/startup-smoke\" && cd \"$REPO_ROOT\" && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=linux-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Linux ./scripts/run-desktop-startup-smoke.sh \"$INSTALLER_PATH\" avalonia linux-x64 Chummer.Avalonia \"$STARTUP_SMOKE_DIR\" run-20260430-123311",
-              "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && cd \"$REPO_ROOT\" && ./scripts/generate-releases-manifest.sh"
-            ],
-            "required_proofs": [
-              "promoted_installer_artifact",
-              "startup_smoke_receipt"
-            ],
-            "rid": "linux-x64",
-            "startup_smoke_receipt_contract": {
-              "head_id": "avalonia",
-              "host_class_contains": "linux",
-              "platform": "linux",
-              "ready_checkpoint": "pre_ui_event_loop",
-              "rid": "linux-x64",
-              "status_any_of": [
-                "pass",
-                "passed",
-                "ready"
-              ]
-            },
-            "tuple_entry_count": 1,
-            "tuple_id": "avalonia:linux-x64:linux",
-            "tuple_unique": true
-          }
-        ],
-        "tuples": [
-          "avalonia:linux-x64:linux"
-        ]
-      },
-      "macos": {
-        "command_pack_path": "/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz",
-        "operator_commands": {
-          "bundle": "bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-macos-proof.sh",
-          "capture": "bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-macos-proof.sh",
-          "ingest": "bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-macos-proof-bundle.sh",
-          "preflight": "bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-macos-proof.sh",
-          "validate": "bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-macos-proof.sh"
-        },
-        "request_count": 1,
-        "requests": [
-          {
-            "capture_deadline_utc": "2026-05-01T12:35:10Z",
-            "channel_id": "preview",
-            "expected_artifact_id": "avalonia-osx-arm64-installer",
-            "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
-            "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
-            "expected_installer_sha256": "ca6c25f0cdaf48bddfe83e3e983ff87b8763d973e671100165248c9edcd044bd",
-            "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
-            "head_id": "avalonia",
-            "local_evidence": {
-              "installer_artifact": {
-                "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg",
-                "present": true,
-                "sha256": "62e410197697915a84b011cc3b15293fa98a5f2852613fa59a930b910a55d354",
-                "sha256_matches_expected": false,
-                "state": "present_sha256_mismatch"
-              },
-              "startup_smoke_receipt": {
-                "age_seconds": 328339,
-                "contract_matches_expected": true,
-                "max_age_seconds": 604800,
-                "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
-                "present": true,
-                "recorded_at_utc": "2026-04-26T17:48:19.106806+00:00",
-                "state": "fresh"
-              }
-            },
-            "platform": "macos",
-            "proof_capture_commands": [
-              "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg\" && EXPECTED_INSTALLER_SHA256=ca6c25f0cdaf48bddfe83e3e983ff87b8763d973e671100165248c9edcd044bd && EXPECTED_INSTALLER_MAGIC='' && export INSTALLER_PATH EXPECTED_INSTALLER_SHA256 EXPECTED_INSTALLER_MAGIC && cd \"$REPO_ROOT\" && mkdir -p \"$(dirname \"$INSTALLER_PATH\")\" && python3 -c 'import hashlib, os, pathlib; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; import sys; sys.exit(0) if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); sys.exit(0) if digest==expected else print(f'\"'\"'installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}'\"'\"') or p.unlink()' && if [ ! -s \"$INSTALLER_PATH\" ]; then if [ -z \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ] && [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ] && [ \"${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}\" != \"1\" ]; then echo 'external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER, CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR (or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; exit 1; fi; curl_auth_args=(); if [ -n \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ]; then curl_auth_args+=( -H \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ]; then curl_auth_args+=( -H \"Cookie: ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ); fi; if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ]; then curl_auth_args+=( --cookie \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ); fi; curl -fL --retry 3 --retry-delay 2 \"${curl_auth_args[@]}\" \"${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-osx-arm64-installer\" -o \"$INSTALLER_PATH\"; fi; python3 -c 'import os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected_magic=os.environ['\"'\"'EXPECTED_INSTALLER_MAGIC'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; probe=p.read_bytes()[:8192]; probe_text=probe.decode('\"'\"'latin-1'\"'\"', errors='\"'\"'ignore'\"'\"').lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); html_like=('\"'\"'<!doctype html'\"'\"' in probe_text) or ('\"'\"'<html'\"'\"' in probe_text) or ('\"'\"'<head'\"'\"' in probe_text); sys.exit(f'\"'\"'installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-missing-auth'\"'\"') if html_like else None; sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode('\"'\"'latin-1'\"'\"'))) else sys.exit(f'\"'\"'installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=unexpected-binary-format-or-route-response'\"'\"')'; python3 -c 'import hashlib, os, pathlib, sys; p=pathlib.Path(os.environ['\"'\"'INSTALLER_PATH'\"'\"']); expected=os.environ['\"'\"'EXPECTED_INSTALLER_SHA256'\"'\"']; sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); sys.exit(0) if digest==expected else sys.exit(f'\"'\"'installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-bytes-drift'\"'\"')'",
-              "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg\" && STARTUP_SMOKE_DIR=\"$REPO_ROOT/Docker/Downloads/startup-smoke\" && cd \"$REPO_ROOT\" && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=macOS ./scripts/run-desktop-startup-smoke.sh \"$INSTALLER_PATH\" avalonia osx-arm64 Chummer.Avalonia \"$STARTUP_SMOKE_DIR\" run-20260430-123311",
-              "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && cd \"$REPO_ROOT\" && ./scripts/generate-releases-manifest.sh"
-            ],
-            "required_proofs": [
-              "promoted_installer_artifact",
-              "startup_smoke_receipt"
-            ],
-            "rid": "osx-arm64",
-            "startup_smoke_receipt_contract": {
-              "head_id": "avalonia",
-              "host_class_contains": "macos",
-              "platform": "macos",
-              "ready_checkpoint": "pre_ui_event_loop",
-              "rid": "osx-arm64",
-              "status_any_of": [
-                "pass",
-                "passed",
-                "ready"
-              ]
-            },
-            "tuple_entry_count": 1,
-            "tuple_id": "avalonia:osx-arm64:macos",
-            "tuple_unique": true
-          }
-        ],
-        "tuples": [
-          "avalonia:osx-arm64:macos"
-        ]
-      }
-    },
-    "hosts": [
-      "linux",
-      "macos"
-    ],
-    "recommended_action": "Only external host-proof gaps remain: linux: transfer /docker/fleet/.codex-studio/published/external-proof-commands/linux-proof-command-pack.tgz, set CHUMMER_UI_REPO_ROOT and either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the signed-in proof cookies, run bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-linux-proof.sh, bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-linux-proof.sh, bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-linux-proof.sh, bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-linux-proof.sh, then return linux-proof-bundle.tgz and ingest it with bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-linux-proof-bundle.sh. macos: transfer /docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz, set CHUMMER_UI_REPO_ROOT and either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the signed-in proof cookies, run bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-macos-proof.sh, bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-macos-proof.sh, bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-macos-proof.sh, bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-macos-proof.sh, then return macos-proof-bundle.tgz and ingest it with bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-macos-proof-bundle.sh.",
-    "release_channel_generated_at": "2026-04-30T12:35:10Z",
-    "request_count": 2
+    "generated_at": "2026-05-01T08:46:32Z",
+    "host_groups": {},
+    "hosts": [],
+    "recommended_action": "No unresolved external desktop host-proof requests remain.",
+    "release_channel_generated_at": "2026-05-01T08:37:08Z",
+    "request_count": 0
   }
 }

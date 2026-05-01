@@ -1400,6 +1400,60 @@ def test_candidate_models_for_account_allows_audit_shard_to_use_core_fallbacks()
     assert models == ["ea-coder-hard-batch"]
 
 
+def test_candidate_models_for_account_prefers_audit_lane_native_models() -> None:
+    module = _load_module()
+    jury_account = module.WorkerAccount(
+        alias="acct-ea-jury",
+        owner_id="tibor.girschele",
+        lane="jury",
+        auth_kind="ea",
+        auth_json_file="",
+        api_key_env="",
+        api_key_file="",
+        allowed_models=["ea-audit-jury", "ea-coder-hard-batch"],
+        health_state="ready",
+        spark_enabled=False,
+        bridge_priority=0,
+        forced_login_method="",
+        forced_chatgpt_workspace_id="",
+        openai_base_url="",
+        home_dir="",
+    )
+    review_account = module.WorkerAccount(
+        alias="acct-ea-review-light",
+        owner_id="tibor.girschele",
+        lane="review_light",
+        auth_kind="ea",
+        auth_json_file="",
+        api_key_env="",
+        api_key_file="",
+        allowed_models=["ea-review-light", "ea-coder-hard-batch"],
+        health_state="ready",
+        spark_enabled=False,
+        bridge_priority=0,
+        forced_login_method="",
+        forced_chatgpt_workspace_id="",
+        openai_base_url="",
+        home_dir="",
+    )
+
+    jury_models = module._candidate_models_for_account(
+        jury_account,
+        ["ea-audit-jury"],
+        {},
+        requested_worker_lane="audit_shard",
+    )
+    review_models = module._candidate_models_for_account(
+        review_account,
+        ["ea-audit-jury"],
+        {},
+        requested_worker_lane="audit_shard",
+    )
+
+    assert jury_models == ["ea-audit-jury"]
+    assert review_models == ["ea-review-light"]
+
+
 def test_account_has_runnable_candidate_models_respects_parallel_claims() -> None:
     module = _load_module()
     account = module.WorkerAccount(
@@ -2220,6 +2274,28 @@ def test_stamp_worker_supervisor_guard_defaults_status_budget_to_runtime(tmp_pat
     exec_prompt = Path(updated["CODEXEA_EXEC_TRACE_PROMPT_FILE"]).read_text(encoding="utf-8")
     assert "Run the exact first commands from the task" in exec_prompt
     assert "chummer_design_supervisor.py status" not in exec_prompt
+
+
+def test_stamp_worker_supervisor_guard_skips_outer_guard_files_for_codexea(tmp_path: Path) -> None:
+    module = _load_module()
+    run_dir = tmp_path / "runs" / "run-123"
+
+    updated = module._stamp_worker_supervisor_guard(
+        {},
+        run_id="run-123",
+        run_dir=run_dir,
+        worker_bin="codexea",
+    )
+
+    assert "CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID" not in updated
+    assert "CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR" not in updated
+    assert "BASH_ENV" not in updated
+    assert "CODEXEA_EXEC_TRACE_PROMPT_FILE" not in updated
+    assert updated["CHUMMER_DESIGN_SUPERVISOR_STATUS_BUDGET"] == module._runtime_env_default(
+        "CHUMMER_DESIGN_SUPERVISOR_STATUS_BUDGET",
+        "8",
+    )
+    assert updated["PATH"].split(os.pathsep)[0] == str((module.DEFAULT_WORKSPACE_ROOT / "scripts" / "codex-shims").resolve())
 
 
 def test_stamp_worker_supervisor_guard_preserves_operator_status_budget(monkeypatch, tmp_path: Path) -> None:
@@ -4784,6 +4860,7 @@ def test_default_worker_command_adds_scope_roots_and_output_file() -> None:
     assert "/docker/EA" in command
     assert "-m" in command
     assert "gpt-5.4" in command
+    assert "--ignore-user-config" not in command
     assert str(run_dir / "last_message.txt") in command
     assert command[-1] == "-"
 
@@ -4830,6 +4907,21 @@ def test_parse_final_message_sections_reads_json_wrapped_closeout_text() -> None
     assert parsed["shipped"] == "alpha"
     assert parsed["remains"] == "beta"
     assert parsed["blocker"] == "none"
+
+
+def test_compose_final_message_sections_prefixes_error_line_for_blockers() -> None:
+    module = _load_module()
+
+    composed = module._compose_final_message_sections(
+        {
+            "shipped": "",
+            "remains": "",
+            "blocker": "no eligible worker account/model attempts were runnable",
+        }
+    )
+
+    assert composed.startswith("Error: no eligible worker account/model attempts were runnable\n")
+    assert "Exact blocker: no eligible worker account/model attempts were runnable\n" in composed
 
 
 def test_assess_worker_result_rejects_timeout_text_even_with_zero_exit() -> None:
@@ -5237,10 +5329,13 @@ def test_prepare_direct_worker_environment_applies_workspace_stream_budget_for_c
             worker_bin="codexea",
         )
 
-        assert env.get("CODEXEA_STREAM_IDLE_TIMEOUT_MS") == "900000"
-        assert env.get("CODEXEA_STREAM_MAX_RETRIES") == "8"
+        assert env.get("CODEXEA_STREAM_IDLE_TIMEOUT_MS") == "60000"
+        assert env.get("CODEXEA_STREAM_MAX_RETRIES") == "1"
         assert env.get("CODEXEA_EXEC_HARD_TIMEOUT_SECONDS") == "9000"
         assert env.get("CODEXEA_CORE_RESPONSES_PROFILE") == "core_batch"
+        assert env.get("CODEXEA_DISABLE_MCP") == "1"
+        assert env.get("CODEXEA_POST_AUDIT") == "0"
+        assert env.get("CODEXEA_OPERATOR_GUARD_ENABLE") == "0"
 
 
 def test_prepare_direct_worker_environment_aligns_codexea_hard_timeout_to_worker_timeout() -> None:
@@ -5266,6 +5361,8 @@ def test_prepare_direct_worker_environment_aligns_codexea_hard_timeout_to_worker
             worker_bin="codexea",
         )
 
+        assert env.get("CODEXEA_STREAM_IDLE_TIMEOUT_MS") == "60000"
+        assert env.get("CODEXEA_STREAM_MAX_RETRIES") == "1"
         assert env.get("CODEXEA_EXEC_HARD_TIMEOUT_SECONDS") == "28800"
 
 
@@ -5413,6 +5510,31 @@ def test_prepare_direct_worker_environment_falls_back_to_passwd_home_for_git_aut
         ).read_text(encoding="utf-8")
 
 
+def test_prepare_direct_worker_environment_resets_codexea_runtime_state() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        home = module._direct_worker_home(root / "state", "core")
+        (home / "state_5.sqlite").write_text("stale\n", encoding="utf-8")
+        (home / "logs_1.sqlite").write_text("stale\n", encoding="utf-8")
+        (home / "sessions" / "2026" / "04").mkdir(parents=True, exist_ok=True)
+        (home / "sessions" / "2026" / "04" / "rollout.jsonl").write_text("stale\n", encoding="utf-8")
+        (home / "shell_snapshots").mkdir(parents=True, exist_ok=True)
+        (home / "shell_snapshots" / "snapshot.sh").write_text("echo stale\n", encoding="utf-8")
+
+        module._prepare_direct_worker_environment(
+            root / "state",
+            "core",
+            workspace_root=root,
+            worker_bin="codexea",
+        )
+
+        assert not (home / "state_5.sqlite").exists()
+        assert not (home / "logs_1.sqlite").exists()
+        assert not (home / "sessions").exists()
+        assert not (home / "shell_snapshots").exists()
+
+
 def test_prepare_account_environment_falls_back_to_workspace_secret_mirror_for_auth_json(monkeypatch) -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -5454,6 +5576,115 @@ def test_prepare_account_environment_falls_back_to_workspace_secret_mirror_for_a
 
         worker_home = Path(str(env["HOME"]))
         assert (worker_home / "auth.json").read_text(encoding="utf-8") == mirrored_auth.read_text(encoding="utf-8")
+
+
+def test_prepare_account_environment_applies_codexea_stream_lane_defaults_for_ea_account(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "runtime.env").write_text(
+            "\n".join(
+                [
+                    "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS=900000",
+                    "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES=8",
+                    "CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE=core_batch",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("EA_KEY", "test-key")
+        account = module.WorkerAccount(
+            alias="acct-ea-core",
+            owner_id="owner",
+            auth_kind="ea",
+            lane="core",
+            auth_json_file="",
+            api_key_env="EA_KEY",
+            api_key_file="",
+            allowed_models=["ea-coder-hard"],
+            health_state="ready",
+            spark_enabled=False,
+            bridge_priority=0,
+            forced_login_method="",
+            forced_chatgpt_workspace_id="",
+            openai_base_url="",
+            home_dir="",
+            max_parallel_runs=1,
+        )
+
+        env = module._prepare_account_environment(
+            root / "state",
+            root,
+            account,
+            worker_bin="codexea",
+            worker_lane="audit_shard",
+        )
+
+        assert env.get("CODEXEA_DISABLE_MCP") == "1"
+        assert env.get("CODEXEA_POST_AUDIT") == "0"
+        assert env.get("CODEXEA_STREAM_IDLE_TIMEOUT_MS") == "60000"
+        assert env.get("CODEXEA_STREAM_MAX_RETRIES") == "1"
+        assert env.get("CODEXEA_EXEC_HARD_TIMEOUT_SECONDS") == "9000"
+        assert env.get("CODEXEA_CORE_RESPONSES_PROFILE") == "core_batch"
+        assert env.get("CODEXEA_OPERATOR_GUARD_ENABLE") == "0"
+
+
+def test_prepare_account_environment_resets_codexea_runtime_state_for_ea_account(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        monkeypatch.setenv("EA_KEY", "test-key")
+        account = module.WorkerAccount(
+            alias="acct-ea-core",
+            owner_id="owner",
+            auth_kind="ea",
+            lane="core",
+            auth_json_file="",
+            api_key_env="EA_KEY",
+            api_key_file="",
+            allowed_models=["ea-coder-hard"],
+            health_state="ready",
+            spark_enabled=False,
+            bridge_priority=0,
+            forced_login_method="",
+            forced_chatgpt_workspace_id="",
+            openai_base_url="",
+            home_dir="",
+            max_parallel_runs=1,
+        )
+        home = module._account_home(root / "state", account)
+        (home / "state_5.sqlite").write_text("stale\n", encoding="utf-8")
+        (home / "logs_1.sqlite").write_text("stale\n", encoding="utf-8")
+        (home / "sessions" / "2026" / "04").mkdir(parents=True, exist_ok=True)
+        (home / "sessions" / "2026" / "04" / "rollout.jsonl").write_text("stale\n", encoding="utf-8")
+        (home / "shell_snapshots").mkdir(parents=True, exist_ok=True)
+        (home / "shell_snapshots" / "snapshot.sh").write_text("echo stale\n", encoding="utf-8")
+
+        module._prepare_account_environment(
+            root / "state",
+            root,
+            account,
+            worker_bin="codexea",
+            worker_lane="audit_shard",
+        )
+
+        assert not (home / "state_5.sqlite").exists()
+        assert not (home / "logs_1.sqlite").exists()
+        assert not (home / "sessions").exists()
+        assert not (home / "shell_snapshots").exists()
+
+
+def test_tail_waiting_for_model_output_recognizes_upstream_response_trace() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        stderr_path = Path(tmp) / "worker.stderr.log"
+        stderr_path.write_text(
+            "Trace: lane=core waiting for upstream response (total_duration=54s)\n",
+            encoding="utf-8",
+        )
+
+        assert module._tail_waiting_for_model_output(stderr_path) is True
 
 
 def test_worker_reported_git_push_repos_parses_unique_repos() -> None:
@@ -9601,6 +9832,101 @@ def test_run_worker_attempt_times_out_when_no_meaningful_output_arrives(monkeypa
         assert module._retryable_worker_error(completed.stderr) is True
 
 
+def test_run_worker_attempt_read_only_stdout_probe_does_not_suppress_model_stall(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43218
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream(
+                [
+                    '/usr/bin/bash -lc "sed -n \'3920,3955p\' /docker/EA/ea/app/api/routes/responses.py" in /docker/fleet\n'
+                ]
+            )
+            self.stderr = _ReplayStream(
+                [
+                    "Trace: lane=review_light provider=ea model=ea-review-light mode=responses next=start_exec_session\n",
+                    "Trace: lane=review_light waiting for upstream response (total_duration=0s)\n",
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            import time as _time
+
+            _time.sleep(0.05)
+            if self.returncode not in (None, 0):
+                return int(self.returncode or 0)
+            raise subprocess.TimeoutExpired(["codexea", "review_light", "exec"], timeout=timeout or 0.05)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+    monkeypatch.setattr(module, "_worker_model_output_stall_seconds", lambda workspace_root, timeout_seconds: 0.01)
+    monkeypatch.setattr(module.os, "killpg", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state"
+        module._write_json(
+            state_root / "state.json",
+            {
+                "active_run": {
+                    "run_id": "run-read-only-probe",
+                    "started_at": "2026-05-01T09:10:00Z",
+                }
+            },
+        )
+        last_message_path = root / "last_message.txt"
+        completed = module._run_worker_attempt(
+            ["codexea", "review_light", "exec"],
+            prompt="Audit the fleet and patch the blocker.\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=last_message_path,
+            state_root=state_root,
+            run_id="run-read-only-probe",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        payload = module._read_state(state_root / "state.json")
+
+        assert completed.returncode == 124
+        assert "worker_model_output_stalled:0.01s" in completed.stderr
+        assert last_message_path.read_text(encoding="utf-8").strip() == "Error: worker_model_output_stalled:0.01s"
+        assert payload["active_run_progress_state"] in {"waiting_for_model_output", "stream_connected_waiting"}
+        assert payload.get("active_run_worker_first_output_at") in (None, "")
+
+
 def test_run_worker_attempt_recycles_after_meaningful_output_goes_silent(monkeypatch) -> None:
     module = _load_module()
 
@@ -9706,16 +10032,38 @@ def test_routed_full_lane_fallback_keeps_lighter_rescue_lanes() -> None:
     assert module._routed_full_lane_direct_fallback_lanes("core") == [
         "core",
         "core_rescue",
+        "review_light",
+        "jury",
         "survival",
         "repair",
     ]
     assert module._routed_full_lane_direct_fallback_lanes("core_rescue") == [
         "core_rescue",
         "core",
+        "review_light",
+        "jury",
+        "survival",
+        "repair",
+    ]
+    assert module._routed_full_lane_direct_fallback_lanes("jury") == [
+        "jury",
+        "review_light",
+        "core",
+        "core_rescue",
         "survival",
         "repair",
     ]
     assert module._routed_full_lane_direct_fallback_lanes("audit_shard") == [
+        "jury",
+        "review_light",
+        "core",
+        "core_rescue",
+        "survival",
+        "repair",
+    ]
+    assert module._routed_full_lane_direct_fallback_lanes("review_shard") == [
+        "review_light",
+        "jury",
         "core",
         "core_rescue",
         "survival",
@@ -9729,10 +10077,90 @@ def test_direct_worker_model_candidates_follow_fallback_lane_compatibility() -> 
         root = Path(tmp)
         args = _args(root)
         args.worker_lane = "core"
-
         assert module._direct_worker_model_candidates_for_lane(args, "core", ["ea-coder-hard"]) == ["ea-coder-hard"]
+        assert module._direct_worker_model_candidates_for_lane(args, "review_light", ["ea-coder-hard"]) == [
+            "ea-review-light"
+        ]
+        assert module._direct_worker_model_candidates_for_lane(args, "jury", ["ea-coder-hard"]) == [
+            "ea-audit-jury"
+        ]
+
+
+def test_routed_full_lane_direct_fallback_args_strips_hard_lanes_for_wait_only_audit_canary(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-3"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "shard_id": "shard-1",
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "wait_only",
+                    "selected_account_alias": "acct-ea-jury",
+                    "selected_model": "ea-audit-jury",
+                }
+            ]
+        },
+    )
+    args = _args(tmp_path)
+    args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+    args.worker_lane = "audit_shard"
+
+    fallback_args = module._routed_full_lane_direct_fallback_args(args, state_root=shard_root)
+
+    assert fallback_args is not None
+    assert module._worker_lane_candidates(fallback_args) == ["jury", "review_light", "survival", "repair"]
+
+
+def test_direct_worker_model_candidates_map_audit_review_lanes_to_native_models() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.worker_lane = "audit_shard"
+
+        assert module._direct_worker_model_candidates_for_lane(args, "jury", ["ea-audit-jury"]) == ["ea-audit-jury"]
+        assert module._direct_worker_model_candidates_for_lane(args, "review_light", ["ea-audit-jury"]) == [
+            "ea-review-light"
+        ]
+
+        args.worker_lane = "jury"
+        assert module._direct_worker_model_candidates_for_lane(args, "review_light", ["ea-audit-jury"]) == [
+            "ea-review-light"
+        ]
+
+
+def test_codexea_profile_for_lane_maps_audit_shards_to_real_provider_profiles() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+
+        assert module._codexea_profile_for_lane("audit_shard", workspace_root=root) == "audit"
+        assert module._codexea_profile_for_lane("review_shard", workspace_root=root) == "review_light"
+
+
+def test_direct_worker_model_candidates_preserve_core_fallbacks() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.worker_lane = "core"
+
         assert module._direct_worker_model_candidates_for_lane(args, "core_rescue", ["ea-coder-hard"]) == [
             "ea-coder-hard"
+        ]
+        assert module._direct_worker_model_candidates_for_lane(args, "review_light", ["ea-coder-hard"]) == [
+            "ea-review-light"
+        ]
+        assert module._direct_worker_model_candidates_for_lane(args, "jury", ["ea-coder-hard"]) == [
+            "ea-audit-jury"
         ]
         assert module._direct_worker_model_candidates_for_lane(args, "survival", ["ea-coder-hard"]) == [
             "ea-coder-survival"
@@ -9957,6 +10385,751 @@ def test_direct_worker_lane_health_snapshot_cools_recent_backend_failure(monkeyp
         assert snapshot["lanes"]["survival"]["state"] == "degraded"
         assert snapshot["lanes"]["survival"]["cooldown_until"] == "2026-04-28T17:55:00Z"
         assert "recent direct-lane backend failure" in snapshot["lanes"]["survival"]["reason"]
+
+
+def test_direct_worker_lane_health_snapshot_uses_actual_balance_override_for_quarantine_only_core_rescue(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core_rescue"
+
+        def fake_urlopen(request, timeout=0):
+            payload = {
+                "provider_registry": {
+                    "lanes": [
+                        {
+                            "profile": "core_rescue",
+                            "primary_provider_key": "onemin",
+                            "primary_state": "unavailable",
+                            "capacity_summary": {
+                                "state": "unavailable",
+                                "configured_slots": 74,
+                                "ready_slots": 0,
+                                "degraded_slots": 0,
+                                "unavailable_slots": 74,
+                                "live_remaining_credits_total": 2576,
+                                "actual_remaining_credits_total": 118681415.0,
+                                "live_remaining_percent_of_max": 0.0,
+                            },
+                            "providers": [
+                                {
+                                    "provider_key": "onemin",
+                                    "state": "unavailable",
+                                    "detail": "",
+                                    "enabled": True,
+                                    "executable": True,
+                                    "slot_pool": {
+                                        "slot_state_counts": {"quarantine": 74},
+                                        "live_positive_balance_slot_count": 22,
+                                    },
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+
+            class _Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+                def read(self):
+                    return json.dumps(payload).encode("utf-8")
+
+            return _Response()
+
+        monkeypatch.setattr(module.urllib.request, "urlopen", fake_urlopen)
+
+        snapshot = module._direct_worker_lane_health_snapshot(args, ["core_rescue"])
+
+        assert snapshot["status"] == "pass"
+        assert snapshot["routable_lanes"] == ["core_rescue"]
+        assert snapshot["unroutable_lanes"] == []
+        assert snapshot["lanes"]["core_rescue"]["routable"] is True
+        assert snapshot["lanes"]["core_rescue"]["state"] == "degraded"
+        assert "actual-balance override after quarantine-only unavailable state" in snapshot["lanes"]["core_rescue"]["reason"]
+
+
+def test_filter_routable_direct_worker_lanes_skips_survival_when_budget_is_saturated(monkeypatch, tmp_path: Path) -> None:
+    module = _load_module()
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_SURVIVAL_LANE_MAX_CONCURRENT_RUNS", "1")
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-2"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "shard_id": "shard-1",
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "stream_connected_waiting",
+                    "selected_account_alias": "lane:survival",
+                    "selected_model": "ea-coder-survival",
+                }
+            ]
+        },
+    )
+
+    filtered, skipped = module._filter_routable_direct_worker_lanes(
+        ["survival", "repair"],
+        {
+            "lanes": {
+                "survival": {
+                    "worker_lane": "survival",
+                    "profile": "survival",
+                    "routable": True,
+                    "state": "ready",
+                    "reason": "ok",
+                },
+                "repair": {
+                    "worker_lane": "repair",
+                    "profile": "repair",
+                    "routable": True,
+                    "state": "ready",
+                    "reason": "ok",
+                },
+            }
+        },
+        state_root=shard_root,
+        exclude_shard_id="shard-2",
+    )
+
+    assert filtered == ["repair"]
+    assert skipped[0]["worker_lane"] == "survival"
+    assert "concurrency budget reached" in skipped[0]["reason"]
+
+
+def test_direct_lane_max_concurrent_runs_widens_ready_review_and_jury_lanes() -> None:
+    module = _load_module()
+
+    assert (
+        module._direct_lane_max_concurrent_runs(
+            "review_light",
+            {"worker_lane": "review_light", "state": "ready", "configured_slots": 1},
+        )
+        == 3
+    )
+    assert (
+        module._direct_lane_max_concurrent_runs(
+            "jury",
+            {"worker_lane": "jury", "state": "ready", "configured_slots": 1},
+        )
+        == 3
+    )
+
+
+def test_filter_routable_direct_worker_lanes_allows_review_light_below_default_ready_budget(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-3"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "shard_id": "shard-1",
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "stream_connected_waiting",
+                    "selected_account_alias": "lane:review_light",
+                    "selected_model": "ea-review-light",
+                }
+            ]
+        },
+    )
+
+    filtered, skipped = module._filter_routable_direct_worker_lanes(
+        ["review_light", "survival"],
+        {
+            "lanes": {
+                "review_light": {
+                    "worker_lane": "review_light",
+                    "profile": "review_light",
+                    "routable": True,
+                    "state": "ready",
+                    "configured_slots": 1,
+                    "reason": "ok",
+                },
+                "survival": {
+                    "worker_lane": "survival",
+                    "profile": "survival",
+                    "routable": True,
+                    "state": "ready",
+                    "reason": "ok",
+                },
+            }
+        },
+        state_root=shard_root,
+        exclude_shard_id="shard-3",
+    )
+
+    assert filtered == ["review_light", "survival"]
+    assert skipped == []
+
+
+def test_active_direct_lane_run_count_coalesces_wait_only_jury_runs_into_single_canary(tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-3"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "shard_id": "shard-1",
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "wait_only",
+                    "selected_account_alias": "lane:jury",
+                    "selected_model": "ea-audit-jury",
+                },
+                {
+                    "shard_id": "shard-2",
+                    "name": "shard-2",
+                    "active_run_id": "run-2",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "wait_only",
+                    "selected_account_alias": "lane:jury",
+                    "selected_model": "ea-audit-jury",
+                },
+                {
+                    "shard_id": "shard-4",
+                    "name": "shard-4",
+                    "active_run_id": "run-4",
+                    "active_run_progress_state": "running_silent",
+                    "active_run_progress_evidence": "worker_output_only",
+                    "selected_account_alias": "lane:jury",
+                    "selected_model": "ea-audit-jury",
+                },
+            ]
+        },
+    )
+
+    assert module._active_direct_lane_run_count(shard_root, "jury", exclude_shard_id="shard-3") == 1
+
+
+def test_active_direct_lane_run_count_keeps_review_light_repo_work_plus_one_waiter(tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-5"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "shard_id": "shard-1",
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "repo_work_detected",
+                    "selected_account_alias": "lane:review_light",
+                    "selected_model": "ea-review-light",
+                },
+                {
+                    "shard_id": "shard-2",
+                    "name": "shard-2",
+                    "active_run_id": "run-2",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "repo_work_detected",
+                    "selected_account_alias": "lane:review_light",
+                    "selected_model": "ea-review-light",
+                },
+                {
+                    "shard_id": "shard-3",
+                    "name": "shard-3",
+                    "active_run_id": "run-3",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "wait_only",
+                    "selected_account_alias": "lane:review_light",
+                    "selected_model": "ea-review-light",
+                },
+                {
+                    "shard_id": "shard-4",
+                    "name": "shard-4",
+                    "active_run_id": "run-4",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "wait_only",
+                    "selected_account_alias": "lane:review_light",
+                    "selected_model": "ea-review-light",
+                },
+            ]
+        },
+    )
+
+    assert module._active_direct_lane_run_count(shard_root, "review_light", exclude_shard_id="shard-5") == 1
+
+
+def test_active_direct_lane_run_count_treats_waiting_repo_work_as_wait_only_canary(tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-6"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "shard_id": "shard-1",
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "repo_work_detected",
+                    "selected_account_alias": "lane:review_light",
+                    "selected_model": "ea-review-light",
+                },
+                {
+                    "shard_id": "shard-2",
+                    "name": "shard-2",
+                    "active_run_id": "run-2",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "repo_work_detected",
+                    "selected_account_alias": "lane:review_light",
+                    "selected_model": "ea-review-light",
+                },
+                {
+                    "shard_id": "shard-3",
+                    "name": "shard-3",
+                    "active_run_id": "run-3",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "wait_only",
+                    "selected_account_alias": "lane:review_light",
+                    "selected_model": "ea-review-light",
+                },
+            ]
+        },
+    )
+
+    assert module._active_direct_lane_run_count(shard_root, "review_light", exclude_shard_id="shard-6") == 1
+
+
+def test_active_direct_lane_run_count_treats_read_only_repo_probe_as_wait_only_canary(tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-8"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "shard_id": "shard-1",
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "read_only_repo_probe",
+                    "selected_account_alias": "lane:review_light",
+                    "selected_model": "ea-review-light",
+                },
+                {
+                    "shard_id": "shard-2",
+                    "name": "shard-2",
+                    "active_run_id": "run-2",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "read_only_repo_probe",
+                    "selected_account_alias": "lane:review_light",
+                    "selected_model": "ea-review-light",
+                },
+            ]
+        },
+    )
+
+    assert module._active_direct_lane_run_count(shard_root, "review_light", exclude_shard_id="shard-8") == 1
+
+
+def test_filter_routable_direct_worker_lanes_skips_review_light_when_budget_is_saturated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module()
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_REVIEW_LIGHT_LANE_MAX_CONCURRENT_RUNS", "1")
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-3"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "shard_id": "shard-1",
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "stream_connected_waiting",
+                    "selected_account_alias": "lane:review_light",
+                    "selected_model": "ea-review-light",
+                }
+            ]
+        },
+    )
+
+    filtered, skipped = module._filter_routable_direct_worker_lanes(
+        ["review_light", "survival"],
+        {
+            "lanes": {
+                "review_light": {
+                    "worker_lane": "review_light",
+                    "profile": "review_light",
+                    "routable": True,
+                    "state": "ready",
+                    "configured_slots": 1,
+                    "reason": "ok",
+                },
+                "survival": {
+                    "worker_lane": "survival",
+                    "profile": "survival",
+                    "routable": True,
+                    "state": "ready",
+                    "reason": "ok",
+                },
+            }
+        },
+        state_root=shard_root,
+        exclude_shard_id="shard-3",
+    )
+
+    assert filtered == ["survival"]
+    assert skipped[0]["worker_lane"] == "review_light"
+    assert "review_light lane concurrency budget reached" in skipped[0]["reason"]
+
+
+def test_filter_routable_direct_worker_lanes_keeps_core_in_single_waiting_canary_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module()
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_CORE_LANE_MAX_CONCURRENT_RUNS", "3")
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-2"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "shard_id": "shard-1",
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "wait_only",
+                    "worker_lane": "core",
+                }
+            ]
+        },
+    )
+
+    filtered, skipped = module._filter_routable_direct_worker_lanes(
+        ["core", "review_light"],
+        {
+            "lanes": {
+                "core": {
+                    "worker_lane": "core",
+                    "profile": "core",
+                    "routable": True,
+                    "state": "ready",
+                    "configured_slots": 3,
+                    "reason": "ok",
+                },
+                "review_light": {
+                    "worker_lane": "review_light",
+                    "profile": "review_light",
+                    "routable": True,
+                    "state": "ready",
+                    "configured_slots": 1,
+                    "reason": "ok",
+                },
+            }
+        },
+        state_root=shard_root,
+        exclude_shard_id="shard-2",
+    )
+
+    assert filtered == ["review_light"]
+    assert skipped[0]["worker_lane"] == "core"
+    assert "productive=0 waiting=1" in skipped[0]["reason"]
+
+
+def test_filter_routable_direct_worker_lanes_allows_core_scale_out_after_productive_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module()
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_CORE_LANE_MAX_CONCURRENT_RUNS", "3")
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-3"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "shard_id": "shard-1",
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "running_with_repo_work",
+                    "active_run_progress_evidence": "repo_work_detected",
+                    "worker_lane": "core",
+                }
+            ]
+        },
+    )
+
+    filtered, skipped = module._filter_routable_direct_worker_lanes(
+        ["core"],
+        {
+            "lanes": {
+                "core": {
+                    "worker_lane": "core",
+                    "profile": "core",
+                    "routable": True,
+                    "state": "ready",
+                    "configured_slots": 3,
+                    "reason": "ok",
+                }
+            }
+        },
+        state_root=shard_root,
+        exclude_shard_id="shard-3",
+    )
+
+    assert filtered == ["core"]
+    assert skipped == []
+
+
+def test_effective_account_max_parallel_runs_collapses_wait_only_review_light_wave(tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-6"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "shard_id": "shard-1",
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "repo_work_detected",
+                    "selected_account_alias": "acct-ea-review-light",
+                    "selected_model": "ea-review-light",
+                },
+                {
+                    "shard_id": "shard-2",
+                    "name": "shard-2",
+                    "active_run_id": "run-2",
+                    "active_run_progress_state": "running_silent",
+                    "active_run_progress_evidence": "worker_output_only",
+                    "selected_account_alias": "acct-ea-review-light",
+                    "selected_model": "ea-review-light",
+                },
+            ]
+        },
+    )
+    account = module.WorkerAccount(
+        alias="acct-ea-review-light",
+        owner_id="",
+        auth_kind="ea",
+        auth_json_file="",
+        api_key_env="",
+        api_key_file="",
+        allowed_models=["ea-review-light"],
+        health_state="ready",
+        spark_enabled=False,
+        bridge_priority=0,
+        forced_login_method="",
+        forced_chatgpt_workspace_id="",
+        openai_base_url="",
+        home_dir="",
+        lane="review_light",
+        max_parallel_runs=3,
+    )
+
+    assert module._effective_account_max_parallel_runs(shard_root, account, exclude_shard_id="shard-6") == 1
+
+
+def test_effective_account_max_parallel_runs_allows_review_light_scale_after_productive_run(tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-6"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "shard_id": "shard-1",
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "running_with_repo_work",
+                    "active_run_progress_evidence": "repo_work_detected",
+                    "selected_account_alias": "acct-ea-review-light",
+                    "selected_model": "ea-review-light",
+                }
+            ]
+        },
+    )
+    account = module.WorkerAccount(
+        alias="acct-ea-review-light",
+        owner_id="",
+        auth_kind="ea",
+        auth_json_file="",
+        api_key_env="",
+        api_key_file="",
+        allowed_models=["ea-review-light"],
+        health_state="ready",
+        spark_enabled=False,
+        bridge_priority=0,
+        forced_login_method="",
+        forced_chatgpt_workspace_id="",
+        openai_base_url="",
+        home_dir="",
+        lane="review_light",
+        max_parallel_runs=3,
+    )
+
+    assert module._effective_account_max_parallel_runs(shard_root, account, exclude_shard_id="shard-6") == 3
+
+
+def test_active_direct_lane_run_count_counts_core_selected_model_aliases(tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-4"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "active_shards": [
+                {
+                    "shard_id": "shard-1",
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "wait_only",
+                    "selected_account_alias": "acct-ea-core-07",
+                    "selected_model": "ea-coder-hard",
+                }
+            ]
+        },
+    )
+
+    assert module._active_direct_lane_run_count(shard_root, "core", exclude_shard_id="shard-4") == 1
+
+
+def test_filter_anonymous_full_fallback_direct_worker_lanes_skips_core_rescue_without_ready_slots() -> None:
+    module = _load_module()
+
+    filtered, skipped = module._filter_anonymous_full_fallback_direct_worker_lanes(
+        ["core_rescue", "survival"],
+        {
+            "lanes": {
+                "core_rescue": {
+                    "worker_lane": "core_rescue",
+                    "profile": "core_rescue",
+                    "routable": True,
+                    "state": "degraded",
+                    "ready_slots": 0,
+                    "reason": "onemin:degraded",
+                },
+                "survival": {
+                    "worker_lane": "survival",
+                    "profile": "survival",
+                    "routable": True,
+                    "state": "ready",
+                    "ready_slots": 0,
+                    "reason": "browseract:ready",
+                },
+            }
+        },
+    )
+
+    assert filtered == ["survival"]
+    assert skipped[0]["worker_lane"] == "core_rescue"
+    assert "anonymous full-fallback requires at least one ready slot" in skipped[0]["reason"]
+
+
+def test_filter_anonymous_full_fallback_direct_worker_lanes_keeps_ready_core_rescue() -> None:
+    module = _load_module()
+
+    filtered, skipped = module._filter_anonymous_full_fallback_direct_worker_lanes(
+        ["core_rescue", "survival"],
+        {
+            "lanes": {
+                "core_rescue": {
+                    "worker_lane": "core_rescue",
+                    "profile": "core_rescue",
+                    "routable": True,
+                    "state": "ready",
+                    "ready_slots": 1,
+                    "reason": "onemin:ready",
+                },
+                "survival": {
+                    "worker_lane": "survival",
+                    "profile": "survival",
+                    "routable": True,
+                    "state": "ready",
+                    "ready_slots": 0,
+                    "reason": "browseract:ready",
+                },
+            }
+        },
+    )
+
+    assert filtered == ["core_rescue", "survival"]
+    assert skipped == []
+
+
+def test_filter_anonymous_full_fallback_direct_worker_lanes_skips_core_rescue_without_lane_report() -> None:
+    module = _load_module()
+
+    filtered, skipped = module._filter_anonymous_full_fallback_direct_worker_lanes(
+        ["core_rescue", "survival"],
+        {
+            "lanes": {
+                "survival": {
+                    "worker_lane": "survival",
+                    "profile": "survival",
+                    "routable": True,
+                    "state": "ready",
+                    "ready_slots": 0,
+                    "reason": "browseract:ready",
+                },
+            }
+        },
+    )
+
+    assert filtered == ["survival"]
+    assert skipped[0]["worker_lane"] == "core_rescue"
+    assert "requires provider-health lane metadata" in skipped[0]["reason"]
+
+
+def test_row_counts_as_active_survival_run_ignores_dead_process_rows() -> None:
+    module = _load_module()
+
+    assert (
+        module._row_counts_as_active_survival_run(
+            {
+                "shard_id": "shard-7",
+                "active_run_id": "run-7",
+                "active_run_process_alive": False,
+                "active_run_progress_state": "stream_connected_waiting",
+                "selected_account_alias": "lane:survival",
+                "selected_model": "ea-coder-survival",
+            }
+        )
+        is False
+    )
 
 
 def test_direct_worker_lane_health_snapshot_sends_runtime_ea_auth_headers(monkeypatch) -> None:
@@ -13667,6 +14840,55 @@ def test_write_active_shard_manifest_snapshot_rehydrates_from_project_contract_t
         assert (aggregate_root / "shard-3").is_dir()
 
 
+def test_runtime_configured_shard_entries_project_contract_clears_stale_manifest_worker_overrides(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        aggregate_root = Path(tmp) / "state" / "chummer_design_supervisor"
+        aggregate_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            aggregate_root / "active_shards.json",
+            {
+                "manifest_kind": "configured_shard_topology",
+                "configured_shards": [
+                    {
+                        "name": "shard-1",
+                        "index": 1,
+                        "frontier_ids": [2299644700],
+                        "worker_bin": "/docker/fleet/scripts/codex-shims/codexea",
+                        "worker_lane": "audit_shard",
+                        "worker_model": "ea-coder-hard",
+                    }
+                ],
+                "active_shards": [],
+            },
+        )
+
+        monkeypatch.setattr(module, "_use_project_configured_shards_for_root", lambda _root: True)
+        monkeypatch.setattr(
+            module,
+            "_project_configured_shard_entries",
+            lambda: [
+                {
+                    "name": "shard-1",
+                    "index": 1,
+                    "focus_owner": ["fleet"],
+                    "focus_text": ["flagship-readiness"],
+                }
+            ],
+        )
+
+        entries = module._runtime_configured_shard_entries(aggregate_root)
+
+        assert entries == [
+            {
+                "name": "shard-1",
+                "index": 1,
+                "focus_owner": ["fleet"],
+                "focus_text": ["flagship-readiness"],
+            }
+        ]
+
+
 def test_heal_state_push_blockers_repairs_recorded_missing_github_push_blocker() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -14530,6 +15752,88 @@ def test_run_supervisor_launcher_keeps_direct_codex_shards_lane_free() -> None:
             assert "review_shard" not in joined
             assert "audit_shard" not in joined
             assert "core_rescue" not in joined
+
+
+def test_run_supervisor_launcher_maps_flagship_and_parity_focuses_to_audit_models() -> None:
+    launcher = Path("/docker/fleet/scripts/run_chummer_design_supervisor.sh")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        wrapper = root / "python3"
+        wrapper.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env bash",
+                    "set -euo pipefail",
+                    "if [[ \"${1:-}\" == \"-\" ]]; then",
+                    "  exec /usr/bin/python3 \"$@\"",
+                    "fi",
+                    "if [[ \"${1:-}\" == \"scripts/chummer_design_supervisor.py\" && \"${2:-}\" == \"status\" && \"${3:-}\" == \"--json\" ]]; then",
+                    "  printf '%s\\n' '{\"frontier_ids\": []}'",
+                    "  exit 0",
+                    "fi",
+                    "if [[ \"${1:-}\" == \"scripts/chummer_design_supervisor.py\" && \"${2:-}\" == \"loop\" ]]; then",
+                    f"  out=\"{root}/loop-args.$$\"",
+                    "  shift 2",
+                    "  printf '%s\\n' \"$@\" >\"$out\"",
+                    "  exit 0",
+                    "fi",
+                    "echo 'unexpected python3 invocation' >&2",
+                    "printf '%s\\n' \"$*\" >&2",
+                    "exit 99",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+        state_root = root / "state" / "chummer_design_supervisor"
+        result = subprocess.run(
+            [str(launcher)],
+            cwd="/docker/fleet",
+            env={
+                **os.environ,
+                "PATH": f"{root}:{os.environ['PATH']}",
+                "CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS": "2",
+                "CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT": str(state_root),
+                "CHUMMER_DESIGN_SUPERVISOR_DYNAMIC_ACCOUNT_ROUTING": "1",
+                "CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN": "/docker/fleet/scripts/codex-shims/codexea",
+                "CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE": "",
+                "CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL": "",
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS": "",
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_ACCOUNT_GROUPS": "",
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_TEXT_GROUPS": "release-proof,flagship-readiness;visual-similarity,parity",
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_FRONTIER_ID_GROUPS": "",
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_BINS": "/docker/fleet/scripts/codex-shims/codexea;/docker/fleet/scripts/codex-shims/codexea",
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_LANES": "",
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_MODELS": "",
+                "CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE": "",
+                "CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER": "",
+                "CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT": "",
+                "CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES": "",
+                "CHUMMER_DESIGN_SUPERVISOR_FRONTIER_DERIVE_MODE": "skip",
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_START_STAGGER_SECONDS": "0",
+            },
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0, result.stderr
+
+        manifest = json.loads((state_root / "active_shards.json").read_text(encoding="utf-8"))
+        active_shards = manifest["active_shards"]
+        assert len(active_shards) == 2
+        assert active_shards[0]["worker_lane"] == "audit_shard"
+        assert active_shards[0]["worker_model"] == "ea-audit-jury"
+        assert active_shards[1]["worker_lane"] == "review_shard"
+        assert active_shards[1]["worker_model"] == "ea-review-light"
+
+        loop_args_files = sorted(root.glob("loop-args.*"))
+        assert loop_args_files
+        joined = "\n".join(path.read_text(encoding="utf-8") for path in loop_args_files)
+        assert "--worker-lane\naudit_shard" in joined
+        assert "--worker-model\nea-audit-jury" in joined
+        assert "--worker-lane\nreview_shard" in joined
+        assert "--worker-model\nea-review-light" in joined
 
 
 def test_run_supervisor_launcher_hydrates_restart_safe_resource_defaults_from_project_config() -> None:
@@ -20182,6 +21486,57 @@ def test_statefile_shard_summaries_recovers_local_proc_active_run_inside_contain
         module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
 
 
+def test_statefile_shard_summaries_recovers_selected_model_from_codex_config_inside_container(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_module()
+    root = tmp_path
+    previous_workspace_root = module.DEFAULT_WORKSPACE_ROOT
+    try:
+        module.DEFAULT_WORKSPACE_ROOT = root
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_root = aggregate_root / "shard-2"
+        run_dir = shard_root / "runs" / "20260501T061342Z-shard-2"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "last_message.txt").write_text("still running\n", encoding="utf-8")
+        (run_dir / "worker.stdout.log").write_text("", encoding="utf-8")
+        (run_dir / "worker.stderr.log").write_text(
+            'Trace: lane=review_light provider=ea model=ea-review-light mode=responses next=start_exec_session\n',
+            encoding="utf-8",
+        )
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-05-01T06:13:42Z",
+                "mode": "flagship_product",
+                "frontier_ids": [34],
+                "open_milestone_ids": [34],
+            },
+        )
+
+        monkeypatch.setattr(module, "_running_inside_container", lambda: True)
+        monkeypatch.setattr(
+            module,
+            "_local_active_run_process_rows",
+            lambda proc_root=Path("/proc"): [
+                (
+                    44444,
+                    'node /usr/bin/codex -c "model=\\"ea-review-light\\"" '
+                    "-c model_provider=ea exec --json --dangerously-bypass-approvals-and-sandbox "
+                    "-C /docker/fleet --add-dir /docker "
+                    "-o /var/lib/codex-fleet/chummer_design_supervisor/shard-2/runs/20260501T061342Z-shard-2/last_message.txt -",
+                )
+            ],
+        )
+
+        summaries = module._statefile_shard_summaries(aggregate_root)
+
+        assert len(summaries) == 1
+        assert summaries[0]["selected_model"] == "ea-review-light"
+    finally:
+        module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
+
+
 def test_statefile_shard_summaries_treats_top_level_container_paths_as_container_scoped(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -20280,6 +21635,25 @@ def test_statefile_shard_summaries_preserves_waiting_for_model_output_from_stder
         assert shard["active_run_progress_state"] == "waiting_for_model_output"
     finally:
         module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
+
+
+def test_tail_progress_evidence_marks_read_only_repo_probe_as_nonproductive(tmp_path: Path) -> None:
+    module = _load_module()
+    stdout_path = tmp_path / "worker.stdout.log"
+    stderr_path = tmp_path / "worker.stderr.log"
+    stdout_path.write_text(
+        '/usr/bin/bash -lc "sed -n \'3920,3955p\' /docker/EA/ea/app/api/routes/responses.py" in /docker/fleet\n',
+        encoding="utf-8",
+    )
+    stderr_path.write_text(
+        "Trace: lane=review_light waiting for upstream response (total_duration=31s)\n",
+        encoding="utf-8",
+    )
+
+    evidence = module._tail_progress_evidence(stdout_path, stderr_path)
+
+    assert evidence["kind"] == "read_only_repo_probe"
+    assert "repo reads/searches" in evidence["reason"]
 
 
 def test_statefile_shard_summaries_waiting_tail_overrides_stale_streaming_progress(
@@ -23071,6 +24445,7 @@ def test_write_state_persists_effective_aggregate_progress_counts_for_sharded_ro
         assert persisted["active_runs_count"] == 1
         assert persisted["progress_evidence_counts"] == {"no_output_yet": 1}
         assert persisted["productive_active_runs_count"] == 0
+        assert persisted["waiting_active_runs_count"] == 0
         assert persisted["nonproductive_active_runs_count"] == 1
         assert {row["name"] for row in persisted["shards"] if isinstance(row, dict)} >= {"shard-1", "shard-2"}
 
@@ -24242,6 +25617,261 @@ def test_memory_dispatch_snapshot_halves_ea_dispatch_after_recent_provider_probe
         assert snapshot["throttled"] is True
         assert snapshot["provider_dispatch_capacity"]["recent_live_fetch_failure"] is True
         assert "recent provider-health probe failure forces EA canary dispatch" in snapshot["reason"]
+
+
+def test_memory_dispatch_snapshot_canary_caps_degraded_hard_lane_when_ready_slots_are_zero(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setattr(module, "_container_local_active_run_records", lambda: {})
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        for index in range(1, 14):
+            shard_root = aggregate_root / f"shard-{index}"
+            shard_root.mkdir(parents=True, exist_ok=True)
+            module._write_json(shard_root / "state.json", {"updated_at": "2026-04-30T18:00:00Z"})
+
+        configured_shards = [
+            {
+                "name": f"shard-{index}",
+                "index": index,
+                "worker_bin": "/docker/fleet/scripts/codex-shims/codexea",
+                "worker_lane": "core",
+                "worker_model": "ea-coder-hard",
+            }
+            for index in range(1, 14)
+        ]
+        module._write_json(
+            aggregate_root / "active_shards.json",
+            {
+                "generated_at": "2026-04-30T18:00:00Z",
+                "updated_at": "2026-04-30T18:00:00Z",
+                "manifest_kind": "configured_shard_topology",
+                "configured_shard_count": 13,
+                "configured_shards": configured_shards,
+                "active_run_count": 0,
+                "active_shards": [],
+            },
+        )
+        module._write_json(
+            aggregate_root / "ea_provider_health_cache.json",
+            {
+                "cached_at": module._iso_now(),
+                "source_url": "http://provider-health.internal:8090/v1/responses/_provider_health",
+                "payload": {
+                    "provider_registry": {
+                        "provider_config": {
+                            "hard_max_active_requests": 12,
+                        }
+                    },
+                    "providers": {
+                        "onemin": {
+                            "balance_basis_summary": "actual",
+                            "live_remaining_credits_total": 64372266,
+                            "actual_remaining_credits_total": 118681415.0,
+                            "configured_slots": 74,
+                            "slots": [
+                                {"configured": True, "state": "degraded"} for _ in range(13)
+                            ]
+                            + [{"configured": True, "state": "quarantine"} for _ in range(61)],
+                        }
+                    },
+                },
+            },
+        )
+
+        args = _args(root)
+        args.state_root = str(aggregate_root)
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+        args.worker_model = "ea-coder-hard"
+        args.memory_dispatch_reserve_gib = module.DEFAULT_MEMORY_DISPATCH_RESERVE_GIB
+        args.memory_dispatch_shard_budget_gib = module.DEFAULT_MEMORY_DISPATCH_SHARD_BUDGET_GIB
+        args.memory_dispatch_warning_available_percent = module.DEFAULT_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT
+        args.memory_dispatch_critical_available_percent = module.DEFAULT_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT
+        args.memory_dispatch_warning_swap_used_percent = module.DEFAULT_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT
+        args.memory_dispatch_critical_swap_used_percent = module.DEFAULT_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT
+
+        snapshot = module._memory_dispatch_snapshot(
+            args,
+            Path(args.state_root),
+            meminfo_bytes={
+                "MemTotal": 64 * 1024**3,
+                "MemAvailable": 48 * 1024**3,
+                "SwapTotal": 32 * 1024**3,
+                "SwapFree": 31 * 1024**3,
+            },
+        )
+
+        assert snapshot["status"] == "warning"
+        assert snapshot["allowed_active_shards"] == 2
+        assert snapshot["throttled"] is True
+        assert "degraded 1min canary cap=2 with ready_slots=0" in snapshot["reason"]
+
+
+def test_provider_dispatch_capacity_uses_actual_balance_override_when_observed_error_quarantines_all_slots(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setattr(module, "_container_local_active_run_records", lambda: {})
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        for index in range(1, 14):
+            shard_root = aggregate_root / f"shard-{index}"
+            shard_root.mkdir(parents=True, exist_ok=True)
+            module._write_json(shard_root / "state.json", {"updated_at": "2026-04-30T18:00:00Z"})
+
+        configured_shards = [
+            {
+                "name": f"shard-{index}",
+                "index": index,
+                "worker_bin": "/docker/fleet/scripts/codex-shims/codexea",
+                "worker_lane": "core",
+                "worker_model": "ea-coder-hard",
+            }
+            for index in range(1, 14)
+        ]
+        module._write_json(
+            aggregate_root / "active_shards.json",
+            {
+                "generated_at": "2026-04-30T18:00:00Z",
+                "updated_at": "2026-04-30T18:00:00Z",
+                "manifest_kind": "configured_shard_topology",
+                "configured_shard_count": 13,
+                "configured_shards": configured_shards,
+                "active_run_count": 0,
+                "active_shards": [],
+            },
+        )
+        module._write_json(
+            aggregate_root / "ea_provider_health_cache.json",
+            {
+                "cached_at": module._iso_now(),
+                "source_url": "http://provider-health.internal:8090/v1/responses/_provider_health",
+                "payload": {
+                    "provider_registry": {
+                        "provider_config": {
+                            "hard_max_active_requests": 12,
+                        }
+                    },
+                    "providers": {
+                        "onemin": {
+                            "balance_basis_summary": "observed_error",
+                            "live_remaining_credits_total": 2576,
+                            "actual_remaining_credits_total": 118681415.0,
+                            "configured_slots": 74,
+                            "slots": [
+                                {"configured": True, "state": "quarantine"} for _ in range(74)
+                            ],
+                        }
+                    },
+                },
+            },
+        )
+
+        args = _args(root)
+        args.state_root = str(aggregate_root)
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+        args.worker_model = "ea-coder-hard"
+        args.memory_dispatch_reserve_gib = module.DEFAULT_MEMORY_DISPATCH_RESERVE_GIB
+        args.memory_dispatch_shard_budget_gib = module.DEFAULT_MEMORY_DISPATCH_SHARD_BUDGET_GIB
+        args.memory_dispatch_warning_available_percent = module.DEFAULT_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT
+        args.memory_dispatch_critical_available_percent = module.DEFAULT_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT
+        args.memory_dispatch_warning_swap_used_percent = module.DEFAULT_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT
+        args.memory_dispatch_critical_swap_used_percent = module.DEFAULT_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT
+
+        capacity = module._provider_dispatch_capacity_snapshot(
+            args,
+            Path(args.state_root),
+        )
+
+        assert capacity["allowed_active_shards"] == 12
+        assert capacity["estimated_remaining_credits_total"] == 118681415.0
+        assert capacity["dispatch_balance_basis_summary"] == "actual_override_after_observed_error"
+        assert "actual-balance override after observed_error" in capacity["reason"]
+
+
+def test_provider_dispatch_capacity_keeps_hard_lane_in_single_canary_while_wave_is_wait_only(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setattr(module, "_container_local_active_run_records", lambda: {})
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        for index in range(1, 14):
+            shard_root = aggregate_root / f"shard-{index}"
+            shard_root.mkdir(parents=True, exist_ok=True)
+            module._write_json(shard_root / "state.json", {"updated_at": "2026-05-01T07:00:00Z"})
+
+        configured_shards = [
+            {
+                "name": f"shard-{index}",
+                "index": index,
+                "worker_bin": "/docker/fleet/scripts/codex-shims/codexea",
+                "worker_lane": "core",
+                "worker_model": "ea-coder-hard",
+            }
+            for index in range(1, 14)
+        ]
+        module._write_json(
+            aggregate_root / "active_shards.json",
+            {
+                "generated_at": "2026-05-01T07:00:00Z",
+                "updated_at": "2026-05-01T07:00:00Z",
+                "manifest_kind": "configured_shard_topology",
+                "configured_shard_count": 13,
+                "configured_shards": configured_shards,
+                "active_run_count": 1,
+                "active_shards": [
+                    {
+                        "name": "shard-1",
+                        "shard_id": "shard-1",
+                        "active_run_id": "run-1",
+                        "selected_model": "ea-coder-hard",
+                        "active_run_progress_state": "waiting_for_model_output",
+                        "active_run_progress_evidence": "wait_only",
+                    }
+                ],
+            },
+        )
+        module._write_json(
+            aggregate_root / "ea_provider_health_cache.json",
+            {
+                "cached_at": module._iso_now(),
+                "source_url": "http://provider-health.internal:8090/v1/responses/_provider_health",
+                "payload": {
+                    "provider_registry": {
+                        "provider_config": {
+                            "hard_max_active_requests": 12,
+                        }
+                    },
+                    "providers": {
+                        "onemin": {
+                            "balance_basis_summary": "actual",
+                            "live_remaining_credits_total": 118681415.0,
+                            "actual_remaining_credits_total": 118681415.0,
+                            "configured_slots": 74,
+                            "live_ready_slot_count": 12,
+                            "slots": [
+                                {"configured": True, "state": "ready"} for _ in range(12)
+                            ],
+                        }
+                    },
+                },
+            },
+        )
+
+        args = _args(root)
+        args.state_root = str(aggregate_root)
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+        args.worker_model = "ea-coder-hard"
+
+        capacity = module._provider_dispatch_capacity_snapshot(
+            args,
+            Path(args.state_root),
+        )
+
+        assert capacity["allowed_active_shards"] == 1
+        assert "hard-lane wait-only canary active" in capacity["reason"]
 
 
 def test_memory_dispatch_snapshot_allows_full_standard_width_with_mixed_non_hard_shards(monkeypatch) -> None:
@@ -25454,7 +27084,54 @@ def test_reconcile_aggregate_shard_truth_derives_progress_evidence_productivity_
         "status_looping_only": 1,
     }
     assert updated["productive_active_runs_count"] == 1
-    assert updated["nonproductive_active_runs_count"] == 2
+    assert updated["waiting_active_runs_count"] == 1
+    assert updated["nonproductive_active_runs_count"] == 1
+
+
+def test_reconcile_aggregate_shard_truth_counts_wait_only_runs_as_waiting_not_nonproductive() -> None:
+    module = _load_module()
+
+    updated = module._reconcile_aggregate_shard_truth(
+        {
+            "shards": [
+                {
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "stream_connected_waiting",
+                    "active_run_progress_evidence": "wait_only",
+                }
+            ]
+        }
+    )
+
+    assert updated["active_runs_count"] == 1
+    assert updated["progress_evidence_counts"] == {"wait_only": 1}
+    assert updated["productive_active_runs_count"] == 0
+    assert updated["waiting_active_runs_count"] == 1
+    assert updated["nonproductive_active_runs_count"] == 0
+
+
+def test_reconcile_aggregate_shard_truth_counts_waiting_repo_work_as_waiting_not_productive() -> None:
+    module = _load_module()
+
+    updated = module._reconcile_aggregate_shard_truth(
+        {
+            "shards": [
+                {
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "repo_work_detected",
+                }
+            ]
+        }
+    )
+
+    assert updated["active_runs_count"] == 1
+    assert updated["progress_evidence_counts"] == {"repo_work_detected": 1}
+    assert updated["productive_active_runs_count"] == 0
+    assert updated["waiting_active_runs_count"] == 1
+    assert updated["nonproductive_active_runs_count"] == 0
 
 
 def test_statefile_shard_summaries_falls_back_to_runtime_handoff_when_state_file_is_missing(monkeypatch) -> None:
@@ -25764,6 +27441,7 @@ def test_reconcile_aggregate_shard_truth_sets_zero_progress_counts_when_no_activ
     assert updated["active_runs_count"] == 0
     assert updated["progress_evidence_counts"] == {}
     assert updated["productive_active_runs_count"] == 0
+    assert updated["waiting_active_runs_count"] == 0
     assert updated["nonproductive_active_runs_count"] == 0
 
 

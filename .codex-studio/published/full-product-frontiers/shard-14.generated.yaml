@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-30T16:29:24Z'
+generated_at: '2026-05-01T08:41:01Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-14
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -57,10 +57,6 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
-  - mobile play shell
-  - ui kit and flagship polish
-  - media artifacts
-  - fleet and operator loop
   - desktop client
 quality_policy:
   bar: top_flagship_grade
@@ -75,7 +71,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-30T16:27:06Z'
+  generated_at: '2026-05-01T08:37:19Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -84,34 +80,33 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1416961433
+- 3690357017
 frontier:
-- id: 1416961433
-  title: Surface campaign memory and consequences on desktop
+- id: 3690357017
+  title: Add GM prep and roster movement surfaces to the desktop workspace
   wave: flagship_product
-  status: blocked_external_host_proof
+  status: not_started
   owners:
   - chummer6-ui
   dependencies: []
   exit_criteria:
-  - Make campaign consequences, stale state, and next-session return actions visible
-    on the promoted desktop route.
-  - 'Own and prove the surface slice(s): campaign_workspace:memory, campaign_return_loop:desktop'
+  - Add GM prep and roster movement surfaces to the primary desktop workspace route.
+  - 'Own and prove the surface slice(s): gm_prep_packets:desktop, roster_movement:desktop'
   - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
     Chummer.Tests, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-ui` (next90-m112-ui-campaign-memory).
+    is landed for `chummer6-ui` (next90-m113-ui-gm-prep-roster-surface).
   eta:
     status: flagship_delivery
-    eta_human: 9h-22h
+    eta_human: 9h-23h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Surface campaign memory and consequences on desktop'' remains
-      open under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
-      ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-01T07:42:00Z'
-    range_low_hours: 8.64
-    range_high_hours: 21.78
+    summary: 'Milestone ''Add GM prep and roster movement surfaces to the desktop
+      workspace'' remains open under the flagship closeout frontier. Outstanding readiness
+      coverage: desktop_client.'
+    predicted_completion_at: '2026-05-02T00:31:25Z'
+    range_low_hours: 9.0
+    range_high_hours: 22.68
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
@@ -125,12 +120,12 @@ frontier:
 source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
 queue_package:
   repo: chummer6-ui
-  package_id: next90-m112-ui-campaign-memory
-  title: Surface campaign memory and consequences on desktop
+  package_id: next90-m113-ui-gm-prep-roster-surface
+  title: Add GM prep and roster movement surfaces to the desktop workspace
   priority: 0
   owned_surfaces:
-  - campaign_workspace:memory
-  - campaign_return_loop:desktop
+  - gm_prep_packets:desktop
+  - roster_movement:desktop
   allowed_paths:
   - Chummer.Avalonia
   - Chummer.Desktop.Runtime

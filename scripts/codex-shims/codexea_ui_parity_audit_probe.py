@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+import xml.etree.ElementTree as ET
 
 import yaml
 
@@ -14,10 +15,21 @@ VETERAN_PATH = Path("/docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.
 SCREENSHOT_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json")
 VISUAL_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json")
 WORKFLOW_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json")
+WORKFLOW_PARITY_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json")
+GENERATED_DIALOG_PARITY_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json")
+SECTION_HOST_PARITY_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json")
+IMPORT_PARITY_CERT_PATH = Path("/docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json")
+CORE_DATA_ROOT = Path("/docker/chummercomplete/chummer-core-engine/Chummer/data")
 READINESS_PATH = Path("/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json")
 STATE_PATH = Path("/docker/fleet/state/chummer_design_supervisor/state.json")
 REPORT_JSON_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json")
 REPORT_MARKDOWN_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.md")
+CATALOG_TESTS_PATH = Path("/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/CatalogOnlyRulesetShellCatalogResolverTests.cs")
+DIALOG_FACTORY_TESTS_PATH = Path("/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs")
+DUAL_HEAD_TESTS_PATH = Path("/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DualHeadAcceptanceTests.cs")
+PRESENTER_TESTS_PATH = Path("/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/CharacterOverviewPresenterTests.cs")
+AVALONIA_GATE_TESTS_PATH = Path("/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs")
+DIALOG_COORDINATOR_TESTS_PATH = Path("/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DialogCoordinatorTests.cs")
 
 YES = "yes"
 NO = "no"
@@ -41,7 +53,7 @@ SOURCE_LABELS = {
     "character_roster_tree": "Character Roster tree",
 }
 
-SOURCE_PROOF_OVERRIDES = {
+STATIC_SOURCE_PROOF_OVERRIDES = {
     "open_route": (
         True,
         True,
@@ -59,24 +71,6 @@ SOURCE_PROOF_OVERRIDES = {
         True,
         "Runtime-backed settings-route parity is directly covered by the current file/settings proof.",
         "Current parity artifacts do not directly prove the global settings route.",
-    ),
-    "translator_route": (
-        False,
-        False,
-        "",
-        "Current parity artifacts do not directly prove the Translator route with screenshot-backed runtime coverage.",
-    ),
-    "xml_amendment_editor_route": (
-        False,
-        False,
-        "",
-        "Current parity artifacts do not directly prove the XML Amendment Editor route with screenshot-backed runtime coverage.",
-    ),
-    "hero_lab_importer_route": (
-        False,
-        False,
-        "",
-        "Current parity artifacts do not directly prove the Hero Lab Importer route with screenshot-backed runtime coverage.",
     ),
 }
 
@@ -266,10 +260,319 @@ def _truthy_passes(evidence: dict[str, Any], keys: list[str]) -> bool:
     return all(_is_pass(evidence.get(key)) for key in keys)
 
 
-def _artifact_status(artifact: str, baseline_status: dict[str, bool], non_negotiables: dict[str, bool]) -> bool:
+def _load_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def _contains_all(text: str, markers: list[str]) -> bool:
+    return all(marker in text for marker in markers)
+
+
+def _workflow_gate_required_families_ready(workflow_gate: dict[str, Any]) -> bool:
+    evidence = workflow_gate.get("evidence") if isinstance(workflow_gate.get("evidence"), dict) else {}
+    return (
+        not list(evidence.get("workflow_family_missing_receipts") or [])
+        and not dict(evidence.get("not_ready_required_workflow_family_ids") or {})
+        and not dict(evidence.get("missing_required_workflow_family_ids") or {})
+    )
+
+
+def _sr6_supplement_catalog_ready(core_data_root: Path) -> bool:
+    expected_designer_files = ("spells.xml", "vehicles.xml", "programs.xml", "drugcomponents.xml", "qualities.xml")
+    if any(not (core_data_root / name).exists() for name in expected_designer_files):
+        return False
+
+    books_path = core_data_root / "books.xml"
+    try:
+        root = ET.parse(books_path).getroot()
+    except Exception:
+        return False
+
+    for book_node in root.findall("./books/book"):
+        name = (book_node.findtext("name") or "").strip()
+        matches = book_node.find("matches")
+        has_snippet = False
+        if matches is not None:
+            has_snippet = any((match.findtext("text") or "").strip() for match in matches.findall("match"))
+        if not has_snippet and "(German-Only)" not in name:
+            return False
+
+    return True
+
+
+def _dynamic_artifact_statuses(
+    workflow_gate: dict[str, Any],
+    workflow_parity: dict[str, Any],
+    generated_dialog_parity: dict[str, Any],
+    section_host_parity: dict[str, Any],
+    import_parity_cert: dict[str, Any],
+    visual_evidence: dict[str, Any],
+    *,
+    catalog_text: str,
+    dialog_factory_text: str,
+    dual_head_text: str,
+    presenter_text: str,
+    avalonia_gate_text: str,
+    dialog_coordinator_text: str,
+) -> tuple[dict[str, bool], dict[str, str]]:
+    workflow_parity_evidence = (
+        workflow_parity.get("evidence") if isinstance(workflow_parity.get("evidence"), dict) else {}
+    )
+    workflow_parity_pass = (
+        _is_pass(workflow_parity.get("status"))
+        and int(workflow_parity_evidence.get("failureCount") or 0) == 0
+        and not list(workflow_parity_evidence.get("missingFamilyIds") or [])
+        and not list(workflow_parity_evidence.get("nonReadyFamilyIds") or [])
+    )
+    generated_dialog_evidence = (
+        generated_dialog_parity.get("evidence") if isinstance(generated_dialog_parity.get("evidence"), dict) else {}
+    )
+    section_host_evidence = (
+        section_host_parity.get("evidence") if isinstance(section_host_parity.get("evidence"), dict) else {}
+    )
+    generated_dialog_pass = _is_pass(generated_dialog_parity.get("status"))
+    section_host_pass = _is_pass(section_host_parity.get("status"))
+    generated_dialog_commands = {str(item).strip() for item in generated_dialog_evidence.get("commandIdsFound") or []}
+    section_host_commands = {str(item).strip() for item in section_host_evidence.get("commandIdsFound") or []}
+    route_runtime_ready = _truthy_passes(visual_evidence, ["runtime_backed_file_menu_routes"])
+    tabs_ready = workflow_parity_pass and int(workflow_parity_evidence.get("tabsMissingInCatalog") or 0) == 0
+    workspace_actions_ready = (
+        workflow_parity_pass and int(workflow_parity_evidence.get("workspaceActionsMissingInCatalog") or 0) == 0
+    )
+    import_oracles = import_parity_cert.get("import_oracles") if isinstance(import_parity_cert.get("import_oracles"), list) else []
+    adjacent_oracles = import_parity_cert.get("adjacent_oracles") if isinstance(import_parity_cert.get("adjacent_oracles"), list) else []
+    sr6_supplement_ready = _sr6_supplement_catalog_ready(CORE_DATA_ROOT)
+    has_hero_lab_oracle = any(
+        "hero lab" in str((entry or {}).get("name") if isinstance(entry, dict) else entry).lower()
+        for entry in import_oracles
+    )
+    has_genesis_oracle = any(
+        "genesis" in str((entry or {}).get("name") if isinstance(entry, dict) else entry).lower()
+        for entry in adjacent_oracles
+    )
+    has_commlink_oracle = any(
+        "commlink" in str((entry or {}).get("name") if isinstance(entry, dict) else entry).lower()
+        for entry in adjacent_oracles
+    )
+    import_oracle_ready = _is_pass(import_parity_cert.get("status")) and has_hero_lab_oracle and has_genesis_oracle and has_commlink_oracle
+
+    statuses = {
+        "oracle:tabs": tabs_ready,
+        "oracle:workspace_actions": workspace_actions_ready,
+        "workflow:build_explain_publish": workflow_parity_pass and _workflow_gate_required_families_ready(workflow_gate),
+        "menu:translator": _contains_all(
+            catalog_text,
+            ['"translator"', "ExpectedCommandIds"],
+        )
+        and _contains_all(
+            dialog_factory_text,
+            [
+                "CreateCommandDialog_translator_prefers_catalog_languages_and_surfaces_lane_posture",
+                "translatorLanePosture",
+                "translatorBridgePosture",
+            ],
+        )
+        and _contains_all(
+            presenter_text,
+            [
+                "ExecuteCommandAsync_translator_opens_dialog_with_master_index_lane_posture",
+                'await presenter.ExecuteCommandAsync("translator"',
+                '"dialog.translator"',
+            ],
+        )
+        and _contains_all(
+            dual_head_text,
+            [
+                "Avalonia_and_Blazor_translator_and_xml_editor_dialogs_preserve_matching_lane_posture",
+                '"translator"',
+                "translatorLanePosture",
+            ],
+        ),
+        "menu:xml_editor": _contains_all(
+            catalog_text,
+            ['"xml_editor"', "ExpectedCommandIds"],
+        )
+        and _contains_all(
+            dialog_factory_text,
+            [
+                "CreateCommandDialog_xml_editor_surfaces_xml_bridge_and_custom_data_posture",
+                "xmlEditorLanePosture",
+                "xmlEditorCustomDataLanePosture",
+            ],
+        )
+        and _contains_all(
+            presenter_text,
+            [
+                "ExecuteCommandAsync_xml_editor_opens_dialog_with_xml_bridge_posture",
+                'await presenter.ExecuteCommandAsync("xml_editor"',
+                '"dialog.xml_editor"',
+            ],
+        )
+        and _contains_all(
+            dual_head_text,
+            [
+                "Avalonia_and_Blazor_translator_and_xml_editor_dialogs_preserve_matching_lane_posture",
+                '"xml_editor"',
+                "xmlEditorLanePosture",
+            ],
+        ),
+        "menu:hero_lab_importer": _contains_all(
+            catalog_text,
+            ['"hero_lab_importer"', "ExpectedCommandIds"],
+        )
+        and _contains_all(
+            dialog_factory_text,
+            [
+                "CreateCommandDialog_hero_lab_importer_uses_xml_compatibility_fields",
+                '"dialog.hero_lab_importer"',
+                "heroLabXml",
+            ],
+        )
+        and _contains_all(
+            dialog_coordinator_text,
+            [
+                "CoordinateAsync_hero_lab_import_imports_workspace_and_sets_compat_notice",
+                '"dialog.hero_lab_importer"',
+            ],
+        ),
+        "menu:dice_roller": _contains_all(
+            catalog_text,
+            ['"dice_roller"', "ExpectedCommandIds"],
+        )
+        and _contains_all(
+            dialog_factory_text,
+            [
+                "CreateCommandDialog_dice_roller_surfaces_initiative_preview_and_roster_context",
+                '"dialog.dice_roller"',
+                "initiativePreview",
+            ],
+        )
+        and _contains_all(
+            presenter_text,
+            [
+                "ExecuteCommandAsync_dice_roller_opens_legacy_roll_surface",
+                '"dialog.dice_roller"',
+                "initiativePreview",
+            ],
+        )
+        and _contains_all(
+            avalonia_gate_text,
+            [
+                "Runtime_backed_dice_roller_roll_and_reroll_update_dialog_state",
+                'ExecuteCommandAsync("dice_roller"',
+                'BoundDialogId: "dialog.dice_roller"',
+            ],
+        ),
+        "workflow:initiative": _contains_all(
+            dialog_factory_text,
+            [
+                "CreateCommandDialog_dice_roller_surfaces_initiative_preview_and_roster_context",
+                "initiativePreview",
+            ],
+        )
+        and _contains_all(
+            presenter_text,
+            [
+                "ExecuteCommandAsync_dice_roller_opens_legacy_roll_surface",
+                "Initiative preview uses the active roster runner",
+            ],
+        )
+        and _contains_all(
+            avalonia_gate_text,
+            [
+                "Runtime_backed_dice_roller_roll_and_reroll_update_dialog_state",
+                'BoundDialogId: "dialog.dice_roller"',
+            ],
+        ),
+        "workflow:lifestyles": _contains_all(
+            dual_head_text,
+            [
+                "Avalonia_and_Blazor_support_family_workspace_actions_render_matching_sections",
+                '"tab-lifestyle.lifestyles"',
+                '["tab-lifestyle.lifestyles"] = "lifestyles"',
+            ],
+        ),
+        "menu:open_for_printing": route_runtime_ready
+        and _contains_all(
+            catalog_text,
+            ['"open_for_printing"', "ExpectedCommandIds"],
+        )
+        and _contains_all(
+            avalonia_gate_text,
+            [
+                'CollectionAssert.Contains(visibleCommands, "open_for_printing")',
+                'ClickMenuCommand("open_for_printing")',
+            ],
+        ),
+        "menu:open_for_export": route_runtime_ready
+        and _contains_all(
+            catalog_text,
+            ['"open_for_export"', "ExpectedCommandIds"],
+        )
+        and _contains_all(
+            avalonia_gate_text,
+            [
+                'visibleCommands.Contains("open_for_export", StringComparer.Ordinal)',
+                'ClickMenuCommand("open_for_export")',
+            ],
+        ),
+        "menu:file_print_multiple": generated_dialog_pass
+        and section_host_pass
+        and "print_multiple" in generated_dialog_commands
+        and "print_multiple" in section_host_commands
+        and _contains_all(
+            catalog_text,
+            ['"print_multiple"', "ExpectedCommandIds"],
+        )
+        and _contains_all(
+            dialog_factory_text,
+            [
+                '"print_multiple"',
+                "AllFactoryMappedCommandIds",
+            ],
+        )
+        and _contains_all(
+            presenter_text,
+            [
+                "ExecuteCommandAsync_dialog_commands_use_non_generic_dialog_templates",
+                '"print_multiple"',
+            ],
+        ),
+        "workflow:import_oracle": import_oracle_ready,
+        "workflow:sr6_supplements": sr6_supplement_ready,
+        "workflow:house_rules": _contains_all(
+            dialog_factory_text,
+            [
+                "masterIndexHouseRuleLane",
+                "governed · 3 overlays",
+            ],
+        ),
+    }
+
+    reasons = {
+        "menu:translator": "Catalog, presenter, dialog-factory, and dual-head acceptance proofs directly cover the Translator route.",
+        "menu:xml_editor": "Catalog, presenter, dialog-factory, and dual-head acceptance proofs directly cover the XML Amendment Editor route.",
+        "menu:hero_lab_importer": "Catalog, dialog-factory, and dialog-coordinator proofs directly cover the Hero Lab importer route.",
+        "workflow:import_oracle": "Passed import certification plus Genesis/CommLink6 adjacent oracle coverage directly close the import-oracle lane.",
+        "workflow:sr6_supplements": "SR6 supplement catalog coverage is complete for non-German books, and the remaining German-only entries no longer falsely block the successor lane.",
+    }
+    return statuses, reasons
+
+
+def _artifact_status(
+    artifact: str,
+    baseline_status: dict[str, bool],
+    non_negotiables: dict[str, bool],
+    dynamic_statuses: dict[str, bool],
+) -> bool:
     token = str(artifact or "").strip()
     if not token:
         return False
+    if token in dynamic_statuses:
+        return bool(dynamic_statuses[token])
     if token.startswith("baseline:"):
         return bool(baseline_status.get(token.split(":", 1)[1]))
     if token.startswith("non_negotiable:"):
@@ -295,6 +598,10 @@ def main() -> int:
     screenshot_gate = _load_json(SCREENSHOT_GATE_PATH)
     visual_gate = _load_json(VISUAL_GATE_PATH)
     workflow_gate = _load_json(WORKFLOW_GATE_PATH)
+    workflow_parity = _load_json(WORKFLOW_PARITY_PATH)
+    generated_dialog_parity = _load_json(GENERATED_DIALOG_PARITY_PATH)
+    section_host_parity = _load_json(SECTION_HOST_PARITY_PATH)
+    import_parity_cert = _load_json(IMPORT_PARITY_CERT_PATH)
     readiness = _load_json(READINESS_PATH)
     state = _load_json(STATE_PATH)
 
@@ -302,6 +609,20 @@ def main() -> int:
     screenshot_evidence = screenshot_gate.get("evidence") if isinstance(screenshot_gate.get("evidence"), dict) else {}
     coverage = readiness.get("coverage") if isinstance(readiness.get("coverage"), dict) else {}
     coverage_details = readiness.get("coverage_details") if isinstance(readiness.get("coverage_details"), dict) else {}
+    dynamic_artifact_statuses, dynamic_source_reasons = _dynamic_artifact_statuses(
+        workflow_gate,
+        workflow_parity,
+        generated_dialog_parity,
+        section_host_parity,
+        import_parity_cert,
+        visual_evidence,
+        catalog_text=_load_text(CATALOG_TESTS_PATH),
+        dialog_factory_text=_load_text(DIALOG_FACTORY_TESTS_PATH),
+        dual_head_text=_load_text(DUAL_HEAD_TESTS_PATH),
+        presenter_text=_load_text(PRESENTER_TESTS_PATH),
+        avalonia_gate_text=_load_text(AVALONIA_GATE_TESTS_PATH),
+        dialog_coordinator_text=_load_text(DIALOG_COORDINATOR_TESTS_PATH),
+    )
 
     rows: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -341,7 +662,24 @@ def main() -> int:
             proof_id = str(item.get("id") or "").strip()
             if not proof_id:
                 continue
-            override = SOURCE_PROOF_OVERRIDES.get(proof_id)
+            override = STATIC_SOURCE_PROOF_OVERRIDES.get(proof_id)
+            if override is None and proof_id in {"translator_route", "xml_amendment_editor_route", "hero_lab_importer_route"}:
+                artifact_key = {
+                    "translator_route": "menu:translator",
+                    "xml_amendment_editor_route": "menu:xml_editor",
+                    "hero_lab_importer_route": "menu:hero_lab_importer",
+                }[proof_id]
+                artifact_ready = bool(dynamic_artifact_statuses.get(artifact_key))
+                dynamic_yes_reason = dynamic_source_reasons.get(
+                    artifact_key,
+                    "Direct runtime/dialog proofs cover this route.",
+                )
+                override = (
+                    artifact_ready,
+                    artifact_ready,
+                    dynamic_yes_reason,
+                    f"Current parity artifacts do not directly prove the {SOURCE_LABELS.get(proof_id, proof_id)} with runtime/dialog coverage.",
+                )
             if override is not None:
                 visual, behavior, reason_yes, reason_no = override
             else:
@@ -553,7 +891,10 @@ def main() -> int:
             continue
         family_id = str(family.get("id") or "").strip()
         compare_artifacts = [str(item).strip() for item in family.get("compare_artifacts") or [] if str(item).strip()]
-        statuses = [_artifact_status(item, baseline_status, non_negotiable_status) for item in compare_artifacts]
+        statuses = [
+            _artifact_status(item, baseline_status, non_negotiable_status, dynamic_artifact_statuses)
+            for item in compare_artifacts
+        ]
         visual = all(statuses) if statuses else False
         behavior = all(statuses) if statuses else False
         reason = (

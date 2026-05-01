@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-30T16:30:38Z'
+generated_at: '2026-05-01T08:46:45Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-6
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,6 +32,7 @@ focus:
   - chummer6-hub
   - chummer6-ui
   - chummer6-core
+  - chummer6-ui-kit
   texts:
   - top flagship grade
   - whole project frontier
@@ -56,11 +57,6 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
-  - mobile play shell
-  - ui kit and flagship polish
-  - media artifacts
-  - fleet and operator loop
-  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -71,90 +67,16 @@ completion_audit:
   status: fail
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 full_product_audit:
-  status: fail
-  reason: 'flagship product readiness proof is not green: fail'
+  status: pass
+  reason: flagship product readiness proof is current across desktop, rules, hub,
+    mobile, horizons, and operator lanes
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-30T16:30:23Z'
-  proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  generated_at: '2026-05-01T08:46:42Z'
+  proof_status: pass
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 1
-frontier_ids:
-- 3449507998
-frontier:
-- id: 3449507998
-  title: Rules engine parity, explain trust, and import certification
-  wave: flagship_product
-  status: blocked_external_host_proof
-  owners:
-  - chummer6-core
-  - chummer6-ui
-  dependencies: []
-  exit_criteria:
-  - Close SR4, SR5, and SR6 character-build parity gaps using deterministic engine
-    truth, explain receipts, and legacy/import oracle evidence described in `projects/core.md`
-    and the roadmap.
-  - Make ruleset import, migration, and explain certification boring enough that flagship
-    desktop and mobile surfaces consume one grounded engine truth.
-  eta:
-    status: flagship_delivery
-    eta_human: 10h-1.1d
-    eta_confidence: low
-    basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Rules engine parity, explain trust, and import certification''
-      remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
-      desktop_client.'
-    predicted_completion_at: '2026-05-01T10:32:44Z'
-    range_low_hours: 10.45
-    range_high_hours: 25.62
-    remaining_open_milestones: 1
-    remaining_in_progress_milestones: 0
-    remaining_not_started_milestones: 1
-    remaining_effort_units: 2.05
-    history_sample_count: 0
-    observed_burn_milestones_per_day: 0.0
-    blocking_reason: ''
-    scope_kind: flagship_product_readiness
-    scope_label: Full Chummer5A parity and flagship proof closeout
-    scope_warning: ''
-eta:
-  status: blocked
-  eta_human: 10h-1.1d after unblock
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic+external_blocker
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:degraded;
-    remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262; survival:browseract:ready;
-    gemini_vortex:missing:command_not_found:gemini; onemin:degraded; repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
-    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
-    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
-    https://www.aimagicx.com/api/v1/chat:http_402:{''error'': ''Chat token limit exceeded'',
-    ''tokens_remaining'': 1, ''tokens_needed'': 18, ''tokens_needed_raw'': 18, ''quota_multipliers'':
-    {''input'': 1, ''output'': 1}}; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
-    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:degraded'
-  summary: 'Milestone ''Rules engine parity, explain trust, and import certification''
-    remains open under the flagship closeout frontier. Outstanding readiness coverage:
-    mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
-    desktop_client. Current external blocker: provider-health preflight left no routable
-    direct lanes: core_rescue:onemin:degraded; remaining_percent_of_max=0.00, estimated_remaining_credits_total=3262;
-    survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini; onemin:degraded;
-    repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
-    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
-    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
-    https://www.aimagicx.com/api/v1/chat:http_402:{''error'': ''Chat token limit exceeded'',
-    ''tokens_remaining'': 1, ''tokens_needed'': 18, ''tokens_needed_raw'': 18, ''quota_multipliers'':
-    {''input'': 1, ''output'': 1}}; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
-    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:degraded'
-  predicted_completion_at: ''
-  range_low_hours: 10.45
-  range_high_hours: 25.62
-  remaining_open_milestones: 1
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 1
-  remaining_effort_units: 2.05
+frontier_count: 0
+frontier_ids: []
+frontier: []

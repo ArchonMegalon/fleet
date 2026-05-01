@@ -45,6 +45,18 @@ The promoted desktop head must still read like Chummer to a veteran user:
 * workbench-first startup instead of decorative landing chrome
 * dense builder posture that feels like an instrument rather than a dashboard
 
+For the remaining hard parity families, familiarity is judged by `CHUMMER5A_HUMAN_PARITY_ACCEPTANCE_SPEC.md` and `CHUMMER5A_HUMAN_PARITY_ACCEPTANCE_MATRIX.yaml`, not by aggregate desktop readiness alone.
+If those families do not have direct dialog-level screenshot, runtime, and per-element verdict proof, the desktop head is not yet flagship grade.
+
+Desktop familiarity is necessary but not sufficient.
+The harder bar is whether a veteran user can move with the same:
+
+* speed
+* confidence
+* reversibility
+* inspectability
+* trust under pressure
+
 ### 1c. Install and first-run experience must feel like one product
 
 The promoted desktop path must behave like one coherent Chummer experience:
@@ -68,6 +80,18 @@ Flagship grade requires:
 * visible state for conditional modifiers, active effects, and timed changes
 * source-linked hints rather than folklore labels
 * public release truth that matches the shelf, help copy, and install reality
+
+### 2a. Trust, durability, and explainability outrank cosmetic similarity
+
+Flagship grade fails when any of these are weak even if the shell looks familiar:
+
+* update, rollback, restore, or first-launch trust
+* character and campaign durability across migration or device change
+* custom-data and amend-package survival
+* large-sheet and dense-roster performance
+* rule explainability where users ask "why?"
+
+Those planes are machine-tracked in `FLAGSHIP_READINESS_PLANES.yaml`.
 
 ### 3. SR4, SR5, and SR6 must feel authored, not flattened
 
@@ -101,6 +125,9 @@ Users must be able to survive:
 * reconnect/replay situations
 
 without losing trust in the product.
+
+Recovery also fails when the product tells different stories in different places.
+Installer bytes, release-channel truth, public shelf truth, in-app update truth, and support truth must agree or the release is not flagship grade.
 
 ### 6. Imports must respect prior investment
 
@@ -208,5 +235,11 @@ Public release is not truly complete until flagship bar evidence exists for:
 * public/download/help honesty
 * artifact and publication credibility
 * operator and support loop trust
+
+Release proof must also classify intentional divergence explicitly:
+
+* `must_match`
+* `may_improve`
+* `may_remove_if_non_degrading`
 
 That evidence must compile into `FLAGSHIP_RELEASE_ACCEPTANCE.yaml` rather than remaining only prose or operator intuition.

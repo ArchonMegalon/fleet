@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-30T16:32:40Z'
+generated_at: '2026-05-01T08:10:49Z'
 mode: completion_review
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -34,14 +34,14 @@ completion_audit:
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260430T162556Z-shard-14 is not trusted: Error:
-    survival_no_backend_available'
-  latest_run_id: 20260430T162556Z-shard-14
-  latest_run_reason: 'Error: survival_no_backend_available'
+  reason: 'latest worker receipt 20260501T080622Z-shard-8 is not trusted: no eligible
+    worker account/model attempts were runnable'
+  latest_run_id: 20260501T080622Z-shard-8
+  latest_run_reason: no eligible worker account/model attempts were runnable
 journey_gate_audit:
   status: fail
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
-  blocked_journey_count: 6
+  blocked_journey_count: 1
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
   status: fail
@@ -49,11 +49,10 @@ linux_desktop_exit_gate_audit:
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
   generated_at: '2026-04-30T15:09:57Z'
 weekly_pulse_audit:
-  status: pass
-  reason: weekly product pulse is fresh and reports no remaining drift or blocker
-    pressure
+  status: fail
+  reason: weekly product pulse reports journey gate health as blocked
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-04-26T15:52:08Z'
+  generated_at: '2026-05-01T05:03:25Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -67,20 +66,17 @@ blocking_audits:
 - component: linux_desktop_exit_gate
   title: Linux desktop exit-gate gaps
   reason: stage flagship_ui_screenshot_gate failed
-- component: desktop_executable_exit_gate
-  title: Desktop executable exit-gate gaps
-  reason: desktop executable exit gate proof did not pass
+- component: weekly_pulse
+  title: Weekly product pulse gaps
+  reason: weekly product pulse reports journey gate health as blocked
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: 'latest worker receipt 20260430T162556Z-shard-14 is not trusted: Error:
-    survival_no_backend_available'
-frontier_count: 5
+  reason: 'latest worker receipt 20260501T080622Z-shard-8 is not trusted: no eligible
+    worker account/model attempts were runnable'
+frontier_count: 2
 frontier_ids:
 - 3194227093
-- 1651087602
-- 4373825539
-- 1469377624
-- 2321811557
+- 1239074135
 frontier:
 - id: 3194227093
   title: 'Completion gate: Install, claim, restore, continue'
@@ -93,130 +89,40 @@ frontier:
   - fleet
   dependencies: []
   exit_criteria:
-  - status_plane is stale.
-  - repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json
-    is stale (397060s old > 172800s max).
-  - repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json
-    field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['linux',
-    'macos'].
-  - repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json
-    field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but
-    was ['avalonia:linux', 'avalonia:macos'].
-  - 'release_channel.generated.json field ''desktopTupleCoverage.missingRequiredPlatformHeadRidTuples''
-    external proof request: capture promoted_installer_artifact, startup_smoke_receipt
-    on linux host for tuple avalonia:linux-x64:linux. Expected targets: artifactId
-    avalonia-linux-x64-installer, installer chummer-avalonia-linux-x64-installer.deb,
-    public route /downloads/install/avalonia-linux-x64-installer, startup-smoke receipt
-    startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json.'
-  - 'release_channel.generated.json field ''desktopTupleCoverage.missingRequiredPlatformHeadRidTuples''
-    external proof request: capture promoted_installer_artifact, startup_smoke_receipt
-    on macos host for tuple avalonia:osx-arm64:macos. Expected targets: artifactId
-    avalonia-osx-arm64-installer, installer chummer-avalonia-osx-arm64-installer.dmg,
-    public route /downloads/install/avalonia-osx-arm64-installer, startup-smoke receipt
-    startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json.'
-- id: 1651087602
-  title: 'Completion gate: Build, explain, publish'
+  - repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+    is missing required marker '"linux_gate:avalonia:linux-x64"'.
+  - repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+    is missing required marker '"macos_gate:avalonia:osx-arm64"'.
+  - repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+    field 'evidence.receipt_scope.linux_gate:avalonia:linux-x64.within_repo_root'
+    expected True but was None.
+  - repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+    field 'evidence.receipt_scope.macos_gate:avalonia:osx-arm64.within_repo_root'
+    expected True but was None.
+- id: 1239074135
+  title: 'Completion gate: Linux desktop exit gate'
   wave: completion_review
   status: review_required
   owners:
-  - chummer6-core
-  - chummer6-ui
-  - chummer6-hub
-  - chummer6-media-factory
-  - fleet
-  dependencies: []
-  exit_criteria:
-  - status_plane is stale.
-- id: 4373825539
-  title: 'Completion gate: Campaign, session, recover, recap'
-  wave: completion_review
-  status: review_required
-  owners:
-  - chummer6-hub
-  - chummer6-mobile
-  - chummer6-ui
-  - chummer6-core
-  - fleet
-  - executive-assistant
-  dependencies: []
-  exit_criteria:
-  - status_plane is stale.
-- id: 1469377624
-  title: 'Completion gate: Recover from sync conflict'
-  wave: completion_review
-  status: review_required
-  owners:
-  - chummer6-hub
-  - chummer6-mobile
   - chummer6-ui
   - fleet
   dependencies: []
   exit_criteria:
-  - status_plane is stale.
-- id: 2321811557
-  title: 'Completion gate: Report, cluster, release, notify'
-  wave: completion_review
-  status: review_required
-  owners:
-  - chummer6-design
-  - chummer6-hub
-  - chummer6-ui
-  - chummer6-hub-registry
-  - fleet
-  - executive-assistant
-  dependencies: []
-  exit_criteria:
-  - status_plane is stale.
-  - release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands'
-    must match tuple-derived canonical command sequence for avalonia:linux-x64:linux.
-  - release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands'
-    must match tuple-derived canonical command sequence for avalonia:osx-arm64:macos.
-  - 'release_channel.generated.json field ''desktopTupleCoverage.missingRequiredPlatformHeadRidTuples''
-    external proof request: capture promoted_installer_artifact, startup_smoke_receipt
-    on linux host for tuple avalonia:linux-x64:linux. Expected targets: artifactId
-    avalonia-linux-x64-installer, installer chummer-avalonia-linux-x64-installer.deb,
-    public route /downloads/install/avalonia-linux-x64-installer, startup-smoke receipt
-    startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json.'
-  - 'release_channel.generated.json field ''desktopTupleCoverage.missingRequiredPlatformHeadRidTuples''
-    external proof request: capture promoted_installer_artifact, startup_smoke_receipt
-    on macos host for tuple avalonia:osx-arm64:macos. Expected targets: artifactId
-    avalonia-osx-arm64-installer, installer chummer-avalonia-osx-arm64-installer.dmg,
-    public route /downloads/install/avalonia-osx-arm64-installer, startup-smoke receipt
-    startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json.'
+  - stage flagship_ui_screenshot_gate failed
+  - Build the Linux desktop binary, package the primary .deb plus fallback archive,
+    run startup smoke on both packaged outputs, run desktop runtime unit tests, and
+    refresh UI_LINUX_DESKTOP_EXIT_GATE.generated.json.
 eta:
-  status: blocked
-  eta_human: 9h-1d after unblock
+  status: recovery
+  eta_human: 3h-9h
   eta_confidence: low
-  basis: completion_review_recovery+external_blocker
+  basis: completion_review_recovery
   scope_kind: completion_review_recovery
   scope_label: Completion review and proof recovery
   scope_warning: This ETA covers registry trust, proof, and review recovery. It is
     still narrower than a final flagship parity claim unless full-product readiness
     is also green.
-  blocking_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:degraded;
-    live_remaining_percent_of_max=0.00, live_remaining_credits_total=3262, actual_remaining_credits_total=118681415;
-    survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini; onemin:degraded;
-    lane:no routable survival backends: chatplayground:unavailable:browseract_binding_unavailable;
-    gemini_web:unavailable:browseract_binding_unavailable; gemini_vortex:missing:command_not_found:gemini;
-    onemin:degraded; repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
-    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
-    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
-    https://www.aimagicx.com/api/v1/chat:http_402:{''error'': ''Chat token limit exceeded'',
-    ''tokens_remaining'': 1, ''tokens_needed'': 18, ''tokens_needed_raw'': 18, ''quota_multipliers'':
-    {''input'': 1, ''output'': 1}}; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
-    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:degraded'
-  summary: 'Registry closure is not yet trustworthy; recovery still needs trusted
-    completion receipt, golden journey proof, Linux desktop exit gate. Blocked journeys=6,
-    warning journeys=0, review frontier=5, decomposed_frontier=0, backlog_tail=0.
-    Current external blocker: provider-health preflight left no routable direct lanes:
-    core_rescue:onemin:degraded; live_remaining_percent_of_max=0.00, live_remaining_credits_total=3262,
-    actual_remaining_credits_total=118681415; survival:browseract:ready; gemini_vortex:missing:command_not_found:gemini;
-    onemin:degraded; lane:no routable survival backends: chatplayground:unavailable:browseract_binding_unavailable;
-    gemini_web:unavailable:browseract_binding_unavailable; gemini_vortex:missing:command_not_found:gemini;
-    onemin:degraded; repair:magixai:degraded:probe_failed:https://www.aimagicx.com/api/v1/chat/completions:http_402:{''error'':
-    ''Chat token limit exceeded'', ''tokens_remaining'': 1, ''tokens_needed'': 18,
-    ''tokens_needed_raw'': 18, ''quota_multipliers'': {''input'': 1, ''output'': 1}};
-    https://www.aimagicx.com/api/v1/chat:http_402:{''error'': ''Chat token limit exceeded'',
-    ''tokens_remaining'': 1, ''tokens_needed'': 18, ''tokens_needed_raw'': 18, ''quota_multipliers'':
-    {''input'': 1, ''output'': 1}}; https://beta.aimagicx.com/api/v1/chat/completions:http_405:{};
-    https://beta.aimagicx.com/api/v1/chat:http_405:{}; onemin:degraded'
+  blocking_reason: ''
+  summary: Registry closure is not yet trustworthy; recovery still needs trusted completion
+    receipt, golden journey proof, Linux desktop exit gate. Blocked journeys=1, warning
+    journeys=0, review frontier=2, decomposed_frontier=0, backlog_tail=0.

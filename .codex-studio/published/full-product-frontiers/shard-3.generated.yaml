@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-30T16:32:02Z'
+generated_at: '2026-05-01T08:46:38Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-3
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,11 +32,9 @@ focus:
   - chummer6-hub
   - chummer6-hub-registry
   - fleet
-  - chummer6-media-factory
-  - executive-assistant
-  - chummer6-design
+  - chummer6-mobile
   - chummer6-core
-  - chummer6-ui
+  - chummer6-ui-kit
   texts:
   - top flagship grade
   - whole project frontier
@@ -61,11 +59,6 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
-  - mobile play shell
-  - ui kit and flagship polish
-  - media artifacts
-  - fleet and operator loop
-  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -79,43 +72,43 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-30T16:30:23Z'
+  generated_at: '2026-05-01T08:44:46Z'
   proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 3449507998
+- 1300044932
 frontier:
-- id: 3449507998
-  title: Rules engine parity, explain trust, and import certification
+- id: 1300044932
+  title: Mobile and play-shell flagship finish
   wave: flagship_product
-  status: blocked_external_host_proof
+  status: not_started
   owners:
+  - chummer6-mobile
   - chummer6-core
-  - chummer6-ui
+  - chummer6-ui-kit
+  - chummer6-hub
   dependencies: []
   exit_criteria:
-  - Close SR4, SR5, and SR6 character-build parity gaps using deterministic engine
-    truth, explain receipts, and legacy/import oracle evidence described in `projects/core.md`
-    and the roadmap.
-  - Make ruleset import, migration, and explain certification boring enough that flagship
-    desktop and mobile surfaces consume one grounded engine truth.
+  - Deliver the dedicated player/GM/session shell described in `projects/mobile.md`,
+    including local-first play, replay/resume, reconnect confidence, installable mobile
+    posture, and cross-device continuity.
+  - Keep mobile grounded on package-only engine/play/UI-kit seams rather than cloning
+    workbench or orchestration logic.
   eta:
     status: flagship_delivery
     eta_human: 10h-1.1d
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Rules engine parity, explain trust, and import certification''
-      remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
-      desktop_client.'
-    predicted_completion_at: '2026-05-01T10:34:08Z'
-    range_low_hours: 10.45
-    range_high_hours: 25.62
+    summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open under
+      the flagship closeout frontier. Outstanding readiness coverage: flagship readiness
+      proof refresh.'
+    predicted_completion_at: '2026-05-02T02:49:02Z'
+    range_low_hours: 10.25
+    range_high_hours: 25.83
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1

@@ -4,6 +4,7 @@ last_reviewed: 2026-04-16
 purpose: Machine-readable flagship-grade acceptance matrix for whole-product public-release readiness.
 source_documents:
   - FLAGSHIP_PRODUCT_BAR.md
+  - FLAGSHIP_READINESS_PLANES.yaml
   - FLAGSHIP_PARITY_REGISTRY.yaml
   - DENSE_WORKBENCH_BUDGET.yaml
   - VETERAN_FIRST_MINUTE_GATE.yaml
@@ -31,6 +32,8 @@ acceptance_axes:
     rule: Each major user job exposes one obvious primary path and one bounded fallback story.
   - id: veteran_first_minute_orientation
     rule: A Chummer5a veteran can reach the real workbench and find the key landmarks in the first minute without browser ritual or dashboard detours.
+  - id: veteran_deep_workflow_confidence
+    rule: A Chummer5a veteran can complete dense high-frequency workflows quickly, confidently, and without ritualized detours.
   - id: desktop_familiarity_and_install_continuity
     rule: Desktop install, claim, restore, and workbench continuation preserve Chummer5a familiarity and avoid browser-ritual or dashboard-first detours on the promoted path.
   - id: desktop_head_authority_and_fallback_honesty
@@ -45,8 +48,18 @@ acceptance_axes:
     rule: The active ruleset, preset, source pack, and amend package set are visible, previewable, and portable wherever they materially affect compute.
   - id: trust_and_recovery
     rule: Crash, update, import, reconnect, and conflict states expose honest next-safe-action guidance instead of mystery failure.
+  - id: data_durability_and_reversible_migration
+    rule: Character, campaign, import, restore, and export flows keep governed truth durable across update, rollback, migration, and device changes.
+  - id: rules_explainability
+    rule: Important computed values, source anchors, and import outcomes remain explainable where users actually ask why.
+  - id: custom_data_survival
+    rule: Custom XML, translator, amend-package, and rule-environment overlays survive migration and upgrades with explicit downgrade or block posture when needed.
+  - id: large_sheet_performance
+    rule: Veteran-sized sheets, dense rosters, compare flows, and import/export tasks stay within promoted flagship performance budgets.
   - id: premium_public_coherence
     rule: Downloads, support, help, status, and in-product posture describe the same premium product reality.
+  - id: split_brain_release_truth
+    rule: Installer bytes, release-channel truth, public shelf truth, in-app update truth, and support truth must agree or the release is not ready.
   - id: cross_surface_design_authorship
     rule: Promoted surfaces follow one shared design contract with trustworthy theming, platform-fit layout grammar, explicit state treatment, and screenshot-backed critique evidence.
   - id: no_step_back_client_parity
@@ -73,6 +86,8 @@ surfaces:
       - Voice mode is strictly opt-in, requires explicit user gesture, and the flagship path remains complete in text-only mode.
       - The promoted desktop head clears the veteran first-minute gate and keeps key landmarks visible without hunting.
       - Startup, install, update, crash-recovery, and feedback/reporting flows are boring on the promoted path.
+      - Character, campaign, import, restore, and export state stay durable across update, rollback, migration, and device changes.
+      - Important computed values, source anchors, and import outcomes remain explainable on the workbench route where trust is exercised.
       - The desktop shell keeps a real `File` menu, first-class master index and character roster routes, roster-first orientation, and other veteran Chummer5a familiarity anchors on the flagship path.
       - The promoted desktop head stays within the dense-workbench budget for spacing, chrome, visible rows, and status-strip permanence.
       - Builder, inspect, compare, explain, and active-effect flows stay dense-data comfortable for expert users.
@@ -104,6 +119,7 @@ surfaces:
       - The release-bound engine proof pack publishes oracle-suite coverage, import-certification truth, and performance budgets for the promoted desktop release instead of relying on softer milestone or support summaries.
       - Legacy Chummer4, Chummer5a, and approved Hero Lab imports emit explicit receipts for lossy, partial, or blocked outcomes.
       - Oracle tests compare imported source facts against Chummer6-derived outcomes and surface divergences as hardening work.
+      - Large-sheet, dense-roster, import, explain, and diff/apply performance budgets remain part of release-bound engine evidence.
       - Custom drugs, stacked active effects, and timing windows resolve through deterministic engine state rather than UI-side folklore.
       - Chummer5a-style amend packages and custom-data overlays either compile into the canonical rule-environment graph or emit explicit downgrade/block receipts.
       - Hero Lab and serious adjacent SR6 client oracles such as Genesis / CommLink6 either map to first-class Chummer6 successor flows or emit explicit bounded parity receipts.
@@ -141,6 +157,7 @@ surfaces:
       - chummer.run, downloads, help, status, account handoff, and support views read as one product.
       - Paying users and operators see the same release truth for install, known issues, fixes, and recovery posture.
       - The public shelf never outruns actual signed, promoted, or supportable artifacts.
+      - Public routes, update posture, and installer bytes cannot disagree about what the primary desktop path is.
       - Public surfaces prove calm hierarchy, bounded CTAs, and trustworthy dark/light rendering under the shared surface-design contract.
     evidence_sources:
       - PUBLIC_RELEASE_EXPERIENCE.yaml
@@ -175,6 +192,7 @@ surfaces:
     must_prove:
       - Whole-product completion is derived from flagship acceptance and lived journey proof, not only empty milestone rows or green repo tests.
       - Structural readiness and flagship readiness are published as distinct planes so green milestone coverage cannot masquerade as veteran-ready product truth.
+      - The published readiness planes include SR5 veteran, veteran deep workflow, public shelf, data durability, recovery trust, rules explainability, custom-data survival, large-sheet performance, SR4 parity, and SR6 parity truth.
       - The loop keeps decomposing remaining flagship gaps until the product is materially release-ready.
       - Completion, ETA, and closure proofs cite the same acceptance surfaces that the public release posture depends on.
       - Release proof names the companion packet, trigger registry, media recipes, and localization fallback contracts whenever companion surfaces are on the promoted path.
@@ -195,7 +213,9 @@ whole_product_release_rules:
   - A desktop release claim is incomplete if it names Blazor Desktop as available without also stating whether it is fallback or flagship for that lane.
   - A fallback head does not satisfy flagship readiness by association; if it is the only user-facing desktop route or the recommended public route, it must pass the flagship bar directly.
   - A gold claim cannot ship a secondary desktop head on shell-only, visual-only, or borrowed proof; every shipped head must independently clear the flagship bar.
+  - Installer bytes, release-channel truth, public shelf truth, in-app update truth, and support truth must agree; if they disagree, the affected release-health planes stay non-ready.
   - Empty backlog views, green repo tests, or clean worktrees are not sufficient proof of flagship-grade completion by themselves.
   - Legacy parity rows marked `covered` are necessary structural evidence, but release truth is tracked in `FLAGSHIP_PARITY_REGISTRY.yaml`; `covered` alone cannot justify veteran-ready or gold-ready claims.
+  - Parity doctrine must classify remaining differences as `must_match`, `may_improve`, or `may_remove_if_non_degrading`; unclassified drift does not count as flagship-ready modernization.
   - Reporter-facing support progress mail must be a sent, staged, receipt-bearing workflow from `wageslave@chummer.run`, not a vague promise that the support timeline exists somewhere.
   - Flagship release cannot claim no-step-back parity while any in-scope family marked `missing` or unbounded `partial` remains unresolved in `LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`; a `partial` family is only bounded when Fleet's flagship-readiness parity audit records a proof-backed successor route for that family, and families listed under `scope.excluded` there, including `plugin-framework`, do not block the claim.

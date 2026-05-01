@@ -222,7 +222,7 @@ CODEXEA_OPERATOR_GUARD_ENABLE="${CODEXEA_OPERATOR_GUARD_ENABLE:-1}"
 CODEXEA_OPERATOR_GUARD_DIR="${CODEXEA_OPERATOR_GUARD_DIR:-${CODEXEA_STATE_DIR}/operator-guard}"
 CODEXEA_DEBUG="${CODEXEA_DEBUG:-0}"
 CODEXEA_DEBUG_LOG_FILE="${CODEXEA_DEBUG_LOG_FILE:-${CODEXEA_STATE_DIR}/debug.log}"
-CODEXEA_EXEC_HARD_TIMEOUT_SECONDS="${CODEXEA_EXEC_HARD_TIMEOUT_SECONDS:-3600}"
+CODEXEA_EXEC_HARD_TIMEOUT_SECONDS="${CODEXEA_EXEC_HARD_TIMEOUT_SECONDS:-}"
 CODEXEA_ONEMIN_BILLING_TIMEOUT_SECONDS_DEFAULT="30"
 CODEXEA_ONEMIN_PROBE_TIMEOUT_SECONDS_DEFAULT="180"
 EA_BASE_URL="$(normalize_ea_base_url "${EA_MCP_BASE_URL:-${EA_BASE_URL:-http://127.0.0.1:8090}}")"
@@ -2504,7 +2504,7 @@ run_exec_session_with_clean_output() {
   [ "${#cmd[@]}" -gt 0 ] || return 0
   mapfile -d '' json_cmd < <(append_exec_json_flag "${cmd[@]}")
   output_last_message_path="$(extract_output_last_message_path "${cmd[@]}" || true)"
-  hard_timeout_seconds="$(positive_integer_or_default "${CODEXEA_EXEC_HARD_TIMEOUT_SECONDS:-0}" "3600")"
+  hard_timeout_seconds="$(default_exec_hard_timeout_seconds)"
   retry_sleep_seconds="$(positive_integer_or_default "${CODEXEA_OPERATOR_GUARD_TRANSPORT_RETRY_SLEEP_SECONDS:-10}" "10")"
   retry_window_seconds="$(positive_integer_or_default "${CODEXEA_OPERATOR_GUARD_TRANSPORT_RETRY_WINDOW_SECONDS:-86400}" "86400")"
   retry_deadline="$(( $(date +%s) + retry_window_seconds ))"
@@ -2648,8 +2648,10 @@ run_exec_session_with_clean_output() {
     fi
     rm -f "${fifo_path}"
     rm -f "${monitor_reason_file}"
+    write_timeout_last_message_if_missing "${output_last_message_path}" "${child_exit}" "${elapsed_seconds}" "${monitor_reason}"
 
     if ! retryable_transport_failure_log "${attempt_log}" "${child_exit}" "${output_last_message_path}"; then
+      write_missing_closeout_last_message_if_needed "${output_last_message_path}" "${child_exit}" "${attempt_log}"
       rm -f "${attempt_log}"
       break
     fi
@@ -2751,6 +2753,129 @@ retryable_transport_failure_log() {
   return 1
 }
 
+output_last_message_missing_or_empty() {
+  local output_last_message_path="${1:-}"
+  [ -n "${output_last_message_path}" ] || return 0
+  [ -f "${output_last_message_path}" ] || return 0
+  [ -s "${output_last_message_path}" ] || return 0
+  python3 - "${output_last_message_path}" <<'PY'
+import pathlib
+import re
+import sys
+
+path = pathlib.Path(sys.argv[1])
+text = path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n")
+if not text.strip():
+    raise SystemExit(0)
+if not any(label in text for label in ("What shipped:", "What remains:", "Exact blocker:")):
+    raise SystemExit(1)
+patterns = {
+    "shipped": r"(?ims)^What shipped:\s*(.*?)(?=^What remains:|^Exact blocker:|\Z)",
+    "remains": r"(?ims)^What remains:\s*(.*?)(?=^Exact blocker:|\Z)",
+    "blocker": r"(?ims)^Exact blocker:\s*(.*?)(?=\Z)",
+}
+for pattern in patterns.values():
+    match = re.search(pattern, text)
+    value = " ".join((match.group(1) if match else "").split()).strip()
+    if not value or value == "...":
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+write_output_last_message_fallback() {
+  local output_last_message_path="${1:-}"
+  local shipped="${2:-none recorded}"
+  local remains="${3:-worker did not produce a final closeout}"
+  local blocker="${4:-missing_final_message}"
+
+  output_last_message_missing_or_empty "${output_last_message_path}" || return 0
+  [ -n "${output_last_message_path}" ] || return 0
+  mkdir -p "$(dirname "${output_last_message_path}")" 2>/dev/null || true
+  {
+    if [ -n "${blocker}" ] && [ "${blocker}" != "none" ]; then
+      printf 'Error: %s\n\n' "${blocker}"
+    fi
+    printf 'What shipped: %s\n\n' "${shipped}"
+    printf 'What remains: %s\n\n' "${remains}"
+    printf 'Exact blocker: %s\n' "${blocker}"
+  } > "${output_last_message_path}"
+}
+
+write_timeout_last_message_if_missing() {
+  local output_last_message_path="${1:-}"
+  local child_exit="${2:-0}"
+  local elapsed_seconds="${3:-0}"
+  local monitor_reason="${4:-}"
+  local blocker=""
+  local remains=""
+
+  case "${child_exit}:${monitor_reason}" in
+    124:*)
+      blocker="upstream_timeout:${elapsed_seconds}s"
+      remains="retry the worker after the upstream stall; no final assistant closeout was produced before the wrapper timeout"
+      ;;
+    125:supervisor_status_loop|125:supervisor_status_loop_stderr)
+      blocker="worker_self_polling:supervisor_status_loop"
+      remains="resume repo-local work instead of polling supervisor status or eta from inside the active worker run"
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  write_output_last_message_fallback \
+    "${output_last_message_path}" \
+    "none recorded" \
+    "${remains}" \
+    "${blocker}"
+}
+
+write_missing_closeout_last_message_if_needed() {
+  local output_last_message_path="${1:-}"
+  local child_exit="${2:-0}"
+  local attempt_log="${3:-}"
+
+  output_last_message_missing_or_empty "${output_last_message_path}" || return 0
+
+  local blocker=""
+  local remains=""
+  if [ "${child_exit}" -eq 0 ]; then
+    if [ -f "${attempt_log}" ] && grep -Eiq 'waiting for upstream response|waiting for model output' "${attempt_log}"; then
+      blocker="missing_final_message:upstream_wait_without_closeout"
+      remains="retry the worker or next fallback lane; the run exited after upstream waiting without a usable structured closeout"
+    else
+      blocker="missing_final_message"
+      remains="retry the worker; the run exited without a usable structured closeout"
+    fi
+  else
+    blocker="worker_exit_${child_exit}:missing_final_message"
+    remains="inspect worker stderr and retry the worker; the run exited without a usable structured closeout"
+  fi
+
+  write_output_last_message_fallback \
+    "${output_last_message_path}" \
+    "none recorded" \
+    "${remains}" \
+    "${blocker}"
+}
+
+default_exec_hard_timeout_seconds() {
+  local configured="${CODEXEA_EXEC_HARD_TIMEOUT_SECONDS:-}"
+  if [ -n "${configured}" ]; then
+    positive_integer_or_default "${configured}" "3600"
+    return
+  fi
+  case "${EFFECTIVE_LANE:-}" in
+    survival)
+      printf '%s' "210"
+      ;;
+    *)
+      printf '%s' "3600"
+      ;;
+  esac
+}
+
 extract_output_last_message_path() {
   local -a args=("$@")
   local i=0
@@ -2787,6 +2912,7 @@ run_with_trace_heartbeat() {
   local script_trace_log=""
   local child_exit=0
   local hard_timeout_seconds=0
+  local output_last_message_path=""
   local retry_sleep_seconds=0
   local retry_window_seconds=0
   local retry_deadline=0
@@ -2805,6 +2931,7 @@ run_with_trace_heartbeat() {
       return $?
       ;;
   esac
+  output_last_message_path="$(extract_output_last_message_path "${cmd[@]}" || true)"
   interval_seconds="$(python3 - "${interval}" <<'PY'
 import sys
 
@@ -2817,7 +2944,7 @@ if interval <= 0:
 print(interval)
 PY
   )"
-  hard_timeout_seconds="$(positive_integer_or_default "${CODEXEA_EXEC_HARD_TIMEOUT_SECONDS:-0}" "3600")"
+  hard_timeout_seconds="$(default_exec_hard_timeout_seconds)"
 
   if [ "${CODEXEA_DISABLE_SCRIPT_WRAPPER:-0}" != "1" ] && [ "${INTERACTIVE_SESSION_REQUEST:-0}" -eq 1 ] && [ "${CODEXEA_SCRIPT_WRAPPED:-0}" != "1" ] && { [ -n "${TMUX-}" ] || [ ! -t 0 ] || [ ! -t 1 ]; }; then
     if script_supports_tty_wrapper; then
@@ -2881,6 +3008,7 @@ PY
     set -e
     trap - INT TERM
     rm -f "${stdin_file}"
+    write_timeout_last_message_if_missing "${output_last_message_path}" "${child_exit}" "${elapsed_seconds}" ""
     if [ "${interrupted_exit}" -ne 0 ]; then
       return "${interrupted_exit}"
     fi

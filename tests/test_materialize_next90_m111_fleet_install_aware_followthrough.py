@@ -23,6 +23,7 @@ def _write_yaml(path: Path, payload: dict) -> None:
 
 
 def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
+    tmp_path = tmp_path.resolve()
     support = tmp_path / "published" / "SUPPORT_CASE_PACKETS.generated.json"
     governor = tmp_path / "published" / "WEEKLY_GOVERNOR_PACKET.generated.json"
     pulse = tmp_path / "product" / "WEEKLY_PRODUCT_PULSE.generated.json"
@@ -162,7 +163,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
 
 class MaterializeNext90M111InstallAwareFollowthroughTests(unittest.TestCase):
     def test_materialize_next90_m111_install_aware_followthrough_gate(self) -> None:
-        tmp_path = Path(self.id().replace(".", "_"))
+        tmp_path = Path(self.id().replace(".", "_")).resolve()
         tmp_path.mkdir(parents=True, exist_ok=True)
         try:
             paths = _fixture_tree(tmp_path)
@@ -194,6 +195,10 @@ class MaterializeNext90M111InstallAwareFollowthroughTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             payload = json.loads(paths["out"].read_text(encoding="utf-8"))
             self.assertEqual(payload["contract_name"], "fleet.install_aware_followthrough_gate")
+            self.assertEqual(payload["status"], "pass")
+            self.assertEqual(payload["gate_summary"], {"followthrough_mail": "pass", "public_proof_promotion": "pass"})
+            self.assertEqual(payload["summary"]["followthrough_mail_state"], "pass")
+            self.assertEqual(payload["summary"]["public_proof_promotion_state"], "pass")
             self.assertEqual(payload["gates"]["followthrough_mail"]["state"], "pass")
             self.assertEqual(payload["gates"]["public_proof_promotion"]["state"], "pass")
             self.assertEqual(payload["queue_status"], "complete")

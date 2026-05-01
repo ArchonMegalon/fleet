@@ -43,6 +43,12 @@ except ModuleNotFoundError:
     from materialize_flagship_product_readiness import materialize_flagship_product_readiness
 
 
+CODEXEA_WAITING_TRACE_RE = re.compile(
+    r"^Trace:\s*lane=.*waiting for (?:model output|upstream response)(?:\s*\([^)]*\))?$",
+    re.IGNORECASE,
+)
+
+
 def _env_float_default(name: str, default: float) -> float:
     try:
         return float(os.environ.get(name, str(default)) or str(default))
@@ -239,21 +245,26 @@ MODEL_COMPATIBILITY_FALLBACKS: Dict[str, tuple[str, ...]] = {
 }
 LANE_MODEL_COMPATIBILITY_FALLBACKS: Dict[str, Dict[str, tuple[str, ...]]] = {
     "core": {
+        "jury": ("ea-audit-jury",),
+        "review_light": ("ea-review-light",),
         "repair": ("ea-coder-fast",),
         "survival": ("ea-coder-survival",),
     },
     "core_rescue": {
+        "jury": ("ea-audit-jury",),
+        "review_light": ("ea-review-light",),
         "repair": ("ea-coder-fast",),
         "survival": ("ea-coder-survival",),
     },
     "jury": {
+        "review_light": ("ea-review-light",),
         "core": ("ea-coder-hard-batch", "ea-coder-hard"),
         "repair": ("ea-coder-fast",),
         "survival": ("ea-coder-survival",),
     },
     "audit_shard": {
-        "jury": ("ea-coder-hard-batch",),
-        "review_light": ("ea-coder-hard-batch",),
+        "jury": ("ea-audit-jury",),
+        "review_light": ("ea-review-light",),
         "core": ("ea-coder-hard-batch", "ea-coder-hard"),
         "core_rescue": ("ea-coder-hard-batch", "ea-coder-hard"),
         "repair": ("ea-coder-fast",),
@@ -261,8 +272,8 @@ LANE_MODEL_COMPATIBILITY_FALLBACKS: Dict[str, Dict[str, tuple[str, ...]]] = {
         "easy": ("",),
     },
     "review_shard": {
-        "jury": ("ea-coder-hard-batch",),
-        "review_light": ("ea-coder-hard-batch",),
+        "jury": ("ea-audit-jury",),
+        "review_light": ("ea-review-light",),
         "core": ("ea-coder-hard-batch", "ea-coder-hard"),
         "core_rescue": ("ea-coder-hard-batch", "ea-coder-hard"),
         "repair": ("ea-coder-fast",),
@@ -988,6 +999,24 @@ def _worker_model_output_stall_seconds(workspace_root: Path, timeout_seconds: fl
             stall_seconds = max(0.0, float(raw))
         except (TypeError, ValueError):
             stall_seconds = DEFAULT_MODEL_OUTPUT_STALL_SECONDS
+    effective_timeout = max(0.0, float(timeout_seconds or 0.0))
+    if effective_timeout > 0.0:
+        stall_seconds = min(stall_seconds, effective_timeout)
+    return max(0.0, stall_seconds)
+
+
+def _codexea_wait_stall_seconds(workspace_root: Path, timeout_seconds: float) -> float:
+    raw = _runtime_env_default_with_workspace(
+        "CHUMMER_DESIGN_SUPERVISOR_CODEXEA_WAIT_STALL_SECONDS",
+        workspace_root,
+        "300",
+    )
+    stall_seconds = 300.0
+    if raw:
+        try:
+            stall_seconds = max(0.0, float(raw))
+        except (TypeError, ValueError):
+            stall_seconds = 300.0
     effective_timeout = max(0.0, float(timeout_seconds or 0.0))
     if effective_timeout > 0.0:
         stall_seconds = min(stall_seconds, effective_timeout)
@@ -1836,17 +1865,41 @@ def _provider_dispatch_capacity_snapshot(
         and cached_failure_age_seconds <= _ea_provider_health_failure_cooldown_seconds()
     )
     live_hard_ea_active_runs = 0
+    shard_summary_hard_ea_productive_runs = 0
+    shard_summary_hard_ea_waiting_runs = 0
     for record in _container_local_active_run_records().values():
         selected_model = str((record or {}).get("selected_model") or "").strip().lower()
         if selected_model.startswith("ea-coder-hard"):
             live_hard_ea_active_runs += 1
     shard_summary_hard_ea_active_runs = 0
-    for row in _statefile_shard_summaries(aggregate_root):
+    manifest_rows: List[Dict[str, Any]] = []
+    manifest_payload = _read_state(_active_shard_manifest_path(aggregate_root))
+    if manifest_payload:
+        manifest_rows = [dict(item) for item in (manifest_payload.get("active_shards") or []) if isinstance(item, dict)]
+    summary_rows: List[Dict[str, Any]] = manifest_rows or [
+        dict(item) for item in _statefile_shard_summaries(aggregate_root) if isinstance(item, dict)
+    ]
+    for row in summary_rows:
         if not _shard_summary_counts_as_active_run(row):
             continue
         selected_model = str((row or {}).get("selected_model") or "").strip().lower()
         if selected_model.startswith("ea-coder-hard"):
             shard_summary_hard_ea_active_runs += 1
+            progress_evidence = str((row or {}).get("active_run_progress_evidence") or "").strip().lower()
+            progress_state = str((row or {}).get("active_run_progress_state") or "").strip().lower()
+            if progress_state in {
+                "waiting_for_model_output",
+                "stream_connected_waiting",
+                "running_silent",
+                "transport_reconnecting",
+                "transport_outage_waiting",
+                "blocked_status_polling",
+                "container_scoped",
+                "missing_output_artifacts",
+            } or progress_evidence in {"wait_only", "worker_output_only", "read_only_repo_probe", "no_output_yet"}:
+                shard_summary_hard_ea_waiting_runs += 1
+            elif progress_evidence == "repo_work_detected":
+                shard_summary_hard_ea_productive_runs += 1
     if shard_summary_hard_ea_active_runs > live_hard_ea_active_runs:
         live_hard_ea_active_runs = shard_summary_hard_ea_active_runs
     recent_live_fetch_failure_overridden = False
@@ -1881,6 +1934,8 @@ def _provider_dispatch_capacity_snapshot(
         ready_slots = max(0, _coerce_int(onemin.get("live_ready_slot_count"), 0))
     else:
         ready_slots = sum(1 for state in slot_states if state in PROVIDER_HEALTH_READY_STATES)
+    degraded_slots = sum(1 for state in slot_states if state in PROVIDER_HEALTH_DEGRADED_STATES)
+    quarantine_slots = sum(1 for state in slot_states if state == "quarantine")
     configured_slots = max(0, _coerce_int(onemin.get("configured_slots"), 0))
     if configured_slots <= 0:
         configured_slots = len(slot_states)
@@ -1891,28 +1946,67 @@ def _provider_dispatch_capacity_snapshot(
         "CHUMMER_DESIGN_SUPERVISOR_PROVIDER_DISPATCH_HARD_LANE_ABSOLUTE_CREDITS",
         50000,
     )
+    dispatch_remaining_credits_total = live_remaining_credits_total
+    dispatch_balance_basis_summary = balance_basis_summary or "unknown"
+    observed_error_actual_override = bool(
+        balance_basis_summary == "observed_error"
+        and actual_remaining_credits_total is not None
+        and actual_remaining_credits_total > 0
+        and ready_slots <= 0
+        and degraded_slots <= 0
+        and quarantine_slots > 0
+        and (
+            live_remaining_credits_total is None
+            or actual_remaining_credits_total
+            >= max(float(credit_budget_floor), float(live_remaining_credits_total) * 10.0)
+        )
+    )
+    if observed_error_actual_override:
+        dispatch_remaining_credits_total = actual_remaining_credits_total
+        dispatch_balance_basis_summary = "actual_override_after_observed_error"
     if (
-        live_remaining_credits_total is not None
-        and live_remaining_credits_total > 0
+        dispatch_remaining_credits_total is not None
+        and dispatch_remaining_credits_total > 0
         and credit_budget_floor > 0
     ):
         credit_budget_capacity = min(
             hard_ea_shard_count,
-            max(0, int(float(live_remaining_credits_total) // float(credit_budget_floor))),
+            max(0, int(float(dispatch_remaining_credits_total) // float(credit_budget_floor))),
         )
     capacity_limits: List[int] = []
     effective_ready_capacity = ready_slots
     effective_hard_max_active_requests = hard_max_active_requests
+    degraded_hard_lane_canary_cap = max(
+        1,
+        _runtime_env_int_default(
+            "CHUMMER_DESIGN_SUPERVISOR_PROVIDER_DISPATCH_DEGRADED_HARD_LANE_MAX_ACTIVE_REQUESTS",
+            2,
+        ),
+    )
+    degraded_credit_fallback_canary = False
     if ready_slots <= 0 and credit_budget_capacity > 0:
         effective_ready_capacity = credit_budget_capacity
-        if effective_hard_max_active_requests <= 0 or effective_hard_max_active_requests < credit_budget_capacity:
-            effective_hard_max_active_requests = credit_budget_capacity
+        if degraded_slots > 0 and not observed_error_actual_override:
+            effective_ready_capacity = min(
+                effective_ready_capacity,
+                max(1, min(degraded_slots, degraded_hard_lane_canary_cap)),
+            )
+            degraded_credit_fallback_canary = True
+        if effective_hard_max_active_requests <= 0 or effective_hard_max_active_requests > effective_ready_capacity:
+            effective_hard_max_active_requests = effective_ready_capacity
     if effective_ready_capacity > 0:
         capacity_limits.append(effective_ready_capacity)
     if effective_hard_max_active_requests > 0:
         capacity_limits.append(effective_hard_max_active_requests)
     if capacity_limits:
         hard_lane_capacity = min(hard_lane_capacity, min(capacity_limits))
+    hard_wait_only_canary_active = bool(
+        shard_summary_hard_ea_active_runs > 0
+        and shard_summary_hard_ea_productive_runs <= 0
+        and shard_summary_hard_ea_waiting_runs > 0
+    )
+    if hard_wait_only_canary_active and hard_lane_capacity > 1:
+        hard_lane_capacity = 1
     if recent_live_fetch_failure and hard_lane_capacity > 1:
         hard_lane_capacity = min(
             hard_lane_capacity,
@@ -1931,7 +2025,21 @@ def _provider_dispatch_capacity_snapshot(
     elif credit_budget_capacity > 0:
         reason_bits.append(
             "credit-derived hard lane capacity="
-            f"{credit_budget_capacity} from live_remaining_credits_total={live_remaining_credits_total:.0f}"
+            f"{credit_budget_capacity} from dispatch_remaining_credits_total={dispatch_remaining_credits_total:.0f}"
+        )
+    if observed_error_actual_override:
+        reason_bits.append(
+            "actual-balance override after observed_error "
+            f"(quarantine_slots={quarantine_slots}, actual_remaining_credits_total={actual_remaining_credits_total:.0f})"
+        )
+    if degraded_credit_fallback_canary:
+        reason_bits.append(
+            f"degraded 1min canary cap={effective_ready_capacity} with ready_slots=0"
+        )
+    if hard_wait_only_canary_active:
+        reason_bits.append(
+            "hard-lane wait-only canary active "
+            f"(waiting={shard_summary_hard_ea_waiting_runs}, productive={shard_summary_hard_ea_productive_runs})"
         )
     if (
         actual_remaining_credits_total is not None
@@ -1960,10 +2068,12 @@ def _provider_dispatch_capacity_snapshot(
         "ready_slots": ready_slots,
         "configured_slots": configured_slots,
         "hard_max_active_requests": hard_max_active_requests,
-        "estimated_remaining_credits_total": live_remaining_credits_total,
+        "estimated_remaining_credits_total": dispatch_remaining_credits_total,
         "live_remaining_credits_total": live_remaining_credits_total,
+        "dispatch_remaining_credits_total": dispatch_remaining_credits_total,
         "actual_remaining_credits_total": actual_remaining_credits_total,
         "balance_basis_summary": balance_basis_summary,
+        "dispatch_balance_basis_summary": dispatch_balance_basis_summary,
         "remaining_percent_of_max": remaining_percent_of_max,
         "live_remaining_percent_of_max": remaining_percent_of_max,
         "actual_remaining_percent_of_max": _coerce_float(onemin.get("actual_remaining_percent_of_max")),
@@ -2436,6 +2546,8 @@ def _codexea_profile_for_lane(worker_lane: str, *, workspace_root: Optional[Path
         "core": core_profile,
         "core_rescue": "core_rescue",
         "jury": "audit",
+        "audit_shard": "audit",
+        "review_shard": "review_light",
         "survival": "survival",
     }
     return profile_by_lane.get(lane, lane)
@@ -3025,6 +3137,15 @@ def _assess_direct_worker_lane_health(
     if estimated_remaining_credits_total is None:
         estimated_remaining_credits_total = _coerce_float(capacity.get("estimated_remaining_credits_total"))
     actual_remaining_credits_total = _coerce_float(capacity.get("actual_remaining_credits_total"))
+    quarantine_slots = 0
+    live_positive_balance_slot_count: Optional[int] = None
+    for provider in providers:
+        slot_pool = dict(provider.get("slot_pool") or {})
+        slot_state_counts = dict(slot_pool.get("slot_state_counts") or {})
+        quarantine_slots = max(quarantine_slots, _coerce_int(slot_state_counts.get("quarantine"), 0))
+        positive_balance_count = _coerce_int(slot_pool.get("live_positive_balance_slot_count"))
+        if positive_balance_count is not None:
+            live_positive_balance_slot_count = max(live_positive_balance_slot_count or 0, positive_balance_count)
     executable_provider_count = sum(
         1 for provider in providers if bool(provider.get("enabled", True)) and bool(provider.get("executable", True))
     )
@@ -3037,10 +3158,25 @@ def _assess_direct_worker_lane_health(
         reason_segments.append(f"lane:{lane_detail}")
     reason = "; ".join(segment for segment in reason_segments if segment)
     credit_floor = _direct_worker_lane_low_capacity_credit_floor(lane)
+    dispatch_remaining_credits_total = estimated_remaining_credits_total
+    observed_error_actual_override = bool(
+        ready_slots <= 0
+        and quarantine_slots > 0
+        and actual_remaining_credits_total is not None
+        and actual_remaining_credits_total > 0
+        and live_positive_balance_slot_count not in (None, 0)
+        and (
+            estimated_remaining_credits_total is None
+            or actual_remaining_credits_total
+            >= max(float(credit_floor or 0), float(estimated_remaining_credits_total) * 10.0)
+        )
+    )
+    if observed_error_actual_override:
+        dispatch_remaining_credits_total = actual_remaining_credits_total
     has_absolute_credit_headroom = (
         credit_floor is not None
-        and estimated_remaining_credits_total is not None
-        and estimated_remaining_credits_total >= credit_floor
+        and dispatch_remaining_credits_total is not None
+        and dispatch_remaining_credits_total >= credit_floor
     )
 
     routable = True
@@ -3067,9 +3203,19 @@ def _assess_direct_worker_lane_health(
             if not reason:
                 reason = f"profile={profile or lane} is degraded with ready_slots={ready_slots}"
         elif state in PROVIDER_HEALTH_UNAVAILABLE_STATES:
-            routable = False
-            if not reason:
-                reason = f"profile={profile or lane} primary_state={state}"
+            if observed_error_actual_override and has_absolute_credit_headroom:
+                state = "degraded"
+                routable = True
+                override_reason = (
+                    "actual-balance override after quarantine-only unavailable state "
+                    f"(quarantine_slots={quarantine_slots}, "
+                    f"live_positive_balance_slot_count={live_positive_balance_slot_count or 0})"
+                )
+                reason = "; ".join(part for part in [reason, override_reason] if part)
+            else:
+                routable = False
+                if not reason:
+                    reason = f"profile={profile or lane} primary_state={state}"
         else:
             routable = True
 
@@ -3140,6 +3286,186 @@ def _direct_worker_lane_low_capacity_credit_floor(worker_lane: str) -> Optional[
             )
         )
     return None
+
+
+def _survival_lane_max_concurrent_runs() -> int:
+    return max(
+        1,
+        _runtime_env_int_default(
+            "CHUMMER_DESIGN_SUPERVISOR_SURVIVAL_LANE_MAX_CONCURRENT_RUNS",
+            _runtime_env_int_default("EA_SURVIVAL_MAX_ACTIVE_REQUESTS", 1),
+        ),
+    )
+
+
+DIRECT_LANE_ACTIVE_MODEL_ALIASES: Dict[str, Set[str]] = {
+    "core": {"ea-coder-hard", "ea-coder-hard-batch"},
+    "core_rescue": {"ea-coder-hard-rescue", "ea-coder-hard-batch", "ea-coder-hard"},
+    "survival": {"ea-coder-survival"},
+    "review_light": {"ea-review-light"},
+    "jury": {"ea-audit-jury"},
+}
+DIRECT_LANE_SHARED_WAIT_ONLY_CANARY_CAPS: Dict[str, int] = {
+    "core": 1,
+    "core_rescue": 1,
+    "review_light": 1,
+    "jury": 1,
+}
+
+
+def _direct_lane_max_concurrent_runs(worker_lane: str, lane_report: Optional[Dict[str, Any]] = None) -> int:
+    lane = str(worker_lane or "").strip().lower()
+    if not lane:
+        return 0
+    if lane == "survival":
+        return _survival_lane_max_concurrent_runs()
+    if lane in {"core", "core_rescue"}:
+        lane_state = str((lane_report or {}).get("state") or "").strip().lower()
+        configured_slots = max(0, _coerce_int((lane_report or {}).get("configured_slots"), 0))
+        default_budget = configured_slots if configured_slots > 0 else 1
+        if lane_state in {"ready", "degraded", "queued"}:
+            default_budget = max(default_budget, 3)
+        env_name = (
+            "CHUMMER_DESIGN_SUPERVISOR_CORE_LANE_MAX_CONCURRENT_RUNS"
+            if lane == "core"
+            else "CHUMMER_DESIGN_SUPERVISOR_CORE_RESCUE_LANE_MAX_CONCURRENT_RUNS"
+        )
+        return max(1, _runtime_env_int_default(env_name, default_budget))
+    if lane in {"review_light", "jury"}:
+        lane_state = str((lane_report or {}).get("state") or "").strip().lower()
+        configured_slots = max(0, _coerce_int((lane_report or {}).get("configured_slots"), 0))
+        default_budget = configured_slots if configured_slots > 0 else 1
+        if lane_state in {"ready", "degraded", "queued"}:
+            default_budget = max(default_budget, 3)
+        env_name = (
+            "CHUMMER_DESIGN_SUPERVISOR_REVIEW_LIGHT_LANE_MAX_CONCURRENT_RUNS"
+            if lane == "review_light"
+            else "CHUMMER_DESIGN_SUPERVISOR_JURY_LANE_MAX_CONCURRENT_RUNS"
+        )
+        return max(1, _runtime_env_int_default(env_name, default_budget))
+    return 0
+
+
+def _row_counts_as_active_direct_lane_run(
+    row: Dict[str, Any],
+    *,
+    worker_lane: str,
+    exclude_run_id: str = "",
+    exclude_shard_id: str = "",
+) -> bool:
+    if not isinstance(row, dict) or not _shard_summary_counts_as_active_run(row):
+        return False
+    active_run_id = str(row.get("active_run_id") or row.get("run_id") or "").strip()
+    shard_id = str(row.get("shard_id") or row.get("name") or row.get("_shard") or "").strip()
+    if exclude_run_id and active_run_id == exclude_run_id:
+        return False
+    if exclude_shard_id and shard_id == exclude_shard_id:
+        return False
+    lane = str(worker_lane or "").strip().lower()
+    configured_lane = str(row.get("worker_lane") or row.get("active_run_worker_lane") or "").strip().lower()
+    selected_account_alias = str(row.get("selected_account_alias") or "").strip().lower()
+    selected_model = str(row.get("selected_model") or "").strip().lower()
+    if configured_lane == lane or selected_account_alias == f"lane:{lane}":
+        return True
+    return bool(selected_model and selected_model in DIRECT_LANE_ACTIVE_MODEL_ALIASES.get(lane, set()))
+
+
+def _row_counts_as_active_survival_run(
+    row: Dict[str, Any],
+    *,
+    exclude_run_id: str = "",
+    exclude_shard_id: str = "",
+) -> bool:
+    return _row_counts_as_active_direct_lane_run(
+        row,
+        worker_lane="survival",
+        exclude_run_id=exclude_run_id,
+        exclude_shard_id=exclude_shard_id,
+    )
+
+
+def _active_direct_lane_run_count(
+    state_root: Path,
+    worker_lane: str,
+    *,
+    exclude_run_id: str = "",
+    exclude_shard_id: str = "",
+) -> int:
+    productive, waiting, other = _active_direct_lane_progress_counts(
+        state_root,
+        worker_lane,
+        exclude_run_id=exclude_run_id,
+        exclude_shard_id=exclude_shard_id,
+    )
+    wait_only_cap = max(0, _coerce_int(DIRECT_LANE_SHARED_WAIT_ONLY_CANARY_CAPS.get(str(worker_lane or "").strip().lower()), 0))
+    if wait_only_cap <= 0:
+        return productive + waiting + other
+    return productive + other + min(waiting, wait_only_cap)
+
+
+def _active_direct_lane_progress_counts(
+    state_root: Path,
+    worker_lane: str,
+    *,
+    exclude_run_id: str = "",
+    exclude_shard_id: str = "",
+) -> tuple[int, int, int]:
+    aggregate_root = _aggregate_state_root(state_root)
+    manifest_path = _active_shard_manifest_path(aggregate_root)
+    rows: List[Dict[str, Any]] = []
+    if manifest_path.exists():
+        payload = _read_state(manifest_path)
+        rows = [dict(item) for item in (payload.get("active_shards") or []) if isinstance(item, dict)]
+    if not rows:
+        rows = [dict(item) for item in _statefile_shard_summaries(aggregate_root) if isinstance(item, dict)]
+    lane = str(worker_lane or "").strip().lower()
+    matching_rows = [
+        row
+        for row in rows
+        if _row_counts_as_active_direct_lane_run(
+            row,
+            worker_lane=lane,
+            exclude_run_id=exclude_run_id,
+            exclude_shard_id=exclude_shard_id,
+        )
+    ]
+    productive = 0
+    waiting = 0
+    other = 0
+    waiting_states = {
+        "waiting_for_model_output",
+        "stream_connected_waiting",
+        "running_silent",
+        "transport_reconnecting",
+        "transport_outage_waiting",
+        "blocked_status_polling",
+        "container_scoped",
+        "missing_output_artifacts",
+    }
+    for row in matching_rows:
+        evidence = str(row.get("active_run_progress_evidence") or "").strip().lower()
+        state = str(row.get("active_run_progress_state") or "").strip().lower()
+        if state in waiting_states or evidence in {"wait_only", "worker_output_only", "read_only_repo_probe", "no_output_yet"}:
+            waiting += 1
+        elif evidence == "repo_work_detected":
+            productive += 1
+        else:
+            other += 1
+    return productive, waiting, other
+
+
+def _active_survival_direct_run_count(
+    state_root: Path,
+    *,
+    exclude_run_id: str = "",
+    exclude_shard_id: str = "",
+) -> int:
+    return _active_direct_lane_run_count(
+        state_root,
+        "survival",
+        exclude_run_id=exclude_run_id,
+        exclude_shard_id=exclude_shard_id,
+    )
 
 
 def _direct_worker_lane_health_snapshot(
@@ -3337,6 +3663,10 @@ def _direct_worker_lane_health_snapshot(
 def _filter_routable_direct_worker_lanes(
     worker_lane_candidates: Sequence[str],
     worker_lane_health: Optional[Dict[str, Any]],
+    *,
+    state_root: Optional[Path] = None,
+    exclude_run_id: str = "",
+    exclude_shard_id: str = "",
 ) -> tuple[List[str], List[Dict[str, Any]]]:
     lanes = [str(item or "").strip() for item in worker_lane_candidates if str(item or "").strip()]
     if not lanes or not isinstance(worker_lane_health, dict):
@@ -3350,7 +3680,96 @@ def _filter_routable_direct_worker_lanes(
         if lane_report and lane_report.get("routable") is False:
             skipped.append(lane_report)
             continue
+        lane_budget = _direct_lane_max_concurrent_runs(lane_key, lane_report)
+        productive_lane_runs = 0
+        waiting_lane_runs = 0
+        active_lane_runs = 0
+        if state_root is not None and lane_budget > 0:
+            productive_lane_runs, waiting_lane_runs, other_lane_runs = _active_direct_lane_progress_counts(
+                state_root,
+                lane_key,
+                exclude_run_id=exclude_run_id,
+                exclude_shard_id=exclude_shard_id,
+            )
+            wait_only_cap = max(
+                0,
+                _coerce_int(DIRECT_LANE_SHARED_WAIT_ONLY_CANARY_CAPS.get(lane_key), 0),
+            )
+            active_lane_runs = productive_lane_runs + other_lane_runs + min(waiting_lane_runs, wait_only_cap)
+            if lane_key in {"core", "core_rescue"} and productive_lane_runs <= 0 and waiting_lane_runs > 0:
+                lane_budget = min(lane_budget, 1)
+        if lane_budget > 0 and active_lane_runs >= lane_budget:
+            skipped.append(
+                {
+                    **lane_report,
+                    "worker_lane": lane_key,
+                    "profile": str(lane_report.get("profile") or lane_key or "default").strip(),
+                    "routable": False,
+                    "state": "queued",
+                    "reason": (
+                        f"{lane_key} lane concurrency budget reached: "
+                        f"active={active_lane_runs} budget={lane_budget}"
+                        + (
+                            f" productive={productive_lane_runs} waiting={waiting_lane_runs}"
+                            if lane_key in {"core", "core_rescue"}
+                            else ""
+                        )
+                    ),
+                }
+            )
+            continue
         filtered.append(lane)
+    return filtered, skipped
+
+
+def _filter_anonymous_full_fallback_direct_worker_lanes(
+    worker_lane_candidates: Sequence[str],
+    worker_lane_health: Optional[Dict[str, Any]],
+) -> tuple[List[str], List[Dict[str, Any]]]:
+    lanes = [str(item or "").strip() for item in worker_lane_candidates if str(item or "").strip()]
+    if not lanes or not isinstance(worker_lane_health, dict):
+        return list(worker_lane_candidates), []
+    lane_rows = dict(worker_lane_health.get("lanes") or {})
+    filtered: List[str] = []
+    skipped: List[Dict[str, Any]] = []
+    for lane in worker_lane_candidates:
+        lane_key = str(lane or "").strip()
+        lane_report = dict(lane_rows.get(lane_key) or {})
+        if lane_key not in {"core", "core_rescue"}:
+            filtered.append(lane)
+            continue
+        if not lane_report:
+            skipped.append(
+                {
+                    "worker_lane": lane_key,
+                    "profile": lane_key or "default",
+                    "routable": False,
+                    "state": "unknown",
+                    "reason": (
+                        f"{lane_key} anonymous full-fallback requires provider-health lane metadata "
+                        "before launching a direct hard-lane waiter"
+                    ),
+                }
+            )
+            continue
+        lane_state = str(lane_report.get("state") or "").strip().lower()
+        ready_slots = max(0, _coerce_int(lane_report.get("ready_slots"), 0))
+        if lane_state == "ready" or ready_slots > 0:
+            filtered.append(lane)
+            continue
+        skipped.append(
+            {
+                **lane_report,
+                "worker_lane": lane_key,
+                "profile": str(lane_report.get("profile") or lane_key or "default").strip(),
+                "routable": False,
+                "state": lane_state or "degraded",
+                "reason": (
+                    f"{lane_key} anonymous full-fallback requires at least one ready slot: "
+                    f"state={lane_state or 'unknown'} ready_slots={ready_slots}"
+                ),
+            }
+        )
     return filtered, skipped
 
 
@@ -4135,8 +4554,9 @@ def _use_project_configured_shards_for_root(aggregate_root: Path) -> bool:
 
 def _runtime_configured_shard_entries(aggregate_root: Path) -> List[Dict[str, Any]]:
     manifest_entries = _active_shard_manifest_entries(aggregate_root)
+    project_entries = _project_configured_shard_entries()
+    project_config_is_source = _use_project_configured_shards_for_root(aggregate_root)
     if manifest_entries:
-        project_entries = _project_configured_shard_entries()
         manifest_is_sparse_seed = all(
             set(entry.keys()).issubset({"name", "index"})
             for entry in manifest_entries
@@ -4144,9 +4564,38 @@ def _runtime_configured_shard_entries(aggregate_root: Path) -> List[Dict[str, An
         )
         if project_entries and manifest_is_sparse_seed and len(project_entries) > len(manifest_entries):
             return [dict(entry) for entry in project_entries]
+        if project_entries and project_config_is_source:
+            manifest_by_name = {
+                str(entry.get("name") or "").strip(): dict(entry)
+                for entry in manifest_entries
+                if isinstance(entry, dict) and str(entry.get("name") or "").strip().startswith("shard-")
+            }
+            merged: List[Dict[str, Any]] = []
+            seen_names: Set[str] = set()
+            for project_entry in project_entries:
+                name = str(project_entry.get("name") or "").strip()
+                if not name.startswith("shard-"):
+                    continue
+                merged_entry: Dict[str, Any] = {}
+                manifest_entry = manifest_by_name.get(name) or {}
+                frontier_ids = [
+                    _coerce_int(value, 0)
+                    for value in (manifest_entry.get("frontier_ids") or [])
+                ]
+                frontier_ids = [value for value in frontier_ids if value > 0]
+                if frontier_ids:
+                    merged_entry["frontier_ids"] = frontier_ids
+                merged_entry.update(dict(project_entry))
+                merged.append(merged_entry)
+                seen_names.add(name)
+            for manifest_entry in manifest_entries:
+                name = str(manifest_entry.get("name") or "").strip()
+                if name.startswith("shard-") and name not in seen_names:
+                    merged.append(dict(manifest_entry))
+            return merged
         return [dict(entry) for entry in manifest_entries]
-    if _use_project_configured_shards_for_root(aggregate_root):
-        return [dict(entry) for entry in _project_configured_shard_entries()]
+    if project_entries and project_config_is_source:
+        return [dict(entry) for entry in project_entries]
     return []
 
 
@@ -6438,6 +6887,7 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
             ui_executable_exit_gate_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
             ui_workflow_execution_gate_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
             ui_visual_familiarity_exit_gate_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+            ui_element_parity_audit_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
             ui_user_journey_tester_audit_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "USER_JOURNEY_TESTER_AUDIT.generated.json",
             ui_localization_release_gate_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LOCALIZATION_RELEASE_GATE.generated.json",
             sr4_workflow_parity_proof_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
@@ -7850,6 +8300,7 @@ def _load_openai_escape_accounts(
             account_runtime,
             requested_worker_lane=requested_worker_lane,
             now=now,
+            state_root=state_root,
         )
         for account in escape_accounts
     )
@@ -7909,6 +8360,7 @@ def _load_openai_escape_accounts(
             account_runtime,
             requested_worker_lane=requested_worker_lane,
             now=now,
+            state_root=state_root,
         )
         for account in escape_accounts
     )
@@ -7946,6 +8398,7 @@ def _load_openai_escape_accounts(
             account_runtime,
             requested_worker_lane=requested_worker_lane,
             now=now,
+            state_root=state_root,
         )
         backoff_until, backoff_reason = _active_source_backoff(account_runtime, account, now=now)
         usage_limited = backoff_until is not None and _is_usage_limit_backoff_reason(backoff_reason)
@@ -7982,6 +8435,7 @@ def _earliest_worker_account_backoff_until(
             account_runtime,
             requested_worker_lane=requested_worker_lane,
             now=now,
+            state_root=state_root,
         ):
             return None
         backoff_until, _reason = _active_source_backoff(account_runtime, account, now=now)
@@ -8129,20 +8583,51 @@ def _routed_full_lane_direct_fallback_lanes(worker_lane: str) -> List[str]:
             [
                 lane,
                 *[item for item in ("core", "core_rescue") if item != lane],
+                "review_light",
+                "jury",
                 *DEFAULT_FALLBACK_WORKER_LANES.get(lane, ()),
             ]
         )
-    if lane in {"jury", "audit_shard", "review_shard"}:
-        return _ordered_unique_lanes(["core", *DEFAULT_FALLBACK_WORKER_LANES.get("core", ())])
+    if lane == "jury":
+        return _ordered_unique_lanes(["jury", "review_light", "core", *DEFAULT_FALLBACK_WORKER_LANES.get("core", ())])
+    if lane == "audit_shard":
+        return _ordered_unique_lanes(
+            ["jury", "review_light", "core", "core_rescue", *DEFAULT_FALLBACK_WORKER_LANES.get("core", ())]
+        )
+    if lane == "review_shard":
+        return _ordered_unique_lanes(
+            ["review_light", "jury", "core", "core_rescue", *DEFAULT_FALLBACK_WORKER_LANES.get("core", ())]
+        )
     return []
 
 
-def _routed_full_lane_direct_fallback_args(args: argparse.Namespace) -> Optional[argparse.Namespace]:
+def _audit_review_wait_only_canary_blocks_hard_fallback(state_root: Path) -> bool:
+    review_productive, review_waiting, _review_other = _active_direct_lane_progress_counts(state_root, "review_light")
+    jury_productive, jury_waiting, _jury_other = _active_direct_lane_progress_counts(state_root, "jury")
+    total_productive = review_productive + jury_productive
+    total_waiting = review_waiting + jury_waiting
+    return total_productive <= 0 and total_waiting > 0
+
+
+def _routed_full_lane_direct_fallback_args(
+    args: argparse.Namespace,
+    *,
+    state_root: Optional[Path] = None,
+) -> Optional[argparse.Namespace]:
     if not _worker_bin_uses_codexea(str(args.worker_bin or "")):
         return None
     lanes = _routed_full_lane_direct_fallback_lanes(str(args.worker_lane or ""))
     if not lanes:
         return None
+    requested_lane = str(args.worker_lane or "").strip().lower()
+    if (
+        state_root is not None
+        and requested_lane in {"audit_shard", "review_shard"}
+        and _audit_review_wait_only_canary_blocks_hard_fallback(state_root)
+    ):
+        lanes = [lane for lane in lanes if lane not in {"core", "core_rescue"}]
+        if not lanes:
+            return None
     clone = argparse.Namespace(**vars(args))
     clone.account_alias = []
     clone.account_owner_id = []
@@ -8234,13 +8719,17 @@ def _account_can_attempt_candidate_model(
     active_account_claims: Optional[Dict[str, int]] = None,
     now: Optional[dt.datetime] = None,
     ea_provider_slot_health_index: Optional[Dict[str, Dict[str, Any]]] = None,
+    state_root: Optional[Path] = None,
 ) -> bool:
     clean_candidate = str(candidate_model or "").strip()
     if not clean_candidate:
         return False
     current = now or _utc_now()
     claims = active_account_claims or {}
-    if account.max_parallel_runs > 0 and int(claims.get(account.alias, 0)) >= account.max_parallel_runs:
+    parallel_limit = (
+        _effective_account_max_parallel_runs(state_root, account) if state_root is not None else max(0, int(account.max_parallel_runs or 0))
+    )
+    if parallel_limit > 0 and int(claims.get(account.alias, 0)) >= parallel_limit:
         return False
     account_candidates = _candidate_models_for_account(
         account,
@@ -8262,6 +8751,7 @@ def _partition_model_candidates_by_runnability(
     active_account_claims: Optional[Dict[str, int]] = None,
     now: Optional[dt.datetime] = None,
     ea_provider_slot_health_index: Optional[Dict[str, Dict[str, Any]]] = None,
+    state_root: Optional[Path] = None,
 ) -> tuple[List[str], List[str]]:
     current = now or _utc_now()
     available: List[str] = []
@@ -8276,6 +8766,7 @@ def _partition_model_candidates_by_runnability(
                 active_account_claims=active_account_claims,
                 now=current,
                 ea_provider_slot_health_index=ea_provider_slot_health_index,
+                state_root=state_root,
             )
             for account in accounts
         )
@@ -8325,6 +8816,7 @@ def _preferred_ea_core_model_candidates(
         requested_worker_lane=requested_worker_lane,
         active_account_claims=_active_account_claim_counts(state_root),
         ea_provider_slot_health_index=current_ea_provider_slot_health_index,
+        state_root=state_root,
     )
     return available + unavailable or configured_models
 
@@ -8354,6 +8846,7 @@ def _preferred_openai_escape_model_candidates(
         account_runtime,
         requested_worker_lane=requested_worker_lane,
         active_account_claims=_active_account_claim_counts(state_root),
+        state_root=state_root,
     )
     return available + unavailable or ordered_candidates or configured_models
 
@@ -8390,6 +8883,7 @@ def _model_selection_snapshot(
         current_runtime,
         requested_worker_lane=effective_worker_lane,
         active_account_claims=active_account_claims,
+        state_root=state_root,
     )
     snapshot["ea_core"] = {
         "status": (
@@ -8429,6 +8923,7 @@ def _model_selection_snapshot(
         current_runtime,
         requested_worker_lane=str(getattr(escape_args, "worker_lane", "") or "").strip(),
         active_account_claims=active_account_claims,
+        state_root=state_root,
     )
     snapshot["openai_escape"] = {
         "status": (
@@ -8844,7 +9339,12 @@ def _compose_final_message_sections(sections: Dict[str, str]) -> str:
     shipped = str((sections or {}).get("shipped") or "").strip()
     remains = str((sections or {}).get("remains") or "").strip()
     blocker = str((sections or {}).get("blocker") or "").strip()
+    prefix = ""
+    if blocker:
+        prefix = blocker if blocker.lower().startswith("error:") else f"Error: {blocker}"
+        prefix = f"{prefix}\n"
     return (
+        f"{prefix}"
         f"What shipped: {shipped}\n\n"
         f"What remains: {remains}\n\n"
         f"Exact blocker: {blocker}\n"
@@ -9254,6 +9754,10 @@ def _history_payload_path(state_root: Path) -> Path:
 
 def _lock_payload_path(state_root: Path) -> Path:
     return state_root / "loop.lock"
+
+
+def _dispatch_selection_lock_path(state_root: Path) -> Path:
+    return _aggregate_state_root(state_root) / "dispatch.lock"
 
 
 def _run_artifact_retention_per_shard(args: argparse.Namespace) -> int:
@@ -9764,7 +10268,7 @@ def _tail_waiting_for_model_output(path: Path) -> bool:
         compact = " ".join(str(line or "").split())
         if not compact:
             continue
-        return bool(re.match(r"^Trace:\s*lane=.*waiting for model output(?:\s*\([^)]*\))?$", compact, re.IGNORECASE))
+        return bool(CODEXEA_WAITING_TRACE_RE.match(compact))
     return False
 
 
@@ -9943,6 +10447,58 @@ def _tail_progress_line_is_helper_noise(line: str) -> bool:
     return False
 
 
+_READ_ONLY_REPO_EXEC_PATTERN = re.compile(
+    r"/usr/bin/bash -lc ['\"][^'\"]*\b(?:"
+    r"sed -n|cat|rg|grep|find|ls|head|tail|wc|nl|"
+    r"git(?:\s+(?:show|status|diff|rev-parse|log|branch))?"
+    r")\b",
+    re.IGNORECASE,
+)
+_MEANINGFUL_REPO_EXEC_PATTERN = re.compile(
+    r"/usr/bin/bash -lc ['\"][^'\"]*\b(?:"
+    r"apply_patch|pytest|dotnet(?: test)?|cargo test|go test|npm test|pnpm test|"
+    r"python3?\s+-m\s+py_compile"
+    r")\b",
+    re.IGNORECASE,
+)
+_REPO_PATH_OUTPUT_PATTERN = re.compile(
+    r"^/(?:docker/(?:fleet|chummercomplete|EA|chummer5a))(?:/[^:\n]+)+:\d+(?::\d+)?:",
+    re.IGNORECASE,
+)
+_REPO_RESULT_PATTERN = re.compile(
+    r"\b(?:python3?|pytest|dotnet(?: test)?|cargo test|go test|npm test|pnpm test)\b.*\bexit(?:s)?\s+0\b",
+    re.IGNORECASE,
+)
+_GIT_STATUS_OUTPUT_PATTERN = re.compile(r"^(?:\?\?|M|A|D|R|C|UU|AM|MM)\s+\S")
+_REPO_MEANINGFUL_SIGNALS = (
+    "apply_patch",
+    "diff --git ",
+    "AssertionError:",
+    "Traceback (most recent call last):",
+    "error CS",
+    "FAILED ",
+    " failed,",
+    " passed in ",
+)
+
+
+def _repo_progress_line_kind(line: str) -> str:
+    compact = " ".join(str(line or "").split())
+    if not compact or _tail_progress_line_is_helper_noise(compact):
+        return ""
+    if _MEANINGFUL_REPO_EXEC_PATTERN.search(compact):
+        return "meaningful"
+    if (
+        _REPO_RESULT_PATTERN.search(compact)
+        or _GIT_STATUS_OUTPUT_PATTERN.match(compact)
+        or any(signal in compact for signal in _REPO_MEANINGFUL_SIGNALS)
+    ):
+        return "meaningful"
+    if _READ_ONLY_REPO_EXEC_PATTERN.search(compact) or _REPO_PATH_OUTPUT_PATTERN.match(compact):
+        return "read_only"
+    return ""
+
+
 def _tail_progress_evidence(stdout_path: Path, stderr_path: Path) -> Dict[str, Any]:
     stdout_lines = (
         [
@@ -9973,50 +10529,19 @@ def _tail_progress_evidence(stdout_path: Path, stderr_path: Path) -> Dict[str, A
         for line in stderr_lines
     )
     stdout_signal_lines = [line for line in stdout_lines if not _tail_progress_line_is_helper_noise(line)]
-    if stdout_signal_lines:
+    stdout_progress_kinds = [_repo_progress_line_kind(line) for line in stdout_signal_lines]
+    if any(kind == "meaningful" for kind in stdout_progress_kinds):
         return {
             "kind": "repo_work_detected",
-            "reason": "stdout contains live worker output beyond prompt boilerplate",
+            "reason": "stdout contains repo mutation/test/build activity beyond prompt boilerplate",
         }
     compact_stderr = [
         " ".join(str(line or "").split())
         for line in stderr_lines
         if str(line or "").strip() and not _tail_progress_line_is_helper_noise(line)
     ]
-    repo_exec_pattern = re.compile(
-        r"/usr/bin/bash -lc ['\"][^'\"]*\b(?:"
-        r"sed -n|cat|rg|grep|git|diff|dotnet|pytest|python3?|bash|node|npm|pnpm|find|ls|cargo|go|apply_patch"
-        r")\b",
-        re.IGNORECASE,
-    )
-    repo_path_output_pattern = re.compile(
-        r"^/(?:docker/(?:fleet|chummercomplete|EA|chummer5a))(?:/[^:\n]+)+:\d+(?::\d+)?:",
-        re.IGNORECASE,
-    )
-    repo_result_pattern = re.compile(
-        r"\b(?:python3?|pytest|dotnet(?: test)?|cargo test|go test|npm test|pnpm test)\b.*\bexit(?:s)?\s+0\b",
-        re.IGNORECASE,
-    )
-    git_status_pattern = re.compile(r"^(?:\?\?|M|A|D|R|C|UU|AM|MM)\s+\S")
-    repo_exec_signals = (
-        "apply_patch",
-        "diff --git ",
-        "AssertionError:",
-        "Traceback (most recent call last):",
-        "error CS",
-        "FAILED ",
-        " failed,",
-        " passed in ",
-    )
-    if (
-        any(repo_exec_pattern.search(line) for line in compact_stderr)
-        or any(repo_path_output_pattern.match(line) for line in compact_stderr)
-        or any(repo_result_pattern.search(line) for line in compact_stderr)
-        or any(git_status_pattern.match(line) for line in compact_stderr)
-        or any(
-        any(signal in line for signal in repo_exec_signals) for line in compact_stderr
-        )
-    ):
+    stderr_progress_kinds = [_repo_progress_line_kind(line) for line in compact_stderr]
+    if any(kind == "meaningful" for kind in stderr_progress_kinds):
         return {
             "kind": "repo_work_detected",
             "reason": "stderr shows repo-file or build/test command execution beyond supervisor telemetry",
@@ -10042,10 +10567,17 @@ def _tail_progress_evidence(stdout_path: Path, stderr_path: Path) -> Dict[str, A
             "kind": "repo_context_redirected",
             "reason": "status helper redirected repo context, but no worker-chosen repo command/output is visible",
         }
-    if any(re.match(r"^Trace:\s*lane=.*waiting for model output(?:\s*\([^)]*\))?$", line, re.IGNORECASE) for line in compact_stderr):
+    if any(kind == "read_only" for kind in stdout_progress_kinds) or any(
+        kind == "read_only" for kind in stderr_progress_kinds
+    ):
+        return {
+            "kind": "read_only_repo_probe",
+            "reason": "worker echoed repo reads/searches, but no mutation/test/build output is visible yet",
+        }
+    if any(CODEXEA_WAITING_TRACE_RE.match(line) for line in compact_stderr):
         return {
             "kind": "wait_only",
-            "reason": "stderr shows only waiting-for-model-output traces so far",
+            "reason": "stderr shows only upstream-wait traces so far",
         }
     if stderr_non_status_signal_lines:
         return {
@@ -10274,6 +10806,13 @@ def _run_worker_attempt(
         "last_total": "",
     }
     worker_uses_codexliz = any("codexliz" in str(part or "").lower() for part in command)
+    worker_uses_codexea = any("codexea" == Path(str(part or "").strip()).name.lower() for part in command[:1])
+    codexea_lane = str(command[1] if worker_uses_codexea and len(command) > 1 else "").strip().lower()
+    if worker_uses_codexea and codexea_lane in _direct_codexea_stream_lanes():
+        model_output_stall_seconds = min(
+            model_output_stall_seconds,
+            _codexea_wait_stall_seconds(workspace_root, timeout_seconds),
+        )
     watchdog_max_silent_seconds = _worker_watchdog_max_silent_seconds(workspace_root, timeout_seconds)
     watchdog_startup_grace_seconds = _worker_watchdog_startup_grace_seconds(workspace_root, timeout_seconds)
     liz_transport_reconnect_stall_seconds = (
@@ -10296,7 +10835,7 @@ def _run_worker_attempt(
         compact = str(chunk or "").strip()
         if not compact:
             return False
-        return bool(re.match(r"^Trace:\s*lane=.*waiting for model output(?:\s*\([^)]*\))?$", compact, re.IGNORECASE))
+        return bool(CODEXEA_WAITING_TRACE_RE.match(compact))
 
     def _worker_stderr_chunk_transport_reconnect_attempt(chunk: str) -> Optional[Tuple[str, str]]:
         compact = str(chunk or "").strip()
@@ -10424,6 +10963,8 @@ def _run_worker_attempt(
             and '"eta_human"' in compact
         ):
             return True
+        if _repo_progress_line_kind(compact) == "read_only":
+            return True
         return False
 
     def _worker_stdout_chunk_is_nonprogress_noise(chunk: str) -> bool:
@@ -10462,6 +11003,8 @@ def _run_worker_attempt(
             and '"remaining_open_milestones"' in compact
             and '"eta_human"' in compact
         ):
+            return True
+        if _repo_progress_line_kind(compact) == "read_only":
             return True
         return False
 
@@ -10923,7 +11466,7 @@ def _run_worker_attempt(
                     break
                 # Wait-trace keepalives are not meaningful progress. Anchor the stall budget to the
                 # first wait trace (or initial silent start), not the most recent heartbeat, so a
-                # model that stays in "waiting for model output" cannot hold a shard forever.
+                # model that stays in "waiting for upstream response" cannot hold a shard forever.
                 no_progress_anchor = float(model_wait_state["first_wait_trace_monotonic"] or 0.0)
                 if no_progress_anchor <= 0.0:
                     no_progress_anchor = float(model_wait_state["no_progress_started_monotonic"] or 0.0)
@@ -11517,6 +12060,8 @@ def _shard_summary_counts_as_active_run(shard: Dict[str, Any]) -> bool:
     active_run_id = str(shard.get("active_run_id") or "").strip()
     if not active_run_id:
         return False
+    if "active_run_process_alive" in shard and shard.get("active_run_process_alive") is False:
+        return False
     progress_state = str(shard.get("active_run_progress_state") or "").strip().lower()
     if not (shard.get("frontier_ids") or shard.get("open_milestone_ids") or shard.get("active_frontier_ids")):
         mode = str(shard.get("mode") or "").strip().lower()
@@ -11562,16 +12107,31 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
         updated["active_runs_count"] = len(active_shards)
         progress_evidence_counts: Dict[str, int] = {}
         productive_active_runs_count = 0
+        waiting_active_runs_count = 0
+        waiting_states = {
+            "waiting_for_model_output",
+            "stream_connected_waiting",
+            "running_silent",
+            "blocked_status_polling",
+            "transport_reconnecting",
+            "transport_outage_waiting",
+            "container_scoped",
+            "missing_output_artifacts",
+        }
         for item in active_shards:
             progress_evidence = str(item.get("active_run_progress_evidence") or "").strip() or "unknown"
+            progress_state = str(item.get("active_run_progress_state") or "").strip().lower()
             progress_evidence_counts[progress_evidence] = progress_evidence_counts.get(progress_evidence, 0) + 1
-            if progress_evidence == "repo_work_detected":
+            if progress_state in waiting_states or progress_evidence in {"wait_only", "read_only_repo_probe"}:
+                waiting_active_runs_count += 1
+            elif progress_evidence == "repo_work_detected":
                 productive_active_runs_count += 1
         updated["progress_evidence_counts"] = progress_evidence_counts
         updated["productive_active_runs_count"] = productive_active_runs_count
+        updated["waiting_active_runs_count"] = waiting_active_runs_count
         updated["nonproductive_active_runs_count"] = max(
             0,
-            len(active_shards) - productive_active_runs_count,
+            len(active_shards) - productive_active_runs_count - waiting_active_runs_count,
         )
     else:
         active_runs = updated.get("active_runs")
@@ -11583,6 +12143,7 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
             )
         updated.pop("progress_evidence_counts", None)
         updated.pop("productive_active_runs_count", None)
+        updated.pop("waiting_active_runs_count", None)
         updated.pop("nonproductive_active_runs_count", None)
     eta = dict(updated.get("eta") or {})
     if eta:
@@ -12108,7 +12669,14 @@ def _active_run_process_records_from_rows(rows: Sequence[tuple[int, str]]) -> Di
             continue
         run_dir = Path("/var/lib/codex-fleet/chummer_design_supervisor") / shard_name / "runs" / run_id
         model_match = re.search(r"\bexec\s+-m\s+(\S+)", command_text)
-        selected_model = str(model_match.group(1) or "").strip() if model_match else ""
+        if model_match is None:
+            model_match = re.search(
+                r'(?:^|\s)-c\s+(?:"model=\\?"([^"\\\s]+)\\?"|model=([^\s]+))',
+                command_text,
+            )
+        selected_model = ""
+        if model_match is not None:
+            selected_model = str(model_match.group(1) or model_match.group(2) or "").strip().strip('"')
         records[shard_name] = {
             "run_id": run_id,
             "started_at": _active_run_started_at_from_run_id(run_id),
@@ -12497,6 +13065,82 @@ def _active_account_claim_counts(state_root: Path) -> Dict[str, int]:
             continue
         counts[alias] = counts.get(alias, 0) + 1
     return counts
+
+
+def _active_account_progress_counts(
+    state_root: Path,
+    account_alias: str,
+    *,
+    exclude_run_id: str = "",
+    exclude_shard_id: str = "",
+) -> tuple[int, int, int]:
+    aggregate_root = _aggregate_state_root(state_root)
+    manifest_path = aggregate_root / "active_shards.json"
+    rows: List[Dict[str, Any]] = []
+    payload = _read_json_file(manifest_path)
+    if isinstance(payload, dict):
+        rows = [dict(item) for item in (payload.get("active_shards") or []) if isinstance(item, dict)]
+    if not rows:
+        rows = [dict(item) for item in _statefile_shard_summaries(aggregate_root) if isinstance(item, dict)]
+    waiting_states = {
+        "waiting_for_model_output",
+        "stream_connected_waiting",
+        "running_silent",
+        "transport_reconnecting",
+        "transport_outage_waiting",
+        "blocked_status_polling",
+        "container_scoped",
+        "missing_output_artifacts",
+    }
+    productive = 0
+    waiting = 0
+    other = 0
+    clean_alias = str(account_alias or "").strip()
+    for row in rows:
+        if not _shard_summary_counts_as_active_run(row):
+            continue
+        active_run_id = str(row.get("active_run_id") or row.get("run_id") or "").strip()
+        shard_id = str(row.get("shard_id") or row.get("name") or row.get("_shard") or "").strip()
+        if exclude_run_id and active_run_id == exclude_run_id:
+            continue
+        if exclude_shard_id and shard_id == exclude_shard_id:
+            continue
+        alias = str(row.get("selected_account_alias") or "").strip()
+        if alias != clean_alias:
+            continue
+        evidence = str(row.get("active_run_progress_evidence") or "").strip().lower()
+        state = str(row.get("active_run_progress_state") or "").strip().lower()
+        if state in waiting_states or evidence in {"wait_only", "worker_output_only", "read_only_repo_probe", "no_output_yet"}:
+            waiting += 1
+        elif evidence == "repo_work_detected":
+            productive += 1
+        else:
+            other += 1
+    return productive, waiting, other
+
+
+def _effective_account_max_parallel_runs(
+    state_root: Path,
+    account: WorkerAccount,
+    *,
+    exclude_run_id: str = "",
+    exclude_shard_id: str = "",
+) -> int:
+    configured = max(0, int(account.max_parallel_runs or 0))
+    if configured <= 1:
+        return configured
+    lane = str(account.lane or "").strip().lower()
+    if lane not in {"review_light", "jury"}:
+        return configured
+    productive, waiting, _other = _active_account_progress_counts(
+        state_root,
+        account.alias,
+        exclude_run_id=exclude_run_id,
+        exclude_shard_id=exclude_shard_id,
+    )
+    if productive <= 0 and waiting > 0:
+        return 1
+    return configured
 
 
 def _account_selection_lock_path(state_root: Path, account_alias: str) -> Path:
@@ -15610,10 +16254,10 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                     "kind": "status_looping_only",
                     "reason": "runtime handoff shows supervisor status polling contract violation",
                 }
-            elif "waiting for model output" in lowered_handoff_stderr:
+            elif "waiting for model output" in lowered_handoff_stderr or "waiting for upstream response" in lowered_handoff_stderr:
                 progress_evidence = {
                     "kind": "wait_only",
-                    "reason": "runtime handoff shows worker waiting for model output without repo work yet",
+                    "reason": "runtime handoff shows worker waiting on upstream response without repo work yet",
                 }
         active_prompt_mode = _active_run_prompt_mode(active_run)
         authoritative_computed_progress_states = {
@@ -16136,6 +16780,44 @@ def _stream_budget_timeout_seconds_for_workspace(workspace_root: Path) -> float:
     return max(3600.0, (stream_idle_ms / 1000.0) * float(stream_max_retries) + 1800.0)
 
 
+def _codexea_stream_idle_timeout_ms(workspace_root: Path, configured_value: str) -> str:
+    cap_raw = _runtime_env_default_with_workspace(
+        "CHUMMER_DESIGN_SUPERVISOR_CODEXEA_STREAM_IDLE_TIMEOUT_MS",
+        workspace_root,
+        "60000",
+    )
+    try:
+        cap_value = max(1000, int(float(cap_raw or "60000")))
+    except (TypeError, ValueError):
+        cap_value = 60000
+    try:
+        configured = int(float(configured_value or "0"))
+    except (TypeError, ValueError):
+        configured = 0
+    if configured <= 0:
+        return str(cap_value)
+    return str(min(configured, cap_value))
+
+
+def _codexea_stream_max_retries(workspace_root: Path, configured_value: str) -> str:
+    cap_raw = _runtime_env_default_with_workspace(
+        "CHUMMER_DESIGN_SUPERVISOR_CODEXEA_STREAM_MAX_RETRIES",
+        workspace_root,
+        "1",
+    )
+    try:
+        cap_value = max(0, int(float(cap_raw or "1")))
+    except (TypeError, ValueError):
+        cap_value = 1
+    try:
+        configured = int(float(configured_value or "0"))
+    except (TypeError, ValueError):
+        configured = -1
+    if configured < 0:
+        return str(cap_value)
+    return str(min(configured, cap_value))
+
+
 def _codexea_exec_hard_timeout_value_for_workspace(workspace_root: Path) -> str:
     explicit_raw = _runtime_env_default_with_workspace("CODEXEA_EXEC_HARD_TIMEOUT_SECONDS", workspace_root, "")
     if explicit_raw:
@@ -16161,6 +16843,78 @@ def _codexea_exec_hard_timeout_value_for_workspace(workspace_root: Path) -> str:
     return ""
 
 
+def _apply_codexea_stream_lane_environment(
+    env: Dict[str, str],
+    *,
+    workspace_root: Path,
+    worker_lane: str,
+) -> None:
+    clean_lane = str(worker_lane or "").strip().lower()
+    if clean_lane not in _direct_codexea_stream_lanes():
+        return
+    stream_idle_ms = _runtime_env_default_with_workspace(
+        "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS",
+        workspace_root,
+        _runtime_env_default_with_workspace(
+            "CODEXEA_STREAM_IDLE_TIMEOUT_MS",
+            workspace_root,
+            "",
+        ),
+    )
+    stream_max_retries = _runtime_env_default_with_workspace(
+        "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES",
+        workspace_root,
+        _runtime_env_default_with_workspace(
+            "CODEXEA_STREAM_MAX_RETRIES",
+            workspace_root,
+            "",
+        ),
+    )
+    model_output_stall_raw = _runtime_env_default_with_workspace(
+        "CHUMMER_DESIGN_SUPERVISOR_MODEL_OUTPUT_STALL_SECONDS",
+        workspace_root,
+        "",
+    )
+    if model_output_stall_raw:
+        try:
+            model_output_stall_seconds = max(0.0, float(model_output_stall_raw))
+        except (TypeError, ValueError):
+            model_output_stall_seconds = 0.0
+        if model_output_stall_seconds > 0.0:
+            capped_stream_idle_ms = max(1000, int(model_output_stall_seconds * 1000.0))
+            try:
+                parsed_stream_idle_ms = max(0, int(float(stream_idle_ms or 0)))
+            except (TypeError, ValueError):
+                parsed_stream_idle_ms = 0
+            if parsed_stream_idle_ms <= 0 or parsed_stream_idle_ms > capped_stream_idle_ms:
+                stream_idle_ms = str(capped_stream_idle_ms)
+            else:
+                stream_idle_ms = str(parsed_stream_idle_ms)
+            stream_max_retries = "0"
+    stream_idle_ms = _codexea_stream_idle_timeout_ms(workspace_root, stream_idle_ms)
+    stream_max_retries = _codexea_stream_max_retries(workspace_root, stream_max_retries)
+    env["CODEXEA_DISABLE_MCP"] = "1"
+    env["CODEXEA_POST_AUDIT"] = "0"
+    env["CODEXEA_OPERATOR_GUARD_ENABLE"] = "0"
+    env["CODEXEA_STREAM_IDLE_TIMEOUT_MS"] = stream_idle_ms
+    env["CODEXEA_STREAM_MAX_RETRIES"] = stream_max_retries
+    exec_hard_timeout = _codexea_exec_hard_timeout_value_for_workspace(workspace_root)
+    if exec_hard_timeout:
+        env["CODEXEA_EXEC_HARD_TIMEOUT_SECONDS"] = exec_hard_timeout
+    if clean_lane == "core":
+        core_profile = _runtime_env_default_with_workspace(
+            "CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE",
+            workspace_root,
+            _runtime_env_default_with_workspace(
+                "CODEXEA_CORE_RESPONSES_PROFILE",
+                workspace_root,
+                "",
+            ),
+        )
+        if core_profile:
+            env["CODEXEA_CORE_RESPONSES_PROFILE"] = core_profile
+
+
 def _prepare_direct_worker_environment(
     state_root: Path,
     worker_lane: str,
@@ -16184,6 +16938,8 @@ def _prepare_direct_worker_environment(
         host_home_raw=host_home_raw,
         host_xdg_config_home_raw=host_xdg_config_home_raw,
     )
+    if _worker_bin_uses_codexea(worker_bin):
+        _reset_codex_home_runtime_state(home)
     worker_gitconfig = home / ".gitconfig"
     worker_xdg_config_home = home / ".config"
     worker_gh_config_dir = worker_xdg_config_home / "gh"
@@ -16203,74 +16959,21 @@ def _prepare_direct_worker_environment(
         env["EA_MCP_PRINCIPAL_ID"] = principal_id
         env["EA_DEFAULT_PRINCIPAL_ID"] = principal_id
     if _worker_bin_uses_codexea(worker_bin) and clean_lane in _direct_codexea_stream_lanes():
-        stream_idle_ms = _runtime_env_default_with_workspace(
-            "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS",
-            workspace_root,
-            _runtime_env_default_with_workspace(
-                "CODEXEA_STREAM_IDLE_TIMEOUT_MS",
-                workspace_root,
-                "",
-            ),
+        _apply_codexea_stream_lane_environment(
+            env,
+            workspace_root=workspace_root,
+            worker_lane=clean_lane,
         )
-        stream_max_retries = _runtime_env_default_with_workspace(
-            "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES",
-            workspace_root,
-            _runtime_env_default_with_workspace(
-                "CODEXEA_STREAM_MAX_RETRIES",
-                workspace_root,
-                "",
-            ),
-        )
-        model_output_stall_raw = _runtime_env_default_with_workspace(
-            "CHUMMER_DESIGN_SUPERVISOR_MODEL_OUTPUT_STALL_SECONDS",
-            workspace_root,
-            "",
-        )
-        if model_output_stall_raw:
-            try:
-                model_output_stall_seconds = max(0.0, float(model_output_stall_raw))
-            except (TypeError, ValueError):
-                model_output_stall_seconds = 0.0
-            if model_output_stall_seconds > 0.0:
-                capped_stream_idle_ms = max(1000, int(model_output_stall_seconds * 1000.0))
-                try:
-                    parsed_stream_idle_ms = max(0, int(float(stream_idle_ms or 0)))
-                except (TypeError, ValueError):
-                    parsed_stream_idle_ms = 0
-                try:
-                    parsed_stream_max_retries = max(0, int(float(stream_max_retries or 0)))
-                except (TypeError, ValueError):
-                    parsed_stream_max_retries = 0
-                if parsed_stream_idle_ms <= 0 or parsed_stream_idle_ms > capped_stream_idle_ms:
-                    stream_idle_ms = str(capped_stream_idle_ms)
-                else:
-                    stream_idle_ms = str(parsed_stream_idle_ms)
-                stream_max_retries = "0"
-        if stream_idle_ms:
-            env["CODEXEA_STREAM_IDLE_TIMEOUT_MS"] = stream_idle_ms
-        if stream_max_retries:
-            env["CODEXEA_STREAM_MAX_RETRIES"] = stream_max_retries
-        exec_hard_timeout = _codexea_exec_hard_timeout_value_for_workspace(workspace_root)
-        if exec_hard_timeout:
-            env["CODEXEA_EXEC_HARD_TIMEOUT_SECONDS"] = exec_hard_timeout
-        if clean_lane == "core":
-            core_profile = _runtime_env_default_with_workspace(
-                "CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE",
-                workspace_root,
-                _runtime_env_default_with_workspace(
-                    "CODEXEA_CORE_RESPONSES_PROFILE",
-                    workspace_root,
-                    "",
-                ),
-            )
-            if core_profile:
-                env["CODEXEA_CORE_RESPONSES_PROFILE"] = core_profile
     return env
 
 
-def _stamp_worker_supervisor_guard(env: Dict[str, str], *, run_id: str, run_dir: Path) -> Dict[str, str]:
-    env["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID"] = str(run_id or "").strip()
-    env["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] = str(run_dir)
+def _stamp_worker_supervisor_guard(
+    env: Dict[str, str],
+    *,
+    run_id: str,
+    run_dir: Path,
+    worker_bin: str = "",
+) -> Dict[str, str]:
     status_budget = (
         str((env or {}).get("CHUMMER_DESIGN_SUPERVISOR_STATUS_BUDGET") or "").strip()
         or _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_STATUS_BUDGET", "8")
@@ -16293,6 +16996,10 @@ def _stamp_worker_supervisor_guard(env: Dict[str, str], *, run_id: str, run_dir:
         if shim_text not in path_entries:
             path_entries.insert(0, shim_text)
             env["PATH"] = os.pathsep.join(path_entries)
+    if _worker_bin_uses_codexea(worker_bin):
+        return env
+    env["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID"] = str(run_id or "").strip()
+    env["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] = str(run_dir)
     env["CODEXEA_EXEC_TRACE_PROMPT_FILE"] = str(_write_worker_exec_trace_prompt(run_dir))
     env["BASH_ENV"] = str(_write_worker_bash_env(run_dir))
     return env
@@ -16424,6 +17131,24 @@ def _copy_file_if_changed(source: Path, target: Path) -> None:
     target.write_bytes(source_bytes)
 
 
+def _reset_codex_home_runtime_state(home: Path) -> None:
+    for pattern in (
+        "state_*.sqlite",
+        "state_*.sqlite-shm",
+        "state_*.sqlite-wal",
+        "logs_*.sqlite",
+        "logs_*.sqlite-shm",
+        "logs_*.sqlite-wal",
+    ):
+        for candidate in home.glob(pattern):
+            try:
+                candidate.unlink()
+            except FileNotFoundError:
+                continue
+    for directory_name in ("sessions", "shell_snapshots"):
+        shutil.rmtree(home / directory_name, ignore_errors=True)
+
+
 def _seed_worker_home_git_auth(
     home: Path,
     *,
@@ -16529,7 +17254,14 @@ def _ea_bridge_api_token(workspace_root: Path) -> str:
     return ""
 
 
-def _prepare_account_environment(state_root: Path, workspace_root: Path, account: WorkerAccount) -> Dict[str, str]:
+def _prepare_account_environment(
+    state_root: Path,
+    workspace_root: Path,
+    account: WorkerAccount,
+    *,
+    worker_bin: str = "",
+    worker_lane: str = "",
+) -> Dict[str, str]:
     home = _account_home(state_root, account)
     config_lines = ['cli_auth_credentials_store = "file"']
     if account.forced_login_method:
@@ -16555,6 +17287,8 @@ def _prepare_account_environment(state_root: Path, workspace_root: Path, account
         host_home_raw=host_home_raw,
         host_xdg_config_home_raw=host_xdg_config_home_raw,
     )
+    if _worker_bin_uses_codexea(worker_bin):
+        _reset_codex_home_runtime_state(home)
     worker_gitconfig = home / ".gitconfig"
     worker_xdg_config_home = home / ".config"
     worker_gh_config_dir = worker_xdg_config_home / "gh"
@@ -16585,6 +17319,13 @@ def _prepare_account_environment(state_root: Path, workspace_root: Path, account
         raise RuntimeError(f"unsupported auth_kind for {account.alias}: {account.auth_kind}")
     if account.openai_base_url:
         env["OPENAI_BASE_URL"] = account.openai_base_url
+    effective_lane = str(account.lane or worker_lane or "").strip().lower()
+    if _worker_bin_uses_codexea(worker_bin) and effective_lane in _direct_codexea_stream_lanes():
+        _apply_codexea_stream_lane_environment(
+            env,
+            workspace_root=workspace_root,
+            worker_lane=effective_lane,
+        )
     return env
 
 
@@ -16798,6 +17539,7 @@ def _resolve_routed_worker_account_plan(
                 active_account_claims=active_account_claims,
                 now=current,
                 ea_provider_slot_health_index=routed_ea_provider_slot_health_index,
+                state_root=state_root,
             )
         if not preferred_runnable_account_found and restore_probe_candidates:
             restore_probe_account_aliases.add(sorted(restore_probe_candidates)[0][3])
@@ -16816,7 +17558,7 @@ def _resolve_routed_worker_account_plan(
             account_candidates = list(preferred_account_candidates) + list(rescue_account_candidates)
             rescue_account_candidates = []
         routed_full_lane_fallback_args = (
-            _routed_full_lane_direct_fallback_args(args)
+            _routed_full_lane_direct_fallback_args(args, state_root=state_root)
             if prefer_full_ea_lanes and routed_account_required
             else None
         )
@@ -17215,11 +17957,15 @@ def _account_has_runnable_candidate_models(
     active_account_claims: Optional[Dict[str, int]] = None,
     now: Optional[dt.datetime] = None,
     ea_provider_slot_health_index: Optional[Dict[str, Dict[str, Any]]] = None,
+    state_root: Optional[Path] = None,
 ) -> bool:
     current = now or _utc_now()
     claims = active_account_claims or {}
     claimed_account_count = int(claims.get(account.alias, 0))
-    if account.max_parallel_runs > 0 and claimed_account_count >= account.max_parallel_runs:
+    parallel_limit = (
+        _effective_account_max_parallel_runs(state_root, account) if state_root is not None else max(0, int(account.max_parallel_runs or 0))
+    )
+    if parallel_limit > 0 and claimed_account_count >= parallel_limit:
         return False
     backoff_until, _ = _active_source_backoff(account_runtime, account, now=current)
     if not ignore_active_backoff and backoff_until is not None:
@@ -17376,27 +18122,42 @@ def launch_worker(
         attempt_index: int,
         total_attempts: int,
         timeout_seconds: Optional[float] = None,
-    ) -> None:
-        _write_active_run_state(
-            state_root,
-            ActiveWorkerRun(
-                run_id=run_id,
-                started_at=started_at,
-                prompt_path=str(prompt_path),
-                stdout_path=str(stdout_path),
-                stderr_path=str(stderr_path),
-                last_message_path=str(last_message_path),
-                frontier_ids=frontier_ids,
-                open_milestone_ids=open_milestone_ids,
-                primary_milestone_id=primary_milestone_id,
-                worker_command=list(command),
-                selected_account_alias=account_alias,
-                selected_model=model_label,
-                attempt_index=attempt_index,
-                total_attempts=max(1, total_attempts),
-                watchdog_timeout_seconds=worker_timeout_seconds if timeout_seconds is None else float(timeout_seconds),
-            ),
-        )
+    ) -> tuple[bool, str]:
+        dispatch_lock_path = _dispatch_selection_lock_path(state_root)
+        try:
+            _acquire_lock(
+                dispatch_lock_path,
+                ttl_seconds=max(60.0, float(getattr(args, "poll_seconds", DEFAULT_POLL_SECONDS)) * 4, LOCK_TTL_SECONDS / 2),
+            )
+        except RuntimeError as exc:
+            return False, f"dispatch_selection_busy: {exc}"
+        try:
+            launch_pressure = _memory_dispatch_snapshot(args, state_root)
+            if _should_defer_dispatch_for_memory_pressure(state_root, launch_pressure):
+                return False, _memory_pressure_notice(launch_pressure)
+            _write_active_run_state(
+                state_root,
+                ActiveWorkerRun(
+                    run_id=run_id,
+                    started_at=started_at,
+                    prompt_path=str(prompt_path),
+                    stdout_path=str(stdout_path),
+                    stderr_path=str(stderr_path),
+                    last_message_path=str(last_message_path),
+                    frontier_ids=frontier_ids,
+                    open_milestone_ids=open_milestone_ids,
+                    primary_milestone_id=primary_milestone_id,
+                    worker_command=list(command),
+                    selected_account_alias=account_alias,
+                    selected_model=model_label,
+                    attempt_index=attempt_index,
+                    total_attempts=max(1, total_attempts),
+                    watchdog_timeout_seconds=worker_timeout_seconds if timeout_seconds is None else float(timeout_seconds),
+                ),
+            )
+            return True, ""
+        finally:
+            _release_lock(dispatch_lock_path)
 
     def reset_last_message_attempt_marker() -> None:
         try:
@@ -17457,10 +18218,22 @@ def launch_worker(
                     candidate_models: List[str] = []
                     try:
                         claimed_account_count = _active_account_claim_counts(state_root).get(account.alias, 0)
-                        if account.max_parallel_runs > 0 and claimed_account_count >= account.max_parallel_runs:
+                        effective_parallel_limit = _effective_account_max_parallel_runs(
+                            state_root,
+                            account,
+                            exclude_shard_id=Path(state_root).resolve().name,
+                        )
+                        if effective_parallel_limit > 0 and claimed_account_count >= effective_parallel_limit:
+                            configured_parallel_runs = max(0, int(account.max_parallel_runs or 0))
+                            cap_note = ""
+                            if (
+                                effective_parallel_limit < configured_parallel_runs
+                                and str(account.lane or "").strip().lower() in {"review_light", "jury"}
+                            ):
+                                cap_note = " wait_only_canary"
                             stderr_handle.write(
                                 f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
-                                f"reason=max_parallel_runs {claimed_account_count}/{account.max_parallel_runs}\n"
+                                f"reason=max_parallel_runs {claimed_account_count}/{effective_parallel_limit}{cap_note}\n"
                             )
                             stderr_handle.flush()
                             continue
@@ -17511,7 +18284,13 @@ def launch_worker(
                             stderr_handle.flush()
                             continue
                         try:
-                            worker_env = _prepare_account_environment(state_root, workspace_root, account)
+                            worker_env = _prepare_account_environment(
+                                state_root,
+                                workspace_root,
+                                account,
+                                worker_bin=worker_bin,
+                                worker_lane=str(account.lane or worker_lane or ""),
+                            )
                         except Exception as exc:
                             message = f"account bootstrap failed: {exc}"
                             until = _utc_now() + dt.timedelta(seconds=DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS)
@@ -17523,7 +18302,12 @@ def launch_worker(
                             )
                             stderr_handle.flush()
                             continue
-                        worker_env = _stamp_worker_supervisor_guard(worker_env, run_id=run_id, run_dir=run_dir)
+                        worker_env = _stamp_worker_supervisor_guard(
+                            worker_env,
+                            run_id=run_id,
+                            run_dir=run_dir,
+                            worker_bin=worker_bin,
+                        )
                         lock_released = False
                         for model_index, candidate_model in enumerate(candidate_models):
                             phase_attempt_index += 1
@@ -17548,17 +18332,24 @@ def launch_worker(
                                 run_dir=run_dir,
                                 worker_model=candidate_model,
                             )
-                            attempted_accounts.append(account.alias)
-                            attempted_models.append(candidate_model or "default")
-                            selected_account_alias = account.alias
                             reset_last_message_attempt_marker()
-                            mark_active_run(
+                            launch_allowed, launch_reason = mark_active_run(
                                 command=worker_command,
                                 account_alias=account.alias,
                                 model_label=candidate_model or "default",
                                 attempt_index=display_attempt_index,
                                 total_attempts=display_total_attempts,
                             )
+                            if not launch_allowed:
+                                stderr_handle.write(
+                                    f"[fleet-supervisor] skip launch account={account.alias} owner={account.owner_id} "
+                                    f"model={candidate_model or 'default'} reason={launch_reason or 'dispatch gate'}\n"
+                                )
+                                stderr_handle.flush()
+                                continue
+                            attempted_accounts.append(account.alias)
+                            attempted_models.append(candidate_model or "default")
+                            selected_account_alias = account.alias
                             stderr_handle.write(
                                 f"[fleet-supervisor] {phase_label} {display_attempt_index}/{display_total_attempts} "
                                 f"account={account.alias} owner={account.owner_id} model={candidate_model or 'default'}\n"
@@ -17769,7 +18560,19 @@ def launch_worker(
                 filtered_lane_candidates, skipped_lane_reports = _filter_routable_direct_worker_lanes(
                     phase_lane_candidates,
                     direct_lane_health,
+                    state_root=state_root,
+                    exclude_run_id=run_id,
+                    exclude_shard_id=Path(state_root).name,
                 )
+                if phase_label == "full-fallback":
+                    (
+                        filtered_lane_candidates,
+                        anonymous_fallback_skipped_lane_reports,
+                    ) = _filter_anonymous_full_fallback_direct_worker_lanes(
+                        filtered_lane_candidates,
+                        direct_lane_health,
+                    )
+                    skipped_lane_reports.extend(anonymous_fallback_skipped_lane_reports)
                 for lane_report in skipped_lane_reports:
                     stderr_handle.write(
                         "[fleet-supervisor] skip direct lane="
@@ -17820,7 +18623,12 @@ def launch_worker(
                         workspace_root=workspace_root,
                         worker_bin=phase_args.worker_bin,
                     )
-                    worker_env = _stamp_worker_supervisor_guard(worker_env, run_id=run_id, run_dir=run_dir)
+                    worker_env = _stamp_worker_supervisor_guard(
+                        worker_env,
+                        run_id=run_id,
+                        run_dir=run_dir,
+                        worker_bin=phase_args.worker_bin,
+                    )
                     lane_alias = f"lane:{candidate_lane}" if candidate_lane else "default"
                     for candidate_model in lane_model_candidates or [""]:
                         if allow_account_restore_probe and account_candidates:
@@ -17873,11 +18681,8 @@ def launch_worker(
                             run_dir=run_dir,
                             worker_model=candidate_model,
                         )
-                        attempted_accounts.append(lane_alias)
-                        attempted_models.append(candidate_model or "default")
-                        selected_account_alias = lane_alias if candidate_lane else ""
                         reset_last_message_attempt_marker()
-                        mark_active_run(
+                        launch_allowed, launch_reason = mark_active_run(
                             command=worker_command,
                             account_alias=lane_alias if candidate_lane else "default",
                             model_label=candidate_model or "default",
@@ -17885,6 +18690,16 @@ def launch_worker(
                             total_attempts=display_total_attempts,
                             timeout_seconds=phase_worker_timeout_seconds,
                         )
+                        if not launch_allowed:
+                            stderr_handle.write(
+                                f"[fleet-supervisor] skip launch account={lane_alias} lane={candidate_lane or 'default'} "
+                                f"model={candidate_model or 'default'} reason={launch_reason or 'dispatch gate'}\n"
+                            )
+                            stderr_handle.flush()
+                            continue
+                        attempted_accounts.append(lane_alias)
+                        attempted_models.append(candidate_model or "default")
+                        selected_account_alias = lane_alias if candidate_lane else ""
                         stderr_handle.write(
                             f"[fleet-supervisor] {phase_label} {display_attempt_index}/{display_total_attempts} "
                             f"account={lane_alias} lane={candidate_lane or 'default'} model={candidate_model or 'default'}\n"
@@ -18698,6 +19513,7 @@ def _stabilize_active_run_progress_evidence(
         "unknown",
         "no_output_yet",
         "wait_only",
+        "read_only_repo_probe",
         "worker_output_only",
         "repo_context_redirected",
         "status_looping_only",
@@ -19126,6 +19942,7 @@ def _render_status(state: Dict[str, Any]) -> str:
             lines.append(
                 "active_run_productivity: "
                 f"productive={_coerce_int(state.get('productive_active_runs_count'), 0)} "
+                f"waiting={_coerce_int(state.get('waiting_active_runs_count'), 0)} "
                 f"nonproductive={_coerce_int(state.get('nonproductive_active_runs_count'), 0)}"
             )
         for shard in shards:

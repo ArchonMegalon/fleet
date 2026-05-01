@@ -173,6 +173,13 @@ def _materialize_flagship_readiness_with_parity_lab(
     synced_external_runbook: bool = False,
     journey_gates_payload: dict | None = None,
     user_journey_tester_audit_payload: dict | None = None,
+    ui_element_parity_audit_payload: dict | None = None,
+    executable_platforms: tuple[str, ...] = ("linux", "windows", "macos"),
+    release_channel_platforms: tuple[str, ...] = ("linux", "windows", "macos"),
+    linux_exit_gate_status: str = "passed",
+    sr4_workflow_parity_payload: dict | None = None,
+    sr6_workflow_parity_payload: dict | None = None,
+    sr4_sr6_frontier_receipt_payload: dict | None = None,
 ) -> dict:
     out_path = tmp_path / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
@@ -195,6 +202,7 @@ def _materialize_flagship_readiness_with_parity_lab(
     ui_executable_exit_gate_path = tmp_path / "ui" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
     ui_workflow_execution_gate_path = tmp_path / "ui" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
     ui_visual_familiarity_exit_gate_path = tmp_path / "ui" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    ui_element_parity_audit_path = tmp_path / "ui" / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
     ui_user_journey_tester_audit_path = tmp_path / "ui" / "USER_JOURNEY_TESTER_AUDIT.generated.json"
     sr4_workflow_parity_path = tmp_path / "ui" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
     sr6_workflow_parity_path = tmp_path / "ui" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
@@ -245,7 +253,7 @@ def _materialize_flagship_readiness_with_parity_lab(
         _write_json(active_shards_path, active_shards)
     _write_json(ooda_state_path, ooda_state_payload or _base_ooda_state())
     _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
-    _write_json(ui_exit_gate_path, {"contract_name": "chummer6-ui.linux_desktop_exit_gate", "status": "passed"})
+    _write_json(ui_exit_gate_path, {"contract_name": "chummer6-ui.linux_desktop_exit_gate", "status": linux_exit_gate_status})
     _write_json(
         ui_windows_exit_gate_path,
         {
@@ -261,7 +269,7 @@ def _materialize_flagship_readiness_with_parity_lab(
         ui_executable_exit_gate_path,
         _desktop_executable_exit_gate_pass_payload(
             heads=("avalonia",),
-            platforms=("linux", "windows", "macos"),
+            platforms=executable_platforms,
             generated_at=current_iso,
         ),
     )
@@ -271,20 +279,36 @@ def _materialize_flagship_readiness_with_parity_lab(
     )
     _write_json(ui_visual_familiarity_exit_gate_path, _desktop_visual_familiarity_pass_payload(module))
     _write_json(
+        ui_element_parity_audit_path,
+        ui_element_parity_audit_payload or _ui_element_parity_audit_pass_payload(module),
+    )
+    _write_json(
         ui_user_journey_tester_audit_path,
         user_journey_tester_audit_payload or _user_journey_tester_audit_pass_payload(module),
     )
     _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
-    _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"})
-    _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"})
-    _write_json(sr4_sr6_frontier_receipt_path, {"contract_name": "chummer6-ui.sr4_sr6_desktop_parity_frontier", "status": "passed"})
+    _write_json(
+        sr4_workflow_parity_path,
+        sr4_workflow_parity_payload
+        or {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"},
+    )
+    _write_json(
+        sr6_workflow_parity_path,
+        sr6_workflow_parity_payload
+        or {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"},
+    )
+    _write_json(
+        sr4_sr6_frontier_receipt_path,
+        sr4_sr6_frontier_receipt_payload
+        or {"contract_name": "chummer6-ui.sr4_sr6_desktop_parity_frontier", "status": "passed"},
+    )
     _write_json(hub_local_release_path, {"contract_name": "chummer6-hub.local_release_proof", "status": "passed"})
     _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
     _write_json(
         release_channel_path,
         _release_channel_payload(
             heads=("avalonia",),
-            platforms=("linux", "windows", "macos"),
+            platforms=release_channel_platforms,
             journeys_passed=("install_claim_restore_continue",),
             generated_at=current_iso,
         ),
@@ -329,6 +353,8 @@ def _materialize_flagship_readiness_with_parity_lab(
             str(ui_workflow_execution_gate_path),
             "--ui-visual-familiarity-exit-gate",
             str(ui_visual_familiarity_exit_gate_path),
+            "--ui-element-parity-audit",
+            str(ui_element_parity_audit_path),
             "--ui-user-journey-tester-audit",
             str(ui_user_journey_tester_audit_path),
             "--sr4-workflow-parity-proof",
@@ -370,6 +396,71 @@ def test_materialize_flagship_product_readiness_recovers_windows_gate_from_aggre
     assert evidence["ui_windows_exit_gate_status"] == "failed"
     assert evidence["ui_windows_exit_gate_recovered_from_executable_gate"] is True
     assert evidence["ui_windows_exit_gate_effective_ready"] is True
+
+
+def test_desktop_parity_receipt_external_only_missing_api_surface_contract_accepts_reason_only_payload() -> None:
+    module = _load_module()
+
+    assert module._desktop_parity_receipt_is_external_only_missing_api_surface_contract(
+        {
+            "status": "fail",
+            "reasons": [
+                "Workflow execution receipts currently require a chummer-api host exposing /api/workspaces and /api/shell/bootstrap (external blocker: missing_api_surface_contract)."
+            ],
+        }
+    )
+
+
+def test_materialize_flagship_product_readiness_allows_windows_only_promoted_tuple_with_external_only_sr6_frontier(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    sr6_reason = (
+        "SR6 workflow parity receipts require a chummer-api host exposing /api/workspaces and "
+        "/api/shell/bootstrap (external blocker: missing_api_surface_contract)."
+    )
+    parity_external_only_evidence = {
+        "failingParityReceiptsExternalOnly": True,
+        "failingParityReceiptsExternal": {
+            "api_surface": ["external_blocker=missing_api_surface_contract"]
+        },
+    }
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        executable_platforms=("windows",),
+        release_channel_platforms=("windows",),
+        linux_exit_gate_status="failed",
+        sr4_workflow_parity_payload={
+            "contract_name": "chummer6-ui.sr4_desktop_workflow_parity",
+            "status": "pass",
+        },
+        sr6_workflow_parity_payload={
+            "contract_name": "chummer6-ui.sr6_desktop_workflow_parity",
+            "status": "fail",
+            "reasons": [sr6_reason],
+            "evidence": parity_external_only_evidence,
+        },
+        sr4_sr6_frontier_receipt_payload={
+            "contract_name": "chummer6-ui.sr4_sr6_desktop_parity_frontier",
+            "status": "fail",
+            "reasons": [
+                f"SR6 parity receipt is not passing: {sr6_reason}",
+                "SR6 parity receipt has failing parity receipt proofs for: create-open-import-save-save-as-print-export",
+            ],
+        },
+    )
+
+    assert payload["coverage"]["desktop_client"] == "ready"
+    desktop = payload["coverage_details"]["desktop_client"]
+    assert desktop["reasons"] == []
+    evidence = desktop["evidence"]
+    assert evidence["release_channel_required_tuple_platforms"] == ["windows"]
+    assert evidence["release_channel_has_linux_public_installer"] is False
+    assert evidence["ui_linux_exit_gate_status"] == "failed"
+    assert evidence["ui_linux_exit_gate_effective_ready"] is True
+    assert evidence["sr6_workflow_parity_external_only_missing_api_surface_contract"] is True
+    assert evidence["sr4_sr6_frontier_receipt_external_only_missing_api_surface_contract"] is True
     assert payload["coverage_details"]["desktop_client"]["reasons"] == []
 
 
@@ -783,6 +874,35 @@ def _user_journey_tester_audit_pass_payload(module) -> dict:
                 for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
             ],
         },
+    }
+
+
+def _ui_element_parity_audit_pass_payload(module) -> dict:
+    elements = [
+        {
+            "id": row_id,
+            "label": row_id,
+            "visual_parity": "yes",
+            "behavioral_parity": "yes",
+            "present_in_chummer5a": "yes",
+            "removable_without_workflow_degradation": "no",
+            "reason": "Direct screenshot-backed and runtime-backed proof is present.",
+            "evidence": [],
+        }
+        for row_id in module.UI_ELEMENT_PARITY_AUDIT_RELEASE_BLOCKING_IDS
+    ]
+    return {
+        "generated_at": _now_iso(),
+        "probe_kind": "ui_parity_audit",
+        "summary": {
+            "total_elements": len(elements),
+            "visual_yes_count": len(elements),
+            "visual_no_count": 0,
+            "behavioral_yes_count": len(elements),
+            "behavioral_no_count": 0,
+            "coverage_gap_keys": [],
+        },
+        "elements": elements,
     }
 
 
@@ -10727,6 +10847,8 @@ def test_materialize_flagship_product_readiness_fail_closes_when_localization_ga
     ui_workflow_execution_gate_path = tmp_path / "ui" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
     ui_visual_familiarity_exit_gate_path = tmp_path / "ui" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
     ui_localization_release_gate_path = tmp_path / "ui" / "UI_LOCALIZATION_RELEASE_GATE.generated.json"
+    ui_element_parity_audit_path = tmp_path / "ui" / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
+    ui_user_journey_tester_audit_path = tmp_path / "ui" / "USER_JOURNEY_TESTER_AUDIT.generated.json"
     ui_workflow_parity_path = tmp_path / "ui" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
     sr4_workflow_parity_path = tmp_path / "ui" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
     sr6_workflow_parity_path = tmp_path / "ui" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
@@ -10896,6 +11018,10 @@ def test_materialize_flagship_product_readiness_fail_closes_when_localization_ga
             str(ui_visual_familiarity_exit_gate_path),
             "--ui-localization-release-gate",
             str(ui_localization_release_gate_path),
+            "--ui-element-parity-audit",
+            str(ui_element_parity_audit_path),
+            "--ui-user-journey-tester-audit",
+            str(ui_user_journey_tester_audit_path),
             "--sr4-workflow-parity-proof",
             str(sr4_workflow_parity_path),
             "--sr6-workflow-parity-proof",
@@ -10946,6 +11072,8 @@ def test_materialize_flagship_product_readiness_fail_closes_when_localization_ga
     ui_workflow_execution_gate_path = tmp_path / "ui" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
     ui_visual_familiarity_exit_gate_path = tmp_path / "ui" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
     ui_localization_release_gate_path = tmp_path / "ui" / "UI_LOCALIZATION_RELEASE_GATE.generated.json"
+    ui_element_parity_audit_path = tmp_path / "ui" / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
+    ui_user_journey_tester_audit_path = tmp_path / "ui" / "USER_JOURNEY_TESTER_AUDIT.generated.json"
     ui_workflow_parity_path = tmp_path / "ui" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
     sr4_workflow_parity_path = tmp_path / "ui" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
     sr6_workflow_parity_path = tmp_path / "ui" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
@@ -11099,6 +11227,10 @@ def test_materialize_flagship_product_readiness_fail_closes_when_localization_ga
             str(ui_visual_familiarity_exit_gate_path),
             "--ui-localization-release-gate",
             str(ui_localization_release_gate_path),
+            "--ui-element-parity-audit",
+            str(ui_element_parity_audit_path),
+            "--ui-user-journey-tester-audit",
+            str(ui_user_journey_tester_audit_path),
             "--sr4-workflow-parity-proof",
             str(sr4_workflow_parity_path),
             "--sr6-workflow-parity-proof",
@@ -11530,6 +11662,8 @@ def test_materialize_flagship_product_readiness_recovers_desktop_lane_from_effec
     ui_workflow_execution_gate_path = tmp_path / "ui" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
     ui_visual_familiarity_exit_gate_path = tmp_path / "ui" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
     ui_localization_release_gate_path = tmp_path / "ui" / "UI_LOCALIZATION_RELEASE_GATE.generated.json"
+    ui_element_parity_audit_path = tmp_path / "ui" / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
+    ui_user_journey_tester_audit_path = tmp_path / "ui" / "USER_JOURNEY_TESTER_AUDIT.generated.json"
     ui_workflow_parity_path = tmp_path / "ui" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
     sr4_workflow_parity_path = tmp_path / "ui" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
     sr6_workflow_parity_path = tmp_path / "ui" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
@@ -11653,6 +11787,8 @@ def test_materialize_flagship_product_readiness_recovers_desktop_lane_from_effec
             "translation_backlog_findings": [],
         },
     )
+    _write_json(ui_element_parity_audit_path, _ui_element_parity_audit_pass_payload(module))
+    _write_json(ui_user_journey_tester_audit_path, _user_journey_tester_audit_pass_payload(module))
     _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
     parity_external_only_evidence = {
         "failingParityReceiptsExternalOnly": True,
@@ -11739,6 +11875,10 @@ def test_materialize_flagship_product_readiness_recovers_desktop_lane_from_effec
             str(ui_visual_familiarity_exit_gate_path),
             "--ui-localization-release-gate",
             str(ui_localization_release_gate_path),
+            "--ui-element-parity-audit",
+            str(ui_element_parity_audit_path),
+            "--ui-user-journey-tester-audit",
+            str(ui_user_journey_tester_audit_path),
             "--sr4-workflow-parity-proof",
             str(sr4_workflow_parity_path),
             "--sr6-workflow-parity-proof",
@@ -12293,5 +12433,105 @@ def test_flagship_product_readiness_does_not_treat_unbound_parity_lab_docs_as_ve
     assert veteran_evidence["parity_lab_capture_missing_non_negotiable_ids"] == ["master_index_first_class"]
     assert "Parity-lab capture pack is missing required desktop non-negotiables" in " ".join(veteran_plane["reasons"])
     assert "Parity-lab capture pack no longer binds its non-negotiable map to desktop_client coverage." in veteran_plane["reasons"]
-    assert flagship_plane["status"] == "warning"
-    assert flagship_plane["evidence"]["parity_lab_ready"] is False
+
+
+def test_flagship_product_readiness_publishes_extended_release_health_planes(tmp_path: Path) -> None:
+    module = _load_module()
+    payload = _materialize_flagship_readiness_with_parity_lab(tmp_path, module)
+
+    readiness_planes = payload["readiness_planes"]
+    assert "sr5_veteran_ready" in readiness_planes
+    assert "veteran_deep_workflow_ready" in readiness_planes
+    assert "public_shelf_ready" in readiness_planes
+    assert "data_durability_ready" in readiness_planes
+    assert "recovery_trust_ready" in readiness_planes
+    assert "rules_explainability_ready" in readiness_planes
+    assert "custom_data_survival_ready" in readiness_planes
+    assert "large_sheet_performance_ready" in readiness_planes
+    assert "sr4_parity_ready" in readiness_planes
+    assert "sr6_parity_ready" in readiness_planes
+    assert readiness_planes["sr5_veteran_ready"]["status"] == readiness_planes["veteran_ready"]["status"]
+    flagship_evidence = readiness_planes["flagship_ready"]["evidence"]
+    assert flagship_evidence["readiness_plane_contract_present"] is True
+    assert "flagship_ready" in flagship_evidence["readiness_plane_contract_ids"]
+
+
+def test_flagship_product_readiness_recovery_and_public_shelf_planes_fail_closed_on_windows_and_route_truth(tmp_path: Path) -> None:
+    module = _load_module()
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        windows_exit_gate_status="failed",
+    )
+
+    assert payload["readiness_planes"]["recovery_trust_ready"]["status"] in {"warning", "missing"}
+    assert payload["readiness_planes"]["public_shelf_ready"]["status"] in {"warning", "missing"}
+    reasons = " ".join(payload["readiness_planes"]["recovery_trust_ready"]["reasons"])
+    assert "Windows executable proof is not effectively ready." in reasons
+
+
+def test_flagship_product_readiness_fails_closed_on_ui_element_parity_audit_release_blockers(tmp_path: Path) -> None:
+    module = _load_module()
+    audit_payload = _ui_element_parity_audit_pass_payload(module)
+    audit_payload["summary"]["visual_yes_count"] -= 3
+    audit_payload["summary"]["visual_no_count"] = 3
+    audit_payload["summary"]["behavioral_yes_count"] -= 3
+    audit_payload["summary"]["behavioral_no_count"] = 3
+    for row in audit_payload["elements"]:
+        if row["id"] == "family:custom_data_xml_and_translator_bridge":
+            row["visual_parity"] = "no"
+            row["behavioral_parity"] = "no"
+            row["reason"] = "Missing direct screenshot-backed/runtime proof."
+        if row["id"] == "family:legacy_and_adjacent_import_oracles":
+            row["visual_parity"] = "no"
+            row["behavioral_parity"] = "no"
+            row["reason"] = "Import oracle route is still not directly proven."
+        if row["id"] == "family:sr6_supplements_designers_and_house_rules":
+            row["visual_parity"] = "no"
+            row["behavioral_parity"] = "no"
+            row["reason"] = "SR6 supplements route is still not directly proven."
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        ui_element_parity_audit_payload=audit_payload,
+    )
+
+    assert payload["coverage"]["desktop_client"] == "missing"
+    desktop = payload["coverage_details"]["desktop_client"]
+    desktop_reasons = " ".join(desktop["reasons"])
+    desktop_evidence = desktop["evidence"]
+    assert "Chummer5A UI element parity audit still has unresolved release-blocking rows" in desktop_reasons
+    assert desktop_evidence["ui_element_parity_audit_visual_no_count"] == 3
+    assert desktop_evidence["ui_element_parity_audit_behavioral_no_count"] == 3
+    assert "family:custom_data_xml_and_translator_bridge" in desktop_evidence["ui_element_parity_audit_unresolved_release_blocking_ids"]
+    assert "family:legacy_and_adjacent_import_oracles" in desktop_evidence["ui_element_parity_audit_unresolved_release_blocking_ids"]
+
+    assert payload["readiness_planes"]["veteran_deep_workflow_ready"]["status"] in {"warning", "missing"}
+    assert payload["readiness_planes"]["custom_data_survival_ready"]["status"] in {"warning", "missing"}
+    assert payload["readiness_planes"]["data_durability_ready"]["status"] in {"warning", "missing"}
+    assert payload["readiness_planes"]["sr6_parity_ready"]["status"] in {"warning", "missing"}
+
+
+def test_flagship_product_readiness_fails_closed_when_ui_element_parity_audit_omits_required_rows(tmp_path: Path) -> None:
+    module = _load_module()
+    audit_payload = _ui_element_parity_audit_pass_payload(module)
+    audit_payload["elements"] = [
+        row
+        for row in audit_payload["elements"]
+        if row["id"] != "source:translator_route"
+    ]
+    audit_payload["summary"]["total_elements"] = len(audit_payload["elements"])
+    audit_payload["summary"]["visual_yes_count"] = len(audit_payload["elements"])
+    audit_payload["summary"]["behavioral_yes_count"] = len(audit_payload["elements"])
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        ui_element_parity_audit_payload=audit_payload,
+    )
+
+    assert payload["coverage"]["desktop_client"] == "missing"
+    reasons = " ".join(payload["coverage_details"]["desktop_client"]["reasons"])
+    assert "Chummer5A UI element parity audit is missing required release-blocking rows" in reasons
+    assert payload["coverage_details"]["desktop_client"]["evidence"]["ui_element_parity_audit_missing_required_ids"] == [
+        "source:translator_route"
+    ]

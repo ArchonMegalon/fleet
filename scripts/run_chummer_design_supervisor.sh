@@ -21,6 +21,16 @@ if [[ -z "${CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKER
 fi
 export CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS
 
+: "${CHUMMER_DESIGN_SUPERVISOR_JURY_LANE_MAX_CONCURRENT_RUNS:=3}"
+: "${CHUMMER_DESIGN_SUPERVISOR_REVIEW_LIGHT_LANE_MAX_CONCURRENT_RUNS:=3}"
+export CHUMMER_DESIGN_SUPERVISOR_JURY_LANE_MAX_CONCURRENT_RUNS
+export CHUMMER_DESIGN_SUPERVISOR_REVIEW_LIGHT_LANE_MAX_CONCURRENT_RUNS
+
+if [[ "${CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_WORKER_LANE:-}" == "core" ]] && [[ "${CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_LANES:-}" == "core_rescue,survival,repair" ]]; then
+  CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_LANES="core_rescue,review_light,jury,survival,repair"
+fi
+export CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_LANES
+
 common_args=()
 project_config_path="${CHUMMER_DESIGN_SUPERVISOR_PROJECT_CONFIG:-/docker/fleet/config/projects/fleet.yaml}"
 shard_owner_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS:-}"
@@ -872,8 +882,19 @@ normalize_shard_worker_model() {
 	    core_authority:ea-coder-hard-batch|core_authority:ea-coder-hard|\
 	    core_booster:ea-coder-hard-batch|core_booster:ea-coder-hard|\
 	    core_rescue:ea-coder-hard-batch|core_rescue:ea-coder-hard|\
-	    review_shard:ea-coder-hard-batch|review_shard:ea-coder-hard|\
+	    review_shard:ea-coder-hard-batch|review_shard:ea-coder-hard)
+	      printf '%s' 'ea-review-light'
+	      ;;
 	    audit_shard:ea-coder-hard-batch|audit_shard:ea-coder-hard)
+	      printf '%s' 'ea-audit-jury'
+	      ;;
+	    review_shard:|review_light:)
+	      printf '%s' 'ea-review-light'
+	      ;;
+	    audit_shard:|jury:)
+	      printf '%s' 'ea-audit-jury'
+	      ;;
+	    core:|core_authority:|core_booster:|core_rescue:)
 	      if [[ -n "$shard_worker_model" ]]; then
 	        printf '%s' "$shard_worker_model"
 	      else
@@ -937,7 +958,7 @@ resolve_shard_worker_profile() {
       ;;
   esac
 
-  case "$focus_text_lower" in
+	  case "$focus_text_lower" in
     *bootstrap*|*install-linking*|*claim-restore*|*handoff-tests*|*download-tests*)
       resolved_lane="repair"
       resolved_model="ea-coder-fast"
@@ -960,11 +981,11 @@ resolve_shard_worker_profile() {
       ;;
 	    *desktop-exit-gate*|*platform-gates*|*startup-smoke*|*release-gates*|*release-proof*|*flagship-readiness*|*grade-bar*|*materializer*|*proof*)
 	      resolved_lane="audit_shard"
-	      resolved_model="ea-coder-hard"
+	      resolved_model="ea-audit-jury"
 	      ;;
 	    *visual-similarity*|*parity*)
 	      resolved_lane="review_shard"
-	      resolved_model="ea-coder-hard"
+	      resolved_model="ea-review-light"
 	      ;;
   esac
 

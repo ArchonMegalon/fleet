@@ -2100,6 +2100,70 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIn("terminating stalled", completed.stderr)
         self.assertIsNone(result["payload"])
 
+    def test_exec_hard_timeout_writes_actionable_last_message_when_output_path_requested(self) -> None:
+        output_path = self.root / "last_message.txt"
+
+        result = self.run_shim(
+            "core",
+            "exec",
+            "-o",
+            str(output_path),
+            "produce a result",
+            extra_env={
+                "CODEXEA_EXEC_HARD_TIMEOUT_SECONDS": "1",
+                "CODEXEA_TEST_FAKE_CODEX_SLEEP": "5",
+                "CODEXEA_OPERATOR_GUARD_ACTIVE": "1",
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 124)
+        self.assertIn("terminating stalled", completed.stderr)
+        self.assertIn("What shipped: none recorded", output_path.read_text(encoding="utf-8"))
+        self.assertIn("Exact blocker: upstream_timeout:1s", output_path.read_text(encoding="utf-8"))
+        self.assertIsNone(result["payload"])
+
+    def test_exec_rewrites_blank_structured_closeout_to_actionable_error(self) -> None:
+        output_path = self.root / "last_message.txt"
+        fake_codex = self.write_executable(
+            self.root / "codex-blank-closeout.py",
+            f"""
+            #!/usr/bin/env python3
+            import pathlib
+            import sys
+
+            output_path = ""
+            argv = sys.argv[1:]
+            for index, arg in enumerate(argv):
+                if arg in ("-o", "--output-last-message") and index + 1 < len(argv):
+                    output_path = argv[index + 1]
+                    break
+            if output_path:
+                pathlib.Path(output_path).write_text(
+                    "What shipped: \\n\\nWhat remains: \\n\\nExact blocker: \\n",
+                    encoding="utf-8",
+                )
+            print("Trace: lane=review_light waiting for upstream response (total_duration=32s)", file=sys.stderr)
+            raise SystemExit(0)
+            """,
+        )
+
+        result = self.run_shim(
+            "review_light",
+            "exec",
+            "-o",
+            str(output_path),
+            "Reply with exactly ok.",
+            extra_env={"CODEXEA_TEST_FAKE_CODEX_PATH": str(fake_codex)},
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        text = output_path.read_text(encoding="utf-8")
+        self.assertIn("Error: missing_final_message", text)
+        self.assertIn("What shipped: none recorded", text)
+        self.assertIn("Exact blocker: missing_final_message", text)
+
     def test_watchdog_ignores_synthetic_wait_heartbeats_as_progress(self) -> None:
         watchdog = _load_watchdog_module()
 
