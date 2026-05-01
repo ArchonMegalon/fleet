@@ -1,19 +1,15 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-05-01T09:13:18Z'
-source_public_status_generated_at: '2026-05-01T09:13:12Z'
+generated_at: '2026-05-01T09:22:20Z'
+source_public_status_generated_at: '2026-05-01T09:22:14Z'
 mission_snapshot:
-  headline: 'Working now: Auto-detect and repair recurring `fleet` mirror drift after
-    15873 repeated audit observations; keep one bounded queue slice for the affected
-    local design mirror bundle instead of reopening one-off mirror refresh work..
-    ETA: 52m 52s. Next: Auto-detect and repair recurring `core` mirror drift after
-    15059 repeated audit observations; keep one bounded queue slice for the affected
-    local design mirror bundle instead of reopening one-off mirror refresh work..
+  headline: 'Working now: Fix feedback: March 2026 Updates. ETA: 50m 33s. Next: {''Execute
+    WL-D014-01'': ''compute source and destination SHA-256 checksums for all WL-D007
+    review-template mirror targets and append the cycle block in `products/chummer/sync/REVIEW_TEMPLATE_MIRROR_PUBLISH_EVIDENCE.md`.''}.
     Vision: 0s. Capacity: Core 1%, Easy 1%, Jury n/a. Stop risk: none.'
-  current_eta: 52m 52s
-  next_title: Auto-detect and repair recurring `core` mirror drift after 15059 repeated
-    audit observations; keep one bounded queue slice for the affected local design
-    mirror bundle instead of reopening one-off mirror refresh work.
+  current_eta: 50m 33s
+  next_title: '{''Execute WL-D014-01'': ''compute source and destination SHA-256 checksums
+    for all WL-D007 review-template mirror targets and append the cycle block in `products/chummer/sync/REVIEW_TEMPLATE_MIRROR_PUBLISH_EVIDENCE.md`.''}'
   vision_eta: 0s
   milestone_title: chummer-vnext
   milestone_eta: 0s
@@ -24,42 +20,21 @@ mission_snapshot:
   stop_risk: none
 queue_forecast:
   now:
-    project_id: fleet
-    title: Auto-detect and repair recurring `fleet` mirror drift after 15873 repeated
-      audit observations; keep one bounded queue slice for the affected local design
-      mirror bundle instead of reopening one-off mirror refresh work.
-    lane: core_booster
+    project_id: guide
+    title: 'Fix feedback: March 2026 Updates'
+    lane: groundwork
     provider: EA
-    brain: EA backend / ea-coder-hard-batch
-    reason: cheap_first_default
-    elapsed_seconds: 428
-    elapsed_human: 7m 8s
-    remaining_seconds: 3172
-    remaining_human: 52m 52s
+    brain: EA backend / ea-groundwork-gemini
+    reason: groundwork_policy_default
+    elapsed_seconds: 567
+    elapsed_human: 9m 27s
+    remaining_seconds: 3033
+    remaining_human: 50m 33s
     total_seconds: 3600
     total_human: 1h
     verify_or_review_ahead: true
     prerequisites: none
   next:
-    project_id: core
-    title: Auto-detect and repair recurring `core` mirror drift after 15059 repeated
-      audit observations; keep one bounded queue slice for the affected local design
-      mirror bundle instead of reopening one-off mirror refresh work.
-    lane: easy
-    provider: not active
-    brain: not active
-    reason: interactive_or_first_pass
-    elapsed_seconds: 0
-    elapsed_human: 0s
-    remaining_seconds: 3600
-    remaining_human: 1h
-    total_seconds: 3600
-    total_human: 1h
-    verify_or_review_ahead: true
-    prerequisites: configured queue has remaining work and is waiting for scheduler
-      dispatch
-    confidence: likely
-  then:
     project_id: design
     title: '{''Execute WL-D014-01'': ''compute source and destination SHA-256 checksums
       for all WL-D007 review-template mirror targets and append the cycle block in
@@ -76,6 +51,24 @@ queue_forecast:
     total_human: 1h
     verify_or_review_ahead: false
     prerequisites: the slice is waiting on GitHub Codex review
+    confidence: likely
+  then:
+    project_id: ea
+    title: Auto-detect and repair recurring `ea` mirror drift after 16732 repeated
+      audit observations; keep one bounded queue slice for the affected local design
+      mirror bundle instead of reopening one-off mirror refresh work.
+    lane: easy
+    provider: not active
+    brain: not active
+    reason: local review is queued (7d 11h)
+    elapsed_seconds: 0
+    elapsed_human: 0s
+    remaining_seconds: 3600
+    remaining_human: 1h
+    total_seconds: 3600
+    total_human: 1h
+    verify_or_review_ahead: false
+    prerequisites: the slice is waiting on local review
     confidence: likely
 capacity_forecast:
   lanes:
@@ -717,7 +710,7 @@ capacity_forecast:
   account_pressure: []
 blocker_forecast:
   now: none
-  next: configured queue has remaining work and is waiting for scheduler dispatch
+  next: the slice is waiting on GitHub Codex review
   vision: blocked unresolved incidents, active workers, and healing runs
 deployment_posture:
   operator_auth_required: true
@@ -923,24 +916,25 @@ support_summary:
   freshness:
     available: true
     at: '2026-05-01T08:46:32Z'
-    age_seconds: 1605
-    age_human: 26m 45s
+    age_seconds: 2147
+    age_human: 35m 47s
     state: fresh
     label: fresh
 publish_readiness:
   state: blocked
   blocking_reason_count: 2
-  warning_reason_count: 2
+  warning_reason_count: 3
   blocking_reasons:
   - status plane is stale.
   - public guide/progress is stale.
   warning_reasons:
+  - Runtime healing is actively compensating for fleet-auditor, fleet-design-supervisor.
   - Live source state is 4d 16h newer than the published campaign OS continuity monitor.
   - Provider-route fallback coverage is still thin for the current release posture.
   recommended_action: Resolve the blocking publish-readiness issues before promoting
     public truth.
   signals:
-    runtime_healing_alert_state: healthy
+    runtime_healing_alert_state: degraded
     status_plane_freshness_state: stale
     progress_report_freshness_state: stale
     journey_gates_freshness_state: fresh
@@ -969,30 +963,30 @@ runtime_healing:
   enabled: true
   summary:
     service_count: 4
-    degraded_service_count: 0
+    degraded_service_count: 2
     cooldown_active_count: 0
     escalated_service_count: 0
     recent_restart_count: 6
-    alert_state: healthy
-    alert_reason: No runtime healing drift is currently recorded.
-    recommended_action: Keep the bounded auto-heal loop enabled and review the weekly
-      healer history.
-    last_event_at: '2026-05-01T08:29:55Z'
-    last_event_service: fleet-auditor
-    last_event_kind: restart_recovered
-    last_event_detail: service recovered after bounded restart
+    alert_state: degraded
+    alert_reason: Runtime healing is actively compensating for fleet-auditor, fleet-design-supervisor.
+    recommended_action: Verify the unhealthy service, fail streak, and cooldown posture
+      before assuming the stack is steady.
+    last_event_at: '2026-05-01T09:21:53Z'
+    last_event_service: fleet-design-supervisor
+    last_event_kind: observed_unhealthy
+    last_event_detail: ''
     last_recovered_service: fleet-auditor
     last_recovered_at: '2026-05-01T08:29:55Z'
   services:
   - service: fleet-auditor
-    current_state: healthy
-    observed_status: healthy
-    consecutive_failures: 0
+    current_state: observed_unhealthy
+    observed_status: unhealthy
+    consecutive_failures: 1
     cooldown_active: false
     cooldown_remaining_seconds: 0
     last_restart_at: '2026-05-01T08:29:44Z'
-    last_result: recovered
-    last_detail: service recovered after bounded restart
+    last_result: unhealthy
+    last_detail: ''
     total_restarts: 34
     restart_window_count: 0
     escalation_threshold: 3
@@ -1021,14 +1015,14 @@ runtime_healing:
     restart_window_count: 0
     escalation_threshold: 3
   - service: fleet-design-supervisor
-    current_state: healthy
-    observed_status: healthy
-    consecutive_failures: 0
+    current_state: observed_unhealthy
+    observed_status: unhealthy
+    consecutive_failures: 1
     cooldown_active: false
     cooldown_remaining_seconds: 0
     last_restart_at: '2026-04-30T15:16:56Z'
-    last_result: recovered
-    last_detail: service recovered after bounded restart
+    last_result: unhealthy
+    last_detail: ''
     total_restarts: 85
     restart_window_count: 0
     escalation_threshold: 3
@@ -1037,19 +1031,19 @@ external_proof_autoingest:
   current_state: cooldown
   commands_dir: /docker/fleet/.codex-studio/published/external-proof-commands
   observed_bundle_count: 3
-  last_attempt_at: '2026-05-01T09:12:13Z'
+  last_attempt_at: '2026-05-01T09:20:21Z'
   last_success_at: ''
   last_result: cooldown
-  last_detail: waiting 59s before retrying host proof bundle ingest
+  last_detail: waiting 28s before retrying host proof bundle ingest
   summary:
     alert_state: tracking
-    alert_reason: waiting 59s before retrying host proof bundle ingest
+    alert_reason: waiting 28s before retrying host proof bundle ingest
     recommended_action: Wait for the retry window or inspect the last failure detail
       in the rebuilder state.
 projects:
 - id: core
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1079,7 +1073,7 @@ projects:
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: running
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1119,7 +1113,7 @@ projects:
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: dispatchable
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1139,7 +1133,7 @@ projects:
   deployment_access_posture: public
 - id: ui
   lifecycle: live
-  runtime_status: healing
+  runtime_status: running
   readiness_stage: publicly_promoted
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: true
@@ -1168,7 +1162,7 @@ groups:
   blocking_owner_projects: []
 - id: control-plane
   lifecycle: live
-  phase: running
+  phase: proposed_tasks
   deployment_status: internal
   deployment_promotion_stage: internal
   deployment_access_posture: ''
