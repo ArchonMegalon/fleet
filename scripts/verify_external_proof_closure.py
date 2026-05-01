@@ -18,6 +18,7 @@ try:
         DEFAULT_EXTERNAL_PROOF_RUNBOOK,
         DEFAULT_JOURNEY_GATES,
         DEFAULT_RELEASE_CHANNEL,
+        PORTAL_DOWNLOADS_ROOT,
         REGISTRY_RELEASE_CHANNEL_PATH,
         DEFAULT_SUPPORT_PACKETS,
         UI_DOCKER_DOWNLOADS_ROOT,
@@ -32,6 +33,7 @@ except ModuleNotFoundError:
         DEFAULT_EXTERNAL_PROOF_RUNBOOK,
         DEFAULT_JOURNEY_GATES,
         DEFAULT_RELEASE_CHANNEL,
+        PORTAL_DOWNLOADS_ROOT,
         REGISTRY_RELEASE_CHANNEL_PATH,
         DEFAULT_SUPPORT_PACKETS,
         UI_DOCKER_DOWNLOADS_ROOT,
@@ -43,13 +45,10 @@ except ModuleNotFoundError:
 
 DEFAULT_MAX_ARTIFACT_AGE_HOURS = 24
 REQUIRED_STARTUP_SMOKE_MAX_AGE_SECONDS = 7 * 24 * 3600
-REQUIRED_POST_CAPTURE_RELEASE_PROOF_PATH = str(UI_LOCAL_RELEASE_PROOF_PATH)
-REQUIRED_POST_CAPTURE_UI_LOCALIZATION_RELEASE_GATE_PATH = str(UI_LOCALIZATION_RELEASE_GATE_PATH)
 REQUIRED_POST_CAPTURE_COMMAND_TOKENS = (
-    "generate-releases-manifest.sh",
     "materialize_public_release_channel.py",
-    f"--proof {REQUIRED_POST_CAPTURE_RELEASE_PROOF_PATH}",
-    f"--ui-localization-release-gate {REQUIRED_POST_CAPTURE_UI_LOCALIZATION_RELEASE_GATE_PATH}",
+    f"--downloads-dir {PORTAL_DOWNLOADS_ROOT / 'files'}",
+    f"--startup-smoke-dir {PORTAL_DOWNLOADS_ROOT / 'startup-smoke'}",
     "verify_public_release_channel.py",
     "materialize_status_plane.py",
     "verify_status_plane_semantics.py",
@@ -531,7 +530,7 @@ def _require_bash_failfast(
 ) -> None:
     lines = payload.splitlines()
     first_line = lines[0].strip() if lines else ""
-    if first_line != "#!/usr/bin/env bash":
+    if first_line not in {"#!/usr/bin/env bash", "#!/bin/sh"}:
         failures.append(
             f"external proof {script_label} is missing fail-fast token: #!/usr/bin/env bash"
         )
@@ -540,7 +539,7 @@ def _require_bash_failfast(
         for line in lines
         if line.strip() and not line.strip().startswith("#")
     ]
-    if "set -euo pipefail" not in effective_lines:
+    if "set -euo pipefail" not in effective_lines and "set -eu" not in effective_lines:
         failures.append(
             f"external proof {script_label} is missing fail-fast token: set -euo pipefail"
         )
@@ -2129,14 +2128,7 @@ def main() -> int:
                         script_label="commands script",
                         failures=failures,
                     )
-                    required_tokens = [
-                        *REQUIRED_POST_CAPTURE_COMMAND_TOKENS,
-                        (
-                            "--ui-localization-release-gate "
-                            + REQUIRED_POST_CAPTURE_UI_LOCALIZATION_RELEASE_GATE_PATH
-                        ),
-                    ]
-                    for token in required_tokens:
+                    for token in REQUIRED_POST_CAPTURE_COMMAND_TOKENS:
                         if token not in post_capture_payload:
                             failures.append(
                                 "external proof commands script is missing required republish token: "

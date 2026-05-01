@@ -339,9 +339,45 @@ external_proof_bundle_count() {
     case "$path" in
       *-command-pack.tgz) continue ;;
     esac
+    if ! external_proof_bundle_has_requests "$path"; then
+      continue
+    fi
     count=$(( count + 1 ))
   done
   printf '%s\n' "$count"
+}
+
+external_proof_bundle_has_requests() {
+  path="$1"
+  python3 - "$path" <<'PY'
+import json
+import sys
+import tarfile
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    with tarfile.open(path, "r:gz") as archive:
+        for candidate in ("./external-proof-manifest.json", "external-proof-manifest.json"):
+            try:
+                member = archive.getmember(candidate)
+            except KeyError:
+                continue
+            if not member.isfile():
+                continue
+            handle = archive.extractfile(member)
+            if handle is None:
+                continue
+            with handle:
+                payload = json.load(handle)
+            request_count = int((payload or {}).get("request_count") or 0)
+            raise SystemExit(0 if request_count > 0 else 1)
+except SystemExit as exc:
+    raise
+except Exception:
+    raise SystemExit(0)
+raise SystemExit(0)
+PY
 }
 
 external_proof_bundle_fingerprint() {
@@ -356,6 +392,9 @@ external_proof_bundle_fingerprint() {
     case "$path" in
       *-command-pack.tgz) continue ;;
     esac
+    if ! external_proof_bundle_has_requests "$path"; then
+      continue
+    fi
     found=1
     size="$(wc -c <"$path" | tr -d ' ')"
     mtime="$(date -u -r "$path" +%s 2>/dev/null || stat -c %Y "$path" 2>/dev/null || printf '0')"
@@ -664,8 +703,23 @@ monitor_external_proof_autoingest() {
   write_text_file "$external_proof_autoingest_last_detail_file" "host proof bundle detected; running finalize-external-host-proof.sh"
   write_external_proof_status "ingesting" "host proof bundle detected; running finalize-external-host-proof.sh" "$bundle_fingerprint" "$bundle_count"
   tmp_output="$external_proof_autoingest_state_dir/last-run.log"
+  proof_shell="$(command -v bash 2>/dev/null || true)"
+  if [ -z "$proof_shell" ] && [ -x /usr/bin/bash ]; then
+    proof_shell="/usr/bin/bash"
+  fi
+  if [ -z "$proof_shell" ] && [ -x /bin/sh ]; then
+    proof_shell="/bin/sh"
+  fi
+  if [ -z "$proof_shell" ] || [ ! -x "$proof_shell" ]; then
+    detail="no shell is available for finalize-external-host-proof.sh"
+    write_text_file "$external_proof_autoingest_last_result_file" "failed"
+    write_text_file "$external_proof_autoingest_last_detail_file" "$detail"
+    write_external_proof_status "failed" "$detail" "$bundle_fingerprint" "$bundle_count"
+    log "external proof auto-ingest failed: $detail"
+    return 0
+  fi
   log "external proof auto-ingest starting"
-  if sh "$finalize_script" >"$tmp_output" 2>&1; then
+  if PATH="${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}" "$proof_shell" "$finalize_script" >"$tmp_output" 2>&1; then
     cat "$tmp_output" >>"$log_file"
     write_text_file "$external_proof_autoingest_last_success_fingerprint_file" "$bundle_fingerprint"
     write_text_file "$external_proof_autoingest_last_success_epoch_file" "$now_epoch"

@@ -23,13 +23,13 @@ try:
         DEFAULT_RELEASE_CHANNEL,
         DEFAULT_SUPPORT_PACKETS,
         FLEET_ROOT,
+        PORTAL_DOWNLOADS_ROOT,
+        PORTAL_RELEASE_CHANNEL_PATH,
         REGISTRY_RELEASE_CHANNEL_PATH,
         RELEASE_CHANNEL_REPO_ROOT,
         UI_DOCKER_DOWNLOADS_FILES_ROOT,
         UI_DOCKER_DOWNLOADS_ROOT,
         UI_DOCKER_DOWNLOADS_STARTUP_SMOKE_ROOT,
-        UI_LOCALIZATION_RELEASE_GATE_PATH,
-        UI_LOCAL_RELEASE_PROOF_PATH,
         UI_REPO_ROOT,
         build_download_path,
         normalize_external_proof_relative_path,
@@ -44,13 +44,13 @@ except ModuleNotFoundError:
         DEFAULT_RELEASE_CHANNEL,
         DEFAULT_SUPPORT_PACKETS,
         FLEET_ROOT,
+        PORTAL_DOWNLOADS_ROOT,
+        PORTAL_RELEASE_CHANNEL_PATH,
         REGISTRY_RELEASE_CHANNEL_PATH,
         RELEASE_CHANNEL_REPO_ROOT,
         UI_DOCKER_DOWNLOADS_FILES_ROOT,
         UI_DOCKER_DOWNLOADS_ROOT,
         UI_DOCKER_DOWNLOADS_STARTUP_SMOKE_ROOT,
-        UI_LOCALIZATION_RELEASE_GATE_PATH,
-        UI_LOCAL_RELEASE_PROOF_PATH,
         UI_REPO_ROOT,
         build_download_path,
         normalize_external_proof_relative_path,
@@ -60,7 +60,7 @@ except ModuleNotFoundError:
 
 UTC = dt.timezone.utc
 DEFAULT_OUT = DEFAULT_EXTERNAL_PROOF_RUNBOOK
-DEFAULT_RELEASE_CHANNEL_MANIFEST_PATH = UI_REPO_ROOT / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
+DEFAULT_RELEASE_CHANNEL_MANIFEST_PATH = DEFAULT_RELEASE_CHANNEL
 FLEET_DESIGN_PRODUCT_ROOT = CHUMMER_COMPLETE_ROOT / "chummer-design"
 FLEET_FLAGSHIP_PRODUCT_READINESS_MIRROR_PATH = (
     FLEET_ROOT / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
@@ -104,6 +104,7 @@ def _post_capture_republish_commands(
 ) -> list[str]:
     effective_journey_gates_path = journey_gates_path or (FLEET_ROOT / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json")
     effective_release_channel_path = release_channel_path or REGISTRY_RELEASE_CHANNEL_PATH
+    republish_manifest_path = PORTAL_RELEASE_CHANNEL_PATH if PORTAL_RELEASE_CHANNEL_PATH.is_file() else effective_release_channel_path
     chummer6_ui_html_report = (
         FLEET_DESIGN_PRODUCT_ROOT / "products" / "chummer" / "PROGRESS_REPORT.generated.html"
     )
@@ -111,21 +112,19 @@ def _post_capture_republish_commands(
         FLEET_DESIGN_PRODUCT_ROOT / "products" / "chummer" / "PROGRESS_REPORT.generated.json"
     )
     return [
-        f"cd {shlex.quote(str(UI_REPO_ROOT))} && ./scripts/generate-releases-manifest.sh",
         "cd "
         + shlex.quote(str(RELEASE_CHANNEL_REPO_ROOT))
         + " && python3 scripts/materialize_public_release_channel.py --manifest "
-        + shlex.quote(str(DEFAULT_RELEASE_CHANNEL_MANIFEST_PATH))
+        + shlex.quote(str(republish_manifest_path))
         + " --downloads-dir "
-        + shlex.quote(str(UI_DOCKER_DOWNLOADS_FILES_ROOT))
+        + shlex.quote(str(PORTAL_DOWNLOADS_ROOT / "files"))
         + " --startup-smoke-dir "
-        + shlex.quote(str(UI_DOCKER_DOWNLOADS_STARTUP_SMOKE_ROOT))
-        + " --proof "
-        + shlex.quote(str(UI_LOCAL_RELEASE_PROOF_PATH))
-        + " --ui-localization-release-gate "
-        + shlex.quote(str(UI_LOCALIZATION_RELEASE_GATE_PATH))
+        + shlex.quote(str(PORTAL_DOWNLOADS_ROOT / "startup-smoke"))
         + " --channel docker --version unpublished --published-at \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" --output .codex-studio/published/RELEASE_CHANNEL.generated.json",
-        f"cd {shlex.quote(str(RELEASE_CHANNEL_REPO_ROOT))} && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json",
+        "cd "
+        + shlex.quote(str(RELEASE_CHANNEL_REPO_ROOT))
+        + " && python3 scripts/verify_public_release_channel.py "
+        + shlex.quote(str(REGISTRY_RELEASE_CHANNEL_PATH)),
         f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml",
         f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml",
         "cd "
@@ -1227,7 +1226,7 @@ def _bundle_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
     manifest_payload = _bundle_manifest_payload_for_group(group, host=host)
     manifest_payload_json = json.dumps(manifest_payload, sort_keys=True)
     commands = [
-        "SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"",
+        "SCRIPT_DIR=\"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\"",
         _ui_downloads_root_setup_command(),
         f"BUNDLE_ROOT=\"$SCRIPT_DIR/host-proof-bundles/{host_token}\"",
         f"BUNDLE_ARCHIVE=\"$SCRIPT_DIR/{host_token}-proof-bundle.tgz\"",
@@ -1267,9 +1266,9 @@ def _ingest_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
     bundle_paths = _bundle_relative_paths_for_group(group)
     manifest_payload = _bundle_manifest_payload_for_group(group, host=host)
     manifest_payload_json = json.dumps(manifest_payload, sort_keys=True)
-    target_root = UI_DOCKER_DOWNLOADS_ROOT
+    target_root = PORTAL_DOWNLOADS_ROOT
     commands = [
-        "SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"",
+        "SCRIPT_DIR=\"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\"",
         f"BUNDLE_ARCHIVE=\"$SCRIPT_DIR/{host_token}-proof-bundle.tgz\"",
         f"BUNDLE_DIR=\"$SCRIPT_DIR/host-proof-bundles/{host_token}\"",
         "export BUNDLE_ARCHIVE",
@@ -1319,6 +1318,8 @@ def _ingest_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
             "    for member in archive.getmembers():\n"
             "        pure=pathlib.PurePosixPath(member.name)\n"
             "        parts=tuple(part for part in pure.parts if part not in ('', '.'))\n"
+            "        if member.isdir():\n"
+            "            continue\n"
             "        if member.name.startswith('/') or '..' in parts or not member.isfile():\n"
             "            bad.append(member.name)\n"
             "            continue\n"
@@ -1864,7 +1865,7 @@ def _normalize_host_token(value: str) -> str:
 
 
 def _render_bash_script(commands: list[str], *, no_op_message: str) -> str:
-    lines = ["#!/usr/bin/env bash", "set -euo pipefail", ""]
+    lines = ["#!/bin/sh", "set -eu", ""]
     if commands:
         lines.extend(commands)
     else:

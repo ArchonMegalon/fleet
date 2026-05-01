@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 echo 'No external-proof validation commands for host '"'"'linux'"'"'.'

@@ -253,6 +253,55 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
 
             self.verify.run_verification(status_plane_path=status_plane_path, status_json_path=status_json_path)
 
+    def test_verify_status_plane_ignores_external_proof_cooldown_countdown_churn(self) -> None:
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            admin_status = self._normalized_admin_status(_sample_admin_status())
+            admin_status["public_status"]["external_proof_autoingest"] = {
+                "generated_at": "2026-05-01T09:23:15Z",
+                "enabled": True,
+                "current_state": "cooldown",
+                "commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
+                "observed_bundle_count": 3,
+                "last_attempt_at": "2026-05-01T09:22:44Z",
+                "last_success_at": "",
+                "last_result": "cooldown",
+                "last_detail": "waiting 89s before retrying host proof bundle ingest",
+                "summary": {
+                    "alert_state": "tracking",
+                    "alert_reason": "waiting 89s before retrying host proof bundle ingest",
+                    "recommended_action": "Wait for the retry window or inspect the last failure detail.",
+                },
+            }
+            status_plane = self.verify.build_expected_status_plane(admin_status)
+            status_plane["external_proof_autoingest"] = copy.deepcopy(admin_status["public_status"]["external_proof_autoingest"])
+            status_plane_path = tmp_path / "STATUS_PLANE.generated.yaml"
+            status_plane_path.write_text(yaml.safe_dump(status_plane, sort_keys=False), encoding="utf-8")
+            status_json_path = tmp_path / "status.json"
+            status_json_path.write_text(json.dumps(admin_status), encoding="utf-8")
+
+            local_cooldown = {
+                "generated_at": "2026-05-01T09:24:15Z",
+                "enabled": True,
+                "current_state": "cooldown",
+                "commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
+                "observed_bundle_count": 3,
+                "last_attempt_at": "2026-05-01T09:22:44Z",
+                "last_success_at": "",
+                "last_result": "cooldown",
+                "last_detail": "waiting 28s before retrying host proof bundle ingest",
+                "summary": {
+                    "alert_state": "tracking",
+                    "alert_reason": "waiting 28s before retrying host proof bundle ingest",
+                    "recommended_action": "Wait for the retry window or inspect the last failure detail.",
+                },
+            }
+
+            with mock.patch.object(self.verify, "_external_proof_autoingest_from_state", return_value=local_cooldown):
+                self.verify.run_verification(status_plane_path=status_plane_path, status_json_path=status_json_path)
+
     def test_verify_status_plane_normalizes_waiting_capacity_to_dispatch_pending(self) -> None:
         from tempfile import TemporaryDirectory
 

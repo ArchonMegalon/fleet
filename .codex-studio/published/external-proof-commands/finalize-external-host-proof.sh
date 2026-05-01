@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 cd /docker/fleet/.codex-studio/published/external-proof-commands
 ./validate-linux-proof.sh

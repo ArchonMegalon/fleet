@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-01T08:37:21Z'
+generated_at: '2026-05-01T09:29:23Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -29,25 +29,94 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-ui
   - chummer6-core
+  - chummer6-design
+  - chummer6-hub
+  - chummer6-hub-registry
+  - chummer6-mobile
+  - chummer6-ui
+  - executive-assistant
+  - fleet
   - chummer6-ui-kit
   texts:
+  - accessibility
+  - advancement
+  - aftermath
+  - automatic bugfixing
+  - build lab
+  - campaign
+  - chummer5a
+  - claim
+  - companion
+  - contacts
+  - continuity
+  - crash
+  - crew-fit
+  - custom-data
+  - dashboard
+  - dedicated-tester
+  - desktop
+  - desktop-client
+  - diary
+  - dice
+  - dossier
+  - downtime
+  - event
+  - exchange
+  - explain
+  - export
+  - feedback
+  - flagship-readiness
+  - genesis
+  - gm
+  - governance
+  - grade-bar
+  - hero lab
+  - import
+  - initiative
+  - install
+  - launch
+  - localization
+  - master index
+  - materializer
+  - mobile
+  - offline
+  - operator
+  - opposition
+  - oracle
+  - prep
+  - pulse
+  - recap
+  - recovery
+  - release truth
+  - release-proof
+  - replay
+  - restore
+  - roster
+  - rule-environment
+  - settings
+  - sourcebook
+  - support
+  - translator
+  - travel
+  - trust
+  - update
+  - user-journey-tester-audit
+  - utility
+  - workbench
+  - xml
   - top flagship grade
   - whole-project frontier
   - no lowered standards
   - feedback loop
-  - automatic bugfixing
   - crash reporting
   - support routing
   - journey smoothness
   - restore confidence
-  - accessibility
-  - localization
   - performance
   - proof shelf
   - fit and finish
-  - desktop client
+  - fleet and operator loop
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -56,22 +125,61 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: stage flagship_ui_screenshot_gate failed
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-01T08:37:19Z'
+  generated_at: '2026-05-01T09:29:12Z'
   proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 1
+frontier_count: 3
 frontier_ids:
+- 3109832007
 - 4066417069
+- 3449507998
 frontier:
+- id: 3109832007
+  title: Fleet and operator loop flagship finish
+  wave: flagship_product
+  status: not_started
+  owners:
+  - fleet
+  - executive-assistant
+  - chummer6-design
+  - chummer6-hub
+  dependencies: []
+  exit_criteria:
+  - Keep the product-governor, support, signal, and operator loop durable enough to
+    steer the full multi-repo product, not just the current milestone wave, with trustworthy
+    proofs, traces, ETAs, handoffs, and fail-closed anti-false-complete posture.
+  - Ensure the loop can keep decomposing full-product work across shards until flagship
+    readiness proof is current and trusted, and that actionable feedback, crash, and
+    support signals can auto-materialize into routed bugfix work without operator
+    babysitting.
+  eta:
+    status: flagship_delivery
+    eta_human: 9h-23h
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
+      the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop.'
+    predicted_completion_at: '2026-05-02T01:35:23Z'
+    range_low_hours: 9.0
+    range_high_hours: 23.2
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 2.0
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
 - id: 4066417069
   title: Flagship desktop client and workbench finish
   wave: flagship_product
@@ -95,8 +203,8 @@ frontier:
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Flagship desktop client and workbench finish'' remains open
-      under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
-    predicted_completion_at: '2026-05-02T03:22:39Z'
+      under the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop.'
+    predicted_completion_at: '2026-05-02T04:14:41Z'
     range_low_hours: 10.86
     range_high_hours: 26.65
     remaining_open_milestones: 1
@@ -109,3 +217,64 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+- id: 3449507998
+  title: Rules engine parity, explain trust, and import certification
+  wave: flagship_product
+  status: not_started
+  owners:
+  - chummer6-core
+  - chummer6-ui
+  dependencies: []
+  exit_criteria:
+  - Close SR4, SR5, and SR6 character-build parity gaps using deterministic engine
+    truth, explain receipts, and legacy/import oracle evidence described in `projects/core.md`
+    and the roadmap.
+  - Make ruleset import, migration, and explain certification boring enough that flagship
+    desktop and mobile surfaces consume one grounded engine truth.
+  eta:
+    status: flagship_delivery
+    eta_human: 11h-1.1d
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Rules engine parity, explain trust, and import certification''
+      remains open under the flagship closeout frontier. Outstanding readiness coverage:
+      fleet_and_operator_loop.'
+    predicted_completion_at: '2026-05-02T04:14:41Z'
+    range_low_hours: 10.86
+    range_high_hours: 26.65
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 2.05
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
+eta:
+  status: blocked
+  eta_human: 1d-2.5d after unblock
+  eta_confidence: low
+  basis: full_product_frontier_heuristic+external_blocker
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: 'provider-health preflight left no routable direct lanes: core_rescue:onemin:unavailable;
+    magixai:unavailable; survival:browseract:unavailable; gemini_vortex:unknown; onemin:unavailable;
+    lane:no routable survival backends: chatplayground:unknown; gemini_web:unknown;
+    gemini_vortex:unknown; onemin:unknown; repair:magixai:unavailable; onemin:unavailable'
+  summary: 'Current closeout gates are green, but flagship product work still remains
+    across 3 synthetic slices. Outstanding readiness coverage: fleet_and_operator_loop.
+    Current external blocker: provider-health preflight left no routable direct lanes:
+    core_rescue:onemin:unavailable; magixai:unavailable; survival:browseract:unavailable;
+    gemini_vortex:unknown; onemin:unavailable; lane:no routable survival backends:
+    chatplayground:unknown; gemini_web:unknown; gemini_vortex:unknown; onemin:unknown;
+    repair:magixai:unavailable; onemin:unavailable'
+  predicted_completion_at: ''
+  range_low_hours: 24.4
+  range_high_hours: 61.0
+  remaining_open_milestones: 3
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 3
+  remaining_effort_units: 6.1

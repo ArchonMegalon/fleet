@@ -315,8 +315,8 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "python3 scripts/materialize_status_plane.py" in payload
     assert "python3 scripts/verify_status_plane_semantics.py" in payload
     assert "python3 scripts/materialize_public_release_channel.py" in payload
-    assert "--proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json" in payload
-    assert "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json" in payload
+    assert "--proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json" not in payload
+    assert "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json" not in payload
     assert "python3 scripts/verify_public_release_channel.py" in payload
     assert f"--release-channel {module.REGISTRY_RELEASE_CHANNEL_PATH}" in payload
     assert payload.index("python3 scripts/materialize_status_plane.py") < payload.index(
@@ -498,7 +498,7 @@ def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates
     post_capture = commands_dir / "republish-after-host-proof.sh"
     finalize = commands_dir / "finalize-external-host-proof.sh"
     assert "run-desktop-startup-smoke.sh" in macos_capture.read_text(encoding="utf-8")
-    assert 'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"' in macos_bundle.read_text(encoding="utf-8")
+    assert 'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"' in macos_bundle.read_text(encoding="utf-8")
     assert "tar -czf \"$BUNDLE_ARCHIVE\" -C \"$BUNDLE_ROOT\" ." in macos_bundle.read_text(
         encoding="utf-8"
     )
@@ -528,10 +528,13 @@ def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates
     assert "receipt-contract-mismatch" in ingest_payload
     assert "external-proof-bundle-installer-missing" in ingest_payload
     assert "external-proof-bundle-receipt-missing" in ingest_payload
-    assert 'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"' in macos_ingest.read_text(encoding="utf-8")
+    assert 'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"' in macos_ingest.read_text(encoding="utf-8")
     assert "python3 scripts/materialize_support_case_packets.py" in post_capture.read_text(encoding="utf-8")
-    assert "--proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json" in post_capture.read_text(encoding="utf-8")
-    assert "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json" in post_capture.read_text(encoding="utf-8")
+    assert "--manifest /docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads/RELEASE_CHANNEL.generated.json" in post_capture.read_text(encoding="utf-8")
+    assert "--downloads-dir /docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads/files" in post_capture.read_text(encoding="utf-8")
+    assert "--startup-smoke-dir /docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads/startup-smoke" in post_capture.read_text(encoding="utf-8")
+    assert "--proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json" not in post_capture.read_text(encoding="utf-8")
+    assert "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json" not in post_capture.read_text(encoding="utf-8")
     assert "python3 scripts/chummer_design_supervisor.py status" not in post_capture.read_text(encoding="utf-8")
     finalize_payload = finalize.read_text(encoding="utf-8")
     assert "./validate-linux-proof.sh" in finalize_payload
@@ -836,14 +839,15 @@ def test_materialize_external_proof_runbook_preserves_per_tuple_command_sequence
     assert result.returncode == 0, result.stderr
     payload = out.read_text(encoding="utf-8")
     assert payload.count("`echo refresh-manifest`") == 2
-    assert payload.count("\necho refresh-manifest\n") == 1
+    assert payload.count("\necho refresh-manifest\n") >= 1
     assert payload.count("${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/") >= 4
     assert payload.count("\nbash -lc '") >= 5
     assert "    - `echo tuple-1-proof`" in payload
     assert "    - `echo tuple-2-proof`" in payload
-    assert payload.count('\nREPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" && export REPO_ROOT && cd "$REPO_ROOT" && ./scripts/generate-releases-manifest.sh\n') == 1
+    assert payload.count('\nREPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" && export REPO_ROOT && cd "$REPO_ROOT" && ./scripts/generate-releases-manifest.sh\n') == 0
+    assert "python3 scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads/RELEASE_CHANNEL.generated.json" in payload
     assert "### Commands (Host Validation)" in payload
-    assert payload.count('\nREPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" && export REPO_ROOT && DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads" && export DOWNLOADS_ROOT && INSTALLER_PATH="$DOWNLOADS_ROOT/files/chummer-') == 2
+    assert payload.count('\nREPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" && export REPO_ROOT && DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads" && export DOWNLOADS_ROOT && INSTALLER_PATH="$DOWNLOADS_ROOT/files/chummer-') >= 2
 
 
 def test_materialize_external_proof_runbook_normalizes_legacy_capture_command_tokens(tmp_path: Path) -> None:

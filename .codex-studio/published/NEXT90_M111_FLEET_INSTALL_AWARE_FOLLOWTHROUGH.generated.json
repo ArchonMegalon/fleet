@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.install_aware_followthrough_gate",
   "schema_version": 1,
-  "generated_at": "2026-05-01T09:22:21Z",
+  "generated_at": "2026-05-01T09:56:41Z",
   "status": "pass",
   "reason": "Install-aware followthrough is clear: install receipts, weekly governor truth, and promoted public proof all agree.",
   "summary": {
@@ -65,7 +65,7 @@
     "queue_staging": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
   },
   "support_receipt_truth": {
-    "support_packets_generated_at": "2026-05-01T08:46:32Z",
+    "support_packets_generated_at": "2026-05-01T09:55:50Z",
     "successor_package_verification_status": "pass",
     "reporter_followthrough_blocked_missing_install_receipts_count": 0,
     "reporter_followthrough_blocked_receipt_mismatch_count": 0,
@@ -79,7 +79,7 @@
     "weekly_product_pulse_as_of": "2026-05-01",
     "weekly_product_pulse_action": "launch_expand",
     "weekly_product_pulse_reason": "Launch expansion is approved for the next bounded window while canaries and support closure remain clear.",
-    "weekly_governor_packet_generated_at": "2026-05-01T09:22:20Z",
+    "weekly_governor_packet_generated_at": "2026-05-01T09:56:41Z",
     "weekly_governor_packet_as_of": "2026-05-01",
     "governor_expected_action": "launch_expand",
     "governor_actual_action": "launch_expand",
@@ -98,8 +98,8 @@
       "role": "install-aware followthrough receipt source",
       "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
       "exists": true,
-      "sha256": "188cd1389c2a97fe09868cfa2f2da98e3a333516d751d464a4b4cd7c553ad5af",
-      "generated_at": "2026-05-01T08:46:32Z",
+      "sha256": "8092683794c4e2aba65e4b9923935e76ab26479e96e0b6504f2ad0abe8d1bdf4",
+      "generated_at": "2026-05-01T09:55:50Z",
       "as_of": ""
     },
     {
@@ -107,8 +107,8 @@
       "role": "promotion and kill-switch ledger",
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
       "exists": true,
-      "sha256": "268c9baedd5eee7ade85e6637dfdd64f69f3ed27e1f76f63ea1d61a250fdadc2",
-      "generated_at": "2026-05-01T09:22:20Z",
+      "sha256": "c7934bd147c5e06e348bdb78f32d9b84e834fda4f6b0f501f2cd64a61b061047",
+      "generated_at": "2026-05-01T09:56:41Z",
       "as_of": "2026-05-01"
     },
     {

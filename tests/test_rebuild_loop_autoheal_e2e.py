@@ -5,6 +5,7 @@ import os
 import stat
 import subprocess
 import sys
+import tarfile
 import time
 from pathlib import Path
 
@@ -192,3 +193,53 @@ def test_rebuild_loop_autoingests_returned_external_proof_bundle(tmp_path: Path)
     assert payload["current_state"] == "ingested"
     assert payload["observed_bundle_count"] == 1
     assert payload["last_result"] == "ingested"
+
+
+def test_rebuild_loop_ignores_retained_zero_backlog_external_proof_bundle(tmp_path: Path) -> None:
+    commands_dir = tmp_path / "external-proof-commands"
+    commands_dir.mkdir(parents=True, exist_ok=True)
+    bundle_path = commands_dir / "windows-proof-bundle.tgz"
+    manifest_dir = tmp_path / "bundle"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    (manifest_dir / "external-proof-manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "host": "windows",
+                "request_count": 0,
+                "requests": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with tarfile.open(bundle_path, "w:gz") as archive:
+        archive.add(manifest_dir / "external-proof-manifest.json", arcname="./external-proof-manifest.json")
+    marker = tmp_path / "finalized.txt"
+    finalize_script = commands_dir / "finalize-external-host-proof.sh"
+    finalize_script.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        f"printf 'unexpected\\n' > {marker}\n",
+        encoding="utf-8",
+    )
+    finalize_script.chmod(finalize_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    result = _run_loop(
+        tmp_path,
+        extra_env={
+            "FLEET_AUTOHEAL_ENABLED": "false",
+            "FLEET_EXTERNAL_PROOF_AUTOINGEST_ENABLED": "true",
+            "FLEET_EXTERNAL_PROOF_COMMANDS_DIR": str(commands_dir),
+            "FLEET_EXTERNAL_PROOF_AUTOINGEST_COOLDOWN_SECONDS": "0",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not marker.exists()
+
+    status_path = tmp_path / "state" / "rebuilder" / "external-proof-autoingest" / "status.json"
+    payload = json.loads(status_path.read_text(encoding="utf-8"))
+    assert payload["current_state"] == "waiting_for_bundle"
+    assert payload["observed_bundle_count"] == 0
+    assert payload["last_result"] == "waiting_for_bundle"

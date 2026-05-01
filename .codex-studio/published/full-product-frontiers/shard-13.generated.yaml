@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-01T08:46:22Z'
+generated_at: '2026-05-01T09:45:09Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-13
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -57,6 +57,7 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
+  - fleet and operator loop
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -65,12 +66,12 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: stage flagship_ui_screenshot_gate failed
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-01T08:44:46Z'
+  generated_at: '2026-05-01T09:29:12Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -101,8 +102,8 @@ frontier:
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Define opposition and scene packet contracts with rules-backed
       stats'' remains open under the flagship closeout frontier. Outstanding readiness
-      coverage: flagship readiness proof refresh.'
-    predicted_completion_at: '2026-05-02T00:19:40Z'
+      coverage: fleet_and_operator_loop.'
+    predicted_completion_at: '2026-05-02T01:18:27Z'
     range_low_hours: 9.01
     range_high_hours: 22.1
     remaining_open_milestones: 1

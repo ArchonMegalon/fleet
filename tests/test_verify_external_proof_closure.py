@@ -171,20 +171,6 @@ def _write_external_proof_bundle(
     release_generated_at: str,
 ) -> None:
     module = _load_verify_external_proof_closure_module()
-    runbook_path.write_text(
-        "\n".join(
-            [
-                "# External Proof Runbook",
-                "",
-                f"- generated_at: {support_generated_at}",
-                f"- plan_generated_at: {support_generated_at}",
-                f"- release_channel_generated_at: {release_generated_at}",
-                "",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
     commands_dir.mkdir(parents=True, exist_ok=True)
     post_capture = commands_dir / "republish-after-host-proof.sh"
     post_capture.write_text(
@@ -192,11 +178,11 @@ def _write_external_proof_bundle(
             [
                 "#!/usr/bin/env bash",
                 "set -euo pipefail",
-                "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
                 (
                     "cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py "
-                    "--proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json "
-                    "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json"
+                    "--manifest /docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads/RELEASE_CHANNEL.generated.json "
+                    "--downloads-dir /docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads/files "
+                    "--startup-smoke-dir /docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads/startup-smoke "
                 ),
                 "cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json",
                 "cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml",
@@ -214,6 +200,84 @@ def _write_external_proof_bundle(
         encoding="utf-8",
     )
     post_capture.chmod(0o755)
+    for host in ("linux", "macos", "windows"):
+        for prefix in ("preflight", "capture", "validate", "bundle"):
+            script = commands_dir / f"{prefix}-{host}-proof.sh"
+            script.write_text(
+                "#!/usr/bin/env bash\nset -euo pipefail\necho ok\n",
+                encoding="utf-8",
+            )
+            script.chmod(0o755)
+        host_lane = commands_dir / f"run-{host}-proof-lane.sh"
+        host_lane.write_text(
+            "#!/usr/bin/env bash\nset -euo pipefail\necho lane\n",
+            encoding="utf-8",
+        )
+        host_lane.chmod(0o755)
+    finalize = commands_dir / "finalize-external-host-proof.sh"
+    finalize.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                "set -euo pipefail",
+                "cd /tmp",
+                "./validate-linux-proof.sh",
+                "./ingest-linux-proof-bundle.sh",
+                "./validate-macos-proof.sh",
+                "./ingest-macos-proof-bundle.sh",
+                "./validate-windows-proof.sh",
+                "./ingest-windows-proof-bundle.sh",
+                "./republish-after-host-proof.sh",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    finalize.chmod(0o755)
+    fingerprint = module._command_bundle_fingerprint(commands_dir)
+    runbook_path.write_text(
+        "\n".join(
+            [
+                "# External Proof Runbook",
+                "",
+                f"- generated_at: {support_generated_at}",
+                f"- plan_generated_at: {support_generated_at}",
+                f"- release_channel_generated_at: {release_generated_at}",
+                f"- command_bundle_sha256: `{fingerprint.get('sha256') or ''}`",
+                f"- command_bundle_file_count: {int(fingerprint.get('file_count') or 0)}",
+                "",
+                "## Resume Commands",
+                "",
+                "### Resume Host Lane: linux",
+                "",
+                "- `./preflight-linux-proof.sh`",
+                "- `./capture-linux-proof.sh`",
+                "- `./validate-linux-proof.sh`",
+                "- `./bundle-linux-proof.sh`",
+                "",
+                "### Resume Host Lane: macos",
+                "",
+                "- `./preflight-macos-proof.sh`",
+                "- `./capture-macos-proof.sh`",
+                "- `./validate-macos-proof.sh`",
+                "- `./bundle-macos-proof.sh`",
+                "",
+                "### Resume Host Lane: windows",
+                "",
+                "- `./preflight-windows-proof.sh`",
+                "- `./capture-windows-proof.sh`",
+                "- `./validate-windows-proof.sh`",
+                "- `./bundle-windows-proof.sh`",
+                "",
+                "## After Host Proof Capture",
+                "",
+                "`finalize-external-host-proof.sh`",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def _write_open_windows_external_proof_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
@@ -1404,15 +1468,15 @@ def test_verify_external_proof_closure_fails_when_post_capture_script_drops_requ
     assert result.returncode == 1
     assert (
         "external proof commands script is missing required republish token: "
-        "generate-releases-manifest.sh"
-    ) in result.stderr
-    assert (
-        "external proof commands script is missing required republish token: "
         "materialize_public_release_channel.py"
     ) in result.stderr
     assert (
         "external proof commands script is missing required republish token: "
-        "--proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json"
+        "--downloads-dir /docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads/files"
+    ) in result.stderr
+    assert (
+        "external proof commands script is missing required republish token: "
+        "--startup-smoke-dir /docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads/startup-smoke"
     ) in result.stderr
 
 

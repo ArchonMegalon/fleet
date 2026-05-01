@@ -318,7 +318,10 @@ services:
       start_period: 20s
 
   fleet-rebuilder:
-    image: docker:28-cli
+    build:
+      context: ./controller
+      args:
+        CODEX_NPM_REFRESH_TOKEN: ${CODEX_NPM_REFRESH_TOKEN:-static}
     container_name: fleet-rebuilder
     restart: unless-stopped
     init: true

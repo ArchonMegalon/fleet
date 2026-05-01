@@ -1,13 +1,15 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-05-01T09:22:20Z'
-source_public_status_generated_at: '2026-05-01T09:22:14Z'
+generated_at: '2026-05-01T09:56:32Z'
+source_public_status_generated_at: '2026-05-01T09:56:26Z'
 mission_snapshot:
-  headline: 'Working now: Fix feedback: March 2026 Updates. ETA: 50m 33s. Next: {''Execute
-    WL-D014-01'': ''compute source and destination SHA-256 checksums for all WL-D007
-    review-template mirror targets and append the cycle block in `products/chummer/sync/REVIEW_TEMPLATE_MIRROR_PUBLISH_EVIDENCE.md`.''}.
+  headline: 'Working now: title: Publish or append runnable backlog for Catalog, visual-regression,
+    and release discipline for the shared kit are not yet materialized.. | difficulty:
+    auto | risk_level: auto. ETA: 51m 44s. Next: {''Execute WL-D014-01'': ''compute
+    source and destination SHA-256 checksums for all WL-D007 review-template mirror
+    targets and append the cycle block in `products/chummer/sync/REVIEW_TEMPLATE_MIRROR_PUBLISH_EVIDENCE.md`.''}.
     Vision: 0s. Capacity: Core 1%, Easy 1%, Jury n/a. Stop risk: none.'
-  current_eta: 50m 33s
+  current_eta: 51m 44s
   next_title: '{''Execute WL-D014-01'': ''compute source and destination SHA-256 checksums
     for all WL-D007 review-template mirror targets and append the cycle block in `products/chummer/sync/REVIEW_TEMPLATE_MIRROR_PUBLISH_EVIDENCE.md`.''}'
   vision_eta: 0s
@@ -20,20 +22,22 @@ mission_snapshot:
   stop_risk: none
 queue_forecast:
   now:
-    project_id: guide
-    title: 'Fix feedback: March 2026 Updates'
-    lane: groundwork
+    project_id: ui-kit
+    title: 'title: Publish or append runnable backlog for Catalog, visual-regression,
+      and release discipline for the shared kit are not yet materialized.. | difficulty:
+      auto | risk_level: auto'
+    lane: easy
     provider: EA
-    brain: EA backend / ea-groundwork-gemini
-    reason: groundwork_policy_default
-    elapsed_seconds: 567
-    elapsed_human: 9m 27s
-    remaining_seconds: 3033
-    remaining_human: 50m 33s
+    brain: EA backend / ea-coder-hard-batch
+    reason: interactive_or_first_pass
+    elapsed_seconds: 496
+    elapsed_human: 8m 16s
+    remaining_seconds: 3104
+    remaining_human: 51m 44s
     total_seconds: 3600
     total_human: 1h
-    verify_or_review_ahead: true
-    prerequisites: none
+    verify_or_review_ahead: false
+    prerequisites: the slice is waiting on local review
   next:
     project_id: design
     title: '{''Execute WL-D014-01'': ''compute source and destination SHA-256 checksums
@@ -54,13 +58,13 @@ queue_forecast:
     confidence: likely
   then:
     project_id: ea
-    title: Auto-detect and repair recurring `ea` mirror drift after 16732 repeated
+    title: Auto-detect and repair recurring `ea` mirror drift after 16916 repeated
       audit observations; keep one bounded queue slice for the affected local design
       mirror bundle instead of reopening one-off mirror refresh work.
     lane: easy
     provider: not active
     brain: not active
-    reason: local review is queued (7d 11h)
+    reason: local review is queued (7d 12h)
     elapsed_seconds: 0
     elapsed_human: 0s
     remaining_seconds: 3600
@@ -98,8 +102,8 @@ capacity_forecast:
     ready_slots: 0
     degraded_slots: 1
     slot_owners: []
-    local_estimated_burn_usd: 3.055413
-    local_run_count: 6
+    local_estimated_burn_usd: 2.900591
+    local_run_count: 5
     mission_ready: false
   - lane: repair
     profile: repair
@@ -157,7 +161,7 @@ capacity_forecast:
     degraded_slots: 0
     slot_owners: []
     local_estimated_burn_usd: 0.0
-    local_run_count: 0
+    local_run_count: 1
     mission_ready: false
   - lane: review_light
     profile: review_light
@@ -278,8 +282,8 @@ capacity_forecast:
     - Philomena.Sullivan@myexternalbrain.com
     - Florence.Kowalski@myexternalbrain.com
     - Leocadia.Nowak@myexternalbrain.com
-    local_estimated_burn_usd: 43.43564
-    local_run_count: 262
+    local_estimated_burn_usd: 3.690321
+    local_run_count: 8
     mission_ready: false
   - lane: core_authority
     profile: core
@@ -709,7 +713,7 @@ capacity_forecast:
     confidence: high
   account_pressure: []
 blocker_forecast:
-  now: none
+  now: the slice is waiting on local review
   next: the slice is waiting on GitHub Codex review
   vision: blocked unresolved incidents, active workers, and healing runs
 deployment_posture:
@@ -824,12 +828,11 @@ readiness_summary:
     boundary_pure: 5
     publicly_promoted: 3
   warning_count: 0
-  final_claim_ready: 4
+  final_claim_ready: 3
   final_claim_ready_project_ids:
   - hub
   - mobile
   - ui
-  - ui-kit
   whole_product_final_claim_status: pass
   whole_product_final_claim_bar: top_flagship_grade
   whole_product_final_claim_whole_project_frontier_required: true
@@ -837,12 +840,11 @@ readiness_summary:
   whole_product_final_claim_accept_lowered_standards: false
   whole_product_final_claim_ready: 1
   whole_product_final_claim_warning_keys: []
-final_claim_ready: 4
+final_claim_ready: 3
 final_claim_ready_project_ids:
 - hub
 - mobile
 - ui
-- ui-kit
 whole_product_final_claim_status: pass
 whole_product_final_claim_bar: top_flagship_grade
 whole_product_final_claim_whole_project_frontier_required: true
@@ -912,31 +914,27 @@ support_summary:
   update_required_misrouted_case_count: 0
   update_required_routed_to_downloads_count: 0
   top_clusters: []
-  generated_at: '2026-05-01T08:46:32Z'
+  generated_at: '2026-05-01T09:55:50Z'
   freshness:
     available: true
-    at: '2026-05-01T08:46:32Z'
-    age_seconds: 2147
-    age_human: 35m 47s
+    at: '2026-05-01T09:55:50Z'
+    age_seconds: 42
+    age_human: 42s
     state: fresh
     label: fresh
 publish_readiness:
-  state: blocked
-  blocking_reason_count: 2
-  warning_reason_count: 3
-  blocking_reasons:
-  - status plane is stale.
-  - public guide/progress is stale.
+  state: warning
+  blocking_reason_count: 0
+  warning_reason_count: 2
+  blocking_reasons: []
   warning_reasons:
-  - Runtime healing is actively compensating for fleet-auditor, fleet-design-supervisor.
-  - Live source state is 4d 16h newer than the published campaign OS continuity monitor.
+  - Live source state is 4d 17h newer than the published campaign OS continuity monitor.
   - Provider-route fallback coverage is still thin for the current release posture.
-  recommended_action: Resolve the blocking publish-readiness issues before promoting
-    public truth.
+  recommended_action: Review the warning signals before claiming the surface is steady.
   signals:
-    runtime_healing_alert_state: degraded
-    status_plane_freshness_state: stale
-    progress_report_freshness_state: stale
+    runtime_healing_alert_state: healthy
+    status_plane_freshness_state: fresh
+    progress_report_freshness_state: fresh
     journey_gates_freshness_state: fresh
     release_channel_freshness_state: fresh
     support_freshness_state: fresh
@@ -963,31 +961,31 @@ runtime_healing:
   enabled: true
   summary:
     service_count: 4
-    degraded_service_count: 2
+    degraded_service_count: 0
     cooldown_active_count: 0
     escalated_service_count: 0
-    recent_restart_count: 6
-    alert_state: degraded
-    alert_reason: Runtime healing is actively compensating for fleet-auditor, fleet-design-supervisor.
-    recommended_action: Verify the unhealthy service, fail streak, and cooldown posture
-      before assuming the stack is steady.
-    last_event_at: '2026-05-01T09:21:53Z'
+    recent_restart_count: 10
+    alert_state: healthy
+    alert_reason: No runtime healing drift is currently recorded.
+    recommended_action: Keep the bounded auto-heal loop enabled and review the weekly
+      healer history.
+    last_event_at: '2026-05-01T09:22:44Z'
     last_event_service: fleet-design-supervisor
-    last_event_kind: observed_unhealthy
-    last_event_detail: ''
-    last_recovered_service: fleet-auditor
-    last_recovered_at: '2026-05-01T08:29:55Z'
+    last_event_kind: restart_recovered
+    last_event_detail: service recovered after bounded restart
+    last_recovered_service: fleet-design-supervisor
+    last_recovered_at: '2026-05-01T09:22:44Z'
   services:
   - service: fleet-auditor
-    current_state: observed_unhealthy
-    observed_status: unhealthy
-    consecutive_failures: 1
+    current_state: healthy
+    observed_status: healthy
+    consecutive_failures: 0
     cooldown_active: false
     cooldown_remaining_seconds: 0
-    last_restart_at: '2026-05-01T08:29:44Z'
-    last_result: unhealthy
-    last_detail: ''
-    total_restarts: 34
+    last_restart_at: '2026-05-01T09:22:23Z'
+    last_result: recovered
+    last_detail: service recovered after bounded restart
+    total_restarts: 35
     restart_window_count: 0
     escalation_threshold: 3
   - service: fleet-controller
@@ -1015,31 +1013,39 @@ runtime_healing:
     restart_window_count: 0
     escalation_threshold: 3
   - service: fleet-design-supervisor
-    current_state: observed_unhealthy
-    observed_status: unhealthy
-    consecutive_failures: 1
+    current_state: healthy
+    observed_status: healthy
+    consecutive_failures: 0
     cooldown_active: false
     cooldown_remaining_seconds: 0
-    last_restart_at: '2026-04-30T15:16:56Z'
-    last_result: unhealthy
-    last_detail: ''
-    total_restarts: 85
+    last_restart_at: '2026-05-01T09:22:34Z'
+    last_result: recovered
+    last_detail: service recovered after bounded restart
+    total_restarts: 86
     restart_window_count: 0
     escalation_threshold: 3
 external_proof_autoingest:
   enabled: true
-  current_state: cooldown
+  current_state: failed
   commands_dir: /docker/fleet/.codex-studio/published/external-proof-commands
   observed_bundle_count: 3
-  last_attempt_at: '2026-05-01T09:20:21Z'
+  last_attempt_at: '2026-05-01T09:56:14Z'
   last_success_at: ''
-  last_result: cooldown
-  last_detail: waiting 28s before retrying host proof bundle ingest
+  last_result: failed
+  last_detail: '"channel": "docker", "version": "run-20260501-083446" } verified public
+    release manifest: /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json
+    status-plane materialization failed: failed to load live admin status via deploy.sh
+    admin-status: fleet admin status is unavailable via canonical internal admin or
+    gateway fallback'
   summary:
-    alert_state: tracking
-    alert_reason: waiting 28s before retrying host proof bundle ingest
-    recommended_action: Wait for the retry window or inspect the last failure detail
-      in the rebuilder state.
+    alert_state: action_needed
+    alert_reason: '"channel": "docker", "version": "run-20260501-083446" } verified
+      public release manifest: /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json
+      status-plane materialization failed: failed to load live admin status via deploy.sh
+      admin-status: fleet admin status is unavailable via canonical internal admin
+      or gateway fallback'
+    recommended_action: Inspect the rebuilder external-proof-autoingest status and
+      rerun finalize-external-host-proof.sh after fixing the blocker.
 projects:
 - id: core
   lifecycle: live
@@ -1073,7 +1079,7 @@ projects:
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1083,7 +1089,7 @@ projects:
   deployment_access_posture: ''
 - id: guide
   lifecycle: signoff_only
-  runtime_status: running
+  runtime_status: dispatch_pending
   readiness_stage: repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1146,8 +1152,8 @@ projects:
   runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: true
-  readiness_warning_count: 0
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 1
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''
@@ -1162,7 +1168,7 @@ groups:
   blocking_owner_projects: []
 - id: control-plane
   lifecycle: live
-  phase: proposed_tasks
+  phase: running
   deployment_status: internal
   deployment_promotion_stage: internal
   deployment_access_posture: ''

@@ -1,12 +1,12 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 BUNDLE_ARCHIVE="$SCRIPT_DIR/macos-proof-bundle.tgz"
 BUNDLE_DIR="$SCRIPT_DIR/host-proof-bundles/macos"
 export BUNDLE_ARCHIVE
 export BUNDLE_DIR
-TARGET_ROOT=/docker/chummercomplete/chummer6-ui/Docker/Downloads
+TARGET_ROOT=/docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads
 export TARGET_ROOT
 mkdir -p "$TARGET_ROOT"
 if [ ! -s "$BUNDLE_ARCHIVE" ]; then
@@ -46,6 +46,8 @@ with tarfile.open(bundle, '"'"'r:gz'"'"') as archive:
     for member in archive.getmembers():
         pure=pathlib.PurePosixPath(member.name)
         parts=tuple(part for part in pure.parts if part not in ('"'"''"'"', '"'"'.'"'"'))
+        if member.isdir():
+            continue
         if member.name.startswith('"'"'/'"'"') or '"'"'..'"'"' in parts or not member.isfile():
             bad.append(member.name)
             continue

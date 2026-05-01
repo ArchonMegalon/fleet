@@ -67,6 +67,10 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
             'external_proof_autoingest_status_file="$external_proof_autoingest_state_dir/status.json"',
             script,
         )
+        self.assertIn('proof_shell="$(command -v bash 2>/dev/null || true)"', script)
+        self.assertIn('if [ -z "$proof_shell" ] && [ -x /usr/bin/bash ]; then', script)
+        self.assertIn('if [ -z "$proof_shell" ] && [ -x /bin/sh ]; then', script)
+        self.assertIn('PATH="${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}" "$proof_shell" "$finalize_script"', script)
         self.assertIn('compose_cmd restart "$service"', script)
         self.assertIn("monitor_autoheal", script)
         self.assertIn("monitor_external_proof_autoingest", script)

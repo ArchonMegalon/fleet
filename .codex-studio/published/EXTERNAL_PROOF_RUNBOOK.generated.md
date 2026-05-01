@@ -1,12 +1,12 @@
 # External Proof Runbook
 
-- generated_at: 2026-05-01T09:10:08Z
+- generated_at: 2026-05-01T09:55:52Z
 - unresolved_request_count: 0
 - unresolved_hosts: (none)
-- plan_generated_at: 2026-05-01T08:46:32Z
-- release_channel_generated_at: 2026-05-01T08:37:08Z
+- plan_generated_at: 2026-05-01T09:55:50Z
+- release_channel_generated_at: 2026-05-01T09:54:41Z
 - capture_deadline_hours: 24
-- capture_deadline_utc: 2026-05-02T08:37:08Z
+- capture_deadline_utc: 2026-05-02T09:54:41Z
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@
 ## Generated Command Files
 
 - commands_dir: `/docker/fleet/.codex-studio/published/external-proof-commands`
-- command_bundle_sha256: `a2909d7ddb08cd259eba9856d0de76003d29ce1430e967490f63f907c4e96329`
+- command_bundle_sha256: `208c493de0d6808d8a0c3a44cfc3ef6504cd6df043a70de3e0a97b279c7b6a15`
 - command_bundle_file_count: 26
 - host `linux`
   preflight_script: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-linux-proof.sh`
@@ -145,9 +145,8 @@ Run these retained commands after a host lane succeeds to validate receipts, ing
 ```
 
 ```bash
-cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh
-cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json --downloads-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/files --startup-smoke-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke --proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json --ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json --channel docker --version unpublished --published-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --output .codex-studio/published/RELEASE_CHANNEL.generated.json
-cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json
+cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads/RELEASE_CHANNEL.generated.json --downloads-dir /docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads/files --startup-smoke-dir /docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads/startup-smoke --channel docker --version unpublished --published-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --output .codex-studio/published/RELEASE_CHANNEL.generated.json
+cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json
 cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml
 cd /docker/fleet && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml
 cd /docker/fleet && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --html-out /docker/chummercomplete/chummer-design/products/chummer/PROGRESS_REPORT.generated.html --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json --preview-out /docker/chummercomplete/chummer-design/products/chummer/PROGRESS_REPORT.generated.json

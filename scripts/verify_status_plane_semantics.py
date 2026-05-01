@@ -458,6 +458,11 @@ def _normalize_runtime_healing(payload: Any) -> Dict[str, Any]:
 def _normalize_external_proof_autoingest(payload: Any) -> Dict[str, Any]:
     normalized = dict(payload or {})
     normalized.pop("generated_at", None)
+    if str(normalized.get("current_state") or "").strip() == "cooldown":
+        normalized["last_detail"] = "cooldown_active"
+        summary = dict(normalized.get("summary") or {})
+        summary["alert_reason"] = "cooldown_active"
+        normalized["summary"] = summary
     return normalized
 
 
@@ -789,7 +794,12 @@ def compare_status_plane(expected: Dict[str, Any], actual: Dict[str, Any]) -> Li
     for key in sorted(expected_keys & actual_keys):
         if key in VOLATILE_TOP_LEVEL_KEYS:
             continue
-        if expected[key] != actual[key]:
+        actual_value = actual[key]
+        if key == "runtime_healing":
+            actual_value = _normalize_runtime_healing(actual_value)
+        elif key == "external_proof_autoingest":
+            actual_value = _normalize_external_proof_autoingest(actual_value)
+        if expected[key] != actual_value:
             errors.append(f"mismatch at {key}")
     return errors
 
