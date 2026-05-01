@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-01T09:52:09Z'
+generated_at: '2026-05-01T09:59:14Z'
 mode: completion_review
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-12
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -105,3 +105,17 @@ frontier:
   - Build the Linux desktop binary, package the primary .deb plus fallback archive,
     run startup smoke on both packaged outputs, run desktop runtime unit tests, and
     refresh UI_LINUX_DESKTOP_EXIT_GATE.generated.json.
+eta:
+  status: recovery
+  eta_human: 2h-6h
+  eta_confidence: medium
+  basis: completion_review_recovery
+  scope_kind: completion_review_recovery
+  scope_label: Completion review and proof recovery
+  scope_warning: This ETA covers registry trust, proof, and review recovery. It is
+    still narrower than a final flagship parity claim unless full-product readiness
+    is also green.
+  blocking_reason: ''
+  summary: Registry closure is not yet trustworthy; recovery still needs trusted completion
+    receipt, Linux desktop exit gate. Blocked journeys=0, warning journeys=0, review
+    frontier=1, decomposed_frontier=0, backlog_tail=0.

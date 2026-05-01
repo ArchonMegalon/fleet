@@ -63,9 +63,9 @@ def git_branch_sync(repo: pathlib.Path) -> dict[str, object]:
     try:
         result["upstream"] = git_stdout(repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
         counts = git_stdout(repo, "rev-list", "--left-right", "--count", "HEAD...@{upstream}")
-        behind_text, ahead_text = counts.split()
-        result["behind"] = int(behind_text)
+        ahead_text, behind_text = counts.split()
         result["ahead"] = int(ahead_text)
+        result["behind"] = int(behind_text)
     except Exception:
         result["upstream"] = ""
     return result
