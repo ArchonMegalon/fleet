@@ -2166,6 +2166,7 @@ def _provider_dispatch_capacity_snapshot(
     onemin = (providers or {}).get("onemin") or {}
     if not isinstance(onemin, dict) or not onemin:
         return {}
+    provider_api_repair = _maybe_trigger_ea_onemin_provider_api_repair(args, payload=payload)
     live_remaining_credits_total = _coerce_float(onemin.get("live_remaining_credits_total"))
     if live_remaining_credits_total is None:
         live_remaining_credits_total = _coerce_float(onemin.get("estimated_remaining_credits_total"))
@@ -2202,10 +2203,19 @@ def _provider_dispatch_capacity_snapshot(
         ready_slots = max(0, _coerce_int(onemin.get("live_ready_slot_count"), 0))
     else:
         ready_slots = ready_slots_from_states
+    recent_live_fetch_failure_cached_dispatchable_override = False
+    if (
+        recent_live_fetch_failure
+        and onemin.get("live_dispatchable_slot_count") not in (None, "")
+        and ready_slots > 0
+        and provider_health_snapshot_age_seconds is not None
+        and provider_health_snapshot_age_seconds <= _ea_provider_health_cache_max_age_seconds()
+    ):
+        recent_live_fetch_failure = False
+        recent_live_fetch_failure_cached_dispatchable_override = True
     provider_health_snapshot_cached_dispatchable_override = False
     if (
         provider_health_snapshot_failure
-        and not recent_live_fetch_failure
         and onemin.get("live_dispatchable_slot_count") not in (None, "")
         and ready_slots > 0
         and provider_health_snapshot_age_seconds is not None
@@ -2281,6 +2291,7 @@ def _provider_dispatch_capacity_snapshot(
         ),
     )
     degraded_credit_fallback_canary = False
+    observed_error_credit_fallback_canary = False
     if (
         billing_backed_dispatchable_slots > ready_slots
         and actual_remaining_credits_total is not None
@@ -2302,7 +2313,13 @@ def _provider_dispatch_capacity_snapshot(
             stale_cached_hard_cap_override = True
     if ready_slots <= 0 and credit_budget_capacity > 0:
         effective_ready_capacity = max(effective_ready_capacity, credit_budget_capacity)
-        if degraded_slots > 0 and not observed_error_actual_override and not billing_backed_slot_override:
+        if observed_error_actual_override and not billing_backed_slot_override:
+            effective_ready_capacity = min(
+                effective_ready_capacity,
+                max(1, live_hard_ea_active_runs or degraded_hard_lane_canary_cap),
+            )
+            observed_error_credit_fallback_canary = True
+        elif degraded_slots > 0 and not billing_backed_slot_override:
             effective_ready_capacity = min(
                 effective_ready_capacity,
                 max(1, min(degraded_slots, degraded_hard_lane_canary_cap)),
@@ -2344,8 +2361,6 @@ def _provider_dispatch_capacity_snapshot(
         len(configured_entries),
         max(0, non_ea_shard_count + max(0, hard_lane_capacity)),
     )
-    if total_allowed_active_shards >= len(configured_entries):
-        return {}
 
     reason_bits = []
     if ready_slots > 0:
@@ -2402,6 +2417,12 @@ def _provider_dispatch_capacity_snapshot(
         reason_bits.append(
             f"degraded 1min canary cap={effective_ready_capacity} with ready_slots=0"
         )
+    if observed_error_credit_fallback_canary:
+        reason_bits.append(
+            "observed_error actual-balance canary cap="
+            f"{effective_ready_capacity} with ready_slots=0"
+            f" live_hard_ea_active_runs={live_hard_ea_active_runs}"
+        )
     if unknown_only_canary_active:
         reason_bits.append("lightweight provider-health snapshot missing slot readiness evidence")
     if hard_wait_only_canary_active:
@@ -2424,10 +2445,31 @@ def _provider_dispatch_capacity_snapshot(
         reason_bits.append("stale cached EA hard request cap overridden by live dispatchable slot count")
     if recent_live_fetch_failure:
         reason_bits.append("recent provider-health probe failure forces EA canary dispatch")
+    elif recent_live_fetch_failure_cached_dispatchable_override:
+        reason_bits.append(
+            "explicit cached EA provider-health dispatchable slot counts override recent route fetch failure"
+        )
     elif recent_live_fetch_failure_overridden:
         reason_bits.append(
             f"live EA worker traffic overrides stale provider-health failure (active_ea_runs={live_hard_ea_active_runs})"
         )
+    if provider_api_repair.get("triggered") is True:
+        reason_bits.append(
+            "triggered 1min provider-api billing reconciliation "
+            f"(pid={_coerce_int(provider_api_repair.get('pid'), 0)})"
+        )
+    elif provider_api_repair.get("status") == "in_flight":
+        reason_bits.append(
+            "1min provider-api billing reconciliation already in flight "
+            f"(pid={_coerce_int(provider_api_repair.get('pid'), 0)})"
+        )
+    elif provider_api_repair.get("status") == "cooldown":
+        remaining = _coerce_float(provider_api_repair.get("cooldown_seconds_remaining"))
+        if remaining is not None:
+            reason_bits.append(
+                "1min provider-api billing reconciliation cooldown "
+                f"({remaining:.0f}s remaining)"
+            )
     if provider_health_snapshot_failure:
         route_snapshot_detail = provider_health_snapshot_reason
         if provider_health_snapshot_age_seconds is not None:
@@ -2463,6 +2505,11 @@ def _provider_dispatch_capacity_snapshot(
         )
     if non_ea_shard_count > 0:
         reason_bits.append(f"non-EA shards={non_ea_shard_count}")
+    reason_prefix = (
+        f"live provider capacity caps shard dispatch at {total_allowed_active_shards}/{len(configured_entries)}"
+        if total_allowed_active_shards < len(configured_entries)
+        else f"live provider capacity supports the full configured shard set at {len(configured_entries)}/{len(configured_entries)}"
+    )
     return {
         "allowed_active_shards": total_allowed_active_shards,
         "configured_shard_count": len(configured_entries),
@@ -2492,9 +2539,10 @@ def _provider_dispatch_capacity_snapshot(
         "provider_health_snapshot_stale": provider_health_snapshot_stale,
         "provider_health_snapshot_failure": provider_health_snapshot_failure,
         "provider_health_snapshot_failure_overridden": provider_health_snapshot_failure_overridden,
+        "provider_api_repair": provider_api_repair,
         "live_hard_ea_active_runs": live_hard_ea_active_runs,
         "reason": (
-            f"live provider capacity caps shard dispatch at {total_allowed_active_shards}/{len(configured_entries)}"
+            reason_prefix
             + (f" ({', '.join(reason_bits)})" if reason_bits else "")
         ),
     }
@@ -3219,6 +3267,51 @@ def _ea_provider_health_payload_for_routing(args: argparse.Namespace) -> Dict[st
     return payload
 
 
+def _ea_onemin_provider_api_repair_cooldown_seconds() -> float:
+    raw = _runtime_env_default(
+        "CHUMMER_DESIGN_SUPERVISOR_ONEMIN_PROVIDER_API_REPAIR_COOLDOWN_SECONDS",
+        "1800",
+    )
+    try:
+        return max(60.0, float(raw))
+    except (TypeError, ValueError):
+        return 1800.0
+
+
+def _ea_onemin_provider_api_repair_state_path(args: argparse.Namespace) -> Path:
+    state_root_raw = str(getattr(args, "state_root", "") or "").strip()
+    state_root = Path(state_root_raw or DEFAULT_STATE_ROOT).resolve()
+    return _aggregate_state_root(state_root) / "onemin_provider_api_repair_state.json"
+
+
+def _ea_onemin_provider_api_repair_log_path(args: argparse.Namespace) -> Path:
+    state_root_raw = str(getattr(args, "state_root", "") or "").strip()
+    state_root = Path(state_root_raw or DEFAULT_STATE_ROOT).resolve()
+    return _aggregate_state_root(state_root) / "onemin_provider_api_repair.log"
+
+
+def _ea_onemin_provider_api_repair_bootstrap_failed(log_path: Path) -> bool:
+    try:
+        with log_path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(0, size - 8192))
+            text = handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return False
+    lowered = text.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "cannot connect to the docker daemon",
+            "permission denied while trying to connect to the docker daemon",
+            "modulenotfounderror",
+            "no module named",
+            "traceback (most recent call last)",
+        )
+    )
+
+
 def _ea_provider_health_dispatchable_slot_count(payload: Dict[str, Any]) -> int:
     providers = payload.get("providers")
     if not isinstance(providers, dict) or not providers:
@@ -3287,6 +3380,125 @@ def _ea_provider_slot_error_text(slot: Dict[str, Any]) -> str:
         seen.add(part)
         deduped.append(part)
     return " | ".join(deduped)
+
+
+def _ea_onemin_billing_reconciliation_needed(onemin: Dict[str, Any]) -> tuple[bool, str]:
+    if not isinstance(onemin, dict) or not onemin:
+        return False, ""
+    explicit_reason = str(onemin.get("billing_reconciliation_reason") or "").strip()
+    if onemin.get("billing_reconciliation_needed") is True:
+        return True, explicit_reason or "stale_actual_billing_funded_slots_without_live_dispatchable_capacity"
+    live_dispatchable_slot_count = _coerce_int(onemin.get("live_dispatchable_slot_count"), 0)
+    stale_actual_billing_funded_slot_count = _coerce_int(onemin.get("stale_actual_billing_funded_slot_count"), 0)
+    actual_positive_balance_slot_count = _coerce_int(onemin.get("actual_positive_balance_slot_count"), 0)
+    actual_remaining_credits_total = _coerce_float(onemin.get("actual_remaining_credits_total"))
+    if (
+        live_dispatchable_slot_count <= 0
+        and stale_actual_billing_funded_slot_count > 0
+        and actual_positive_balance_slot_count > 0
+        and actual_remaining_credits_total is not None
+        and actual_remaining_credits_total > 0
+    ):
+        return True, "stale_actual_billing_funded_slots_without_live_dispatchable_capacity"
+    live_positive_balance_slot_count = _coerce_int(onemin.get("live_positive_balance_slot_count"), 0)
+    live_remaining_credits_total = _coerce_float(onemin.get("live_remaining_credits_total"))
+    if live_remaining_credits_total is None:
+        live_remaining_credits_total = _coerce_float(onemin.get("estimated_remaining_credits_total"))
+    balance_basis_summary = str(onemin.get("balance_basis_summary") or "").strip().lower()
+    if (
+        live_dispatchable_slot_count <= 0
+        and actual_positive_balance_slot_count > 0
+        and live_positive_balance_slot_count > 0
+        and actual_remaining_credits_total is not None
+        and actual_remaining_credits_total > 0
+        and (
+            "actual_provider_api" in balance_basis_summary
+            or "actual_billing_usage_page" in balance_basis_summary
+            or balance_basis_summary == "actual"
+        )
+        and actual_remaining_credits_total
+        >= max(50000.0, float(live_remaining_credits_total or 0.0) * 20.0)
+    ):
+        return True, "actual_billing_vs_live_probe_drift_without_dispatchable_capacity"
+    return False, ""
+
+
+def _maybe_trigger_ea_onemin_provider_api_repair(
+    args: argparse.Namespace,
+    *,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    providers = payload.get("providers")
+    if not isinstance(providers, dict) or not providers:
+        providers = ((payload.get("provider_health") or {}).get("providers") or {})
+    onemin = (providers or {}).get("onemin") or {}
+    if not isinstance(onemin, dict) or not onemin:
+        return {}
+    needed, reason = _ea_onemin_billing_reconciliation_needed(onemin)
+    if not needed:
+        return {}
+    state_path = _ea_onemin_provider_api_repair_state_path(args)
+    log_path = _ea_onemin_provider_api_repair_log_path(args)
+    cooldown_seconds = _ea_onemin_provider_api_repair_cooldown_seconds()
+    existing = _read_state(state_path)
+    if not isinstance(existing, dict):
+        existing = {}
+    existing_pid = _coerce_int(existing.get("pid"))
+    existing_started_at = _parse_iso(str(existing.get("started_at") or ""))
+    now = _utc_now()
+    if existing_pid and _pid_alive(existing_pid):
+        return {
+            "triggered": False,
+            "status": "in_flight",
+            "pid": existing_pid,
+            "started_at": _iso(existing_started_at) if existing_started_at is not None else "",
+            "reason": reason,
+            "log_path": str(log_path),
+        }
+    if existing_started_at is not None and _ea_onemin_provider_api_repair_bootstrap_failed(log_path):
+        existing_started_at = None
+    if existing_started_at is not None:
+        age_seconds = max(0.0, (now - existing_started_at).total_seconds())
+        if age_seconds < cooldown_seconds:
+            return {
+                "triggered": False,
+                "status": "cooldown",
+                "cooldown_seconds_remaining": max(0.0, cooldown_seconds - age_seconds),
+                "reason": reason,
+                "log_path": str(log_path),
+            }
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    command = ["bash", "/docker/fleet/scripts/refresh_onemin_provider_api_reconciliation.sh"]
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(f"[{_iso_now()}] starting onemin provider-api reconciliation: {reason}\n")
+        handle.flush()
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=handle,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            text=True,
+        )
+    _write_json(
+        state_path,
+        {
+            "started_at": _iso_now(),
+            "pid": int(process.pid or 0),
+            "reason": reason,
+            "log_path": str(log_path),
+            "actual_remaining_credits_total": _coerce_float(onemin.get("actual_remaining_credits_total")),
+            "live_dispatchable_slot_count": _coerce_int(onemin.get("live_dispatchable_slot_count"), 0),
+            "stale_actual_billing_funded_slot_count": _coerce_int(onemin.get("stale_actual_billing_funded_slot_count"), 0),
+        },
+    )
+    return {
+        "triggered": True,
+        "status": "started",
+        "pid": int(process.pid or 0),
+        "reason": reason,
+        "log_path": str(log_path),
+    }
 
 
 def _ea_provider_slot_required_credits(error_text: str) -> Optional[int]:
@@ -12586,6 +12798,18 @@ def _retryable_internal_worker_blocker_text(value: Any) -> bool:
     )
 
 
+def _retryable_internal_receipt_reason_text(value: Any) -> bool:
+    lowered = " ".join(str(value or "").split()).strip().lower()
+    if not lowered:
+        return False
+    return (
+        "missing_final_message" in lowered
+        or "missing final message" in lowered
+        or "worker_status_helper_loop:repeated_blocked_status_polling" in lowered
+        or "worker_silent_stalled" in lowered
+    )
+
+
 def _retryable_preflight_launch_gate_reason(value: Any) -> bool:
     lowered = " ".join(str(value or "").split()).strip().lower()
     if not lowered:
@@ -13173,10 +13397,19 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
         provider_capacity_summary = _provider_capacity_summary_from_host_memory_pressure(host_memory_pressure)
         if provider_capacity_summary:
             updated["provider_capacity_summary"] = provider_capacity_summary
-            updated["provider_active_shards_ceiling"] = max(
+            provider_allowed_active_shards = max(
                 0,
                 _coerce_int(provider_capacity_summary.get("allowed_active_shards"), 0),
             )
+            updated["provider_active_shards_ceiling"] = provider_allowed_active_shards
+            if provider_allowed_active_shards or provider_capacity_summary.get("allowed_active_shards") == 0:
+                updated["allowed_active_shards"] = min(
+                    max(0, _coerce_int(updated.get("allowed_active_shards"), 0)),
+                    provider_allowed_active_shards,
+                )
+                provider_dispatch_reason = str(provider_capacity_summary.get("reason") or "").strip()
+                if provider_dispatch_reason:
+                    updated["dispatch_reason"] = provider_dispatch_reason
             updated["provider_ready_slots"] = max(
                 0,
                 _coerce_int(provider_capacity_summary.get("ready_slots"), 0),
@@ -13417,6 +13650,8 @@ def _write_active_shard_manifest_snapshot(aggregate_root: Path) -> None:
     }
     _write_json(manifest_path, payload)
     active_shards = _statefile_shard_summaries(aggregate_root, prefer_manifest=False)
+    aggregate_state = _read_state(_state_payload_path(aggregate_root))
+    active_shards = _merge_lagging_shard_rows_with_aggregate_active_runs(active_shards, aggregate_state)
     active_shards = _stabilize_active_run_progress_evidence(
         active_shards,
         previous_rows=previous_manifest.get("active_shards") if isinstance(previous_manifest, dict) else [],
@@ -24503,8 +24738,14 @@ def run_loop(args: argparse.Namespace) -> int:
                 return 0
             if run.worker_exit_code != 0 or not run.accepted:
                 failure_reason = run.acceptance_reason or f"worker exit {run.worker_exit_code}"
-                print(f"[fleet-supervisor] worker result rejected: {failure_reason}; backing off", flush=True)
+                receipt_recycle = _retryable_internal_receipt_reason_text(failure_reason)
+                if receipt_recycle:
+                    print(f"[fleet-supervisor] worker recycle: {failure_reason}; retrying", flush=True)
+                else:
+                    print(f"[fleet-supervisor] worker result rejected: {failure_reason}; backing off", flush=True)
                 backoff_seconds = max(1.0, float(args.failure_backoff_seconds))
+                if receipt_recycle:
+                    backoff_seconds = min(backoff_seconds, 2.0)
                 if _eta_external_blocker_reason(
                     history + [_run_payload(run)],
                     context.get("completion_audit"),

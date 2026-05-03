@@ -707,8 +707,14 @@ def refresh_materialized_status_snapshot(
         payload,
         eta_payload_from_state(payload),
     )
+    persisted_updated_at = parse_iso(str(persisted_state.get("updated_at") or ""))
+    payload_updated_at = parse_iso(str(payload.get("updated_at") or ""))
     if persisted_remaining_open > 0 and (
         payload_remaining_open <= 0 or persisted_remaining_open < payload_remaining_open
+    ) and (
+        payload_updated_at is None
+        or persisted_updated_at is None
+        or persisted_updated_at >= payload_updated_at
     ):
         for key in (
             "remaining_open_milestones",
@@ -1084,6 +1090,24 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
     active_runs_count = active_runs_count_from_state(state_payload, active_shards_payload)
     active_shards_count = len(active_shards) if active_shards else active_runs_count
     provider_capacity_summary = dict(state_payload.get("provider_capacity_summary") or {})
+    allowed_active_shards = int_or_zero(
+        state_payload.get("allowed_active_shards")
+        if state_payload.get("allowed_active_shards") not in (None, "")
+        else provider_capacity_summary.get("allowed_active_shards")
+    )
+    provider_ready_slots = int_or_zero(
+        state_payload.get("provider_ready_slots")
+        if state_payload.get("provider_ready_slots") not in (None, "")
+        else provider_capacity_summary.get("ready_slots")
+    )
+    provider_hard_max_active_requests = int_or_zero(
+        state_payload.get("provider_hard_max_active_requests")
+        if state_payload.get("provider_hard_max_active_requests") not in (None, "")
+        else provider_capacity_summary.get("hard_max_active_requests")
+    )
+    productive_active_runs_count = int_or_zero(state_payload.get("productive_active_runs_count"))
+    waiting_active_runs_count = int_or_zero(state_payload.get("waiting_active_runs_count"))
+    dispatch_reason = str(state_payload.get("dispatch_reason") or "").strip()
     remaining_open_milestones = remaining_open_milestones_from_state(state_payload, eta_payload)
     supervisor_fields = {
         "mode": str(state_payload.get("mode") or "").strip(),
@@ -1186,6 +1210,12 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
                 "blocking_reason": blocking_reason,
                 "active_runs_count": active_runs_count,
                 "active_shards_count": active_shards_count,
+                "allowed_active_shards": allowed_active_shards,
+                "provider_ready_slots": provider_ready_slots,
+                "provider_hard_max_active_requests": provider_hard_max_active_requests,
+                "productive_active_runs_count": productive_active_runs_count,
+                "waiting_active_runs_count": waiting_active_runs_count,
+                "dispatch_reason": dispatch_reason or None,
                 "provider_capacity_summary": provider_capacity_summary,
                 "remaining_open_milestones": remaining_open_milestones,
                 "failure_hint": ((state_payload.get("last_run") or {}).get("failure_hint") or ""),
@@ -1241,6 +1271,12 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
     monitor_state["blocking_reason"] = blocking_reason
     monitor_state["active_runs_count"] = active_runs_count
     monitor_state["active_shards_count"] = active_shards_count
+    monitor_state["allowed_active_shards"] = allowed_active_shards
+    monitor_state["provider_ready_slots"] = provider_ready_slots
+    monitor_state["provider_hard_max_active_requests"] = provider_hard_max_active_requests
+    monitor_state["productive_active_runs_count"] = productive_active_runs_count
+    monitor_state["waiting_active_runs_count"] = waiting_active_runs_count
+    monitor_state["dispatch_reason"] = dispatch_reason or None
     monitor_state["provider_capacity_summary"] = provider_capacity_summary
     monitor_state["active_shards"] = active_shards
     monitor_state["remaining_open_milestones"] = remaining_open_milestones

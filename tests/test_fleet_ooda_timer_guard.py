@@ -46,7 +46,7 @@ def test_fleet_runtime_defaults_include_operator_principal_for_ea_status_calls()
     assert guard.FLEET_RUNTIME_DEFAULTS["EA_MCP_PRINCIPAL_ID"] == "codex-fleet"
     assert guard.FLEET_RUNTIME_DEFAULTS["EA_PRINCIPAL_ID"] == "codex-fleet"
     assert guard.FLEET_RUNTIME_DEFAULTS["CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_PRINCIPAL_ID"] == "codex-fleet"
-    assert guard.EA_RUNTIME_DEFAULTS["EA_RESPONSES_HARD_MAX_ACTIVE_REQUESTS"] == "13"
+    assert guard.EA_RUNTIME_DEFAULTS["EA_RESPONSES_HARD_MAX_ACTIVE_REQUESTS"] == "20"
 
 
 def test_load_status_reports_timeout_without_crashing(monkeypatch, tmp_path: Path) -> None:

@@ -5026,6 +5026,23 @@ def test_retryable_internal_worker_blocker_text_treats_dispatch_parking_as_retry
     )
 
 
+def test_retryable_internal_receipt_reason_text_limits_fast_recycle_to_receipt_churn() -> None:
+    module = _load_module()
+
+    assert module._retryable_internal_receipt_reason_text("missing_final_message")
+    assert module._retryable_internal_receipt_reason_text("Error: missing final message")
+    assert module._retryable_internal_receipt_reason_text(
+        "worker_status_helper_loop:repeated_blocked_status_polling"
+    )
+    assert module._retryable_internal_receipt_reason_text("worker_silent_stalled:300s")
+    assert not module._retryable_internal_receipt_reason_text(
+        "dispatch parked this shard until provider capacity recovers"
+    )
+    assert not module._retryable_internal_receipt_reason_text(
+        "dispatch launch selection is temporarily busy"
+    )
+
+
 def test_synthesized_retryable_preflight_reason_prefers_provider_capacity_parking() -> None:
     module = _load_module()
 
@@ -26934,6 +26951,90 @@ def test_provider_dispatch_capacity_trusts_recent_cached_dispatchable_counts_ove
         assert "explicit cached EA provider-health dispatchable slot counts override route refresh timeout" in capacity["reason"]
 
 
+def test_provider_dispatch_capacity_trusts_recent_cached_dispatchable_counts_over_recent_fetch_failure(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setattr(module, "_container_local_active_run_records", lambda: {})
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        for index in range(1, 21):
+            shard_root = aggregate_root / f"shard-{index}"
+            shard_root.mkdir(parents=True, exist_ok=True)
+            module._write_json(shard_root / "state.json", {"updated_at": "2026-05-01T07:00:00Z"})
+
+        configured_shards = [
+            {
+                "name": f"shard-{index}",
+                "index": index,
+                "worker_bin": "/docker/fleet/scripts/codex-shims/codexea",
+                "worker_lane": "core",
+                "worker_model": "ea-coder-hard",
+            }
+            for index in range(1, 21)
+        ]
+        module._write_json(
+            aggregate_root / "active_shards.json",
+            {
+                "generated_at": "2026-05-01T07:00:00Z",
+                "updated_at": "2026-05-01T07:00:00Z",
+                "manifest_kind": "configured_shard_topology",
+                "configured_shard_count": 20,
+                "configured_shards": configured_shards,
+                "active_run_count": 0,
+                "active_shards": [],
+            },
+        )
+        module._write_json(
+            aggregate_root / "ea_provider_health_cache.json",
+            {
+                "cached_at": module._iso_now(),
+                "last_live_fetch_failed_at": module._iso_now(),
+                "last_live_fetch_error": "live provider-health refresh timed out",
+                "source_url": "http://provider-health.internal:8090/v1/responses/_provider_health",
+                "payload": {
+                    "provider_health_snapshot": {
+                        "status": "cached",
+                        "reason": "fresh provider-health cache",
+                        "age_seconds": 12.0,
+                    },
+                    "provider_registry": {
+                        "provider_config": {
+                            "hard_max_active_requests": 20,
+                        }
+                    },
+                    "providers": {
+                        "onemin": {
+                            "balance_basis_summary": "actual",
+                            "live_remaining_credits_total": 3135.0,
+                            "actual_remaining_credits_total": 113929800.0,
+                            "configured_slots": 74,
+                            "live_ready_slot_count": 0,
+                            "live_dispatchable_slot_count": 6,
+                            "ready_slot_count": 0,
+                            "live_positive_balance_slot_count": 20,
+                            "actual_positive_balance_slot_count": 66,
+                        }
+                    },
+                },
+            },
+        )
+
+        args = _args(root)
+        args.state_root = str(aggregate_root)
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+        args.worker_model = "ea-coder-hard"
+
+        capacity = module._provider_dispatch_capacity_snapshot(
+            args,
+            Path(args.state_root),
+        )
+
+        assert capacity["allowed_active_shards"] == 6
+        assert capacity["recent_live_fetch_failure"] is False
+        assert "explicit cached EA provider-health dispatchable slot counts override recent route fetch failure" in capacity["reason"]
+
+
 def test_provider_dispatch_capacity_prefers_higher_local_dispatchable_truth_over_cached_route(monkeypatch) -> None:
     module = _load_module()
     monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
@@ -27039,6 +27140,7 @@ def test_provider_dispatch_capacity_uses_billing_backed_degraded_slots_when_live
     module = _load_module()
     monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
     monkeypatch.setattr(module, "_container_local_active_run_records", lambda: {})
+    monkeypatch.setattr(module, "_local_ea_provider_health_payload", lambda: {})
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         aggregate_root = root / "state"
@@ -27130,10 +27232,166 @@ def test_provider_dispatch_capacity_uses_billing_backed_degraded_slots_when_live
         assert "stale cached EA hard request cap overridden by live dispatchable slot count" in capacity["reason"]
 
 
+def test_provider_dispatch_capacity_triggers_provider_api_repair_for_stale_billing_collapse(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setattr(module, "_container_local_active_run_records", lambda: {})
+    popen_calls = []
+
+    class _DummyProcess:
+        pid = 424242
+
+    def _fake_popen(command, **kwargs):
+        popen_calls.append((list(command), dict(kwargs)))
+        return _DummyProcess()
+
+    monkeypatch.setattr(module.subprocess, "Popen", _fake_popen)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        for index in range(1, 25):
+            shard_root = aggregate_root / f"shard-{index}"
+            shard_root.mkdir(parents=True, exist_ok=True)
+            module._write_json(shard_root / "state.json", {"updated_at": "2026-05-01T07:00:00Z"})
+
+        configured_shards = [
+            {
+                "name": f"shard-{index}",
+                "index": index,
+                "worker_bin": "/docker/fleet/scripts/codex-shims/codexea",
+                "worker_lane": "core",
+                "worker_model": "ea-coder-hard",
+            }
+            for index in range(1, 25)
+        ]
+        module._write_json(
+            aggregate_root / "active_shards.json",
+            {
+                "generated_at": "2026-05-01T07:00:00Z",
+                "updated_at": "2026-05-01T07:00:00Z",
+                "manifest_kind": "configured_shard_topology",
+                "configured_shard_count": 24,
+                "configured_shards": configured_shards,
+                "active_run_count": 0,
+                "active_shards": [],
+            },
+        )
+        module._write_json(
+            aggregate_root / "ea_provider_health_cache.json",
+            {
+                "cached_at": module._iso_now(),
+                "source_url": "http://provider-health.internal:8090/v1/responses/_provider_health",
+                "payload": {
+                    "provider_health_snapshot": {
+                        "status": "live",
+                        "reason": "waited for stale provider-health refresh",
+                        "age_seconds": 0.0,
+                    },
+                    "provider_registry": {
+                        "provider_config": {
+                            "hard_max_active_requests": 20,
+                        }
+                    },
+                    "providers": {
+                        "onemin": {
+                            "balance_basis_summary": "actual_provider_api,observed_error",
+                            "live_remaining_credits_total": 3135.0,
+                            "actual_remaining_credits_total": 113929800.0,
+                            "configured_slots": 74,
+                            "live_ready_slot_count": 0,
+                            "live_dispatchable_slot_count": 0,
+                            "ready_slot_count": 0,
+                            "actual_positive_balance_slot_count": 20,
+                            "stale_actual_billing_funded_slot_count": 20,
+                            "billing_reconciliation_needed": True,
+                            "billing_reconciliation_reason": "stale_actual_billing_funded_slots_without_live_dispatchable_capacity",
+                            "slot_state_counts": {"degraded": 15, "quarantine": 59},
+                        }
+                    },
+                },
+            },
+        )
+
+        args = _args(root)
+        args.state_root = str(aggregate_root)
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+        args.worker_model = "ea-coder-hard"
+
+        capacity = module._provider_dispatch_capacity_snapshot(
+            args,
+            Path(args.state_root),
+        )
+
+        assert popen_calls
+        assert popen_calls[0][0] == ["bash", "/docker/fleet/scripts/refresh_onemin_provider_api_reconciliation.sh"]
+        assert capacity["provider_api_repair"]["triggered"] is True
+        assert "triggered 1min provider-api billing reconciliation" in capacity["reason"]
+
+
+def test_provider_dispatch_capacity_retries_provider_api_repair_after_bootstrap_failure(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setattr(module, "_container_local_active_run_records", lambda: {})
+    popen_calls = []
+
+    class _DummyProcess:
+        pid = 515151
+
+    def _fake_popen(command, **kwargs):
+        popen_calls.append((list(command), dict(kwargs)))
+        return _DummyProcess()
+
+    monkeypatch.setattr(module.subprocess, "Popen", _fake_popen)
+    monkeypatch.setattr(module, "_pid_alive", lambda pid: False)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        aggregate_root.mkdir(parents=True, exist_ok=True)
+        log_path = aggregate_root / "onemin_provider_api_repair.log"
+        log_path.write_text(
+            "[2026-05-03T11:40:40Z] starting onemin provider-api reconciliation\n"
+            "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
+            encoding="utf-8",
+        )
+        module._write_json(
+            aggregate_root / "onemin_provider_api_repair_state.json",
+            {
+                "started_at": module._iso_now(),
+                "pid": 31337,
+                "reason": "stale_actual_billing_funded_slots_without_live_dispatchable_capacity",
+                "log_path": str(log_path),
+            },
+        )
+
+        args = _args(root)
+        args.state_root = str(aggregate_root)
+        result = module._maybe_trigger_ea_onemin_provider_api_repair(
+            args,
+            payload={
+                "providers": {
+                    "onemin": {
+                        "billing_reconciliation_needed": True,
+                        "billing_reconciliation_reason": "stale_actual_billing_funded_slots_without_live_dispatchable_capacity",
+                        "actual_remaining_credits_total": 113929800.0,
+                        "live_dispatchable_slot_count": 0,
+                        "stale_actual_billing_funded_slot_count": 66,
+                    }
+                }
+            },
+        )
+
+        assert popen_calls
+        assert result["triggered"] is True
+        assert result["status"] == "started"
+
+
 def test_provider_dispatch_capacity_ignores_stale_cached_lower_hard_cap(monkeypatch) -> None:
     module = _load_module()
     monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
     monkeypatch.setattr(module, "_container_local_active_run_records", lambda: {})
+    monkeypatch.setattr(module, "_local_ea_provider_health_payload", lambda: {})
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         aggregate_root = root / "state"
@@ -27213,6 +27471,189 @@ def test_provider_dispatch_capacity_ignores_stale_cached_lower_hard_cap(monkeypa
         assert capacity["hard_max_active_requests"] == 13
         assert "ea hard request cap=14" in capacity["reason"]
         assert "stale cached EA hard request cap overridden by live dispatchable slot count" in capacity["reason"]
+
+
+def test_provider_dispatch_capacity_keeps_full_capacity_summary_when_provider_supports_full_shard_set(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setattr(module, "_container_local_active_run_records", lambda: {})
+    monkeypatch.setattr(module, "_local_ea_provider_health_payload", lambda: {})
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        for index in range(1, 21):
+            shard_root = aggregate_root / f"shard-{index}"
+            shard_root.mkdir(parents=True, exist_ok=True)
+            module._write_json(shard_root / "state.json", {"updated_at": "2026-05-01T07:00:00Z"})
+
+        configured_shards = [
+            {
+                "name": f"shard-{index}",
+                "index": index,
+                "worker_bin": "/docker/fleet/scripts/codex-shims/codexea",
+                "worker_lane": "core",
+                "worker_model": "ea-coder-hard",
+            }
+            for index in range(1, 21)
+        ]
+        module._write_json(
+            aggregate_root / "active_shards.json",
+            {
+                "generated_at": "2026-05-01T07:00:00Z",
+                "updated_at": "2026-05-01T07:00:00Z",
+                "manifest_kind": "configured_shard_topology",
+                "configured_shard_count": 20,
+                "configured_shards": configured_shards,
+                "active_run_count": 0,
+                "active_shards": [],
+            },
+        )
+        module._write_json(
+            aggregate_root / "ea_provider_health_cache.json",
+            {
+                "cached_at": module._iso_now(),
+                "source_url": "http://provider-health.internal:8090/v1/responses/_provider_health",
+                "payload": {
+                    "provider_health_snapshot": {
+                        "status": "live",
+                        "reason": "waited for stale provider-health refresh",
+                        "age_seconds": 0.0,
+                    },
+                    "provider_registry": {
+                        "provider_config": {
+                            "hard_max_active_requests": 20,
+                        }
+                    },
+                    "providers": {
+                        "onemin": {
+                            "balance_basis_summary": "actual",
+                            "live_remaining_credits_total": 118681415.0,
+                            "actual_remaining_credits_total": 118681415.0,
+                            "configured_slots": 74,
+                            "live_ready_slot_count": 20,
+                            "live_dispatchable_slot_count": 20,
+                            "ready_slot_count": 20,
+                            "slots": [
+                                {"configured": True, "state": "ready"} for _ in range(20)
+                            ],
+                        }
+                    },
+                },
+            },
+        )
+
+        args = _args(root)
+        args.state_root = str(aggregate_root)
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+        args.worker_model = "ea-coder-hard"
+
+        capacity = module._provider_dispatch_capacity_snapshot(
+            args,
+            Path(args.state_root),
+        )
+
+        assert capacity["allowed_active_shards"] == 20
+        assert capacity["hard_max_active_requests"] == 20
+        assert "supports the full configured shard set at 20/20" in capacity["reason"]
+
+
+def test_provider_dispatch_capacity_caps_observed_error_credit_fallback_to_live_active_runs(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setattr(
+        module,
+        "_container_local_active_run_records",
+        lambda: {
+            f"run-{index}": {"selected_model": "ea-coder-hard"}
+            for index in range(1, 13)
+        },
+    )
+    monkeypatch.setattr(module, "_local_ea_provider_health_payload", lambda: {})
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        for index in range(1, 21):
+            shard_root = aggregate_root / f"shard-{index}"
+            shard_root.mkdir(parents=True, exist_ok=True)
+            module._write_json(shard_root / "state.json", {"updated_at": "2026-05-01T07:00:00Z"})
+
+        configured_shards = [
+            {
+                "name": f"shard-{index}",
+                "index": index,
+                "worker_bin": "/docker/fleet/scripts/codex-shims/codexea",
+                "worker_lane": "core",
+                "worker_model": "ea-coder-hard",
+            }
+            for index in range(1, 21)
+        ]
+        module._write_json(
+            aggregate_root / "active_shards.json",
+            {
+                "generated_at": "2026-05-01T07:00:00Z",
+                "updated_at": "2026-05-01T07:00:00Z",
+                "manifest_kind": "configured_shard_topology",
+                "configured_shard_count": 20,
+                "configured_shards": configured_shards,
+                "active_run_count": 12,
+                "active_shards": [
+                    {
+                        "name": f"shard-{index}",
+                        "shard_id": f"shard-{index}",
+                        "active_run_id": f"run-{index}",
+                        "selected_model": "ea-coder-hard",
+                        "active_run_progress_state": "waiting_for_model_output",
+                        "active_run_progress_evidence": "worker_output_only",
+                    }
+                    for index in range(1, 13)
+                ],
+            },
+        )
+        module._write_json(
+            aggregate_root / "ea_provider_health_cache.json",
+            {
+                "cached_at": module._iso_now(),
+                "source_url": "http://provider-health.internal:8090/v1/responses/_provider_health",
+                "payload": {
+                    "provider_health_snapshot": {
+                        "status": "cached",
+                        "reason": "fresh provider-health cache",
+                        "age_seconds": 12.0,
+                    },
+                    "provider_registry": {
+                        "provider_config": {
+                            "hard_max_active_requests": 20,
+                        }
+                    },
+                    "providers": {
+                        "onemin": {
+                            "balance_basis_summary": "observed_error",
+                            "live_remaining_credits_total": 3135.0,
+                            "actual_remaining_credits_total": 113929800.0,
+                            "configured_slots": 74,
+                            "live_ready_slot_count": 0,
+                            "live_dispatchable_slot_count": 0,
+                            "ready_slot_count": 0,
+                            "slot_state_counts": {"quarantine": 74},
+                            "slots": [
+                                {"configured": True, "state": "quarantine", "raw_state": "depleted", "billing_remaining_credits": 4000000}
+                                for _ in range(74)
+                            ],
+                        }
+                    },
+                },
+            },
+        )
+
+        args = _args(root)
+        args.state_root = str(aggregate_root)
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+        args.worker_model = "ea-coder-hard"
+
+        capacity = module._provider_dispatch_capacity_snapshot(args, Path(args.state_root))
+
+        assert capacity["allowed_active_shards"] == 12
+        assert "observed_error actual-balance canary cap=12" in capacity["reason"]
 
 
 def test_provider_dispatch_capacity_prefers_local_higher_hard_cap_when_dispatchable_slots_are_equal(monkeypatch) -> None:
@@ -28314,6 +28755,38 @@ def test_apply_status_alias_fields_projects_provider_capacity_summary() -> None:
     assert payload["provider_hard_max_active_requests"] == 8
 
 
+def test_apply_status_alias_fields_prefers_lower_provider_dispatch_ceiling_over_host_memory_budget() -> None:
+    module = _load_module()
+
+    payload = module._apply_status_alias_fields(
+        {
+            "host_memory_pressure": {
+                "status": "ok",
+                "reason": "host memory headroom is healthy for the configured shard set",
+                "allowed_active_shards": 20,
+                "dispatch_allowed": True,
+                "provider_dispatch_capacity": {
+                    "allowed_active_shards": 10,
+                    "configured_shard_count": 20,
+                    "ready_slots": 0,
+                    "configured_slots": 74,
+                    "hard_max_active_requests": 20,
+                    "estimated_remaining_credits_total": 3135,
+                    "balance_basis_summary": "observed_error",
+                    "remaining_percent_of_max": 0.0,
+                    "recent_live_fetch_failure": False,
+                    "reason": "live provider capacity caps shard dispatch at 10/20",
+                },
+            }
+        }
+    )
+
+    assert payload["allowed_active_shards"] == 10
+    assert payload["dispatch_reason"] == "live provider capacity caps shard dispatch at 10/20"
+    assert payload["provider_ready_slots"] == 0
+    assert payload["provider_hard_max_active_requests"] == 20
+
+
 def test_update_active_run_fields_clears_idle_reason(tmp_path: Path) -> None:
     module = _load_module()
     state_root = tmp_path / "state"
@@ -28425,6 +28898,104 @@ def test_persist_live_state_snapshot_refreshes_shard_aliases_and_active_shards_m
     assert manifest_payload["active_shards"][0]["active_run_id"] == "run-live-1"
     assert manifest_payload["active_shards"][0]["worker_last_output_at"] == "2026-04-13T11:40:30Z"
     assert "worker_model" not in manifest_payload["active_shards"][0]
+
+
+def test_write_active_shard_manifest_snapshot_recovers_aggregate_active_runs_when_shard_states_lag(tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root_1 = aggregate_root / "shard-1"
+    shard_root_2 = aggregate_root / "shard-2"
+    shard_root_1.mkdir(parents=True, exist_ok=True)
+    shard_root_2.mkdir(parents=True, exist_ok=True)
+
+    module._write_json(
+        aggregate_root / "state.json",
+        {
+            "updated_at": "2026-04-13T11:56:00Z",
+            "active_runs": [
+                {
+                    "_shard": "shard-1",
+                    "run_id": "run-live-1",
+                    "frontier_ids": [101],
+                    "open_milestone_ids": [101],
+                    "progress_state": "waiting_for_model_output",
+                    "started_at": "2026-04-13T11:55:00Z",
+                    "selected_account_alias": "acct-ea-core-01",
+                    "selected_model": "ea-coder-hard",
+                    "worker_pid": 1234,
+                    "worker_first_output_at": "2026-04-13T11:55:10Z",
+                    "worker_last_output_at": "2026-04-13T11:55:20Z",
+                    "output_updated_at": "2026-04-13T11:55:20Z",
+                    "output_sizes": {"stdout": 20},
+                    "process_alive": True,
+                    "process_state": "running",
+                    "process_cpu_seconds": 1.2,
+                },
+                {
+                    "_shard": "shard-2",
+                    "run_id": "run-live-2",
+                    "frontier_ids": [202],
+                    "open_milestone_ids": [202],
+                    "progress_state": "running_silent",
+                    "started_at": "2026-04-13T11:55:30Z",
+                    "selected_account_alias": "acct-ea-core-02",
+                    "selected_model": "ea-coder-hard",
+                    "worker_pid": 1235,
+                    "worker_first_output_at": "2026-04-13T11:55:35Z",
+                    "worker_last_output_at": "2026-04-13T11:55:40Z",
+                    "output_updated_at": "2026-04-13T11:55:40Z",
+                    "output_sizes": {"stdout": 10},
+                    "process_alive": True,
+                    "process_state": "running",
+                    "process_cpu_seconds": 0.8,
+                },
+            ],
+            "active_runs_count": 2,
+        },
+    )
+    module._write_json(
+        shard_root_1 / "state.json",
+        {
+            "updated_at": "2026-04-13T11:55:00Z",
+            "frontier_ids": [101],
+            "open_milestone_ids": [101],
+            "idle_reason": "claimed_frontier_without_active_run",
+            "active_run_progress_state": "idle_claimed_frontier_without_active_run",
+        },
+    )
+    module._write_json(
+        shard_root_2 / "state.json",
+        {
+            "updated_at": "2026-04-13T11:55:30Z",
+            "frontier_ids": [202],
+            "open_milestone_ids": [202],
+            "idle_reason": "claimed_frontier_without_active_run",
+            "active_run_progress_state": "idle_claimed_frontier_without_active_run",
+        },
+    )
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "generated_at": "2026-04-13T11:54:00Z",
+            "updated_at": "2026-04-13T11:54:00Z",
+            "manifest_kind": "configured_shard_topology",
+            "topology_fingerprint": "seed",
+            "configured_shard_count": 2,
+            "configured_shards": [
+                {"name": "shard-1", "index": 1, "worker_model": "ea-coder-hard"},
+                {"name": "shard-2", "index": 2, "worker_model": "ea-coder-hard"},
+            ],
+            "active_run_count": 0,
+            "active_shards": [],
+        },
+    )
+
+    module._write_active_shard_manifest_snapshot(aggregate_root)
+
+    payload = module._read_state(aggregate_root / "active_shards.json")
+    assert payload["active_run_count"] == 2
+    assert payload["progress_evidence_counts"]["worker_output_only"] == 2
+    assert [row["active_run_id"] for row in payload["active_shards"][:2]] == ["run-live-1", "run-live-2"]
 
 
 def test_reconcile_aggregate_shard_truth_clears_shard_scoped_aliases_when_parallelized() -> None:
