@@ -92,6 +92,14 @@ def test_set_host_controller_env_defaults_points_host_import_at_state_db(monkeyp
     assert Path(os.environ["FLEET_GROUP_ROOT"]) == tmp_path / "state" / "groups"
 
 
+def test_default_controller_url_uses_host_dashboard_port_by_default() -> None:
+    assert keeper.default_controller_url(running_in_controller_container=False) == "http://127.0.0.1:18090"
+
+
+def test_default_controller_url_keeps_controller_container_port() -> None:
+    assert keeper.default_controller_url(running_in_controller_container=True) == "http://127.0.0.1:8090"
+
+
 def _seed_db() -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row

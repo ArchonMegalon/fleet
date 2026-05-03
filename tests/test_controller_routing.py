@@ -3745,6 +3745,75 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertTrue(queue[0]["allow_credit_burn"])
         self.assertTrue(queue[0]["premium_required"])
 
+    def test_normalize_config_loads_next90_queue_staging_items_for_matching_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir(parents=True, exist_ok=True)
+            staging_path = root / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+            staging_path.write_text(
+                self.controller.yaml.safe_dump(
+                    {
+                        "items": [
+                            {
+                                "package_id": "next90-ui-1",
+                                "repo": "chummer6-ui",
+                                "status": "not_started",
+                                "title": "Desktop continuity lane",
+                            },
+                            {
+                                "package_id": "next90-hub-1",
+                                "repo": "chummer6-hub",
+                                "status": "not_started",
+                                "title": "Hub continuity lane",
+                            },
+                        ]
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            config_path = root / "fleet.yaml"
+            accounts_path = root / "accounts.yaml"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "projects": [
+                            {
+                                "id": "ui",
+                                "path": str(repo_root),
+                                "queue": [],
+                                "review": {"repo": "chummer6-ui"},
+                                "queue_sources": [
+                                    {"kind": "next90_queue_staging", "path": str(staging_path), "mode": "append"}
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            accounts_path.write_text(json.dumps({"accounts": {}}), encoding="utf-8")
+            self.controller.CONFIG_PATH = config_path
+            self.controller.ACCOUNTS_PATH = accounts_path
+            self.controller.POLICIES_PATH = config_path.with_name("policies.yaml")
+            self.controller.ROUTING_PATH = config_path.with_name("routing.yaml")
+            self.controller.GROUPS_PATH = config_path.with_name("groups.yaml")
+            self.controller.PROJECTS_DIR = config_path.parent / "projects"
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller._CONFIG_CONSISTENCY_BLOCKERS = []
+            self.controller._CONFIG_CONSISTENCY_BLOCKER_SIGNATURE = ""
+
+            config = self.controller.normalize_config()
+
+        queue = config["projects"][0]["queue"]
+        self.assertEqual(len(queue), 1)
+        self.assertEqual(queue[0]["package_id"], "next90-ui-1")
+        self.assertEqual(queue[0]["repo"], "chummer6-ui")
+
     def test_merge_queue_overlay_item_stamps_pre_overlay_queue_fingerprint_from_queue_sources(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
@@ -9144,6 +9213,56 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual([row["package_id"] for row in rows], ["fleet-done", "fleet-active"])
         self.assertEqual([row["status"] for row in rows], ["complete", "ready"])
+
+    def test_sync_work_packages_reopens_archived_package_when_queue_item_is_active(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [
+                            {
+                                "package_id": "fleet-reopen",
+                                "title": "Reopen archived backlog slice",
+                                "status": "not_started",
+                                "allowed_paths": ["src/reopen.py"],
+                            }
+                        ],
+                        "enabled": True,
+                    }
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    UPDATE work_packages
+                    SET status='archived',
+                        runtime_state='idle',
+                        completed_at=NULL,
+                        updated_at=?
+                    WHERE package_id='fleet-reopen'
+                    """,
+                    (self.controller.iso(self.controller.utc_now()),),
+                )
+
+            self.controller.sync_work_packages_to_db(config)
+            rows = self.controller.work_package_rows(project_id="fleet")
+
+        self.assertEqual([row["package_id"] for row in rows], ["fleet-reopen"])
+        self.assertEqual([row["status"] for row in rows], ["ready"])
 
     def test_plan_candidate_launch_requires_scope_lease_for_booster_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

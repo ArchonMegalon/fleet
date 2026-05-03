@@ -11,6 +11,7 @@ RUN_OODA_LOOP = Path("/docker/fleet/scripts/run_ooda_design_supervisor.sh")
 RUN_FLEET_OODA_CODEX_TIMER = Path("/docker/fleet/scripts/run_fleet_ooda_codex_timer.sh")
 RUNTIME_ENV_EXAMPLE = Path("/docker/fleet/runtime.env.example")
 README = Path("/docker/fleet/README.md")
+INTERNAL_AFFAIRS_WATCHDOG = Path("/home/tibor/codexea-internal-affairs-watchdog.sh")
 
 
 class RuntimeAutoHealContractTests(unittest.TestCase):
@@ -94,8 +95,11 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         script = RUN_FLEET_OODA_CODEX_TIMER.read_text(encoding="utf-8")
         self.assertIn('workspace_root="${FLEET_OODA_CODEXEA_WORKSPACE_ROOT:-${FLEET_OODA_CODEX_WORKSPACE_ROOT:-/docker/fleet}}"', script)
         self.assertIn('state_root="${FLEET_OODA_CODEXEA_STATE_ROOT:-${FLEET_OODA_CODEX_STATE_ROOT:-${workspace_root}/state/fleet_ooda_codex_timer}}"', script)
+        self.assertIn('target_shards="${FLEET_OODA_CODEXEA_TARGET_SHARDS:-${FLEET_OODA_CODEX_TARGET_SHARDS:-20}}"', script)
         self.assertIn('timeout_seconds="${FLEET_OODA_CODEXEA_TIMEOUT_SECONDS:-${FLEET_OODA_CODEX_TIMEOUT_SECONDS:-1200}}"', script)
         self.assertIn('post_guard_timeout_seconds="${FLEET_OODA_CODEXEA_POST_GUARD_TIMEOUT_SECONDS:-${FLEET_OODA_CODEX_POST_GUARD_TIMEOUT_SECONDS:-120}}"', script)
+        self.assertIn('service_budget_seconds="${FLEET_OODA_CODEXEA_SERVICE_BUDGET_SECONDS:-${FLEET_OODA_CODEX_SERVICE_BUDGET_SECONDS:-1380}}"', script)
+        self.assertIn('fallback_minimum_window_seconds="${FLEET_OODA_CODEXEA_FALLBACK_MINIMUM_WINDOW_SECONDS:-${FLEET_OODA_CODEX_FALLBACK_MINIMUM_WINDOW_SECONDS:-180}}"', script)
         self.assertIn('codexea_bin="${FLEET_OODA_CODEXEA_BIN:-${FLEET_OODA_CODEX_BIN:-}}"', script)
         self.assertIn('codexea_model="${FLEET_OODA_CODEXEA_MODEL:-${FLEET_OODA_CODEX_MODEL:-}}"', script)
         self.assertIn('codexea_lane="${FLEET_OODA_CODEXEA_LANE:-core}"', script)
@@ -105,6 +109,8 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn("Keep Fleet workers and this scheduled operator pass on EA/codexea.", script)
         self.assertIn('Chosen timer metadata for this run is in:', script)
         self.assertIn('retrying with fallback lane=%s after primary lane=%s stalled', script)
+        self.assertIn('service-budget-exhausted lane=%s remaining_total=%ss post_guard_timeout=%ss; terminating attempt', script)
+        self.assertIn('skipping fallback lane=%s after primary lane=%s stalled because remaining service budget=%ss is below minimum retry window=%ss', script)
         self.assertIn('timeout 20s docker compose -f docker-compose.yml ps', script)
         self.assertIn('timeout 10s df -h / || true', script)
         self.assertIn('timeout 10s free -h || true', script)
@@ -112,6 +118,15 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn("Wrap status, live-refresh, guard, keeper, docker-log, and test commands in explicit timeouts", script)
         self.assertIn("timeout 90s scripts/chummer_design_supervisor.py status --json --live-refresh", script)
         self.assertIn('timeout "${post_guard_timeout_seconds}s" python3 scripts/fleet_ooda_timer_guard.py', script)
+
+    def test_internal_affairs_watchdog_allows_audit_when_backlog_is_productive_only(self) -> None:
+        script = INTERNAL_AFFAIRS_WATCHDOG.read_text(encoding="utf-8")
+        self.assertIn("/docker/fleet/state/chummer_design_supervisor/status-live-refresh.materialized.json", script)
+        self.assertIn('"healthy_enough_for_internal_affairs": healthy_enough_for_internal_affairs', script)
+        self.assertIn('(remaining_open > 0 and productive >= 1 and active == productive)', script)
+        self.assertIn('if [[ "${healthy_enough}" != "1" ]]; then', script)
+        self.assertIn('fleet-health loop still owns active remediation; deferring internal-affairs patch cycle', script)
+        self.assertNotIn('fleet-health loop still owns active remediation or backlog; deferring internal-affairs patch cycle', script)
 
     def test_runtime_env_and_readme_document_autoheal(self) -> None:
         env_example = RUNTIME_ENV_EXAMPLE.read_text(encoding="utf-8")

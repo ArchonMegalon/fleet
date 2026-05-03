@@ -88,6 +88,7 @@ surfaces:
       - Startup, install, update, crash-recovery, and feedback/reporting flows are boring on the promoted path.
       - Character, campaign, import, restore, and export state stay durable across update, rollback, migration, and device changes.
       - Important computed values, source anchors, and import outcomes remain explainable on the workbench route where trust is exercised.
+      - Visible computed values, legality results, and warning states on promoted workbench routes either open a packet-backed explain drawer with source-anchor and stale-state posture or stay explicit release-blocking gaps.
       - The desktop shell keeps a real `File` menu, first-class master index and character roster routes, roster-first orientation, and other veteran Chummer5a familiarity anchors on the flagship path.
       - The promoted desktop head stays within the dense-workbench budget for spacing, chrome, visible rows, and status-strip permanence.
       - Builder, inspect, compare, explain, and active-effect flows stay dense-data comfortable for expert users.
@@ -139,12 +140,14 @@ surfaces:
     must_prove:
       - Reconnect, replay, and resume are trustworthy under degraded-network and cross-device conditions.
       - Player and GM flows feel authored for live play instead of behaving like shrunk workbench screens.
+      - Important live-play and mobile-visible mechanical values, active effects, and warning states either expose packet-backed quick explain with source-anchor posture and explicit stale-state handling or remain bounded non-flagship gaps.
       - The shell clearly distinguishes live, stale, offline, pending, and conflict state.
       - Missing or incompatible rule packs and amend packages are explicit before a resumed device computes against the wrong environment.
       - Mobile theming, touch targets, and state visibility are proven against the shared surface-design contract instead of inheriting desktop chrome.
     evidence_sources:
       - CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md
       - ROAMING_WORKSPACE_AND_ENTITLEMENT_SYNC.md
+      - EXPLAIN_EVERY_VALUE_AND_GROUNDED_FOLLOW_UP.md
       - SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md
       - journeys/rejoin-after-disconnect.md
 

@@ -427,6 +427,52 @@ def _load_milestone_capability_queue(project_cfg: Dict[str, Any], source_cfg: Di
     return items
 
 
+def _load_next90_queue_staging_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+    path = _resolve_project_file(
+        project_cfg,
+        str(source_cfg.get("path", "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml")),
+    )
+    if not path.exists() or not path.is_file():
+        return []
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return []
+    raw_items = list((data.get("items") or []) if isinstance(data, dict) else [])
+    if not raw_items:
+        return []
+    include_statuses = {
+        str(status).strip().lower()
+        for status in (source_cfg.get("include_statuses") or ["in_progress", "not_started"])
+        if str(status).strip()
+    }
+    repos = _unique_preserve(
+        [str(item).strip() for item in (source_cfg.get("repos") or []) if str(item).strip()]
+        or [project_repo_slug(project_cfg)]
+    )
+    items: List[Dict[str, Any]] = []
+    seen_package_ids: set[str] = set()
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict):
+            continue
+        status = str(raw_item.get("status") or raw_item.get("state") or "").strip().lower()
+        repo = str(raw_item.get("repo") or "").strip()
+        package_id = str(raw_item.get("package_id") or "").strip()
+        if include_statuses and status not in include_statuses:
+            continue
+        if repos and repo not in repos:
+            continue
+        if package_id and package_id in seen_package_ids:
+            continue
+        item = {key: value for key, value in dict(raw_item).items() if value not in ("", None, [], {})}
+        if not item:
+            continue
+        items.append(item)
+        if package_id:
+            seen_package_ids.add(package_id)
+    return items
+
+
 def _apply_queue_source(project_cfg: Dict[str, Any], queue: List[Any], source_cfg: Dict[str, Any]) -> List[Any]:
     queue = [item for item in queue if _queue_entry_active(item)]
     fallback_only_if_empty = bool(source_cfg.get("fallback_only_if_empty"))
@@ -441,6 +487,8 @@ def _apply_queue_source(project_cfg: Dict[str, Any], queue: List[Any], source_cf
         items = _load_tasks_work_log_queue(project_cfg, source_cfg)
     elif kind == "milestone_capabilities":
         items = _load_milestone_capability_queue(project_cfg, source_cfg)
+    elif kind == "next90_queue_staging":
+        items = _load_next90_queue_staging_queue(project_cfg, source_cfg)
     else:
         items = []
     mode = str(source_cfg.get("mode", "append")).strip().lower() or "append"

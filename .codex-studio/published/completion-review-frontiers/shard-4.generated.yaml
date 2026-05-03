@@ -1,7 +1,7 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-01T09:59:31Z'
-mode: completion_review
+generated_at: '2026-05-03T10:39:46Z'
+mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-4
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -11,7 +11,7 @@ project_supervisor_contract:
   schema_version: 1
   source: /docker/fleet/config/projects/fleet.yaml
   shard_topology:
-    configured_shard_count: 14
+    configured_shard_count: 20
     primary_probe_shard: shard-1
   proof_paths:
     status_plane: /docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml
@@ -33,6 +33,10 @@ focus:
   - chummer6-ui
   - chummer6-core
   - chummer6-design
+  - chummer6-hub
+  - chummer6-hub-registry
+  - chummer6-mobile
+  - chummer6-ui-kit
   texts:
   - top flagship grade
   - whole project frontier
@@ -49,32 +53,40 @@ focus:
   - custom-data
   - xml
   - translator
+  - whole-project frontier
+  - no lowered standards
+  - feedback loop
+  - crash reporting
+  - support routing
+  - journey smoothness
+  - performance
+  - proof shelf
+  - fleet and operator loop
 completion_audit:
   status: fail
-  reason: stage flagship_ui_screenshot_gate failed
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260501T095115Z-shard-4 is not trusted: Error: missing_final_message
-    What shipped: none recorded What remains: retry the worker; the...'
-  latest_run_id: 20260501T095115Z-shard-4
-  latest_run_reason: 'Error: missing_final_message What shipped: none recorded What
-    remains: retry the worker; the...'
+  reason: latest worker receipt 20260503T102915Z-shard-4 was an internal retryable
+    worker recycle; waiting for a fresh structured completion receipt
+  latest_run_id: 20260503T102915Z-shard-4
+  latest_run_reason: dispatch parked this shard until provider capacity recovers
 journey_gate_audit:
-  status: pass
-  reason: golden journey proof is ready
-  blocked_journey_count: 0
+  status: fail
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  blocked_journey_count: 2
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
-  status: fail
-  reason: stage flagship_ui_screenshot_gate failed
-  path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-  generated_at: '2026-04-30T15:09:57Z'
-weekly_pulse_audit:
   status: pass
-  reason: weekly product pulse is fresh and reports no remaining drift or blocker
-    pressure
+  reason: linux desktop binary build/start/test proof is ready on current repo-local
+    evidence
+  path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
+  generated_at: '2026-05-02T13:48:07Z'
+weekly_pulse_audit:
+  status: fail
+  reason: weekly product pulse reports journey gate health as blocked
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-01T08:58:46Z'
+  generated_at: '2026-05-03T10:37:31Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -82,27 +94,28 @@ repo_backlog_audit:
   open_project_count: 0
   open_items: []
 blocking_audits:
-- component: linux_desktop_exit_gate
-  title: Linux desktop exit-gate gaps
-  reason: stage flagship_ui_screenshot_gate failed
+- component: journey_gate
+  title: Golden journey release-proof gaps
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+- component: weekly_pulse
+  title: Weekly product pulse gaps
+  reason: weekly product pulse reports journey gate health as blocked
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: 'latest worker receipt 20260501T095115Z-shard-4 is not trusted: Error: missing_final_message
-    What shipped: none recorded What remains: retry the worker; the...'
-frontier_count: 1
-frontier_ids:
-- 1239074135
-frontier:
-- id: 1239074135
-  title: 'Completion gate: Linux desktop exit gate'
-  wave: completion_review
-  status: review_required
-  owners:
-  - chummer6-ui
-  - fleet
-  dependencies: []
-  exit_criteria:
-  - stage flagship_ui_screenshot_gate failed
-  - Build the Linux desktop binary, package the primary .deb plus fallback archive,
-    run startup smoke on both packaged outputs, run desktop runtime unit tests, and
-    refresh UI_LINUX_DESKTOP_EXIT_GATE.generated.json.
+  reason: latest worker receipt 20260503T102915Z-shard-4 was an internal retryable
+    worker recycle; waiting for a fresh structured completion receipt
+frontier_count: 0
+frontier_ids: []
+frontier: []
+eta:
+  status: flagship_delivery
+  eta_human: 10h-1.1d
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: ''
+  summary: 'Milestone ''Shared design system, accessibility, localization, and flagship
+    polish'' remains open under the flagship closeout frontier. Outstanding readiness
+    coverage: fleet_and_operator_loop.'

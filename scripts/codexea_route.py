@@ -1060,6 +1060,12 @@ def _local_onemin_direct_payload(*, probe_all: bool = False, include_reserve: bo
                 }
             }
         }
+        provider_config = dict(provider_health.get("provider_config") or {})
+        if provider_config:
+            payload["provider_config"] = provider_config
+        provider_registry = dict(provider_health.get("provider_registry") or {})
+        if provider_registry:
+            payload["provider_registry"] = provider_registry
         if isinstance(probe_payload, dict):
             payload["probe"] = probe_payload
         return payload

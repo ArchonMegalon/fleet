@@ -85,4 +85,4 @@ After restart, validate:
 
 The default profile is `standard`.
 
-`standard` currently starts 13 shards with a low per-shard memory budget and explicit warning/critical thresholds. `burst` is available for broader work when the host and provider lanes are healthy. `maintenance` is the fallback profile for pressure, provider instability, or narrow proof refresh work.
+`standard` currently starts 20 shards with a low per-shard memory budget and explicit warning/critical thresholds. `burst` is available for broader work when the host and provider lanes are healthy. `maintenance` is the fallback profile for pressure, provider instability, or narrow proof refresh work.

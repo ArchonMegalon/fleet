@@ -26,6 +26,7 @@ LOCK_FILE = STATE_DIR / "daily.lock"
 STATE_FILE = STATE_DIR / "daily-state.json"
 LOG_FILE = STATE_DIR / "daily.log"
 FLEET_STATE = Path("/docker/fleet/state/chummer_design_supervisor/state.json")
+FLEET_STATE_MATERIALIZED = Path("/docker/fleet/state/chummer_design_supervisor/status-live-refresh.materialized.json")
 DEFAULT_RECIPIENT = "tibor.girschele@gmail.com"
 DEFAULT_SENDER_EMAIL = "ia@chummer.run"
 DEFAULT_SENDER_NAME = "Internal Affairs"
@@ -71,6 +72,16 @@ def load_env_file(path: Path) -> None:
         key = key.strip()
         value = value.strip().strip('"').strip("'")
         os.environ.setdefault(key, value)
+
+
+def parse_utc_timestamp(value: Any) -> dt.datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def pid_alive(pid: int) -> bool:
@@ -240,9 +251,69 @@ def summaries_for_date(target_date: dt.date) -> list[dict[str, Any]]:
     return rows
 
 
+def _select_fleet_snapshot(primary: dict[str, Any], secondary: dict[str, Any]) -> dict[str, Any]:
+    primary_ts = parse_utc_timestamp(primary.get("updated_at"))
+    secondary_ts = parse_utc_timestamp(secondary.get("updated_at"))
+    if secondary_ts and (not primary_ts or secondary_ts > primary_ts):
+        chosen, fallback = secondary, primary
+    else:
+        chosen, fallback = primary, secondary
+    merged = dict(fallback)
+    merged.update(chosen)
+    for key, value in fallback.items():
+        if merged.get(key) in (None, "") and value not in (None, ""):
+            merged[key] = value
+    return merged
+
+
 def current_fleet_snapshot() -> dict[str, Any]:
-    payload = load_json(FLEET_STATE, {})
-    return payload if isinstance(payload, dict) else {}
+    primary = load_json(FLEET_STATE, {})
+    materialized = load_json(FLEET_STATE_MATERIALIZED, {})
+    primary = primary if isinstance(primary, dict) else {}
+    materialized = materialized if isinstance(materialized, dict) else {}
+    if primary and materialized:
+        return _select_fleet_snapshot(primary, materialized)
+    if primary:
+        return primary
+    if materialized:
+        return materialized
+    return {}
+
+
+def compact_fleet_status(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "updated_at": payload.get("updated_at"),
+        "active_runs_count": payload.get("active_runs_count"),
+        "productive_active_runs_count": payload.get("productive_active_runs_count"),
+        "waiting_active_runs_count": payload.get("waiting_active_runs_count"),
+        "nonproductive_active_runs_count": payload.get("nonproductive_active_runs_count"),
+        "remaining_open_milestones": payload.get("remaining_open_milestones"),
+        "allowed_active_shards": payload.get("allowed_active_shards"),
+        "last_run_blocker": payload.get("last_run_blocker"),
+        "preflight_failure_reason": payload.get("preflight_failure_reason"),
+    }
+
+
+def record_run_state(
+    *,
+    target_date: dt.date,
+    dry_run: bool,
+    summary_status: str | None,
+    watchdog_status: str | None,
+) -> dict[str, Any]:
+    state = load_state()
+    state["last_run_at"] = dt.datetime.now(tz=LOCAL_TZ).isoformat()
+    state["last_target_date"] = target_date.isoformat()
+    state["last_dry_run"] = bool(dry_run)
+    state["last_summary_status"] = str(summary_status or "").strip()
+    state["last_watchdog_action"] = str(watchdog_status or "").strip()
+    results = [item for item in [state["last_summary_status"], state["last_watchdog_action"]] if item]
+    state["last_results"] = results
+    snapshot = current_fleet_snapshot()
+    state["last_fleet_status"] = compact_fleet_status(snapshot)
+    state["fleet_snapshot"] = snapshot
+    save_state(state)
+    return state
 
 
 def derive_changed_files_from_run_dir(run_dir: Path) -> list[str]:
@@ -460,20 +531,29 @@ def main() -> int:
             target_date = (dt.datetime.now(tz=LOCAL_TZ) - dt.timedelta(days=1)).date()
 
         results: list[str] = []
+        summary_result = ""
+        watchdog_result = ""
         if not args.start_only:
-            result = send_summary_email(
+            summary_result = send_summary_email(
                 target_date=target_date,
                 recipient=str(args.recipient or DEFAULT_RECIPIENT).strip(),
                 dry_run=bool(args.dry_run),
                 force=bool(args.force_send),
             )
-            log(result)
-            results.append(result)
+            log(summary_result)
+            results.append(summary_result)
 
         if not args.send_summary_only:
-            result = start_watchdog(dry_run=bool(args.dry_run))
-            log(result)
-            results.append(result)
+            watchdog_result = start_watchdog(dry_run=bool(args.dry_run))
+            log(watchdog_result)
+            results.append(watchdog_result)
+
+        record_run_state(
+            target_date=target_date,
+            dry_run=bool(args.dry_run),
+            summary_status=summary_result,
+            watchdog_status=watchdog_result,
+        )
 
         for item in results:
             print(item)

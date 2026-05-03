@@ -66,4 +66,9 @@ queue_sources:
 - kind: tasks_work_log
   path: /docker/fleet/state/chummer6/TASKS_WORK_LOG.md
   mode: append
+- kind: next90_queue_staging
+  path: /docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml
+  mode: append
+  repos:
+  - executive-assistant
 enabled: true

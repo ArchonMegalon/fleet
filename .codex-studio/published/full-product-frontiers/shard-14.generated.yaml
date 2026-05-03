@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-01T08:41:01Z'
+generated_at: '2026-05-03T10:50:03Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-14
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -57,7 +57,7 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
-  - desktop client
+  - fleet and operator loop
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -71,10 +71,9 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-01T08:37:19Z'
+  generated_at: '2026-05-03T10:37:30Z'
   proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
@@ -103,8 +102,8 @@ frontier:
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Add GM prep and roster movement surfaces to the desktop
       workspace'' remains open under the flagship closeout frontier. Outstanding readiness
-      coverage: desktop_client.'
-    predicted_completion_at: '2026-05-02T00:31:25Z'
+      coverage: fleet_and_operator_loop.'
+    predicted_completion_at: '2026-05-04T02:40:27Z'
     range_low_hours: 9.0
     range_high_hours: 22.68
     remaining_open_milestones: 1

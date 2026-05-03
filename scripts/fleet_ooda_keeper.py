@@ -24,11 +24,7 @@ DEFAULT_STATE_ROOT = (
     if Path("/var/lib/codex-fleet").exists()
     else DEFAULT_WORKSPACE_ROOT / "state" / "fleet_ooda_keeper"
 )
-DEFAULT_CONTROLLER_URL = os.environ.get(
-    "FLEET_CONTROLLER_URL",
-    "http://127.0.0.1:8090" if RUNNING_IN_CONTROLLER_CONTAINER else "http://127.0.0.1:8090",
-)
-DEFAULT_TARGET_ACTIVE = 13
+DEFAULT_TARGET_ACTIVE = 20
 DEFAULT_READY_BACKLOG_FLOOR = 10
 DEFAULT_POLL_SECONDS = 10 * 60
 DEFAULT_DURATION_SECONDS = 12 * 7 * 24 * 60 * 60
@@ -47,6 +43,15 @@ THROTTLED_PROJECT_STATUSES = {
     "waiting_dependency",
 }
 CAPACITY_ERROR_MARKERS = {"capacity", "account", "budget", "runway", "pool", "cooldown", "rate limit"}
+
+
+def default_controller_url(*, running_in_controller_container: Optional[bool] = None) -> str:
+    if running_in_controller_container is None:
+        running_in_controller_container = RUNNING_IN_CONTROLLER_CONTAINER
+    return "http://127.0.0.1:8090" if running_in_controller_container else "http://127.0.0.1:18090"
+
+
+DEFAULT_CONTROLLER_URL = os.environ.get("FLEET_CONTROLLER_URL", default_controller_url())
 
 
 def parse_args() -> argparse.Namespace:
@@ -795,12 +800,35 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
         repeated_failures=repeated_failures,
         target_active=int(args.target_active),
     )
+    generated_at = iso_now()
     committed_after = sorted(active_commitment_keys(app))
     ready_after = ready_backlog_count(app, config, repeated_failures)
     blockers = blocker_summary(app, repeated_failures)
     imminent_blockers = anticipate_blockers(app, repeated_failures, ready_backlog_after=ready_after)
+    repeated_failure_counts = {
+        key: int((value or {}).get("count") or 0)
+        for key, value in repeated_failures.items()
+    }
+    last_action_kind = "observe"
+    if launched:
+        last_action_kind = "launch"
+    elif nudged_ready_projects:
+        last_action_kind = "nudge_ready"
+    elif healed_local_reviews or released_review_holds:
+        last_action_kind = "cleanup"
+    elif guide_pause:
+        last_action_kind = "guide_pause"
+    last_action = {
+        "kind": last_action_kind,
+        "launch_count": len(launched),
+        "ready_nudge_count": len(nudged_ready_projects),
+        "healed_local_review_count": healed_local_reviews,
+        "released_review_hold_count": len(released_review_holds),
+        "guide_pause": bool(guide_pause),
+    }
     payload = {
-        "generated_at": iso_now(),
+        "generated_at": generated_at,
+        "updated_at": generated_at,
         "target_active": int(args.target_active),
         "ready_backlog_floor": int(args.ready_backlog_floor),
         "committed_active": len(committed_after),
@@ -812,8 +840,10 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
         "released_review_holds": released_review_holds,
         "guide_pause": guide_pause or {},
         "repeated_failures": repeated_failures,
+        "repeated_failure_counts": repeated_failure_counts,
         "top_blockers": blockers,
         "imminent_blockers": imminent_blockers,
+        "last_action": last_action,
         "healthy": len(committed_after) >= int(args.target_active) and ready_after >= int(args.ready_backlog_floor),
         "ooda": {
             "observe": {

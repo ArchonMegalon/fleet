@@ -100,3 +100,70 @@ def test_published_fleet_queue_overlay_matches_generated_payload(tmp_path: Path)
     expected = yaml.safe_load(out_path.read_text(encoding="utf-8"))
 
     assert actual == expected
+
+
+def test_materialize_fleet_queue_overlay_includes_next90_queue_staging_in_fingerprint(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    published = repo_root / ".codex-studio" / "published"
+    published.mkdir(parents=True, exist_ok=True)
+    staging_path = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    staging_path.write_text(
+        yaml.safe_dump(
+            {
+                "items": [
+                    {
+                        "package_id": "next90-ui-1",
+                        "repo": "chummer6-ui",
+                        "status": "not_started",
+                        "title": "Desktop continuity lane",
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    projects_dir = tmp_path / "projects"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    (projects_dir / "ui.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": "ui",
+                "path": str(repo_root),
+                "queue": [],
+                "review": {"repo": "chummer6-ui"},
+                "queue_sources": [{"kind": "next90_queue_staging", "path": str(staging_path), "mode": "append"}],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(repo_root),
+            "--project-id",
+            "ui",
+            "--projects-dir",
+            str(projects_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = yaml.safe_load((published / "QUEUE.generated.yaml").read_text(encoding="utf-8"))
+    expected_queue = [
+        {
+            "package_id": "next90-ui-1",
+            "repo": "chummer6-ui",
+            "status": "not_started",
+            "title": "Desktop continuity lane",
+        }
+    ]
+    assert payload["source_queue_fingerprint"] == _queue_fingerprint(expected_queue)

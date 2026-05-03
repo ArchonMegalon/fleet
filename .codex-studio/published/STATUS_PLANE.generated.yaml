@@ -1,25 +1,28 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-05-01T10:00:45Z'
-source_public_status_generated_at: '2026-05-01T10:00:39Z'
+generated_at: '2026-05-02T14:47:36Z'
+source_public_status_generated_at: '2026-05-02T14:47:30Z'
 mission_snapshot:
   headline: 'Working now: title: Publish or append runnable backlog for Catalog, visual-regression,
     and release discipline for the shared kit are not yet materialized.. | difficulty:
-    auto | risk_level: auto. ETA: 47m 31s. Next: {''Execute WL-D014-01'': ''compute
-    source and destination SHA-256 checksums for all WL-D007 review-template mirror
-    targets and append the cycle block in `products/chummer/sync/REVIEW_TEMPLATE_MIRROR_PUBLISH_EVIDENCE.md`.''}.
-    Vision: 0s. Capacity: Core 1%, Easy 1%, Jury n/a. Stop risk: none.'
-  current_eta: 47m 31s
-  next_title: '{''Execute WL-D014-01'': ''compute source and destination SHA-256 checksums
-    for all WL-D007 review-template mirror targets and append the cycle block in `products/chummer/sync/REVIEW_TEMPLATE_MIRROR_PUBLISH_EVIDENCE.md`.''}'
+    auto | risk_level: auto. ETA: 45m 5s. Next: title: Auto-detect and repair recurring
+    `core` mirror drift after 15059 repeated audit observations; keep one bounded
+    queue slice for the affected local design mirror bundle instead of reopening one-off
+    mirror refresh work. | difficulty: auto | risk_level: auto. Vision: 0s. Capacity:
+    Core 2%, Easy 2%, Jury 2%. Stop risk: 2d 11h runway.'
+  current_eta: 45m 5s
+  next_title: 'title: Auto-detect and repair recurring `core` mirror drift after 15059
+    repeated audit observations; keep one bounded queue slice for the affected local
+    design mirror bundle instead of reopening one-off mirror refresh work. | difficulty:
+    auto | risk_level: auto'
   vision_eta: 0s
   milestone_title: chummer-vnext
   milestone_eta: 0s
   lane_capacity_summary:
-  - Core 1%
-  - Easy 1%
-  - Jury n/a
-  stop_risk: none
+  - Core 2%
+  - Easy 2%
+  - Jury 2%
+  stop_risk: 2d 11h runway
 queue_forecast:
   now:
     project_id: ui-kit
@@ -30,15 +33,34 @@ queue_forecast:
     provider: EA
     brain: EA backend / ea-coder-hard-batch
     reason: interactive_or_first_pass
-    elapsed_seconds: 749
-    elapsed_human: 12m 29s
-    remaining_seconds: 2851
-    remaining_human: 47m 31s
+    elapsed_seconds: 895
+    elapsed_human: 14m 55s
+    remaining_seconds: 2705
+    remaining_human: 45m 5s
     total_seconds: 3600
     total_human: 1h
     verify_or_review_ahead: false
     prerequisites: the slice is waiting on local review
   next:
+    project_id: core
+    title: 'title: Auto-detect and repair recurring `core` mirror drift after 15059
+      repeated audit observations; keep one bounded queue slice for the affected local
+      design mirror bundle instead of reopening one-off mirror refresh work. | difficulty:
+      auto | risk_level: auto'
+    lane: easy
+    provider: EA
+    brain: EA backend / ea-coder-hard
+    reason: interactive_or_first_pass
+    elapsed_seconds: 0
+    elapsed_human: 0s
+    remaining_seconds: 3600
+    remaining_human: 1h
+    total_seconds: 3600
+    total_human: 1h
+    verify_or_review_ahead: false
+    prerequisites: the slice is waiting on local review
+    confidence: likely
+  then:
     project_id: design
     title: '{''Execute WL-D014-01'': ''compute source and destination SHA-256 checksums
       for all WL-D007 review-template mirror targets and append the cycle block in
@@ -56,99 +78,209 @@ queue_forecast:
     verify_or_review_ahead: false
     prerequisites: the slice is waiting on GitHub Codex review
     confidence: likely
-  then:
-    project_id: ea
-    title: Auto-detect and repair recurring `ea` mirror drift after 16916 repeated
-      audit observations; keep one bounded queue slice for the affected local design
-      mirror bundle instead of reopening one-off mirror refresh work.
-    lane: easy
-    provider: not active
-    brain: not active
-    reason: local review is queued (7d 12h)
-    elapsed_seconds: 0
-    elapsed_human: 0s
-    remaining_seconds: 3600
-    remaining_human: 1h
-    total_seconds: 3600
-    total_human: 1h
-    verify_or_review_ahead: false
-    prerequisites: the slice is waiting on local review
-    confidence: likely
 capacity_forecast:
   lanes:
   - lane: easy
     profile: easy
     model: ea-coder-fast
     brain: ea-coder-fast
-    backend: magixai
-    provider: magixai
-    state: degraded
-    remaining_percent: 1.3
-    remaining_text: 1%
+    backend: onemin
+    provider: gemini_vortex
+    state: ready
+    remaining_percent: 2.38
+    remaining_text: 2%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 1% allowance
+    sustainable_runway: 2% allowance
     native_allowance:
-      provider_key: magixai
-      state: degraded
-      remaining_percent_of_max: 1.3
+      provider_key: gemini_vortex
+      state: ready
+      remaining_percent_of_max: 2.38
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
       estimated_remaining_credits_total: null
       max_requests_per_hour: null
       max_credits_per_hour: null
       max_credits_per_day: null
-    configured_slots: 1
-    ready_slots: 0
-    degraded_slots: 1
-    slot_owners: []
+    configured_slots: 74
+    ready_slots: 9
+    degraded_slots: 65
+    slot_owners:
+    - tibor.girschele@gmail.com
+    - archon.megalon@gmail.com
+    - the.girscheles@gmail.com
+    - 1min1@girschele.com
+    - 1min2@girschele.com
+    - 1min3@girschele.com
+    - tibor.hoza@gmail.com
+    - noah.girschele@gmail.com
+    - elisabeth.girschele@gmail.com
+    - vermisst.ma01.wien@gmail.com
+    - peter@chummer.run
+    - franz@chummer.run
+    - errant@chummer.run
+    - tibor.hoza@wien.gv.at
+    - office@chummer.run
+    - support@chummer.run
+    - invoice@chummer.run
+    - zmhms86kcg@privaterelay.appleid.com
+    - uk@chummer.run
+    - us@chummer.run
+    - ny@chummer.run
+    - sk@chummer.run
+    - hk@chummer.run
+    - usport@chummer.run
+    - tk@chummer.run
+    - it@chummer.run
+    - nr@chummer.run
+    - fi@chummer.run
+    - ru@chummer.run
+    - pl@chummer.run
+    - au@chummer.run
+    - id@chummer.run
+    - pt@chummer.run
+    - es@chummer.run
+    - swiss@chummer.run
+    - sp@chummer.run
+    - be@chummer.run
+    - co@chummer.run
+    - dk@chummer.run
+    - Jaciara.Cavalcanti@myexternalbrain.com
+    - Ladina.Zgraggen@myexternalbrain.com
+    - Kateri.Parenteau@myexternalbrain.com
+    - Saga.Silfverberg@myexternalbrain.com
+    - Csenge.Solymosi@myexternalbrain.com
+    - Philomene.Goudreau@myexternalbrain.com
+    - Elvira.Fortunato@myexternalbrain.com
+    - Julia.Lagahuzere@myexternalbrain.com
+    - Rosa.Mota@myexternalbrain.com
+    - Valmai.Johnston@myexternalbrain.com
+    - oie.Sepp@chummer.run
+    - Aziliz.Tanguy@chummer.run
+    - Heidrun.Kretschmer@chummer.run
+    - Zara.Tindall@myexternalbrain.com
+    - Lamija.Hodzic@myexternalbrain.com
+    - Yoon.Bada@myexternalbrain.com
+    - anzorigiin.Nomuun@myexternalbrain.com
+    - boldbaataryn.Selenge@myexternalbrain.com
+    - Sihana.Berisha@myexternalbrain.com
+    - Era.Gashi@myexternalbrain.com
+    - Stasia.Grabowski@myexternalbrain.com
+    - Maureen.Callahan@myexternalbrain.com
+    - Philomena.Sullivan@myexternalbrain.com
+    - Florence.Kowalski@myexternalbrain.com
+    - Leocadia.Nowak@myexternalbrain.com
     local_estimated_burn_usd: 2.900591
     local_run_count: 5
-    mission_ready: false
+    mission_ready: true
   - lane: repair
     profile: repair
     model: ea-coder-fast
     brain: ea-coder-fast
-    backend: magixai
-    provider: magixai
-    state: degraded
-    remaining_percent: 1.3
-    remaining_text: 1%
+    backend: onemin
+    provider: gemini_vortex
+    state: ready
+    remaining_percent: 2.38
+    remaining_text: 2%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 1% allowance
+    sustainable_runway: 2% allowance
     native_allowance:
-      provider_key: magixai
-      state: degraded
-      remaining_percent_of_max: 1.3
+      provider_key: gemini_vortex
+      state: ready
+      remaining_percent_of_max: 2.38
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
       estimated_remaining_credits_total: null
       max_requests_per_hour: null
       max_credits_per_hour: null
       max_credits_per_day: null
-    configured_slots: 1
-    ready_slots: 0
-    degraded_slots: 1
-    slot_owners: []
+    configured_slots: 74
+    ready_slots: 9
+    degraded_slots: 65
+    slot_owners:
+    - tibor.girschele@gmail.com
+    - archon.megalon@gmail.com
+    - the.girscheles@gmail.com
+    - 1min1@girschele.com
+    - 1min2@girschele.com
+    - 1min3@girschele.com
+    - tibor.hoza@gmail.com
+    - noah.girschele@gmail.com
+    - elisabeth.girschele@gmail.com
+    - vermisst.ma01.wien@gmail.com
+    - peter@chummer.run
+    - franz@chummer.run
+    - errant@chummer.run
+    - tibor.hoza@wien.gv.at
+    - office@chummer.run
+    - support@chummer.run
+    - invoice@chummer.run
+    - zmhms86kcg@privaterelay.appleid.com
+    - uk@chummer.run
+    - us@chummer.run
+    - ny@chummer.run
+    - sk@chummer.run
+    - hk@chummer.run
+    - usport@chummer.run
+    - tk@chummer.run
+    - it@chummer.run
+    - nr@chummer.run
+    - fi@chummer.run
+    - ru@chummer.run
+    - pl@chummer.run
+    - au@chummer.run
+    - id@chummer.run
+    - pt@chummer.run
+    - es@chummer.run
+    - swiss@chummer.run
+    - sp@chummer.run
+    - be@chummer.run
+    - co@chummer.run
+    - dk@chummer.run
+    - Jaciara.Cavalcanti@myexternalbrain.com
+    - Ladina.Zgraggen@myexternalbrain.com
+    - Kateri.Parenteau@myexternalbrain.com
+    - Saga.Silfverberg@myexternalbrain.com
+    - Csenge.Solymosi@myexternalbrain.com
+    - Philomene.Goudreau@myexternalbrain.com
+    - Elvira.Fortunato@myexternalbrain.com
+    - Julia.Lagahuzere@myexternalbrain.com
+    - Rosa.Mota@myexternalbrain.com
+    - Valmai.Johnston@myexternalbrain.com
+    - oie.Sepp@chummer.run
+    - Aziliz.Tanguy@chummer.run
+    - Heidrun.Kretschmer@chummer.run
+    - Zara.Tindall@myexternalbrain.com
+    - Lamija.Hodzic@myexternalbrain.com
+    - Yoon.Bada@myexternalbrain.com
+    - anzorigiin.Nomuun@myexternalbrain.com
+    - boldbaataryn.Selenge@myexternalbrain.com
+    - Sihana.Berisha@myexternalbrain.com
+    - Era.Gashi@myexternalbrain.com
+    - Stasia.Grabowski@myexternalbrain.com
+    - Maureen.Callahan@myexternalbrain.com
+    - Philomena.Sullivan@myexternalbrain.com
+    - Florence.Kowalski@myexternalbrain.com
+    - Leocadia.Nowak@myexternalbrain.com
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: false
+    mission_ready: true
   - lane: groundwork
     profile: groundwork
     model: ea-groundwork-gemini
     brain: ea-groundwork-gemini
     backend: gemini_vortex
     provider: gemini_vortex
-    state: missing
+    state: degraded
     remaining_percent: null
-    remaining_text: missing
+    remaining_text: degraded
     hours_text: unknown
     hot_runway: unknown
     sustainable_runway: unknown
     native_allowance:
       provider_key: gemini_vortex
-      state: missing
+      state: degraded
       remaining_percent_of_max: null
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
@@ -158,7 +290,7 @@ capacity_forecast:
       max_credits_per_day: null
     configured_slots: 2
     ready_slots: 0
-    degraded_slots: 0
+    degraded_slots: 2
     slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 1
@@ -167,28 +299,92 @@ capacity_forecast:
     profile: review_light
     model: ea-review-light
     brain: ea-review-light
-    backend: chatplayground
-    provider: browseract
+    backend: onemin
+    provider: onemin
     state: ready
-    remaining_percent: null
-    remaining_text: ready
-    hours_text: unknown
-    hot_runway: unknown
-    sustainable_runway: Forever on trend
+    remaining_percent: 2.38
+    remaining_text: 2%
+    hours_text: 2d 11h
+    hot_runway: 2d 11h
+    sustainable_runway: 2d 11h
     native_allowance:
-      provider_key: browseract
+      provider_key: onemin
       state: ready
-      remaining_percent_of_max: null
-      estimated_hours_remaining_at_current_pace: null
+      remaining_percent_of_max: 2.38
+      estimated_hours_remaining_at_current_pace: 59.65
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: null
-      max_requests_per_hour: null
-      max_credits_per_hour: null
-      max_credits_per_day: null
-    configured_slots: 1
-    ready_slots: 1
-    degraded_slots: 0
-    slot_owners: []
+      estimated_remaining_credits_total: 7824320
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 74
+    ready_slots: 9
+    degraded_slots: 65
+    slot_owners:
+    - tibor.girschele@gmail.com
+    - archon.megalon@gmail.com
+    - the.girscheles@gmail.com
+    - 1min1@girschele.com
+    - 1min2@girschele.com
+    - 1min3@girschele.com
+    - tibor.hoza@gmail.com
+    - noah.girschele@gmail.com
+    - elisabeth.girschele@gmail.com
+    - vermisst.ma01.wien@gmail.com
+    - peter@chummer.run
+    - franz@chummer.run
+    - errant@chummer.run
+    - tibor.hoza@wien.gv.at
+    - office@chummer.run
+    - support@chummer.run
+    - invoice@chummer.run
+    - zmhms86kcg@privaterelay.appleid.com
+    - uk@chummer.run
+    - us@chummer.run
+    - ny@chummer.run
+    - sk@chummer.run
+    - hk@chummer.run
+    - usport@chummer.run
+    - tk@chummer.run
+    - it@chummer.run
+    - nr@chummer.run
+    - fi@chummer.run
+    - ru@chummer.run
+    - pl@chummer.run
+    - au@chummer.run
+    - id@chummer.run
+    - pt@chummer.run
+    - es@chummer.run
+    - swiss@chummer.run
+    - sp@chummer.run
+    - be@chummer.run
+    - co@chummer.run
+    - dk@chummer.run
+    - Jaciara.Cavalcanti@myexternalbrain.com
+    - Ladina.Zgraggen@myexternalbrain.com
+    - Kateri.Parenteau@myexternalbrain.com
+    - Saga.Silfverberg@myexternalbrain.com
+    - Csenge.Solymosi@myexternalbrain.com
+    - Philomene.Goudreau@myexternalbrain.com
+    - Elvira.Fortunato@myexternalbrain.com
+    - Julia.Lagahuzere@myexternalbrain.com
+    - Rosa.Mota@myexternalbrain.com
+    - Valmai.Johnston@myexternalbrain.com
+    - oie.Sepp@chummer.run
+    - Aziliz.Tanguy@chummer.run
+    - Heidrun.Kretschmer@chummer.run
+    - Zara.Tindall@myexternalbrain.com
+    - Lamija.Hodzic@myexternalbrain.com
+    - Yoon.Bada@myexternalbrain.com
+    - anzorigiin.Nomuun@myexternalbrain.com
+    - boldbaataryn.Selenge@myexternalbrain.com
+    - Sihana.Berisha@myexternalbrain.com
+    - Era.Gashi@myexternalbrain.com
+    - Stasia.Grabowski@myexternalbrain.com
+    - Maureen.Callahan@myexternalbrain.com
+    - Philomena.Sullivan@myexternalbrain.com
+    - Florence.Kowalski@myexternalbrain.com
+    - Leocadia.Nowak@myexternalbrain.com
     local_estimated_burn_usd: 0.0
     local_run_count: 0
     mission_ready: true
@@ -198,25 +394,25 @@ capacity_forecast:
     brain: ea-coder-hard
     backend: onemin
     provider: onemin
-    state: degraded
-    remaining_percent: 1.3
-    remaining_text: 1%
-    hours_text: unknown
-    hot_runway: unknown
-    sustainable_runway: 1% allowance
+    state: ready
+    remaining_percent: 2.38
+    remaining_text: 2%
+    hours_text: 2d 11h
+    hot_runway: 2d 11h
+    sustainable_runway: 2d 11h
     native_allowance:
       provider_key: onemin
-      state: degraded
-      remaining_percent_of_max: 1.3
-      estimated_hours_remaining_at_current_pace: null
+      state: ready
+      remaining_percent_of_max: 2.38
+      estimated_hours_remaining_at_current_pace: 59.65
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 4285797
+      estimated_remaining_credits_total: 7824320
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 74
-    ready_slots: 0
-    degraded_slots: 3
+    ready_slots: 9
+    degraded_slots: 65
     slot_owners:
     - tibor.girschele@gmail.com
     - archon.megalon@gmail.com
@@ -284,32 +480,32 @@ capacity_forecast:
     - Leocadia.Nowak@myexternalbrain.com
     local_estimated_burn_usd: 3.690321
     local_run_count: 8
-    mission_ready: false
+    mission_ready: true
   - lane: core_authority
     profile: core
     model: ea-coder-hard
     brain: ea-coder-hard
     backend: onemin
     provider: onemin
-    state: degraded
-    remaining_percent: 1.3
-    remaining_text: 1%
-    hours_text: unknown
-    hot_runway: unknown
-    sustainable_runway: 1% allowance
+    state: ready
+    remaining_percent: 2.38
+    remaining_text: 2%
+    hours_text: 2d 11h
+    hot_runway: 2d 11h
+    sustainable_runway: 2d 11h
     native_allowance:
       provider_key: onemin
-      state: degraded
-      remaining_percent_of_max: 1.3
-      estimated_hours_remaining_at_current_pace: null
+      state: ready
+      remaining_percent_of_max: 2.38
+      estimated_hours_remaining_at_current_pace: 59.65
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 4285797
+      estimated_remaining_credits_total: 7824320
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 74
-    ready_slots: 0
-    degraded_slots: 3
+    ready_slots: 9
+    degraded_slots: 65
     slot_owners:
     - tibor.girschele@gmail.com
     - archon.megalon@gmail.com
@@ -377,32 +573,32 @@ capacity_forecast:
     - Leocadia.Nowak@myexternalbrain.com
     local_estimated_burn_usd: 1.126012
     local_run_count: 2
-    mission_ready: false
+    mission_ready: true
   - lane: core_booster
     profile: core
     model: ea-coder-hard
     brain: ea-coder-hard
     backend: onemin
     provider: onemin
-    state: degraded
-    remaining_percent: 1.3
-    remaining_text: 1%
-    hours_text: unknown
-    hot_runway: unknown
-    sustainable_runway: 1% allowance
+    state: ready
+    remaining_percent: 2.38
+    remaining_text: 2%
+    hours_text: 2d 11h
+    hot_runway: 2d 11h
+    sustainable_runway: 2d 11h
     native_allowance:
       provider_key: onemin
-      state: degraded
-      remaining_percent_of_max: 1.3
-      estimated_hours_remaining_at_current_pace: null
+      state: ready
+      remaining_percent_of_max: 2.38
+      estimated_hours_remaining_at_current_pace: 59.65
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 4285797
+      estimated_remaining_credits_total: 7824320
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 74
-    ready_slots: 0
-    degraded_slots: 3
+    ready_slots: 9
+    degraded_slots: 65
     slot_owners:
     - tibor.girschele@gmail.com
     - archon.megalon@gmail.com
@@ -470,32 +666,32 @@ capacity_forecast:
     - Leocadia.Nowak@myexternalbrain.com
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: false
+    mission_ready: true
   - lane: core_rescue
     profile: core
     model: ea-coder-hard
     brain: ea-coder-hard
     backend: onemin
     provider: onemin
-    state: degraded
-    remaining_percent: 1.3
-    remaining_text: 1%
-    hours_text: unknown
-    hot_runway: unknown
-    sustainable_runway: 1% allowance
+    state: ready
+    remaining_percent: 2.38
+    remaining_text: 2%
+    hours_text: 2d 11h
+    hot_runway: 2d 11h
+    sustainable_runway: 2d 11h
     native_allowance:
       provider_key: onemin
-      state: degraded
-      remaining_percent_of_max: 1.3
-      estimated_hours_remaining_at_current_pace: null
+      state: ready
+      remaining_percent_of_max: 2.38
+      estimated_hours_remaining_at_current_pace: 59.65
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 4285797
+      estimated_remaining_credits_total: 7824320
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 74
-    ready_slots: 0
-    degraded_slots: 3
+    ready_slots: 9
+    degraded_slots: 65
     slot_owners:
     - tibor.girschele@gmail.com
     - archon.megalon@gmail.com
@@ -563,33 +759,97 @@ capacity_forecast:
     - Leocadia.Nowak@myexternalbrain.com
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: false
+    mission_ready: true
   - lane: review_shard
     profile: review_light
     model: ea-review-light
     brain: ea-review-light
-    backend: chatplayground
-    provider: browseract
+    backend: onemin
+    provider: onemin
     state: ready
-    remaining_percent: null
-    remaining_text: ready
-    hours_text: unknown
-    hot_runway: unknown
-    sustainable_runway: Forever on trend
+    remaining_percent: 2.38
+    remaining_text: 2%
+    hours_text: 2d 11h
+    hot_runway: 2d 11h
+    sustainable_runway: 2d 11h
     native_allowance:
-      provider_key: browseract
+      provider_key: onemin
       state: ready
-      remaining_percent_of_max: null
-      estimated_hours_remaining_at_current_pace: null
+      remaining_percent_of_max: 2.38
+      estimated_hours_remaining_at_current_pace: 59.65
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: null
-      max_requests_per_hour: null
-      max_credits_per_hour: null
-      max_credits_per_day: null
-    configured_slots: 1
-    ready_slots: 1
-    degraded_slots: 0
-    slot_owners: []
+      estimated_remaining_credits_total: 7824320
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 74
+    ready_slots: 9
+    degraded_slots: 65
+    slot_owners:
+    - tibor.girschele@gmail.com
+    - archon.megalon@gmail.com
+    - the.girscheles@gmail.com
+    - 1min1@girschele.com
+    - 1min2@girschele.com
+    - 1min3@girschele.com
+    - tibor.hoza@gmail.com
+    - noah.girschele@gmail.com
+    - elisabeth.girschele@gmail.com
+    - vermisst.ma01.wien@gmail.com
+    - peter@chummer.run
+    - franz@chummer.run
+    - errant@chummer.run
+    - tibor.hoza@wien.gv.at
+    - office@chummer.run
+    - support@chummer.run
+    - invoice@chummer.run
+    - zmhms86kcg@privaterelay.appleid.com
+    - uk@chummer.run
+    - us@chummer.run
+    - ny@chummer.run
+    - sk@chummer.run
+    - hk@chummer.run
+    - usport@chummer.run
+    - tk@chummer.run
+    - it@chummer.run
+    - nr@chummer.run
+    - fi@chummer.run
+    - ru@chummer.run
+    - pl@chummer.run
+    - au@chummer.run
+    - id@chummer.run
+    - pt@chummer.run
+    - es@chummer.run
+    - swiss@chummer.run
+    - sp@chummer.run
+    - be@chummer.run
+    - co@chummer.run
+    - dk@chummer.run
+    - Jaciara.Cavalcanti@myexternalbrain.com
+    - Ladina.Zgraggen@myexternalbrain.com
+    - Kateri.Parenteau@myexternalbrain.com
+    - Saga.Silfverberg@myexternalbrain.com
+    - Csenge.Solymosi@myexternalbrain.com
+    - Philomene.Goudreau@myexternalbrain.com
+    - Elvira.Fortunato@myexternalbrain.com
+    - Julia.Lagahuzere@myexternalbrain.com
+    - Rosa.Mota@myexternalbrain.com
+    - Valmai.Johnston@myexternalbrain.com
+    - oie.Sepp@chummer.run
+    - Aziliz.Tanguy@chummer.run
+    - Heidrun.Kretschmer@chummer.run
+    - Zara.Tindall@myexternalbrain.com
+    - Lamija.Hodzic@myexternalbrain.com
+    - Yoon.Bada@myexternalbrain.com
+    - anzorigiin.Nomuun@myexternalbrain.com
+    - boldbaataryn.Selenge@myexternalbrain.com
+    - Sihana.Berisha@myexternalbrain.com
+    - Era.Gashi@myexternalbrain.com
+    - Stasia.Grabowski@myexternalbrain.com
+    - Maureen.Callahan@myexternalbrain.com
+    - Philomena.Sullivan@myexternalbrain.com
+    - Florence.Kowalski@myexternalbrain.com
+    - Leocadia.Nowak@myexternalbrain.com
     local_estimated_burn_usd: 0.0
     local_run_count: 0
     mission_ready: true
@@ -597,28 +857,92 @@ capacity_forecast:
     profile: audit
     model: ea-audit-jury
     brain: ea-audit-jury
-    backend: chatplayground
-    provider: browseract
+    backend: onemin
+    provider: onemin
     state: ready
-    remaining_percent: null
-    remaining_text: ready
-    hours_text: unknown
-    hot_runway: unknown
-    sustainable_runway: Forever on trend
+    remaining_percent: 2.38
+    remaining_text: 2%
+    hours_text: 2d 11h
+    hot_runway: 2d 11h
+    sustainable_runway: 2d 11h
     native_allowance:
-      provider_key: browseract
+      provider_key: onemin
       state: ready
-      remaining_percent_of_max: null
-      estimated_hours_remaining_at_current_pace: null
+      remaining_percent_of_max: 2.38
+      estimated_hours_remaining_at_current_pace: 59.65
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: null
-      max_requests_per_hour: null
-      max_credits_per_hour: null
-      max_credits_per_day: null
-    configured_slots: 1
-    ready_slots: 1
-    degraded_slots: 0
-    slot_owners: []
+      estimated_remaining_credits_total: 7824320
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 74
+    ready_slots: 9
+    degraded_slots: 65
+    slot_owners:
+    - tibor.girschele@gmail.com
+    - archon.megalon@gmail.com
+    - the.girscheles@gmail.com
+    - 1min1@girschele.com
+    - 1min2@girschele.com
+    - 1min3@girschele.com
+    - tibor.hoza@gmail.com
+    - noah.girschele@gmail.com
+    - elisabeth.girschele@gmail.com
+    - vermisst.ma01.wien@gmail.com
+    - peter@chummer.run
+    - franz@chummer.run
+    - errant@chummer.run
+    - tibor.hoza@wien.gv.at
+    - office@chummer.run
+    - support@chummer.run
+    - invoice@chummer.run
+    - zmhms86kcg@privaterelay.appleid.com
+    - uk@chummer.run
+    - us@chummer.run
+    - ny@chummer.run
+    - sk@chummer.run
+    - hk@chummer.run
+    - usport@chummer.run
+    - tk@chummer.run
+    - it@chummer.run
+    - nr@chummer.run
+    - fi@chummer.run
+    - ru@chummer.run
+    - pl@chummer.run
+    - au@chummer.run
+    - id@chummer.run
+    - pt@chummer.run
+    - es@chummer.run
+    - swiss@chummer.run
+    - sp@chummer.run
+    - be@chummer.run
+    - co@chummer.run
+    - dk@chummer.run
+    - Jaciara.Cavalcanti@myexternalbrain.com
+    - Ladina.Zgraggen@myexternalbrain.com
+    - Kateri.Parenteau@myexternalbrain.com
+    - Saga.Silfverberg@myexternalbrain.com
+    - Csenge.Solymosi@myexternalbrain.com
+    - Philomene.Goudreau@myexternalbrain.com
+    - Elvira.Fortunato@myexternalbrain.com
+    - Julia.Lagahuzere@myexternalbrain.com
+    - Rosa.Mota@myexternalbrain.com
+    - Valmai.Johnston@myexternalbrain.com
+    - oie.Sepp@chummer.run
+    - Aziliz.Tanguy@chummer.run
+    - Heidrun.Kretschmer@chummer.run
+    - Zara.Tindall@myexternalbrain.com
+    - Lamija.Hodzic@myexternalbrain.com
+    - Yoon.Bada@myexternalbrain.com
+    - anzorigiin.Nomuun@myexternalbrain.com
+    - boldbaataryn.Selenge@myexternalbrain.com
+    - Sihana.Berisha@myexternalbrain.com
+    - Era.Gashi@myexternalbrain.com
+    - Stasia.Grabowski@myexternalbrain.com
+    - Maureen.Callahan@myexternalbrain.com
+    - Philomena.Sullivan@myexternalbrain.com
+    - Florence.Kowalski@myexternalbrain.com
+    - Leocadia.Nowak@myexternalbrain.com
     local_estimated_burn_usd: 0.0
     local_run_count: 0
     mission_ready: true
@@ -626,28 +950,92 @@ capacity_forecast:
     profile: audit
     model: ea-audit-jury
     brain: ea-audit-jury
-    backend: chatplayground
-    provider: browseract
+    backend: onemin
+    provider: onemin
     state: ready
-    remaining_percent: null
-    remaining_text: ready
-    hours_text: unknown
-    hot_runway: unknown
-    sustainable_runway: Forever on trend
+    remaining_percent: 2.38
+    remaining_text: 2%
+    hours_text: 2d 11h
+    hot_runway: 2d 11h
+    sustainable_runway: 2d 11h
     native_allowance:
-      provider_key: browseract
+      provider_key: onemin
       state: ready
-      remaining_percent_of_max: null
-      estimated_hours_remaining_at_current_pace: null
+      remaining_percent_of_max: 2.38
+      estimated_hours_remaining_at_current_pace: 59.65
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: null
-      max_requests_per_hour: null
-      max_credits_per_hour: null
-      max_credits_per_day: null
-    configured_slots: 1
-    ready_slots: 1
-    degraded_slots: 0
-    slot_owners: []
+      estimated_remaining_credits_total: 7824320
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 74
+    ready_slots: 9
+    degraded_slots: 65
+    slot_owners:
+    - tibor.girschele@gmail.com
+    - archon.megalon@gmail.com
+    - the.girscheles@gmail.com
+    - 1min1@girschele.com
+    - 1min2@girschele.com
+    - 1min3@girschele.com
+    - tibor.hoza@gmail.com
+    - noah.girschele@gmail.com
+    - elisabeth.girschele@gmail.com
+    - vermisst.ma01.wien@gmail.com
+    - peter@chummer.run
+    - franz@chummer.run
+    - errant@chummer.run
+    - tibor.hoza@wien.gv.at
+    - office@chummer.run
+    - support@chummer.run
+    - invoice@chummer.run
+    - zmhms86kcg@privaterelay.appleid.com
+    - uk@chummer.run
+    - us@chummer.run
+    - ny@chummer.run
+    - sk@chummer.run
+    - hk@chummer.run
+    - usport@chummer.run
+    - tk@chummer.run
+    - it@chummer.run
+    - nr@chummer.run
+    - fi@chummer.run
+    - ru@chummer.run
+    - pl@chummer.run
+    - au@chummer.run
+    - id@chummer.run
+    - pt@chummer.run
+    - es@chummer.run
+    - swiss@chummer.run
+    - sp@chummer.run
+    - be@chummer.run
+    - co@chummer.run
+    - dk@chummer.run
+    - Jaciara.Cavalcanti@myexternalbrain.com
+    - Ladina.Zgraggen@myexternalbrain.com
+    - Kateri.Parenteau@myexternalbrain.com
+    - Saga.Silfverberg@myexternalbrain.com
+    - Csenge.Solymosi@myexternalbrain.com
+    - Philomene.Goudreau@myexternalbrain.com
+    - Elvira.Fortunato@myexternalbrain.com
+    - Julia.Lagahuzere@myexternalbrain.com
+    - Rosa.Mota@myexternalbrain.com
+    - Valmai.Johnston@myexternalbrain.com
+    - oie.Sepp@chummer.run
+    - Aziliz.Tanguy@chummer.run
+    - Heidrun.Kretschmer@chummer.run
+    - Zara.Tindall@myexternalbrain.com
+    - Lamija.Hodzic@myexternalbrain.com
+    - Yoon.Bada@myexternalbrain.com
+    - anzorigiin.Nomuun@myexternalbrain.com
+    - boldbaataryn.Selenge@myexternalbrain.com
+    - Sihana.Berisha@myexternalbrain.com
+    - Era.Gashi@myexternalbrain.com
+    - Stasia.Grabowski@myexternalbrain.com
+    - Maureen.Callahan@myexternalbrain.com
+    - Philomena.Sullivan@myexternalbrain.com
+    - Florence.Kowalski@myexternalbrain.com
+    - Leocadia.Nowak@myexternalbrain.com
     local_estimated_burn_usd: 0.0
     local_run_count: 0
     mission_ready: true
@@ -658,15 +1046,15 @@ capacity_forecast:
     backend: chatplayground
     provider: browseract
     state: ready
-    remaining_percent: 1.3
-    remaining_text: 1%
+    remaining_percent: 2.38
+    remaining_text: 2%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 1% allowance
+    sustainable_runway: 2% allowance
     native_allowance:
       provider_key: browseract
       state: ready
-      remaining_percent_of_max: 1.3
+      remaining_percent_of_max: 2.38
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
       estimated_remaining_credits_total: null
@@ -681,9 +1069,9 @@ capacity_forecast:
     local_run_count: 1
     mission_ready: true
   critical_path_lane: core
-  critical_path_stop: unknown
+  critical_path_stop: 2d 11h
   pool_runway: unknown
-  mission_runway: unknown
+  mission_runway: 2d 11h
   group_pressure:
   - group_id: chummer-vnext
     runway_risk: high
@@ -693,7 +1081,7 @@ capacity_forecast:
     remaining_slices: 0
     slot_share_percent: 0
     drain_share_percent: 0
-    bottleneck: 'mobile: review orchestration failed'
+    bottleneck: 'core: waiting on review lane'
     deployment_summary: Public Chummer portal is live at chummer.run as a promoted
       preview release shell for the split heads.
     program_eta: 0s
@@ -714,7 +1102,7 @@ capacity_forecast:
   account_pressure: []
 blocker_forecast:
   now: the slice is waiting on local review
-  next: the slice is waiting on GitHub Codex review
+  next: the slice is waiting on local review
   vision: blocked unresolved incidents, active workers, and healing runs
 deployment_posture:
   operator_auth_required: true
@@ -914,28 +1302,29 @@ support_summary:
   update_required_misrouted_case_count: 0
   update_required_routed_to_downloads_count: 0
   top_clusters: []
-  generated_at: '2026-05-01T09:55:50Z'
+  generated_at: '2026-05-02T14:24:23Z'
   freshness:
     available: true
-    at: '2026-05-01T09:55:50Z'
-    age_seconds: 295
-    age_human: 4m 55s
+    at: '2026-05-02T14:24:23Z'
+    age_seconds: 1393
+    age_human: 23m 13s
     state: fresh
     label: fresh
 publish_readiness:
   state: blocked
-  blocking_reason_count: 1
+  blocking_reason_count: 2
   warning_reason_count: 2
   blocking_reasons:
+  - status plane is stale.
   - public guide/progress is stale.
   warning_reasons:
-  - Live source state is 4d 17h newer than the published campaign OS continuity monitor.
+  - Live source state is 5d 21h newer than the published campaign OS continuity monitor.
   - Provider-route fallback coverage is still thin for the current release posture.
   recommended_action: Resolve the blocking publish-readiness issues before promoting
     public truth.
   signals:
     runtime_healing_alert_state: healthy
-    status_plane_freshness_state: fresh
+    status_plane_freshness_state: stale
     progress_report_freshness_state: stale
     journey_gates_freshness_state: fresh
     release_channel_freshness_state: fresh
@@ -955,7 +1344,7 @@ publish_readiness:
     journey_gate_blocked_count: 0
     journey_gate_warning_count: 0
     provider_review_due_count: 0
-    provider_fallback_thin_count: 5
+    provider_fallback_thin_count: 1
     provider_revert_now_count: 0
     support_closure_waiting_count: 0
     support_needs_human_response_count: 0
@@ -966,7 +1355,7 @@ runtime_healing:
     degraded_service_count: 0
     cooldown_active_count: 0
     escalated_service_count: 0
-    recent_restart_count: 10
+    recent_restart_count: 0
     alert_state: healthy
     alert_reason: No runtime healing drift is currently recorded.
     recommended_action: Keep the bounded auto-heal loop enabled and review the weekly
@@ -1043,7 +1432,7 @@ external_proof_autoingest:
 projects:
 - id: core
   lifecycle: live
-  runtime_status: verifying
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1073,7 +1462,7 @@ projects:
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1103,7 +1492,7 @@ projects:
   deployment_access_posture: public
 - id: hub-registry
   lifecycle: dispatchable
-  runtime_status: healing
+  runtime_status: running
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1113,7 +1502,7 @@ projects:
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: dispatchable
-  runtime_status: running
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1133,7 +1522,7 @@ projects:
   deployment_access_posture: public
 - id: ui
   lifecycle: live
-  runtime_status: running
+  runtime_status: dispatch_pending
   readiness_stage: publicly_promoted
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: true
@@ -1162,7 +1551,7 @@ groups:
   blocking_owner_projects: []
 - id: control-plane
   lifecycle: live
-  phase: proposed_tasks
+  phase: running
   deployment_status: internal
   deployment_promotion_stage: internal
   deployment_access_posture: ''

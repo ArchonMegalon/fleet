@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-01T09:41:10Z'
+generated_at: '2026-05-03T10:48:47Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,6 +32,8 @@ focus:
   - fleet
   - chummer6-design
   - chummer6-ui
+  - executive-assistant
+  - chummer6-hub
   texts:
   - top flagship grade
   - whole project frontier
@@ -65,12 +67,12 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: stage flagship_ui_screenshot_gate failed
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-01T09:29:12Z'
+  generated_at: '2026-05-03T10:37:30Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -78,56 +80,43 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 2299644700
+- 3109832007
 frontier:
-- id: 2299644700
-  title: Auto-detect and repair recurring `fleet` mirror drift after 15897 repeated
-    audit observations; keep one bounded queue slice for the affected local design
-    mirror bundle instead of reopening one-off mirror refresh work.
+- id: 3109832007
+  title: Fleet and operator loop flagship finish
   wave: flagship_product
   status: not_started
-  owners: []
+  owners:
+  - fleet
+  - executive-assistant
+  - chummer6-design
+  - chummer6-hub
   dependencies: []
   exit_criteria:
-  - Auto-detect and repair recurring `fleet` mirror drift after 15897 repeated audit
-    observations; keep one bounded queue slice for the affected local design mirror
-    bundle instead of reopening one-off mirror refresh work.
-  - 'Own and prove the surface slice(s): design_mirror:fleet'
-  - 'Keep implementation scoped to the allowed paths: .codex-design'
-  - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed (audit-task-3226027).
+  - Keep the product-governor, support, signal, and operator loop durable enough to
+    steer the full multi-repo product, not just the current milestone wave, with trustworthy
+    proofs, traces, ETAs, handoffs, and fail-closed anti-false-complete posture.
+  - Ensure the loop can keep decomposing full-product work across shards until flagship
+    readiness proof is current and trusted, and that actionable feedback, crash, and
+    support signals can auto-materialize into routed bugfix work without operator
+    babysitting.
   eta:
     status: flagship_delivery
-    eta_human: 7h-17h
+    eta_human: 9h-23h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Auto-detect and repair recurring `fleet` mirror drift after
-      15897 repeated audit observations; keep one bounded queue slice for the affected
-      local design mirror bundle instead of reopening one-off mirror refresh work.''
-      remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      fleet_and_operator_loop.'
-    predicted_completion_at: '2026-05-01T21:21:22Z'
-    range_low_hours: 6.52
-    range_high_hours: 16.82
+    summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
+      the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop.'
+    predicted_completion_at: '2026-05-04T02:54:47Z'
+    range_low_hours: 9.0
+    range_high_hours: 23.2
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.45
+    remaining_effort_units: 2.0
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-source_queue_fingerprint: 7bd98f74031f7ba65a0f1ee36c1909f5296b46ae
-queue_package:
-  repo: ''
-  package_id: audit-task-3226027
-  title: Auto-detect and repair recurring `fleet` mirror drift after 15897 repeated
-    audit observations; keep one bounded queue slice for the affected local design
-    mirror bundle instead of reopening one-off mirror refresh work.
-  priority: 0
-  owned_surfaces:
-  - design_mirror:fleet
-  allowed_paths:
-  - .codex-design

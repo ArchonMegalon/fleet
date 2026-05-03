@@ -77,9 +77,12 @@ If Blazor is the only shipped desktop head for a lane or the recommended public 
 Flagship grade requires:
 
 * explain receipts where the user expects "why?"
+* bounded `why not?`, `what changed?`, and `what if I toggle this one factor?` answers on promoted explain surfaces
 * visible state for conditional modifiers, active effects, and timed changes
-* source-linked hints rather than folklore labels
+* packet-backed source-anchor posture rather than folklore labels, detached citations, or presenter-only narration
 * public release truth that matches the shelf, help copy, and install reality
+
+The detailed explain contract lives in `EXPLAIN_EVERY_VALUE_AND_GROUNDED_FOLLOW_UP.md`.
 
 ### 2a. Trust, durability, and explainability outrank cosmetic similarity
 
@@ -89,7 +92,7 @@ Flagship grade fails when any of these are weak even if the shell looks familiar
 * character and campaign durability across migration or device change
 * custom-data and amend-package survival
 * large-sheet and dense-roster performance
-* rule explainability where users ask "why?"
+* rule explainability where users ask "why?", "why not?", or "what changed?"
 
 Those planes are machine-tracked in `FLAGSHIP_READINESS_PLANES.yaml`.
 

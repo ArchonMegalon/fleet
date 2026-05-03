@@ -502,20 +502,36 @@ def materialized_shards_with_manifest_evidence(
             manifest_by_name[name] = dict(row)
 
     materialized: List[Dict[str, Any]] = []
+    seen_names: set[str] = set()
     for row in observed_shards:
         if not isinstance(row, dict):
             continue
         observed = dict(row)
         name = str(observed.get("shard_id") or observed.get("name") or "").strip()
+        if name:
+            seen_names.add(name)
         manifest = manifest_by_name.get(name) or {}
         manifest_run_id = str(manifest.get("active_run_id") or "").strip()
         observed_run_id = str(observed.get("active_run_id") or "").strip()
-        if manifest and (not manifest_run_id or not observed_run_id or manifest_run_id == observed_run_id):
+        if manifest and manifest_run_id and not observed_run_id:
+            materialized.append(dict(manifest))
+            continue
+        if manifest and (not manifest_run_id or manifest_run_id == observed_run_id):
             merged = dict(manifest)
             merged.update(observed)
             materialized.append(merged)
             continue
         materialized.append(observed)
+    for name, manifest in manifest_by_name.items():
+        if name in seen_names:
+            continue
+        manifest_run_id = str(manifest.get("active_run_id") or "").strip()
+        manifest_progress_state = str(
+            manifest.get("active_run_progress_state") or manifest.get("progress_state") or ""
+        ).strip()
+        if not manifest_run_id or manifest_progress_state in {"closing", "missing_process"}:
+            continue
+        materialized.append(dict(manifest))
     return materialized
 
 
@@ -553,6 +569,42 @@ def materialized_active_runs_from_observed_shards(observed_shards: List[Dict[str
     return active_runs
 
 
+def materialized_progress_run_counts(observed_shards: List[Dict[str, Any]]) -> tuple[int, int, int]:
+    productive = 0
+    waiting = 0
+    waiting_states = {
+        "waiting_for_model_output",
+        "stream_connected_waiting",
+        "running_silent",
+        "blocked_status_polling",
+        "transport_reconnecting",
+        "transport_outage_waiting",
+        "missing_output_artifacts",
+    }
+    active_run_total = 0
+    for row in observed_shards:
+        if not isinstance(row, dict):
+            continue
+        active_run_id = str(row.get("active_run_id") or "").strip()
+        if not active_run_id:
+            continue
+        progress_state = str(row.get("active_run_progress_state") or row.get("progress_state") or "").strip().lower()
+        if progress_state in {"closing", "missing_process"}:
+            continue
+        active_run_total += 1
+        progress_evidence = str(row.get("active_run_progress_evidence") or "").strip() or "unknown"
+        container_scoped_waiting = progress_state == "container_scoped" and progress_evidence != "repo_work_detected"
+        if progress_evidence == "repo_work_detected":
+            productive += 1
+        elif progress_state in waiting_states or container_scoped_waiting or progress_evidence in {
+            "wait_only",
+            "read_only_repo_probe",
+        }:
+            waiting += 1
+    nonproductive = max(0, active_run_total - productive - waiting)
+    return productive, waiting, nonproductive
+
+
 def refresh_materialized_status_snapshot(
     state_root: Path,
     *,
@@ -563,6 +615,9 @@ def refresh_materialized_status_snapshot(
     generated_at = iso_now()
     materialized_shards = materialized_shards_with_manifest_evidence(observed_shards, active_shards_payload)
     active_runs = materialized_active_runs_from_observed_shards(materialized_shards)
+    productive_active_runs_count, waiting_active_runs_count, nonproductive_active_runs_count = materialized_progress_run_counts(
+        materialized_shards
+    )
     progress_evidence_counts: Dict[str, int] = {}
     for row in materialized_shards:
         if not isinstance(row, dict) or not str(row.get("active_run_id") or "").strip():
@@ -584,6 +639,88 @@ def refresh_materialized_status_snapshot(
         configured_shard_count = len(observed_shards)
 
     payload = dict(state_payload or {})
+    persisted_state_path = state_root / "state.json"
+    persisted_state: Dict[str, Any] = {}
+    try:
+        persisted_raw = json.loads(persisted_state_path.read_text(encoding="utf-8"))
+        if isinstance(persisted_raw, dict):
+            persisted_state = dict(persisted_raw)
+    except Exception:
+        persisted_state = {}
+    persisted_allowed_active_shards = int_or_zero(persisted_state.get("allowed_active_shards"))
+    payload_allowed_active_shards = int_or_zero(payload.get("allowed_active_shards"))
+    persisted_dispatch_reason = str(persisted_state.get("dispatch_reason") or "").strip().lower()
+    payload_dispatch_reason = str(payload.get("dispatch_reason") or "").strip().lower()
+    if persisted_allowed_active_shards > payload_allowed_active_shards:
+        for key in (
+            "allowed_active_shards",
+            "provider_ready_slots",
+            "provider_hard_max_active_requests",
+            "dispatch_reason",
+            "provider_capacity_summary",
+                "host_memory_pressure",
+            ):
+                if key in persisted_state:
+                    payload[key] = persisted_state.get(key)
+    elif persisted_allowed_active_shards > 0 and persisted_allowed_active_shards == payload_allowed_active_shards:
+        persisted_provider_ready_slots = int_or_zero(persisted_state.get("provider_ready_slots"))
+        payload_provider_ready_slots = int_or_zero(payload.get("provider_ready_slots"))
+        persisted_provider_hard_cap = int_or_zero(persisted_state.get("provider_hard_max_active_requests"))
+        payload_provider_hard_cap = int_or_zero(payload.get("provider_hard_max_active_requests"))
+        if (
+            persisted_provider_ready_slots > payload_provider_ready_slots
+            or persisted_provider_hard_cap > payload_provider_hard_cap
+        ):
+            for key in (
+                "provider_ready_slots",
+                "provider_hard_max_active_requests",
+                "dispatch_reason",
+                "provider_capacity_summary",
+                "host_memory_pressure",
+            ):
+                if key in persisted_state:
+                    payload[key] = persisted_state.get(key)
+    elif (
+        persisted_allowed_active_shards > 0
+        and payload_allowed_active_shards > persisted_allowed_active_shards
+        and "provider capacity caps shard dispatch" in persisted_dispatch_reason
+        and (
+            not str(payload.get("provider_health_snapshot_status") or "").strip()
+            or "host memory headroom is healthy" in payload_dispatch_reason
+        )
+    ):
+        for key in (
+            "allowed_active_shards",
+            "provider_ready_slots",
+            "provider_hard_max_active_requests",
+            "dispatch_reason",
+            "provider_capacity_summary",
+            "host_memory_pressure",
+        ):
+            if key in persisted_state:
+                payload[key] = persisted_state.get(key)
+    persisted_remaining_open = remaining_open_milestones_from_state(
+        persisted_state,
+        eta_payload_from_state(persisted_state),
+    )
+    payload_remaining_open = remaining_open_milestones_from_state(
+        payload,
+        eta_payload_from_state(payload),
+    )
+    if persisted_remaining_open > 0 and (
+        payload_remaining_open <= 0 or persisted_remaining_open < payload_remaining_open
+    ):
+        for key in (
+            "remaining_open_milestones",
+            "remaining_in_progress_milestones",
+            "remaining_not_started_milestones",
+            "eta",
+            "eta_status",
+            "eta_human",
+            "eta_summary",
+        ):
+            if key in persisted_state:
+                payload[key] = persisted_state.get(key)
     payload.update(
         {
             "contract_name": "fleet.chummer_design_supervisor.status_live_refresh_materialized",
@@ -594,16 +731,27 @@ def refresh_materialized_status_snapshot(
             "shard_count": len(observed_shards) or configured_shard_count,
             "active_run_count": len(active_runs),
             "active_runs_count": len(active_runs),
-            "productive_active_runs_count": progress_evidence_counts.get("repo_work_detected", 0),
-            "nonproductive_active_runs_count": max(
-                0,
-                len(active_runs) - progress_evidence_counts.get("repo_work_detected", 0),
-            ),
+            "productive_active_runs_count": productive_active_runs_count,
+            "waiting_active_runs_count": waiting_active_runs_count,
+            "nonproductive_active_runs_count": nonproductive_active_runs_count,
             "progress_evidence_counts": progress_evidence_counts,
             "active_runs": active_runs,
             "shards": materialized_shards,
         }
     )
+    if not active_runs and int_or_zero(persisted_state.get("active_runs_count")) > 0:
+        for key in (
+            "active_run_count",
+            "active_runs_count",
+            "productive_active_runs_count",
+            "waiting_active_runs_count",
+            "nonproductive_active_runs_count",
+            "progress_evidence_counts",
+            "active_runs",
+            "shards",
+        ):
+            if key in persisted_state:
+                payload[key] = persisted_state.get(key)
     eta_payload = eta_payload_from_state(payload)
     if eta_payload:
         eta_status = str(eta_payload.get("status") or "").strip()

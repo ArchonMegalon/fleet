@@ -815,7 +815,350 @@ def test_refresh_materialized_status_snapshot_replaces_stale_blocked_snapshot(
     assert payload["configured_shard_count"] == 13
     assert payload["active_runs_count"] == 2
     assert payload["productive_active_runs_count"] == 1
+    assert payload["waiting_active_runs_count"] == 0
     assert payload["nonproductive_active_runs_count"] == 1
+    assert [item["run_id"] for item in payload["active_runs"]] == ["run-1", "run-2"]
+
+
+def test_refresh_materialized_status_snapshot_classifies_waiting_runs_separately(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "state" / "chummer_design_supervisor"
+    state_root.mkdir(parents=True)
+    monkeypatch.setattr(module, "iso_now", lambda: "2026-04-01T05:30:00Z")
+
+    module.refresh_materialized_status_snapshot(
+        state_root,
+        state_payload={"updated_at": "2026-04-01T05:29:00Z"},
+        active_shards_payload={
+            "configured_shard_count": 3,
+            "active_shards": [
+                {
+                    "name": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_evidence": "repo_work_detected",
+                },
+                {
+                    "name": "shard-2",
+                    "active_run_id": "run-2",
+                    "active_run_progress_evidence": "worker_output_only",
+                },
+                {
+                    "name": "shard-3",
+                    "active_run_id": "run-3",
+                    "active_run_progress_evidence": "read_only_repo_probe",
+                },
+            ],
+        },
+        observed_shards=[
+            {
+                "name": "shard-1",
+                "shard_id": "shard-1",
+                "active_run_id": "run-1",
+                "active_run_progress_state": "streaming",
+            },
+            {
+                "name": "shard-2",
+                "shard_id": "shard-2",
+                "active_run_id": "run-2",
+                "active_run_progress_state": "container_scoped",
+            },
+            {
+                "name": "shard-3",
+                "shard_id": "shard-3",
+                "active_run_id": "run-3",
+                "active_run_progress_state": "waiting_for_model_output",
+            },
+        ],
+    )
+
+    payload = json.loads((state_root / "status-live-refresh.materialized.json").read_text(encoding="utf-8"))
+
+    assert payload["active_runs_count"] == 3
+    assert payload["productive_active_runs_count"] == 1
+    assert payload["waiting_active_runs_count"] == 2
+    assert payload["nonproductive_active_runs_count"] == 0
+
+
+def test_refresh_materialized_status_snapshot_promotes_richer_persisted_dispatch_capacity(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "state" / "chummer_design_supervisor"
+    state_root.mkdir(parents=True)
+    (state_root / "state.json").write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-05-03T10:14:00Z",
+                "allowed_active_shards": 19,
+                "provider_ready_slots": 1,
+                "dispatch_reason": "live provider capacity caps shard dispatch at 19/20 (billing-backed degraded slot override)",
+                "provider_capacity_summary": {"allowed_active_shards": 19, "ready_slots": 1},
+                "host_memory_pressure": {"allowed_active_shards": 20},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "iso_now", lambda: "2026-05-03T10:15:00Z")
+
+    module.refresh_materialized_status_snapshot(
+        state_root,
+        state_payload={
+            "updated_at": "2026-05-03T10:14:30Z",
+            "allowed_active_shards": 1,
+            "provider_ready_slots": 1,
+            "dispatch_reason": "live provider capacity caps shard dispatch at 1/20",
+        },
+        active_shards_payload={"configured_shard_count": 20, "active_shards": []},
+        observed_shards=[],
+    )
+
+    payload = json.loads((state_root / "status-live-refresh.materialized.json").read_text(encoding="utf-8"))
+
+    assert payload["allowed_active_shards"] == 19
+    assert payload["provider_ready_slots"] == 1
+    assert "billing-backed degraded slot override" in payload["dispatch_reason"]
+    assert payload["provider_capacity_summary"]["allowed_active_shards"] == 19
+    assert payload["host_memory_pressure"]["allowed_active_shards"] == 20
+
+
+def test_refresh_materialized_status_snapshot_promotes_richer_persisted_provider_truth_when_shard_ceiling_matches(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "state" / "chummer_design_supervisor"
+    state_root.mkdir(parents=True)
+    (state_root / "state.json").write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-05-03T10:25:00Z",
+                "allowed_active_shards": 4,
+                "provider_ready_slots": 4,
+                "provider_hard_max_active_requests": 20,
+                "dispatch_reason": "live provider capacity caps shard dispatch at 4/20 (billing-backed degraded slot override)",
+                "provider_capacity_summary": {
+                    "allowed_active_shards": 4,
+                    "ready_slots": 4,
+                    "hard_max_active_requests": 20,
+                },
+                "host_memory_pressure": {"allowed_active_shards": 20},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "iso_now", lambda: "2026-05-03T10:26:00Z")
+
+    module.refresh_materialized_status_snapshot(
+        state_root,
+        state_payload={
+            "updated_at": "2026-05-03T10:25:30Z",
+            "allowed_active_shards": 4,
+            "provider_ready_slots": 2,
+            "provider_hard_max_active_requests": 13,
+            "dispatch_reason": "live provider capacity caps shard dispatch at 4/20",
+        },
+        active_shards_payload={"configured_shard_count": 20, "active_shards": []},
+        observed_shards=[],
+    )
+
+    payload = json.loads((state_root / "status-live-refresh.materialized.json").read_text(encoding="utf-8"))
+
+    assert payload["allowed_active_shards"] == 4
+    assert payload["provider_ready_slots"] == 4
+    assert payload["provider_hard_max_active_requests"] == 20
+    assert "billing-backed degraded slot override" in payload["dispatch_reason"]
+
+
+def test_refresh_materialized_status_snapshot_prefers_persisted_provider_cap_over_host_memory_only_sample(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "state" / "chummer_design_supervisor"
+    state_root.mkdir(parents=True)
+    (state_root / "state.json").write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-05-03T12:40:00Z",
+                "allowed_active_shards": 10,
+                "provider_ready_slots": 0,
+                "provider_hard_max_active_requests": 20,
+                "dispatch_reason": "live provider capacity caps shard dispatch at 10/20 (recent provider-health probe failure forces EA canary dispatch)",
+                "provider_capacity_summary": {
+                    "allowed_active_shards": 10,
+                    "ready_slots": 0,
+                    "hard_max_active_requests": 20,
+                },
+                "provider_health_snapshot_status": "local_override",
+                "host_memory_pressure": {"allowed_active_shards": 20},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "iso_now", lambda: "2026-05-03T12:41:00Z")
+
+    module.refresh_materialized_status_snapshot(
+        state_root,
+        state_payload={
+            "updated_at": "2026-05-03T12:40:30Z",
+            "allowed_active_shards": 20,
+            "dispatch_reason": "host memory headroom is healthy for the configured shard set",
+        },
+        active_shards_payload={"configured_shard_count": 20, "active_shards": []},
+        observed_shards=[],
+    )
+
+    payload = json.loads((state_root / "status-live-refresh.materialized.json").read_text(encoding="utf-8"))
+
+    assert payload["allowed_active_shards"] == 10
+    assert payload["provider_hard_max_active_requests"] == 20
+    assert "provider capacity caps shard dispatch at 10/20" in payload["dispatch_reason"]
+
+
+def test_refresh_materialized_status_snapshot_prefers_lower_persisted_remaining_open_milestones(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "state" / "chummer_design_supervisor"
+    state_root.mkdir(parents=True)
+    (state_root / "state.json").write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-05-03T10:20:00Z",
+                "remaining_open_milestones": 18,
+                "remaining_in_progress_milestones": 18,
+                "remaining_not_started_milestones": 0,
+                "eta": {
+                    "status": "tracked",
+                    "eta_human": "10h-1.1d",
+                    "summary": "18 open milestones remain (18 in progress, 0 not started).",
+                    "remaining_open_milestones": 18,
+                    "remaining_in_progress_milestones": 18,
+                    "remaining_not_started_milestones": 0,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "iso_now", lambda: "2026-05-03T10:21:00Z")
+
+    module.refresh_materialized_status_snapshot(
+        state_root,
+        state_payload={
+            "updated_at": "2026-05-03T10:20:30Z",
+            "remaining_open_milestones": 37,
+            "eta": {
+                "status": "tracked",
+                "eta_human": "later",
+                "summary": "37 open milestones remain.",
+                "remaining_open_milestones": 37,
+                "remaining_in_progress_milestones": 37,
+                "remaining_not_started_milestones": 0,
+            },
+        },
+        active_shards_payload={"configured_shard_count": 20, "active_shards": []},
+        observed_shards=[],
+    )
+
+    payload = json.loads((state_root / "status-live-refresh.materialized.json").read_text(encoding="utf-8"))
+
+    assert payload["remaining_open_milestones"] == 18
+    assert payload["remaining_in_progress_milestones"] == 18
+    assert payload["eta"]["remaining_open_milestones"] == 18
+    assert payload["eta_human"] == "10h-1.1d"
+
+
+def test_refresh_materialized_status_snapshot_preserves_persisted_active_run_counts_when_observed_list_is_empty(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "state" / "chummer_design_supervisor"
+    state_root.mkdir(parents=True)
+    (state_root / "state.json").write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-05-03T10:22:00Z",
+                "active_run_count": 10,
+                "active_runs_count": 10,
+                "productive_active_runs_count": 0,
+                "waiting_active_runs_count": 10,
+                "nonproductive_active_runs_count": 0,
+                "progress_evidence_counts": {"wait_only": 10},
+                "active_runs": [{"run_id": "run-1"}],
+                "shards": [{"name": "shard-1", "active_run_id": "run-1"}],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "iso_now", lambda: "2026-05-03T10:23:00Z")
+
+    module.refresh_materialized_status_snapshot(
+        state_root,
+        state_payload={"updated_at": "2026-05-03T10:22:30Z"},
+        active_shards_payload={"configured_shard_count": 20, "active_shards": []},
+        observed_shards=[],
+    )
+
+    payload = json.loads((state_root / "status-live-refresh.materialized.json").read_text(encoding="utf-8"))
+
+    assert payload["active_run_count"] == 10
+    assert payload["active_runs_count"] == 10
+    assert payload["waiting_active_runs_count"] == 10
+    assert payload["progress_evidence_counts"] == {"wait_only": 10}
+    assert payload["active_runs"] == [{"run_id": "run-1"}]
+
+
+def test_refresh_materialized_status_snapshot_includes_manifest_only_active_runs(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "state" / "chummer_design_supervisor"
+    state_root.mkdir(parents=True)
+    monkeypatch.setattr(module, "iso_now", lambda: "2026-05-03T10:30:00Z")
+
+    module.refresh_materialized_status_snapshot(
+        state_root,
+        state_payload={"updated_at": "2026-05-03T10:29:00Z"},
+        active_shards_payload={
+            "configured_shard_count": 20,
+            "active_run_count": 2,
+            "active_shards": [
+                {
+                    "name": "shard-1",
+                    "shard_id": "shard-1",
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "repo_work_detected",
+                },
+                {
+                    "name": "shard-2",
+                    "shard_id": "shard-2",
+                    "active_run_id": "run-2",
+                    "active_run_progress_state": "waiting_for_model_output",
+                    "active_run_progress_evidence": "wait_only",
+                },
+            ],
+        },
+        observed_shards=[
+            {
+                "name": "shard-1",
+                "shard_id": "shard-1",
+                "active_run_id": "",
+                "active_run_progress_state": "idle_claimed_frontier_without_active_run",
+            }
+        ],
+    )
+
+    payload = json.loads((state_root / "status-live-refresh.materialized.json").read_text(encoding="utf-8"))
+
+    assert payload["active_runs_count"] == 2
+    assert payload["productive_active_runs_count"] == 1
+    assert payload["waiting_active_runs_count"] == 1
     assert [item["run_id"] for item in payload["active_runs"]] == ["run-1", "run-2"]
 
 

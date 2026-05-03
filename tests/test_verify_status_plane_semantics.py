@@ -170,6 +170,66 @@ def test_flagship_claim_status_uses_readiness_plane_gaps_when_coverage_is_green(
     assert claim["warning_keys"] == ["flagship_ready", "structural_ready"]
 
 
+def test_ui_independent_public_release_proof_bundle_promotes_public_stage(tmp_path: Path) -> None:
+    module = _load_module()
+    published_dir = tmp_path / "ui" / ".codex-studio" / "published"
+    published_dir.mkdir(parents=True, exist_ok=True)
+    for name in (
+        "UI_LOCAL_RELEASE_PROOF.generated.json",
+        "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+        "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
+        "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+    ):
+        (published_dir / name).write_text(json.dumps({"status": "pass"}) + "\n", encoding="utf-8")
+    (published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "open_blocking_findings_count": 0}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json").write_text(
+        json.dumps({"summary": {"visual_no_count": 0, "behavioral_no_count": 0}}) + "\n",
+        encoding="utf-8",
+    )
+
+    stage = module._infer_fallback_readiness_stage(
+        "ui",
+        tmp_path / "ui",
+        lifecycle="live",
+        deployment={"status": "public", "promotion_stage": "promoted_preview", "access_posture": "public"},
+    )
+
+    assert stage == "publicly_promoted"
+
+
+def test_ui_independent_public_release_proof_bundle_requires_clean_user_journey_audit(tmp_path: Path) -> None:
+    module = _load_module()
+    published_dir = tmp_path / "ui" / ".codex-studio" / "published"
+    published_dir.mkdir(parents=True, exist_ok=True)
+    for name in (
+        "UI_LOCAL_RELEASE_PROOF.generated.json",
+        "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+        "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
+        "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+    ):
+        (published_dir / name).write_text(json.dumps({"status": "pass"}) + "\n", encoding="utf-8")
+    (published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "open_blocking_findings_count": 2}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json").write_text(
+        json.dumps({"summary": {"visual_no_count": 0, "behavioral_no_count": 0}}) + "\n",
+        encoding="utf-8",
+    )
+
+    stage = module._infer_fallback_readiness_stage(
+        "ui",
+        tmp_path / "ui",
+        lifecycle="live",
+        deployment={"status": "public", "promotion_stage": "promoted_preview", "access_posture": "public"},
+    )
+
+    assert stage == "repo_local_complete"
+
+
 class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
     def setUp(self) -> None:
         self.verify = _load_module()

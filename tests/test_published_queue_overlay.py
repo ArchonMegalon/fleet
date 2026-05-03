@@ -29,3 +29,54 @@ def test_published_fleet_queue_overlay_contains_no_stale_solved_tasks() -> None:
 
     assert payload.get("source_queue_fingerprint") == _queue_fingerprint(queue)
     assert items == []
+
+
+def test_apply_queue_source_loads_next90_queue_staging_for_matching_repo(tmp_path: Path) -> None:
+    staging_path = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    staging_path.write_text(
+        yaml.safe_dump(
+            {
+                "items": [
+                    {
+                        "package_id": "next90-ui-1",
+                        "repo": "chummer6-ui",
+                        "status": "not_started",
+                        "title": "Desktop continuity lane",
+                    },
+                    {
+                        "package_id": "next90-hub-1",
+                        "repo": "chummer6-hub",
+                        "status": "not_started",
+                        "title": "Hub followthrough lane",
+                    },
+                    {
+                        "package_id": "next90-ui-done",
+                        "repo": "chummer6-ui",
+                        "status": "done",
+                        "title": "Already complete lane",
+                    },
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    project_cfg = {
+        "path": str(tmp_path),
+        "review": {"repo": "chummer6-ui"},
+    }
+
+    queue = _apply_queue_source(
+        project_cfg,
+        [],
+        {"kind": "next90_queue_staging", "path": str(staging_path), "mode": "append"},
+    )
+
+    assert queue == [
+        {
+            "package_id": "next90-ui-1",
+            "repo": "chummer6-ui",
+            "status": "not_started",
+            "title": "Desktop continuity lane",
+        }
+    ]

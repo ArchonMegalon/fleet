@@ -71,6 +71,11 @@ queue_sources:
 - kind: feedback_notes
   path: feedback/2026-04-13-post-flagship-release-train-and-veteran-certification.md
   mode: append
+- kind: next90_queue_staging
+  path: /docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml
+  mode: append
+  repos:
+  - chummer6-ui
 deployment:
   status: public
   promotion_stage: promoted_preview

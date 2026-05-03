@@ -809,6 +809,14 @@ build_loop_args() {
   local effective_worker_bin="${shard_worker_bin:-${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-codex}}"
   local shard_state_root=""
   IFS='|' read -r shard_worker_lane shard_worker_model <<<"$(resolve_shard_worker_profile "$effective_worker_bin" "$shard_focus_text" "$shard_worker_lane" "$shard_worker_model")"
+  if prefer_full_ea_lanes && [[ "$shard_worker_lane" =~ ^(repair|survival)$ ]]; then
+    shard_worker_lane="core"
+    case "$shard_worker_model" in
+      ""|ea-coder-fast|ea-coder-survival)
+        shard_worker_model="ea-coder-hard"
+        ;;
+    esac
+  fi
   dest=("${common_args[@]}")
   if [[ -n "$state_root_base" ]]; then
     shard_state_root="$state_root_base"
@@ -881,7 +889,9 @@ normalize_shard_worker_model() {
 	    core:ea-coder-hard-batch|core:ea-coder-hard|\
 	    core_authority:ea-coder-hard-batch|core_authority:ea-coder-hard|\
 	    core_booster:ea-coder-hard-batch|core_booster:ea-coder-hard|\
-	    core_rescue:ea-coder-hard-batch|core_rescue:ea-coder-hard|\
+	    core_rescue:ea-coder-hard-batch|core_rescue:ea-coder-hard)
+	      printf '%s' "$shard_worker_model"
+	      ;;
 	    review_shard:ea-coder-hard-batch|review_shard:ea-coder-hard)
 	      printf '%s' 'ea-review-light'
 	      ;;
@@ -993,6 +1003,13 @@ resolve_shard_worker_profile() {
 	    resolved_lane="core"
 	    resolved_model="ea-coder-hard"
 	  fi
+
+  if [[ -z "$resolved_lane" && -n "${CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE:-}" ]]; then
+    resolved_lane="${CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE:-}"
+    if [[ -z "$resolved_model" && -n "${CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL:-}" ]]; then
+      resolved_model="${CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL:-}"
+    fi
+  fi
 
   resolved_model="$(normalize_shard_worker_model "$resolved_lane" "$resolved_model")"
   printf '%s|%s\n' "$resolved_lane" "$resolved_model"

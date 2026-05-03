@@ -107,6 +107,18 @@ Required:
 Error, empty, blocked, preview, and conflict states must be designed intentionally.
 A blank placeholder or framework-default error card is not flagship behavior.
 
+### 7. Explain surfaces are product surfaces
+
+Promoted visible mechanical values, warnings, and deltas may not hide their only inspectable truth inside hover-only tooltips or narration-only affordances.
+
+Required:
+
+* text-first explain drawer or quick-explain panel posture where the value is used
+* same-packet source-anchor and stale-state visibility
+* bounded follow-up actions that remain visibly subordinate to current truth
+
+This rule binds to `EXPLAIN_EVERY_VALUE_AND_GROUNDED_FOLLOW_UP.md`.
+
 ## Layout grammars by surface
 
 ### Desktop workbench grammar

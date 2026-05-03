@@ -18,6 +18,49 @@ def _load_module():
     return module
 
 
+def test_default_controller_url_uses_host_dashboard_port() -> None:
+    module = _load_module()
+
+    assert module.default_controller_url() == "http://127.0.0.1:18090"
+
+
+def test_main_defaults_target_active_to_twenty(monkeypatch, tmp_path: Path) -> None:
+    module = _load_module()
+
+    class _Conn:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(module, "connect", lambda _path: _Conn())
+    monkeypatch.setattr(module, "active_runtime_count", lambda _conn: 15)
+    monkeypatch.setattr(module, "ready_projects", lambda _conn: ["fleet"])
+    monkeypatch.setattr(module, "trigger_run_now", lambda *_args, **_kwargs: (_ for _ in ()).throw(TimeoutError("timed out")))
+
+    def _stop_after_one_sleep(_seconds: float) -> None:
+        raise SystemExit(0)
+
+    monkeypatch.setattr(module.time, "sleep", _stop_after_one_sleep)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "fleet_push_until_13.py",
+            "--db",
+            str(tmp_path / "fleet.db"),
+            "--poll-seconds",
+            "1",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+
+    assert exc.value.code == 0
+
+
 def test_main_handles_trigger_timeout_and_keeps_loop_alive(monkeypatch, tmp_path: Path) -> None:
     module = _load_module()
 

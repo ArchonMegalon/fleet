@@ -107,6 +107,11 @@ queue_sources:
 - kind: worklist
   path: WORKLIST.md
   mode: replace
+- kind: next90_queue_staging
+  path: /docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml
+  mode: append
+  repos:
+  - chummer6-hub
 deployment:
   status: public
   promotion_stage: promoted_preview

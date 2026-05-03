@@ -48,6 +48,15 @@ STAGE_ORDER = (
 STAGE_RANK = {name: index for index, name in enumerate(STAGE_ORDER)}
 
 
+def _refresh_weekly_governor_packet_if_possible(repo_root: Path, support_packets_path: Path) -> bool:
+    scripts_dir = str(Path(__file__).resolve().parent)
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    from materialize_support_case_packets import _refresh_weekly_governor_packet_if_possible as helper
+
+    return helper(repo_root, support_packets_path)
+
+
 def iso_now() -> str:
     return dt.datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -209,6 +218,34 @@ def _fleet_package_manifest_ready(published_dir: Path) -> bool:
     return True
 
 
+def _ui_independent_public_release_proof_passed(published_dir: Path) -> bool:
+    def _proof_passed(payload: Dict[str, Any]) -> bool:
+        return str(payload.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
+
+    ui_local_release_proof = _load_json_file(published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json")
+    desktop_executable_exit_gate = _load_json_file(published_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json")
+    desktop_workflow_execution_gate = _load_json_file(published_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json")
+    desktop_visual_familiarity_exit_gate = _load_json_file(
+        published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    )
+    user_journey_tester_audit = _load_json_file(published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json")
+    element_parity_audit = _load_json_file(published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json")
+    parity_summary = dict(element_parity_audit.get("summary") or {})
+    open_blocking_findings_count = int(user_journey_tester_audit.get("open_blocking_findings_count") or 0)
+    visual_no_count = int(parity_summary.get("visual_no_count") or 0)
+    behavioral_no_count = int(parity_summary.get("behavioral_no_count") or 0)
+    return (
+        _proof_passed(ui_local_release_proof)
+        and _proof_passed(desktop_executable_exit_gate)
+        and _proof_passed(desktop_workflow_execution_gate)
+        and _proof_passed(desktop_visual_familiarity_exit_gate)
+        and _proof_passed(user_journey_tester_audit)
+        and open_blocking_findings_count == 0
+        and visual_no_count == 0
+        and behavioral_no_count == 0
+    )
+
+
 def _infer_fallback_readiness_stage(
     project_id: str,
     project_root: Path,
@@ -269,9 +306,7 @@ def _infer_fallback_readiness_stage(
         if _is_public_deployment(deployment_row) and _proof_passed(mobile_local_release_proof):
             return "publicly_promoted"
     elif project_id == "ui":
-        ui_flagship_release_gate = _load_json_file(published_dir / "UI_FLAGSHIP_RELEASE_GATE.generated.json")
-        ui_local_release_proof = _load_json_file(published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json")
-        if _is_public_deployment(deployment_row) and _proof_passed(ui_flagship_release_gate) and _proof_passed(ui_local_release_proof):
+        if _is_public_deployment(deployment_row) and _ui_independent_public_release_proof_passed(published_dir):
             return "publicly_promoted"
     elif project_id == "fleet":
         if _fleet_boundary_proof_passed(published_dir):
@@ -535,7 +570,13 @@ def main(argv: List[str] | None = None) -> int:
         write_text_atomic(status_json_out_path, json.dumps(admin_status, indent=2, sort_keys=True) + "\n")
     manifest_repo_root = repo_root_for_published_path(output_path)
     if manifest_repo_root is not None:
-        write_compile_manifest(manifest_repo_root)
+        support_packets_path = manifest_repo_root / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+        refreshed_weekly = _refresh_weekly_governor_packet_if_possible(
+            manifest_repo_root,
+            support_packets_path,
+        )
+        if not refreshed_weekly:
+            write_compile_manifest(manifest_repo_root)
     print(f"wrote status plane: {output_path}")
     return 0
 

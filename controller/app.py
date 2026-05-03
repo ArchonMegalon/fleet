@@ -2770,7 +2770,12 @@ def existing_work_package_terminal_status(raw_item: Any, task_meta: Optional[Dic
 
 
 def queue_item_terminal_status(raw_item: Any, task_meta: Optional[Dict[str, Any]] = None) -> str:
-    return raw_queue_item_terminal_status(raw_item, task_meta) or existing_work_package_terminal_status(raw_item, task_meta)
+    raw = dict(raw_item) if isinstance(raw_item, dict) else {}
+    meta = dict(task_meta or {})
+    explicit_status = str(meta.get("status") or raw.get("status") or "").strip().lower()
+    if explicit_status:
+        return explicit_status if explicit_status in RAW_QUEUE_TERMINAL_STATUSES else ""
+    return existing_work_package_terminal_status(raw_item, task_meta)
 
 
 def build_package_compile_work_item(
@@ -2971,8 +2976,6 @@ def sync_work_packages_to_db(config: Dict[str, Any]) -> None:
                 dispatchability = str(((package.get("task_meta") or {}).get("dispatchability_state")) or "dispatchable").strip().lower()
                 if completed_at:
                     status = "complete"
-                elif existing_status == "archived":
-                    status = "archived"
                 elif declared_status == "archived":
                     status = "archived"
                 elif declared_status in RAW_QUEUE_TERMINAL_STATUSES:
@@ -17146,6 +17149,8 @@ def load_queue_source_items(project_cfg: Dict[str, Any], source_cfg: Dict[str, A
         return load_tasks_work_log_queue(project_cfg, source_cfg)
     if kind == "milestone_capabilities":
         return load_milestone_capability_queue(project_cfg, source_cfg)
+    if kind == "next90_queue_staging":
+        return load_next90_queue_staging_queue(project_cfg, source_cfg)
     return []
 
 
@@ -17298,6 +17303,57 @@ def load_milestone_capability_queue(project_cfg: Dict[str, Any], source_cfg: Dic
             continue
         items.append(label)
         seen.add(label)
+    return items
+
+
+def load_next90_queue_staging_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+    path = resolve_project_file(
+        project_cfg,
+        str(source_cfg.get("path", "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml")),
+    )
+    if not path.exists() or not path.is_file():
+        return []
+
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return []
+
+    raw_items = list((data.get("items") or []) if isinstance(data, dict) else [])
+    if not raw_items:
+        return []
+
+    include_statuses = {
+        str(status).strip().lower()
+        for status in (source_cfg.get("include_statuses") or ["in_progress", "not_started"])
+        if str(status).strip()
+    }
+    repos = [
+        str(item).strip()
+        for item in (source_cfg.get("repos") or [])
+        if str(item).strip()
+    ] or [project_repo_slug(project_cfg)]
+
+    items: List[Dict[str, Any]] = []
+    seen_package_ids: set[str] = set()
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict):
+            continue
+        status = str(raw_item.get("status") or raw_item.get("state") or "").strip().lower()
+        repo = str(raw_item.get("repo") or "").strip()
+        package_id = str(raw_item.get("package_id") or "").strip()
+        if include_statuses and status not in include_statuses:
+            continue
+        if repos and repo not in repos:
+            continue
+        if package_id and package_id in seen_package_ids:
+            continue
+        item = {key: value for key, value in dict(raw_item).items() if value not in ("", None, [], {})}
+        if not item:
+            continue
+        items.append(item)
+        if package_id:
+            seen_package_ids.add(package_id)
     return items
 
 

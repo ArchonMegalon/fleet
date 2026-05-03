@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from admin.readiness import _load_milestone_capability_queue, _load_tasks_work_log_queue, _load_worklist_queue
+from admin.readiness import _load_milestone_capability_queue, _load_next90_queue_staging_queue, _load_tasks_work_log_queue, _load_worklist_queue
 
 PROJECTS_CONFIG_DIR = ROOT / "config" / "projects"
 DEFAULT_TARGET_RELPATH = ".codex-studio/published/WORKPACKAGES.generated.yaml"
@@ -91,6 +91,8 @@ def apply_queue_source(project_cfg: dict[str, Any], queue: List[Any], source_cfg
         items = _load_tasks_work_log_queue(project_cfg, source_cfg)
     elif kind == "milestone_capabilities":
         items = _load_milestone_capability_queue(project_cfg, source_cfg)
+    elif kind == "next90_queue_staging":
+        items = _load_next90_queue_staging_queue(project_cfg, source_cfg)
     else:
         items = []
     mode = str(source_cfg.get("mode", "append")).strip().lower() or "append"

@@ -33,6 +33,12 @@ except ModuleNotFoundError:
 
 ROOT = Path("/docker/fleet")
 PUBLISHED = ROOT / ".codex-studio" / "published"
+WEEKLY_PULSE_SNAPSHOT_SCRIPT = (
+    Path("/docker/chummercomplete/chummer-design/scripts/ai/materialize_weekly_product_pulse_snapshot.py")
+)
+WEEKLY_PULSE_SNAPSHOT_DEFAULT_OUT = (
+    Path("/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json")
+)
 SUCCESSOR_REGISTRY = (
     Path("/docker/chummercomplete/chummer-design/products/chummer")
     / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
@@ -1808,6 +1814,79 @@ def _source_input_fingerprint(source_input_health: Dict[str, Any]) -> Dict[str, 
         ).hexdigest(),
         "rows": rows,
     }
+
+
+def _canonical_weekly_pulse_auto_refresh_enabled(args: argparse.Namespace) -> bool:
+    expected_paths = {
+        "repo_root": ROOT,
+        "weekly_pulse": WEEKLY_PULSE,
+        "flagship_readiness": FLAGSHIP_READINESS,
+        "journey_gates": JOURNEY_GATES,
+        "support_packets": SUPPORT_PACKETS,
+        "status_plane": STATUS_PLANE,
+    }
+    for field, expected in expected_paths.items():
+        raw_value = getattr(args, field, None)
+        if raw_value is None:
+            return False
+        if Path(str(raw_value)).resolve() != expected.resolve():
+            return False
+    return True
+
+
+def _run_weekly_pulse_snapshot_refresh(command: List[str]) -> bool:
+    result = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return True
+    detail = (result.stderr or result.stdout or "unknown weekly pulse refresh failure").strip()
+    print(f"weekly pulse auto-refresh skipped: {detail}", file=sys.stderr)
+    return False
+
+
+def _refresh_weekly_pulse_if_needed(args: argparse.Namespace) -> bool:
+    if not _canonical_weekly_pulse_auto_refresh_enabled(args):
+        return False
+    if not WEEKLY_PULSE_SNAPSHOT_SCRIPT.is_file():
+        return False
+    weekly_pulse_path = Path(args.weekly_pulse).resolve()
+    source_paths = [
+        Path(args.flagship_readiness).resolve(),
+        Path(args.journey_gates).resolve(),
+        Path(args.support_packets).resolve(),
+        Path(args.status_plane).resolve(),
+    ]
+    if not all(path.is_file() for path in source_paths):
+        return False
+    pulse_targets: List[Path] = []
+    for candidate in (WEEKLY_PULSE_SNAPSHOT_DEFAULT_OUT.resolve(), weekly_pulse_path):
+        if candidate not in pulse_targets:
+            pulse_targets.append(candidate)
+    latest_source_mtime = max(path.stat().st_mtime for path in source_paths)
+    needs_refresh = any(
+        (not target.is_file()) or target.stat().st_mtime < latest_source_mtime
+        for target in pulse_targets
+    )
+    if not needs_refresh:
+        return False
+    commands: List[List[str]] = [[sys.executable, str(WEEKLY_PULSE_SNAPSHOT_SCRIPT)]]
+    if weekly_pulse_path != WEEKLY_PULSE_SNAPSHOT_DEFAULT_OUT.resolve():
+        commands.append(
+            [
+                sys.executable,
+                str(WEEKLY_PULSE_SNAPSHOT_SCRIPT),
+                "--out",
+                str(weekly_pulse_path),
+            ]
+        )
+    refreshed = False
+    for command in commands:
+        refreshed = _run_weekly_pulse_snapshot_refresh(command) or refreshed
+    return refreshed
 
 
 def _followthrough_group_rows(followthrough: Dict[str, Any], name: str) -> List[Dict[str, Any]]:
@@ -3938,6 +4017,7 @@ def materialize(args: argparse.Namespace) -> Path:
         if str(args.markdown_out or "").strip()
         else out_path.with_name("WEEKLY_GOVERNOR_PACKET.generated.md")
     )
+    _refresh_weekly_pulse_if_needed(args)
     source_paths = {
         "successor_registry": str(Path(args.successor_registry).resolve()),
         "closed_flagship_registry": str(Path(args.closed_flagship_registry).resolve()),

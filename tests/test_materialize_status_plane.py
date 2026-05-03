@@ -626,6 +626,60 @@ def test_materialize_status_plane_defaults_status_snapshot_out_for_live_runs(mon
     assert snapshot_payload["generated_at"] == "2026-04-20T12:00:00Z"
 
 
+def test_materialize_status_plane_refreshes_weekly_governor_packet_when_repo_root_is_known(
+    monkeypatch, tmp_path: Path
+) -> None:
+    out_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
+    snapshot_path = tmp_path / "status-plane.verify.json"
+    admin_status = {
+        "generated_at": "2026-04-20T12:00:00Z",
+        "public_status": {
+            "generated_at": "2026-04-20T12:00:00Z",
+            "deployment_posture": {},
+            "readiness_summary": {"counts": {}, "warning_count": 0, "final_claim_ready": 0},
+            "runtime_healing": {
+                "generated_at": "2026-04-20T12:00:00Z",
+                "enabled": True,
+                "summary": {"alert_state": "healthy"},
+                "services": [],
+            },
+        },
+        "projects": [],
+        "groups": [],
+    }
+    refresh_calls: list[tuple[Path, Path]] = []
+    compile_calls: list[Path] = []
+
+    monkeypatch.setattr(materialize_status_plane_module, "DEFAULT_STATUS_JSON_SNAPSHOT_PATH", snapshot_path)
+    monkeypatch.setattr(
+        materialize_status_plane_module,
+        "load_admin_status",
+        lambda status_json_path, *, use_default_snapshot=True: admin_status,
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "repo_root_for_published_path", lambda path: tmp_path)
+    monkeypatch.setattr(
+        materialize_status_plane_module,
+        "_refresh_weekly_governor_packet_if_possible",
+        lambda repo_root, support_packets_path: refresh_calls.append((repo_root, support_packets_path)) or True,
+    )
+    monkeypatch.setattr(
+        materialize_status_plane_module,
+        "write_compile_manifest",
+        lambda repo_root: compile_calls.append(repo_root),
+    )
+
+    result = materialize_status_plane_module.main(["--out", str(out_path)])
+
+    assert result == 0
+    assert refresh_calls == [
+        (
+            tmp_path,
+            tmp_path / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json",
+        )
+    ]
+    assert compile_calls == []
+
+
 def test_core_fallback_stage_uses_import_parity_and_engine_proof(monkeypatch, tmp_path: Path) -> None:
     config_dir = tmp_path / "config" / "projects"
     published_dir = tmp_path / "core" / ".codex-studio" / "published"
@@ -1019,7 +1073,7 @@ deployment:
     assert rows[0]["readiness"]["stage"] == "repo_local_complete"
 
 
-def test_ui_fallback_stage_uses_flagship_release_gate_when_public(monkeypatch, tmp_path: Path) -> None:
+def test_ui_fallback_stage_uses_independent_desktop_proof_bundle_when_public(monkeypatch, tmp_path: Path) -> None:
     config_dir = tmp_path / "config" / "projects"
     published_dir = tmp_path / "ui" / ".codex-studio" / "published"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -1038,12 +1092,28 @@ deployment:
         + "\n",
         encoding="utf-8",
     )
-    (published_dir / "UI_FLAGSHIP_RELEASE_GATE.generated.json").write_text(
+    (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
+        json.dumps({"status": "passed"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").write_text(
         json.dumps({"status": "pass"}) + "\n",
         encoding="utf-8",
     )
-    (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
-        json.dumps({"status": "passed"}) + "\n",
+    (published_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "open_blocking_findings_count": 0}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json").write_text(
+        json.dumps({"summary": {"visual_no_count": 0, "behavioral_no_count": 0}}) + "\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
@@ -1054,7 +1124,7 @@ deployment:
     assert rows[0]["readiness"]["stage"] == "publicly_promoted"
 
 
-def test_ui_fallback_stage_stays_repo_local_when_flagship_gate_fails(monkeypatch, tmp_path: Path) -> None:
+def test_ui_fallback_stage_stays_repo_local_without_independent_desktop_proof_bundle(monkeypatch, tmp_path: Path) -> None:
     config_dir = tmp_path / "config" / "projects"
     published_dir = tmp_path / "ui" / ".codex-studio" / "published"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -1073,12 +1143,28 @@ deployment:
         + "\n",
         encoding="utf-8",
     )
-    (published_dir / "UI_FLAGSHIP_RELEASE_GATE.generated.json").write_text(
-        json.dumps({"status": "fail"}) + "\n",
-        encoding="utf-8",
-    )
     (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
         json.dumps({"status": "passed"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "open_blocking_findings_count": 1}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json").write_text(
+        json.dumps({"summary": {"visual_no_count": 0, "behavioral_no_count": 0}}) + "\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)

@@ -126,7 +126,7 @@ supervisor_contract:
     state_root: /docker/fleet/state/chummer_design_supervisor
     clear_lock_on_boot: true
     health_max_age_seconds: 900
-    shard_count: 13
+    shard_count: 20
     shard_start_stagger_seconds: 3
     frontier_derive_mode: auto
     dynamic_account_routing: auto
@@ -348,6 +348,81 @@ supervisor_contract:
       - release-proof
       - materializer
       worker_lane: audit_shard
+    - name: shard-15
+      index: 15
+      focus_owner:
+      - chummer6-hub
+      - chummer6-hub-registry
+      - chummer6-design
+      focus_text:
+      - release truth
+      - install
+      - update
+      - recovery
+      - claim
+    - name: shard-16
+      index: 16
+      focus_owner:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-design
+      focus_text:
+      - campaign
+      - downtime
+      - aftermath
+      - diary
+      - contacts
+    - name: shard-17
+      index: 17
+      focus_owner:
+      - chummer6-ui
+      - chummer6-hub
+      - chummer6-core
+      focus_text:
+      - build lab
+      - explain
+      - crew-fit
+      - rule-environment
+      - advancement
+    - name: shard-18
+      index: 18
+      focus_profile:
+      - top_flagship_grade
+      - whole_project_frontier
+      focus_owner:
+      - fleet
+      - chummer6-design
+      - chummer6-ui
+      focus_text:
+      - flagship-readiness
+      - accessibility
+      - materializer
+      - quality
+      - automatic bugfixing
+    - name: shard-19
+      index: 19
+      focus_owner:
+      - chummer6-hub
+      - chummer6-hub-registry
+      - chummer6-core
+      focus_text:
+      - dossier
+      - exchange
+      - replay
+      - recap
+      - export
+    - name: shard-20
+      index: 20
+      focus_owner:
+      - fleet
+      - chummer6-design
+      - chummer6-hub
+      focus_text:
+      - trust
+      - support
+      - pulse
+      - launch
+      - governance
   focus_profiles:
     top_flagship_grade:
       description: "Apply the hard flagship bar: whole-product frontier, no lowered standards, durable feedback/autofix readiness, and fail-closed desktop proof."
@@ -395,7 +470,7 @@ supervisor_contract:
     - /docker/fleet/runtime.ea.env
     - /docker/fleet/runtime.env
     launcher_defaults:
-      parallel_shards: 13
+      parallel_shards: 20
       state_root: /docker/fleet/state/chummer_design_supervisor
       clear_lock_on_boot: true
     generated_state:
@@ -425,7 +500,7 @@ supervisor_contract:
         demotion_rule: demote here when memory is critical, credits are guarded, or external providers are unstable
       standard:
         description: Default steady-state mode for closeout plus successor-wave work without exhausting host headroom.
-        max_active_shards: 13
+        max_active_shards: 20
         memory_dispatch_reserve_gib: 2.0
         memory_dispatch_shard_budget_gib: 0.28
         memory_dispatch_warning_available_percent: 10.0
@@ -724,3 +799,8 @@ queue_sources:
   path: WORKLIST.md
   mode: replace
   fallback_only_if_empty: true
+- kind: next90_queue_staging
+  path: /docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml
+  mode: append
+  repos:
+  - fleet

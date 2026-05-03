@@ -37,10 +37,12 @@ if [[ -z "$codexea_bin" || ! -x "$codexea_bin" ]]; then
   exit 127
 fi
 
-target_shards="${FLEET_OODA_CODEXEA_TARGET_SHARDS:-${FLEET_OODA_CODEX_TARGET_SHARDS:-13}}"
+target_shards="${FLEET_OODA_CODEXEA_TARGET_SHARDS:-${FLEET_OODA_CODEX_TARGET_SHARDS:-20}}"
 minimum_productive_shards="${FLEET_OODA_CODEXEA_MIN_PRODUCTIVE_SHARDS:-${FLEET_OODA_CODEX_MIN_PRODUCTIVE_SHARDS:-8}}"
 timeout_seconds="${FLEET_OODA_CODEXEA_TIMEOUT_SECONDS:-${FLEET_OODA_CODEX_TIMEOUT_SECONDS:-1200}}"
 post_guard_timeout_seconds="${FLEET_OODA_CODEXEA_POST_GUARD_TIMEOUT_SECONDS:-${FLEET_OODA_CODEX_POST_GUARD_TIMEOUT_SECONDS:-120}}"
+service_budget_seconds="${FLEET_OODA_CODEXEA_SERVICE_BUDGET_SECONDS:-${FLEET_OODA_CODEX_SERVICE_BUDGET_SECONDS:-1380}}"
+fallback_minimum_window_seconds="${FLEET_OODA_CODEXEA_FALLBACK_MINIMUM_WINDOW_SECONDS:-${FLEET_OODA_CODEX_FALLBACK_MINIMUM_WINDOW_SECONDS:-180}}"
 codexea_lane="${FLEET_OODA_CODEXEA_LANE:-core}"
 fallback_lane="${FLEET_OODA_CODEXEA_FALLBACK_LANE:-repair}"
 first_response_timeout_seconds="${FLEET_OODA_CODEXEA_FIRST_RESPONSE_TIMEOUT_SECONDS:-360}"
@@ -53,6 +55,8 @@ timer_dry_run=0
 if [[ "${1:-}" == "--dry-run" ]]; then
   timer_dry_run=1
 fi
+service_start_epoch="$(date +%s)"
+service_deadline_epoch=$((service_start_epoch + service_budget_seconds))
 
 guard_path="${current_run}/timer_guard.json"
 guard_stderr_path="${current_run}/timer_guard.stderr.log"
@@ -99,6 +103,8 @@ metadata_path="${current_run}/timer_run.env"
   printf 'minimum_productive_shards=%s\n' "$minimum_productive_shards"
   printf 'timeout_seconds=%s\n' "$timeout_seconds"
   printf 'post_guard_timeout_seconds=%s\n' "$post_guard_timeout_seconds"
+  printf 'service_budget_seconds=%s\n' "$service_budget_seconds"
+  printf 'fallback_minimum_window_seconds=%s\n' "$fallback_minimum_window_seconds"
   printf 'first_response_timeout_seconds=%s\n' "$first_response_timeout_seconds"
 } >"$metadata_path"
 
@@ -182,7 +188,7 @@ printf '%s started fleet OODA CodexEA run %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ'
 
 run_codexea_attempt() {
   local requested_lane="$1"
-  local start_epoch now elapsed
+  local start_epoch now elapsed remaining_total remaining_runtime_budget
   rm -f "${current_run}/stdout.log" "${current_run}/stderr.log" "${current_run}/last_message.txt"
   printf '%s launch lane=%s fallback=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$requested_lane" "$fallback_lane" >>"${state_root}/timer.log"
   setsid "$codexea_bin" "$requested_lane" exec \
@@ -201,6 +207,17 @@ run_codexea_attempt() {
   while kill -0 "$attempt_pid" 2>/dev/null; do
     now="$(date +%s)"
     elapsed=$((now - start_epoch))
+    remaining_total=$((service_deadline_epoch - now))
+    remaining_runtime_budget=$((remaining_total - post_guard_timeout_seconds - 15))
+    if (( remaining_runtime_budget <= 0 )); then
+      printf '%s service-budget-exhausted lane=%s remaining_total=%ss post_guard_timeout=%ss; terminating attempt\n' \
+        "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$requested_lane" "$remaining_total" "$post_guard_timeout_seconds" >>"${state_root}/timer.log"
+      kill -TERM -- "-${attempt_pid}" 2>/dev/null || true
+      sleep 5
+      kill -KILL -- "-${attempt_pid}" 2>/dev/null || true
+      wait "$attempt_pid" || true
+      return 124
+    fi
     if (( elapsed >= first_response_timeout_seconds )) && [[ ! -s "${current_run}/stdout.log" && ! -s "${current_run}/last_message.txt" ]]; then
       printf '%s first-response-timeout lane=%s elapsed=%ss; terminating stalled attempt\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$requested_lane" "$elapsed" >>"${state_root}/timer.log"
       kill -TERM -- "-${attempt_pid}" 2>/dev/null || true
@@ -209,8 +226,9 @@ run_codexea_attempt() {
       wait "$attempt_pid" || true
       return 124
     fi
-    if (( elapsed >= timeout_seconds )); then
-      printf '%s hard-timeout lane=%s elapsed=%ss; terminating attempt\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$requested_lane" "$elapsed" >>"${state_root}/timer.log"
+    if (( elapsed >= timeout_seconds || elapsed >= remaining_runtime_budget )); then
+      printf '%s hard-timeout lane=%s elapsed=%ss runtime_budget=%ss; terminating attempt\n' \
+        "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$requested_lane" "$elapsed" "$remaining_runtime_budget" >>"${state_root}/timer.log"
       kill -TERM -- "-${attempt_pid}" 2>/dev/null || true
       sleep 5
       kill -KILL -- "-${attempt_pid}" 2>/dev/null || true
@@ -227,11 +245,20 @@ run_codexea_attempt "$codexea_lane"
 rc=$?
 set -e
 if [[ "$rc" == "124" && -n "$fallback_lane" && "$fallback_lane" != "$codexea_lane" ]]; then
-  printf '%s retrying with fallback lane=%s after primary lane=%s stalled\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$fallback_lane" "$codexea_lane" >>"${state_root}/timer.log"
-  set +e
-  run_codexea_attempt "$fallback_lane"
-  rc=$?
-  set -e
+  now="$(date +%s)"
+  remaining_total=$((service_deadline_epoch - now))
+  remaining_runtime_budget=$((remaining_total - post_guard_timeout_seconds - 15))
+  if (( remaining_runtime_budget >= fallback_minimum_window_seconds )); then
+    printf '%s retrying with fallback lane=%s after primary lane=%s stalled remaining_budget=%ss\n' \
+      "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$fallback_lane" "$codexea_lane" "$remaining_runtime_budget" >>"${state_root}/timer.log"
+    set +e
+    run_codexea_attempt "$fallback_lane"
+    rc=$?
+    set -e
+  else
+    printf '%s skipping fallback lane=%s after primary lane=%s stalled because remaining service budget=%ss is below minimum retry window=%ss\n' \
+      "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$fallback_lane" "$codexea_lane" "$remaining_runtime_budget" "$fallback_minimum_window_seconds" >>"${state_root}/timer.log"
+  fi
 fi
 
 post_guard_path="${current_run}/post_codex_timer_guard.json"

@@ -12,6 +12,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+def default_controller_url() -> str:
+    return "http://127.0.0.1:18090"
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -57,8 +61,8 @@ def trigger_run_now(controller_url: str, project_id: str) -> dict[str, object]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Aggressively trigger ready fleet projects until target live runtime count is reached.")
     parser.add_argument("--db", default="/docker/fleet/state/fleet.db")
-    parser.add_argument("--controller-url", default="http://127.0.0.1:8090")
-    parser.add_argument("--target-active", type=int, default=13)
+    parser.add_argument("--controller-url", default=default_controller_url())
+    parser.add_argument("--target-active", type=int, default=20)
     parser.add_argument("--poll-seconds", type=int, default=30)
     parser.add_argument("--max-idle-passes", type=int, default=0, help="0 means run forever until target is reached.")
     args = parser.parse_args()

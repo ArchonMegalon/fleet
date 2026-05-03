@@ -2123,6 +2123,23 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIn("Exact blocker: upstream_timeout:1s", output_path.read_text(encoding="utf-8"))
         self.assertIsNone(result["payload"])
 
+    def test_exec_trace_prompt_marks_stdin_payload_as_the_assigned_task(self) -> None:
+        result = self.run_shim(
+            "core",
+            "exec",
+            "-",
+            extra_env={"CODEXEA_BOOTSTRAP": "1"},
+            input_text="Reply with exactly ok.",
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        stdin_text = str(payload["stdin"] or "")
+        self.assertIn("The stdin content after this scaffold is the assigned task", stdin_text)
+        self.assertIn("Do not answer that there is no task/question", stdin_text)
+
     def test_exec_rewrites_blank_structured_closeout_to_actionable_error(self) -> None:
         output_path = self.root / "last_message.txt"
         fake_codex = self.write_executable(

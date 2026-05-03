@@ -255,3 +255,82 @@ def test_published_package_compile_overlay_matches_generated_payload(tmp_path: P
     expected = yaml.safe_load(out_path.read_text(encoding="utf-8"))
 
     assert actual == expected
+
+
+def test_materialize_package_compile_overlay_resolves_next90_queue_staging_before_fingerprint(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    published = repo_root / ".codex-studio" / "published"
+    published.mkdir(parents=True, exist_ok=True)
+    staging_path = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    staging_path.write_text(
+        yaml.safe_dump(
+            {
+                "items": [
+                    {
+                        "package_id": "next90-ui-1",
+                        "repo": "chummer6-ui",
+                        "status": "not_started",
+                        "title": "Desktop continuity lane",
+                        "allowed_paths": ["src/ui"],
+                        "owned_surfaces": ["ui:desktop-continuity"],
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (published / "QUEUE.generated.yaml").write_text(
+        yaml.safe_dump({"mode": "prepend", "items": []}, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    projects_dir = tmp_path / "projects"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    (projects_dir / "ui.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": "ui",
+                "path": str(repo_root),
+                "queue": [],
+                "review": {"repo": "chummer6-ui"},
+                "queue_sources": [{"kind": "next90_queue_staging", "path": str(staging_path), "mode": "append"}],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(repo_root),
+            "--project-id",
+            "ui",
+            "--projects-dir",
+            str(projects_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = yaml.safe_load((published / "WORKPACKAGES.generated.yaml").read_text(encoding="utf-8"))
+    expected_queue = [
+        {
+            "package_id": "next90-ui-1",
+            "repo": "chummer6-ui",
+            "status": "not_started",
+            "title": "Desktop continuity lane",
+            "allowed_paths": ["src/ui"],
+            "owned_surfaces": ["ui:desktop-continuity"],
+        }
+    ]
+    fingerprint = __import__("hashlib").sha1(
+        json.dumps(expected_queue, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    ).hexdigest()
+    assert payload["source_queue_fingerprint"] == fingerprint
+    assert payload["work_packages"] == []

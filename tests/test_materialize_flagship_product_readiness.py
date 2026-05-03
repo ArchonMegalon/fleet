@@ -1003,6 +1003,12 @@ def test_parse_args_inherits_ignore_nonlinux_desktop_host_proof_blockers_from_ru
     assert args.ignore_nonlinux_desktop_host_proof_blockers is True
 
 
+def test_parse_args_defaults_user_journey_tester_audit_path() -> None:
+    module = _load_module()
+    args = module.parse_args(["--out", str(Path("/tmp/flagship.json"))])
+    assert args.ui_user_journey_tester_audit == str(module.DEFAULT_UI_USER_JOURNEY_TESTER_AUDIT)
+
+
 def test_release_channel_external_proof_contract_ready_accepts_current_required_tuple_shape() -> None:
     module = _load_module()
     release_channel = {
@@ -6970,6 +6976,65 @@ def test_user_journey_tester_audit_rejects_counter_only_screenshot_claims() -> N
     assert gaps["counter_only_screenshot_workflows"] == sorted(module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS)
     assert "workflow_screenshots_must_be_paths_not_counters" in gaps["missing_execution_discipline"]
     assert "workflow_screenshot_review_must_prove_existing_pngs" in gaps["missing_execution_discipline"]
+    assert "workflow_assertions_must_prove_visible_user_results" in gaps["missing_execution_discipline"]
+
+
+def test_user_journey_tester_audit_requires_seeded_starter_attribute_assertions() -> None:
+    module = _load_module()
+
+    gaps = module.user_journey_tester_audit_gaps(
+        {
+            "contract_name": "chummer6-ui.user_journey_tester_audit",
+            "status": "fail",
+            "evidence": {
+                "linux_binary_under_test": True,
+                "used_internal_apis": False,
+                "fix_shard_separate": True,
+                "open_blocking_findings_count": 0,
+                "workflows": [
+                    {
+                        "id": workflow_id,
+                        "status": "pass",
+                        "screenshots": [f"{workflow_id}-before.png", f"{workflow_id}-after.png"],
+                        "screenshotReview": [
+                            {
+                                "path": f"{workflow_id}-before.png",
+                                "exists": True,
+                                "is_png": True,
+                                "within_repo_root": True,
+                            },
+                            {
+                                "path": f"{workflow_id}-after.png",
+                                "exists": True,
+                                "is_png": True,
+                                "within_repo_root": True,
+                            },
+                        ],
+                        "assertions": (
+                            {
+                                "new_character_action_opened_visible_workspace": True,
+                                "visible_workspace_nonblank": True,
+                            }
+                            if workflow_id == "file_new_character_visible_workspace"
+                            else {
+                                assertion: True
+                                for assertion in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS[workflow_id]
+                            }
+                        ),
+                    }
+                    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
+                ],
+            },
+        }
+    )
+
+    assert gaps["ready"] is False
+    assert gaps["missing_workflow_assertions"] == {
+        "file_new_character_visible_workspace": [
+            "starter_attributes_match_seeded_workspace",
+            "section_preview_omits_review_copy",
+        ]
+    }
     assert "workflow_assertions_must_prove_visible_user_results" in gaps["missing_execution_discipline"]
 
 

@@ -5878,6 +5878,110 @@ def test_weekly_governor_packet_allows_launch_expand_when_dependencies_and_gates
     assert "- Successor dependency posture: satisfied" in markdown
 
 
+def test_weekly_governor_packet_auto_refreshes_canonical_weekly_pulse_when_sources_are_newer(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_module_from_path(SCRIPT)
+    paths = _fixture_tree(tmp_path)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"] = [
+        {
+            "id": dep_id,
+            "title": f"Dependency {dep_id}",
+            "status": "complete",
+            "owners": ["fleet"],
+        }
+        for dep_id in (101, 102, 103, 104, 105)
+    ] + registry["milestones"]
+    _write_yaml(paths["registry"], registry)
+    design_pulse_out = tmp_path / "design" / "WEEKLY_PRODUCT_PULSE.generated.json"
+    design_pulse_script = tmp_path / "design" / "materialize_weekly_product_pulse_snapshot.py"
+    design_pulse_script.parent.mkdir(parents=True, exist_ok=True)
+    design_pulse_script.write_text("# pulse refresh stub\n", encoding="utf-8")
+    refresh_calls: list[list[str]] = []
+
+    monkeypatch.setattr(module, "ROOT", paths["root"])
+    monkeypatch.setattr(module, "WEEKLY_PULSE", paths["weekly"])
+    monkeypatch.setattr(module, "FLAGSHIP_READINESS", paths["readiness"])
+    monkeypatch.setattr(module, "JOURNEY_GATES", paths["journeys"])
+    monkeypatch.setattr(module, "SUPPORT_PACKETS", paths["support"])
+    monkeypatch.setattr(module, "STATUS_PLANE", paths["status"])
+    monkeypatch.setattr(module, "WEEKLY_PULSE_SNAPSHOT_SCRIPT", design_pulse_script)
+    monkeypatch.setattr(module, "WEEKLY_PULSE_SNAPSHOT_DEFAULT_OUT", design_pulse_out)
+
+    def fake_run(command, **kwargs):
+        refresh_calls.append([str(item) for item in command])
+        out_path = design_pulse_out
+        if "--out" in command:
+            out_path = Path(command[command.index("--out") + 1])
+        weekly = json.loads(paths["weekly"].read_text(encoding="utf-8"))
+        weekly["generated_at"] = _iso_now()
+        weekly["governor_decisions"][0]["action"] = "launch_expand"
+        weekly["governor_decisions"][0]["reason"] = "All measured gates are green."
+        weekly["governor_decisions"][0]["cited_signals"] = [
+            "journey_gate_state=ready",
+            "journey_gate_blocked_count=0",
+            "local_release_proof_status=passed",
+            "provider_canary_status=Canary green on all active lanes",
+            "closure_health_state=clear",
+        ]
+        weekly["supporting_signals"]["provider_route_stewardship"] = {
+            "canary_status": "Canary green on all active lanes",
+            "next_decision": "Continue weekly launch expansion.",
+        }
+        weekly["supporting_signals"]["adoption_health"]["local_release_proof_status"] = "passed"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(weekly, indent=2) + "\n", encoding="utf-8")
+
+        class _Completed:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return _Completed()
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    args = module.parse_args(
+        [
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ]
+    )
+
+    module.materialize(args)
+
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    refreshed_weekly = json.loads(paths["weekly"].read_text(encoding="utf-8"))
+    assert payload["decision_board"]["current_launch_action"] == "launch_expand"
+    assert refreshed_weekly["governor_decisions"][0]["action"] == "launch_expand"
+    assert refreshed_weekly["supporting_signals"]["adoption_health"]["local_release_proof_status"] == "passed"
+    assert len(refresh_calls) == 2
+    assert refresh_calls[0] == [sys.executable, str(design_pulse_script)]
+    assert refresh_calls[1] == [sys.executable, str(design_pulse_script), "--out", str(paths["weekly"])]
+
+
 def test_weekly_governor_packet_fails_package_verification_on_queue_authority_drift(tmp_path: Path) -> None:
     paths = _fixture_tree(tmp_path)
     queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
