@@ -28919,6 +28919,21 @@ def test_apply_status_alias_fields_restores_active_and_last_run_aliases() -> Non
     assert payload["eta_summary"] == "8 open milestones remain (5 in progress, 3 not started)."
 
 
+def test_apply_status_alias_fields_derives_remaining_open_from_explicit_open_ids_without_eta() -> None:
+    module = _load_module()
+
+    payload = module._apply_status_alias_fields(
+        {
+            "frontier_ids": [101, 102, 103],
+            "open_milestone_ids": [101, 102, 103],
+        }
+    )
+
+    assert payload["remaining_open_milestones"] == 3
+    assert "eta_human" not in payload
+    assert "eta_status" not in payload
+
+
 def test_persist_live_state_snapshot_clears_dead_local_active_run(monkeypatch, tmp_path: Path) -> None:
     module = _load_module()
     shard_root = tmp_path / "state" / "chummer_design_supervisor" / "shard-1"

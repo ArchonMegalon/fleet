@@ -13247,6 +13247,16 @@ def _clear_shard_scoped_aggregate_aliases(payload: Dict[str, Any]) -> Dict[str, 
 
 def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
     updated = dict(state or {})
+    explicit_open_ids = sorted(
+        {
+            _coerce_int(value, 0)
+            for value in (
+                list(updated.get("open_milestone_ids") or [])
+                or list(updated.get("frontier_ids") or [])
+            )
+            if _coerce_int(value, 0) > 0
+        }
+    )
     shards = updated.get("shards")
     if isinstance(shards, list):
         active_shards = [
@@ -13342,7 +13352,11 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 updated[key] = value
     else:
-        updated.pop("remaining_open_milestones", None)
+        fallback_remaining_open = len(explicit_open_ids)
+        if fallback_remaining_open > 0:
+            updated["remaining_open_milestones"] = fallback_remaining_open
+        else:
+            updated.pop("remaining_open_milestones", None)
         updated.pop("remaining_in_progress_milestones", None)
         updated.pop("remaining_not_started_milestones", None)
         updated.pop("eta_human", None)
