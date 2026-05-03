@@ -12,6 +12,8 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from contextlib import redirect_stderr, redirect_stdout
 from argparse import Namespace
 from pathlib import Path
@@ -19759,6 +19761,33 @@ def test_acquire_lock_treats_reused_self_pid_without_start_ticks_as_stale() -> N
         payload = json.loads(lock_path.read_text(encoding="utf-8"))
         assert payload["pid"] == os.getpid()
         assert payload["proc_start_ticks"]
+        module._release_lock(lock_path)
+
+
+def test_acquire_lock_waits_for_live_holder_within_window(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        lock_path = root / "loop.lock"
+        lock_path.write_text(
+            json.dumps({"pid": 99999, "created_at": module._utc_now().isoformat()}),
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(module, "_is_lock_stale", lambda raw, now, ttl_seconds: False)
+
+        def release_lock() -> None:
+            time.sleep(0.05)
+            lock_path.unlink(missing_ok=True)
+
+        releaser = threading.Thread(target=release_lock, daemon=True)
+        releaser.start()
+
+        module._acquire_lock(lock_path, ttl_seconds=300.0, wait_seconds=0.5)
+
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+        assert payload["pid"] == os.getpid()
+        releaser.join(timeout=1.0)
         module._release_lock(lock_path)
 
 

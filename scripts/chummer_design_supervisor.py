@@ -410,7 +410,7 @@ READY_ACCOUNT_STATES = {"", "ready", "unknown", "ok"}
 SPARK_MODEL = "gpt-5.3-codex-spark"
 GPT54_MODEL = "gpt-5.4"
 GPT53_CODEX_MODEL = "gpt-5.3-codex"
-EA_CORE_MODEL_PREFERENCE = ("ea-coder-hard", "ea-coder-hard-batch")
+EA_CORE_MODEL_PREFERENCE = ("ea-coder-hard-batch", "ea-coder-hard")
 OPENAI_ESCAPE_MODEL_PREFERENCE = (GPT54_MODEL, SPARK_MODEL, GPT53_CODEX_MODEL)
 FLAGSHIP_UI_APP_KEY = "avalonia"
 FLAGSHIP_UI_PROJECT_PATH = "Chummer.Avalonia/Chummer.Avalonia.csproj"
@@ -527,6 +527,8 @@ EA_PROVIDER_ACCOUNT_ROUTING_ORDER = {
 LOCK_TTL_SECONDS = 300.0
 LOCK_ACQUIRE_RETRIES = 12
 LOCK_RETRY_SECONDS = 0.25
+DISPATCH_SELECTION_LOCK_WAIT_SECONDS = 15.0
+ACCOUNT_SELECTION_LOCK_WAIT_SECONDS = 5.0
 FOCUS_PROFILES: Dict[str, Dict[str, Any]] = {
     "desktop_client": {
         "description": "Prioritize desktop-client delivery across UI, core, rules, and SR4-SR6 readiness.",
@@ -9743,7 +9745,11 @@ def _preferred_ea_core_model_candidates(
         else dict(ea_provider_slot_health_index or {})
     )
     extra_preferences = EA_CORE_MODEL_PREFERENCE if _prefer_core_batch_model_aliases_enabled() else ()
-    ordered_candidates = _ordered_unique_models(configured_models, extra_preferences)
+    ordered_candidates = (
+        _ordered_unique_models(extra_preferences, configured_models)
+        if extra_preferences
+        else _ordered_unique_models(configured_models)
+    )
     if not ordered_candidates:
         ordered_candidates = list(EA_CORE_MODEL_PREFERENCE)
     available, unavailable = _partition_model_candidates_by_runnability(
@@ -15527,8 +15533,9 @@ def _is_lock_stale(raw: Dict[str, Any], now: dt.datetime, ttl_seconds: float) ->
     return False
 
 
-def _acquire_lock(path: Path, *, ttl_seconds: float) -> None:
+def _acquire_lock(path: Path, *, ttl_seconds: float, wait_seconds: float = 0.0) -> None:
     _ensure_dir(path.parent)
+    deadline_monotonic = time.monotonic() + max(0.0, float(wait_seconds))
     for attempt in range(LOCK_ACQUIRE_RETRIES):
         now = _utc_now()
         if path.exists():
@@ -15537,12 +15544,18 @@ def _acquire_lock(path: Path, *, ttl_seconds: float) -> None:
             except Exception:
                 raw = {}
             if raw and not _is_lock_stale(raw, now, ttl_seconds):
+                if time.monotonic() < deadline_monotonic:
+                    time.sleep(LOCK_RETRY_SECONDS)
+                    continue
                 holder_pid = raw.get("pid")
                 raise RuntimeError(f"design supervisor lock already held by pid={holder_pid} at {path}")
             path.unlink(missing_ok=True)
         try:
             fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError:
+            if time.monotonic() < deadline_monotonic:
+                time.sleep(LOCK_RETRY_SECONDS)
+                continue
             if attempt >= LOCK_ACQUIRE_RETRIES - 1:
                 raise RuntimeError(f"design supervisor lock race at {path}")
             time.sleep(LOCK_RETRY_SECONDS)
@@ -19396,6 +19409,7 @@ def launch_worker(
             _acquire_lock(
                 dispatch_lock_path,
                 ttl_seconds=max(60.0, float(getattr(args, "poll_seconds", DEFAULT_POLL_SECONDS)) * 4, LOCK_TTL_SECONDS / 2),
+                wait_seconds=DISPATCH_SELECTION_LOCK_WAIT_SECONDS,
             )
         except RuntimeError as exc:
             return False, f"dispatch_selection_busy: {exc}"
@@ -19476,7 +19490,11 @@ def launch_worker(
                 for account in accounts:
                     selection_lock_path = _account_selection_lock_path(state_root, account.alias)
                     try:
-                        _acquire_lock(selection_lock_path, ttl_seconds=max(60.0, LOCK_TTL_SECONDS / 4))
+                        _acquire_lock(
+                            selection_lock_path,
+                            ttl_seconds=max(60.0, LOCK_TTL_SECONDS / 4),
+                            wait_seconds=ACCOUNT_SELECTION_LOCK_WAIT_SECONDS,
+                        )
                     except RuntimeError:
                         transient_preflight_launch_reasons.append("account_selection_busy")
                         stderr_handle.write(
@@ -19613,59 +19631,59 @@ def launch_worker(
                                 attempt_index=display_attempt_index,
                                 total_attempts=display_total_attempts,
                             )
-                        if not launch_allowed:
-                            if _retryable_preflight_launch_gate_reason(launch_reason):
-                                transient_preflight_launch_reasons.append(str(launch_reason or "").strip())
+                            if not launch_allowed:
+                                if _retryable_preflight_launch_gate_reason(launch_reason):
+                                    transient_preflight_launch_reasons.append(str(launch_reason or "").strip())
+                                stderr_handle.write(
+                                    f"[fleet-supervisor] skip launch account={account.alias} owner={account.owner_id} "
+                                    f"model={candidate_model or 'default'} reason={launch_reason or 'dispatch gate'}\n"
+                                )
+                                stderr_handle.flush()
+                                continue
+                            attempted_accounts.append(account.alias)
+                            attempted_models.append(candidate_model or "default")
+                            selected_account_alias = account.alias
                             stderr_handle.write(
-                                f"[fleet-supervisor] skip launch account={account.alias} owner={account.owner_id} "
-                                f"model={candidate_model or 'default'} reason={launch_reason or 'dispatch gate'}\n"
+                                f"[fleet-supervisor] {phase_label} {display_attempt_index}/{display_total_attempts} "
+                                f"account={account.alias} owner={account.owner_id} model={candidate_model or 'default'}\n"
                             )
+                            if lane_fallback:
+                                stderr_handle.write(
+                                    f"[fleet-supervisor] lane fallback requested={requested_worker_lane} "
+                                    f"using account lane={account_worker_lane} account={account.alias} "
+                                    f"model={candidate_model or 'default'}\n"
+                                )
                             stderr_handle.flush()
-                            continue
-                        attempted_accounts.append(account.alias)
-                        attempted_models.append(candidate_model or "default")
-                        selected_account_alias = account.alias
-                        stderr_handle.write(
-                            f"[fleet-supervisor] {phase_label} {display_attempt_index}/{display_total_attempts} "
-                            f"account={account.alias} owner={account.owner_id} model={candidate_model or 'default'}\n"
-                        )
-                        if lane_fallback:
-                            stderr_handle.write(
-                                f"[fleet-supervisor] lane fallback requested={requested_worker_lane} "
-                                f"using account lane={account_worker_lane} account={account.alias} "
-                                f"model={candidate_model or 'default'}\n"
+                            _release_lock(selection_lock_path)
+                            lock_released = True
+                            completed = _run_worker_attempt(
+                                worker_command,
+                                prompt=prompt,
+                                workspace_root=worker_workspace_root,
+                                worker_env=worker_env,
+                                timeout_seconds=worker_timeout_seconds,
+                                last_message_path=last_message_path,
+                                state_root=state_root,
+                                run_id=run_id,
+                                stdout_sink=stdout_handle,
+                                stderr_sink=stderr_handle,
                             )
-                        stderr_handle.flush()
-                        _release_lock(selection_lock_path)
-                        lock_released = True
-                        completed = _run_worker_attempt(
-                            worker_command,
-                            prompt=prompt,
-                            workspace_root=worker_workspace_root,
-                            worker_env=worker_env,
-                            timeout_seconds=worker_timeout_seconds,
-                            last_message_path=last_message_path,
-                            state_root=state_root,
-                            run_id=run_id,
-                            stdout_sink=stdout_handle,
-                            stderr_sink=stderr_handle,
-                        )
-                        stdout_handle.flush()
-                        stderr_handle.flush()
-                        final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
-                        parsed = _parse_final_message_sections(final_message)
-                        accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
-                        if completed.returncode == 0 and accepted:
-                            _clear_source_backoff(account_runtime, account)
-                            _write_account_runtime(account_runtime_path, account_runtime)
-                            return True
-                        if completed.returncode == 0:
-                            stderr_handle.write(
-                                f"[fleet-supervisor] rejected result account={account.alias} "
-                                f"model={candidate_model or 'default'} reason={acceptance_reason}\n"
-                            )
+                            stdout_handle.flush()
                             stderr_handle.flush()
-                            continue
+                            final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
+                            parsed = _parse_final_message_sections(final_message)
+                            accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
+                            if completed.returncode == 0 and accepted:
+                                _clear_source_backoff(account_runtime, account)
+                                _write_account_runtime(account_runtime_path, account_runtime)
+                                return True
+                            if completed.returncode == 0:
+                                stderr_handle.write(
+                                    f"[fleet-supervisor] rejected result account={account.alias} "
+                                    f"model={candidate_model or 'default'} reason={acceptance_reason}\n"
+                                )
+                                stderr_handle.flush()
+                                continue
                             self_poll_backoff_reason = _worker_account_self_poll_backoff_reason(
                                 completed.stderr,
                                 final_message,
@@ -19687,7 +19705,7 @@ def launch_worker(
                                 )
                                 stderr_handle.flush()
                                 break
-                            if completed.returncode != 0 and _should_hard_fail_account_rotation(
+                            if _should_hard_fail_account_rotation(
                                 acceptance_reason,
                                 final_message,
                                 completed.stderr,
