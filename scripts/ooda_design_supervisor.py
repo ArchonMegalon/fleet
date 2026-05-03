@@ -119,6 +119,20 @@ def path_modified_at(path: Path) -> Optional[dt.datetime]:
         return None
 
 
+def resolve_run_artifact_path(path_value: str) -> Path:
+    path_text = str(path_value or "").strip()
+    if not path_text:
+        return Path()
+    path = Path(path_text)
+    if path.exists():
+        return path
+    try:
+        relative = path.relative_to(Path("/var/lib/codex-fleet"))
+    except ValueError:
+        return path
+    return (DEFAULT_WORKSPACE_ROOT / "state" / relative).resolve()
+
+
 def active_process_snapshot(pid_value: Any, *, active_run_payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     try:
         pid = int(str(pid_value or "").strip())
@@ -1083,7 +1097,7 @@ def _path_recent_enough(path_value: str, *, now: dt.datetime, threshold_seconds:
     path_text = str(path_value or "").strip()
     if not path_text:
         return False
-    path = Path(path_text)
+    path = resolve_run_artifact_path(path_text)
     if not path.exists():
         return False
     try:

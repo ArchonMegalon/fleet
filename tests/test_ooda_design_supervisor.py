@@ -208,6 +208,50 @@ def test_remaining_open_milestones_from_state_prefers_explicit_open_ids_over_sta
     assert module.remaining_open_milestones_from_state(payload, {}) == 4
 
 
+def test_path_recent_enough_resolves_container_local_state_mount(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "fleet"
+    artifact = workspace_root / "state" / "chummer_design_supervisor" / "shard-1" / "runs" / "run-1" / "worker.stderr.log"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text("hello\n", encoding="utf-8")
+    monkeypatch.setattr(module, "DEFAULT_WORKSPACE_ROOT", workspace_root)
+
+    now = dt.datetime.fromtimestamp(artifact.stat().st_mtime, tz=dt.timezone.utc) + dt.timedelta(seconds=5)
+
+    assert (
+        module._path_recent_enough(
+            "/var/lib/codex-fleet/chummer_design_supervisor/shard-1/runs/run-1/worker.stderr.log",
+            now=now,
+            threshold_seconds=60,
+        )
+        is True
+    )
+
+
+def test_shard_active_run_still_healthy_accepts_container_local_output_paths(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "fleet"
+    artifact = workspace_root / "state" / "chummer_design_supervisor" / "shard-1" / "runs" / "run-1" / "worker.stdout.log"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text("progress\n", encoding="utf-8")
+    monkeypatch.setattr(module, "DEFAULT_WORKSPACE_ROOT", workspace_root)
+    now = dt.datetime.fromtimestamp(artifact.stat().st_mtime, tz=dt.timezone.utc) + dt.timedelta(seconds=5)
+
+    shard_state = {
+        "active_run": {
+            "started_at": "2026-05-03T10:00:00Z",
+            "watchdog_timeout_seconds": 0.0,
+            "stdout_path": "/var/lib/codex-fleet/chummer_design_supervisor/shard-1/runs/run-1/worker.stdout.log",
+        }
+    }
+
+    assert module.shard_active_run_still_healthy(shard_state, now=now, stale_seconds=60) is True
+
+
 def test_merge_richer_runtime_fields_prefers_more_productive_split_when_active_run_count_matches() -> None:
     payload = {
         "updated_at": "2026-05-03T10:20:30Z",
