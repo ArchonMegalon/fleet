@@ -83,6 +83,18 @@ def eta_payload_from_state(state_payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def remaining_open_milestones_from_state(state_payload: Dict[str, Any], eta_payload: Dict[str, Any]) -> int:
+    explicit_open_ids: set[int] = set()
+    for key in ("open_milestone_ids", "frontier_ids"):
+        for value in state_payload.get(key) or []:
+            try:
+                milestone_id = int(value or 0)
+            except (TypeError, ValueError):
+                milestone_id = 0
+            if milestone_id > 0:
+                explicit_open_ids.add(milestone_id)
+    explicit_open_count = len(explicit_open_ids)
+
+    reported_count = 0
     for value in (
         state_payload.get("remaining_open_milestones"),
         state_payload.get("successor_wave_remaining_open_milestones"),
@@ -93,8 +105,11 @@ def remaining_open_milestones_from_state(state_payload: Dict[str, Any], eta_payl
         except (TypeError, ValueError):
             count = 0
         if count > 0:
-            return count
-    return 0
+            reported_count = count
+            break
+    if explicit_open_count > 0 and (reported_count <= 0 or explicit_open_count < reported_count):
+        return explicit_open_count
+    return reported_count
 
 
 def path_modified_at(path: Path) -> Optional[dt.datetime]:
@@ -489,6 +504,96 @@ def int_or_zero(value: Any) -> int:
         return 0
 
 
+def merge_richer_runtime_fields(payload: Dict[str, Any], candidate: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(candidate, dict) or not candidate:
+        return dict(payload or {})
+    merged = dict(payload or {})
+    payload_updated_at = parse_iso(str(merged.get("updated_at") or ""))
+    candidate_updated_at = parse_iso(str(candidate.get("updated_at") or ""))
+    candidate_recent_enough = (
+        payload_updated_at is None
+        or candidate_updated_at is None
+        or candidate_updated_at >= payload_updated_at - dt.timedelta(minutes=5)
+    )
+
+    payload_allowed_active_shards = int_or_zero(merged.get("allowed_active_shards"))
+    candidate_allowed_active_shards = int_or_zero(candidate.get("allowed_active_shards"))
+    payload_provider_ready_slots = int_or_zero(merged.get("provider_ready_slots"))
+    candidate_provider_ready_slots = int_or_zero(candidate.get("provider_ready_slots"))
+    payload_provider_hard_cap = int_or_zero(merged.get("provider_hard_max_active_requests"))
+    candidate_provider_hard_cap = int_or_zero(candidate.get("provider_hard_max_active_requests"))
+    if candidate_recent_enough and (
+        candidate_allowed_active_shards > payload_allowed_active_shards
+        or (
+            candidate_allowed_active_shards == payload_allowed_active_shards
+            and (
+                candidate_provider_ready_slots > payload_provider_ready_slots
+                or candidate_provider_hard_cap > payload_provider_hard_cap
+            )
+        )
+    ):
+        for key in (
+            "allowed_active_shards",
+            "provider_ready_slots",
+            "provider_hard_max_active_requests",
+            "dispatch_reason",
+            "provider_capacity_summary",
+            "host_memory_pressure",
+        ):
+            if key in candidate:
+                merged[key] = candidate.get(key)
+
+    payload_active_runs_count = int_or_zero(merged.get("active_runs_count"))
+    candidate_active_runs_count = int_or_zero(candidate.get("active_runs_count"))
+    payload_productive_active_runs_count = int_or_zero(merged.get("productive_active_runs_count"))
+    candidate_productive_active_runs_count = int_or_zero(candidate.get("productive_active_runs_count"))
+    payload_waiting_active_runs_count = int_or_zero(merged.get("waiting_active_runs_count"))
+    candidate_waiting_active_runs_count = int_or_zero(candidate.get("waiting_active_runs_count"))
+    if candidate_recent_enough and (
+        candidate_active_runs_count > payload_active_runs_count
+        or (
+            candidate_active_runs_count == payload_active_runs_count
+            and (
+                candidate_productive_active_runs_count > payload_productive_active_runs_count
+                or (
+                    candidate_productive_active_runs_count == payload_productive_active_runs_count
+                    and candidate_waiting_active_runs_count < payload_waiting_active_runs_count
+                )
+            )
+        )
+    ):
+        for key in (
+            "active_run_count",
+            "active_runs_count",
+            "productive_active_runs_count",
+            "waiting_active_runs_count",
+            "nonproductive_active_runs_count",
+            "progress_evidence_counts",
+            "active_runs",
+            "active_shards",
+        ):
+            if key in candidate:
+                merged[key] = candidate.get(key)
+
+    payload_remaining_open = remaining_open_milestones_from_state(merged, eta_payload_from_state(merged))
+    candidate_remaining_open = remaining_open_milestones_from_state(candidate, eta_payload_from_state(candidate))
+    if candidate_recent_enough and candidate_remaining_open > 0 and (
+        payload_remaining_open <= 0 or candidate_remaining_open < payload_remaining_open
+    ):
+        for key in (
+            "remaining_open_milestones",
+            "remaining_in_progress_milestones",
+            "remaining_not_started_milestones",
+            "eta",
+            "eta_status",
+            "eta_human",
+            "eta_summary",
+        ):
+            if key in candidate:
+                merged[key] = candidate.get(key)
+    return merged
+
+
 def materialized_shards_with_manifest_evidence(
     observed_shards: List[Dict[str, Any]],
     active_shards_payload: Dict[str, Any],
@@ -639,6 +744,15 @@ def refresh_materialized_status_snapshot(
         configured_shard_count = len(observed_shards)
 
     payload = dict(state_payload or {})
+    existing_materialized: Dict[str, Any] = {}
+    try:
+        existing_materialized_raw = json.loads(materialized_status_path(state_root).read_text(encoding="utf-8"))
+        if isinstance(existing_materialized_raw, dict):
+            existing_materialized = dict(existing_materialized_raw)
+    except Exception:
+        existing_materialized = {}
+    if existing_materialized:
+        payload = merge_richer_runtime_fields(payload, existing_materialized)
     persisted_state_path = state_root / "state.json"
     persisted_state: Dict[str, Any] = {}
     try:
@@ -745,6 +859,8 @@ def refresh_materialized_status_snapshot(
             "shards": materialized_shards,
         }
     )
+    if state_payload:
+        payload = merge_richer_runtime_fields(payload, state_payload)
     if not active_runs and int_or_zero(persisted_state.get("active_runs_count")) > 0:
         for key in (
             "active_run_count",
@@ -758,7 +874,12 @@ def refresh_materialized_status_snapshot(
         ):
             if key in persisted_state:
                 payload[key] = persisted_state.get(key)
+    if existing_materialized:
+        payload = merge_richer_runtime_fields(payload, existing_materialized)
     eta_payload = eta_payload_from_state(payload)
+    remaining_open = remaining_open_milestones_from_state(payload, eta_payload)
+    if remaining_open > 0:
+        payload["remaining_open_milestones"] = remaining_open
     if eta_payload:
         eta_status = str(eta_payload.get("status") or "").strip()
         eta_human = str(eta_payload.get("eta_human") or "").strip()
@@ -769,9 +890,6 @@ def refresh_materialized_status_snapshot(
             payload["eta_human"] = eta_human
         if eta_summary and not str(payload.get("eta_summary") or "").strip():
             payload["eta_summary"] = eta_summary
-        remaining_open = remaining_open_milestones_from_state(payload, eta_payload)
-        if remaining_open > 0:
-            payload["remaining_open_milestones"] = remaining_open
         for source_key, target_key in (
             ("remaining_in_progress_milestones", "remaining_in_progress_milestones"),
             ("remaining_not_started_milestones", "remaining_not_started_milestones"),
@@ -1192,6 +1310,34 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
         active_shards_payload=active_shards_payload,
         observed_shards=observed_shards,
     )
+    materialized_payload = read_json(materialized_status_path(state_root))
+    if materialized_payload:
+        state_payload = merge_richer_runtime_fields(state_payload, materialized_payload)
+        active_runs_count = max(
+            active_runs_count,
+            int_or_zero(state_payload.get("active_runs_count")),
+        )
+        active_shards_count = max(active_shards_count, active_runs_count)
+        allowed_active_shards = int_or_zero(
+            state_payload.get("allowed_active_shards")
+            if state_payload.get("allowed_active_shards") not in (None, "")
+            else provider_capacity_summary.get("allowed_active_shards")
+        )
+        provider_ready_slots = int_or_zero(
+            state_payload.get("provider_ready_slots")
+            if state_payload.get("provider_ready_slots") not in (None, "")
+            else provider_capacity_summary.get("ready_slots")
+        )
+        provider_hard_max_active_requests = int_or_zero(
+            state_payload.get("provider_hard_max_active_requests")
+            if state_payload.get("provider_hard_max_active_requests") not in (None, "")
+            else provider_capacity_summary.get("hard_max_active_requests")
+        )
+        productive_active_runs_count = int_or_zero(state_payload.get("productive_active_runs_count"))
+        waiting_active_runs_count = int_or_zero(state_payload.get("waiting_active_runs_count"))
+        dispatch_reason = str(state_payload.get("dispatch_reason") or "").strip()
+        provider_capacity_summary = dict(state_payload.get("provider_capacity_summary") or provider_capacity_summary)
+        remaining_open_milestones = remaining_open_milestones_from_state(state_payload, eta_payload_from_state(state_payload))
 
     append_event(
         event_path,

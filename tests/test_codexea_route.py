@@ -1429,21 +1429,94 @@ class CodexEaRouteTests(unittest.TestCase):
         app_module.services = services_module
 
         with mock.patch.object(self.route_module, "_seed_local_ea_runtime_env", lambda: None):
-            with mock.patch.dict(
-                sys.modules,
-                {
-                    "app": app_module,
-                    "app.services": services_module,
-                    "app.services.responses_upstream": upstream_module,
-                },
-                clear=False,
-            ):
-                payload = self.route_module._local_onemin_direct_payload(probe_all=False)
+            with mock.patch.object(self.route_module, "_fleet_provider_health_bridge_payload", return_value=None):
+                with mock.patch.dict(
+                    sys.modules,
+                    {
+                        "app": app_module,
+                        "app.services": services_module,
+                        "app.services.responses_upstream": upstream_module,
+                    },
+                    clear=False,
+                ):
+                    payload = self.route_module._local_onemin_direct_payload(probe_all=False)
 
         self.assertIsNotNone(payload)
         self.assertEqual(payload["provider_config"]["hard_max_active_requests"], 20)
         self.assertEqual(payload["provider_registry"]["provider_config"]["hard_max_active_requests"], 20)
         self.assertEqual(payload["provider_health"]["providers"]["onemin"]["live_dispatchable_slot_count"], 8)
+
+    def test_local_onemin_direct_payload_prefers_richer_fleet_bridge_payload(self) -> None:
+        import types
+
+        app_module = types.ModuleType("app")
+        services_module = types.ModuleType("app.services")
+        upstream_module = types.ModuleType("app.services.responses_upstream")
+
+        def _provider_health_report():
+            return {
+                "provider_config": {
+                    "hard_max_active_requests": 20,
+                },
+                "provider_registry": {
+                    "provider_config": {
+                        "hard_max_active_requests": 20,
+                    }
+                },
+                "providers": {
+                    "onemin": {
+                        "ready_slot_count": 74,
+                        "live_ready_slot_count": 0,
+                        "live_dispatchable_slot_count": 0,
+                        "live_remaining_credits_total": 0,
+                        "actual_remaining_credits_total": 0,
+                        "slots": [{"slot": "primary", "configured": True, "state": "ready"}],
+                    }
+                },
+            }
+
+        upstream_module._provider_health_report = _provider_health_report
+        upstream_module.probe_all_onemin_slots = lambda include_reserve=True: {"slot_count": 1}
+        services_module.responses_upstream = upstream_module
+        app_module.services = services_module
+
+        bridge_payload = {
+            "provider_config": {
+                "hard_max_active_requests": 20,
+            },
+            "provider_registry": {
+                "provider_config": {
+                    "hard_max_active_requests": 20,
+                }
+            },
+            "providers": {
+                "onemin": {
+                    "ready_slot_count": 11,
+                    "live_ready_slot_count": 11,
+                    "live_dispatchable_slot_count": 11,
+                    "live_remaining_credits_total": 28_122_476,
+                    "actual_remaining_credits_total": 125_883_892.0,
+                    "slots": [{"slot": "primary", "configured": True, "state": "ready"}],
+                }
+            },
+        }
+
+        with mock.patch.object(self.route_module, "_seed_local_ea_runtime_env", lambda: None):
+            with mock.patch.object(self.route_module, "_fleet_provider_health_bridge_payload", return_value=bridge_payload):
+                with mock.patch.dict(
+                    sys.modules,
+                    {
+                        "app": app_module,
+                        "app.services": services_module,
+                        "app.services.responses_upstream": upstream_module,
+                    },
+                    clear=False,
+                ):
+                    payload = self.route_module._local_onemin_direct_payload(probe_all=False)
+
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["provider_health"]["providers"]["onemin"]["live_dispatchable_slot_count"], 11)
+        self.assertEqual(payload["provider_health"]["providers"]["onemin"]["live_remaining_credits_total"], 28_122_476)
 
     def test_onemin_aggregate_cli_accepts_billing_flag(self) -> None:
         self.write_config({})

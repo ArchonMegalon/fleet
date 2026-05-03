@@ -198,6 +198,38 @@ def test_eta_payload_from_state_prefers_successor_wave_eta_when_primary_eta_miss
     assert module.remaining_open_milestones_from_state({}, payload) == 6
 
 
+def test_remaining_open_milestones_from_state_prefers_explicit_open_ids_over_stale_successor_wave_count() -> None:
+    payload = {
+        "successor_wave_remaining_open_milestones": 37,
+        "open_milestone_ids": [101, 102, 103, 104],
+        "frontier_ids": [101, 102, 103, 104],
+    }
+
+    assert module.remaining_open_milestones_from_state(payload, {}) == 4
+
+
+def test_merge_richer_runtime_fields_prefers_more_productive_split_when_active_run_count_matches() -> None:
+    payload = {
+        "updated_at": "2026-05-03T10:20:30Z",
+        "active_runs_count": 14,
+        "productive_active_runs_count": 0,
+        "waiting_active_runs_count": 14,
+    }
+    candidate = {
+        "updated_at": "2026-05-03T10:20:25Z",
+        "active_runs_count": 14,
+        "productive_active_runs_count": 3,
+        "waiting_active_runs_count": 11,
+        "progress_evidence_counts": {"repo_work_detected": 3, "worker_output_only": 11},
+    }
+
+    merged = module.merge_richer_runtime_fields(payload, candidate)
+
+    assert merged["productive_active_runs_count"] == 3
+    assert merged["waiting_active_runs_count"] == 11
+    assert merged["progress_evidence_counts"] == {"repo_work_detected": 3, "worker_output_only": 11}
+
+
 def test_parse_supervisor_status_text_extracts_effective_shard_modes() -> None:
     payload = module.parse_supervisor_status_text(
         "\n".join(
@@ -838,6 +870,124 @@ def test_run_cycle_preserves_zero_provider_ready_slots(
     assert payload["waiting_active_runs_count"] == 1
 
 
+def test_run_cycle_prefers_richer_existing_materialized_runtime_fields(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    state_root = tmp_path / "state" / "chummer_design_supervisor"
+    state_root.mkdir(parents=True)
+    (state_root / "state.json").write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-04-01T04:48:34Z",
+                "mode": "flagship_product",
+                "active_runs_count": 0,
+                "productive_active_runs_count": 0,
+                "waiting_active_runs_count": 0,
+                "remaining_open_milestones": 19,
+                "eta": {
+                    "status": "tracked",
+                    "eta_human": "11h-1.1d",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (state_root / "active_shards.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-01T04:48:40Z",
+                "active_run_count": 0,
+                "active_shards": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    module.materialized_status_path(state_root).write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-04-01T05:18:00Z",
+                "allowed_active_shards": 14,
+                "provider_ready_slots": 14,
+                "provider_hard_max_active_requests": 20,
+                "active_runs_count": 11,
+                "productive_active_runs_count": 5,
+                "waiting_active_runs_count": 6,
+                "remaining_open_milestones": 18,
+                "dispatch_reason": "live provider capacity caps shard dispatch at 14/20",
+                "provider_capacity_summary": {
+                    "allowed_active_shards": 14,
+                    "ready_slots": 14,
+                    "hard_max_active_requests": 20,
+                    "reason": "live provider capacity caps shard dispatch at 14/20",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    log_path = tmp_path / "monitor" / "ooda.log"
+    event_path = tmp_path / "monitor" / "events.jsonl"
+    state_path = tmp_path / "monitor" / "state.json"
+    args = argparse.Namespace(
+        workspace_root=str(workspace_root),
+        state_root=str(state_root),
+        monitor_root=str(tmp_path / "monitor"),
+        poll_seconds=300,
+        duration_seconds=28800,
+        repair_cooldown_seconds=1800,
+        stale_seconds=900,
+        once=True,
+    )
+
+    def fake_run_command(command, *, cwd, env=None):  # type: ignore[no-untyped-def]
+        if command[:3] == ["python3", "scripts/chummer_design_supervisor.py", "status"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="updated_at: 2026-04-01T04:48:34Z\nmode: flagship_product\n",
+                stderr="",
+            )
+        if command[:7] == [
+            "/usr/bin/curl",
+            "--silent",
+            "--show-error",
+            "--fail",
+            "--unix-socket",
+            module.DOCKER_SOCKET_PATH,
+            "-X",
+        ]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout='{"State": {"Status": "running"}}\n',
+                stderr="",
+            )
+        if command[-2:] == ["compose", "version"]:
+            return subprocess.CompletedProcess(command, 0, stdout="Docker Compose version v2.0.0\n", stderr="")
+        if command[-3:] == ["compose", "ps", "fleet-controller"] or command[-3:] == ["compose", "ps", "fleet-design-supervisor"]:
+            return subprocess.CompletedProcess(command, 0, stdout="service Up\n", stderr="")
+        raise AssertionError(command)
+
+    monkeypatch.setattr(module, "utc_now", lambda: dt.datetime(2026, 4, 1, 5, 20, tzinfo=dt.timezone.utc))
+    monkeypatch.setattr(module, "run_command", fake_run_command)
+
+    module.run_cycle(args, log_path=log_path, event_path=event_path, state_path=state_path)
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert payload["allowed_active_shards"] == 14
+    assert payload["provider_ready_slots"] == 14
+    assert payload["provider_hard_max_active_requests"] == 20
+    assert payload["active_runs_count"] == 11
+    assert payload["productive_active_runs_count"] == 5
+    assert payload["waiting_active_runs_count"] == 6
+    assert payload["dispatch_reason"] == "live provider capacity caps shard dispatch at 14/20"
+
+
 def test_refresh_materialized_status_snapshot_replaces_stale_blocked_snapshot(
     monkeypatch,
     tmp_path: Path,
@@ -1232,6 +1382,60 @@ def test_refresh_materialized_status_snapshot_does_not_let_older_persisted_remai
     assert payload["remaining_in_progress_milestones"] == 18
     assert payload["eta"]["remaining_open_milestones"] == 18
     assert payload["eta_human"] == "10h-1.1d"
+
+
+def test_refresh_materialized_status_snapshot_prefers_explicit_open_ids_over_stale_successor_wave_remaining(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "state" / "chummer_design_supervisor"
+    state_root.mkdir(parents=True)
+    monkeypatch.setattr(module, "iso_now", lambda: "2026-05-03T10:21:00Z")
+
+    module.refresh_materialized_status_snapshot(
+        state_root,
+        state_payload={
+            "updated_at": "2026-05-03T10:20:30Z",
+            "successor_wave_remaining_open_milestones": 37,
+            "open_milestone_ids": [101, 102, 103, 104],
+            "frontier_ids": [101, 102, 103, 104],
+        },
+        active_shards_payload={"configured_shard_count": 20, "active_shards": []},
+        observed_shards=[],
+    )
+
+    payload = json.loads((state_root / "status-live-refresh.materialized.json").read_text(encoding="utf-8"))
+
+    assert payload["remaining_open_milestones"] == 4
+
+
+def test_refresh_materialized_status_snapshot_preserves_richer_state_productive_split(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "state" / "chummer_design_supervisor"
+    state_root.mkdir(parents=True)
+    monkeypatch.setattr(module, "iso_now", lambda: "2026-05-03T10:21:00Z")
+
+    module.refresh_materialized_status_snapshot(
+        state_root,
+        state_payload={
+            "updated_at": "2026-05-03T10:20:30Z",
+            "active_runs_count": 14,
+            "productive_active_runs_count": 3,
+            "waiting_active_runs_count": 11,
+            "progress_evidence_counts": {"repo_work_detected": 3, "worker_output_only": 11},
+        },
+        active_shards_payload={"configured_shard_count": 20, "active_shards": []},
+        observed_shards=[],
+    )
+
+    payload = json.loads((state_root / "status-live-refresh.materialized.json").read_text(encoding="utf-8"))
+
+    assert payload["active_runs_count"] == 14
+    assert payload["productive_active_runs_count"] == 3
+    assert payload["waiting_active_runs_count"] == 11
+    assert payload["progress_evidence_counts"] == {"repo_work_detected": 3, "worker_output_only": 11}
 
 
 def test_refresh_materialized_status_snapshot_preserves_persisted_active_run_counts_when_observed_list_is_empty(

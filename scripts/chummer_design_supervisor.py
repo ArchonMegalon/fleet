@@ -2276,8 +2276,13 @@ def _provider_dispatch_capacity_snapshot(
     if (
         onemin.get("live_dispatchable_slot_count") not in (None, "")
         and ready_slots > 0
-        and effective_hard_max_active_requests > 0
-        and ready_slots > effective_hard_max_active_requests
+        and (
+            effective_hard_max_active_requests <= 0
+            or (
+                (provider_health_snapshot_failure or provider_health_snapshot_cached_dispatchable_override)
+                and ready_slots > effective_hard_max_active_requests
+            )
+        )
         and provider_health_snapshot_status
         and provider_health_snapshot_status != "live"
     ):
@@ -2453,15 +2458,18 @@ def _provider_dispatch_capacity_snapshot(
         reason_bits.append(
             f"live EA worker traffic overrides stale provider-health failure (active_ea_runs={live_hard_ea_active_runs})"
         )
+    provider_api_repair_reason = str(provider_api_repair.get("reason") or "").strip()
     if provider_api_repair.get("triggered") is True:
         reason_bits.append(
             "triggered 1min provider-api billing reconciliation "
             f"(pid={_coerce_int(provider_api_repair.get('pid'), 0)})"
+            + (f" reason={provider_api_repair_reason}" if provider_api_repair_reason else "")
         )
     elif provider_api_repair.get("status") == "in_flight":
         reason_bits.append(
             "1min provider-api billing reconciliation already in flight "
             f"(pid={_coerce_int(provider_api_repair.get('pid'), 0)})"
+            + (f" reason={provider_api_repair_reason}" if provider_api_repair_reason else "")
         )
     elif provider_api_repair.get("status") == "cooldown":
         remaining = _coerce_float(provider_api_repair.get("cooldown_seconds_remaining"))
@@ -2469,6 +2477,7 @@ def _provider_dispatch_capacity_snapshot(
             reason_bits.append(
                 "1min provider-api billing reconciliation cooldown "
                 f"({remaining:.0f}s remaining)"
+                + (f" reason={provider_api_repair_reason}" if provider_api_repair_reason else "")
             )
     if provider_health_snapshot_failure:
         route_snapshot_detail = provider_health_snapshot_reason
@@ -3267,10 +3276,16 @@ def _ea_provider_health_payload_for_routing(args: argparse.Namespace) -> Dict[st
     return payload
 
 
-def _ea_onemin_provider_api_repair_cooldown_seconds() -> float:
+def _ea_onemin_provider_api_repair_cooldown_seconds(reason: str = "") -> float:
+    clean_reason = str(reason or "").strip().lower()
+    env_name = "CHUMMER_DESIGN_SUPERVISOR_ONEMIN_PROVIDER_API_REPAIR_COOLDOWN_SECONDS"
+    default_value = "1800"
+    if clean_reason == "stale_actual_billing_funded_slots_under_target_dispatch_capacity":
+        env_name = "CHUMMER_DESIGN_SUPERVISOR_ONEMIN_PROVIDER_API_REPAIR_PARTIAL_COOLDOWN_SECONDS"
+        default_value = "300"
     raw = _runtime_env_default(
-        "CHUMMER_DESIGN_SUPERVISOR_ONEMIN_PROVIDER_API_REPAIR_COOLDOWN_SECONDS",
-        "1800",
+        env_name,
+        default_value,
     )
     try:
         return max(60.0, float(raw))
@@ -3420,6 +3435,16 @@ def _ea_onemin_billing_reconciliation_needed(onemin: Dict[str, Any]) -> tuple[bo
         >= max(50000.0, float(live_remaining_credits_total or 0.0) * 20.0)
     ):
         return True, "actual_billing_vs_live_probe_drift_without_dispatchable_capacity"
+    if (
+        stale_actual_billing_funded_slot_count >= 10
+        and actual_positive_balance_slot_count >= max(20, live_dispatchable_slot_count * 3)
+        and actual_remaining_credits_total is not None
+        and actual_remaining_credits_total > 0
+        and actual_remaining_credits_total
+        >= max(50000.0, float(live_remaining_credits_total or 0.0) * 20.0)
+        and live_dispatchable_slot_count < min(8, actual_positive_balance_slot_count)
+    ):
+        return True, "stale_actual_billing_funded_slots_under_target_dispatch_capacity"
     return False, ""
 
 
@@ -3439,7 +3464,7 @@ def _maybe_trigger_ea_onemin_provider_api_repair(
         return {}
     state_path = _ea_onemin_provider_api_repair_state_path(args)
     log_path = _ea_onemin_provider_api_repair_log_path(args)
-    cooldown_seconds = _ea_onemin_provider_api_repair_cooldown_seconds()
+    cooldown_seconds = _ea_onemin_provider_api_repair_cooldown_seconds(reason)
     existing = _read_state(state_path)
     if not isinstance(existing, dict):
         existing = {}

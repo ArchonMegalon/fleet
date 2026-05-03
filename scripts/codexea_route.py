@@ -1038,6 +1038,53 @@ def _seed_local_ea_runtime_env() -> None:
             os.environ.setdefault(str(key), str(value))
 
 
+def _fleet_provider_health_bridge_payload() -> dict[str, Any] | None:
+    candidates = (
+        ROOT / "state" / "chummer_design_supervisor" / "ea_provider_health_cache.json",
+        Path("/docker/fleet/state/chummer_design_supervisor/ea_provider_health_cache.json"),
+    )
+    seen: set[Path] = set()
+    for path in candidates:
+        if path in seen:
+            continue
+        seen.add(path)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        bridge_payload = payload.get("payload")
+        if isinstance(bridge_payload, dict) and bridge_payload:
+            return dict(bridge_payload)
+    return None
+
+
+def _onemin_provider_payload_tuple(payload: dict[str, Any] | None) -> tuple[dict[str, Any], int, float]:
+    if not isinstance(payload, dict):
+        return {}, 0, 0.0
+    providers = payload.get("providers")
+    if not isinstance(providers, dict) or not providers:
+        providers = ((payload.get("provider_health") or {}).get("providers") or {})
+    onemin = (providers or {}).get("onemin") or {}
+    if not isinstance(onemin, dict):
+        return {}, 0, 0.0
+    live_dispatchable = onemin.get("live_dispatchable_slot_count")
+    if live_dispatchable in (None, ""):
+        live_dispatchable_count = 0
+    else:
+        try:
+            live_dispatchable_count = max(0, int(live_dispatchable))
+        except Exception:
+            live_dispatchable_count = 0
+    remaining_credits = onemin.get("live_remaining_credits_total")
+    try:
+        live_remaining_credits_total = max(0.0, float(remaining_credits or 0.0))
+    except Exception:
+        live_remaining_credits_total = 0.0
+    return dict(onemin), live_dispatchable_count, live_remaining_credits_total
+
+
 def _local_onemin_direct_payload(*, probe_all: bool = False, include_reserve: bool = True) -> dict[str, Any] | None:
     try:
         _seed_local_ea_runtime_env()
@@ -1048,6 +1095,38 @@ def _local_onemin_direct_payload(*, probe_all: bool = False, include_reserve: bo
 
         probe_payload = upstream.probe_all_onemin_slots(include_reserve=include_reserve) if probe_all else None
         provider_health = upstream._provider_health_report()
+        bridge_payload = _fleet_provider_health_bridge_payload()
+        provider_onemin, provider_live_dispatchable_count, provider_live_remaining_credits_total = (
+            _onemin_provider_payload_tuple(
+                {
+                    "providers": dict(provider_health.get("providers") or {}),
+                    "provider_config": dict(provider_health.get("provider_config") or {}),
+                    "provider_registry": dict(provider_health.get("provider_registry") or {}),
+                }
+            )
+        )
+        bridge_onemin, bridge_live_dispatchable_count, bridge_live_remaining_credits_total = (
+            _onemin_provider_payload_tuple(bridge_payload)
+        )
+        if bridge_onemin and (
+            bridge_live_dispatchable_count > provider_live_dispatchable_count
+            or (
+                bridge_live_dispatchable_count == provider_live_dispatchable_count
+                and bridge_live_remaining_credits_total > provider_live_remaining_credits_total
+            )
+        ):
+            merged_provider_health = dict(provider_health)
+            merged_providers = dict(merged_provider_health.get("providers") or {})
+            merged_providers["onemin"] = bridge_onemin
+            merged_provider_health["providers"] = merged_providers
+            if isinstance(bridge_payload, dict):
+                bridge_provider_config = dict(bridge_payload.get("provider_config") or {})
+                if bridge_provider_config:
+                    merged_provider_health["provider_config"] = bridge_provider_config
+                bridge_provider_registry = dict(bridge_payload.get("provider_registry") or {})
+                if bridge_provider_registry:
+                    merged_provider_health["provider_registry"] = bridge_provider_registry
+            provider_health = merged_provider_health
         onemin = dict(((provider_health.get("providers") or {}).get("onemin") or {}))
         slot_count = len(onemin.get("slots") or []) if isinstance(onemin.get("slots"), list) else 0
         probe_slot_count = int((probe_payload or {}).get("slot_count") or 0) if isinstance(probe_payload, dict) else 0
