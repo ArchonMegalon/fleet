@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-03T10:51:53Z'
+generated_at: '2026-05-03T10:52:19Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-5
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -107,7 +107,7 @@ frontier:
     summary: 'Milestone ''Horizons, public guide, and flagship future-lane posture''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
       fleet_and_operator_loop.'
-    predicted_completion_at: '2026-05-04T05:49:11Z'
+    predicted_completion_at: '2026-05-04T05:49:37Z'
     range_low_hours: 10.69
     range_high_hours: 27.22
     remaining_open_milestones: 1
