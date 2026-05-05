@@ -1,0 +1,479 @@
+{
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "canonical_monitors": {
+    "creator_publication_policy": {
+      "checks": {
+        "compatibility_unknown": true,
+        "no_moderation_as_compatibility": true,
+        "no_trust_rank_as_certification": true,
+        "truth_order": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "external_tools_plane": {
+      "checks": {
+        "community_hub_boundary": true,
+        "community_hub_lane": true,
+        "productlift_boundary": true,
+        "runbook_press_lane": true,
+        "runsite_boundary": true,
+        "table_pulse_lane": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "horizon_registry": {
+      "issues": [],
+      "monitored_horizon_count": 6,
+      "monitored_horizons": [
+        {
+          "access_posture": "",
+          "bounded_tool_count": 4,
+          "id": "nexus-pan",
+          "owning_repo_count": 3,
+          "promoted_tool_count": 0,
+          "public_guide_enabled": true,
+          "public_signal_eligible": true,
+          "status": "horizon"
+        },
+        {
+          "access_posture": "booster_first",
+          "bounded_tool_count": 4,
+          "id": "jackpoint",
+          "owning_repo_count": 3,
+          "promoted_tool_count": 5,
+          "public_guide_enabled": true,
+          "public_signal_eligible": true,
+          "status": "horizon"
+        },
+        {
+          "access_posture": "booster_first",
+          "bounded_tool_count": 8,
+          "id": "community-hub",
+          "owning_repo_count": 6,
+          "promoted_tool_count": 7,
+          "public_guide_enabled": true,
+          "public_signal_eligible": true,
+          "status": "horizon"
+        },
+        {
+          "access_posture": "",
+          "bounded_tool_count": 4,
+          "id": "runsite",
+          "owning_repo_count": 2,
+          "promoted_tool_count": 3,
+          "public_guide_enabled": true,
+          "public_signal_eligible": true,
+          "status": "horizon"
+        },
+        {
+          "access_posture": "booster_first",
+          "bounded_tool_count": 2,
+          "id": "runbook-press",
+          "owning_repo_count": 3,
+          "promoted_tool_count": 5,
+          "public_guide_enabled": true,
+          "public_signal_eligible": true,
+          "status": "horizon"
+        },
+        {
+          "access_posture": "",
+          "bounded_tool_count": 6,
+          "id": "table-pulse",
+          "owning_repo_count": 2,
+          "promoted_tool_count": 1,
+          "public_guide_enabled": false,
+          "public_signal_eligible": false,
+          "status": "horizon"
+        }
+      ],
+      "state": "pass",
+      "warnings": []
+    },
+    "ltd_integration_guide": {
+      "checks": {
+        "community_hub": true,
+        "nexus_pan": true,
+        "runbook_press": true,
+        "runsite": true,
+        "table_pulse": true,
+        "truth_first": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "next90_guide": {
+      "checks": {
+        "exit_contract": true,
+        "milestone_137": true,
+        "wave_24": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "open_runs_community_hub": {
+      "checks": {
+        "canonical_rule": true,
+        "meeting_projection_only": true,
+        "observer_consent": true,
+        "productlift_projection_only": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "open_runs_consent": {
+      "community_safety_event_family_count": 8,
+      "issues": [],
+      "observer_external_tool_count": 3,
+      "state": "pass"
+    },
+    "public_concierge_workflows": {
+      "issues": [],
+      "monitored_flow_count": 4,
+      "monitored_flows": [
+        {
+          "entry_surface": "tokenized_invite_page_without_private_truth",
+          "fixed_route_target": "first_party_invite_or_join_page",
+          "id": "campaign_invite_concierge",
+          "proof_anchor_count": 4
+        },
+        {
+          "entry_surface": "creator_page",
+          "fixed_route_target": "creator_page",
+          "id": "creator_consult_concierge",
+          "proof_anchor_count": 3
+        },
+        {
+          "entry_surface": "now_or_release_or_public_help_page",
+          "fixed_route_target": "release_notes_page",
+          "id": "release_concierge",
+          "proof_anchor_count": 3
+        },
+        {
+          "entry_surface": "runsite_page",
+          "fixed_route_target": "runsite_page",
+          "id": "runsite_host_choice",
+          "proof_anchor_count": 2
+        }
+      ],
+      "state": "pass"
+    },
+    "public_guide_boundaries": {
+      "docs": {
+        "community_hub": {
+          "checks": {
+            "discord_boundary": true,
+            "not_lfg": true
+          },
+          "issues": [],
+          "state": "pass"
+        },
+        "jackpoint": {
+          "checks": {
+            "no_invention": true,
+            "source_trails": true
+          },
+          "issues": [],
+          "state": "pass"
+        },
+        "runbook_press": {
+          "checks": {
+            "no_invention": true,
+            "pipeline": true
+          },
+          "issues": [],
+          "state": "pass"
+        },
+        "runsite": {
+          "checks": {
+            "not_tactical": true,
+            "permissioned_artifact": true
+          },
+          "issues": [],
+          "state": "pass"
+        }
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "public_release_experience": {
+      "checks": {
+        "concierge_preview": true,
+        "fallback_distinct": true,
+        "no_fix_overclaim": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "queue_alignment": {
+      "issues": [],
+      "state": "pass",
+      "warnings": [
+        "Fleet queue mirror row is still missing for work task 137.7."
+      ]
+    },
+    "roadmap": {
+      "checks": {
+        "acquisition_fit_boundary": true,
+        "public_and_operator_stack": true
+      },
+      "issues": [],
+      "state": "pass"
+    }
+  },
+  "contract_name": "fleet.next90_m137_ecosystem_seam_monitors",
+  "frontier_id": 9074685645,
+  "generated_at": "2026-05-05T16:10:27Z",
+  "milestone_id": 137,
+  "monitor_summary": {
+    "dependency_runtime_blocker_count": 1,
+    "ecosystem_seam_status": "blocked",
+    "monitored_horizon_count": 6,
+    "monitored_public_card_count": 5,
+    "runtime_blocker_count": 1,
+    "runtime_blockers": [
+      "dependency_proof: m133: M133 media/social horizon monitors status is blocked."
+    ],
+    "warning_count": 1
+  },
+  "owned_surfaces": [
+    "monitor_unsupported_ecosystem_claims_stale_seam_proof_co:fleet"
+  ],
+  "package_closeout": {
+    "blockers": [],
+    "state": "pass",
+    "warnings": [
+      "dependency_proof: m133: M133 media/social horizon monitors status is blocked.",
+      "Fleet queue mirror row is still missing for work task 137.7."
+    ]
+  },
+  "package_id": "next90-m137-fleet-monitor-unsupported-ecosystem-claims-stale-seam-proof-consent-drift-an",
+  "queue_title": "Monitor unsupported ecosystem claims, stale seam proof, consent drift, and public-posture mismatch across first-party and integration-ready lanes.",
+  "runtime_monitors": {
+    "dependency_proof": {
+      "flagship_readiness": {
+        "age_hours": 0.22,
+        "generated_at": "2026-05-05T15:57:13Z",
+        "issues": [],
+        "runtime_blockers": [],
+        "state": "pass",
+        "status": "pass"
+      },
+      "issues": [],
+      "journeys": {
+        "age_hours": 0.66,
+        "generated_at": "2026-05-05T15:30:44Z",
+        "issues": [],
+        "monitored_journeys": [
+          {
+            "blocking_reason_count": 0,
+            "id": "campaign_session_recover_recap",
+            "state": "ready",
+            "warning_reason_count": 0
+          },
+          {
+            "blocking_reason_count": 0,
+            "id": "organize_community_and_close_loop",
+            "state": "ready",
+            "warning_reason_count": 0
+          },
+          {
+            "blocking_reason_count": 0,
+            "id": "report_cluster_release_notify",
+            "state": "ready",
+            "warning_reason_count": 0
+          }
+        ],
+        "runtime_blockers": [],
+        "state": "pass"
+      },
+      "m131_public_guide": {
+        "age_hours": 2.63,
+        "generated_at": "2026-05-05T13:32:27Z",
+        "issues": [],
+        "runtime_blockers": [],
+        "state": "pass",
+        "status": "pass"
+      },
+      "m133_media_social": {
+        "age_hours": 1.28,
+        "generated_at": "2026-05-05T14:53:22Z",
+        "issues": [],
+        "runtime_blockers": [
+          "M133 media/social horizon monitors status is blocked."
+        ],
+        "state": "pass",
+        "status": "blocked"
+      },
+      "runtime_blockers": [
+        "m133: M133 media/social horizon monitors status is blocked."
+      ],
+      "state": "pass"
+    },
+    "public_feature_posture": {
+      "issues": [],
+      "monitored_public_card_count": 5,
+      "monitored_public_cards": [
+        {
+          "badge": "Preparing",
+          "detail_primary_href": "/now#real-mobile-prep",
+          "detail_route": "/roadmap/nexus-pan",
+          "horizon_id": "nexus-pan",
+          "id": "horizon_nexus_pan",
+          "proof_note_present": false
+        },
+        {
+          "badge": "Preview lane",
+          "detail_primary_href": "/artifacts/dossier-brief",
+          "detail_route": "/roadmap/jackpoint",
+          "horizon_id": "jackpoint",
+          "id": "horizon_jackpoint",
+          "proof_note_present": true
+        },
+        {
+          "badge": "Preview lane",
+          "detail_primary_href": "/artifacts/runsite-pack",
+          "detail_route": "/roadmap/runsite",
+          "horizon_id": "runsite",
+          "id": "horizon_runsite",
+          "proof_note_present": true
+        },
+        {
+          "badge": "Preview lane",
+          "detail_primary_href": "/artifacts/campaign-primer",
+          "detail_route": "/roadmap/runbook-press",
+          "horizon_id": "runbook-press",
+          "id": "horizon_runbook_press",
+          "proof_note_present": true
+        },
+        {
+          "badge": "Research",
+          "detail_primary_href": "/roadmap/black-ledger",
+          "detail_route": "/roadmap/community-hub",
+          "horizon_id": "community-hub",
+          "id": "horizon_community_hub",
+          "proof_note_present": false
+        }
+      ],
+      "runtime_blockers": [],
+      "state": "pass",
+      "warnings": []
+    }
+  },
+  "source_inputs": {
+    "community_safety_states": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/COMMUNITY_SAFETY_EVENT_AND_APPEAL_STATES.yaml",
+      "sha256": "cc11c9de6cf775fa8249a23c29aeb7b3c9753acb8e1964421ade510c1c2de462"
+    },
+    "creator_publication_policy": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/CREATOR_PUBLICATION_TRUST_AND_COMPATIBILITY_POLICY.md",
+      "sha256": "653010432e511a0f59d8952bbbb8ba3ba7a2306a17dd84dd0d30981c13a4191b"
+    },
+    "design_queue_staging": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "11cc1ecd96db0176604771f8f6f398998db558b6167a3e2bd37140a2124ddca6"
+    },
+    "external_tools_plane": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/EXTERNAL_TOOLS_PLANE.md",
+      "sha256": "7894c569ebd73445b42b900d067b615e1a842749951c175d501fd5d0620271ee"
+    },
+    "flagship_readiness": {
+      "generated_at": "2026-05-05T15:57:13Z",
+      "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+      "sha256": "c9d9c8de9d3b30a49602316eed3ff735f2fb12de118450539807ea7095ff78a2"
+    },
+    "fleet_queue_staging": {
+      "generated_at": "",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "6da82d05213bc6ae4f536f75debf5dab04463c91c9b2992df970d392bd3972b1"
+    },
+    "horizon_registry": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/HORIZON_REGISTRY.yaml",
+      "sha256": "488986a819f88884a494f2797a20c0ba34f1cbc06d71a21f5be7f013117e8862"
+    },
+    "journey_gates": {
+      "generated_at": "2026-05-05T15:30:44Z",
+      "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+      "sha256": "75b999ec50bbd63a3f2c1c214c6af32597ad7c2ef296910b3d430e141c355a8d"
+    },
+    "ltd_integration_guide": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/HORIZON_AND_FEATURE_LTD_INTEGRATION_GUIDE.md",
+      "sha256": "5c52f92a8833d7d7b6a2493faca673cf5b3f1c646e617d5102b8d993a6e7985e"
+    },
+    "m131_public_guide_gates": {
+      "generated_at": "2026-05-05T13:32:27Z",
+      "path": "/docker/fleet/.codex-studio/published/NEXT90_M131_FLEET_PUBLIC_GUIDE_GATES.generated.json",
+      "sha256": "dfb3c3b27b8f73933d62d474674d83abd61c33e841921c6e2975ae82ab012c87"
+    },
+    "m133_media_social_monitors": {
+      "generated_at": "2026-05-05T14:53:22Z",
+      "path": "/docker/fleet/.codex-studio/published/NEXT90_M133_FLEET_MEDIA_SOCIAL_HORIZON_MONITORS.generated.json",
+      "sha256": "efe8d6457330a1dd6d1c9000befc051f1dff7bdf95c8af8f91c47feb4bab3298"
+    },
+    "next90_guide": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
+      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+    },
+    "open_runs_community_hub": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/OPEN_RUNS_AND_COMMUNITY_HUB.md",
+      "sha256": "e6ee9d05cd44133dad222675fdd5b96053c44e58032baf3eb8b67066214b4f0e"
+    },
+    "open_runs_honors": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/OPEN_RUNS_REPUTATION_AND_SEASONAL_HONORS.yaml",
+      "sha256": "d2d34e9a6ae9014ead44cb524a783b4f0fa347e435914e7000cdd627ecda8bea"
+    },
+    "public_concierge_workflows": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_CONCIERGE_WORKFLOWS.yaml",
+      "sha256": "c166129a71a7631e37a52ef95b37365e31bb4f298dc853b87b52bdcbbe49990d"
+    },
+    "public_feature_registry": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FEATURE_REGISTRY.yaml",
+      "sha256": "cb90a2b1429a943a514d3627ae4ee208dcece66584caac1805aea152ff3ef9b8"
+    },
+    "public_guide_root": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/HORIZONS",
+      "sha256": ""
+    },
+    "public_landing_manifest": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_LANDING_MANIFEST.yaml",
+      "sha256": "104c46bc68365be611735b6c6a4fc16a983eb87d7df2821f86e60e43affe3ce6"
+    },
+    "public_release_experience": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_RELEASE_EXPERIENCE.yaml",
+      "sha256": "1eff1ce4c1ddabd6ee0a8274c853940babc256465474644ed6880e3947a52df0"
+    },
+    "roadmap": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md",
+      "sha256": "0563a1a363406fed29d2fba61ca8b638c383b0bba1abb4747d9b21b918f27da0"
+    },
+    "successor_registry": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "641255112587cbec2c7c43a37dda5a90f6f59e0d2775206517fede2695c233e3"
+    }
+  },
+  "status": "pass",
+  "wave": "W24",
+  "work_task_id": "137.7"
+}
