@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-05-05T19:47:26Z",
+  "generated_at": "2026-05-05T20:01:09Z",
   "status": "fail",
   "scoped_status": "fail",
   "ready_keys": [
@@ -105,7 +105,7 @@
       "status": "warning",
       "summary": "Flagship replacement truth is still stricter than the current structural closure.",
       "reasons": [
-        "M141 import-route closeout gate is not ready."
+        "M142 route-local proof closeout gate is not ready."
       ],
       "evidence": {
         "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml",
@@ -169,12 +169,18 @@
         "m140_portability_and_cadence_closeout_gate_generated_at": "2026-05-05T19:13:58Z",
         "m140_portability_and_cadence_closeout_gate_reasons": [],
         "m141_import_route_closeout_gate_path": "/docker/fleet/.codex-studio/published/NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.json",
-        "m141_import_route_closeout_gate_ready": false,
-        "m141_import_route_closeout_gate_status": "fail",
-        "m141_import_route_closeout_monitor_status": "warning",
-        "m141_import_route_closeout_gate_generated_at": "2026-05-05T19:47:18Z",
-        "m141_import_route_closeout_gate_reasons": [
-          "M141 import-route closeout gate package is not passing."
+        "m141_import_route_closeout_gate_ready": true,
+        "m141_import_route_closeout_gate_status": "pass",
+        "m141_import_route_closeout_monitor_status": "pass",
+        "m141_import_route_closeout_gate_generated_at": "2026-05-05T19:49:37Z",
+        "m141_import_route_closeout_gate_reasons": [],
+        "m142_route_local_proof_closeout_gate_path": "/docker/fleet/.codex-studio/published/NEXT90_M142_FLEET_ROUTE_LOCAL_PROOF_CLOSEOUT_GATES.generated.json",
+        "m142_route_local_proof_closeout_gate_ready": false,
+        "m142_route_local_proof_closeout_gate_status": "pass",
+        "m142_route_local_proof_closeout_monitor_status": "blocked",
+        "m142_route_local_proof_closeout_gate_generated_at": "2026-05-05T20:00:59Z",
+        "m142_route_local_proof_closeout_gate_reasons": [
+          "M142 route-local proof closeout gate still reports blocked runtime proof."
         ],
         "readiness_plane_contract_path": "/docker/fleet/.codex-design/product/FLAGSHIP_READINESS_PLANES.yaml",
         "readiness_plane_contract_present": true,
@@ -426,7 +432,7 @@
           "teable"
         ],
         "support_generated_at": "2026-05-05T19:30:34Z",
-        "support_generated_age_seconds": 1012,
+        "support_generated_age_seconds": 1835,
         "support_source_refresh_mode": "source_mirror_fallback",
         "support_source_refresh_mode_recovered_from_external_only_backlog": false,
         "support_source_refresh_mode_recovered_from_fresh_zero_backlog_mirror": true,
@@ -661,7 +667,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-05-05T03:53:56.486187Z",
-        "ui_executable_gate_age_seconds": 57209,
+        "ui_executable_gate_age_seconds": 58032,
         "ui_linux_exit_gate_status": "passed",
         "ui_linux_exit_gate_recovered_from_executable_gate": true,
         "ui_linux_exit_gate_effective_ready": true,
@@ -855,7 +861,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-05-05T19:17:52Z",
-        "release_channel_age_seconds": 1774,
+        "release_channel_age_seconds": 2597,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "preview",
@@ -1178,7 +1184,7 @@
         "journey_local_blocker_unrouted_reason_sample": [],
         "history_snapshot_count": 22,
         "support_packets_generated_at": "2026-05-05T19:30:34Z",
-        "support_packets_generated_age_seconds": 1012,
+        "support_packets_generated_age_seconds": 1835,
         "support_packets_refresh_mode": "source_mirror_fallback",
         "support_open_packet_count": 0,
         "support_open_non_external_packet_count": 0,
@@ -1202,20 +1208,20 @@
         "external_proof_runbook_synced": true,
         "external_proof_runbook_sync_issue_count": 0,
         "dispatchable_truth_ready": true,
-        "active_shards_generated_at": "2026-05-05T19:47:24Z",
+        "active_shards_generated_at": "2026-05-05T20:01:06Z",
         "active_shards_manifest_kind": "configured_shard_topology",
-        "active_shards_count": 7,
+        "active_shards_count": 1,
         "configured_shards_count": 20,
         "active_shards_recent": true,
         "ooda_state_recovered_from_active_shards": false,
         "ooda_state_recovery_source": "",
         "supervisor_mode": "sharded",
-        "supervisor_completion_status": "fail",
+        "supervisor_completion_status": "pass",
         "supervisor_completion_external_only": false,
         "supervisor_completion_desktop_scoped": false,
         "supervisor_completion_routed_local_only": false,
         "supervisor_successor_wave_steering_ready": false,
-        "supervisor_updated_at": "2026-05-05T19:47:22Z",
+        "supervisor_updated_at": "2026-05-05T20:00:38Z",
         "supervisor_recent_enough": true,
         "supervisor_focus_profiles": [
           "top_flagship_grade",
@@ -1226,7 +1232,7 @@
           "whole_project_frontier"
         ],
         "supervisor_state_recovered_from_active_shards": false,
-        "supervisor_focus_profiles_recovered_from_runtime_env": false,
+        "supervisor_focus_profiles_recovered_from_runtime_env": true,
         "supervisor_hard_flagship_ready": true,
         "supervisor_whole_project_frontier_ready": true,
         "ooda_controller": "up",
@@ -1235,8 +1241,7 @@
         "ooda_timestamp_stale": false,
         "ooda_steady_complete_quiet": false,
         "ooda_live_active_progress": false,
-        "ooda_recovered_from_current_supervisor_topology": false,
-        "supervisor_completion_status_recovered_from_current_readiness": true
+        "ooda_recovered_from_current_supervisor_topology": false
       }
     }
   },

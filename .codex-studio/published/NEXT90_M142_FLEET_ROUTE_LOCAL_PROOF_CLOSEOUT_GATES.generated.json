@@ -1,0 +1,287 @@
+{
+  "canonical_monitors": {
+    "guide_markers": {
+      "checks": {
+        "exit_contract": true,
+        "milestone_142": true,
+        "wave_22p": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "queue_alignment": {
+      "issues": [],
+      "state": "pass",
+      "warnings": [
+        "Fleet queue mirror row is still missing for work task 142.5."
+      ]
+    },
+    "workflow_pack_contract": {
+      "issues": [],
+      "state": "pass"
+    }
+  },
+  "contract_name": "fleet.next90_m142_route_local_proof_closeout_gates",
+  "frontier_id": 7414599441,
+  "generated_at": "2026-05-05T20:00:59Z",
+  "milestone_id": 142,
+  "monitor_summary": {
+    "canonical_issue_count": 0,
+    "route_local_proof_closeout_status": "blocked",
+    "runtime_blocker_count": 5,
+    "runtime_blockers": [
+      "family:dense_builder_and_career_workflows: live proof corpus still lacks direct route-local receipts for workflow:build_explain_publish.",
+      "family:dice_initiative_and_table_utilities: live proof corpus still lacks direct route-local receipts for menu:dice_roller_or_workflow:initiative_screenshot.",
+      "family:dense_builder_and_career_workflows: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/task-speed receipt artifacts for this family; row evidence still relies only on broad family proof artifacts",
+      "family:dice_initiative_and_table_utilities: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/task-speed receipt artifacts for this family; row evidence still relies only on broad family proof artifacts",
+      "family:identity_contacts_lifestyles_history: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/task-speed receipt artifacts for this family; row evidence still relies only on broad family proof artifacts"
+    ],
+    "warning_count": 1,
+    "warnings": [
+      "Fleet queue mirror row is still missing for work task 142.5."
+    ]
+  },
+  "package_closeout": {
+    "ready": false,
+    "reasons": [
+      "family:dense_builder_and_career_workflows: live proof corpus still lacks direct route-local receipts for workflow:build_explain_publish.",
+      "family:dice_initiative_and_table_utilities: live proof corpus still lacks direct route-local receipts for menu:dice_roller_or_workflow:initiative_screenshot.",
+      "family:dense_builder_and_career_workflows: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/task-speed receipt artifacts for this family; row evidence still relies only on broad family proof artifacts",
+      "family:dice_initiative_and_table_utilities: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/task-speed receipt artifacts for this family; row evidence still relies only on broad family proof artifacts",
+      "family:identity_contacts_lifestyles_history: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/task-speed receipt artifacts for this family; row evidence still relies only on broad family proof artifacts"
+    ],
+    "status": "blocked",
+    "warnings": [
+      "Fleet queue mirror row is still missing for work task 142.5."
+    ]
+  },
+  "package_id": "next90-m142-fleet-fail-closeout-when-any-route-in-this-milestone-closes-on-family-prose",
+  "queue_title": "Fail closeout when any route in this milestone closes on family prose, stale captures, or missing task-speed and runtime receipts.",
+  "runtime_monitors": {
+    "proof_corpus": {
+      "family_receipt_summary": {
+        "family:dense_builder_and_career_workflows": {
+          "missing_route_receipts": [
+            "workflow:build_explain_publish"
+          ],
+          "satisfied_route_receipts": [
+            "oracle:tabs",
+            "oracle:workspace_actions"
+          ]
+        },
+        "family:dice_initiative_and_table_utilities": {
+          "missing_route_receipts": [
+            "menu:dice_roller_or_workflow:initiative_screenshot"
+          ],
+          "satisfied_route_receipts": [
+            "menu:dice_roller",
+            "workflow:initiative",
+            "workflow:initiative"
+          ]
+        },
+        "family:identity_contacts_lifestyles_history": {
+          "missing_route_receipts": [],
+          "satisfied_route_receipts": [
+            "workflow:contacts",
+            "workflow:notes",
+            "workflow:lifestyles",
+            "workflow:contacts_and_notes_screenshots"
+          ]
+        }
+      },
+      "issues": [],
+      "runtime_blockers": [
+        "family:dense_builder_and_career_workflows: live proof corpus still lacks direct route-local receipts for workflow:build_explain_publish.",
+        "family:dice_initiative_and_table_utilities: live proof corpus still lacks direct route-local receipts for menu:dice_roller_or_workflow:initiative_screenshot."
+      ],
+      "state": "pass",
+      "warnings": []
+    },
+    "target_rows": {
+      "issues": [],
+      "rows": [
+        {
+          "behavioral_parity": "yes",
+          "compare_artifacts": [
+            "oracle:tabs",
+            "oracle:workspace_actions",
+            "workflow:build_explain_publish"
+          ],
+          "evidence": [
+            "/docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+          ],
+          "id": "family:dense_builder_and_career_workflows",
+          "issues": [
+            "row still closes on broad family prose instead of route-local proof receipts",
+            "row evidence does not cite any direct runtime/task-speed receipt artifacts for this family",
+            "row evidence still relies only on broad family proof artifacts"
+          ],
+          "label": "Dense builder and career workflows",
+          "present_in_chummer5a": "yes",
+          "present_in_chummer6": "yes",
+          "reason": "All declared compare artifacts for this Chummer5A family are directly backed by current parity proof: ['oracle:tabs', 'oracle:workspace_actions', 'workflow:build_explain_publish'].",
+          "removable_if_not_in_chummer5a": "no",
+          "visual_parity": "yes"
+        },
+        {
+          "behavioral_parity": "yes",
+          "compare_artifacts": [
+            "menu:dice_roller",
+            "workflow:initiative"
+          ],
+          "evidence": [
+            "/docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+          ],
+          "id": "family:dice_initiative_and_table_utilities",
+          "issues": [
+            "row still closes on broad family prose instead of route-local proof receipts",
+            "row evidence does not cite any direct runtime/task-speed receipt artifacts for this family",
+            "row evidence still relies only on broad family proof artifacts"
+          ],
+          "label": "Dice, initiative, and table utilities",
+          "present_in_chummer5a": "yes",
+          "present_in_chummer6": "yes",
+          "reason": "All declared compare artifacts for this Chummer5A family are directly backed by current parity proof: ['menu:dice_roller', 'workflow:initiative'].",
+          "removable_if_not_in_chummer5a": "no",
+          "visual_parity": "yes"
+        },
+        {
+          "behavioral_parity": "yes",
+          "compare_artifacts": [
+            "workflow:contacts",
+            "workflow:lifestyles",
+            "workflow:notes"
+          ],
+          "evidence": [
+            "/docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+          ],
+          "id": "family:identity_contacts_lifestyles_history",
+          "issues": [
+            "row still closes on broad family prose instead of route-local proof receipts",
+            "row evidence does not cite any direct runtime/task-speed receipt artifacts for this family",
+            "row evidence still relies only on broad family proof artifacts"
+          ],
+          "label": "Identity, contacts, lifestyles, and history workflows",
+          "present_in_chummer5a": "yes",
+          "present_in_chummer6": "yes",
+          "reason": "All declared compare artifacts for this Chummer5A family are directly backed by current parity proof: ['workflow:contacts', 'workflow:lifestyles', 'workflow:notes'].",
+          "removable_if_not_in_chummer5a": "no",
+          "visual_parity": "yes"
+        }
+      ],
+      "runtime_blockers": [
+        "family:dense_builder_and_career_workflows: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/task-speed receipt artifacts for this family; row evidence still relies only on broad family proof artifacts",
+        "family:dice_initiative_and_table_utilities: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/task-speed receipt artifacts for this family; row evidence still relies only on broad family proof artifacts",
+        "family:identity_contacts_lifestyles_history: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/task-speed receipt artifacts for this family; row evidence still relies only on broad family proof artifacts"
+      ],
+      "state": "pass"
+    }
+  },
+  "source_inputs": {
+    "classic_dense_workbench_gate": {
+      "generated_at": "2026-05-02T14:05:07.981802Z",
+      "generated_at_source": "payload",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json",
+      "sha256": "21ce4c331622bc7d131e91bd29492c0b2eb7310c3e7a77cb012080cec303999a"
+    },
+    "core_dense_receipts_doc": {
+      "generated_at": "2026-05-05T05:04:29Z",
+      "generated_at_source": "file_mtime",
+      "path": "/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
+      "sha256": "2760d2b65cbf32d7dcd873dd63d829659a9a8c77fb85edb0ccaca16969188403"
+    },
+    "design_queue_staging": {
+      "generated_at": "2026-05-05T20:00:38Z",
+      "generated_at_source": "file_mtime",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "1c94fd2c69eca4eb802416ce1a7e93c12eec9283dec40d0b51341d2376f0494b"
+    },
+    "desktop_visual_familiarity_gate": {
+      "generated_at": "2026-05-05T15:52:11.269451Z",
+      "generated_at_source": "payload",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+      "sha256": "a8177012e1cff67255e3c136f44c8addc1d6670b3b8fcc03500f967d51508f0f"
+    },
+    "desktop_workflow_execution_gate": {
+      "generated_at": "2026-05-04T10:41:18.723581Z",
+      "generated_at_source": "payload",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
+      "sha256": "e022825eb03037243dfe405b8d60562b1f6015d1c22d35c9ad6071ad4fb1e577"
+    },
+    "fleet_queue_staging": {
+      "generated_at": "2026-05-05T20:00:38Z",
+      "generated_at_source": "file_mtime",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "bf8770ae1645a534a59189f3103d1a388d9a3ccfb1459e7a7dd40c1a86384eaf"
+    },
+    "generated_dialog_parity": {
+      "generated_at": "2026-05-04T20:21:16.770780Z",
+      "generated_at_source": "payload",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json",
+      "sha256": "246406108e10d777e6bcd2586d360bf8aadc163a3ef45c169b8e4c276e4dd5af"
+    },
+    "gm_runboard_route": {
+      "generated_at": "2026-05-05T16:28:45Z",
+      "generated_at_source": "payload",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json",
+      "sha256": "d3b232f8875fdec7607867302006bde9c2ce4d09c1264600799acfd03d00213d"
+    },
+    "next90_guide": {
+      "generated_at": "2026-05-05T19:47:04Z",
+      "generated_at_source": "file_mtime",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
+      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+    },
+    "parity_audit": {
+      "generated_at": "2026-05-05T19:47:18.226745Z",
+      "generated_at_source": "payload",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
+      "sha256": "1374e218119af0656384d451e178f3ea1a9ff86d30f334aa43a08f3830d21c0b"
+    },
+    "screenshot_review_gate": {
+      "generated_at": "2026-05-05T15:52:37.242320Z",
+      "generated_at_source": "payload",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
+      "sha256": "9d6c0b49bae2f8e9bf32d7fc9c9c808429671e9f904dffd35ac027d91c758ad8"
+    },
+    "section_host_ruleset_parity": {
+      "generated_at": "2026-04-23T15:52:14.898217Z",
+      "generated_at_source": "payload",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json",
+      "sha256": "bea6baea26fb0b81a2fc7b32e5619490bd09385b2712e94fc7c2cc64837efbf5"
+    },
+    "successor_registry": {
+      "generated_at": "2026-05-05T19:54:39Z",
+      "generated_at_source": "file_mtime",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "7c33e6af9c6b3701b5d8d1372f6e226510c7dc2d553df46734926b0d1692ac2f"
+    },
+    "ui_flagship_release_gate": {
+      "generated_at": "2026-05-02T14:05:07.728429Z",
+      "generated_at_source": "payload",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json",
+      "sha256": "9fad53c6ca17b210e8b57b4a81b7341b74ebb015f84db9d4430bb810c3c21d27"
+    },
+    "veteran_task_time_gate": {
+      "generated_at": "2026-05-05T19:43:26.993880Z",
+      "generated_at_source": "payload",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json",
+      "sha256": "51c6db6f77de13c78b9f65c1d7417b6b39d5bfbf8ba9494f7a9cca50270cc4f6"
+    },
+    "workflow_pack": {
+      "generated_at": "2026-05-05T19:51:57Z",
+      "generated_at_source": "file_mtime",
+      "path": "/docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml",
+      "sha256": "8099aa40c47a3a7ea16a7c7f753e231141378d002e33518692be2c5333f815de"
+    }
+  },
+  "status": "pass",
+  "wave": "W22P",
+  "work_task_id": "142.5"
+}
