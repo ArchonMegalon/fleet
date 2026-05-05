@@ -1,0 +1,475 @@
+{
+  "adoption_health": {
+    "pulse_as_of": "2026-05-05",
+    "raw_state": "clear",
+    "source": {
+      "history_snapshot_count": 22,
+      "local_release_proof_status": "passed",
+      "proven_journey_count": 5,
+      "proven_route_count": 10,
+      "successor_dependency_summary": {
+        "dependency_ids": [
+          101,
+          102,
+          103,
+          104,
+          105
+        ],
+        "milestone_id": 106,
+        "open_dependency_ids": [],
+        "open_dependency_work_task_ids": [],
+        "state": "ready",
+        "summary": "Successor launch dependencies are closed in the next-90-day registry."
+      }
+    },
+    "state": "pass",
+    "summary": "Current local edge proof passed. 5 journey proofs and 10 trust routes are on record. 22 weekly snapshots are on record for the current public trust posture."
+  },
+  "agreement": {
+    "design_queue_status": "in_progress",
+    "fleet_queue_status": "in_progress",
+    "queue_closure_matches_package": true,
+    "queue_scope_matches_package": true,
+    "registry_closure_matches_package": true,
+    "registry_scope_matches_package": true,
+    "registry_status": "in_progress",
+    "registry_work_task_title": "Compile launch pulse, adoption health, support risk, and proof freshness into governor-ready public status packets.",
+    "work_task_status": ""
+  },
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "as_of": "2026-05-05",
+  "contract_name": "fleet.next90_m120_launch_pulse",
+  "frontier_id": 2614855152,
+  "generated_at": "2026-05-05T16:19:45Z",
+  "launch_pulse": {
+    "alignment_ok": true,
+    "decision_alignment": {
+      "actual_action": "freeze_launch",
+      "expected_action": "freeze_launch",
+      "status": "pass"
+    },
+    "focus_shift_reason": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
+    "governor_action": "freeze_launch",
+    "public_status_body": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
+    "public_status_copy_state": "freeze_launch",
+    "public_status_headline": "Launch expansion remains frozen.",
+    "pulse_action": "freeze_launch",
+    "state": "pass"
+  },
+  "milestone_id": 120,
+  "next_actions": [
+    "Keep packet fresh from governed source truth and raise only when source truth drifts."
+  ],
+  "owned_surfaces": [
+    "launch_pulse",
+    "adoption_health:governor"
+  ],
+  "package_id": "next90-m120-fleet-launch-pulse",
+  "proof_freshness": {
+    "missing_input_count": 0,
+    "source_rows": {
+      "flagship_readiness": {
+        "age_seconds": 428,
+        "exists": true,
+        "generated_at": "2026-05-05T16:12:37Z",
+        "generated_at_sha256": "b6a0197f72dfa23d14df93345c514ad56f631eee8b4aac22271b821f47eb841f",
+        "max_age_seconds": 172800,
+        "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+        "sha256": "46a28b85231076c59a117adc2b07b4c00955d29385e30cc2c3535c3045940129",
+        "state": "pass",
+        "status": "pass"
+      },
+      "journey_gates": {
+        "age_seconds": 437,
+        "exists": true,
+        "generated_at": "2026-05-05T16:12:28Z",
+        "generated_at_sha256": "0fd7b9df8247fd796884cf3a0b8026356780257d4a37282927b4e1f2d0251e77",
+        "max_age_seconds": 172800,
+        "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+        "sha256": "461ab1f8ba36631f69899bb70ea84835c341e38fb41afd6b5b1b33802b02ae88",
+        "state": "pass",
+        "status": "pass"
+      },
+      "progress_report": {
+        "age_seconds": 12560,
+        "exists": true,
+        "generated_at": "2026-05-05T12:50:25Z",
+        "generated_at_sha256": "206ea95cfa0fe9c7721a6947bf30d108b5a5964f6d34ecfef0ae070cf0fa507f",
+        "max_age_seconds": 172800,
+        "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+        "sha256": "9fe996c9cc333203c3f7231b6cab33db568fc1e714fb6946f48be3980d471137",
+        "state": "pass",
+        "status": "pass"
+      },
+      "proof_orchestration": {
+        "age_seconds": 1869,
+        "exists": true,
+        "generated_at": "2026-05-05T15:48:36Z",
+        "generated_at_sha256": "0178f10ae932ebe3d38598553059e47eb42a2eef3f485dffb97bdef2878346b1",
+        "max_age_seconds": 172800,
+        "path": "/docker/fleet/.codex-studio/published/PROOF_ORCHESTRATION.generated.json",
+        "sha256": "76c5023dbbad4c80f6a8ff3e838a56c778c276a102a21e78d4803702ab2a5f9c",
+        "state": "pass",
+        "status": "pass"
+      },
+      "status_plane": {
+        "age_seconds": 12654,
+        "exists": true,
+        "generated_at": "2026-05-05T12:48:51Z",
+        "generated_at_sha256": "be4cfb86e881df1f210d66e0fb94bde833f0ffb7833e265f43f16fb027e05333",
+        "max_age_seconds": 172800,
+        "path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
+        "sha256": "ec9475a99a66df178ced6ad409e44b4505df8753faddddf587340d795a078927",
+        "state": "pass",
+        "status": "pass"
+      },
+      "support_packets": {
+        "age_seconds": 450,
+        "exists": true,
+        "generated_at": "2026-05-05T16:12:15Z",
+        "generated_at_sha256": "bb7565a216dbde899e39435fd288eb5a2c482191379f9b7714b17aae77182b64",
+        "max_age_seconds": 172800,
+        "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+        "sha256": "2dc1712084bd188a02155e81e8fac90dcf171784682871fd4658cec36b4c2916",
+        "state": "pass",
+        "status": "pass"
+      },
+      "weekly_governor_packet": {
+        "age_seconds": 422,
+        "exists": true,
+        "generated_at": "2026-05-05T16:12:43Z",
+        "generated_at_sha256": "eca3e9d86955be9aef4c24a482212d9f7bce7f3ed00526086b47b6508d41be14",
+        "max_age_seconds": 172800,
+        "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+        "sha256": "8d0337cb12726595d1c084d26e19d70e48a7f904d9c107f2812a9eac6038d93b",
+        "state": "pass",
+        "status": "pass"
+      },
+      "weekly_product_pulse": {
+        "age_seconds": 427,
+        "exists": true,
+        "generated_at": "2026-05-05T16:12:38Z",
+        "generated_at_sha256": "1ad7a86cfd25a69854fec2717726f2a1f915d52eaec8f32567366839cbdf17dd",
+        "max_age_seconds": 172800,
+        "path": "/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
+        "sha256": "467c071a95c9f594eb12121b42a76742a392347470f1c9d9ed96c31819cf1e12",
+        "state": "pass",
+        "status": "pass"
+      }
+    },
+    "stale_input_count": 0,
+    "state": "pass"
+  },
+  "public_followthrough": {
+    "final_claim_state": "pass",
+    "flagship_readiness_status": "pass",
+    "journey_gates_overall_state": "ready",
+    "progress_report": {
+      "momentum": {
+        "label": "Stale",
+        "summary": "Core Engine is currently setting the delivery pace."
+      },
+      "overall_status": "complete",
+      "percent_complete": 99,
+      "top_risks": [
+        {
+          "key": "flagship_release_truth",
+          "summary": "Executable flagship proof is green, but parity and layout proof are not complete enough to widen final claims."
+        },
+        {
+          "key": "repo_local_backlog",
+          "summary": "Mapped public parts are at zero open milestone weight, but repo-local backlog still has 112 active item(s) across 10 project(s). Next up: Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta, and source-anchor receipts for the first SR6 combat-round proof.."
+        },
+        {
+          "key": "full_product_queue",
+          "summary": "18 open milestones remain in the full-product frontier. The current supervisor ETA is scoped to Aggregate multi-shard ETA, not full-product parity."
+        }
+      ]
+    },
+    "public_followthrough_reasons": [],
+    "state": "pass",
+    "summary": "Public followthrough inputs are aligned for governor-facing operator packaging."
+  },
+  "queue_task": "Produce launch pulse, adoption health, support risk, proof freshness, and public followthrough packets from governed release truth.",
+  "queue_title": "Compile launch pulse and adoption health into governor packets",
+  "source_input_health": {
+    "flagship_readiness": {
+      "age_seconds": 428,
+      "exists": true,
+      "generated_at": "2026-05-05T16:12:37Z",
+      "generated_at_sha256": "b6a0197f72dfa23d14df93345c514ad56f631eee8b4aac22271b821f47eb841f",
+      "max_age_seconds": 172800,
+      "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+      "sha256": "46a28b85231076c59a117adc2b07b4c00955d29385e30cc2c3535c3045940129",
+      "state": "pass",
+      "status": "pass"
+    },
+    "journey_gates": {
+      "age_seconds": 437,
+      "exists": true,
+      "generated_at": "2026-05-05T16:12:28Z",
+      "generated_at_sha256": "0fd7b9df8247fd796884cf3a0b8026356780257d4a37282927b4e1f2d0251e77",
+      "max_age_seconds": 172800,
+      "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+      "sha256": "461ab1f8ba36631f69899bb70ea84835c341e38fb41afd6b5b1b33802b02ae88",
+      "state": "pass",
+      "status": "pass"
+    },
+    "progress_report": {
+      "age_seconds": 12560,
+      "exists": true,
+      "generated_at": "2026-05-05T12:50:25Z",
+      "generated_at_sha256": "206ea95cfa0fe9c7721a6947bf30d108b5a5964f6d34ecfef0ae070cf0fa507f",
+      "max_age_seconds": 172800,
+      "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+      "sha256": "9fe996c9cc333203c3f7231b6cab33db568fc1e714fb6946f48be3980d471137",
+      "state": "pass",
+      "status": "pass"
+    },
+    "proof_orchestration": {
+      "age_seconds": 1869,
+      "exists": true,
+      "generated_at": "2026-05-05T15:48:36Z",
+      "generated_at_sha256": "0178f10ae932ebe3d38598553059e47eb42a2eef3f485dffb97bdef2878346b1",
+      "max_age_seconds": 172800,
+      "path": "/docker/fleet/.codex-studio/published/PROOF_ORCHESTRATION.generated.json",
+      "sha256": "76c5023dbbad4c80f6a8ff3e838a56c778c276a102a21e78d4803702ab2a5f9c",
+      "state": "pass",
+      "status": "pass"
+    },
+    "status_plane": {
+      "age_seconds": 12654,
+      "exists": true,
+      "generated_at": "2026-05-05T12:48:51Z",
+      "generated_at_sha256": "be4cfb86e881df1f210d66e0fb94bde833f0ffb7833e265f43f16fb027e05333",
+      "max_age_seconds": 172800,
+      "path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
+      "sha256": "ec9475a99a66df178ced6ad409e44b4505df8753faddddf587340d795a078927",
+      "state": "pass",
+      "status": "pass"
+    },
+    "support_packets": {
+      "age_seconds": 450,
+      "exists": true,
+      "generated_at": "2026-05-05T16:12:15Z",
+      "generated_at_sha256": "bb7565a216dbde899e39435fd288eb5a2c482191379f9b7714b17aae77182b64",
+      "max_age_seconds": 172800,
+      "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+      "sha256": "2dc1712084bd188a02155e81e8fac90dcf171784682871fd4658cec36b4c2916",
+      "state": "pass",
+      "status": "pass"
+    },
+    "weekly_governor_packet": {
+      "age_seconds": 422,
+      "exists": true,
+      "generated_at": "2026-05-05T16:12:43Z",
+      "generated_at_sha256": "eca3e9d86955be9aef4c24a482212d9f7bce7f3ed00526086b47b6508d41be14",
+      "max_age_seconds": 172800,
+      "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+      "sha256": "8d0337cb12726595d1c084d26e19d70e48a7f904d9c107f2812a9eac6038d93b",
+      "state": "pass",
+      "status": "pass"
+    },
+    "weekly_product_pulse": {
+      "age_seconds": 427,
+      "exists": true,
+      "generated_at": "2026-05-05T16:12:38Z",
+      "generated_at_sha256": "1ad7a86cfd25a69854fec2717726f2a1f915d52eaec8f32567366839cbdf17dd",
+      "max_age_seconds": 172800,
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
+      "sha256": "467c071a95c9f594eb12121b42a76742a392347470f1c9d9ed96c31819cf1e12",
+      "state": "pass",
+      "status": "pass"
+    }
+  },
+  "source_inputs": {
+    "design_queue_staging": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+    "flagship_readiness": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+    "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+    "progress_report": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+    "proof_orchestration": "/docker/fleet/.codex-studio/published/PROOF_ORCHESTRATION.generated.json",
+    "queue_staging": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+    "registry": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+    "status_plane": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
+    "successor_frontier_id": 2614855152,
+    "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+    "weekly_governor_packet": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+    "weekly_product_pulse": "/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json"
+  },
+  "source_packet_links": {
+    "flagship_readiness": {
+      "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+      "scoped_status": "pass",
+      "status": "pass"
+    },
+    "support_case_packets": {
+      "contract_name": "fleet.support_case_packets",
+      "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+      "successor_package_verification": {
+        "allowed_paths": [
+          "scripts",
+          "tests",
+          ".codex-studio",
+          "feedback"
+        ],
+        "design_queue_source_completion_action": "verify_closed_package_only",
+        "design_queue_source_do_not_reopen_reason": "M102 Fleet reporter receipts are complete; future shards must verify the support-packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the install-aware followthrough package.",
+        "design_queue_source_frontier_id": "2454416974",
+        "design_queue_source_item_count": 1,
+        "design_queue_source_item_found": true,
+        "design_queue_source_milestone_id": 102,
+        "design_queue_source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+        "design_queue_source_repo": "fleet",
+        "design_queue_source_status": "complete",
+        "design_queue_source_task": "Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.",
+        "design_queue_source_title": "Gate fix followthrough against real install and receipt truth",
+        "design_queue_source_wave": "W6",
+        "disallowed_design_queue_source_proof_entries": [],
+        "disallowed_queue_proof_entries": [],
+        "disallowed_registry_evidence_entries": [],
+        "frontier_id": "2454416974",
+        "issues": [],
+        "milestone_id": 102,
+        "missing_design_queue_source_proof_anchor_paths": [],
+        "missing_design_queue_source_proof_markers": [],
+        "missing_queue_design_source_proof_markers": [],
+        "missing_queue_proof_anchor_paths": [],
+        "missing_queue_proof_markers": [],
+        "missing_registry_evidence_markers": [],
+        "missing_registry_proof_anchor_paths": [],
+        "owned_surfaces": [
+          "feedback_loop_ready:install_receipts",
+          "product_governor:followthrough"
+        ],
+        "package_id": "next90-m102-fleet-reporter-receipts",
+        "queue_completion_action": "verify_closed_package_only",
+        "queue_do_not_reopen_reason": "M102 Fleet reporter receipts are complete; future shards must verify the support-packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the install-aware followthrough package.",
+        "queue_frontier_id": "2454416974",
+        "queue_item_count": 1,
+        "queue_milestone_id": 102,
+        "queue_repo": "fleet",
+        "queue_staging_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+        "queue_status": "complete",
+        "queue_task": "Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.",
+        "queue_title": "Gate fix followthrough against real install and receipt truth",
+        "queue_wave": "W6",
+        "registry_dependencies": [
+          101
+        ],
+        "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+        "registry_status": "complete",
+        "registry_title": "Desktop-native claim, update, rollback, and support followthrough",
+        "registry_wave": "W6",
+        "registry_work_task_count": 1,
+        "registry_work_task_id": "102.4",
+        "registry_work_task_status": "complete",
+        "registry_work_task_title": "Gate the staged reporter mail loop against real install and fix receipts, not only queued support state.",
+        "repo": "fleet",
+        "required_queue_proof_markers": [
+          "/docker/fleet/scripts/materialize_support_case_packets.py",
+          "/docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py",
+          "/docker/fleet/tests/test_materialize_support_case_packets.py",
+          "/docker/fleet/tests/test_verify_next90_m102_fleet_reporter_receipts.py",
+          "/docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py",
+          "/docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py",
+          "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+          "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+          "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
+          "/docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md",
+          "python3 -m py_compile",
+          "python3 tests/test_materialize_support_case_packets.py exits 0",
+          "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
+          "python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0",
+          "installation-bound receipt gating",
+          "fixed-version receipts",
+          "fixed-channel receipts",
+          "receipt-gated support followthrough tests",
+          "successor frontier 2454416974",
+          "design-owned queue source",
+          "generated support-packet proof hygiene",
+          "stale generated support proof gaps",
+          "generated support successor scope drift",
+          "generated support successor closure-field drift",
+          "weekly/support receipt-count drift",
+          "weekly/support generated_at freshness",
+          "weekly support-packet source sha256 drift fails the standalone verifier",
+          "future-dated support and weekly generated_at receipts fail the standalone verifier",
+          "weekly support-packet source-path drift",
+          "standalone verifier rejects fix-available, please-test, feedback, or recovery action-group rows that omit their own install-aware receipt gates",
+          "standalone verifier rejects ready action-group rows whose install receipt, release receipt, fixed receipt, or installed-build values disagree even when stale generated booleans claim ready",
+          "design queue source path rejects active-run helper paths",
+          "weekly governor source-path hygiene and worker command guard",
+          "design-owned queue source proof markers",
+          "successor verifier fail-closes missing Fleet proof anchors",
+          "telemetry command proof markers fail the standalone verifier and shared successor authority check",
+          "runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check",
+          "distinct queue proof anti-collapse guard",
+          "duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check",
+          "cached packet fallback provenance guard",
+          "seeded cached-packet mirror provenance guard",
+          "completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason on Fleet and design queue rows"
+        ],
+        "required_registry_evidence_markers": [
+          "scripts/materialize_support_case_packets.py",
+          "tests/test_materialize_support_case_packets.py",
+          "python3 tests/test_materialize_support_case_packets.py exits 0",
+          "SUPPORT_CASE_PACKETS.generated.json",
+          "WEEKLY_GOVERNOR_PACKET.generated.json",
+          "feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md",
+          "install truth",
+          "installation-bound installed-build receipts",
+          "installed-build receipts",
+          "fixed-version receipts",
+          "fixed-channel receipts",
+          "release-channel receipts",
+          "weekly/support generated_at freshness",
+          "future-dated generated_at receipts",
+          "verify_script_bootstrap_no_pythonpath.py",
+          "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
+          "duplicate next90-m102-fleet-reporter-receipts queue rows",
+          "generated successor scope-drift",
+          "missing Fleet proof-anchor markers",
+          "runtime handoff metadata proof markers",
+          "cached packet fallback provenance guard",
+          "seeded cached-packet mirror provenance guard",
+          "stale ready action-group receipt mismatches",
+          "missing per-row install-aware receipt gates",
+          "verify_closed_package_only",
+          "do-not-reopen reason"
+        ],
+        "status": "pass"
+      }
+    },
+    "weekly_governor_packet": {
+      "contract_name": "fleet.weekly_governor_packet",
+      "current_launch_action": "freeze_launch",
+      "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json"
+    },
+    "weekly_product_pulse": {
+      "as_of": "2026-05-05",
+      "contract_name": "chummer.weekly_product_pulse",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
+      "pulse_action": "freeze_launch"
+    }
+  },
+  "status": "pass",
+  "status_reason": "All sources are aligned and governed from release truth.",
+  "support_risk": {
+    "counts": {
+      "closure_waiting_on_release_truth": 0,
+      "needs_human_response": 0,
+      "open_packet_count": 0,
+      "packet_count": 0,
+      "update_required_case_count": 0
+    },
+    "state": "low",
+    "summary": "Support followthrough pressure is currently low."
+  },
+  "wave_id": "W14",
+  "work_task_id": "120.3"
+}

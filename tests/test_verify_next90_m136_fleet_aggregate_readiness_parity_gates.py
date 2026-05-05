@@ -7,7 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from test_materialize_next90_m136_fleet_aggregate_readiness_parity_gates import _fixture_tree
+try:
+    from test_materialize_next90_m136_fleet_aggregate_readiness_parity_gates import _fixture_tree
+except ModuleNotFoundError:
+    from tests.test_materialize_next90_m136_fleet_aggregate_readiness_parity_gates import _fixture_tree
 
 
 MATERIALIZER = Path("/docker/fleet/scripts/materialize_next90_m136_fleet_aggregate_readiness_parity_gates.py")

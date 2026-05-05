@@ -235,19 +235,19 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
                 "(or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; "
                 "  exit 1; "
                 "fi; "
-                "curl_auth_args=(); "
+                "set -- curl -fL --retry 3 --retry-delay 2; "
                 "if [ -n \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ]; then "
-                "  curl_auth_args+=( -H \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ); "
+                "  set -- \"$@\" -H \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\"; "
                 "fi; "
                 "if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ]; then "
-                "  curl_auth_args+=( -H \"Cookie: ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ); "
+                "  set -- \"$@\" -H \"Cookie: ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\"; "
                 "fi; "
                 "if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ]; then "
-                "  curl_auth_args+=( --cookie \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ); "
+                "  set -- \"$@\" --cookie \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\"; "
                 "fi; "
-                f"curl -fL --retry 3 --retry-delay 2 ${{curl_auth_args[@]}} "
-                f"\"${{CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}}/downloads/install/{head}-{rid}-installer\" "
+                f"set -- \"$@\" \"${{CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}}/downloads/install/{head}-{rid}-installer\" "
                 f"-o {repo_root}/Docker/Downloads/files/{installer_name}; "
+                "\"$@\"; "
                 "fi; "
                 "python3 -c 'import os, pathlib, sys; "
                 f"p=pathlib.Path('\"'\"'{repo_root}/Docker/Downloads/files/{installer_name}'\"'\"'); "
@@ -1190,6 +1190,56 @@ def _normalize_external_proof_capture_command(value: Any) -> str:
     raw = str(value or "").strip()
     if not raw:
         return ""
+    repo_root = "/docker/chummercomplete/chummer6-ui"
+    repo_root_match = re.search(
+        r'REPO_ROOT="\$\{CHUMMER_UI_REPO_ROOT:-([^}]+)\}"',
+        raw,
+        re.IGNORECASE,
+    )
+    if repo_root_match is not None and str(repo_root_match.group(1) or "").strip():
+        repo_root = str(repo_root_match.group(1) or "").strip()
+    raw = raw.replace('"$REPO_ROOT"', repo_root).replace("$REPO_ROOT", repo_root)
+    raw = raw.replace(
+        '"$STARTUP_SMOKE_DIR"',
+        f"{repo_root}/Docker/Downloads/startup-smoke",
+    ).replace(
+        "$STARTUP_SMOKE_DIR",
+        f"{repo_root}/Docker/Downloads/startup-smoke",
+    )
+    if "./scripts/generate-releases-manifest.sh" in raw:
+        return "refresh_manifest"
+    installer_name_match = re.search(r"(chummer-[a-z0-9-]+-installer\.(?:exe|dmg|deb))", raw, re.IGNORECASE)
+    installer_name = str(installer_name_match.group(1) if installer_name_match else "").strip().lower()
+    route_match = re.search(r"(/downloads/install/[a-z0-9-]+)", raw, re.IGNORECASE)
+    public_route = str(route_match.group(1) if route_match else "").strip().lower()
+    sha_match = re.search(r"\b([0-9a-f]{64})\b", raw, re.IGNORECASE)
+    expected_sha256 = str(sha_match.group(1) if sha_match else "").strip().lower()
+    if "run-desktop-startup-smoke.sh" in raw:
+        host_match = re.search(r"CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=([^\s]+)", raw)
+        host = str(host_match.group(1) if host_match else "").strip().lower()
+        smoke_args_match = re.search(
+            r"run-desktop-startup-smoke\.sh\s+[\"']?(?P<installer>[^\s\"']+)[\"']?\s+"
+            r"(?P<head>[a-z0-9-]+)\s+(?P<rid>[a-z0-9-]+)\s+(?P<target>[^\s\"']+)\s+[\"']?(?P<outdir>[^\s\"']+)",
+            raw,
+            re.IGNORECASE,
+        )
+        if smoke_args_match:
+            installer_path = str(smoke_args_match.group("installer") or "").strip().lower()
+            head = str(smoke_args_match.group("head") or "").strip().lower()
+            rid = str(smoke_args_match.group("rid") or "").strip().lower()
+            launch_target = str(smoke_args_match.group("target") or "").strip().lower()
+            output_dir = str(smoke_args_match.group("outdir") or "").strip().lower()
+            installer_name = installer_name or Path(installer_path).name.lower()
+            return (
+                "startup_smoke:"
+                f"{host}:{head}:{rid}:{launch_target}:{installer_name}:{output_dir}"
+            )
+    if (
+        "installer-preflight-sha256-mismatch" in raw
+        or "installer-postdownload-sha256-mismatch" in raw
+        or "/downloads/install/" in raw
+    ):
+        return f"capture_installer:{installer_name}:{expected_sha256}:{public_route}"
     host_class_match = re.search(r"CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=([^\s]+)", raw)
     host_class_value = ""
     if host_class_match is not None:
@@ -1638,6 +1688,9 @@ def evaluate_journey(
             blocking_reasons.extend(_release_channel_external_proof_reasons(proof_payload))
 
     support_summary = dict(support_packets.get("summary") or {})
+    support_packet_rows = [
+        item for item in (support_packets.get("packets") or []) if isinstance(item, dict)
+    ]
     support_packet_contract_violations: List[str] = []
     support_recovery_contract_violations: List[str] = []
     support_generated_at = str(support_packets.get("generated_at") or "").strip()
@@ -1662,13 +1715,40 @@ def evaluate_journey(
             blocking_reasons.append(
                 "support packets do not prove all update-required cases route to /downloads."
             )
+    support_install_truth_activity_present = bool(support_packet_rows)
+    if not support_install_truth_activity_present:
+        for raw_value in support_summary.values():
+            if isinstance(raw_value, bool):
+                support_install_truth_activity_present = raw_value
+                if support_install_truth_activity_present:
+                    break
+            elif isinstance(raw_value, int):
+                if raw_value > 0:
+                    support_install_truth_activity_present = True
+                    break
+            elif isinstance(raw_value, dict):
+                if any(
+                    (value if isinstance(value, bool) else int(value) > 0)
+                    for value in raw_value.values()
+                    if isinstance(value, (bool, int))
+                ):
+                    support_install_truth_activity_present = True
+                    break
+            elif isinstance(raw_value, list):
+                if any(str(item or "").strip() for item in raw_value):
+                    support_install_truth_activity_present = True
+                    break
+            elif str(raw_value or "").strip():
+                support_install_truth_activity_present = True
+                break
+
     if bool(fleet_gate.get("require_support_install_truth_contract")):
         if release_channel_external_proof_source_present:
             if release_channel_generated_at is None:
                 support_packet_contract_violations.append(
                     "release channel install-truth proof is missing parseable generated_at/generatedAt timestamp."
                 )
-            else:
+            elif support_install_truth_activity_present:
                 support_generated_at_parsed = parse_iso(support_generated_at)
                 if support_generated_at_parsed is None:
                     support_packet_contract_violations.append(

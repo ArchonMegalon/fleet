@@ -230,6 +230,52 @@ def test_ui_independent_public_release_proof_bundle_requires_clean_user_journey_
     assert stage == "repo_local_complete"
 
 
+def test_ui_independent_public_release_proof_bundle_accepts_aggregate_visual_proof_when_visual_receipt_is_stale(tmp_path: Path) -> None:
+    module = _load_module()
+    published_dir = tmp_path / "ui" / ".codex-studio" / "published"
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "local_blocking_findings_count": 0,
+                "evidence": {"visual_familiarity_status": "pass"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json").write_text(
+        json.dumps({"status": "fail", "reasons": ["stale screenshots"]}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "open_blocking_findings_count": 0}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json").write_text(
+        json.dumps({"summary": {"visual_no_count": 0, "behavioral_no_count": 0}}) + "\n",
+        encoding="utf-8",
+    )
+
+    stage = module._infer_fallback_readiness_stage(
+        "ui",
+        tmp_path / "ui",
+        lifecycle="live",
+        deployment={"status": "public", "promotion_stage": "promoted_preview", "access_posture": "public"},
+    )
+
+    assert stage == "publicly_promoted"
+
+
 class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
     def setUp(self) -> None:
         self.verify = _load_module()

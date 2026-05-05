@@ -45,6 +45,7 @@ families:
     current_design_equivalents:
       - CHUMMER5A_FAMILIARITY_BRIDGE.md
       - FLAGSHIP_UI_RELEASE_GATE.md
+      - SR5_FLAGSHIP_VISUAL_PARITY_EXIT.yaml
       - FLAGSHIP_RELEASE_ACCEPTANCE.yaml
     status: covered
     milestone_ids:
@@ -64,6 +65,7 @@ families:
       - matrix and magic workflows
     current_design_equivalents:
       - CHUMMER5A_FAMILIARITY_BRIDGE.md
+      - SR5_SCREENSHOT_ORACLE_REGISTRY.yaml
       - DESKTOP_CLIENT_PRODUCT_CUT.md
       - BUILD_LAB_PRODUCT_MODEL.md
     status: covered

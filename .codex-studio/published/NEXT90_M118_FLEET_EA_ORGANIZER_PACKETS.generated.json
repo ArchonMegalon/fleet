@@ -1,0 +1,165 @@
+{
+  "agreement": {
+    "closed_anywhere": true,
+    "design_queue_completion_action": "verify_closed_package_only",
+    "design_queue_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
+    "design_queue_status": "complete",
+    "expected_completion_action": "verify_closed_package_only",
+    "expected_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
+    "fleet_queue_status": "complete",
+    "queue_completion_action": "verify_closed_package_only",
+    "queue_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
+    "queue_scope_matches_package": true,
+    "registry_scope_matches_package": true,
+    "registry_work_task_completion_action": "verify_closed_package_only",
+    "registry_work_task_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
+    "registry_work_task_status": "complete"
+  },
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "as_of": "2026-05-05",
+  "contract_name": "fleet.next90_m118_organizer_operator_packets",
+  "frontier_id": 4199699036,
+  "generated_at": "2026-05-05T14:56:38Z",
+  "milestone_id": 118,
+  "next_actions": [
+    "Promote the M118 organizer operator packet as a current operator-loop input and keep the sibling proofs fresh."
+  ],
+  "organizer_health": {
+    "artifact_shelf_publication_surface": {
+      "filter_receipt_present": true,
+      "package_status": "in_progress",
+      "receipt_summary": "Hub now serves one governed artifact shelf lane for signed-in personal, campaign, creator, and public views, keeping recap lineage, publication state, trust posture, and public publication detail on the same inspectable surface instead of splitting them into unrelated routes.",
+      "state": "pass",
+      "summary": "Hub artifact shelf and audience-filter receipts are both present."
+    },
+    "ea_event_prep_followthrough": {
+      "baseline_pack_issues": [],
+      "baseline_pack_path": "/docker/EA/docs/chummer_operator_safe_packets/CHUMMER_OPERATOR_SAFE_PACKET_PACK.yaml",
+      "baseline_pack_present": true,
+      "baseline_pack_state": "ready",
+      "organizer_pack_issues": [],
+      "organizer_pack_path": "/docker/EA/docs/chummer_organizer_packets/CHUMMER_ORGANIZER_PACKET_PACK.yaml",
+      "organizer_pack_present": true,
+      "state": "ready",
+      "summary": "EA organizer event-prep packet contract is present and shape-valid."
+    },
+    "hub_creator_publication": {
+      "exists": true,
+      "exit_code": 0,
+      "path": "/docker/chummercomplete/chummer.run-services/scripts/verify_next90_m116_hub_creator_publication.py",
+      "status": "pass",
+      "summary": "next90 m116 hub creator publication proof passed"
+    },
+    "hub_organizer_ops": {
+      "exists": true,
+      "exit_code": 0,
+      "path": "/docker/chummercomplete/chummer.run-services/scripts/verify_next90_m118_hub_organizer_ops.py",
+      "status": "pass",
+      "summary": "next90 m118 hub organizer ops proof passed"
+    },
+    "queue_alignment": {
+      "closed_anywhere": true,
+      "design_queue_completion_action": "verify_closed_package_only",
+      "design_queue_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
+      "design_queue_status": "complete",
+      "expected_completion_action": "verify_closed_package_only",
+      "expected_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
+      "fleet_queue_status": "complete",
+      "issues": [],
+      "queue_completion_action": "verify_closed_package_only",
+      "queue_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
+      "registry_work_task_completion_action": "verify_closed_package_only",
+      "registry_work_task_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
+      "registry_work_task_status": "complete",
+      "state": "pass"
+    },
+    "state": "pass"
+  },
+  "owned_surfaces": [
+    "organizer_health_packets",
+    "publication_readiness:operator"
+  ],
+  "package_id": "next90-m118-fleet-ea-organizer-packets",
+  "publication_readiness": {
+    "artifact_shelf_receipt_id": "artifact_shelf:v2",
+    "creator_publication_verifier_status": "pass",
+    "state": "watch",
+    "summary": "Launch expansion is still frozen at the weekly governor layer.",
+    "weekly_governor_action": "freeze_launch",
+    "weekly_governor_public_state": "freeze_launch"
+  },
+  "queue_task": "Add fleet and EA operator-loop packets for organizer health, event prep, support risk, and publication readiness.",
+  "queue_title": "Compile organizer health and publication readiness packets",
+  "source_inputs": {
+    "ea_operator_safe_pack": {
+      "exists": true,
+      "path": "/docker/EA/docs/chummer_operator_safe_packets/CHUMMER_OPERATOR_SAFE_PACKET_PACK.yaml",
+      "state": "ready"
+    },
+    "ea_organizer_packet_pack": {
+      "exists": true,
+      "path": "/docker/EA/docs/chummer_organizer_packets/CHUMMER_ORGANIZER_PACKET_PACK.yaml",
+      "state": "ready"
+    },
+    "hub_local_release_proof": {
+      "generated_at": "2026-05-05T12:55:39Z",
+      "path": "/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
+      "status": "passed"
+    },
+    "support_packets": {
+      "generated_at": "2026-05-05T14:30:51Z",
+      "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+      "successor_package_verification_status": "pass"
+    },
+    "weekly_governor_packet": {
+      "generated_at": "2026-05-05T14:30:59Z",
+      "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+      "status": "blocked"
+    }
+  },
+  "source_packet_links": {
+    "claim_guard": "fleet_or_ea_packets_must_link_back_to_source_packet_ids",
+    "ea_operator_packets": {
+      "baseline_pack_path": "/docker/EA/docs/chummer_operator_safe_packets/CHUMMER_OPERATOR_SAFE_PACKET_PACK.yaml",
+      "organizer_pack_path": "/docker/EA/docs/chummer_organizer_packets/CHUMMER_ORGANIZER_PACKET_PACK.yaml"
+    },
+    "hub_publication_receipts": {
+      "package_ids": [
+        "next90-m117-hub-artifact-shelf-v2"
+      ],
+      "receipt_ids": [
+        "artifact_shelf:v2",
+        "artifact_audience_filters"
+      ]
+    },
+    "support_followthrough": {
+      "contract_name": "fleet.support_case_packets",
+      "package_id": "next90-m102-fleet-reporter-receipts",
+      "packet_ids": []
+    },
+    "weekly_governor": {
+      "as_of": "2026-05-05",
+      "contract_name": "fleet.weekly_governor_packet",
+      "decision_action": "freeze_launch"
+    }
+  },
+  "status": "pass",
+  "status_reason": "Organizer-health, support-risk, and publication-readiness inputs are aligned.",
+  "support_risk": {
+    "counts": {
+      "closure_waiting_on_release_truth": 0,
+      "needs_human_response": 0,
+      "open_packet_count": 0,
+      "update_required_case_count": 0
+    },
+    "state": "low",
+    "summary": "No live support-case packet pressure is currently blocking organizer or publication operator work."
+  },
+  "wave_id": "W13",
+  "work_task_id": "118.4"
+}

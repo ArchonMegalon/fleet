@@ -680,6 +680,60 @@ def test_materialize_status_plane_refreshes_weekly_governor_packet_when_repo_roo
     assert compile_calls == []
 
 
+def test_materialize_status_plane_falls_back_to_config_inventory_when_live_admin_is_unavailable(
+    monkeypatch, tmp_path: Path
+) -> None:
+    out_path = tmp_path / "STATUS_PLANE.generated.yaml"
+    snapshot_path = tmp_path / "status-plane.verify.json"
+    config_dir = tmp_path / "config" / "projects"
+    config_dir.mkdir(parents=True)
+    (config_dir / "hub-registry.yaml").write_text(
+        """
+id: hub-registry
+lifecycle: dispatchable
+path: /tmp/chummer-hub-registry
+design_doc: /tmp/hub-registry.md
+enabled: true
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    group_config = tmp_path / "config" / "groups.yaml"
+    group_config.parent.mkdir(parents=True, exist_ok=True)
+    group_config.write_text(
+        """
+project_groups:
+  - id: chummer-vnext
+    lifecycle: dispatchable
+    phase: active
+    deployment:
+      public_surface:
+        status: preview
+        promotion_stage: protected_preview
+        access_posture: protected_preview
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    def failing_load_admin_status(status_json_path, *, use_default_snapshot=True):
+        raise materialize_status_plane_module.StatusPlaneDriftError("admin offline")
+
+    monkeypatch.setattr(materialize_status_plane_module, "DEFAULT_STATUS_JSON_SNAPSHOT_PATH", snapshot_path)
+    monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+    monkeypatch.setattr(materialize_status_plane_module, "GROUP_CONFIG_PATH", group_config)
+    monkeypatch.setattr(materialize_status_plane_module, "load_admin_status", failing_load_admin_status)
+
+    result = materialize_status_plane_module.main(["--out", str(out_path)])
+
+    assert result == 0
+    payload = yaml.safe_load(out_path.read_text(encoding="utf-8"))
+    assert [project["id"] for project in payload["projects"]] == ["hub-registry"]
+    assert payload["groups"][0]["id"] == "chummer-vnext"
+    snapshot_payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    assert snapshot_payload["projects"][0]["id"] == "hub-registry"
+
+
 def test_core_fallback_stage_uses_import_parity_and_engine_proof(monkeypatch, tmp_path: Path) -> None:
     config_dir = tmp_path / "config" / "projects"
     published_dir = tmp_path / "core" / ".codex-studio" / "published"
@@ -1175,6 +1229,64 @@ deployment:
     assert rows[0]["readiness"]["stage"] == "repo_local_complete"
 
 
+def test_ui_fallback_stage_accepts_aggregate_visual_proof_when_visual_receipt_is_stale(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "projects"
+    published_dir = tmp_path / "ui" / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "ui.yaml").write_text(
+        f"""
+id: ui
+enabled: true
+lifecycle: live
+path: {tmp_path / "ui"}
+deployment:
+  status: public
+  promotion_stage: promoted_preview
+  access_posture: public
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
+        json.dumps({"status": "passed"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "local_blocking_findings_count": 0,
+                "evidence": {"visual_familiarity_status": "pass"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json").write_text(
+        json.dumps({"status": "fail", "reasons": ["stale screenshots"]}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "open_blocking_findings_count": 0}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json").write_text(
+        json.dumps({"summary": {"visual_no_count": 0, "behavioral_no_count": 0}}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+
+    rows = materialize_status_plane_module._load_project_config_rows()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "ui"
+    assert rows[0]["readiness"]["stage"] == "publicly_promoted"
+
+
 def test_materialize_status_plane_overlays_stale_runtime_healing_escalation(tmp_path: Path) -> None:
     status_json = tmp_path / "admin_status.json"
     out_path = tmp_path / "STATUS_PLANE.generated.yaml"
@@ -1250,6 +1362,133 @@ def test_materialize_status_plane_overlays_stale_runtime_healing_escalation(tmp_
     payload = yaml.safe_load(out_path.read_text(encoding="utf-8"))
     assert payload["runtime_healing"]["summary"]["alert_state"] == "healthy"
     assert payload["runtime_healing"]["services"][0]["current_state"] == "healthy"
+
+
+def test_materialize_status_plane_uses_local_runtime_healing_when_snapshot_is_empty(tmp_path: Path) -> None:
+    status_json = tmp_path / "admin_status.json"
+    out_path = tmp_path / "STATUS_PLANE.generated.yaml"
+    autoheal_dir = tmp_path / "rebuilder" / "autoheal"
+    autoheal_dir.mkdir(parents=True, exist_ok=True)
+    status_json.write_text(
+        """
+{
+  "generated_at": "2026-03-23T00:00:00Z",
+  "public_status": {
+    "generated_at": "2026-03-23T00:00:00Z",
+    "deployment_posture": {},
+    "readiness_summary": {},
+    "runtime_healing": {}
+  },
+  "projects": [],
+  "groups": []
+}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (autoheal_dir / "fleet.status.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-20T12:30:00Z",
+                "service": "fleet",
+                "current_state": "healthy",
+                "observed_status": "healthy",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--status-json",
+            str(status_json),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_script_env(tmp_path),
+    )
+    assert result.returncode == 0, result.stderr
+
+    payload = yaml.safe_load(out_path.read_text(encoding="utf-8"))
+    assert payload["runtime_healing"]["summary"]["alert_state"] == "healthy"
+    assert payload["runtime_healing"]["services"][0]["service"] == "fleet"
+
+
+def test_materialize_status_plane_falls_back_to_top_level_health_fields_when_public_snapshot_omits_them(tmp_path: Path) -> None:
+    status_json = tmp_path / "admin_status.json"
+    out_path = tmp_path / "STATUS_PLANE.generated.yaml"
+    status_json.write_text(
+        """
+{
+  "generated_at": "2026-05-05T05:30:11Z",
+  "public_status": {
+    "generated_at": "2026-05-05T05:30:11Z",
+    "readiness_summary": {},
+    "support_summary": {},
+    "publish_readiness": {},
+    "runtime_healing": {},
+    "external_proof_autoingest": {}
+  },
+  "support_summary": {
+    "open_case_count": 0,
+    "closure_waiting_on_release_truth": 0
+  },
+  "publish_readiness": {
+    "status": "watch",
+    "reason": "Only external host proof remains."
+  },
+  "runtime_healing": {
+    "generated_at": "2026-05-05T05:30:10Z",
+    "enabled": true,
+    "summary": {
+      "alert_state": "healthy",
+      "recent_restart_count": 0
+    },
+    "services": []
+  },
+  "external_proof_autoingest": {
+    "generated_at": "2026-05-05T05:30:09Z",
+    "enabled": true,
+    "current_state": "waiting_for_bundle",
+    "summary": {
+      "alert_state": "tracking"
+    }
+  },
+  "projects": [],
+  "groups": []
+}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--status-json",
+            str(status_json),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_script_env(tmp_path),
+    )
+    assert result.returncode == 0, result.stderr
+
+    payload = yaml.safe_load(out_path.read_text(encoding="utf-8"))
+    assert payload["support_summary"]["open_case_count"] == 0
+    assert payload["publish_readiness"]["status"] == "watch"
+    assert payload["runtime_healing"]["summary"]["alert_state"] == "healthy"
+    assert payload["external_proof_autoingest"]["current_state"] == "waiting_for_bundle"
 
 
 def test_materialize_status_plane_overlays_local_external_proof_autoingest_state(tmp_path: Path) -> None:

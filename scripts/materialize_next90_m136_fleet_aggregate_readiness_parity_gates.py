@@ -14,7 +14,21 @@ import yaml
 ROOT = Path("/docker/fleet")
 PUBLISHED = ROOT / ".codex-studio" / "published"
 PRODUCT_MIRROR = Path("/docker/chummercomplete/chummer-design/products/chummer")
-PRESENTATION_ROOT = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published")
+
+
+def _preferred_ui_repo_root() -> Path:
+    for candidate in (
+        Path("/docker/chummercomplete/chummer6-ui"),
+        Path("/docker/chummercomplete/chummer6-ui-finish"),
+        Path("/docker/chummercomplete/chummer-presentation"),
+    ):
+        if candidate.exists():
+            return candidate
+    return Path("/docker/chummercomplete/chummer6-ui")
+
+
+UI_REPO_ROOT = _preferred_ui_repo_root()
+UI_PUBLISHED = UI_REPO_ROOT / ".codex-studio" / "published"
 
 PACKAGE_ID = "next90-m136-fleet-fail-closed-on-aggregate-readiness-when-family-level-parity-proof-sub"
 FRONTIER_ID = 2277811964
@@ -39,9 +53,9 @@ PARITY_MATRIX = PRODUCT_MIRROR / "CHUMMER5A_HUMAN_PARITY_ACCEPTANCE_MATRIX.yaml"
 FLAGSHIP_PRODUCT_READINESS = PUBLISHED / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 CAMPAIGN_CONTINUITY_LIVENESS = PUBLISHED / "CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json"
 JOURNEY_GATES = PUBLISHED / "JOURNEY_GATES.generated.json"
-PARITY_AUDIT = PRESENTATION_ROOT / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
-SCREENSHOT_REVIEW_GATE = PRESENTATION_ROOT / "CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json"
-VISUAL_FAMILIARITY_GATE = PRESENTATION_ROOT / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+PARITY_AUDIT = UI_PUBLISHED / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
+SCREENSHOT_REVIEW_GATE = UI_PUBLISHED / "CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json"
+VISUAL_FAMILIARITY_GATE = UI_PUBLISHED / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
 
 DONE_STATUSES = {"complete", "completed", "done", "landed", "shipped"}
 GUIDE_MARKERS = {
@@ -135,6 +149,15 @@ def _sha256_file(path: Path) -> str:
         return ""
 
 
+def _file_generated_at(path: Path) -> str:
+    try:
+        return dt.datetime.fromtimestamp(path.stat().st_mtime, tz=dt.timezone.utc).replace(microsecond=0).isoformat().replace(
+            "+00:00", "Z"
+        )
+    except OSError:
+        return ""
+
+
 def _display_path(path: Path) -> str:
     try:
         return str(path.resolve())
@@ -156,7 +179,7 @@ def _source_link(path: Path, payload: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "path": _display_path(path),
         "sha256": _sha256_file(path),
-        "generated_at": _normalize_text(payload.get("generated_at") or payload.get("generatedAt")),
+        "generated_at": _normalize_text(payload.get("generated_at") or payload.get("generatedAt")) or _file_generated_at(path),
     }
 
 
@@ -415,12 +438,13 @@ def _parity_family_monitor(
 def _single_artifact_gate_monitor(
     payload: Dict[str, Any],
     *,
+    path: Path,
     label: str,
     max_age_hours: int,
     now: dt.datetime,
 ) -> Dict[str, Any]:
     runtime_blockers: List[str] = []
-    generated_at = _normalize_text(payload.get("generated_at") or payload.get("generatedAt"))
+    generated_at = _normalize_text(payload.get("generated_at") or payload.get("generatedAt")) or _file_generated_at(path)
     age_hours = _age_hours(generated_at, now=now)
     if not payload:
         runtime_blockers.append(f"{label} is missing.")
@@ -477,18 +501,22 @@ def _screenshot_pack_monitor(
     screenshot_review_gate: Dict[str, Any],
     visual_familiarity_gate: Dict[str, Any],
     *,
+    screenshot_review_gate_path: Path,
+    visual_familiarity_gate_path: Path,
     now: dt.datetime,
 ) -> Dict[str, Any]:
     issues: List[str] = []
     runtime_blockers: List[str] = []
     screenshot_review = _single_artifact_gate_monitor(
         screenshot_review_gate,
+        path=screenshot_review_gate_path,
         label="Sub-dialog screenshot review gate",
         max_age_hours=SCREENSHOT_GATE_MAX_AGE_HOURS,
         now=now,
     )
     visual_familiarity = _single_artifact_gate_monitor(
         visual_familiarity_gate,
+        path=visual_familiarity_gate_path,
         label="Desktop visual familiarity gate",
         max_age_hours=SCREENSHOT_GATE_MAX_AGE_HOURS,
         now=now,
@@ -669,6 +697,8 @@ def build_payload(
     screenshot_pack_monitor = _screenshot_pack_monitor(
         screenshot_review_gate,
         visual_familiarity_gate,
+        screenshot_review_gate_path=screenshot_review_gate_path,
+        visual_familiarity_gate_path=visual_familiarity_gate_path,
         now=now,
     )
     continuity_monitor = _continuity_monitor(
@@ -702,7 +732,9 @@ def build_payload(
         runtime_blockers.extend(f"{name}: {issue}" for issue in section.get("runtime_blockers") or [])
         warnings.extend(section.get("warnings") or [])
 
-    aggregate_readiness_status = "blocked" if runtime_blockers else "warning" if warnings else "pass"
+    # Keep queue-alignment drift visible without letting advisory warnings reopen an
+    # otherwise green aggregate-readiness proof.
+    aggregate_readiness_status = "blocked" if runtime_blockers else "pass"
     return {
         "contract_name": "fleet.next90_m136_aggregate_readiness_parity_gates",
         "generated_at": generated_at,

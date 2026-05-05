@@ -14,22 +14,22 @@
       "state": "accumulating"
     },
     "current_launch_action": "freeze_launch",
-    "current_launch_reason": "Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
+    "current_launch_reason": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
     "focus_shift": {
       "reason": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
       "state": "queued_successor_wave"
     },
     "freeze_launch": {
-      "reason": "Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
+      "reason": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
       "state": "active"
     },
     "launch_expand": {
-      "reason": "Weekly pulse holds launch expansion: Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
+      "reason": "Weekly pulse holds launch expansion: Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
       "state": "blocked"
     },
     "rollback": {
       "reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-      "state": "watch"
+      "state": "armed"
     }
   },
   "decision_gate_ledger": {
@@ -78,9 +78,9 @@
       },
       {
         "name": "source_input_health",
-        "observed": "fail",
+        "observed": "pass",
         "required": "pass",
-        "state": "fail"
+        "state": "pass"
       },
       {
         "name": "decision_alignment",
@@ -96,9 +96,9 @@
       },
       {
         "name": "flagship_readiness",
-        "observed": "fail",
+        "observed": "pass",
         "required": "pass",
-        "state": "blocked"
+        "state": "pass"
       },
       {
         "name": "flagship_parity",
@@ -108,21 +108,21 @@
       },
       {
         "name": "flagship_quality",
-        "observed": "blocked",
+        "observed": "pass",
         "required": "localization pass and accessibility/polish proof ready",
-        "state": "blocked"
+        "state": "pass"
       },
       {
         "name": "status_plane_final_claim",
-        "observed": "unknown",
+        "observed": "pass",
         "required": "pass",
-        "state": "blocked"
+        "state": "pass"
       },
       {
         "name": "journey_gates",
-        "observed": "blocked",
+        "observed": "ready",
         "required": "ready",
-        "state": "blocked"
+        "state": "pass"
       },
       {
         "name": "local_release_proof",
@@ -132,7 +132,7 @@
       },
       {
         "name": "weekly_adoption_truth",
-        "observed": "clear / 20 history snapshots",
+        "observed": "clear / 22 history snapshots",
         "required": "present with measured history",
         "state": "pass"
       },
@@ -144,9 +144,9 @@
       },
       {
         "name": "closure_health",
-        "observed": "watch",
+        "observed": "clear",
         "required": "clear",
-        "state": "blocked"
+        "state": "pass"
       },
       {
         "name": "support_packets",
@@ -182,24 +182,24 @@
       },
       {
         "name": "release_health",
-        "observed": "needs_attention",
+        "observed": "green_or_explained",
         "required": "green, green_or_explained, or ready",
-        "state": "watch"
+        "state": "clear"
       }
     ]
   },
-  "generated_at": "2026-05-05T04:28:28Z",
+  "generated_at": "2026-05-05T16:12:43Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
       "gate_count": 17,
-      "reason": "Weekly pulse holds launch expansion: Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
+      "reason": "Weekly pulse holds launch expansion: Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
       "state": "blocked"
     },
     {
       "action": "freeze_launch",
       "gate_count": 1,
-      "reason": "Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
+      "reason": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
       "state": "active"
     },
     {
@@ -212,7 +212,7 @@
       "action": "rollback",
       "gate_count": 4,
       "reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-      "state": "watch"
+      "state": "armed"
     },
     {
       "action": "focus_shift",
@@ -224,9 +224,9 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-05-05T04:28:28Z",
+    "generated_at": "2026-05-05T16:12:43Z",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-05-12T04:28:28Z",
+    "next_packet_due_at": "2026-05-12T16:12:43Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -322,11 +322,11 @@
       },
       {
         "action": "rollback",
-        "board_state": "watch",
+        "board_state": "armed",
         "complete": true,
         "gate_count_consistent": true,
         "governor_gate_count": 4,
-        "governor_state": "watch",
+        "governor_state": "armed",
         "ledger_gate_count": 4,
         "state_consistent": true
       },
@@ -354,31 +354,25 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 8,
+          "blocking_gate_count": 2,
           "blocking_gates": [
             "weekly_launch_decision",
-            "source_input_health",
-            "flagship_readiness",
-            "flagship_quality",
-            "status_plane_final_claim",
-            "journey_gates",
-            "provider_canary",
-            "closure_health"
+            "provider_canary"
           ],
           "cadence": "weekly",
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
-            "closure_health": "blocked",
+            "closure_health": "pass",
             "decision_alignment": "pass",
             "flagship_parity": "pass",
-            "flagship_quality": "blocked",
-            "flagship_readiness": "blocked",
-            "journey_gates": "blocked",
+            "flagship_quality": "pass",
+            "flagship_readiness": "pass",
+            "journey_gates": "pass",
             "local_release_proof": "pass",
             "package_authority": "pass",
             "provider_canary": "blocked",
-            "source_input_health": "fail",
-            "status_plane_final_claim": "blocked",
+            "source_input_health": "pass",
+            "status_plane_final_claim": "pass",
             "successor_dependencies": "pass",
             "support_followthrough_receipts": "pass",
             "support_packets": "pass",
@@ -387,13 +381,13 @@
             "weekly_launch_decision": "blocked"
           },
           "max_age_seconds": 604800,
-          "next_decision": "Weekly pulse holds launch expansion: Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
+          "next_decision": "Weekly pulse holds launch expansion: Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
           "operator_action": "do_not_expand_launch",
           "operator_action_when_blocked": "do_not_expand_launch",
           "operator_action_when_clear": "promote_measured_launch_expansion",
           "owner": "fleet",
           "ready_for_operator_packet": true,
-          "reason": "Weekly pulse holds launch expansion: Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
+          "reason": "Weekly pulse holds launch expansion: Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
           "route": "weekly_governor_packet.launch_expand",
           "route_blocked": true,
           "state": "blocked",
@@ -412,13 +406,13 @@
             "fail_closed_default": "active"
           },
           "max_age_seconds": 604800,
-          "next_decision": "Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
+          "next_decision": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
           "operator_action": "keep_launch_frozen",
           "operator_action_when_blocked": "keep_launch_frozen",
           "operator_action_when_clear": "leave_freeze_available",
           "owner": "fleet",
           "ready_for_operator_packet": true,
-          "reason": "Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
+          "reason": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
           "route": "weekly_governor_packet.freeze_launch",
           "route_blocked": true,
           "state": "active",
@@ -452,29 +446,27 @@
         },
         {
           "action": "rollback",
-          "blocking_gate_count": 1,
-          "blocking_gates": [
-            "release_health"
-          ],
+          "blocking_gate_count": 0,
+          "blocking_gates": [],
           "cadence": "weekly",
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
             "closure_waiting_on_release_truth": "clear",
-            "release_health": "watch",
+            "release_health": "clear",
             "support_followthrough_receipt_blockers": "clear",
             "update_required_misrouted_cases": "clear"
           },
           "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "operator_action": "prepare_rollback_or_revoke",
+          "operator_action": "keep_rollback_armed",
           "operator_action_when_blocked": "prepare_rollback_or_revoke",
           "operator_action_when_clear": "keep_rollback_armed",
           "owner": "fleet",
           "ready_for_operator_packet": true,
           "reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
           "route": "measured_rollout_loop.rollback",
-          "route_blocked": true,
-          "state": "watch",
+          "route_blocked": false,
+          "state": "armed",
           "trigger_gate": "release_health",
           "unblock_condition": "release and support followthrough gates are clear"
         },
@@ -517,30 +509,24 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 8,
+          "blocking_gate_count": 2,
           "blocking_gates": [
             "weekly_launch_decision",
-            "source_input_health",
-            "flagship_readiness",
-            "flagship_quality",
-            "status_plane_final_claim",
-            "journey_gates",
-            "provider_canary",
-            "closure_health"
+            "provider_canary"
           ],
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
-            "closure_health": "blocked",
+            "closure_health": "pass",
             "decision_alignment": "pass",
             "flagship_parity": "pass",
-            "flagship_quality": "blocked",
-            "flagship_readiness": "blocked",
-            "journey_gates": "blocked",
+            "flagship_quality": "pass",
+            "flagship_readiness": "pass",
+            "journey_gates": "pass",
             "local_release_proof": "pass",
             "package_authority": "pass",
             "provider_canary": "blocked",
-            "source_input_health": "fail",
-            "status_plane_final_claim": "blocked",
+            "source_input_health": "pass",
+            "status_plane_final_claim": "pass",
             "successor_dependencies": "pass",
             "support_followthrough_receipts": "pass",
             "support_packets": "pass",
@@ -552,12 +538,12 @@
           "ledger_gate_count": 17,
           "matrix_complete": true,
           "max_age_seconds": 604800,
-          "next_decision": "Weekly pulse holds launch expansion: Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
+          "next_decision": "Weekly pulse holds launch expansion: Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
           "operator_action": "do_not_expand_launch",
           "ready_for_operator_packet": true,
-          "reason": "Weekly pulse holds launch expansion: Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
-          "receipt_id": "m106-launch_expand-23a78ef61f8273dc",
-          "receipt_sha256": "23a78ef61f8273dc584ee1ef1b8f22c0deecc38c4f69660c243d38db2d698b67",
+          "reason": "Weekly pulse holds launch expansion: Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
+          "receipt_id": "m106-launch_expand-80ca6acb352bba0d",
+          "receipt_sha256": "80ca6acb352bba0d558eef0d146ef6d59c6f9260f3a4f981d0cf0b4f00232150",
           "route": "weekly_governor_packet.launch_expand",
           "state": "blocked"
         },
@@ -575,12 +561,12 @@
           "ledger_gate_count": 1,
           "matrix_complete": true,
           "max_age_seconds": 604800,
-          "next_decision": "Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
+          "next_decision": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
           "operator_action": "keep_launch_frozen",
           "ready_for_operator_packet": true,
-          "reason": "Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
-          "receipt_id": "m106-freeze_launch-9b48bb27898ead58",
-          "receipt_sha256": "9b48bb27898ead589e5f3020647eb95b3bda60048ebaaf1ef35cb294577645ca",
+          "reason": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
+          "receipt_id": "m106-freeze_launch-ea186ee48811e08f",
+          "receipt_sha256": "ea186ee48811e08fdbbd321ce9ee1aaef2a977b35fc857ac86381a52c29709cc",
           "route": "weekly_governor_packet.freeze_launch",
           "state": "active"
         },
@@ -609,14 +595,12 @@
         },
         {
           "action": "rollback",
-          "blocking_gate_count": 1,
-          "blocking_gates": [
-            "release_health"
-          ],
+          "blocking_gate_count": 0,
+          "blocking_gates": [],
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
             "closure_waiting_on_release_truth": "clear",
-            "release_health": "watch",
+            "release_health": "clear",
             "support_followthrough_receipt_blockers": "clear",
             "update_required_misrouted_cases": "clear"
           },
@@ -625,13 +609,13 @@
           "matrix_complete": true,
           "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "operator_action": "prepare_rollback_or_revoke",
+          "operator_action": "keep_rollback_armed",
           "ready_for_operator_packet": true,
           "reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "receipt_id": "m106-rollback-54b25698c3bf1ddd",
-          "receipt_sha256": "54b25698c3bf1ddde2b3404c4af376081295e46a1f8091e5f22d97701433f9d1",
+          "receipt_id": "m106-rollback-fcedde06369bab3d",
+          "receipt_sha256": "fcedde06369bab3d9743f33b9ab677d50249e9d19b4d611b7089e3afa8d29452",
           "route": "measured_rollout_loop.rollback",
-          "state": "watch"
+          "state": "armed"
         },
         {
           "action": "focus_shift",
@@ -895,20 +879,14 @@
     "launch_gate_summary": {
       "accumulating_count": 0,
       "all_green": false,
-      "blocked_count": 7,
+      "blocked_count": 2,
       "blocking_gate_names": [
         "weekly_launch_decision",
-        "source_input_health",
-        "flagship_readiness",
-        "flagship_quality",
-        "status_plane_final_claim",
-        "journey_gates",
-        "provider_canary",
-        "closure_health"
+        "provider_canary"
       ],
-      "fail_count": 1,
+      "fail_count": 0,
       "gate_count": 17,
-      "pass_count": 9,
+      "pass_count": 15,
       "unknown_count": 0,
       "watch_count": 0
     },
@@ -921,23 +899,17 @@
       "rollback",
       "focus_shift"
     ],
-    "rollback_watch": true,
+    "rollback_watch": false,
     "weekly_operator_handoff": {
       "action_count": 5,
       "cadence": "weekly",
       "incomplete_actions": [],
       "launch_gate_blocking_names": [
         "weekly_launch_decision",
-        "source_input_health",
-        "flagship_readiness",
-        "flagship_quality",
-        "status_plane_final_claim",
-        "journey_gates",
-        "provider_canary",
-        "closure_health"
+        "provider_canary"
       ],
       "missing_actions": [],
-      "next_review_due_at": "2026-05-12T04:28:28Z",
+      "next_review_due_at": "2026-05-12T16:12:43Z",
       "required_actions": [
         "launch_expand",
         "freeze_launch",
@@ -955,30 +927,24 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 8,
+          "blocking_gate_count": 2,
           "blocking_gates": [
             "weekly_launch_decision",
-            "source_input_health",
-            "flagship_readiness",
-            "flagship_quality",
-            "status_plane_final_claim",
-            "journey_gates",
-            "provider_canary",
-            "closure_health"
+            "provider_canary"
           ],
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
-            "closure_health": "blocked",
+            "closure_health": "pass",
             "decision_alignment": "pass",
             "flagship_parity": "pass",
-            "flagship_quality": "blocked",
-            "flagship_readiness": "blocked",
-            "journey_gates": "blocked",
+            "flagship_quality": "pass",
+            "flagship_readiness": "pass",
+            "journey_gates": "pass",
             "local_release_proof": "pass",
             "package_authority": "pass",
             "provider_canary": "blocked",
-            "source_input_health": "fail",
-            "status_plane_final_claim": "blocked",
+            "source_input_health": "pass",
+            "status_plane_final_claim": "pass",
             "successor_dependencies": "pass",
             "support_followthrough_receipts": "pass",
             "support_packets": "pass",
@@ -987,11 +953,11 @@
             "weekly_launch_decision": "blocked"
           },
           "max_age_seconds": 604800,
-          "next_decision": "Weekly pulse holds launch expansion: Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
-          "next_review_due_at": "2026-05-12T04:28:28Z",
+          "next_decision": "Weekly pulse holds launch expansion: Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
+          "next_review_due_at": "2026-05-12T16:12:43Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "do_not_expand_launch",
-          "receipt_id": "m106-launch_expand-23a78ef61f8273dc",
+          "receipt_id": "m106-launch_expand-80ca6acb352bba0d",
           "route": "weekly_governor_packet.launch_expand",
           "state": "blocked"
         },
@@ -1006,11 +972,11 @@
             "fail_closed_default": "active"
           },
           "max_age_seconds": 604800,
-          "next_decision": "Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
-          "next_review_due_at": "2026-05-12T04:28:28Z",
+          "next_decision": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
+          "next_review_due_at": "2026-05-12T16:12:43Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_launch_frozen",
-          "receipt_id": "m106-freeze_launch-9b48bb27898ead58",
+          "receipt_id": "m106-freeze_launch-ea186ee48811e08f",
           "route": "weekly_governor_packet.freeze_launch",
           "state": "active"
         },
@@ -1026,7 +992,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Canary evidence is still accumulating",
-          "next_review_due_at": "2026-05-12T04:28:28Z",
+          "next_review_due_at": "2026-05-12T16:12:43Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "collect_canary_evidence",
           "receipt_id": "m106-canary-a040f1941fe96cbe",
@@ -1035,25 +1001,23 @@
         },
         {
           "action": "rollback",
-          "blocking_gate_count": 1,
-          "blocking_gates": [
-            "release_health"
-          ],
+          "blocking_gate_count": 0,
+          "blocking_gates": [],
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
             "closure_waiting_on_release_truth": "clear",
-            "release_health": "watch",
+            "release_health": "clear",
             "support_followthrough_receipt_blockers": "clear",
             "update_required_misrouted_cases": "clear"
           },
           "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "next_review_due_at": "2026-05-12T04:28:28Z",
+          "next_review_due_at": "2026-05-12T16:12:43Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
-          "operator_action": "prepare_rollback_or_revoke",
-          "receipt_id": "m106-rollback-54b25698c3bf1ddd",
+          "operator_action": "keep_rollback_armed",
+          "receipt_id": "m106-rollback-fcedde06369bab3d",
           "route": "measured_rollout_loop.rollback",
-          "state": "watch"
+          "state": "armed"
         },
         {
           "action": "focus_shift",
@@ -1065,7 +1029,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
-          "next_review_due_at": "2026-05-12T04:28:28Z",
+          "next_review_due_at": "2026-05-12T16:12:43Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "route_remaining_work_to_dependency_or_sibling_packages",
           "receipt_id": "m106-focus_shift-9e0a36a10f3ebf57",
@@ -2023,7 +1987,7 @@
   },
   "program_wave": "next_90_day_product_advance",
   "public_status_copy": {
-    "body": "Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
+    "body": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
     "decision_actions": [
       "launch_expand",
       "freeze_launch",
@@ -2033,11 +1997,11 @@
     ],
     "derived_from": "measured_rollout_loop.decision_action_matrix",
     "freshness_policy": "refresh_before_public_status_or_operator_action_if_packet_is_overdue",
-    "headline": "Launch expansion is frozen with rollback watch active.",
+    "headline": "Launch expansion remains frozen.",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-05-12T04:28:28Z",
+    "next_packet_due_at": "2026-05-12T16:12:43Z",
     "schedule_ref": "governor_packet_schedule.next_packet_due_at",
-    "state": "freeze_with_rollback_watch"
+    "state": "freeze_launch"
   },
   "repeat_prevention": {
     "allowed_paths": [
@@ -2697,13 +2661,13 @@
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "af6ba48852e2ec8317f6bae95269c2c00c0ed09968eff99dbc9eac88ff37dfd4",
+    "combined_source_sha256": "d2372a3d3a639e5add1bc9fbd4953e68d49244cb75901fa444a88fa1f775e6e3",
     "missing_inputs": [],
     "rows": [
       {
         "name": "successor_registry",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "f2093be888c97f5858b7ce55ee5e7ed12625958bc4dfc517b561ae0f64411bbb"
+        "source_sha256": "641255112587cbec2c7c43a37dda5a90f6f59e0d2775206517fede2695c233e3"
       },
       {
         "name": "closed_flagship_registry",
@@ -2713,46 +2677,44 @@
       {
         "name": "design_queue_staging",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "1920f307792ecca5cadbbc47930af4307d7d66af5c7e23e35d6110dc6e89c94a"
+        "source_sha256": "11cc1ecd96db0176604771f8f6f398998db558b6167a3e2bd37140a2124ddca6"
       },
       {
         "name": "queue_staging",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "170ea199e7e9f0ee431aae9919da5b59e02e6c53490b28800a1421c6553bc8b6"
+        "source_sha256": "6da82d05213bc6ae4f536f75debf5dab04463c91c9b2992df970d392bd3972b1"
       },
       {
         "name": "weekly_pulse",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "9c4b02daece41b21c5b90c145e4de5caa1501d4ac608d73bf25c2f3b1a31340a"
+        "source_sha256": "d6e7a813faaf878c7c48c0508110dfc68c214cdd7b24ac9342c5d62e6019d39c"
       },
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "1fffb157e6371550c1088209d6d5829b129eba4952c89410f7b72c9bc113e0b7"
+        "source_sha256": "46a28b85231076c59a117adc2b07b4c00955d29385e30cc2c3535c3045940129"
       },
       {
         "name": "journey_gates",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "39a4a6f6229ae7b1afe6f5ffbef05f3500d0925fe981399736df75c9faba8646"
+        "source_sha256": "461ab1f8ba36631f69899bb70ea84835c341e38fb41afd6b5b1b33802b02ae88"
       },
       {
         "name": "support_packets",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "f8ac2f88619e1e0b8a12a919bed45ce3fcf9b657e62d546b9a7a4066ebd874db"
+        "source_sha256": "2dc1712084bd188a02155e81e8fac90dcf171784682871fd4658cec36b4c2916"
       },
       {
         "name": "status_plane",
         "source_path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
-        "source_sha256": "e2a6cef0ccb3d47da40cd6aa92c13e88ca2fbfb4b48d7f45a4b503ff71b35d0e"
+        "source_sha256": "ec9475a99a66df178ced6ad409e44b4505df8753faddddf587340d795a078927"
       }
     ],
     "source_count": 9,
     "status": "pass"
   },
   "source_input_health": {
-    "issues": [
-      "status_plane is missing, empty, unparseable, or lacks whole_product_final_claim_status"
-    ],
+    "issues": [],
     "required_inputs": {
       "closed_flagship_registry": {
         "milestone_count": 18,
@@ -2769,37 +2731,37 @@
       "design_queue_staging": {
         "required_key": "items",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "1920f307792ecca5cadbbc47930af4307d7d66af5c7e23e35d6110dc6e89c94a",
+        "source_sha256": "11cc1ecd96db0176604771f8f6f398998db558b6167a3e2bd37140a2124ddca6",
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-05-05T04:28:27Z",
+        "generated_at": "2026-05-05T16:12:37Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "1fffb157e6371550c1088209d6d5829b129eba4952c89410f7b72c9bc113e0b7",
+        "source_sha256": "46a28b85231076c59a117adc2b07b4c00955d29385e30cc2c3535c3045940129",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-05-05T04:28:24Z",
+        "generated_at": "2026-05-05T16:12:28Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "39a4a6f6229ae7b1afe6f5ffbef05f3500d0925fe981399736df75c9faba8646",
+        "source_sha256": "461ab1f8ba36631f69899bb70ea84835c341e38fb41afd6b5b1b33802b02ae88",
         "state": "present"
       },
       "launch_signal_truth_alignment": {
         "cited_signals": {
-          "closure_health_state": "watch",
-          "journey_gate_blocked_count": "6",
-          "journey_gate_state": "blocked",
+          "closure_health_state": "clear",
+          "journey_gate_blocked_count": "0",
+          "journey_gate_state": "ready",
           "local_release_proof_status": "passed",
           "provider_canary_status": "Canary evidence is still accumulating"
         },
         "expected_from_sources": {
-          "closure_health_state": "watch",
-          "journey_gate_blocked_count": "6",
-          "journey_gate_state": "blocked",
+          "closure_health_state": "clear",
+          "journey_gate_blocked_count": "0",
+          "journey_gate_state": "ready",
           "local_release_proof_status": "passed",
           "provider_canary_status": "Canary evidence is still accumulating"
         },
@@ -2809,7 +2771,7 @@
       "queue_staging": {
         "required_key": "items",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "170ea199e7e9f0ee431aae9919da5b59e02e6c53490b28800a1421c6553bc8b6",
+        "source_sha256": "6da82d05213bc6ae4f536f75debf5dab04463c91c9b2992df970d392bd3972b1",
         "state": "present"
       },
       "source_path_authority": {
@@ -2967,36 +2929,37 @@
         "state": "pass"
       },
       "status_plane": {
-        "generated_at": "2026-05-05T03:50:16Z",
+        "generated_at": "2026-05-05T12:48:51Z",
+        "max_age_seconds": 691200,
         "required_key": "whole_product_final_claim_status",
         "source_path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
-        "source_sha256": "e2a6cef0ccb3d47da40cd6aa92c13e88ca2fbfb4b48d7f45a4b503ff71b35d0e",
-        "state": "missing_or_unparseable"
+        "source_sha256": "ec9475a99a66df178ced6ad409e44b4505df8753faddddf587340d795a078927",
+        "state": "present"
       },
       "successor_registry": {
         "required_key": "program_wave",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "f2093be888c97f5858b7ce55ee5e7ed12625958bc4dfc517b561ae0f64411bbb",
+        "source_sha256": "641255112587cbec2c7c43a37dda5a90f6f59e0d2775206517fede2695c233e3",
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-05-05T04:28:21Z",
+        "generated_at": "2026-05-05T16:12:15Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "f8ac2f88619e1e0b8a12a919bed45ce3fcf9b657e62d546b9a7a4066ebd874db",
+        "source_sha256": "2dc1712084bd188a02155e81e8fac90dcf171784682871fd4658cec36b4c2916",
         "state": "present",
         "successor_package_verification_status": "pass"
       },
       "weekly_pulse": {
-        "generated_at": "2026-05-05T04:28:27Z",
+        "generated_at": "2026-05-05T16:12:39Z",
         "required_key": "contract_name",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "9c4b02daece41b21c5b90c145e4de5caa1501d4ac608d73bf25c2f3b1a31340a",
+        "source_sha256": "d6e7a813faaf878c7c48c0508110dfc68c214cdd7b24ac9342c5d62e6019d39c",
         "state": "present"
       }
     },
-    "status": "fail"
+    "status": "pass"
   },
   "source_paths": {
     "closed_flagship_registry": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
@@ -3016,20 +2979,20 @@
   ],
   "truth_inputs": {
     "adoption_health": {
-      "history_snapshot_count": 20,
+      "history_snapshot_count": 22,
       "local_release_proof_status": "passed",
       "proven_journey_count": 5,
       "proven_route_count": 10,
       "state": "clear",
-      "summary": "Current local edge proof passed. 5 journey proofs and 10 trust routes are on record. 20 weekly snapshots are on record for the current public trust posture."
+      "summary": "Current local edge proof passed. 5 journey proofs and 10 trust routes are on record. 22 weekly snapshots are on record for the current public trust posture."
     },
     "closed_flagship_registry_status": "complete",
-    "closure_health_state": "watch",
+    "closure_health_state": "clear",
     "flagship_parity_release_truth": {
       "families_below_gold_ready": [],
       "families_below_task_proven": [],
       "families_below_veteran_approved": [],
-      "readiness_plane_status": "missing",
+      "readiness_plane_status": "ready",
       "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml",
       "registry_present": true,
       "release_truth_status": "gold_ready",
@@ -3043,15 +3006,12 @@
       }
     },
     "flagship_quality_release_truth": {
-      "accessibility_proof_named": false,
-      "issues": [
-        "ui kit and flagship polish status is warning",
-        "ui kit and flagship polish proof does not name accessibility"
-      ],
+      "accessibility_proof_named": true,
+      "issues": [],
       "localization_release_gate_present": true,
       "localization_release_gate_status": "pass",
       "missing_locale_summary_shipping_locale_count": 0,
-      "release_truth_status": "blocked",
+      "release_truth_status": "pass",
       "shipping_locale_count": 6,
       "shipping_locales": [
         "de-de",
@@ -3062,14 +3022,14 @@
         "zh-cn"
       ],
       "translation_backlog_finding_count": 0,
-      "ui_kit_and_flagship_polish_status": "warning",
+      "ui_kit_and_flagship_polish_status": "ready",
       "untranslated_locale_count": 0
     },
-    "flagship_readiness_status": "fail",
-    "journey_gate_state": "blocked",
+    "flagship_readiness_status": "pass",
+    "journey_gate_state": "ready",
     "local_release_proof_status": "passed",
     "provider_canary_status": "Canary evidence is still accumulating",
-    "status_plane_final_claim": "",
+    "status_plane_final_claim": "pass",
     "successor_dependency_package_routes": {
       "closed_package_count": 12,
       "incomplete_package_milestone_ids": [],
@@ -3212,7 +3172,7 @@
       "followthrough_receipt_gates_installed_build_receipted_count": 0,
       "followthrough_receipt_gates_ready_count": 0,
       "open_non_external_packet_count": 0,
-      "open_packet_count": 1,
+      "open_packet_count": 0,
       "please_test_ready_count": 0,
       "recovery_loop_ready_count": 0,
       "reporter_followthrough_blocked_missing_install_receipts_count": 0,
@@ -3230,7 +3190,7 @@
   },
   "wave_id": "W8",
   "weekly_input_health": {
-    "generated_at": "2026-05-05T04:28:27Z",
+    "generated_at": "2026-05-05T16:12:39Z",
     "issues": [],
     "max_age_seconds": 691200,
     "required_launch_signals": [

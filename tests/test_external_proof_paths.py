@@ -163,3 +163,111 @@ def test_resolve_release_channel_path_prefers_registry_tuple_coverage_truth_over
     resolved = module.resolve_release_channel_path(candidates=(registry, portal))
 
     assert resolved == registry
+
+
+def test_resolve_release_channel_path_ignores_stale_registry_mirror_when_same_release_portal_is_more_complete(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    registry = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    portal = tmp_path / "portal" / "RELEASE_CHANNEL.generated.json"
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    portal.parent.mkdir(parents=True, exist_ok=True)
+    registry.write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "channelId": "preview",
+                "version": "run-20260503-163502",
+                "generatedAt": "2026-05-05T05:16:58Z",
+                "artifacts": [{"artifactId": "avalonia-win-x64-archive"}],
+                "desktopTupleCoverage": {
+                    "missingRequiredPlatforms": ["windows"],
+                    "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                    "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                    "externalProofRequests": [{"tupleId": "avalonia:win-x64:windows"}],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    portal.write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "channelId": "preview",
+                "version": "run-20260503-163502",
+                "generatedAt": "2026-05-05T05:17:01Z",
+                "artifacts": [{"artifactId": "avalonia-win-x64-installer"}],
+                "desktopTupleCoverage": {
+                    "missingRequiredPlatforms": [],
+                    "missingRequiredPlatformHeadPairs": [],
+                    "missingRequiredPlatformHeadRidTuples": [],
+                    "externalProofRequests": [],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    resolved = module.resolve_release_channel_path(candidates=(registry, portal))
+
+    assert resolved == portal
+
+
+def test_resolve_release_channel_path_keeps_registry_truth_over_same_release_ui_docker_mirror(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    registry = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    docker = tmp_path / "chummer6-ui" / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    docker.parent.mkdir(parents=True, exist_ok=True)
+    registry.write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "channelId": "preview",
+                "version": "run-20260503-163502",
+                "generatedAt": "2026-05-05T05:16:58Z",
+                "artifacts": [{"artifactId": "avalonia-win-x64-archive"}],
+                "desktopTupleCoverage": {
+                    "missingRequiredPlatforms": ["windows"],
+                    "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                    "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                    "externalProofRequests": [{"tupleId": "avalonia:win-x64:windows"}],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    docker.write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "channelId": "preview",
+                "version": "run-20260503-163502",
+                "generatedAt": "2026-05-05T05:17:01Z",
+                "artifacts": [{"artifactId": "avalonia-win-x64-installer"}],
+                "desktopTupleCoverage": {
+                    "missingRequiredPlatforms": [],
+                    "missingRequiredPlatformHeadPairs": [],
+                    "missingRequiredPlatformHeadRidTuples": [],
+                    "externalProofRequests": [],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    resolved = module.resolve_release_channel_path(candidates=(registry, docker))
+
+    assert resolved == registry

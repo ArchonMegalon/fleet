@@ -217,7 +217,18 @@ ACTIVE_QUEUE_STATUSES = {
     "in_progress",
     "active",
 }
-MILESTONE_TERMINAL_STATUSES = {"released"}
+MILESTONE_TERMINAL_STATUSES = {
+    "released",
+    "complete",
+    "completed",
+    "done",
+    "closed",
+    "cancelled",
+    "canceled",
+    "shipped",
+    "archived",
+    "skipped",
+}
 WORKLIST_CHECKLIST_RE = re.compile(
     r"^\s*[-*]\s+\[(?P<status>[^\]]+)\]\s+(?:(?P<task_id>[A-Za-z0-9._-]+)\s+)?(?P<task>.+?)\s*$"
 )
@@ -2386,7 +2397,23 @@ def _load_milestone_capability_queue(project_cfg: Dict[str, Any], source_cfg: Di
     return items
 
 
+def _queue_entry_status(item: Any) -> str:
+    if not isinstance(item, dict):
+        return ""
+    return str(item.get("status") or item.get("state") or "").strip().lower().replace("_", " ")
+
+
+def _queue_entry_active(item: Any) -> bool:
+    status = _queue_entry_status(item)
+    if not status:
+        return True
+    return status not in MILESTONE_TERMINAL_STATUSES
+
+
 def _apply_queue_source(project_cfg: Dict[str, Any], queue: List[Any], source_cfg: Dict[str, Any]) -> List[Any]:
+    if source_cfg.get("publish_queue_truth") is False:
+        return list(queue)
+    queue = [item for item in queue if _queue_entry_active(item)]
     fallback_only_if_empty = bool(source_cfg.get("fallback_only_if_empty"))
     if fallback_only_if_empty and queue:
         return list(queue)
@@ -2409,7 +2436,7 @@ def _apply_queue_source(project_cfg: Dict[str, Any], queue: List[Any], source_cf
 
 def _base_queue_for_target(target_cfg: Dict[str, Any]) -> List[Any]:
     project_cfg = dict(target_cfg.get("project_cfg") or {})
-    queue = list(project_cfg.get("queue") or [])
+    queue = [item for item in (project_cfg.get("queue") or []) if _queue_entry_active(item)]
     for source_cfg in project_cfg.get("queue_sources") or []:
         if isinstance(source_cfg, dict):
             queue = _apply_queue_source(project_cfg, queue, source_cfg)

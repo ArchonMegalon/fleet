@@ -7,6 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+TEST_ROOT = Path(__file__).resolve().parent
+if str(TEST_ROOT) not in sys.path:
+    sys.path.insert(0, str(TEST_ROOT))
+
 from test_materialize_next90_m129_fleet_participation_lane_receipts import _fixture_tree
 
 

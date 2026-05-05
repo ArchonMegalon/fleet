@@ -20,6 +20,8 @@ SCRIPTS = (
     SCRIPT_DIR / "verify_next90_m102_fleet_reporter_receipts.py",
     SCRIPT_DIR / "materialize_next90_m111_fleet_install_aware_followthrough.py",
     SCRIPT_DIR / "verify_next90_m111_fleet_install_aware_followthrough.py",
+    SCRIPT_DIR / "materialize_next90_m145_fleet_explain_coverage_gate.py",
+    SCRIPT_DIR / "verify_next90_m145_fleet_explain_coverage_gate.py",
     SCRIPT_DIR / "verify_next90_m106_fleet_governor_packet.py",
     SCRIPT_DIR / "materialize_flagship_product_readiness.py",
     SCRIPT_DIR / "chummer_design_supervisor.py",

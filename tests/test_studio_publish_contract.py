@@ -304,6 +304,47 @@ class StudioPublishContractTests(unittest.TestCase):
         self.assertTrue(payload["stages"]["execution_compile"])
         self.assertFalse(payload["dispatchable_truth_ready"])
 
+    def test_compile_manifest_payload_ignores_terminal_and_non_publish_successor_queue_sources(self) -> None:
+        payload = self.studio.compile_manifest_payload(
+            {
+                "target_type": "project",
+                "target_id": "fleet",
+                "project_cfg": {
+                    "lifecycle": "live",
+                    "queue": [
+                        {"title": "Closed slice", "status": "done"},
+                    ],
+                    "queue_sources": [
+                        {
+                            "kind": "next90_queue_staging",
+                            "path": "/tmp/unused",
+                            "mode": "append",
+                            "publish_queue_truth": False,
+                        }
+                    ],
+                },
+            },
+            [
+                {
+                    "path": "QUEUE.generated.yaml",
+                    "content": (
+                        f"source_queue_fingerprint: {self.studio.work_package_source_queue_fingerprint([])}\n"
+                        "mode: append\n"
+                        "items: []\n"
+                    ),
+                },
+                {
+                    "path": "WORKPACKAGES.generated.yaml",
+                    "content": (
+                        f"source_queue_fingerprint: {self.studio.work_package_source_queue_fingerprint([])}\n"
+                        "work_packages: []\n"
+                    ),
+                },
+            ],
+        )
+
+        self.assertTrue(payload["dispatchable_truth_ready"])
+
     def test_publish_target_files_stamps_queue_overlay_and_writes_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

@@ -10,9 +10,12 @@ from pathlib import Path
 
 REGISTRY_ROOT = Path("/docker/chummercomplete/chummer-hub-registry")
 UI_ROOT = Path("/docker/chummercomplete/chummer6-ui")
+PORTAL_ROOT = Path("/docker/chummercomplete/chummer.run-services/Chummer.Portal")
 DEFAULT_OUTPUT = REGISTRY_ROOT / ".codex-studio" / "published" / "RELEASE_CHANNEL.generated.json"
 DEFAULT_COMPAT_OUTPUT = REGISTRY_ROOT / ".codex-studio" / "published" / "releases.json"
 DEFAULT_DOWNLOADS_DIR = UI_ROOT / "Docker" / "Downloads" / "files"
+PORTAL_DOWNLOADS_DIR = PORTAL_ROOT / "downloads" / "files"
+REGISTRY_PUBLISHED_DOWNLOADS_DIR = REGISTRY_ROOT / ".codex-studio" / "published" / "files"
 DEFAULT_MANIFEST = UI_ROOT / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
 DEFAULT_STARTUP_SMOKE_DIR = REGISTRY_ROOT / ".codex-studio" / "published" / "startup-smoke"
 STARTUP_SMOKE_FALLBACK_DIRS = (
@@ -27,6 +30,59 @@ STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS = 60
 UTC = dt.timezone.utc
 PASS_STATUSES = {"pass", "passed", "ready"}
 STARTUP_SMOKE_REQUIRED_READY_CHECKPOINT = "pre_ui_event_loop"
+
+
+def _manifest_artifact_file_names(manifest_path: Path | None) -> list[str]:
+    if manifest_path is None or not manifest_path.exists() or not manifest_path.is_file():
+        return []
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, dict):
+        return []
+    rows = payload.get("artifacts")
+    if not isinstance(rows, list):
+        rows = payload.get("downloads")
+    if not isinstance(rows, list):
+        return []
+    file_names: list[str] = []
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        file_name = str(item.get("fileName") or "").strip()
+        if not file_name:
+            file_name = Path(str(item.get("downloadUrl") or item.get("url") or "").strip()).name
+        if file_name:
+            file_names.append(file_name)
+    return sorted(set(file_names))
+
+
+def _downloads_dir_match_count(downloads_dir: Path | None, file_names: list[str]) -> int:
+    if downloads_dir is None or not downloads_dir.exists() or not downloads_dir.is_dir() or not file_names:
+        return 0
+    return sum(1 for file_name in file_names if (downloads_dir / file_name).is_file())
+
+
+def resolve_downloads_dir(
+    requested_dir: Path | None,
+    *,
+    manifest_path: Path | None = None,
+    fallback_dirs: tuple[Path, ...] = (PORTAL_DOWNLOADS_DIR, REGISTRY_PUBLISHED_DOWNLOADS_DIR),
+) -> Path | None:
+    requested = requested_dir if requested_dir is not None else DEFAULT_DOWNLOADS_DIR
+    manifest_file_names = _manifest_artifact_file_names(manifest_path)
+    if not manifest_file_names:
+        return requested
+
+    best_dir = requested
+    best_score = _downloads_dir_match_count(requested, manifest_file_names)
+    for candidate in fallback_dirs:
+        candidate_score = _downloads_dir_match_count(candidate, manifest_file_names)
+        if candidate_score > best_score:
+            best_dir = candidate
+            best_score = candidate_score
+    return best_dir
 
 
 def parse_args() -> argparse.Namespace:
@@ -123,6 +179,7 @@ def main() -> int:
     if not REGISTRY_MATERIALIZER.exists():
         raise SystemExit(f"Missing registry materializer: {REGISTRY_MATERIALIZER}")
 
+    downloads_dir = resolve_downloads_dir(args.downloads_dir, manifest_path=args.manifest)
     cmd = [
         "python3",
         str(REGISTRY_MATERIALIZER),
@@ -137,8 +194,8 @@ def main() -> int:
     ]
     if args.manifest and args.manifest.exists():
         cmd.extend(["--manifest", str(args.manifest)])
-    else:
-        cmd.extend(["--downloads-dir", str(args.downloads_dir)])
+    if downloads_dir is not None and downloads_dir.exists():
+        cmd.extend(["--downloads-dir", str(downloads_dir)])
     if args.published_at:
         cmd.extend(["--published-at", args.published_at])
     if args.runtime_bundles:

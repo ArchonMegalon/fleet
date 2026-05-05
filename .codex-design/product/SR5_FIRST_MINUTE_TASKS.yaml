@@ -1,0 +1,41 @@
+product: chummer
+version: 1
+last_reviewed: 2026-05-04
+purpose: Release-blocking first-minute task pack for proving that a serious Chummer5a veteran can orient in the promoted SR5 desktop head without coaching.
+release_blocking: true
+scope:
+  ruleset: SR5
+  heads:
+    - Chummer.Avalonia
+user_model: Serious Chummer5a veteran with no coaching and no browser ritual tolerance.
+total_time_budget_seconds: 60
+required_generated_receipt: SR5_FIRST_MINUTE_TASKS.generated.json
+tasks:
+  - id: start_new_sr5_character
+    time_budget_seconds: 15
+    success_criteria:
+      - The user reaches a real SR5 character workspace instead of a dashboard or landing detour.
+      - The current section and workspace posture are visible immediately.
+  - id: locate_attributes_or_skills
+    time_budget_seconds: 10
+    success_criteria:
+      - The user can reach Attributes or Skills without guessing through nested chrome.
+      - Section rhythm stays visible while navigating.
+  - id: locate_save_or_open
+    time_budget_seconds: 10
+    success_criteria:
+      - Save and open or import routes are discoverable from the default shell landmarks.
+  - id: locate_settings
+    time_budget_seconds: 10
+    success_criteria:
+      - Settings is visible from the promoted desktop route without hidden overflow-only discovery.
+  - id: identify_rules_and_workspace_state
+    time_budget_seconds: 15
+    success_criteria:
+      - The active ruleset or workspace context is visible.
+      - The bottom status posture exposes enough trust state that the user can tell where they are and what head they are using.
+failure_conditions:
+  - New character flow lands in decorative landing or dashboard chrome before the real workbench.
+  - Save, open or import, settings, or section navigation requires hidden secondary routing.
+  - Ruleset, workspace context, or status posture is not visible in the first minute.
+  - Debug or payload-looking surfaces compete with the workbench during the orientation run.

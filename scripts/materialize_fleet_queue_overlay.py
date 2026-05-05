@@ -54,6 +54,8 @@ def queue_fingerprint(items: List[Any]) -> str:
 
 def apply_queue_source(project_cfg: dict[str, Any], queue: List[Any], source_cfg: dict[str, Any]) -> List[Any]:
     """Match Studio's publish-time base queue semantics for artifact fingerprints."""
+    if source_cfg.get("publish_queue_truth") is False:
+        return list(queue)
     queue = [item for item in queue if _queue_entry_active(item)]
     fallback_only_if_empty = bool(source_cfg.get("fallback_only_if_empty"))
     if fallback_only_if_empty and queue:

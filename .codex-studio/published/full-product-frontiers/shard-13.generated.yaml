@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T04:35:57Z'
+generated_at: '2026-05-05T15:52:40Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-13
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,7 +32,7 @@ focus:
   - chummer6-ui
   - chummer6-hub
   - fleet
-  - chummer6-media-factory
+  - chummer6-mobile
   texts:
   - top flagship grade
   - whole project frontier
@@ -57,14 +57,6 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
-  - rules engine and import
-  - hub and registry
-  - mobile play shell
-  - ui kit and flagship polish
-  - media artifacts
-  - horizons and public surface
-  - fleet and operator loop
-  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -73,55 +65,49 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: weekly product pulse reports release health as needs_attention
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T04:28:27Z'
+  generated_at: '2026-05-05T15:52:28Z'
   proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 3169292357
+- 3316568713
 frontier:
-- id: 3169292357
-  title: Render optional audio or presenter siblings from approved explanation packets
-    without becoming calculation authority.
+- id: 3316568713
+  title: Add travel and mobile starter continuity for primer and briefing artifacts
   wave: flagship_product
-  status: blocked_external_host_proof
+  status: not_started
   owners:
-  - chummer6-media-factory
+  - chummer6-mobile
   dependencies: []
   exit_criteria:
-  - Render optional audio or presenter siblings from approved explanation packets
-    while preserving packet identity, grounding scope, and first-party text fallback.
-  - 'Own and prove the surface slice(s): explain_presenter_siblings:media_factory,
-    explain_audio_video:media_factory'
+  - Add travel and mobile starter continuity for primer and briefing artifacts.
+  - 'Own and prove the surface slice(s): starter_onboarding:mobile, first_session_briefing:mobile'
   - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-media-factory` (next90-m145-media-factory-explain-presenter-siblings).
+    is landed for `chummer6-mobile` (next90-m119-mobile-onboarding-continuity).
   eta:
     status: flagship_delivery
-    eta_human: 9h-21h
+    eta_human: 8h-21h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Render optional audio or presenter siblings from approved
-      explanation packets without becoming calculation authority.'' remains open under
-      the flagship closeout frontier. Outstanding readiness coverage: rules_engine_and_import,
-      hub_and_registry, mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts,
-      horizons_and_public_surface, fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-05T19:33:33Z'
-    range_low_hours: 8.67
-    range_high_hours: 21.25
+    summary: 'Milestone ''Add travel and mobile starter continuity for primer and
+      briefing artifacts'' remains open under the flagship closeout frontier. Outstanding
+      readiness coverage: flagship readiness proof refresh.'
+    predicted_completion_at: '2026-05-06T06:22:04Z'
+    range_low_hours: 8.1
+    range_high_hours: 20.88
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.7
+    remaining_effort_units: 1.8
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
@@ -130,14 +116,13 @@ frontier:
     scope_warning: ''
 source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
 queue_package:
-  repo: chummer6-media-factory
-  package_id: next90-m145-media-factory-explain-presenter-siblings
-  title: Render optional audio or presenter siblings from approved explanation packets
-    without becoming calculation authority.
+  repo: chummer6-mobile
+  package_id: next90-m119-mobile-onboarding-continuity
+  title: Add travel and mobile starter continuity for primer and briefing artifacts
   priority: 0
   owned_surfaces:
-  - explain_presenter_siblings:media_factory
-  - explain_audio_video:media_factory
+  - starter_onboarding:mobile
+  - first_session_briefing:mobile
   allowed_paths:
   - src
   - tests

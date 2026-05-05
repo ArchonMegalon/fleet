@@ -210,6 +210,83 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertEqual(payload["contract_name"], "fleet.operator_surface")
         self.assertEqual(payload["overall_state"], "nominal")
 
+    def test_operator_surface_blocks_when_required_audit_shard_is_missing(self) -> None:
+        status = {
+            "generated_at": "2026-05-05T05:30:00Z",
+            "config": {"projects": [], "groups": []},
+            "projects": [],
+            "groups": [],
+            "account_pools": [],
+            "cockpit": {"worker_breakdown": {"active_workers": 0}},
+            "runtime_healing": {"summary": {"alert_state": "healthy"}},
+        }
+
+        payload = self.admin.operator_surface_payload(
+            status,
+            active_shards_payload={
+                "configured_shard_count": 20,
+                "configured_shards": [
+                    {"name": "shard-14", "worker_lane": "audit_shard"},
+                ],
+                "active_shards": [
+                    {
+                        "name": "shard-1",
+                        "active_run_id": "run-1",
+                        "active_run_process_alive": True,
+                        "active_run_progress_state": "streaming",
+                    }
+                ],
+                "updated_at": "2026-05-05T05:30:00Z",
+            },
+            artifact_freshness={},
+            completion_frontier={},
+        )
+
+        self.assertEqual(payload["overall_state"], "blocked")
+        self.assertEqual(payload["section_states"]["shard_mix"], "blocked")
+        self.assertEqual(payload["shard_mix"]["audit_shard"]["state"], "blocked")
+        self.assertIn("dedicated desktop-client audit shard-14", payload["next_page"])
+        self.assertTrue(any(row["scope"] == "desktop_client:audit_shard" for row in payload["blocked_milestones"]))
+
+    def test_operator_surface_marks_required_audit_shard_nominal_when_active(self) -> None:
+        status = {
+            "generated_at": "2026-05-05T05:30:00Z",
+            "config": {"projects": [], "groups": []},
+            "projects": [],
+            "groups": [],
+            "account_pools": [],
+            "cockpit": {"worker_breakdown": {"active_workers": 1}},
+            "runtime_healing": {"summary": {"alert_state": "healthy"}},
+        }
+
+        payload = self.admin.operator_surface_payload(
+            status,
+            active_shards_payload={
+                "configured_shard_count": 20,
+                "configured_shards": [
+                    {"name": "shard-14", "worker_lane": "audit_shard"},
+                ],
+                "active_run_count": 1,
+                "active_shards": [
+                    {
+                        "name": "shard-14",
+                        "worker_lane": "audit_shard",
+                        "active_run_id": "run-14",
+                        "active_run_process_alive": True,
+                        "active_run_progress_state": "streaming",
+                        "updated_at": "2026-05-05T05:30:00Z",
+                    }
+                ],
+                "updated_at": "2026-05-05T05:30:00Z",
+            },
+            artifact_freshness={},
+            completion_frontier={},
+        )
+
+        self.assertEqual(payload["shard_mix"]["audit_shard"]["state"], "nominal")
+        self.assertTrue(payload["shard_mix"]["audit_shard"]["running"])
+        self.assertFalse(any(row["scope"] == "desktop_client:audit_shard" for row in payload["blocked_milestones"]))
+
     def test_render_operator_surface_shows_queue_recovery_policy_and_receipt_link(self) -> None:
         self.admin.utc_now = lambda: self.admin.parse_iso("2026-04-18T06:55:00Z")
         self.admin.admin_status_payload = lambda: {

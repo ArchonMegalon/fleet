@@ -24272,6 +24272,31 @@ def test_full_product_frontier_is_empty_when_readiness_is_green_under_hard_flags
         assert module._full_product_frontier(args) == []
 
 
+def test_full_product_frontier_limits_hard_flagship_to_explicit_coverage_gap_rows() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_flagship_product_readiness(
+            root,
+            status="fail",
+            ready_keys=(
+                "rules_engine_and_import",
+                "hub_and_registry",
+                "mobile_play_shell",
+                "ui_kit_and_flagship_polish",
+                "media_artifacts",
+                "horizons_and_public_surface",
+                "fleet_and_operator_loop",
+            ),
+        )
+        args = _args(root)
+        args.focus_profile = ["top_flagship_grade", "whole_project_frontier"]
+
+        frontier = module._full_product_frontier(args)
+
+        assert [item.title for item in frontier] == ["Flagship desktop client and workbench finish"]
+
+
 def test_full_product_frontier_does_not_inject_next_wave_queue_when_readiness_is_green() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:

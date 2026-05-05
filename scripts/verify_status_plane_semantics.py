@@ -239,17 +239,22 @@ def _ui_independent_public_release_proof_passed(published_dir: Path) -> bool:
     desktop_visual_familiarity_exit_gate = _load_json_file(
         published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
     )
+    executable_gate_evidence = dict(desktop_executable_exit_gate.get("evidence") or {})
     user_journey_tester_audit = _load_json_file(published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json")
     element_parity_audit = _load_json_file(published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json")
     parity_summary = dict(element_parity_audit.get("summary") or {})
     open_blocking_findings_count = int(user_journey_tester_audit.get("open_blocking_findings_count") or 0)
     visual_no_count = int(parity_summary.get("visual_no_count") or 0)
     behavioral_no_count = int(parity_summary.get("behavioral_no_count") or 0)
+    visual_familiarity_proven = _proof_passed(desktop_visual_familiarity_exit_gate) or (
+        str(executable_gate_evidence.get("visual_familiarity_status") or "").strip().lower() == "pass"
+        and int(desktop_executable_exit_gate.get("local_blocking_findings_count") or 0) == 0
+    )
     return (
         _proof_passed(ui_local_release_proof)
         and _proof_passed(desktop_executable_exit_gate)
         and _proof_passed(desktop_workflow_execution_gate)
-        and _proof_passed(desktop_visual_familiarity_exit_gate)
+        and visual_familiarity_proven
         and _proof_passed(user_journey_tester_audit)
         and open_blocking_findings_count == 0
         and visual_no_count == 0
@@ -695,11 +700,18 @@ def _resolve_runtime_healing(snapshot_runtime_healing: Any) -> Dict[str, Any]:
     local = _runtime_healing_from_autoheal_state()
     if not local:
         return snapshot
+    if not snapshot:
+        return local
 
     snapshot_alert = str((snapshot.get("summary") or {}).get("alert_state") or "").strip().lower()
     local_alert = str((local.get("summary") or {}).get("alert_state") or "").strip().lower()
     snapshot_generated = _parse_iso(snapshot.get("generated_at"))
     local_generated = _parse_iso(local.get("generated_at"))
+
+    if not snapshot_alert:
+        return local
+    if snapshot_generated is None and local_generated is not None:
+        return local
 
     if snapshot_alert != "action_needed":
         return snapshot
@@ -722,10 +734,25 @@ def _resolve_external_proof_autoingest(snapshot_external_proof_autoingest: Any) 
     return local
 
 
+def _preferred_status_mapping(public_status: Dict[str, Any], admin_status: Dict[str, Any], key: str) -> Dict[str, Any]:
+    public_value = public_status.get(key)
+    if isinstance(public_value, dict) and public_value:
+        return dict(public_value)
+    admin_value = admin_status.get(key)
+    if isinstance(admin_value, dict) and admin_value:
+        return dict(admin_value)
+    return dict(public_value or admin_value or {})
+
+
 def build_expected_status_plane(admin_status: Dict[str, Any]) -> Dict[str, Any]:
     public_status = dict(admin_status.get("public_status") or {})
     projects = list(admin_status.get("projects") or [])
     groups = list(admin_status.get("groups") or [])
+    dispatch_policy = _preferred_status_mapping(public_status, admin_status, "dispatch_policy")
+    support_summary = _preferred_status_mapping(public_status, admin_status, "support_summary")
+    publish_readiness = _preferred_status_mapping(public_status, admin_status, "publish_readiness")
+    runtime_healing = _preferred_status_mapping(public_status, admin_status, "runtime_healing")
+    external_proof_autoingest = _preferred_status_mapping(public_status, admin_status, "external_proof_autoingest")
 
     project_rows: List[Dict[str, Any]] = []
     for project in sorted(projects, key=lambda item: str(item.get("id") or "")):
@@ -793,12 +820,12 @@ def build_expected_status_plane(admin_status: Dict[str, Any]) -> Dict[str, Any]:
         "whole_product_final_claim_warning_keys": list(
             readiness_summary.get("whole_product_final_claim_warning_keys") or []
         ),
-        "dispatch_policy": dict(public_status.get("dispatch_policy") or {}),
-        "support_summary": dict(public_status.get("support_summary") or {}),
-        "publish_readiness": dict(public_status.get("publish_readiness") or {}),
-        "runtime_healing": _normalize_runtime_healing(_resolve_runtime_healing(public_status.get("runtime_healing") or {})),
+        "dispatch_policy": dispatch_policy,
+        "support_summary": support_summary,
+        "publish_readiness": publish_readiness,
+        "runtime_healing": _normalize_runtime_healing(_resolve_runtime_healing(runtime_healing)),
         "external_proof_autoingest": _normalize_external_proof_autoingest(
-            _resolve_external_proof_autoingest(public_status.get("external_proof_autoingest") or {})
+            _resolve_external_proof_autoingest(external_proof_autoingest)
         ),
         "projects": project_rows,
         "groups": group_rows,

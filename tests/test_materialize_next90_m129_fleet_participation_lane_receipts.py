@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -145,7 +146,59 @@ def _status_plane(*, include_ea: bool) -> dict:
     }
 
 
-def _fixture_tree(tmp_path: Path, *, design_status: str, include_ea: bool, with_artifact: bool) -> dict[str, Path]:
+def _controller(*, leak_lane_local_auth: bool) -> str:
+    leak_line = '        "auth_json_file": "/tmp/auth.json",\n' if leak_lane_local_auth else ""
+    return f"""from pathlib import Path
+from typing import Any, Dict
+
+
+def participant_lane_home(lane_id: str) -> Path:
+    return Path("/tmp") / lane_id
+
+
+def participant_lane_status_path(lane_id: str) -> Path:
+    return participant_lane_home(lane_id) / "device-auth-status.json"
+
+
+def participant_lane_auth_path(lane_id: str) -> Path:
+    return participant_lane_home(lane_id) / "auth.json"
+
+
+def participant_receipt_signature(receipt: Dict[str, Any]) -> str:
+    return "sig"
+
+
+def activate_participant_lane_record(lane_id: str) -> bool:
+    return participant_lane_auth_path(lane_id).exists()
+
+
+def build_participant_contribution_receipt(
+    lane_id: str,
+    sponsor_session_id: str,
+    authorization_tier: str,
+) -> Dict[str, Any]:
+    receipt: Dict[str, Any] = {{
+        "lane_id": lane_id,
+        "sponsor_session_id": sponsor_session_id,
+        "auth_class": "chatgpt_auth_json",
+        "lane_type": "participant_burst",
+        "consent_trace": {{"public": True}},
+        "sponsor_billing_attribution": {{"sponsor_session_id": sponsor_session_id}},
+        "authorization_tier_at_receipt": authorization_tier,
+{leak_line}    }}
+    receipt["signed_by_fleet"] = participant_receipt_signature(receipt)
+    return receipt
+"""
+
+
+def _fixture_tree(
+    tmp_path: Path,
+    *,
+    design_status: str,
+    include_ea: bool,
+    with_artifact: bool,
+    leak_lane_local_auth: bool = False,
+) -> dict[str, Path]:
     registry_path = tmp_path / "registry.yaml"
     queue_path = tmp_path / "queue.yaml"
     design_queue_path = tmp_path / "design_queue.yaml"
@@ -157,6 +210,7 @@ def _fixture_tree(tmp_path: Path, *, design_status: str, include_ea: bool, with_
     hub_project_path = tmp_path / "hub.md"
     agent_template_path = tmp_path / "fleet.AGENTS.template.md"
     status_plane_path = tmp_path / "STATUS_PLANE.generated.yaml"
+    controller_path = tmp_path / "controller.py"
     fleet_published_root = tmp_path / "fleet-pub"
     hub_published_root = tmp_path / "hub-pub"
     registry_published_root = tmp_path / "registry-pub"
@@ -173,6 +227,7 @@ def _fixture_tree(tmp_path: Path, *, design_status: str, include_ea: bool, with_
     _write_text(hub_project_path, _hub_project())
     _write_text(agent_template_path, _agent_template())
     _write_yaml(status_plane_path, _status_plane(include_ea=include_ea))
+    _write_text(controller_path, _controller(leak_lane_local_auth=leak_lane_local_auth))
     if with_artifact:
         _write_text(
             hub_published_root / "SPONSOR_SESSION_PROOF.generated.json",
@@ -190,6 +245,7 @@ def _fixture_tree(tmp_path: Path, *, design_status: str, include_ea: bool, with_
         "hub_project": hub_project_path,
         "agent_template": agent_template_path,
         "status_plane": status_plane_path,
+        "controller": controller_path,
         "fleet_published_root": fleet_published_root,
         "hub_published_root": hub_published_root,
         "registry_published_root": registry_published_root,
@@ -197,6 +253,13 @@ def _fixture_tree(tmp_path: Path, *, design_status: str, include_ea: bool, with_
 
 
 class MaterializeNext90M129FleetParticipationLaneReceiptsTest(unittest.TestCase):
+    def _load_module(self):
+        spec = importlib.util.spec_from_file_location("m129_fleet_materializer", SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(module)
+        return module
+
     def _run_materializer(self, fixture: dict[str, Path], artifact_path: Path) -> dict:
         markdown_path = artifact_path.with_suffix(".md")
         subprocess.run(
@@ -278,6 +341,45 @@ class MaterializeNext90M129FleetParticipationLaneReceiptsTest(unittest.TestCase)
         self.assertEqual(payload["monitor_summary"]["participation_status"], "blocked")
         self.assertTrue(
             any("status plane is missing owner project row(s): ea" in row for row in payload["monitor_summary"]["runtime_blockers"])
+        )
+
+    def test_lane_local_auth_fields_do_not_leak_into_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(
+                tmp_path,
+                design_status="done",
+                include_ea=True,
+                with_artifact=True,
+                leak_lane_local_auth=True,
+            )
+            module = self._load_module()
+            payload = module.build_payload(
+                registry_path=fixture["registry"],
+                queue_path=fixture["queue"],
+                design_queue_path=fixture["design_queue"],
+                next90_guide_path=fixture["next90_guide"],
+                adr_path=fixture["adr"],
+                workflow_path=fixture["workflow"],
+                ownership_matrix_path=fixture["ownership"],
+                fleet_project_path=fixture["fleet_project"],
+                hub_project_path=fixture["hub_project"],
+                fleet_agent_template_path=fixture["agent_template"],
+                status_plane_path=fixture["status_plane"],
+                fleet_published_root=fixture["fleet_published_root"],
+                hub_published_root=fixture["hub_published_root"],
+                registry_published_root=fixture["registry_published_root"],
+                controller_path=fixture["controller"],
+            )
+
+        self.assertEqual(payload["status"], "pass")
+        self.assertEqual(payload["monitor_summary"]["participation_status"], "blocked")
+        self.assertEqual(payload["monitor_summary"]["controller_forbidden_leak_count"], 1)
+        self.assertTrue(
+            any(
+                "participant contribution receipts leak lane-local auth/cache fields: auth_json_file" in row
+                for row in payload["monitor_summary"]["runtime_blockers"]
+            )
         )
 
 

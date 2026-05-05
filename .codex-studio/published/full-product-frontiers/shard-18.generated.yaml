@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T04:35:52Z'
+generated_at: '2026-05-05T15:53:10Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-18
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,6 +32,7 @@ focus:
   - fleet
   - chummer6-design
   - chummer6-ui
+  - chummer6-core
   texts:
   - top flagship grade
   - whole project frontier
@@ -54,14 +55,6 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
-  - rules engine and import
-  - hub and registry
-  - mobile play shell
-  - ui kit and flagship polish
-  - media artifacts
-  - horizons and public surface
-  - fleet and operator loop
-  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -70,53 +63,52 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: weekly product pulse reports release health as needs_attention
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T04:28:27Z'
+  generated_at: '2026-05-05T15:52:45Z'
   proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1416961433
+- 3909693086
 frontier:
-- id: 1416961433
-  title: Surface campaign memory and consequences on desktop
+- id: 3909693086
+  title: Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta, and source-anchor
+    receipts for the first SR6 combat-round proof.
   wave: flagship_product
-  status: blocked_external_host_proof
+  status: not_started
   owners:
-  - chummer6-ui
+  - chummer6-core
   dependencies: []
   exit_criteria:
-  - Make campaign consequences, stale state, and next-session return actions visible
-    on the promoted desktop route.
-  - 'Own and prove the surface slice(s): campaign_workspace:memory, campaign_return_loop:desktop'
-  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
-    Chummer.Tests, scripts'
+  - Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta, and source-anchor
+    receipts for the first SR6 combat-round proof.
+  - 'Own and prove the surface slice(s): implement_actionbudgetresult_actionaffordance_turnledger:core'
+  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-ui` (next90-m112-ui-campaign-memory).
+    is landed for `chummer6-core` (next90-m121-core-implement-actionbudgetresult-actionaffordance-turnledger).
   eta:
     status: flagship_delivery
-    eta_human: 9h-22h
+    eta_human: 8h-20h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Surface campaign memory and consequences on desktop'' remains
-      open under the flagship closeout frontier. Outstanding readiness coverage: rules_engine_and_import,
-      hub_and_registry, mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts,
-      horizons_and_public_surface, fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-05T19:48:28Z'
-    range_low_hours: 8.64
-    range_high_hours: 21.78
+    summary: 'Milestone ''Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta,
+      and source-anchor receipts for the first SR6 combat-round proof.'' remains open
+      under the flagship closeout frontier. Outstanding readiness coverage: flagship
+      readiness proof refresh.'
+    predicted_completion_at: '2026-05-06T05:34:16Z'
+    range_low_hours: 7.65
+    range_high_hours: 19.72
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.8
+    remaining_effort_units: 1.7
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
@@ -125,15 +117,35 @@ frontier:
     scope_warning: ''
 source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
 queue_package:
-  repo: chummer6-ui
-  package_id: next90-m112-ui-campaign-memory
-  title: Surface campaign memory and consequences on desktop
+  repo: chummer6-core
+  package_id: next90-m121-core-implement-actionbudgetresult-actionaffordance-turnledger
+  title: Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta, and source-anchor
+    receipts for the first SR6 combat-round proof.
   priority: 0
   owned_surfaces:
-  - campaign_workspace:memory
-  - campaign_return_loop:desktop
+  - implement_actionbudgetresult_actionaffordance_turnledger:core
   allowed_paths:
-  - Chummer.Avalonia
-  - Chummer.Desktop.Runtime
-  - Chummer.Tests
+  - src
+  - tests
+  - docs
   - scripts
+eta:
+  status: flagship_delivery
+  eta_human: 8h-20h
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: ''
+  summary: 'Milestone ''Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta,
+    and source-anchor receipts for the first SR6 combat-round proof.'' remains open
+    under the flagship closeout frontier. Outstanding readiness coverage: flagship
+    readiness proof refresh.'
+  predicted_completion_at: '2026-05-06T05:34:16Z'
+  range_low_hours: 7.65
+  range_high_hours: 19.72
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 1.7

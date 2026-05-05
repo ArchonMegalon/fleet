@@ -230,17 +230,23 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     windows_validate_ps1 = commands_dir / "validate-windows-proof.ps1"
     windows_bundle_ps1 = commands_dir / "bundle-windows-proof.ps1"
     windows_ingest_ps1 = commands_dir / "ingest-windows-proof-bundle.ps1"
+    windows_command_pack = commands_dir / "windows-proof-command-pack.tgz"
+    windows_command_pack_sha = commands_dir / "windows-proof-command-pack.tgz.sha256"
     macos_preflight = commands_dir / "preflight-macos-proof.sh"
     macos_capture = commands_dir / "capture-macos-proof.sh"
     macos_validate = commands_dir / "validate-macos-proof.sh"
     macos_bundle = commands_dir / "bundle-macos-proof.sh"
     macos_ingest = commands_dir / "ingest-macos-proof-bundle.sh"
+    macos_command_pack = commands_dir / "macos-proof-command-pack.tgz"
+    macos_command_pack_sha = commands_dir / "macos-proof-command-pack.tgz.sha256"
     linux_preflight = commands_dir / "preflight-linux-proof.sh"
     linux_capture = commands_dir / "capture-linux-proof.sh"
     linux_validate = commands_dir / "validate-linux-proof.sh"
     linux_bundle = commands_dir / "bundle-linux-proof.sh"
     linux_ingest = commands_dir / "ingest-linux-proof-bundle.sh"
     linux_run_lane = commands_dir / "run-linux-proof-lane.sh"
+    linux_command_pack = commands_dir / "linux-proof-command-pack.tgz"
+    linux_command_pack_sha = commands_dir / "linux-proof-command-pack.tgz.sha256"
     post_capture = commands_dir / "republish-after-host-proof.sh"
     finalize = commands_dir / "finalize-external-host-proof.sh"
 
@@ -249,6 +255,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert f"commands_dir: `{commands_dir}`" in payload
     assert "## Host: windows" in payload
     assert "## Host: macos" in payload
+    assert "### Command Pack Verification" in payload
     assert "shell_hint: Run canonical commands in Git Bash (or WSL bash)." in payload
     assert "shell_hint: Run commands in a POSIX shell (bash/zsh) on the required host." in payload
     assert "plan_generated_at: 2026-04-05T00:00:00Z" in payload
@@ -280,8 +287,28 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert linux_bundle.is_file()
     assert linux_ingest.is_file()
     assert linux_run_lane.is_file()
+    assert linux_command_pack.is_file()
+    assert linux_command_pack_sha.is_file()
+    assert macos_command_pack.is_file()
+    assert macos_command_pack_sha.is_file()
+    assert windows_command_pack.is_file()
+    assert windows_command_pack_sha.is_file()
     assert (commands_dir / "host-proof-bundles" / "linux" / "external-proof-manifest.json").is_file()
     assert (commands_dir / "linux-proof-bundle.tgz").is_file()
+    linux_pack_digest = hashlib.sha256(linux_command_pack.read_bytes()).hexdigest()
+    macos_pack_digest = hashlib.sha256(macos_command_pack.read_bytes()).hexdigest()
+    windows_pack_digest = hashlib.sha256(windows_command_pack.read_bytes()).hexdigest()
+    assert linux_command_pack_sha.read_text(encoding="utf-8") == f"{linux_pack_digest}  {linux_command_pack.name}\n"
+    assert macos_command_pack_sha.read_text(encoding="utf-8") == f"{macos_pack_digest}  {macos_command_pack.name}\n"
+    assert windows_command_pack_sha.read_text(encoding="utf-8") == f"{windows_pack_digest}  {windows_command_pack.name}\n"
+    assert f"command_pack_sha256_path: `{linux_command_pack_sha}`" in payload
+    assert f"command_pack_sha256_path: `{macos_command_pack_sha}`" in payload
+    assert f"command_pack_sha256_path: `{windows_command_pack_sha}`" in payload
+    assert f"command_pack_sha256: `{linux_pack_digest}`" in payload
+    assert f"command_pack_sha256: `{macos_pack_digest}`" in payload
+    assert f"command_pack_sha256: `{windows_pack_digest}`" in payload
+    assert f"shasum -a 256 -c {macos_command_pack_sha.name}" in payload
+    assert f"tar -xzf {macos_command_pack.name}" in payload
     assert "bash -lc 'set -euo pipefail" in payload
     assert "echo windows-proof" in payload
     assert "installer-preflight-sha256-mismatch" in payload
@@ -537,16 +564,13 @@ def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates
     assert "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json" not in post_capture.read_text(encoding="utf-8")
     assert "python3 scripts/chummer_design_supervisor.py status" not in post_capture.read_text(encoding="utf-8")
     finalize_payload = finalize.read_text(encoding="utf-8")
-    assert "./validate-linux-proof.sh" in finalize_payload
-    assert "./ingest-linux-proof-bundle.sh" in finalize_payload
     assert "./validate-macos-proof.sh" in finalize_payload
     assert "./ingest-macos-proof-bundle.sh" in finalize_payload
-    assert "./validate-windows-proof.sh" in finalize_payload
-    assert "./ingest-windows-proof-bundle.sh" in finalize_payload
+    assert "./validate-linux-proof.sh" not in finalize_payload
+    assert "./ingest-linux-proof-bundle.sh" not in finalize_payload
+    assert "./validate-windows-proof.sh" not in finalize_payload
+    assert "./ingest-windows-proof-bundle.sh" not in finalize_payload
     assert "./republish-after-host-proof.sh" in finalize_payload
-    assert finalize_payload.index("./ingest-linux-proof-bundle.sh") < finalize_payload.index(
-        "./republish-after-host-proof.sh"
-    )
     assert finalize_payload.index("./validate-macos-proof.sh") < finalize_payload.index(
         "./ingest-macos-proof-bundle.sh"
     )

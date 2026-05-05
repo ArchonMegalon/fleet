@@ -72,7 +72,15 @@ def _float_env(name: str, default: float) -> float:
 
 def _state_path() -> Path:
     raw = str(os.environ.get("ONEMIN_PROVIDER_API_RECONCILIATION_CURSOR_PATH") or "").strip()
-    return Path(raw or "/tmp/onemin_provider_api_reconciliation_cursor.json")
+    if raw:
+        return Path(raw)
+    provider_ledger_state_path = Path("/data/provider-ledger/onemin_provider_api_reconciliation_cursor.json")
+    if provider_ledger_state_path.parent.exists():
+        return provider_ledger_state_path
+    fleet_state_path = Path("/docker/fleet/state/chummer_design_supervisor/onemin_provider_api_reconciliation_cursor.json")
+    if fleet_state_path.parent.exists():
+        return fleet_state_path
+    return Path("/tmp/onemin_provider_api_reconciliation_cursor.json")
 
 
 def _read_state() -> dict[str, object]:

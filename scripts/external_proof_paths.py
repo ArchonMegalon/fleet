@@ -121,14 +121,24 @@ def _release_channel_authority_rank(candidate: Path, payload: object) -> int:
     return int(parent_name == "registry")
 
 
+def _candidate_can_supersede_registry(candidate: Path) -> bool:
+    normalized_candidate = str(candidate.resolve())
+    if normalized_candidate in {
+        str(PORTAL_RELEASE_CHANNEL_PATH.resolve()),
+        str(LEGACY_PORTAL_RELEASE_CHANNEL_PATH.resolve()),
+    }:
+        return True
+    ancestor_names = {part.strip().lower() for part in candidate.parts if str(part).strip()}
+    return bool({"portal", "chummer.portal"} & ancestor_names)
+
+
 def resolve_release_channel_path(*, candidates: tuple[Path, ...] | None = None) -> Path:
     override = str(os.environ.get("CHUMMER_EXTERNAL_PROOF_RELEASE_CHANNEL", "") or "").strip()
     if override:
         return Path(override)
 
     candidate_paths = candidates or RELEASE_CHANNEL_CANDIDATE_PATHS
-    best_path: Path | None = None
-    best_score: tuple[int, int, int, int, int, float, int] | None = None
+    candidate_infos: list[dict[str, object]] = []
     fallback_path: Path | None = None
     for index, candidate in enumerate(candidate_paths):
         if not candidate.is_file():
@@ -152,15 +162,75 @@ def resolve_release_channel_path(*, candidates: tuple[Path, ...] | None = None) 
             payload.get("generatedAt") or payload.get("generated_at")
         )
         generated_at_ts = generated_at.timestamp() if generated_at is not None else float("-inf")
+        candidate_infos.append(
+            {
+                "path": candidate,
+                "index": index,
+                "payload": payload,
+                "artifacts": artifacts,
+                "artifactful": artifactful,
+                "status_rank": status_rank,
+                "coverage_rank": coverage_rank,
+                "authority_rank": authority_rank,
+                "published_with_artifacts": published_with_artifacts,
+                "startup_smoke_available": startup_smoke_available,
+                "generated_at_ts": generated_at_ts,
+                "channel_id": str(payload.get("channelId") or payload.get("channel") or "").strip().lower(),
+                "version": str(payload.get("version") or payload.get("releaseVersion") or "").strip(),
+            }
+        )
+
+    stale_registry_paths: set[Path] = set()
+    for info in candidate_infos:
+        if int(info.get("authority_rank") or 0) < 1:
+            continue
+        registry_channel_id = str(info.get("channel_id") or "").strip().lower()
+        registry_version = str(info.get("version") or "").strip()
+        registry_quality = (
+            int(info.get("coverage_rank") or 0),
+            int(info.get("published_with_artifacts") or 0),
+            int(info.get("status_rank") or 0),
+            int(info.get("artifactful") or 0),
+        )
+        if not registry_channel_id or not registry_version:
+            continue
+        for candidate in candidate_infos:
+            if candidate is info:
+                continue
+            candidate_path = candidate["path"]
+            if not isinstance(candidate_path, Path) or not _candidate_can_supersede_registry(candidate_path):
+                continue
+            if str(candidate.get("channel_id") or "").strip().lower() != registry_channel_id:
+                continue
+            if str(candidate.get("version") or "").strip() != registry_version:
+                continue
+            candidate_quality = (
+                int(candidate.get("coverage_rank") or 0),
+                int(candidate.get("published_with_artifacts") or 0),
+                int(candidate.get("status_rank") or 0),
+                int(candidate.get("artifactful") or 0),
+            )
+            if candidate_quality <= registry_quality:
+                continue
+            stale_registry_paths.add(info["path"])
+            break
+
+    best_path: Path | None = None
+    best_score: tuple[int, int, int, int, int, int, float, int] | None = None
+    for info in candidate_infos:
+        candidate = info["path"]
+        authority_rank = int(info.get("authority_rank") or 0)
+        if candidate in stale_registry_paths:
+            authority_rank = -1
         score = (
             authority_rank,
-            coverage_rank,
-            published_with_artifacts,
-            status_rank,
-            artifactful,
-            startup_smoke_available,
-            generated_at_ts,
-            -index,
+            int(info.get("coverage_rank") or 0),
+            int(info.get("published_with_artifacts") or 0),
+            int(info.get("status_rank") or 0),
+            int(info.get("artifactful") or 0),
+            int(info.get("startup_smoke_available") or 0),
+            float(info.get("generated_at_ts") or float("-inf")),
+            -int(info.get("index") or 0),
         )
         if best_score is None or score > best_score:
             best_score = score

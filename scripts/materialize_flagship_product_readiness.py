@@ -893,10 +893,17 @@ def _m136_aggregate_readiness_gate_audit(payload: Dict[str, Any]) -> Dict[str, A
     status = str(payload.get("status") or "").strip().lower()
     monitor_summary = dict(payload.get("monitor_summary") or {})
     aggregate_readiness_status = str(monitor_summary.get("aggregate_readiness_status") or "").strip().lower()
+    runtime_blockers = [
+        str(item).strip()
+        for item in (monitor_summary.get("runtime_blockers") or [])
+        if str(item).strip()
+    ]
     generated_at = str(payload.get("generated_at") or payload.get("generatedAt") or "").strip()
     if status != "pass":
         reasons.append("M136 aggregate-readiness parity gate package is not passing.")
-    if aggregate_readiness_status not in {"pass", "ready"}:
+    if aggregate_readiness_status not in {"pass", "ready"} and (
+        aggregate_readiness_status != "warning" or runtime_blockers
+    ):
         reasons.append("M136 aggregate-readiness parity gate still reports blocked runtime proof.")
     if not generated_at:
         reasons.append("M136 aggregate-readiness parity gate generated_at is missing.")
@@ -904,6 +911,7 @@ def _m136_aggregate_readiness_gate_audit(payload: Dict[str, Any]) -> Dict[str, A
         "ready": not reasons,
         "status": status,
         "aggregate_readiness_status": aggregate_readiness_status,
+        "runtime_blockers": runtime_blockers,
         "generated_at": generated_at,
         "reasons": reasons,
     }

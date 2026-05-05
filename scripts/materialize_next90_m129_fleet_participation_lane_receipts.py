@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List
@@ -46,6 +47,7 @@ STATUS_PLANE = PUBLISHED / "STATUS_PLANE.generated.yaml"
 FLEET_PUBLISHED_ROOT = ROOT / ".codex-studio" / "published"
 HUB_PUBLISHED_ROOT = Path("/docker/chummercomplete/chummer.run-services/.codex-studio/published")
 REGISTRY_PUBLISHED_ROOT = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published")
+CONTROLLER_APP = ROOT / "controller" / "app.py"
 
 DONE_STATUSES = {"complete", "completed", "done", "landed", "shipped"}
 STATUS_PLANE_FRESHNESS_HOURS = 24
@@ -406,6 +408,106 @@ def _status_plane_monitor(*, milestone: Dict[str, Any], status_plane: Dict[str, 
     }
 
 
+def _controller_receipt_function_block(controller_text: str) -> str:
+    match = re.search(
+        r"^def build_participant_contribution_receipt\([^)]*\) -> Dict\[str, Any\]:\n(?P<body>(?:^[ \t].*\n|^\n)*)",
+        controller_text,
+        re.MULTILINE,
+    )
+    return match.group("body") if match else ""
+
+
+def _controller_runtime_monitor(controller_path: Path) -> Dict[str, Any]:
+    required_controller_markers = {
+        "participant_lane_auth_path": "def participant_lane_auth_path(",
+        "participant_lane_status_path": "def participant_lane_status_path(",
+        "lane_local_auth_json": '"auth.json"',
+        "lane_local_device_auth_status": '"device-auth-status.json"',
+        "activation_requires_lane_local_auth": "participant_lane_auth_path(lane_id).exists()",
+    }
+    required_receipt_markers = {
+        "receipt_signature": 'receipt["signed_by_fleet"] = participant_receipt_signature(receipt)',
+        "sponsor_session_id": '"sponsor_session_id": sponsor_session_id',
+        "sponsor_billing_attribution": '"sponsor_billing_attribution":',
+        "authorization_tier": '"authorization_tier_at_receipt": authorization_tier',
+        "consent_trace": '"consent_trace":',
+        "lane_type": '"lane_type": "participant_burst"',
+        "auth_class": '"auth_class": "chatgpt_auth_json"',
+    }
+    forbidden_receipt_markers = {
+        "auth_json_file": "auth_json_file",
+        "device_auth_status_path": "device_auth_status_path",
+        "lane_home": "lane_home",
+        "participant_lane_auth_path_call": "participant_lane_auth_path(",
+        "participant_lane_status_path_call": "participant_lane_status_path(",
+    }
+    runtime_blockers: List[str] = []
+    warnings: List[str] = []
+    if not controller_path.exists():
+        runtime_blockers.append(f"controller app is missing: {_display_path(controller_path)}")
+        return {
+            "state": "blocked",
+            "controller_path": _display_path(controller_path),
+            "matched_controller_markers": [],
+            "matched_receipt_markers": [],
+            "forbidden_receipt_leaks": [],
+            "required_controller_markers": list(required_controller_markers),
+            "required_receipt_markers": list(required_receipt_markers),
+            "forbidden_receipt_markers": list(forbidden_receipt_markers),
+            "runtime_blockers": runtime_blockers,
+            "warnings": warnings,
+            "issues": [],
+        }
+    controller_text = controller_path.read_text(encoding="utf-8")
+    receipt_function = _controller_receipt_function_block(controller_text)
+    if not receipt_function:
+        runtime_blockers.append(
+            "build_participant_contribution_receipt() is missing; participant-lane receipt proof cannot be checked."
+        )
+    matched_controller_markers = sorted(
+        marker_name for marker_name, marker in required_controller_markers.items() if marker in controller_text
+    )
+    matched_receipt_markers = sorted(
+        marker_name for marker_name, marker in required_receipt_markers.items() if marker in receipt_function
+    )
+    missing_controller_markers = sorted(
+        marker_name for marker_name, marker in required_controller_markers.items() if marker not in controller_text
+    )
+    missing_receipt_markers = sorted(
+        marker_name for marker_name, marker in required_receipt_markers.items() if marker not in receipt_function
+    )
+    forbidden_receipt_leaks = sorted(
+        marker_name for marker_name, marker in forbidden_receipt_markers.items() if marker in receipt_function
+    )
+    if missing_controller_markers:
+        runtime_blockers.append(
+            "controller no longer proves lane-local auth/status handling: " + ", ".join(missing_controller_markers)
+        )
+    if missing_receipt_markers:
+        runtime_blockers.append(
+            "participant contribution receipts no longer prove signed sponsor-session execution metadata: "
+            + ", ".join(missing_receipt_markers)
+        )
+    if forbidden_receipt_leaks:
+        runtime_blockers.append(
+            "participant contribution receipts leak lane-local auth/cache fields: "
+            + ", ".join(forbidden_receipt_leaks)
+        )
+    return {
+        "state": "pass",
+        "controller_path": _display_path(controller_path),
+        "matched_controller_markers": matched_controller_markers,
+        "matched_receipt_markers": matched_receipt_markers,
+        "forbidden_receipt_leaks": forbidden_receipt_leaks,
+        "required_controller_markers": list(required_controller_markers),
+        "required_receipt_markers": list(required_receipt_markers),
+        "forbidden_receipt_markers": list(forbidden_receipt_markers),
+        "runtime_blockers": runtime_blockers,
+        "warnings": warnings,
+        "issues": [],
+    }
+
+
 def _receipt_artifact_monitor(search_roots: List[Path]) -> Dict[str, Any]:
     issues: List[str] = []
     runtime_blockers: List[str] = []
@@ -472,6 +574,7 @@ def build_payload(
     fleet_published_root: Path,
     hub_published_root: Path,
     registry_published_root: Path,
+    controller_path: Path = CONTROLLER_APP,
     generated_at: str | None = None,
 ) -> Dict[str, Any]:
     generated_at = generated_at or _utc_now()
@@ -516,6 +619,7 @@ def build_payload(
         status_plane=status_plane,
         now=reference_now,
     )
+    controller_monitor = _controller_runtime_monitor(controller_path)
     artifact_monitor = _receipt_artifact_monitor(
         [fleet_published_root, hub_published_root, registry_published_root]
     )
@@ -534,6 +638,7 @@ def build_payload(
         ("fleet_agent_template", agent_monitor),
         ("queue_coverage_monitor", queue_coverage_monitor),
         ("status_plane_monitor", status_plane_monitor),
+        ("controller_runtime_monitor", controller_monitor),
         ("artifact_monitor", artifact_monitor),
     ):
         for issue in section.get("issues") or []:
@@ -569,12 +674,16 @@ def build_payload(
         "runtime_monitors": {
             "queue_coverage": queue_coverage_monitor,
             "status_plane": status_plane_monitor,
+            "controller_receipts": controller_monitor,
             "receipt_artifacts": artifact_monitor,
         },
         "monitor_summary": {
             "participation_status": participation_status,
             "queued_work_task_count": queue_coverage_monitor.get("queued_work_task_count"),
             "expected_work_task_count": queue_coverage_monitor.get("expected_work_task_count"),
+            "controller_required_match_count": len(controller_monitor.get("matched_controller_markers") or []),
+            "controller_receipt_match_count": len(controller_monitor.get("matched_receipt_markers") or []),
+            "controller_forbidden_leak_count": len(controller_monitor.get("forbidden_receipt_leaks") or []),
             "receipt_artifact_match_count": artifact_monitor.get("match_count"),
             "missing_status_plane_project_count": len(status_plane_monitor.get("missing_owner_project_ids") or []),
             "runtime_blocker_count": len(runtime_blockers),
@@ -598,6 +707,7 @@ def build_payload(
             "hub_project": _text_source_link(hub_project_path),
             "fleet_agent_template": _text_source_link(fleet_agent_template_path),
             "status_plane": _source_link(status_plane_path, status_plane),
+            "controller_app": _text_source_link(controller_path),
             "fleet_published_root": _text_source_link(fleet_published_root),
             "hub_published_root": _text_source_link(hub_published_root),
             "registry_published_root": _text_source_link(registry_published_root),
@@ -619,6 +729,9 @@ def render_markdown(payload: Dict[str, Any]) -> str:
         "",
         "## Runtime summary",
         f"- queued_work_task_count: {summary.get('queued_work_task_count')} / {summary.get('expected_work_task_count')}",
+        f"- controller_required_match_count: {summary.get('controller_required_match_count')}",
+        f"- controller_receipt_match_count: {summary.get('controller_receipt_match_count')}",
+        f"- controller_forbidden_leak_count: {summary.get('controller_forbidden_leak_count')}",
         f"- receipt_artifact_match_count: {summary.get('receipt_artifact_match_count')}",
         f"- missing_status_plane_project_count: {summary.get('missing_status_plane_project_count')}",
         f"- runtime_blocker_count: {summary.get('runtime_blocker_count')}",

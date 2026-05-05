@@ -18,6 +18,8 @@ SCRIPTS = (
     Path("/docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py"),
     Path("/docker/fleet/scripts/materialize_next90_m111_fleet_install_aware_followthrough.py"),
     Path("/docker/fleet/scripts/verify_next90_m111_fleet_install_aware_followthrough.py"),
+    Path("/docker/fleet/scripts/materialize_next90_m145_fleet_explain_coverage_gate.py"),
+    Path("/docker/fleet/scripts/verify_next90_m145_fleet_explain_coverage_gate.py"),
     Path("/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py"),
     Path("/docker/fleet/scripts/materialize_flagship_product_readiness.py"),
     Path("/docker/fleet/scripts/materialize_proof_orchestration.py"),

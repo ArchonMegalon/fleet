@@ -9400,6 +9400,74 @@ def _operator_state_from_counts(counts: Dict[str, int]) -> str:
     return "nominal"
 
 
+def _required_audit_shard_health(
+    active_shards_payload: Dict[str, Any],
+    shard_rows: Sequence[Dict[str, Any]],
+) -> Dict[str, Any]:
+    required_name = "shard-14"
+    required_lane = "audit_shard"
+    configured_rows = [dict(item) for item in (active_shards_payload.get("configured_shards") or []) if isinstance(item, dict)]
+    topology_present = bool(configured_rows or list(shard_rows) or active_shards_payload.get("configured_shard_count"))
+    if not topology_present:
+        return {
+            "required_name": required_name,
+            "required_lane": required_lane,
+            "configured": False,
+            "configured_lane": "",
+            "active": False,
+            "active_lane": "",
+            "running": False,
+            "progress_state": "",
+            "updated_at": "",
+            "open_milestone_count": 0,
+            "state": "nominal",
+            "reasons": [],
+        }
+    configured_row = next((item for item in configured_rows if str(item.get("name") or "").strip() == required_name), {})
+    active_row = next((item for item in shard_rows if str(item.get("name") or "").strip() == required_name), {})
+
+    configured_lane = str(configured_row.get("worker_lane") or "").strip()
+    active_lane = str(active_row.get("worker_lane") or "").strip()
+    progress_state = str(active_row.get("active_run_progress_state") or "").strip().lower()
+    running = bool(active_row) and (
+        bool(active_row.get("active_run_process_alive"))
+        or bool(str(active_row.get("active_run_id") or "").strip())
+        or progress_state not in {"", "idle", "idle_waiting_for_local_frontier_slice"}
+    )
+
+    reasons: List[str] = []
+    if not configured_row:
+        reasons.append("Configured shard topology is missing required shard-14 dedicated tester entry.")
+    if configured_lane and configured_lane != required_lane:
+        reasons.append(
+            f"Configured shard-14 lane is {configured_lane}, not {required_lane}."
+        )
+    if not active_row:
+        reasons.append("Required dedicated tester shard-14 is not present in the active shard manifest.")
+    if active_row and active_lane != required_lane:
+        reasons.append(
+            f"Active shard-14 lane is {active_lane or 'missing'}, not {required_lane}."
+        )
+    if active_row and not running:
+        reasons.append("Active shard-14 is present but not running a dedicated tester slice.")
+
+    state = "blocked" if reasons else "nominal"
+    return {
+        "required_name": required_name,
+        "required_lane": required_lane,
+        "configured": bool(configured_row),
+        "configured_lane": configured_lane,
+        "active": bool(active_row),
+        "active_lane": active_lane,
+        "running": running,
+        "progress_state": progress_state,
+        "updated_at": str(active_row.get("updated_at") or "").strip(),
+        "open_milestone_count": len(active_row.get("open_milestone_ids") or []) if active_row else 0,
+        "state": state,
+        "reasons": reasons,
+    }
+
+
 def _age_seconds_from_timestamp(value: Any) -> Optional[int]:
     stamp = parse_iso(value)
     if stamp is None:
@@ -9824,6 +9892,8 @@ def operator_surface_payload(
         "focus_owners": focus_owners,
         "updated_at": str(active_shards.get("updated_at") or active_shards.get("generated_at") or "").strip(),
     }
+    audit_shard_health = _required_audit_shard_health(active_shards, shard_rows)
+    shard_mix["audit_shard"] = audit_shard_health
 
     project_rows: List[Dict[str, Any]] = []
     blocked_projects: List[Dict[str, Any]] = []
@@ -10028,6 +10098,17 @@ def operator_surface_payload(
                 "eta": frontier_payload.get("eta") or {},
             }
         )
+    if audit_shard_health["state"] == "blocked":
+        blocked_milestones.append(
+            {
+                "scope": "desktop_client:audit_shard",
+                "status": "blocked",
+                "remaining_count": len(audit_shard_health["reasons"]),
+                "remaining": ["Restore dedicated UI journey tester shard continuity for desktop-client readiness."],
+                "blockers": list(audit_shard_health["reasons"]),
+                "eta": {},
+            }
+        )
 
     alerts: List[str] = []
     completion_status = str(((frontier_payload.get("completion_audit") or {}).get("status")) or "").strip().lower()
@@ -10045,6 +10126,8 @@ def operator_surface_payload(
         alerts.append(
             f"{worker_transport_health['reconnecting_shard_count']} shard(s) are reconnecting to local external-worker transport"
         )
+    if audit_shard_health["state"] == "blocked":
+        alerts.append("dedicated desktop-client audit shard-14 is missing, misrouted, or inactive")
     if account_health["state"] == "blocked":
         alerts.append("one or more account pools are red")
     if not alerts and blocked_milestones:
@@ -10053,7 +10136,11 @@ def operator_surface_payload(
         alerts.append("no immediate operator page")
 
     section_states = {
-        "shard_mix": "attention" if shard_mix["running_shard_count"] < shard_mix["active_run_count"] else "nominal",
+        "shard_mix": (
+            "blocked"
+            if audit_shard_health["state"] == "blocked"
+            else ("attention" if shard_mix["running_shard_count"] < shard_mix["active_run_count"] else "nominal")
+        ),
         "shard_debt_aging": shard_debt_aging["state"],
         "queue_health": queue_health["state"],
         "proof_freshness": proof_freshness["state"],

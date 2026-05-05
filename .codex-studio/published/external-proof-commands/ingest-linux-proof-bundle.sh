@@ -35,6 +35,7 @@ for source in sorted(bundle_dir.rglob('"'"'*'"'"')):
 assert not bad, '"'"'external-proof-bundle-path-unsafe:'"'"' + '"'"','"'"'.join(sorted(set(bad)))
 assert copied, '"'"'external-proof-bundle-empty:'"'"' + str(bundle_dir)'
 else
+  tar -xzf "$BUNDLE_ARCHIVE" -C "$TARGET_ROOT"
   python3 -c 'import os, pathlib, shutil, tarfile
 bundle=pathlib.Path(os.environ['"'"'BUNDLE_ARCHIVE'"'"'])
 target_root=pathlib.Path(os.environ['"'"'TARGET_ROOT'"'"'])

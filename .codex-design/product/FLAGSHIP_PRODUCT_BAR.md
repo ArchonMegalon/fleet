@@ -69,8 +69,8 @@ The promoted desktop path must behave like one coherent Chummer experience:
 ### 1a. Desktop head authority is explicit
 
 `Chummer.Avalonia` is the default flagship desktop head for the current delivery wave.
-`Chummer.Blazor.Desktop` is only a bounded fallback when the public shelf, platform matrix, and release evidence say so.
-If Blazor is the only shipped desktop head for a lane or the recommended public route, it must meet the flagship bar directly instead of borrowing Avalonia proof.
+No second desktop head is currently part of the public desktop shelf.
+If another desktop head is shipped later, it must meet the flagship bar directly instead of borrowing Avalonia proof.
 
 ### 2. Explainability and trust stay first-class
 

@@ -1,0 +1,227 @@
+{
+  "aggregate_checks": {
+    "coverage_registry_truth": {
+      "required_packages": [
+        "145.1",
+        "145.7"
+      ],
+      "status": "pass"
+    },
+    "deterministic_packet_proof": {
+      "required_packages": [
+        "145.1"
+      ],
+      "status": "pass"
+    },
+    "presenter_optional_fallback": {
+      "required_packages": [
+        "145.5"
+      ],
+      "status": "pass"
+    },
+    "source_anchor_posture": {
+      "required_packages": [
+        "145.2",
+        "145.3",
+        "145.7"
+      ],
+      "status": "pass"
+    },
+    "text_first_fallback": {
+      "required_packages": [
+        "145.2",
+        "145.3",
+        "145.4"
+      ],
+      "status": "pass"
+    }
+  },
+  "canonical_alignment": {
+    "design_queue_item_present": true,
+    "design_queue_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+    "design_queue_status": "complete",
+    "issues": [],
+    "queue_item_present": true,
+    "queue_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+    "queue_status": "complete",
+    "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+    "registry_status": "complete",
+    "registry_work_task_present": true
+  },
+  "contract_name": "fleet.next90_m145_explain_coverage_gate",
+  "frontier_id": 1456045606,
+  "generated_at": "2026-05-05T08:48:29Z",
+  "milestone_id": 145,
+  "package_closeout": {
+    "blocked_reasons": [],
+    "do_not_close_until": [
+      "canonical queue, design-queue, and registry rows agree on this Fleet package",
+      "every shipped sibling explain surface has closed packet/source-anchor/text-first proof",
+      "local queue closures do not outrun the design-owned queue mirror"
+    ],
+    "status": "pass"
+  },
+  "package_id": "next90-m145-fleet-explain-coverage-gate",
+  "queue_task": "Fail closeout when promoted visible values, warnings, or bounded what-if answers ship without coverage-registry truth, deterministic packet proof, source-anchor posture, or text-first fallback.",
+  "queue_title": "Fail closeout when visible values, warnings, or bounded what-if answers ship without explain coverage and fallback proof.",
+  "status": "pass",
+  "surface_receipts": [
+    {
+      "blocking_reasons": [],
+      "design_queue_status": "complete",
+      "key": "core_packets",
+      "owner": "chummer6-core",
+      "package_id": "next90-m145-core-explain-every-value-packets",
+      "proof_evidence": {
+        "counterfactual_outcome_kinds": [
+          "what-if",
+          "why",
+          "why-not"
+        ],
+        "coverage_registry_kinds": [
+          "before-after-delta",
+          "counterfactual",
+          "legality-state",
+          "mechanical-result",
+          "source-anchor",
+          "warning"
+        ],
+        "proof_anchor_count": 6,
+        "receipt_path": "/docker/chummercomplete/chummer-core-engine/.codex-studio/published/EXPLAIN_VALUE_PACKETS.generated.json",
+        "status": "passed",
+        "unresolved": {
+          "missing_files": [],
+          "snippet_failures": {}
+        },
+        "verification_commands": [
+          "CHUMMER_CORE_ENGINE_TEST_FILTER=explain-value-packets dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -m:1 -p:UseSharedCompilation=false",
+          "python3 tests/test_explain_value_packet_receipt.py",
+          "python3 scripts/verify-explain-value-packets.py --repo-root . --out .codex-studio/published/EXPLAIN_VALUE_PACKETS.generated.json"
+        ]
+      },
+      "proof_passed": true,
+      "queue_status": "complete",
+      "registry_status": "complete",
+      "shipped": true,
+      "work_task_id": "145.1"
+    },
+    {
+      "blocking_reasons": [],
+      "design_queue_status": "complete",
+      "key": "desktop_drawer",
+      "owner": "chummer6-ui",
+      "package_id": "next90-m145-ui-desktop-explain-drawer-and-follow-up",
+      "proof_evidence": {
+        "receipt_path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M145_UI_DESKTOP_EXPLAIN_DRAWER_AND_FOLLOW_UP.generated.json",
+        "status": "pass",
+        "unresolved": []
+      },
+      "proof_passed": true,
+      "queue_status": "complete",
+      "registry_status": "complete",
+      "shipped": true,
+      "work_task_id": "145.2"
+    },
+    {
+      "blocking_reasons": [],
+      "design_queue_status": "complete",
+      "key": "mobile_follow_up",
+      "owner": "chummer6-mobile",
+      "package_id": "next90-m145-mobile-quick-explain-and-follow-up",
+      "proof_evidence": {
+        "journeys_passed": [
+          "campaign_session_recover_recap",
+          "install_claim_restore_continue",
+          "migration_boundary_evidence",
+          "quality_release_hardening",
+          "quick_explain_follow_up",
+          "recover_from_sync_conflict"
+        ],
+        "receipt_path": "/docker/chummercomplete/chummer-play/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
+        "status": "passed"
+      },
+      "proof_passed": true,
+      "queue_status": "complete",
+      "registry_status": "complete",
+      "shipped": true,
+      "work_task_id": "145.3"
+    },
+    {
+      "blocking_reasons": [],
+      "design_queue_status": "done",
+      "key": "ea_grounded_follow_up",
+      "owner": "executive-assistant",
+      "package_id": "next90-m145-ea-grounded-explain-narration-packs",
+      "proof_evidence": {
+        "packet_pack_path": "/docker/EA/docs/chummer_explain_narration_packs/CHUMMER_EXPLAIN_NARRATION_PACKET_PACK.yaml",
+        "required_labels": [
+          "no_arithmetic_authority",
+          "packet_grounded",
+          "text_first_fallback"
+        ],
+        "status": "complete"
+      },
+      "proof_passed": true,
+      "queue_status": "done",
+      "registry_status": "done",
+      "shipped": true,
+      "work_task_id": "145.4"
+    },
+    {
+      "blocking_reasons": [],
+      "design_queue_status": "complete",
+      "key": "presenter_siblings",
+      "owner": "chummer6-media-factory",
+      "package_id": "next90-m145-media-factory-explain-presenter-siblings",
+      "proof_evidence": {
+        "proof_source": "successor_package",
+        "receipt_path": "/docker/fleet/repos/chummer-media-factory/.codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json",
+        "receipt_rows": [
+          "ApprovalState",
+          "ArtifactReceipts",
+          "AssetUrl",
+          "AudioReceiptIds",
+          "CaptionRefReceipts",
+          "CompanionReadyRefs",
+          "CompanionRefReceipts",
+          "CompanionRefs",
+          "ExplainPresenterCaptionRefReceipt",
+          "ExplainPresenterCompanionRefReceipt",
+          "ExplainPresenterPreviewRefReceipt",
+          "ExplainPresenterSiblingReadyRef",
+          "ExplainPresenterSiblingRoleReceiptGroup",
+          "ExplainPresenterTextFallbackReceipt",
+          "JobIds",
+          "PresenterReceiptIds",
+          "PreviewRefReceipts",
+          "RetentionState",
+          "RoleReceiptGroups",
+          "StorageClass",
+          "TextFallbackReceipt"
+        ],
+        "status": "complete"
+      },
+      "proof_passed": true,
+      "queue_status": "complete",
+      "registry_status": "complete",
+      "shipped": true,
+      "work_task_id": "145.5"
+    },
+    {
+      "blocking_reasons": [],
+      "design_queue_status": "done",
+      "key": "design_canon",
+      "owner": "chummer6-design",
+      "package_id": "next90-m145-design-explain-every-value-canon",
+      "proof_evidence": {
+        "canon_path": "/docker/chummercomplete/chummer-design/products/chummer/EXPLAIN_EVERY_VALUE_AND_GROUNDED_FOLLOW_UP.md",
+        "missing_markers": []
+      },
+      "proof_passed": true,
+      "queue_status": "done",
+      "registry_status": "done",
+      "shipped": true,
+      "work_task_id": "145.7"
+    }
+  ]
+}

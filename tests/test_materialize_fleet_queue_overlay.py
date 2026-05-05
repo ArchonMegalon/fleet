@@ -167,3 +167,68 @@ def test_materialize_fleet_queue_overlay_includes_next90_queue_staging_in_finger
         }
     ]
     assert payload["source_queue_fingerprint"] == _queue_fingerprint(expected_queue)
+
+
+def test_materialize_fleet_queue_overlay_skips_non_publish_successor_sources(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    published = repo_root / ".codex-studio" / "published"
+    published.mkdir(parents=True, exist_ok=True)
+    staging_path = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    staging_path.write_text(
+        yaml.safe_dump(
+            {
+                "items": [
+                    {
+                        "package_id": "next90-fleet-1",
+                        "repo": "fleet",
+                        "status": "not_started",
+                        "title": "Successor staging lane",
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    projects_dir = tmp_path / "projects"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    (projects_dir / "fleet.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": "fleet",
+                "path": str(repo_root),
+                "queue": ["Flagship Closeout Slice"],
+                "queue_sources": [
+                    {
+                        "kind": "next90_queue_staging",
+                        "path": str(staging_path),
+                        "mode": "append",
+                        "publish_queue_truth": False,
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(repo_root),
+            "--project-id",
+            "fleet",
+            "--projects-dir",
+            str(projects_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = yaml.safe_load((published / "QUEUE.generated.yaml").read_text(encoding="utf-8"))
+    assert payload["source_queue_fingerprint"] == _queue_fingerprint(["Flagship Closeout Slice"])

@@ -154,8 +154,64 @@ class MaterializeReleaseRegistryProjectionTests(unittest.TestCase):
                 resolved = module.resolve_startup_smoke_dir(
                     missing_primary,
                     fallback_dirs=(future, fresh),
-                )
+            )
             self.assertEqual(resolved, fresh)
+
+    def test_resolve_downloads_dir_prefers_fallback_with_more_manifest_artifacts(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            requested = root / "ui-downloads"
+            fallback = root / "portal-downloads"
+            requested.mkdir(parents=True, exist_ok=True)
+            fallback.mkdir(parents=True, exist_ok=True)
+            manifest = root / "RELEASE_CHANNEL.generated.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "artifacts": [
+                            {"fileName": "chummer-avalonia-win-x64-installer.exe"},
+                            {"fileName": "chummer-avalonia-win-x64.zip"},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (requested / "chummer-avalonia-win-x64.zip").write_text("zip", encoding="utf-8")
+            (fallback / "chummer-avalonia-win-x64.zip").write_text("zip", encoding="utf-8")
+            (fallback / "chummer-avalonia-win-x64-installer.exe").write_text("exe", encoding="utf-8")
+
+            resolved = module.resolve_downloads_dir(
+                requested,
+                manifest_path=manifest,
+                fallback_dirs=(fallback,),
+            )
+
+            self.assertEqual(resolved, fallback)
+
+    def test_resolve_downloads_dir_keeps_requested_dir_when_manifest_coverage_is_equal(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            requested = root / "ui-downloads"
+            fallback = root / "portal-downloads"
+            requested.mkdir(parents=True, exist_ok=True)
+            fallback.mkdir(parents=True, exist_ok=True)
+            manifest = root / "RELEASE_CHANNEL.generated.json"
+            manifest.write_text(
+                json.dumps({"artifacts": [{"fileName": "chummer-avalonia-win-x64.zip"}]}),
+                encoding="utf-8",
+            )
+            (requested / "chummer-avalonia-win-x64.zip").write_text("zip", encoding="utf-8")
+            (fallback / "chummer-avalonia-win-x64.zip").write_text("zip", encoding="utf-8")
+
+            resolved = module.resolve_downloads_dir(
+                requested,
+                manifest_path=manifest,
+                fallback_dirs=(fallback,),
+            )
+
+            self.assertEqual(resolved, requested)
 
     def test_main_skips_proof_argument_by_default(self) -> None:
         module = _load_module()

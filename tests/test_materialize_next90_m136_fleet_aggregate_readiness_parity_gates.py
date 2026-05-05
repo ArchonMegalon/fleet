@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -356,6 +357,43 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
         self.assertEqual(payload["status"], "pass")
         self.assertEqual(payload["monitor_summary"]["aggregate_readiness_status"], "pass")
         self.assertEqual(payload["monitor_summary"]["receipt_runtime_blocker_count"], 0)
+
+    def test_missing_generated_at_uses_file_mtime_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(
+                tmp_path,
+                include_fleet_queue_row=True,
+                parity_audit_generated_at="2026-05-05T12:00:00Z",
+                screenshot_review_generated_at="2026-05-05T12:00:00Z",
+                visual_gate_generated_at="2026-05-05T12:00:00Z",
+                visual_gate_status="pass",
+                continuity_status="pass",
+                continuity_generated_at="2026-05-05T12:00:00Z",
+                journey_generated_at="2026-05-05T12:00:00Z",
+                flagship_status="fail",
+            )
+            screenshot_payload = json.loads(fixture["screenshot"].read_text(encoding="utf-8"))
+            screenshot_payload.pop("generated_at", None)
+            _write_json(fixture["screenshot"], screenshot_payload)
+            visual_payload = json.loads(fixture["visual"].read_text(encoding="utf-8"))
+            visual_payload.pop("generated_at", None)
+            _write_json(fixture["visual"], visual_payload)
+            recent_timestamp = 1777982400  # 2026-05-05T12:00:00Z
+            os.utime(fixture["screenshot"], (recent_timestamp, recent_timestamp))
+            os.utime(fixture["visual"], (recent_timestamp, recent_timestamp))
+
+            artifact = tmp_path / "artifact.json"
+            payload = self._run_materializer(fixture, artifact)
+
+        self.assertEqual(payload["monitor_summary"]["aggregate_readiness_status"], "pass")
+        self.assertFalse(
+            any("generated_at is missing or invalid" in row for row in payload["monitor_summary"]["runtime_blockers"])
+        )
+        self.assertEqual(
+            payload["source_inputs"]["screenshot_review_gate"]["generated_at"],
+            "2026-05-05T12:00:00Z",
+        )
 
 
 if __name__ == "__main__":

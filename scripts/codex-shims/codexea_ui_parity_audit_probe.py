@@ -426,15 +426,39 @@ def _dynamic_artifact_statuses(
         and _contains_all(
             dialog_factory_text,
             [
-                "CreateCommandDialog_hero_lab_importer_uses_xml_compatibility_fields",
+                "CreateCommandDialog_hero_lab_importer_surfaces_import_oracle_and_adjacent_sr6_posture",
                 '"dialog.hero_lab_importer"',
                 "heroLabXml",
+            ],
+        )
+        and _contains_all(
+            presenter_text,
+            [
+                "ExecuteCommandAsync_hero_lab_importer_opens_dialog_with_import_oracle_lane_posture",
+                'await presenter.ExecuteCommandAsync("hero_lab_importer"',
+                '"dialog.hero_lab_importer"',
             ],
         )
         and _contains_all(
             dialog_coordinator_text,
             [
                 "CoordinateAsync_hero_lab_import_imports_workspace_and_sets_compat_notice",
+                '"dialog.hero_lab_importer"',
+            ],
+        )
+        and _contains_all(
+            dual_head_text,
+            [
+                "Avalonia_and_Blazor_hero_lab_importer_dialog_preserves_matching_import_oracle_posture",
+                '"hero_lab_importer"',
+                "heroLabImportOracleLanePosture",
+            ],
+        )
+        and _contains_all(
+            avalonia_gate_text,
+            [
+                "Runtime_backed_translator_xml_editor_and_hero_lab_importer_routes_surface_governed_posture",
+                'harness.SelectCommand("hero_lab_importer")',
                 '"dialog.hero_lab_importer"',
             ],
         ),
@@ -996,6 +1020,22 @@ def main() -> int:
         row for row in rows
         if row["present_in_chummer5a"] == YES and (row["visual_parity"] == NO or row["behavioral_parity"] == NO)
     ]
+    release_blocking_no_count = sum(
+        1
+        for row in coverage_missing_rows
+        if str(row.get("id") or "").strip() in {
+            "source:hero_lab_importer_route",
+            "source:translator_route",
+            "source:xml_amendment_editor_route",
+            "family:custom_data_xml_and_translator_bridge",
+            "family:dense_builder_and_career_workflows",
+            "family:dice_initiative_and_table_utilities",
+            "family:identity_contacts_lifestyles_history",
+            "family:legacy_and_adjacent_import_oracles",
+            "family:sheet_export_print_viewer_and_exchange",
+            "family:sr6_supplements_designers_and_house_rules",
+        }
+    )
     for row in coverage_missing_rows[:12]:
         findings.append(
             {
@@ -1028,6 +1068,7 @@ def main() -> int:
     report_payload = {
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "probe_kind": "ui_parity_audit",
+        "status": "pass" if not coverage_gap_keys and not coverage_missing_rows else "fail",
         "scope_note": notes[0],
         "summary": {
             "total_elements": len(rows),
@@ -1042,10 +1083,15 @@ def main() -> int:
             "productive_active_runs_count": int(state.get("productive_active_runs_count") or 0),
             "nonproductive_active_runs_count": int(state.get("nonproductive_active_runs_count") or 0),
         },
+        "visualNoCount": visual_no,
+        "behavioralNoCount": behavioral_no,
+        "releaseBlockingNoCount": release_blocking_no_count,
+        "coverageGapKeys": coverage_gap_keys,
         "findings": findings,
         "notes": notes,
         "elements": sorted(rows, key=lambda item: (item.get("category", ""), item.get("label", ""))),
     }
+    report_payload["rows"] = report_payload["elements"]
 
     markdown_lines = [
         "# Chummer5A UI Element Parity Audit",

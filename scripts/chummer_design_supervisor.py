@@ -6977,17 +6977,14 @@ def _default_full_product_frontier(args: argparse.Namespace, audit: Dict[str, An
         if FULL_PRODUCT_FRONTIER_KEY_BY_COVERAGE.get(item)
     }
     all_rows = [row for row in FULL_PRODUCT_FRONTIER_SPECS if isinstance(row, dict)]
-    if _hard_flagship_requested(args):
-        prioritized_keys = list(selected_spec_keys)
-        prioritized_rows = [row for row in all_rows if str(row.get("key") or "").strip() in selected_spec_keys]
-        trailing_rows = [row for row in all_rows if str(row.get("key") or "").strip() not in selected_spec_keys]
-        rows = prioritized_rows + trailing_rows
-    elif selected_spec_keys:
+    if selected_spec_keys:
         rows = [
             row
             for row in all_rows
             if str(row.get("key") or "").strip() in selected_spec_keys
         ]
+    elif _hard_flagship_requested(args):
+        rows = list(all_rows)
     elif audit.get("unresolved_parity_families"):
         rows = []
     else:

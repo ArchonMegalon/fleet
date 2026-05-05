@@ -81,17 +81,21 @@
   },
   "contract_name": "fleet.next90_m129_participation_lane_receipts",
   "frontier_id": 7997916353,
-  "generated_at": "2026-05-05T15:09:40Z",
+  "generated_at": "2026-05-05T16:24:57Z",
   "milestone_id": 129,
   "monitor_summary": {
+    "controller_forbidden_leak_count": 0,
+    "controller_receipt_match_count": 6,
+    "controller_required_match_count": 5,
     "expected_work_task_count": 6,
     "missing_status_plane_project_count": 0,
     "participation_status": "blocked",
     "queued_work_task_count": 6,
     "receipt_artifact_match_count": 2,
-    "runtime_blocker_count": 1,
+    "runtime_blocker_count": 2,
     "runtime_blockers": [
-      "queue_coverage_monitor: design canon task 129.6 is unknown."
+      "queue_coverage_monitor: design canon task 129.6 is unknown.",
+      "controller_runtime_monitor: participant contribution receipts no longer prove signed sponsor-session execution metadata: sponsor_session_id"
     ],
     "warning_count": 0
   },
@@ -102,13 +106,62 @@
     "blockers": [],
     "state": "pass",
     "warnings": [
-      "queue_coverage_monitor: design canon task 129.6 is unknown."
+      "queue_coverage_monitor: design canon task 129.6 is unknown.",
+      "controller_runtime_monitor: participant contribution receipts no longer prove signed sponsor-session execution metadata: sponsor_session_id"
     ]
   },
   "package_id": "next90-m129-fleet-keep-participant-lane-auth-lane-local-while-emitting-sig",
   "queue_task": "Keep participant-lane auth lane-local while emitting signed contribution receipts and sponsor-session execution metadata.",
   "queue_title": "Keep participant-lane auth lane-local while emitting signed contribution receipts and sponsor-session execution metadata.",
   "runtime_monitors": {
+    "controller_receipts": {
+      "controller_path": "/docker/fleet/controller/app.py",
+      "forbidden_receipt_leaks": [],
+      "forbidden_receipt_markers": [
+        "auth_json_file",
+        "device_auth_status_path",
+        "lane_home",
+        "participant_lane_auth_path_call",
+        "participant_lane_status_path_call"
+      ],
+      "issues": [],
+      "matched_controller_markers": [
+        "activation_requires_lane_local_auth",
+        "lane_local_auth_json",
+        "lane_local_device_auth_status",
+        "participant_lane_auth_path",
+        "participant_lane_status_path"
+      ],
+      "matched_receipt_markers": [
+        "auth_class",
+        "authorization_tier",
+        "consent_trace",
+        "lane_type",
+        "receipt_signature",
+        "sponsor_billing_attribution"
+      ],
+      "required_controller_markers": [
+        "participant_lane_auth_path",
+        "participant_lane_status_path",
+        "lane_local_auth_json",
+        "lane_local_device_auth_status",
+        "activation_requires_lane_local_auth"
+      ],
+      "required_receipt_markers": [
+        "receipt_signature",
+        "sponsor_session_id",
+        "sponsor_billing_attribution",
+        "authorization_tier",
+        "consent_trace",
+        "lane_type",
+        "auth_class"
+      ],
+      "runtime_blockers": [
+        "participant contribution receipts no longer prove signed sponsor-session execution metadata: sponsor_session_id"
+      ],
+      "state": "pass",
+      "warnings": []
+    },
     "queue_coverage": {
       "design_canon_task_id": "129.6",
       "design_canon_task_status": "unknown",
@@ -183,7 +236,7 @@
       "warnings": []
     },
     "status_plane": {
-      "age_hours": 2.35,
+      "age_hours": 3.6,
       "expected_owner_project_ids": [
         "design",
         "ea",
@@ -207,10 +260,15 @@
       "path": "/docker/chummercomplete/chummer-design/products/chummer/adrs/ADR-0006-participation-and-sponsored-execution-split.md",
       "sha256": "575dcc5ed948c7947d55b191c02a83f1d965cb3863cdc6bf130544579db55728"
     },
+    "controller_app": {
+      "generated_at": "",
+      "path": "/docker/fleet/controller/app.py",
+      "sha256": "84d270b1a857aa85d939f72cdb0b882480ac905144beae93f164fd861656009b"
+    },
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "11cc1ecd96db0176604771f8f6f398998db558b6167a3e2bd37140a2124ddca6"
+      "sha256": "0d13a2d5bc8d2942b267ad7b0c841de3197f7f6c0194153956aac8cfc7fe31c1"
     },
     "fleet_agent_template": {
       "generated_at": "",
@@ -250,7 +308,7 @@
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "6da82d05213bc6ae4f536f75debf5dab04463c91c9b2992df970d392bd3972b1"
+      "sha256": "d0fc856422ff38f97daab4fb47038200da8c50e4ff36a68af5ec2e2875d7a34b"
     },
     "registry_published_root": {
       "generated_at": "",

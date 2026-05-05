@@ -1,7 +1,7 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T03:33:22Z'
-mode: flagship_product
+generated_at: '2026-05-05T16:04:56Z'
+mode: complete
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -25,201 +25,122 @@ design_source_paths:
 - /docker/chummercomplete/chummer-design/products/chummer/projects/fleet.md
 primary_probe_shard: shard-1
 focus:
-  profiles:
-  - top_flagship_grade
-  - whole_project_frontier
+  profiles: []
   owners:
   - chummer6-core
   - chummer6-design
   - chummer6-hub
   - chummer6-hub-registry
-  - chummer6-media-factory
   - chummer6-mobile
   - chummer6-ui
-  - chummer6-ui-kit
+  - executive-assistant
+  - fleet
   texts:
   - accessibility
+  - advancement
   - aftermath
   - automatic bugfixing
+  - build lab
   - campaign
+  - chummer5a
+  - claim
+  - companion
   - contacts
+  - continuity
   - crash
-  - crash reporting
-  - desktop client
+  - crew-fit
+  - custom-data
+  - dashboard
+  - dedicated-tester
+  - desktop
+  - desktop-client
   - diary
+  - dice
+  - dossier
   - downtime
+  - event
+  - exchange
+  - explain
+  - export
   - feedback
-  - feedback loop
-  - fit and finish
-  - fleet and operator loop
-  - journey smoothness
+  - flagship-readiness
+  - genesis
+  - gm
+  - governance
+  - grade-bar
+  - hero lab
+  - import
+  - initiative
+  - install
+  - launch
   - localization
-  - media artifacts
-  - mobile play shell
-  - no lowered standards
-  - performance
-  - proof shelf
-  - restore confidence
+  - master index
+  - materializer
+  - mobile
+  - offline
+  - operator
+  - opposition
+  - oracle
+  - prep
+  - pulse
+  - quality
+  - recap
+  - recovery
+  - release truth
+  - release-proof
+  - replay
+  - restore
+  - roster
+  - rule-environment
+  - settings
+  - sourcebook
   - support
-  - support routing
-  - top flagship grade
-  - ui kit and flagship polish
-  - whole project frontier
-  - whole-project frontier
+  - translator
+  - travel
+  - trust
+  - update
+  - user-journey-tester-audit
+  - utility
+  - workbench
+  - xml
 quality_policy:
-  bar: top_flagship_grade
+  bar: flagship_product
   whole_project_frontier: true
   desktop_is_only_one_head: true
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  status: pass
+  reason: recent supervisor history ends with a trusted structured worker receipt
 full_product_audit:
-  status: fail
-  reason: 'flagship product readiness proof is not green: fail'
+  status: pass
+  reason: flagship product readiness proof is current across desktop, rules, hub,
+    mobile, horizons, and operator lanes
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T03:30:45Z'
-  proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  generated_at: '2026-05-05T15:57:13Z'
+  proof_status: pass
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 3
-frontier_ids:
-- 4066417069
-- 1300044932
-- 4182074715
-frontier:
-- id: 4066417069
-  title: Flagship desktop client and workbench finish
-  wave: flagship_product
-  status: blocked_external_host_proof
-  owners:
-  - chummer6-ui
-  - chummer6-core
-  - chummer6-ui-kit
-  dependencies: []
-  exit_criteria:
-  - Ship the flagship workbench/browser/desktop surface described in `projects/ui.md`
-    and `BUILD_LAB_PRODUCT_MODEL.md`, including builder, compare, explain, grouped
-    inspection, conditional toggles, desktop packaging, updater, and in-app support
-    polish.
-  - Keep the flagship desktop head centered on Avalonia with release-grade startup,
-    packaging, and support evidence rather than treating Linux exit-gate closure as
-    the whole product.
-  eta:
-    status: flagship_delivery
-    eta_human: 10h-1.1d
-    eta_confidence: low
-    basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Flagship desktop client and workbench finish'' remains open
-      under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
-      ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-05T21:35:28Z'
-    range_low_hours: 10.45
-    range_high_hours: 25.62
-    remaining_open_milestones: 1
-    remaining_in_progress_milestones: 0
-    remaining_not_started_milestones: 1
-    remaining_effort_units: 2.05
-    history_sample_count: 0
-    observed_burn_milestones_per_day: 0.0
-    blocking_reason: ''
-    scope_kind: flagship_product_readiness
-    scope_label: Full Chummer5A parity and flagship proof closeout
-    scope_warning: ''
-- id: 1300044932
-  title: Mobile and play-shell flagship finish
-  wave: flagship_product
-  status: blocked_external_host_proof
-  owners:
-  - chummer6-mobile
-  - chummer6-core
-  - chummer6-ui-kit
-  - chummer6-hub
-  dependencies: []
-  exit_criteria:
-  - Deliver the dedicated player/GM/session shell described in `projects/mobile.md`,
-    including local-first play, replay/resume, reconnect confidence, installable mobile
-    posture, and cross-device continuity.
-  - Keep mobile grounded on package-only engine/play/UI-kit seams rather than cloning
-    workbench or orchestration logic.
-  eta:
-    status: flagship_delivery
-    eta_human: 10h-1d
-    eta_confidence: low
-    basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open under
-      the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
-      ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-05T20:52:34Z'
-    range_low_hours: 9.84
-    range_high_hours: 24.8
-    remaining_open_milestones: 1
-    remaining_in_progress_milestones: 0
-    remaining_not_started_milestones: 1
-    remaining_effort_units: 2.05
-    history_sample_count: 0
-    observed_burn_milestones_per_day: 0.0
-    blocking_reason: ''
-    scope_kind: flagship_product_readiness
-    scope_label: Full Chummer5A parity and flagship proof closeout
-    scope_warning: ''
-- id: 4182074715
-  title: Shared design system, accessibility, localization, and flagship polish
-  wave: flagship_product
-  status: blocked_external_host_proof
-  owners:
-  - chummer6-ui-kit
-  - chummer6-ui
-  - chummer6-mobile
-  dependencies: []
-  exit_criteria:
-  - Make shared tokens, dense-data primitives, accessibility primitives, localization
-    readiness, and flagship-grade visual polish real across workbench and play surfaces
-    as described in `projects/ui-kit.md`.
-  - Keep package-only shared UI discipline intact while raising the product to a flagship
-    quality bar instead of repo-local one-off chrome.
-  eta:
-    status: flagship_delivery
-    eta_human: 10h-1d
-    eta_confidence: low
-    basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Shared design system, accessibility, localization, and flagship
-      polish'' remains open under the flagship closeout frontier. Outstanding readiness
-      coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
-      desktop_client.'
-    predicted_completion_at: '2026-05-05T20:52:34Z'
-    range_low_hours: 9.84
-    range_high_hours: 24.8
-    remaining_open_milestones: 1
-    remaining_in_progress_milestones: 0
-    remaining_not_started_milestones: 1
-    remaining_effort_units: 2.05
-    history_sample_count: 0
-    observed_burn_milestones_per_day: 0.0
-    blocking_reason: ''
-    scope_kind: flagship_product_readiness
-    scope_label: Full Chummer5A parity and flagship proof closeout
-    scope_warning: ''
+frontier_count: 0
+frontier_ids: []
+frontier: []
 eta:
-  status: flagship_delivery
-  eta_human: 1d-2.6d
-  eta_confidence: low
-  basis: full_product_frontier_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
+  status: ready
+  eta_human: ready now
+  eta_confidence: high
+  basis: completion_audit_pass
+  scope_kind: repo_local_completion_ready
+  scope_label: Repo-local completion review
+  scope_warning: Repo-local completion evidence is green. External release, flagship,
+    or parity claims still depend on the broader readiness surfaces staying green.
   blocking_reason: ''
-  summary: 'Current closeout gates are green, but flagship product work still remains
-    across 3 synthetic slices. Outstanding readiness coverage: mobile_play_shell,
-    ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
-  predicted_completion_at: '2026-05-06T22:36:22Z'
-  range_low_hours: 24.6
-  range_high_hours: 61.5
-  remaining_open_milestones: 3
+  summary: Whole-product completion audit is green on current repo-local evidence.
+  predicted_completion_at: '2026-05-05T16:04:56Z'
+  range_low_hours: 0.0
+  range_high_hours: 0.0
+  remaining_open_milestones: 0
   remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 3
-  remaining_effort_units: 6.15
+  remaining_not_started_milestones: 0
+  remaining_effort_units: 0.0

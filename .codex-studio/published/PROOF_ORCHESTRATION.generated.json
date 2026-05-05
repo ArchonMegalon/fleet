@@ -1,6 +1,6 @@
 {
   "contract_name": "fleet.proof_orchestration",
-  "generated_at": "2026-04-26T15:53:17Z",
+  "generated_at": "2026-05-05T15:48:36Z",
   "jobs": [
     {
       "command": "python3 scripts/materialize_fleet_queue_overlay.py --repo-root /docker/fleet --project-id fleet",
@@ -12,14 +12,14 @@
       "output_states": [
         {
           "acceptable_statuses": [],
-          "age_minutes": 24,
+          "age_minutes": 582,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-26T15:29:02Z",
+          "generated_at": "2026-05-05T06:06:11Z",
           "path": "/docker/fleet/.codex-studio/published/QUEUE.generated.yaml",
           "payload_status": "",
           "required": true,
-          "state": "fresh",
+          "state": "stale",
           "status_ok": true
         }
       ],
@@ -30,7 +30,7 @@
           "transient_io"
         ]
       },
-      "state": "ready",
+      "state": "stale",
       "title": "Publish live queue overlay"
     },
     {
@@ -45,10 +45,10 @@
       "output_states": [
         {
           "acceptable_statuses": [],
-          "age_minutes": 351,
+          "age_minutes": 582,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-26T10:02:01Z",
+          "generated_at": "2026-05-05T06:06:11Z",
           "path": "/docker/fleet/.codex-studio/published/WORKPACKAGES.generated.yaml",
           "payload_status": "",
           "required": true,
@@ -76,10 +76,10 @@
       "output_states": [
         {
           "acceptable_statuses": [],
-          "age_minutes": 2,
+          "age_minutes": 17,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-26T15:50:40Z",
+          "generated_at": "2026-05-05T15:30:41Z",
           "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
           "payload_status": "",
           "required": true,
@@ -110,26 +110,26 @@
       "output_states": [
         {
           "acceptable_statuses": [],
-          "age_minutes": 1,
+          "age_minutes": 178,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-26T15:52:07Z",
+          "generated_at": "2026-05-05T12:50:25Z",
           "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
           "payload_status": "",
           "required": true,
-          "state": "fresh",
+          "state": "stale",
           "status_ok": true
         },
         {
           "acceptable_statuses": [],
-          "age_minutes": 1,
+          "age_minutes": 178,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-26T15:52:07Z",
+          "generated_at": "2026-05-05T12:50:25Z",
           "path": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
           "payload_status": "",
           "required": true,
-          "state": "fresh",
+          "state": "stale",
           "status_ok": true
         }
       ],
@@ -140,7 +140,7 @@
           "transient_io"
         ]
       },
-      "state": "ready",
+      "state": "stale",
       "title": "Materialize public progress and history"
     },
     {
@@ -157,14 +157,14 @@
       "output_states": [
         {
           "acceptable_statuses": [],
-          "age_minutes": 0,
+          "age_minutes": 179,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-26T15:52:29Z",
+          "generated_at": "2026-05-05T12:48:51Z",
           "path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
           "payload_status": "",
           "required": true,
-          "state": "fresh",
+          "state": "stale",
           "status_ok": true
         }
       ],
@@ -175,7 +175,7 @@
           "transient_io"
         ]
       },
-      "state": "ready",
+      "state": "stale",
       "title": "Materialize fleet status plane"
     },
     {
@@ -192,10 +192,10 @@
       "output_states": [
         {
           "acceptable_statuses": [],
-          "age_minutes": 2,
+          "age_minutes": 17,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-26T15:51:05Z",
+          "generated_at": "2026-05-05T15:30:44Z",
           "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
           "payload_status": "",
           "required": true,
@@ -214,7 +214,7 @@
       "title": "Materialize golden journey gates"
     },
     {
-      "command": "python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out state/chummer_design_supervisor/artifacts/FLAGSHIP_PRODUCT_READINESS.generated.json",
+      "command": "bash scripts/refresh_flagship_readiness_proof.sh",
       "dependencies": [
         "journey_gates"
       ],
@@ -229,15 +229,15 @@
             "passed",
             "ready"
           ],
-          "age_minutes": 2,
+          "age_minutes": 0,
           "exists": true,
           "freshness_window_minutes": 90,
-          "generated_at": "2026-04-26T15:51:08Z",
+          "generated_at": "2026-05-05T15:48:16Z",
           "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-          "payload_status": "pass",
+          "payload_status": "fail",
           "required": true,
-          "state": "fresh",
-          "status_ok": true
+          "state": "failed_status",
+          "status_ok": false
         }
       ],
       "retry": {
@@ -269,10 +269,10 @@
             "passed",
             "ready"
           ],
-          "age_minutes": 1,
+          "age_minutes": 0,
           "exists": true,
           "freshness_window_minutes": 1440,
-          "generated_at": "2026-04-26T15:51:18Z",
+          "generated_at": "2026-05-05T15:48:35Z",
           "path": "/docker/fleet/.codex-studio/published/CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json",
           "payload_status": "fail",
           "required": true,
@@ -303,10 +303,10 @@
       "output_states": [
         {
           "acceptable_statuses": [],
-          "age_minutes": 125,
+          "age_minutes": 17,
           "exists": true,
           "freshness_window_minutes": 1440,
-          "generated_at": "2026-04-26T13:47:50Z",
+          "generated_at": "2026-05-05T15:30:46Z",
           "path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
           "payload_status": "",
           "required": true,
@@ -340,12 +340,12 @@
             "passed",
             "ready"
           ],
-          "age_minutes": 36,
+          "age_minutes": 714,
           "exists": true,
           "freshness_window_minutes": 1440,
-          "generated_at": "2026-04-26T15:17:04Z",
+          "generated_at": "2026-05-05T03:54:10Z",
           "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
-          "payload_status": "pass",
+          "payload_status": "passed",
           "required": true,
           "state": "fresh",
           "status_ok": true
@@ -375,10 +375,10 @@
             "passed",
             "ready"
           ],
-          "age_minutes": 36,
+          "age_minutes": 714,
           "exists": true,
           "freshness_window_minutes": 1440,
-          "generated_at": "2026-04-26T15:17:04Z",
+          "generated_at": "2026-05-05T03:53:56.486187Z",
           "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
           "payload_status": "pass",
           "required": true,
@@ -399,11 +399,11 @@
   "source": "/docker/fleet/config/projects/fleet.yaml",
   "status": "fail",
   "summary": {
-    "failed_status_output_count": 1,
+    "failed_status_output_count": 2,
     "job_count": 11,
     "missing_output_count": 0,
     "required_output_count": 12,
-    "stale_output_count": 1,
+    "stale_output_count": 5,
     "unknown_freshness_output_count": 0,
     "unknown_status_output_count": 0
   }

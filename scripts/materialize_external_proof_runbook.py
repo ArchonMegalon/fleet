@@ -1305,6 +1305,7 @@ def _ingest_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
             "assert copied, 'external-proof-bundle-empty:' + str(bundle_dir)"
         ),
         "else",
+        "  tar -xzf \"$BUNDLE_ARCHIVE\" -C \"$TARGET_ROOT\"",
         "  python3 -c "
         + shlex.quote(
             "import os, pathlib, shutil, tarfile\n"
@@ -1819,20 +1820,19 @@ def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
         "(or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; "
         "exit 1; "
         "fi; "
-        "curl_auth_args=(); "
+        "set -- curl -fL --retry 3 --retry-delay 2; "
         f"if [ -n \"{DEFAULT_EXTERNAL_PROOF_AUTH_HEADER_EXPR}\" ]; then "
-        f"curl_auth_args+=( -H \"{DEFAULT_EXTERNAL_PROOF_AUTH_HEADER_EXPR}\" ); "
+        f"set -- \"$@\" -H \"{DEFAULT_EXTERNAL_PROOF_AUTH_HEADER_EXPR}\"; "
         "fi; "
         f"if [ -n \"{DEFAULT_EXTERNAL_PROOF_COOKIE_HEADER_EXPR}\" ]; then "
-        f"curl_auth_args+=( -H \"Cookie: {DEFAULT_EXTERNAL_PROOF_COOKIE_HEADER_EXPR}\" ); "
+        f"set -- \"$@\" -H \"Cookie: {DEFAULT_EXTERNAL_PROOF_COOKIE_HEADER_EXPR}\"; "
         "fi; "
         f"if [ -n \"{DEFAULT_EXTERNAL_PROOF_COOKIE_JAR_EXPR}\" ]; then "
-        f"curl_auth_args+=( --cookie \"{DEFAULT_EXTERNAL_PROOF_COOKIE_JAR_EXPR}\" ); "
+        f"set -- \"$@\" --cookie \"{DEFAULT_EXTERNAL_PROOF_COOKIE_JAR_EXPR}\"; "
         "fi; "
-        f"curl -fL --retry 3 --retry-delay 2 "
-        '"${curl_auth_args[@]}" '
-        f"\"{DEFAULT_EXTERNAL_PROOF_BASE_URL_EXPR}{expected_route}\" "
+        f"set -- \"$@\" \"{DEFAULT_EXTERNAL_PROOF_BASE_URL_EXPR}{expected_route}\" "
         '-o "$INSTALLER_PATH"; '
+        '"$@"; '
         f"fi"
         f"{post_download_contract_check}"
         f"{digest_post_download}"
@@ -1843,6 +1843,7 @@ def _commands_for_request(request: dict[str, Any]) -> list[str]:
     commands: list[str] = []
     normalized_seen: set[str] = set()
     preflight = _installer_fetch_preflight_command(request)
+    has_generated_fetch_preflight = bool(preflight)
     if preflight:
         commands.append(preflight)
         normalized_preflight = _proof_capture_command_dedupe_key(preflight)
@@ -1851,6 +1852,12 @@ def _commands_for_request(request: dict[str, Any]) -> list[str]:
     for command in request.get("proof_capture_commands") or []:
         raw = _normalize_text(command)
         normalized = _proof_capture_command_dedupe_key(raw)
+        if has_generated_fetch_preflight and (
+            "installer-preflight-sha256-mismatch" in raw
+            and "installer-postdownload-sha256-mismatch" in raw
+            and "/downloads/install/" in raw
+        ):
+            continue
         if not raw or not normalized or normalized in normalized_seen:
             continue
         commands.append(raw)
@@ -1881,6 +1888,24 @@ def _write_file(path: Path, content: str, *, executable: bool) -> None:
     os.chmod(path, mode)
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _write_sha256_sidecar(path: Path) -> tuple[Path, str]:
+    digest = _sha256_file(path)
+    sidecar_path = path.with_name(path.name + ".sha256")
+    sidecar_path.write_text(f"{digest}  {path.name}\n", encoding="utf-8")
+    return sidecar_path, digest
+
+
 def _reset_zero_backlog_bundle_dir(bundle_dir: Path, expected_manifest: dict[str, Any]) -> None:
     if int(expected_manifest.get("request_count") or 0) != 0:
         return
@@ -1903,11 +1928,41 @@ def _materialize_zero_backlog_bundle_archive(bundle_archive: Path, bundle_dir: P
         archive.add(bundle_dir, arcname=".")
 
 
+def _materialize_host_command_pack(
+    *,
+    command_pack_archive: Path,
+    commands_dir: Path,
+    host_token: str,
+    extra_relative_paths: list[str] | None = None,
+) -> tuple[Path, str]:
+    relative_paths = [
+        f"preflight-{host_token}-proof.sh",
+        f"capture-{host_token}-proof.sh",
+        f"validate-{host_token}-proof.sh",
+        f"bundle-{host_token}-proof.sh",
+        f"run-{host_token}-proof-lane.sh",
+        f"host-proof-bundles/{host_token}/external-proof-manifest.json",
+    ]
+    for rel in extra_relative_paths or []:
+        normalized = str(rel or "").strip().lstrip("/")
+        if normalized and normalized not in relative_paths:
+            relative_paths.append(normalized)
+    if command_pack_archive.exists():
+        command_pack_archive.unlink()
+    with tarfile.open(command_pack_archive, "w:gz") as archive:
+        for relative_path in relative_paths:
+            source = commands_dir / relative_path
+            if source.is_file():
+                archive.add(source, arcname=relative_path)
+    return _write_sha256_sidecar(command_pack_archive)
+
+
 def _materialize_command_files(
     plan: dict[str, Any], *, commands_dir: Path, journey_gates_path: Path | None = None, release_channel_path: Path | None = None
 ) -> dict[str, Any]:
     requested_hosts = [str(item) for item in (plan.get("hosts") or []) if str(item)]
     hosts = sorted(set(requested_hosts).union(ALLOWED_REQUIRED_HOSTS))
+    finalize_hosts = list(requested_hosts)
     host_groups = plan.get("host_groups") or {}
     host_files: list[dict[str, str]] = []
     commands_dir.mkdir(parents=True, exist_ok=True)
@@ -1943,6 +1998,7 @@ def _materialize_command_files(
         bundle_script = commands_dir / f"bundle-{host_token}-proof.sh"
         ingest_script = commands_dir / f"ingest-{host_token}-proof-bundle.sh"
         host_lane_script = commands_dir / f"run-{host_token}-proof-lane.sh"
+        command_pack_path = commands_dir / f"{host_token}-proof-command-pack.tgz"
         _write_file(
             preflight_script,
             _render_bash_script(
@@ -2065,6 +2121,27 @@ def _materialize_command_files(
             host_file_row["bundle_powershell"] = str(bundle_ps1)
             host_file_row["ingest_powershell"] = str(ingest_ps1)
             host_file_row["host_lane_powershell"] = str(host_lane_ps1)
+            command_pack_sha256_path, command_pack_sha256 = _materialize_host_command_pack(
+                command_pack_archive=command_pack_path,
+                commands_dir=commands_dir,
+                host_token=host_token,
+                extra_relative_paths=[
+                    preflight_ps1.name,
+                    capture_ps1.name,
+                    validation_ps1.name,
+                    bundle_ps1.name,
+                    host_lane_ps1.name,
+                ],
+            )
+        else:
+            command_pack_sha256_path, command_pack_sha256 = _materialize_host_command_pack(
+                command_pack_archive=command_pack_path,
+                commands_dir=commands_dir,
+                host_token=host_token,
+            )
+        host_file_row["command_pack_path"] = str(command_pack_path)
+        host_file_row["command_pack_sha256_path"] = str(command_pack_sha256_path)
+        host_file_row["command_pack_sha256"] = command_pack_sha256
         host_files.append(host_file_row)
 
     post_capture_script = commands_dir / "republish-after-host-proof.sh"
@@ -2083,7 +2160,7 @@ def _materialize_command_files(
     _write_file(
         finalize_script,
         _render_bash_script(
-            _finalize_after_host_proof_commands(hosts=hosts, commands_dir=commands_dir),
+            _finalize_after_host_proof_commands(hosts=finalize_hosts, commands_dir=commands_dir),
             no_op_message="No finalize commands were generated.",
         ),
         executable=True,
@@ -2184,6 +2261,15 @@ def materialize_markdown(
                 lines.append(f"  ingest_script: `{ingest_script}`")
             if host_lane_script:
                 lines.append(f"  host_lane_script: `{host_lane_script}`")
+            command_pack_path = _normalize_text(host_row.get("command_pack_path"))
+            if command_pack_path:
+                lines.append(f"  command_pack_path: `{command_pack_path}`")
+            command_pack_sha256_path = _normalize_text(host_row.get("command_pack_sha256_path"))
+            if command_pack_sha256_path:
+                lines.append(f"  command_pack_sha256_path: `{command_pack_sha256_path}`")
+            command_pack_sha256 = _normalize_text(host_row.get("command_pack_sha256"))
+            if command_pack_sha256:
+                lines.append(f"  command_pack_sha256: `{command_pack_sha256}`")
             if preflight_powershell:
                 lines.append(f"  preflight_powershell: `{preflight_powershell}`")
             if capture_powershell:
@@ -2236,6 +2322,16 @@ def materialize_markdown(
             lines.append(f"- retained_bundle_archive_present: `{str(bundle_archive_path.exists()).lower()}`")
             lines.append(f"- retained_bundle_directory_path: `{bundle_directory_path}`")
             lines.append(f"- retained_bundle_directory_present: `{str(bundle_directory_path.is_dir()).lower()}`")
+            command_pack_path = _normalize_text(host_row.get("command_pack_path"))
+            if command_pack_path:
+                lines.append(f"- command_pack_path: `{command_pack_path}`")
+                lines.append(f"- command_pack_present: `{str(Path(command_pack_path).is_file()).lower()}`")
+            command_pack_sha256_path = _normalize_text(host_row.get("command_pack_sha256_path"))
+            if command_pack_sha256_path:
+                lines.append(f"- command_pack_sha256_path: `{command_pack_sha256_path}`")
+            command_pack_sha256 = _normalize_text(host_row.get("command_pack_sha256"))
+            if command_pack_sha256:
+                lines.append(f"- command_pack_sha256: `{command_pack_sha256}`")
             lines.append("")
         lines.append("## Resume Commands")
         lines.append("")
@@ -2323,7 +2419,35 @@ def materialize_markdown(
         lines.append(
             f"- cached_bundle_directory_path: `{_normalize_text(bundle_state.get('directory_path')) or '(missing)'}`"
         )
+        command_pack_path = _normalize_text(command_host_rows.get(host, {}).get("command_pack_path"))
+        if command_pack_path:
+            lines.append(f"- command_pack_path: `{command_pack_path}`")
+            lines.append(f"- command_pack_present: `{str(Path(command_pack_path).is_file()).lower()}`")
+        command_pack_sha256_path = _normalize_text(command_host_rows.get(host, {}).get("command_pack_sha256_path"))
+        if command_pack_sha256_path:
+            lines.append(f"- command_pack_sha256_path: `{command_pack_sha256_path}`")
+        command_pack_sha256 = _normalize_text(command_host_rows.get(host, {}).get("command_pack_sha256"))
+        if command_pack_sha256:
+            lines.append(f"- command_pack_sha256: `{command_pack_sha256}`")
         lines.append("")
+        if command_pack_sha256:
+            command_pack_name = Path(command_pack_path).name if command_pack_path else f"{host_token}-proof-command-pack.tgz"
+            command_pack_sha_name = (
+                Path(command_pack_sha256_path).name
+                if command_pack_sha256_path
+                else f"{command_pack_name}.sha256"
+            )
+            lines.append("### Command Pack Verification")
+            lines.append("")
+            lines.append(
+                "Verify the transferred command pack before unpacking it on the native proof host."
+            )
+            lines.append("")
+            lines.append("```bash")
+            lines.append(f"shasum -a 256 -c {command_pack_sha_name}")
+            lines.append(f"tar -xzf {command_pack_name}")
+            lines.append("```")
+            lines.append("")
         lines.append("### Requested Tuples")
         lines.append("")
         for request in group.get("requests") or []:
