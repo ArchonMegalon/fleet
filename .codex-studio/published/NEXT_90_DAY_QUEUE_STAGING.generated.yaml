@@ -5678,4 +5678,33 @@ items:
   - feedback
   owned_surfaces:
   - publish_derived_release_health_planes_from_live_proof_so:fleet
+- title: Bind READY_FOR_TONIGHT_GATES, ROLE_KIT_REGISTRY, VTT_EXPORT_TARGET_ACCEPTANCE, and related newcomer-path proof into
+    machine-readable readiness and public-truth projections.
+  task: Bind READY_FOR_TONIGHT_GATES, ROLE_KIT_REGISTRY, VTT_EXPORT_TARGET_ACCEPTANCE, and related newcomer-path proof into
+    machine-readable readiness and public-truth projections.
+  package_id: next90-m138-fleet-bind-ready-for-tonight-gates-role-kit-registry-vtt-export-target-accep
+  work_task_id: '138.10'
+  frontier_id: 7914546694
+  milestone_id: 138
+  status: complete
+  wave: W25
+  repo: fleet
+  completion_action: verify_closed_package_only
+  landed_commit: unlanded
+  do_not_reopen_reason: M138 Fleet newcomer-path projections are complete; future shards must verify the repo-local projection scripts, generated packet, focused regressions, and canonical queue mirrors instead of reopening READY_FOR_TONIGHT, role-kit, VTT-acceptance, or newcomer-path public-truth binding through prose only.
+  proof:
+  - /docker/fleet/scripts/materialize_next90_m138_fleet_hero_path_projections.py
+  - /docker/fleet/scripts/verify_next90_m138_fleet_hero_path_projections.py
+  - /docker/fleet/tests/test_materialize_next90_m138_fleet_hero_path_projections.py
+  - /docker/fleet/tests/test_verify_next90_m138_fleet_hero_path_projections.py
+  - /docker/fleet/.codex-studio/published/NEXT90_M138_FLEET_HERO_PATH_PROJECTIONS.generated.json
+  - /docker/fleet/.codex-studio/published/NEXT90_M138_FLEET_HERO_PATH_PROJECTIONS.generated.md
+  - /docker/fleet/feedback/2026-05-05-next90-m138-fleet-hero-path-projections-closeout.md
+  allowed_paths:
+  - scripts
+  - tests
+  - .codex-studio
+  - feedback
+  owned_surfaces:
+  - bind_ready_for_tonight_gates_role_kit_registry_vtt_expor:fleet
 source_queue_fingerprint: 433cdfebb5d8504552c5cea941d1217970cac13840edd39e02ae392c785b1551

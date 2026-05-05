@@ -27,6 +27,11 @@ def _write_yaml(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
+def _write_generated_queue_overlay(path: Path, item: dict) -> None:
+    payload = yaml.safe_dump({"items": [item]}, sort_keys=False)
+    _write_text(path, "- title: overlay legacy row\nmode: append\n" + payload)
+
+
 def _registry() -> dict:
     return {
         "milestones": [
@@ -223,6 +228,65 @@ class MaterializeNext90M138FleetHeroPathProjectionsTest(unittest.TestCase):
             "newcomer_path",
             "ready_for_tonight",
         ])
+
+    def test_materializer_reads_generated_queue_overlay_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path)
+            _write_generated_queue_overlay(fixture["fleet_queue"], _queue_item())
+            _write_generated_queue_overlay(fixture["design_queue"], _queue_item())
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--output",
+                    str(artifact),
+                    "--markdown-output",
+                    str(markdown),
+                    "--successor-registry",
+                    str(fixture["registry"]),
+                    "--fleet-queue-staging",
+                    str(fixture["fleet_queue"]),
+                    "--design-queue-staging",
+                    str(fixture["design_queue"]),
+                    "--next90-guide",
+                    str(fixture["next90_guide"]),
+                    "--ready-for-tonight-gates",
+                    str(fixture["ready_for_tonight_gates"]),
+                    "--public-onboarding-paths",
+                    str(fixture["public_onboarding"]),
+                    "--role-kit-registry",
+                    str(fixture["role_kit_registry"]),
+                    "--source-aware-explain",
+                    str(fixture["source_aware_explain"]),
+                    "--campaign-adoption-flow",
+                    str(fixture["campaign_adoption"]),
+                    "--foundry-first-handoff",
+                    str(fixture["foundry"]),
+                    "--vtt-export-target-acceptance",
+                    str(fixture["vtt_acceptance"]),
+                    "--public-faq-registry",
+                    str(fixture["public_faq_registry"]),
+                    "--public-guide-community-hub",
+                    str(fixture["community_hub"]),
+                    "--open-run-journey",
+                    str(fixture["open_run_journey"]),
+                    "--public-feature-registry",
+                    str(fixture["public_feature_registry"]),
+                    "--public-landing-manifest",
+                    str(fixture["public_landing_manifest"]),
+                ],
+                check=True,
+            )
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["status"], "pass")
+        self.assertFalse(any("Design queue row is missing." in blocker for blocker in payload["package_closeout"]["blockers"]))
+        self.assertFalse(
+            any("Fleet queue mirror row is still missing for work task 138.10." in warning for warning in payload["package_closeout"]["warnings"])
+        )
 
 
 if __name__ == "__main__":

@@ -17,14 +17,12 @@
     "queue_alignment": {
       "issues": [],
       "state": "pass",
-      "warnings": [
-        "Fleet queue mirror row is still missing for work task 138.10."
-      ]
+      "warnings": []
     }
   },
   "contract_name": "fleet.next90_m138_hero_path_projections",
   "frontier_id": 7914546694,
-  "generated_at": "2026-05-05T16:32:41Z",
+  "generated_at": "2026-05-05T21:11:25Z",
   "milestone_id": 138,
   "owned_surfaces": [
     "bind_ready_for_tonight_gates_role_kit_registry_vtt_expor:fleet"
@@ -32,9 +30,7 @@
   "package_closeout": {
     "blockers": [],
     "state": "pass",
-    "warnings": [
-      "Fleet queue mirror row is still missing for work task 138.10."
-    ]
+    "warnings": []
   },
   "package_id": "next90-m138-fleet-bind-ready-for-tonight-gates-role-kit-registry-vtt-export-target-accep",
   "projection_summary": {
@@ -42,7 +38,7 @@
     "hero_path_public_card_count": 0,
     "hero_path_public_route_count": 0,
     "projection_count": 4,
-    "warning_count": 1
+    "warning_count": 0
   },
   "projections": {
     "adoption_confidence": {
@@ -173,19 +169,19 @@
   "queue_title": "Bind READY_FOR_TONIGHT_GATES, ROLE_KIT_REGISTRY, VTT_EXPORT_TARGET_ACCEPTANCE, and related newcomer-path proof into machine-readable readiness and public-truth projections.",
   "source_inputs": {
     "campaign_adoption_flow": {
-      "generated_at": "2026-05-03T19:07:21Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/CAMPAIGN_ADOPTION_START_FROM_TODAY_FLOW.md",
-      "sha256": "7c44667d1d0d3eccc774caab94fff80487fb904664ce96b2beaca088ae68cccf"
+      "sha256": "0a8a5fa1907f0f1de5f1cbb01277568773a67656d27d8187fdae2aeb0e151916"
     },
     "design_queue_staging": {
-      "generated_at": "2026-05-05T16:27:11Z",
+      "generated_at": "2026-05-05T21:11:24Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "d1080b139470e531cedee381c64a2fff06cc852a39bd421bc235e04a0b6789e2"
+      "sha256": "e4fbca2db84ab175406a7cb93f6bc0fa5c9bc3d3dea28e60c52f6f7266ff83b9"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-05-05T16:27:11Z",
+      "generated_at": "2026-05-05T21:11:24Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "09a457d276b9a3dc26f91b428df1878ea148435526a733190cfa4846e2f3c096"
+      "sha256": "9fdec28b755cf8941edd67d0f86cf1647d0cb8093f44280ddfb01c8bf0dcb3ac"
     },
     "foundry_first_handoff": {
       "generated_at": "2026-04-30T21:57:57Z",
@@ -193,7 +189,7 @@
       "sha256": "9640961e364d41667dc92a42a8ceecf0f36086158da05036e1811734c9bf833b"
     },
     "next90_guide": {
-      "generated_at": "2026-05-04T02:57:07Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
       "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
     },
@@ -223,7 +219,7 @@
       "sha256": "104c46bc68365be611735b6c6a4fc16a983eb87d7df2821f86e60e43affe3ce6"
     },
     "public_onboarding_paths": {
-      "generated_at": "2026-05-05T10:55:10Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_ONBOARDING_PATHS_FOR_NO_DESKTOP_USERS.md",
       "sha256": "e0f64c43d22da1bd490f96e50fdaefbe24caf623895c5709fe02e9c78464d352"
     },
@@ -243,9 +239,9 @@
       "sha256": "fa14b7cd799cf32abe812a4d037c9952dcd632e78967a65932b9ebad077e8e0a"
     },
     "successor_registry": {
-      "generated_at": "2026-05-05T16:27:11Z",
+      "generated_at": "2026-05-05T20:56:27Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "a4ee7b8faed11351903a71ab4fda5ed6f3edf94455e024398d8e1fb8b1fa760c"
+      "sha256": "9f4f93305afddf9cf95c2b515c6e9ceced71e435389e2a49fc0e0bc4f19395c7"
     },
     "vtt_export_target_acceptance": {
       "generated_at": "2026-04-30T21:57:57Z",
