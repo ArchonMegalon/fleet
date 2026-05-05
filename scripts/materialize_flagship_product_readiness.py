@@ -106,6 +106,9 @@ DEFAULT_M141_IMPORT_ROUTE_CLOSEOUT_GATE = (
 DEFAULT_M142_ROUTE_LOCAL_PROOF_CLOSEOUT_GATE = (
     ROOT / ".codex-studio" / "published" / "NEXT90_M142_FLEET_ROUTE_LOCAL_PROOF_CLOSEOUT_GATES.generated.json"
 )
+DEFAULT_M143_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATE = (
+    ROOT / ".codex-studio" / "published" / "NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.json"
+)
 DEFAULT_EXTERNAL_PROOF_RUNBOOK = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
 DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR = ROOT / ".codex-studio" / "published" / "external-proof-commands"
 DEFAULT_PARITY_LAB_DOCS_ROOT = ROOT / "docs" / "chummer5a-oracle"
@@ -526,6 +529,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--m142-route-local-proof-closeout-gate",
         default=str(DEFAULT_M142_ROUTE_LOCAL_PROOF_CLOSEOUT_GATE),
         help="path to NEXT90_M142_FLEET_ROUTE_LOCAL_PROOF_CLOSEOUT_GATES.generated.json",
+    )
+    parser.add_argument(
+        "--m143-route-local-output-closeout-gate",
+        default=str(DEFAULT_M143_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATE),
+        help="path to NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.json",
     )
     parser.add_argument(
         "--external-proof-runbook",
@@ -1143,6 +1151,44 @@ def _m142_route_local_proof_closeout_gate_audit(payload: Dict[str, Any]) -> Dict
         "ready": not reasons,
         "status": status,
         "route_local_proof_closeout_status": route_local_proof_closeout_status,
+        "runtime_blockers": runtime_blockers,
+        "generated_at": generated_at,
+        "reasons": reasons,
+    }
+
+
+def _m143_route_local_output_closeout_gate_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
+    reasons: List[str] = []
+    if not payload:
+        reasons.append("M143 route-local output closeout gate is missing.")
+        return {
+            "ready": False,
+            "status": "",
+            "route_local_output_closeout_status": "",
+            "generated_at": "",
+            "reasons": reasons,
+        }
+    status = str(payload.get("status") or "").strip().lower()
+    monitor_summary = dict(payload.get("monitor_summary") or {})
+    route_local_output_closeout_status = str(monitor_summary.get("route_local_output_closeout_status") or "").strip().lower()
+    runtime_blockers = [
+        str(item).strip()
+        for item in (monitor_summary.get("runtime_blockers") or [])
+        if str(item).strip()
+    ]
+    generated_at = str(payload.get("generated_at") or payload.get("generatedAt") or "").strip()
+    if status != "pass":
+        reasons.append("M143 route-local output closeout gate package is not passing.")
+    if route_local_output_closeout_status not in {"pass", "ready"} and (
+        route_local_output_closeout_status != "warning" or runtime_blockers
+    ):
+        reasons.append("M143 route-local output closeout gate still reports blocked runtime proof.")
+    if not generated_at:
+        reasons.append("M143 route-local output closeout gate generated_at is missing.")
+    return {
+        "ready": not reasons,
+        "status": status,
+        "route_local_output_closeout_status": route_local_output_closeout_status,
         "runtime_blockers": runtime_blockers,
         "generated_at": generated_at,
         "reasons": reasons,

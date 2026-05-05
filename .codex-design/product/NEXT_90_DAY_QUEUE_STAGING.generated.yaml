@@ -1,3 +1,21 @@
+- title: Add deterministic reward, downtime, goal-update, and consequence receipt contracts consumed by adoption and BLACK
+    LEDGER flows.
+  task: Add deterministic reward, downtime, goal-update, and consequence receipt contracts consumed by adoption and BLACK
+    LEDGER flows.
+  package_id: next90-m122-core-add-deterministic-reward-downtime-goal-update-and-conseq
+  work_task_id: '122.2'
+  frontier_id: 1771239378
+  milestone_id: 122
+  status: not_started
+  wave: W15
+  repo: chummer6-core
+  allowed_paths:
+  - src
+  - tests
+  - docs
+  - scripts
+  owned_surfaces:
+  - add_deterministic_reward_downtime_goal:core
 mode: append
 program_wave: next_90_day_product_advance
 status: live_parallel_successor
@@ -4586,6 +4604,20 @@ items:
   status: done
   wave: W28
   repo: chummer6-design
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M145 chummer6-design explain-every-value canon is complete; future shards must verify the explain
+    canon docs, validator, feedback closeout note, and canonical registry plus fleet queue rows instead of reopening this
+    source-anchor and bounded-follow-up design slice.
+  proof:
+  - /docker/chummercomplete/chummer-design/products/chummer/EXPLAIN_EVERY_VALUE_AND_GROUNDED_FOLLOW_UP.md
+  - /docker/chummercomplete/chummer-design/products/chummer/SOURCE_AWARE_EXPLAIN_PUBLIC_TRUST_HOOK.md
+  - /docker/chummercomplete/chummer-design/products/chummer/SOURCE_ANCHOR_AND_LOCAL_RULEBOOK_BINDING.md
+  - /docker/chummercomplete/chummer-design/products/chummer/BUILD_LAB_PRODUCT_MODEL.md
+  - /docker/chummercomplete/chummer-design/products/chummer/LIVE_ACTION_ECONOMY_AND_TURN_ASSIST.md
+  - /docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PRODUCT_BAR.md
+  - /docker/chummercomplete/chummer-design/products/chummer/SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md
+  - /docker/chummercomplete/chummer-design/scripts/ai/validate_next90_m145_design_explain_every_value_canon.py
+  - /docker/chummercomplete/chummer-design/products/chummer/maintenance/feedback_archive/2026-05-05-next90-m145-design-explain-every-value-canon-closeout.md
   allowed_paths:
   - products
   - scripts
@@ -4632,9 +4664,25 @@ items:
   work_task_id: '128.6'
   frontier_id: 7477646343
   milestone_id: 128
-  status: not_started
+  status: complete
   wave: W18
   repo: chummer6-design
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M128 chummer6-design trust-completion canon is complete; future shards must verify the localization,
+    telemetry, privacy-retention, feedback-status, and experience-metrics canon docs, validator, feedback closeout note,
+    and canonical registry plus Fleet queue rows instead of reopening this design slice.
+  proof:
+  - /docker/chummercomplete/chummer-design/products/chummer/LOCALIZATION_AND_LANGUAGE_SYSTEM.md
+  - /docker/chummercomplete/chummer-design/products/chummer/LOCALIZATION_PARITY_MATRIX.yaml
+  - /docker/chummercomplete/chummer-design/products/chummer/PRODUCT_USAGE_TELEMETRY_MODEL.md
+  - /docker/chummercomplete/chummer-design/products/chummer/PRODUCT_USAGE_TELEMETRY_EVENT_SCHEMA.md
+  - /docker/chummercomplete/chummer-design/products/chummer/PRIVACY_AND_RETENTION_BOUNDARIES.md
+  - /docker/chummercomplete/chummer-design/products/chummer/FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md
+  - /docker/chummercomplete/chummer-design/products/chummer/FEEDBACK_AND_CRASH_STATUS_MODEL.md
+  - /docker/chummercomplete/chummer-design/products/chummer/EXPERIENCE_SUCCESS_METRICS.md
+  - /docker/chummercomplete/chummer-design/products/chummer/METRICS_AND_SLOS.yaml
+  - /docker/chummercomplete/chummer-design/scripts/ai/validate_next90_m128_design_trust_completion_canon.py
+  - /docker/chummercomplete/chummer-design/products/chummer/maintenance/feedback_archive/2026-05-05-next90-m128-design-trust-completion-canon-closeout.md
   allowed_paths:
   - products
   - scripts
@@ -4731,9 +4779,24 @@ items:
   work_task_id: '129.6'
   frontier_id: 3846410661
   milestone_id: 129
-  status: not_started
+  status: complete
   wave: W19
   repo: chummer6-design
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M129 chummer6-design public-auth and community-ledger canon is complete; future shards must verify
+    the public-auth, user-model, identity-channel-linking, account-aware front-door, and community-sponsorship canon docs,
+    standard validator wiring, feedback closeout note, and the canonical registry plus design queue rows instead of reopening
+    the account-aware front-door canon slice.
+  proof:
+  - /docker/chummercomplete/chummer-design/products/chummer/PUBLIC_AUTH_FLOW.md
+  - /docker/chummercomplete/chummer-design/products/chummer/PUBLIC_USER_MODEL.md
+  - /docker/chummercomplete/chummer-design/products/chummer/IDENTITY_AND_CHANNEL_LINKING_MODEL.md
+  - /docker/chummercomplete/chummer-design/products/chummer/ACCOUNT_AWARE_INSTALL_AND_SUPPORT_LINKING.md
+  - /docker/chummercomplete/chummer-design/products/chummer/NEXT_WAVE_ACCOUNT_AWARE_FRONT_DOOR.md
+  - /docker/chummercomplete/chummer-design/products/chummer/COMMUNITY_SPONSORSHIP_BACKLOG.md
+  - /docker/chummercomplete/chummer-design/products/chummer/PUBLIC_PART_REGISTRY.yaml
+  - /docker/chummercomplete/chummer-design/scripts/ai/validate_next90_m129_design_account_community_canon.py
+  - /docker/chummercomplete/chummer-design/products/chummer/maintenance/feedback_archive/2026-05-05-next90-m129-design-account-community-canon-closeout.md
   allowed_paths:
   - products
   - scripts
@@ -5379,9 +5442,37 @@ items:
   work_task_id: '135.6'
   frontier_id: 8351771106
   milestone_id: 135
-  status: not_started
+  status: complete
   wave: W22
   repo: chummer6-ui
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M135 chummer6-ui desktop surface coverage is complete; future shards must verify the closure receipt,
+    veteran-familiarity gate, focused desktop guards, canonical registry row, and queue mirrors instead of reopening
+    the workbench/publication/restore/support surface bundle.
+  proof:
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopHomeWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCreatorPublicationWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopOrganizerOperationsWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopRuleEnvironmentStudioWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopSupportWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/App.axaml.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Desktop.Runtime/DesktopStartupSurfaceCatalog.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/AccessibilitySignoffSmokeTests.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/Next90M135DesktopSurfaceCoverageGuardTests.cs
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M105_UI_RESTORE_CONTINUITY.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M114_UI_RULE_STUDIO.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M116_UI_CREATOR_PUBLICATION.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M118_UI_ORGANIZER_OPS.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M145_UI_DESKTOP_EXPLAIN_DRAWER_AND_FOLLOW_UP.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M135_UI_DESKTOP_SURFACE_COVERAGE.generated.json
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/veteran-task-time-evidence-gate.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/next90-m135-ui-desktop-surface-coverage-check.sh
+  - bash scripts/ai/milestones/veteran-task-time-evidence-gate.sh
+  - bash scripts/ai/milestones/next90-m135-ui-desktop-surface-coverage-check.sh
+  - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Next90M135DesktopSurfaceCoverageGuardTests" --no-restore
+  - dotnet test Chummer.Tests/Presentation/Chummer.Presentation.Signoff.Tests.csproj --filter "FullyQualifiedName~AccessibilitySignoffSmokeTests" --no-restore
   allowed_paths:
   - Chummer.Avalonia
   - Chummer.Desktop.Runtime

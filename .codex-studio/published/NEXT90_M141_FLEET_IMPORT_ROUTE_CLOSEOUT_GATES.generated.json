@@ -40,40 +40,28 @@
       "state": "pass"
     },
     "queue_alignment": {
-      "issues": [
-        "Canonical registry work task is missing.",
-        "Design queue row is missing."
-      ],
-      "state": "fail",
-      "warnings": [
-        "Fleet queue mirror row is still missing for work task 141.5."
-      ]
+      "issues": [],
+      "state": "pass",
+      "warnings": []
     }
   },
   "contract_name": "fleet.next90_m141_import_route_closeout_gates",
   "frontier_id": 4147587006,
-  "generated_at": "2026-05-05T19:47:18Z",
+  "generated_at": "2026-05-05T19:49:37Z",
   "milestone_id": 141,
   "monitor_summary": {
-    "canonical_issue_count": 2,
-    "import_route_closeout_status": "warning",
+    "canonical_issue_count": 0,
+    "import_route_closeout_status": "pass",
     "runtime_blocker_count": 0,
     "runtime_blockers": [],
-    "warning_count": 1,
-    "warnings": [
-      "Fleet queue mirror row is still missing for work task 141.5."
-    ]
+    "warning_count": 0,
+    "warnings": []
   },
   "package_closeout": {
-    "ready": false,
-    "reasons": [
-      "Canonical registry work task is missing.",
-      "Design queue row is missing."
-    ],
-    "status": "blocked",
-    "warnings": [
-      "Fleet queue mirror row is still missing for work task 141.5."
-    ]
+    "ready": true,
+    "reasons": [],
+    "status": "pass",
+    "warnings": []
   },
   "package_id": "next90-m141-fleet-fail-closeout-when-any-of-the-five-route-or-family-rows-in-this-milest",
   "queue_title": "Fail closeout when any of the five route or family rows in this milestone remain `no`, blank, stale, or unsupported by direct proof receipts.",
@@ -217,10 +205,10 @@
   },
   "source_inputs": {
     "design_queue_staging": {
-      "generated_at": "2026-05-05T19:47:04Z",
+      "generated_at": "2026-05-05T19:48:11Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "11eaa96929405b0ae89d8dcbe0f2b6f47955f948354abc70f3bf0deaf95f708d"
+      "sha256": "54502355c94a33bba3f199a56bcc62ac97e6bacc1a5cce74701ae41141062bc3"
     },
     "engine_proof_pack": {
       "generated_at": "2026-04-21T14:27:10Z",
@@ -232,7 +220,7 @@
       "generated_at": "2026-05-05T19:42:06Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "9d1a60e6241747a35164df5ecb8d40411468de8a0994dfa24887a11038c61d1e"
+      "sha256": "433cdfebb5d8504552c5cea941d1217970cac13840edd39e02ae392c785b1551"
     },
     "import_parity_certification": {
       "generated_at": "2026-04-04T19:20:00Z",
@@ -271,10 +259,10 @@
       "sha256": "1374e218119af0656384d451e178f3ea1a9ff86d30f334aa43a08f3830d21c0b"
     },
     "successor_registry": {
-      "generated_at": "2026-05-05T19:47:04Z",
+      "generated_at": "2026-05-05T19:48:11Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "32df3132e19517e97a2926c820065e067a1daa6853c4362afe5507bb540b9442"
+      "sha256": "89b18a3bcfd5324fa9300c971c82ecd834a447b4eccb8843d4bec418de3f1553"
     },
     "ui_release_gate": {
       "generated_at": "2026-05-02T14:05:07.728429Z",
@@ -295,7 +283,7 @@
       "sha256": "a8177012e1cff67255e3c136f44c8addc1d6670b3b8fcc03500f967d51508f0f"
     }
   },
-  "status": "fail",
+  "status": "pass",
   "wave": "W22P",
   "work_task_id": "141.5"
 }

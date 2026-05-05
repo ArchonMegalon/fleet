@@ -751,6 +751,30 @@ def test_ea_readme_current_sync_line_matches_manifests_and_handoff() -> None:
     assert desktop_gate_generated_at in readme
 
 
+def test_ea_readme_current_readiness_note_matches_live_receipt() -> None:
+    readme = README_PATH.read_text(encoding="utf-8")
+    readiness = _json(READINESS_PATH)
+
+    warning_keys = [str(item).strip() for item in (readiness.get("warning_keys") or []) if str(item).strip()]
+    missing_keys = [str(item).strip() for item in (readiness.get("missing_keys") or []) if str(item).strip()]
+    ready_keys = {str(item).strip() for item in (readiness.get("ready_keys") or []) if str(item).strip()}
+
+    if not warning_keys and not missing_keys:
+        assert "live proof is green" in readme
+        assert "no missing or warning coverage keys remain" in readme
+        for coverage_key in (
+            "desktop_client",
+            "mobile_play_shell",
+            "ui_kit_and_flagship_polish",
+            "media_artifacts",
+            "fleet_and_operator_loop",
+        ):
+            assert coverage_key in ready_keys
+            assert coverage_key in readme
+        assert "still keeps `desktop_client` missing" not in readme
+        assert "also warns on `mobile_play_shell`" not in readme
+
+
 def test_ea_capture_pack_oracle_line_proofs_match_live_chummer5a_sources() -> None:
     capture_pack = _yaml(CAPTURE_PACK_PATH)
     extract = dict(capture_pack.get("oracle_surface_extract") or {})

@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T19:48:30Z'
+generated_at: '2026-05-05T20:08:56Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-13
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -69,32 +69,63 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T19:47:26Z'
+  generated_at: '2026-05-05T20:01:09Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 0
-frontier_ids: []
-frontier: []
-eta:
-  status: tracked
-  eta_human: tracked
-  eta_confidence: low
-  basis: aggregate_shard_eta_scope_mismatch
-  scope_kind: aggregate_shard_mixed_scope
-  scope_label: Aggregate multi-shard ETA
-  scope_warning: Aggregate shard status currently mixes multiple ETA scopes. Use the
-    ETA command for a fresh whole-fleet forecast instead of reading this as a single
-    parity horizon.
-  blocking_reason: ''
-  summary: Aggregate shard state currently mixes ETA scopes (aggregate_shard_mixed_scope,
-    flagship_product_readiness). 9 open milestones remain across the active frontier.
-  predicted_completion_at: ''
-  range_low_hours: 0.0
-  range_high_hours: 0.0
-  remaining_open_milestones: 9
-  remaining_in_progress_milestones: 9
-  remaining_not_started_milestones: 0
-  remaining_effort_units: 0.0
+frontier_count: 1
+frontier_ids:
+- 2305272423
+frontier:
+- id: 2305272423
+  title: Publish public trust, status, release, and proof-shelf surfaces from registry
+    and governor truth.
+  wave: flagship_product
+  status: not_started
+  owners:
+  - chummer6-hub
+  dependencies: []
+  exit_criteria:
+  - Compile live, preview, fallback, revoked, fixed, blocked, proof freshness, support
+    pulse, and adoption health into public status surfaces.
+  - 'Own and prove the surface slice(s): public_trust_surface:v3, launch_health:public'
+  - 'Keep implementation scoped to the allowed paths: Chummer.Run.Api, scripts, tests'
+  - Refresh flagship proof and close out the queue slice honestly when this package
+    is landed for `chummer6-hub` (next90-m120-hub-public-launch-health).
+  eta:
+    status: flagship_delivery
+    eta_human: 9h-22h
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Publish public trust, status, release, and proof-shelf surfaces
+      from registry and governor truth.'' remains open under the flagship closeout
+      frontier. Outstanding readiness coverage: flagship readiness proof refresh.'
+    predicted_completion_at: '2026-05-06T11:18:50Z'
+    range_low_hours: 8.55
+    range_high_hours: 21.78
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 1.8
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
+source_queue_fingerprint: 433cdfebb5d8504552c5cea941d1217970cac13840edd39e02ae392c785b1551
+queue_package:
+  repo: chummer6-hub
+  package_id: next90-m120-hub-public-launch-health
+  title: Publish public trust, status, release, and proof-shelf surfaces from registry
+    and governor truth.
+  priority: 0
+  owned_surfaces:
+  - public_trust_surface:v3
+  - launch_health:public
+  allowed_paths:
+  - Chummer.Run.Api
+  - scripts
+  - tests

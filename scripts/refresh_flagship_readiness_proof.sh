@@ -31,15 +31,20 @@ resolve_ui_repo_root() {
 ui_root="$(resolve_ui_repo_root)"
 b14_script="$ui_root/scripts/ai/milestones/b14-flagship-ui-release-gate.sh"
 b14_lock_dir="$ui_root/.codex-studio/locks/b14-flagship-ui-release-gate.lock"
+b14_lock_owner_pid_path="$b14_lock_dir/owner.pid"
 ui_flagship_receipt_path="$ui_root/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json"
 ui_visual_gate_path="$ui_root/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
 ui_parity_audit_path="$ui_root/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
+ui_refresh_lock_stale_max_age_seconds="${CHUMMER_FLAGSHIP_UI_REFRESH_LOCK_STALE_MAX_AGE_SECONDS:-900}"
 
 if ! [[ "$ui_refresh_wait_timeout_seconds" =~ ^[0-9]+$ ]]; then
   ui_refresh_wait_timeout_seconds=1800
 fi
 if ! [[ "$ui_refresh_poll_interval_seconds" =~ ^[0-9]+$ ]] || [[ "$ui_refresh_poll_interval_seconds" -le 0 ]]; then
   ui_refresh_poll_interval_seconds=5
+fi
+if ! [[ "$ui_refresh_lock_stale_max_age_seconds" =~ ^[0-9]+$ ]]; then
+  ui_refresh_lock_stale_max_age_seconds=900
 fi
 
 ui_receipt_mtime() {
@@ -51,7 +56,63 @@ ui_receipt_mtime() {
   fi
 }
 
+prune_b14_lock_if_stale() {
+  if [[ ! -d "$b14_lock_dir" ]]; then
+    return 0
+  fi
+  if [[ -f "$b14_lock_owner_pid_path" ]]; then
+    owner_pid="$(tr -dc '0-9' <"$b14_lock_owner_pid_path")"
+    if [[ -n "$owner_pid" ]] && kill -0 "$owner_pid" 2>/dev/null; then
+      return 0
+    fi
+  fi
+  if pgrep -f "$b14_script" >/dev/null 2>&1; then
+    return 0
+  fi
+  if pgrep -f "scripts/ai/milestones/b14-flagship-ui-release-gate.sh" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  lock_stale_probe="$(
+    python3 - <<'PY' "$b14_lock_dir" "$b14_lock_owner_pid_path" "$ui_refresh_lock_stale_max_age_seconds"
+from __future__ import annotations
+
+import sys
+import time
+from pathlib import Path
+
+lock_dir = Path(sys.argv[1])
+owner_pid_path = Path(sys.argv[2])
+max_age = int(sys.argv[3])
+if not lock_dir.is_dir():
+    print("absent")
+    raise SystemExit(0)
+
+entries = list(lock_dir.iterdir())
+entries_without_owner = [entry for entry in entries if entry != owner_pid_path]
+if entries_without_owner:
+    print("nonempty")
+    raise SystemExit(0)
+
+age_seconds = max(0, int(time.time() - lock_dir.stat().st_mtime))
+if owner_pid_path.exists():
+    print(f"dead_owner_only:{age_seconds}")
+    raise SystemExit(0)
+
+if age_seconds < max_age:
+    print(f"young:{age_seconds}")
+    raise SystemExit(0)
+
+print(f"stale_empty:{age_seconds}")
+PY
+  )"
+  if [[ "$lock_stale_probe" == stale_empty:* || "$lock_stale_probe" == stale_owner_only:* || "$lock_stale_probe" == dead_owner_only:* ]]; then
+    rm -rf "$b14_lock_dir"
+  fi
+}
+
 ui_refresh_active() {
+  prune_b14_lock_if_stale
   if [[ -d "$b14_lock_dir" ]]; then
     return 0
   fi

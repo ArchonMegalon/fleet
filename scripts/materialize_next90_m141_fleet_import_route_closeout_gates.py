@@ -183,6 +183,8 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
             payload = yaml.safe_load("items:\n" + raw.split(marker, 1)[1]) or {}
         except yaml.YAMLError:
             return {}
+    if isinstance(payload, list):
+        return {"items": payload}
     return payload if isinstance(payload, dict) else {}
 
 

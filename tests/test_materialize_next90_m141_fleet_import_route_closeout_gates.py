@@ -275,6 +275,43 @@ def _fixture_tree(tmp_path: Path, *, use_old_shape: bool) -> dict[str, Path]:
 
 
 class MaterializeNext90M141FleetImportRouteCloseoutGatesTest(unittest.TestCase):
+    def test_materializer_accepts_list_root_queue_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, use_old_shape=False)
+            _write_yaml(fixture["fleet_queue"], [_queue_item()])
+            _write_yaml(fixture["design_queue"], [_queue_item()])
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--output", str(artifact),
+                    "--markdown-output", str(markdown),
+                    "--successor-registry", str(fixture["registry"]),
+                    "--fleet-queue-staging", str(fixture["fleet_queue"]),
+                    "--design-queue-staging", str(fixture["design_queue"]),
+                    "--next90-guide", str(fixture["guide"]),
+                    "--parity-acceptance-matrix", str(fixture["matrix"]),
+                    "--legacy-chrome-policy", str(fixture["policy"]),
+                    "--parity-audit", str(fixture["parity_audit"]),
+                    "--visual-familiarity-gate", str(fixture["visual_gate"]),
+                    "--veteran-task-time-gate", str(fixture["veteran_gate"]),
+                    "--ui-release-gate", str(fixture["ui_release"]),
+                    "--import-receipts-doc", str(fixture["receipts_doc"]),
+                    "--import-parity-certification", str(fixture["import_cert"]),
+                    "--engine-proof-pack", str(fixture["engine_pack"]),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            assert payload["status"] == "pass"
+            assert payload["package_closeout"]["ready"] is True
+
     def test_materializer_emits_passing_gate_when_rows_carry_direct_field_shape_and_proof_citations(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)

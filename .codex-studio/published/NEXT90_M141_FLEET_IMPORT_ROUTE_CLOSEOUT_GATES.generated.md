@@ -1,8 +1,8 @@
 # Next90 M141 Fleet Import Route Closeout Gates
 
-- status: `fail`
+- status: `pass`
 - import_route_closeout_status: `warning`
-- ready: `False`
+- ready: `True`
 
 ## Runtime blockers
 - none

@@ -1658,14 +1658,29 @@ def _read_text(path: Path) -> str:
 
 
 def _read_yaml(path: Path) -> Dict[str, Any]:
+    raw = _read_text(path)
     try:
-        payload = yaml.safe_load(_read_text(path))
+        payload = yaml.safe_load(raw)
     except Exception as exc:
+        if "\nmode:" in raw and "\nitems:\n" in raw:
+            try:
+                prefix, suffix = raw.split("\nmode:", 1)
+                prefix_payload = yaml.safe_load(prefix) or []
+                suffix_payload = yaml.safe_load("mode:" + suffix) or {}
+                if isinstance(prefix_payload, list) and isinstance(suffix_payload, dict):
+                    combined = dict(suffix_payload)
+                    suffix_items = combined.get("items") if isinstance(combined.get("items"), list) else []
+                    combined["items"] = list(prefix_payload) + list(suffix_items)
+                    return combined
+            except Exception:
+                pass
         print(
             f"[fleet-supervisor] warning: unable to parse yaml payload, using empty fallback for "
             f"{path}: {exc.__class__.__name__}: {exc}"
         )
         return {}
+    if isinstance(payload, list):
+        return {"items": payload}
     return dict(payload or {})
 
 

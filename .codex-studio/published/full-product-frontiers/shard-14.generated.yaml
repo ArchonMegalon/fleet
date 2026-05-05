@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T19:47:10Z'
+generated_at: '2026-05-05T20:06:28Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-14
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,8 +32,7 @@ focus:
   - fleet
   - chummer6-design
   - chummer6-ui
-  - chummer6-ui-kit
-  - chummer6-mobile
+  - chummer6-hub-registry
   texts:
   - top flagship grade
   - whole project frontier
@@ -72,7 +71,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T19:45:03Z'
+  generated_at: '2026-05-05T20:01:09Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -80,41 +79,56 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 4182074715
+- 1386209342
 frontier:
-- id: 4182074715
-  title: Shared design system, accessibility, localization, and flagship polish
+- id: 1386209342
+  title: Normalize adoption health, proof freshness, release channel, and revocation
+    facts for public surfaces
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-ui-kit
-  - chummer6-ui
-  - chummer6-mobile
+  - chummer6-hub-registry
   dependencies: []
   exit_criteria:
-  - Make shared tokens, dense-data primitives, accessibility primitives, localization
-    readiness, and flagship-grade visual polish real across workbench and play surfaces
-    as described in `projects/ui-kit.md`.
-  - Keep package-only shared UI discipline intact while raising the product to a flagship
-    quality bar instead of repo-local one-off chrome.
+  - Normalize adoption health, proof freshness, release channel, and revocation facts
+    for public surfaces.
+  - 'Own and prove the surface slice(s): public_trust_metrics, revocation_facts'
+  - 'Keep implementation scoped to the allowed paths: Chummer.Hub.Registry, scripts,
+    docs'
+  - Refresh flagship proof and close out the queue slice honestly when this package
+    is landed for `chummer6-hub-registry` (next90-m120-hub-registry-launch-truth).
   eta:
     status: flagship_delivery
-    eta_human: 10h-1.1d
+    eta_human: 9h-22h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Shared design system, accessibility, localization, and flagship
-      polish'' remains open under the flagship closeout frontier. Outstanding readiness
-      coverage: flagship readiness proof refresh.'
-    predicted_completion_at: '2026-05-06T13:49:34Z'
-    range_low_hours: 10.25
-    range_high_hours: 25.83
+    summary: 'Milestone ''Normalize adoption health, proof freshness, release channel,
+      and revocation facts for public surfaces'' remains open under the flagship closeout
+      frontier. Outstanding readiness coverage: flagship readiness proof refresh.'
+    predicted_completion_at: '2026-05-06T11:16:22Z'
+    range_low_hours: 8.55
+    range_high_hours: 21.78
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 2.05
+    remaining_effort_units: 1.8
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+source_queue_fingerprint: 433cdfebb5d8504552c5cea941d1217970cac13840edd39e02ae392c785b1551
+queue_package:
+  repo: chummer6-hub-registry
+  package_id: next90-m120-hub-registry-launch-truth
+  title: Normalize adoption health, proof freshness, release channel, and revocation
+    facts for public surfaces
+  priority: 0
+  owned_surfaces:
+  - public_trust_metrics
+  - revocation_facts
+  allowed_paths:
+  - Chummer.Hub.Registry
+  - scripts
+  - docs

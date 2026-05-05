@@ -1,19 +1,19 @@
 contract_name: executive_assistant.veteran_compare_packs
 schema_version: 1
-generated_at: 2026-04-23 04:22:19+00:00
+generated_at: 2026-05-05 19:49:40+00:00
 milestone:
   id: 103
   package_id: next90-m103-ea-parity-lab
   owned_surfaces:
   - veteran_compare_packs
 sync_context:
-  task_local_telemetry_path: /docker/fleet/state/chummer_design_supervisor/shard-4/runs/20260423T042213Z-shard-4/TASK_LOCAL_TELEMETRY.generated.json
+  task_local_telemetry_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-3/runs/20260505T194421Z-shard-3/TASK_LOCAL_TELEMETRY.generated.json
   task_local_telemetry_snapshot:
     mode: implementation_only
     scope_label: Full Chummer5A parity and flagship proof closeout
     slice_summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open
-      under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
-      ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
+      under the flagship closeout frontier. Outstanding readiness coverage: flagship
+      readiness proof refresh.'
     status_query_supported: false
     polling_disabled: true
     package_id: ''
@@ -22,11 +22,11 @@ sync_context:
     owned_surfaces: []
     allowed_paths: []
   readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  readiness_generated_at: '2026-04-23T04:22:19Z'
+  readiness_generated_at: '2026-05-05T19:49:40Z'
   desktop_executable_exit_gate_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
-  desktop_executable_exit_gate_generated_at: '2026-04-22T23:48:17.432738Z'
-  runtime_handoff_path: /docker/fleet/state/chummer_design_supervisor/shard-4/ACTIVE_RUN_HANDOFF.generated.md
-  runtime_handoff_first_output_at: '2026-04-23T04:22:17Z'
+  desktop_executable_exit_gate_generated_at: '2026-05-05T03:53:56.486187Z'
+  runtime_handoff_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-3/ACTIVE_RUN_HANDOFF.generated.md
+  runtime_handoff_first_output_at: '2026-05-05T19:49:01Z'
 required_landmarks:
 - File menu
 - Tools menu
@@ -292,12 +292,13 @@ task_local_frontier_context:
   - top_flagship_grade
   - whole_project_frontier
   focus_owners:
-  - chummer6-ui
-  - chummer6-core
+  - chummer6-hub
+  - chummer6-hub-registry
+  - fleet
   - chummer6-design
   - chummer6-mobile
+  - chummer6-core
   - chummer6-ui-kit
-  - chummer6-hub
   focus_texts:
   - top flagship grade
   - whole project frontier
@@ -309,11 +310,11 @@ task_local_frontier_context:
   - localization
   - restore confidence
   - fit and finish
-  - sourcebook
-  - settings
-  - custom-data
-  - xml
-  - translator
+  - install
+  - update
+  - recovery
+  - claim
+  - release truth
   - whole-project frontier
   - no lowered standards
   - feedback loop
@@ -322,10 +323,6 @@ task_local_frontier_context:
   - journey smoothness
   - performance
   - proof shelf
-  - mobile play shell
-  - ui kit and flagship polish
-  - media artifacts
-  - desktop client
   frontier_briefs:
   - '1300044932 [flagship_product] Mobile and play-shell flagship finish (status:
     not_started; owners: chummer6-mobile, chummer6-core, chummer6-ui-kit, chummer6-hub;
@@ -365,7 +362,7 @@ whole_product_frontier_coverage:
       proof are current.
 live_desktop_executable_gate_snapshot:
   source_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
-  generated_at: 2026-04-23 09:26:16.415910+00:00
+  generated_at: 2026-05-05 03:53:56.486187+00:00
   status: pass
   blocked_by_external_constraints_only: false
   blocking_findings_count: 0
@@ -377,7 +374,7 @@ live_desktop_executable_gate_snapshot:
 visual_familiarity_screenshot_snapshot:
   source_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
   screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
-  reference_generated_at: 2026-04-23 09:25:22.807251+00:00
+  reference_generated_at: 2026-05-05 15:52:11.269451+00:00
   required_screenshots:
   - 01-initial-shell-light.png
   - 02-menu-open-light.png

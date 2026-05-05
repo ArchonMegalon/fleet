@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T19:44:40Z'
+generated_at: '2026-05-05T20:06:45Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-18
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,8 +32,7 @@ focus:
   - fleet
   - chummer6-design
   - chummer6-ui
-  - executive-assistant
-  - chummer6-hub
+  - chummer6-mobile
   texts:
   - top flagship grade
   - whole project frontier
@@ -69,7 +68,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T19:44:00Z'
+  generated_at: '2026-05-05T20:01:09Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -77,44 +76,56 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 3109832007
+- 1956693230
 frontier:
-- id: 3109832007
-  title: Fleet and operator loop flagship finish
+- id: 1956693230
+  title: Add player table cards, between-turn affordances, and GM-lite continuity
+    views for live combat confidence.
   wave: flagship_product
   status: not_started
   owners:
-  - fleet
-  - executive-assistant
-  - chummer6-design
-  - chummer6-hub
+  - chummer6-mobile
   dependencies: []
   exit_criteria:
-  - Keep the product-governor, support, signal, and operator loop durable enough to
-    steer the full multi-repo product, not just the current milestone wave, with trustworthy
-    proofs, traces, ETAs, handoffs, and fail-closed anti-false-complete posture.
-  - Ensure the loop can keep decomposing full-product work across shards until flagship
-    readiness proof is current and trusted, and that actionable feedback, crash, and
-    support signals can auto-materialize into routed bugfix work without operator
-    babysitting.
+  - Add player table cards, between-turn affordances, and GM-lite continuity views
+    for live combat confidence.
+  - 'Own and prove the surface slice(s): add_player_table_cards_between:mobile'
+  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
+  - Refresh flagship proof and close out the queue slice honestly when this package
+    is landed for `chummer6-mobile` (next90-m121-mobile-add-player-table-cards-between-turn-affordances-and-gm-l).
   eta:
     status: flagship_delivery
-    eta_human: 9h-23h
+    eta_human: 8h-21h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
-      the flagship closeout frontier. Outstanding readiness coverage: flagship readiness
-      proof refresh.'
-    predicted_completion_at: '2026-05-06T11:50:40Z'
-    range_low_hours: 9.0
-    range_high_hours: 23.2
+    summary: 'Milestone ''Add player table cards, between-turn affordances, and GM-lite
+      continuity views for live combat confidence.'' remains open under the flagship
+      closeout frontier. Outstanding readiness coverage: flagship readiness proof
+      refresh.'
+    predicted_completion_at: '2026-05-06T10:36:09Z'
+    range_low_hours: 8.1
+    range_high_hours: 20.88
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 2.0
+    remaining_effort_units: 1.8
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+source_queue_fingerprint: 433cdfebb5d8504552c5cea941d1217970cac13840edd39e02ae392c785b1551
+queue_package:
+  repo: chummer6-mobile
+  package_id: next90-m121-mobile-add-player-table-cards-between-turn-affordances-and-gm-l
+  title: Add player table cards, between-turn affordances, and GM-lite continuity
+    views for live combat confidence.
+  priority: 0
+  owned_surfaces:
+  - add_player_table_cards_between:mobile
+  allowed_paths:
+  - src
+  - tests
+  - docs
+  - scripts

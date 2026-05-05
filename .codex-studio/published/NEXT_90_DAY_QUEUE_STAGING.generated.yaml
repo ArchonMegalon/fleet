@@ -5438,9 +5438,19 @@ items:
   work_task_id: '135.9'
   frontier_id: 4720040715
   milestone_id: 135
-  status: not_started
   wave: W22
   repo: chummer6-media-factory
+  status: complete
+  landed_commit: unlanded
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M135 chummer6-media-factory is complete; future shards must verify the repo-local proof floor, release-proof package entry, and canonical queue/registry mirrors instead of reopening the media coverage bundle.
+  proof:
+  - /docker/fleet/repos/chummer-media-factory/docs/NEXT90_M135_MEDIA_COVERAGE_PROOF_FLOOR.md
+  - /docker/fleet/repos/chummer-media-factory/tests/test_m135_media_coverage_proof.py
+  - /docker/fleet/repos/chummer-media-factory/scripts/ai/verify_m135_media_coverage.sh
+  - /docker/fleet/repos/chummer-media-factory/scripts/ai/materialize_media_release_proof.py
+  - /docker/fleet/repos/chummer-media-factory/.codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json
+  - /docker/fleet/repos/chummer-media-factory/.codex-studio/published/ARTIFACT_PUBLICATION_CERTIFICATION.generated.json
   allowed_paths:
   - src
   - tests
@@ -5465,4 +5475,22 @@ items:
   - docs
   owned_surfaces:
   - close_ea_compile_signal_companion:executive_assistant
-source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
+- title: Fail closeout when any of the five route or family rows in this milestone remain `no`, blank, stale, or unsupported
+    by direct proof receipts.
+  task: Fail closeout when any of the five route or family rows in this milestone remain `no`, blank, stale, or unsupported
+    by direct proof receipts.
+  package_id: next90-m141-fleet-fail-closeout-when-any-of-the-five-route-or-family-rows-in-this-milest
+  work_task_id: '141.5'
+  frontier_id: 4147587006
+  milestone_id: 141
+  status: not_started
+  wave: W22P
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - .codex-studio
+  - feedback
+  owned_surfaces:
+  - fail_closeout_when_any_of_the_five_route_or_family_rows:fleet
+source_queue_fingerprint: 433cdfebb5d8504552c5cea941d1217970cac13840edd39e02ae392c785b1551

@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.design_mirror_drift_repair_receipt",
   "schema_version": 1,
-  "generated_at": "2026-04-23T21:21:08Z",
+  "generated_at": "2026-05-05T19:51:40Z",
   "frontier_id": 2299644700,
   "queue_package_id": "audit-task-3226027",
   "status": "repaired",
@@ -14,51 +14,108 @@
   "target_root": "/docker/fleet/.codex-design/product",
   "repairs": [
     {
+      "relative_path": "WEEKLY_PRODUCT_PULSE.generated.json",
+      "source_sha256": "66a140c0e0f89887ad20e00cd976bfbe743ee9efebe6a11c56caf967884def93",
+      "previous_target_sha256": "11fcd0268e26b88236167e80cd9be04bddf642d8eb863c9c7eacd5e824479f4c",
+      "repaired_target_sha256": "66a140c0e0f89887ad20e00cd976bfbe743ee9efebe6a11c56caf967884def93"
+    },
+    {
+      "relative_path": "NEXT_WAVE_ACCOUNT_AWARE_FRONT_DOOR.md",
+      "source_sha256": "0c13bec25d0cdb81fba8d52f5b7d241e5bc4b99ed06814986350016bb527c5c8",
+      "previous_target_sha256": "d68c4a844f0b9f2d88dcfe59352f4728d71dc5e86f7fb9dda32e3591d5b049a7",
+      "repaired_target_sha256": "0c13bec25d0cdb81fba8d52f5b7d241e5bc4b99ed06814986350016bb527c5c8"
+    },
+    {
       "relative_path": "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "source_sha256": "82f85a47cb9019a6aba343475e1e4e597f9140b3f2a54273b425abb7dc2fd40d",
-      "previous_target_sha256": "0e287af799384f1989b8d8d57b512813a785cd7e81adf07514603b865fa2baa1",
-      "repaired_target_sha256": "82f85a47cb9019a6aba343475e1e4e597f9140b3f2a54273b425abb7dc2fd40d"
+      "source_sha256": "89b18a3bcfd5324fa9300c971c82ecd834a447b4eccb8843d4bec418de3f1553",
+      "previous_target_sha256": "616f4844e766d84514f1c6e1110ed6925dc66bb77155e880e6a11e6b49218f8e",
+      "repaired_target_sha256": "89b18a3bcfd5324fa9300c971c82ecd834a447b4eccb8843d4bec418de3f1553"
     },
     {
       "relative_path": "NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "source_sha256": "93c93ebbb9dcf71fc9218fd6268b1495b6985882e5dc36683f2e955a37bf60e7",
-      "previous_target_sha256": "8d8dd20f3079bda3fcd1a7eeae4d379b2e35a6332d2679a74c9b6e74f8aa4445",
-      "repaired_target_sha256": "93c93ebbb9dcf71fc9218fd6268b1495b6985882e5dc36683f2e955a37bf60e7"
+      "source_sha256": "54502355c94a33bba3f199a56bcc62ac97e6bacc1a5cce74701ae41141062bc3",
+      "previous_target_sha256": "8dd98722f4eb51477fd2c41c0da6d53b0594b32e44e170d0bc03a4e3c45bb0fa",
+      "repaired_target_sha256": "54502355c94a33bba3f199a56bcc62ac97e6bacc1a5cce74701ae41141062bc3"
+    },
+    {
+      "relative_path": "PUBLIC_USER_MODEL.md",
+      "source_sha256": "17a9bd22456545660b3189f20e8ce09682936cdbe7a81fbccdb6ee323c58742f",
+      "previous_target_sha256": "45de1adb04a9b8c1c726f4f7e3de9652b7d27fd415745f09ed435a617ceba4d8",
+      "repaired_target_sha256": "17a9bd22456545660b3189f20e8ce09682936cdbe7a81fbccdb6ee323c58742f"
+    },
+    {
+      "relative_path": "PUBLIC_AUTH_FLOW.md",
+      "source_sha256": "b5b96e054e1730289cc104c7b124888e53bac42b96ba4a27cd095508bef6a493",
+      "previous_target_sha256": "6c26ec23ccfc4c30e93e160d432f6826ae7f215a45d0e331c804e5a9f9938f88",
+      "repaired_target_sha256": "b5b96e054e1730289cc104c7b124888e53bac42b96ba4a27cd095508bef6a493"
+    },
+    {
+      "relative_path": "IDENTITY_AND_CHANNEL_LINKING_MODEL.md",
+      "source_sha256": "53f2a46616b32e18184b8cc95b5fa4e27c1b245ddbfc7b7afbe89cfb47581f43",
+      "previous_target_sha256": "18ab6d719919551b4af45249bd8f9421f2a76f6602be103c41ccc221f457b246",
+      "repaired_target_sha256": "53f2a46616b32e18184b8cc95b5fa4e27c1b245ddbfc7b7afbe89cfb47581f43"
+    },
+    {
+      "relative_path": "PUBLIC_PART_REGISTRY.yaml",
+      "source_sha256": "d666fc3dd512bf43c829e30b304cb6ad9e4926cff5815f22970ca668cb9c75c7",
+      "previous_target_sha256": "51dc8597c38bf687e8bd8e7419d6221d2008b9390ff0f4383dae5f366cbf74ca",
+      "repaired_target_sha256": "d666fc3dd512bf43c829e30b304cb6ad9e4926cff5815f22970ca668cb9c75c7"
+    },
+    {
+      "relative_path": "COMMUNITY_SPONSORSHIP_BACKLOG.md",
+      "source_sha256": "efe5817275eed873a8a0f1f96c5006e28ca3607ce86d60407b79a15040048446",
+      "previous_target_sha256": "5ec111fc15b96c606ae815e57ad6f02e291f7bfd2338a0a595ba29057822e20f",
+      "repaired_target_sha256": "efe5817275eed873a8a0f1f96c5006e28ca3607ce86d60407b79a15040048446"
+    },
+    {
+      "relative_path": "FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md",
+      "source_sha256": "ff0738b697401a20a40932b080a8e870ba47ad9ed836c95da5afb8f31991760a",
+      "previous_target_sha256": "d558db37fae6968ba48ccc9f9544b2ea1cd1355163b793bdea47514ea632060d",
+      "repaired_target_sha256": "ff0738b697401a20a40932b080a8e870ba47ad9ed836c95da5afb8f31991760a"
     },
     {
       "relative_path": "FLAGSHIP_PRODUCT_READINESS.generated.json",
       "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "source_sha256": "cfd63d549b2af8d3fed4dfea9149d694771de2c9305ce627a35a093998f15d57",
-      "previous_target_sha256": null,
-      "repaired_target_sha256": "cfd63d549b2af8d3fed4dfea9149d694771de2c9305ce627a35a093998f15d57"
+      "source_sha256": "df6846f117e515b9e4ced1ea843c57c6c8a2e2afeea282c60c78383203b97136",
+      "previous_target_sha256": "1e0be74e484805073c665ee3b1bd2b6a8659ff3eef13423af3b19d538d8db084",
+      "repaired_target_sha256": "df6846f117e515b9e4ced1ea843c57c6c8a2e2afeea282c60c78383203b97136"
     }
   ],
   "cluster_policy": {
-    "observation_count": 8870,
+    "observation_count": 15925,
     "bounded_queue_slice": true,
     "do_not_reopen_one_off_refresh_work": true,
     "source_items": [
+      "/docker/fleet/.codex-design/product/WEEKLY_PRODUCT_PULSE.generated.json",
+      "/docker/fleet/.codex-design/product/NEXT_WAVE_ACCOUNT_AWARE_FRONT_DOOR.md",
       "/docker/fleet/.codex-design/product/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
       "/docker/fleet/.codex-design/product/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "/docker/fleet/.codex-design/product/PUBLIC_USER_MODEL.md",
+      "/docker/fleet/.codex-design/product/PUBLIC_AUTH_FLOW.md",
+      "/docker/fleet/.codex-design/product/IDENTITY_AND_CHANNEL_LINKING_MODEL.md",
+      "/docker/fleet/.codex-design/product/PUBLIC_PART_REGISTRY.yaml",
+      "/docker/fleet/.codex-design/product/COMMUNITY_SPONSORSHIP_BACKLOG.md",
+      "/docker/fleet/.codex-design/product/FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md",
       "/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json"
     ],
-    "reason": "The repeated fleet mirror-drift cluster was repaired as one bounded design_mirror:fleet slice, and the local flagship readiness mirror was restored so Fleet can consume the same green readiness receipt through the repo-local design bundle without reopening a broad mirror refresh wave."
+    "reason": "The repeated fleet mirror-drift cluster was repaired as one bounded design_mirror:fleet slice. Fleet's declared local mirror bundle is back in manifest parity, and the supplemental local flagship readiness mirror now matches the published green proof without reopening a broader mirror refresh wave."
   },
   "post_repair_verification": {
-    "checked_at": "2026-04-23T21:21:08Z",
-    "expected_file_count": 161,
+    "checked_at": "2026-05-05T19:51:40Z",
+    "expected_file_count": 192,
     "missing_target_count": 0,
     "drifted_target_count": 0,
     "stale_project_ids": [],
-    "verification_scope": "Fleet mirror entries from products/chummer/sync/sync-manifest.yaml for repo `fleet`",
+    "verification_scope": "Fleet mirror entries from products/chummer/sync/sync-manifest.yaml for repo `fleet`, plus repo/review mirrors and the supplemental local FLAGSHIP_PRODUCT_READINESS mirror.",
+    "manifest_check_command": "python3 /docker/chummercomplete/chummer-design/scripts/ai/publish_local_mirrors.py --check --repo fleet --no-prune",
     "supplemental_local_mirror_targets": [
       {
         "path": "/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json",
         "status": "present",
-        "sha256": "cfd63d549b2af8d3fed4dfea9149d694771de2c9305ce627a35a093998f15d57"
+        "sha256": "df6846f117e515b9e4ced1ea843c57c6c8a2e2afeea282c60c78383203b97136"
       }
     ],
     "result": "pass"
   },
-  "flagship_readiness_note": "This repair clears the scoped Fleet local design-mirror drift for audit-task-3226027 / frontier 2299644700. Fleet and operator loop readiness can consume the repaired mirror receipt plus the restored local FLAGSHIP_PRODUCT_READINESS mirror instead of republishing one-off mirror refresh tasks for the same source items."
+  "flagship_readiness_note": "This repair clears the scoped Fleet local design-mirror drift for audit-task-3226027 / frontier 2299644700. Fleet can consume both the refreshed manifest-backed canon mirror and the locally mirrored green FLAGSHIP_PRODUCT_READINESS receipt from the same repo-local design bundle."
 }
