@@ -1,0 +1,279 @@
+{
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "canonical_alignment": {
+    "design_queue_status": "not_started",
+    "fleet_queue_status": "not_started",
+    "issues": [],
+    "registry_status": "not_started",
+    "state": "pass",
+    "work_task_status": ""
+  },
+  "canonical_monitors": {
+    "adr": {
+      "checks": {
+        "fleet_lane_local": true,
+        "hub_truth": true,
+        "recognition_rule": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "fleet_agent_template": {
+      "checks": {
+        "hub_truth_boundary": true,
+        "lane_local_caches": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "fleet_project": {
+      "checks": {
+        "lane_local_auth": true,
+        "signed_receipts": true,
+        "sponsor_metadata": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "hub_project": {
+      "checks": {
+        "receipt_ingest": true,
+        "reward_rule": true,
+        "sponsor_status": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "next90_guide": {
+      "checks": {
+        "exit_contract": true,
+        "milestone_129": true,
+        "wave_19": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "ownership_matrix": {
+      "checks": {
+        "lane_local_auth": true,
+        "signed_receipts": true,
+        "sponsor_metadata": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "workflow": {
+      "checks": {
+        "lane_local_storage": true,
+        "raw_auth_lane_local": true,
+        "receipt_emission": true,
+        "receipt_projected": true,
+        "sponsor_session_truth": true
+      },
+      "issues": [],
+      "state": "pass"
+    }
+  },
+  "contract_name": "fleet.next90_m129_participation_lane_receipts",
+  "frontier_id": 7997916353,
+  "generated_at": "2026-05-05T15:09:40Z",
+  "milestone_id": 129,
+  "monitor_summary": {
+    "expected_work_task_count": 6,
+    "missing_status_plane_project_count": 0,
+    "participation_status": "blocked",
+    "queued_work_task_count": 6,
+    "receipt_artifact_match_count": 2,
+    "runtime_blocker_count": 1,
+    "runtime_blockers": [
+      "queue_coverage_monitor: design canon task 129.6 is unknown."
+    ],
+    "warning_count": 0
+  },
+  "owned_surfaces": [
+    "keep_participant_lane_auth_lane:fleet"
+  ],
+  "package_closeout": {
+    "blockers": [],
+    "state": "pass",
+    "warnings": [
+      "queue_coverage_monitor: design canon task 129.6 is unknown."
+    ]
+  },
+  "package_id": "next90-m129-fleet-keep-participant-lane-auth-lane-local-while-emitting-sig",
+  "queue_task": "Keep participant-lane auth lane-local while emitting signed contribution receipts and sponsor-session execution metadata.",
+  "queue_title": "Keep participant-lane auth lane-local while emitting signed contribution receipts and sponsor-session execution metadata.",
+  "runtime_monitors": {
+    "queue_coverage": {
+      "design_canon_task_id": "129.6",
+      "design_canon_task_status": "unknown",
+      "expected_work_task_count": 6,
+      "issues": [],
+      "queued_work_task_count": 6,
+      "runtime_blockers": [
+        "design canon task 129.6 is unknown."
+      ],
+      "state": "pass",
+      "warnings": [],
+      "work_tasks": [
+        {
+          "owner": "chummer6-hub",
+          "queued_ready": true,
+          "reasons": [],
+          "registry_status": "unknown",
+          "title": "Build reusable account, profile, group, membership, join-code, boost-code, reward-journal, and entitlement-journal flows.",
+          "work_task_id": "129.1"
+        },
+        {
+          "owner": "chummer6-hub-registry",
+          "queued_ready": true,
+          "reasons": [],
+          "registry_status": "unknown",
+          "title": "Publish entitlement-backed desktop channel, install guidance, participation receipt, and reward-publication refs.",
+          "work_task_id": "129.2"
+        },
+        {
+          "owner": "chummer6-ui",
+          "queued_ready": true,
+          "reasons": [],
+          "registry_status": "unknown",
+          "title": "Surface account, claim, entitlement, channel, participation, and recovery posture inside desktop without browser-only ritual.",
+          "work_task_id": "129.3"
+        },
+        {
+          "owner": "fleet",
+          "queued_ready": true,
+          "reasons": [],
+          "registry_status": "unknown",
+          "title": "Keep participant-lane auth lane-local while emitting signed contribution receipts and sponsor-session execution metadata.",
+          "work_task_id": "129.4"
+        },
+        {
+          "owner": "executive-assistant",
+          "queued_ready": true,
+          "reasons": [],
+          "registry_status": "unknown",
+          "title": "Compile contribution, participation, entitlement, channel, and reward followthrough packets from Hub/Fleet receipts only.",
+          "work_task_id": "129.5"
+        },
+        {
+          "owner": "chummer6-design",
+          "queued_ready": true,
+          "reasons": [],
+          "registry_status": "unknown",
+          "title": "Close public-auth, identity/channel-linking, participation, account-aware front-door, and community-ledger canon coverage.",
+          "work_task_id": "129.6"
+        }
+      ]
+    },
+    "receipt_artifacts": {
+      "issues": [],
+      "match_count": 2,
+      "matches": [
+        "/docker/fleet/.codex-studio/published/NEXT90_M130_FLEET_PROVIDER_STEWARDSHIP.admin_status.generated.json",
+        "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+      ],
+      "runtime_blockers": [],
+      "state": "pass",
+      "warnings": []
+    },
+    "status_plane": {
+      "age_hours": 2.35,
+      "expected_owner_project_ids": [
+        "design",
+        "ea",
+        "fleet",
+        "hub",
+        "hub-registry",
+        "ui"
+      ],
+      "generated_at": "2026-05-05T12:48:51Z",
+      "issues": [],
+      "missing_owner_project_ids": [],
+      "runtime_blockers": [],
+      "state": "pass",
+      "warnings": [],
+      "whole_product_final_claim_status": "pass"
+    }
+  },
+  "source_inputs": {
+    "adr": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/adrs/ADR-0006-participation-and-sponsored-execution-split.md",
+      "sha256": "575dcc5ed948c7947d55b191c02a83f1d965cb3863cdc6bf130544579db55728"
+    },
+    "design_queue_staging": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "11cc1ecd96db0176604771f8f6f398998db558b6167a3e2bd37140a2124ddca6"
+    },
+    "fleet_agent_template": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/review/fleet.AGENTS.template.md",
+      "sha256": "7c5521b51174f6a3234bfdc6dece11963e066fad92b8443e05e3188581a819ea"
+    },
+    "fleet_project": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/projects/fleet.md",
+      "sha256": "3eafc5e26c6a8e8aa2bf4e3bace707c49667cca85fe738acd73260364536cea4"
+    },
+    "fleet_published_root": {
+      "generated_at": "",
+      "path": "/docker/fleet/.codex-studio/published",
+      "sha256": ""
+    },
+    "hub_project": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/projects/hub.md",
+      "sha256": "e7164a0a0143b65cc1111f7087de12f50678b9814a9f31d63b19e840635e5e96"
+    },
+    "hub_published_root": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer.run-services/.codex-studio/published",
+      "sha256": ""
+    },
+    "next90_guide": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
+      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+    },
+    "ownership_matrix": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/OWNERSHIP_MATRIX.md",
+      "sha256": "3eee98e859e5f81633a4574ee551c5ae847353318dd6bf8694d226307efc1ead"
+    },
+    "queue_staging": {
+      "generated_at": "",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "6da82d05213bc6ae4f536f75debf5dab04463c91c9b2992df970d392bd3972b1"
+    },
+    "registry_published_root": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published",
+      "sha256": ""
+    },
+    "status_plane": {
+      "generated_at": "2026-05-05T12:48:51Z",
+      "path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
+      "sha256": "ec9475a99a66df178ced6ad409e44b4505df8753faddddf587340d795a078927"
+    },
+    "successor_registry": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "641255112587cbec2c7c43a37dda5a90f6f59e0d2775206517fede2695c233e3"
+    },
+    "workflow": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PARTICIPATION_AND_BOOSTER_WORKFLOW.md",
+      "sha256": "dcd21c977712ce443ee53a9d46a8ccc960b3a6c77bfa11e49276eb9ac7253d2a"
+    }
+  },
+  "status": "pass",
+  "wave": "W19",
+  "work_task_id": "129.4"
+}
