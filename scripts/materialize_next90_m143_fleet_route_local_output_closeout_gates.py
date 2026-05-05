@@ -25,6 +25,28 @@ WAVE_ID = "W22P"
 QUEUE_TITLE = "Fail closeout when these families remain green only by broad family prose, missing outputs, or stale route-local receipts."
 OWNED_SURFACES = ["fail_closeout_when_these_families_remain_green_only_by_b:fleet"]
 ALLOWED_PATHS = ["scripts", "tests", ".codex-studio", "feedback"]
+COMPLETION_ACTION = "verify_closed_package_only"
+LANDED_COMMIT = "unlanded"
+DO_NOT_REOPEN_REASON = (
+    "M143 fleet route-local output closeout gate is complete; future shards must verify the repo-local gate scripts, "
+    "generated proof artifacts, and canonical queue/registry mirrors instead of reopening print or export or exchange "
+    "and SR6 supplement or house-rule parity closeout by broad family prose."
+)
+QUEUE_PROOF = [
+    "/docker/fleet/scripts/materialize_next90_m143_fleet_route_local_output_closeout_gates.py",
+    "/docker/fleet/scripts/verify_next90_m143_fleet_route_local_output_closeout_gates.py",
+    "/docker/fleet/tests/test_materialize_next90_m143_fleet_route_local_output_closeout_gates.py",
+    "/docker/fleet/tests/test_verify_next90_m143_fleet_route_local_output_closeout_gates.py",
+    "/docker/fleet/.codex-studio/published/NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.json",
+    "/docker/fleet/.codex-studio/published/NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.md",
+    "/docker/fleet/feedback/2026-05-05-next90-m143-fleet-route-local-output-closeout.md",
+]
+REGISTRY_EVIDENCE = [
+    "/docker/fleet/scripts/materialize_next90_m143_fleet_route_local_output_closeout_gates.py and /docker/fleet/scripts/verify_next90_m143_fleet_route_local_output_closeout_gates.py now fail closed when milestone 143 families rely on broad family prose, missing outputs, or reopened canonical closeout metadata instead of route-local output receipts.",
+    "/docker/fleet/tests/test_materialize_next90_m143_fleet_route_local_output_closeout_gates.py and /docker/fleet/tests/test_verify_next90_m143_fleet_route_local_output_closeout_gates.py now cover route-local output evidence requirements plus canonical closeout metadata so stale or reopened rows break the gate.",
+    "/docker/fleet/.codex-studio/published/NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.json and /docker/fleet/.codex-studio/published/NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.md record the current pass state for print/export/exchange and SR6 supplement/house-rule families against route-local receipts and output proof surfaces.",
+    "python3 scripts/materialize_next90_m143_fleet_route_local_output_closeout_gates.py, python3 scripts/verify_next90_m143_fleet_route_local_output_closeout_gates.py --json, and python3 -m unittest tests.test_materialize_next90_m143_fleet_route_local_output_closeout_gates tests.test_verify_next90_m143_fleet_route_local_output_closeout_gates all exit 0.",
+]
 
 DEFAULT_OUTPUT = PUBLISHED / "NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.json"
 DEFAULT_MARKDOWN = PUBLISHED / "NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.md"
@@ -317,7 +339,7 @@ def _queue_alignment(*, work_task: Dict[str, Any], fleet_queue_item: Dict[str, A
     if not design_queue_item:
         issues.append("Design queue row is missing.")
     if not fleet_queue_item:
-        warnings.append("Fleet queue mirror row is still missing for work task 143.6.")
+        issues.append("Fleet queue mirror row is missing for work task 143.6.")
     expected = {
         "title": QUEUE_TITLE,
         "task": QUEUE_TITLE,
@@ -327,31 +349,31 @@ def _queue_alignment(*, work_task: Dict[str, Any], fleet_queue_item: Dict[str, A
         "milestone_id": MILESTONE_ID,
         "wave": WAVE_ID,
         "repo": "fleet",
+        "status": "complete",
+        "completion_action": COMPLETION_ACTION,
+        "landed_commit": LANDED_COMMIT,
+        "do_not_reopen_reason": DO_NOT_REOPEN_REASON,
     }
     if work_task and _normalize_text(work_task.get("owner")) != "fleet":
         issues.append("Canonical registry work task owner drifted from fleet.")
+    if work_task and _normalize_text(work_task.get("title")) != QUEUE_TITLE:
+        issues.append("Canonical registry work task title drifted from the M143 Fleet closeout contract.")
+    if work_task and _normalize_text(work_task.get("status")) != "complete":
+        issues.append("Canonical registry work task status must be complete before M143 can close.")
+    if work_task and _normalize_list(work_task.get("evidence")) != REGISTRY_EVIDENCE:
+        issues.append("Canonical registry work task evidence drifted from the M143 Fleet closeout proof set.")
     for label, row in (("design", design_queue_item), ("fleet", fleet_queue_item)):
         if not row:
             continue
         for field, expected_value in expected.items():
             if _normalize_text(row.get(field)) != _normalize_text(expected_value):
-                message = f"{label.title()} queue {field} drifted."
-                if label == "design":
-                    issues.append(message)
-                else:
-                    warnings.append(message)
+                issues.append(f"{label.title()} queue {field} drifted.")
         if _normalize_list(row.get("allowed_paths")) != ALLOWED_PATHS:
-            message = f"{label.title()} queue allowed_paths drifted."
-            if label == "design":
-                issues.append(message)
-            else:
-                warnings.append(message)
+            issues.append(f"{label.title()} queue allowed_paths drifted.")
         if _normalize_list(row.get("owned_surfaces")) != OWNED_SURFACES:
-            message = f"{label.title()} queue owned_surfaces drifted."
-            if label == "design":
-                issues.append(message)
-            else:
-                warnings.append(message)
+            issues.append(f"{label.title()} queue owned_surfaces drifted.")
+        if _normalize_list(row.get("proof")) != QUEUE_PROOF:
+            issues.append(f"{label.title()} queue proof drifted.")
     return {"state": "pass" if not issues else "fail", "issues": issues, "warnings": warnings}
 
 

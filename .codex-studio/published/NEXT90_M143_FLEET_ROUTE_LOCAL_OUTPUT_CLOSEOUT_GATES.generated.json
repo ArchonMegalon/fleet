@@ -12,9 +12,7 @@
     "queue_alignment": {
       "issues": [],
       "state": "pass",
-      "warnings": [
-        "Fleet queue mirror row is still missing for work task 143.6."
-      ]
+      "warnings": []
     },
     "workflow_pack_contract": {
       "issues": [],
@@ -23,35 +21,21 @@
   },
   "contract_name": "fleet.next90_m143_route_local_output_closeout_gates",
   "frontier_id": 8787562259,
-  "generated_at": "2026-05-05T20:09:58Z",
+  "generated_at": "2026-05-05T20:41:47Z",
   "milestone_id": 143,
   "monitor_summary": {
     "canonical_issue_count": 0,
-    "route_local_output_closeout_status": "blocked",
-    "runtime_blocker_count": 4,
-    "runtime_blockers": [
-      "family:sheet_export_print_viewer_and_exchange: live proof corpus still lacks direct route-local receipts for screenshot:print_export_exchange.",
-      "family:sr6_supplements_designers_and_house_rules: live proof corpus still lacks direct route-local receipts for screenshot:sr6_supplements_and_house_rules.",
-      "family:sheet_export_print_viewer_and_exchange: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/output receipt artifacts for this family; row evidence still relies only on broad family proof artifacts",
-      "family:sr6_supplements_designers_and_house_rules: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/output receipt artifacts for this family; row evidence still relies only on broad family proof artifacts"
-    ],
-    "warning_count": 1,
-    "warnings": [
-      "Fleet queue mirror row is still missing for work task 143.6."
-    ]
+    "route_local_output_closeout_status": "pass",
+    "runtime_blocker_count": 0,
+    "runtime_blockers": [],
+    "warning_count": 0,
+    "warnings": []
   },
   "package_closeout": {
-    "ready": false,
-    "reasons": [
-      "family:sheet_export_print_viewer_and_exchange: live proof corpus still lacks direct route-local receipts for screenshot:print_export_exchange.",
-      "family:sr6_supplements_designers_and_house_rules: live proof corpus still lacks direct route-local receipts for screenshot:sr6_supplements_and_house_rules.",
-      "family:sheet_export_print_viewer_and_exchange: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/output receipt artifacts for this family; row evidence still relies only on broad family proof artifacts",
-      "family:sr6_supplements_designers_and_house_rules: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/output receipt artifacts for this family; row evidence still relies only on broad family proof artifacts"
-    ],
-    "status": "blocked",
-    "warnings": [
-      "Fleet queue mirror row is still missing for work task 143.6."
-    ]
+    "ready": true,
+    "reasons": [],
+    "status": "pass",
+    "warnings": []
   },
   "package_id": "next90-m143-fleet-fail-closeout-when-these-families-remain-green-only-by-broad-family-pr",
   "queue_title": "Fail closeout when these families remain green only by broad family prose, missing outputs, or stale route-local receipts.",
@@ -59,32 +43,27 @@
     "proof_corpus": {
       "family_receipt_summary": {
         "family:sheet_export_print_viewer_and_exchange": {
-          "missing_route_receipts": [
-            "screenshot:print_export_exchange"
-          ],
+          "missing_route_receipts": [],
           "satisfied_route_receipts": [
             "menu:open_for_printing",
             "menu:open_for_export",
             "menu:file_print_multiple",
-            "receipt:workspace_exchange"
+            "receipt:workspace_exchange",
+            "screenshot:print_export_exchange"
           ]
         },
         "family:sr6_supplements_designers_and_house_rules": {
-          "missing_route_receipts": [
-            "screenshot:sr6_supplements_and_house_rules"
-          ],
+          "missing_route_receipts": [],
           "satisfied_route_receipts": [
             "workflow:sr6_supplements",
             "workflow:house_rules",
-            "surface:rule_environment_studio"
+            "surface:rule_environment_studio",
+            "screenshot:sr6_supplements_and_house_rules"
           ]
         }
       },
       "issues": [],
-      "runtime_blockers": [
-        "family:sheet_export_print_viewer_and_exchange: live proof corpus still lacks direct route-local receipts for screenshot:print_export_exchange.",
-        "family:sr6_supplements_designers_and_house_rules: live proof corpus still lacks direct route-local receipts for screenshot:sr6_supplements_and_house_rules."
-      ],
+      "runtime_blockers": [],
       "state": "pass",
       "warnings": []
     },
@@ -100,19 +79,17 @@
           ],
           "evidence": [
             "/docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml",
-            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
-            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
+            "/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md"
           ],
           "id": "family:sheet_export_print_viewer_and_exchange",
-          "issues": [
-            "row still closes on broad family prose instead of route-local proof receipts",
-            "row evidence does not cite any direct runtime/output receipt artifacts for this family",
-            "row evidence still relies only on broad family proof artifacts"
-          ],
+          "issues": [],
           "label": "Sheet export, print viewer, and exchange",
           "present_in_chummer5a": "yes",
           "present_in_chummer6": "yes",
-          "reason": "All declared compare artifacts for this Chummer5A family are directly backed by current parity proof: ['menu:open_for_printing', 'menu:open_for_export', 'menu:file_print_multiple'].",
+          "reason": "Route-local print, export, and exchange proof cites menu parity, screenshot review markers, and deterministic workspace-exchange receipts directly.",
           "removable_if_not_in_chummer5a": "no",
           "visual_parity": "yes"
         },
@@ -124,27 +101,21 @@
           ],
           "evidence": [
             "/docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml",
-            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
-            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M114_UI_RULE_STUDIO.generated.json",
+            "/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md"
           ],
           "id": "family:sr6_supplements_designers_and_house_rules",
-          "issues": [
-            "row still closes on broad family prose instead of route-local proof receipts",
-            "row evidence does not cite any direct runtime/output receipt artifacts for this family",
-            "row evidence still relies only on broad family proof artifacts"
-          ],
+          "issues": [],
           "label": "SR6 supplements, designers, and house rules",
           "present_in_chummer5a": "yes",
           "present_in_chummer6": "yes",
-          "reason": "All declared compare artifacts for this Chummer5A family are directly backed by current parity proof: ['workflow:sr6_supplements', 'workflow:house_rules'].",
+          "reason": "Route-local SR6 supplement and house-rule proof cites screenshot review markers, rule studio surface proof, and deterministic successor-lane receipts directly.",
           "removable_if_not_in_chummer5a": "no",
           "visual_parity": "yes"
         }
       ],
-      "runtime_blockers": [
-        "family:sheet_export_print_viewer_and_exchange: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/output receipt artifacts for this family; row evidence still relies only on broad family proof artifacts",
-        "family:sr6_supplements_designers_and_house_rules: row still closes on broad family prose instead of route-local proof receipts; row evidence does not cite any direct runtime/output receipt artifacts for this family; row evidence still relies only on broad family proof artifacts"
-      ],
+      "runtime_blockers": [],
       "state": "pass"
     }
   },
@@ -156,22 +127,22 @@
       "sha256": "0615c3a1cc3e8096dd01d7a85af7eee8595e4aade17b87af80ba0513c9650c1a"
     },
     "design_queue_staging": {
-      "generated_at": "2026-05-05T20:03:29Z",
+      "generated_at": "2026-05-05T20:41:04Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "cdf2824a2d9f1b6a8aabab4aa5f5ce187e99fd53db48f62205bf9c5d49a60ae0"
+      "sha256": "82289ac2a73556455b1840d9d7b3a019e49dd15775abfab6741ad9e73f159866"
     },
     "desktop_visual_familiarity_gate": {
       "generated_at": "2026-05-05T15:52:11.269451Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
-      "sha256": "a8177012e1cff67255e3c136f44c8addc1d6670b3b8fcc03500f967d51508f0f"
+      "sha256": "c81148da229ac1df966a87072c8ba4d0045ffd4f8644d3559b56275222d3defa"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-05-05T20:00:38Z",
+      "generated_at": "2026-05-05T20:41:28Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "bf8770ae1645a534a59189f3103d1a388d9a3ccfb1459e7a7dd40c1a86384eaf"
+      "sha256": "fec8b3a9bb733a1efac9fa95231eec2cc3e0e6abb7e5857208c58bf97f73670b"
     },
     "generated_dialog_parity": {
       "generated_at": "2026-05-04T20:21:16.770780Z",
@@ -192,16 +163,16 @@
       "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
     },
     "parity_audit": {
-      "generated_at": "2026-05-05T19:47:18.226745Z",
+      "generated_at": "2026-05-05T20:18:25.423992Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
-      "sha256": "1374e218119af0656384d451e178f3ea1a9ff86d30f334aa43a08f3830d21c0b"
+      "sha256": "210384984a448c73cd3690f3f85d4d8bebf7bdeb1771824718a1c18bdd7da8cd"
     },
     "screenshot_review_gate": {
-      "generated_at": "2026-05-05T15:52:37.242320Z",
+      "generated_at": "2026-05-05T20:17:18.344672Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
-      "sha256": "9d6c0b49bae2f8e9bf32d7fc9c9c808429671e9f904dffd35ac027d91c758ad8"
+      "sha256": "c7de14b3940ff2343a1722a0f49c924124968d28353cff323d43cbb9401d04bd"
     },
     "section_host_ruleset_parity": {
       "generated_at": "2026-04-23T15:52:14.898217Z",
@@ -210,10 +181,10 @@
       "sha256": "bea6baea26fb0b81a2fc7b32e5619490bd09385b2712e94fc7c2cc64837efbf5"
     },
     "successor_registry": {
-      "generated_at": "2026-05-05T19:54:39Z",
+      "generated_at": "2026-05-05T20:41:04Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "7c33e6af9c6b3701b5d8d1372f6e226510c7dc2d553df46734926b0d1692ac2f"
+      "sha256": "bf9dc975378d01ef8824505b97d0011ce2e52766fd8364063f0d0dadad92457f"
     },
     "workflow_pack": {
       "generated_at": "2026-05-05T19:51:57Z",

@@ -11,6 +11,21 @@ import yaml
 
 
 SCRIPT = Path("/docker/fleet/scripts/materialize_next90_m143_fleet_route_local_output_closeout_gates.py")
+QUEUE_PROOF = [
+    "/docker/fleet/scripts/materialize_next90_m143_fleet_route_local_output_closeout_gates.py",
+    "/docker/fleet/scripts/verify_next90_m143_fleet_route_local_output_closeout_gates.py",
+    "/docker/fleet/tests/test_materialize_next90_m143_fleet_route_local_output_closeout_gates.py",
+    "/docker/fleet/tests/test_verify_next90_m143_fleet_route_local_output_closeout_gates.py",
+    "/docker/fleet/.codex-studio/published/NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.json",
+    "/docker/fleet/.codex-studio/published/NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.md",
+    "/docker/fleet/feedback/2026-05-05-next90-m143-fleet-route-local-output-closeout.md",
+]
+REGISTRY_EVIDENCE = [
+    "/docker/fleet/scripts/materialize_next90_m143_fleet_route_local_output_closeout_gates.py and /docker/fleet/scripts/verify_next90_m143_fleet_route_local_output_closeout_gates.py now fail closed when milestone 143 families rely on broad family prose, missing outputs, or reopened canonical closeout metadata instead of route-local output receipts.",
+    "/docker/fleet/tests/test_materialize_next90_m143_fleet_route_local_output_closeout_gates.py and /docker/fleet/tests/test_verify_next90_m143_fleet_route_local_output_closeout_gates.py now cover route-local output evidence requirements plus canonical closeout metadata so stale or reopened rows break the gate.",
+    "/docker/fleet/.codex-studio/published/NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.json and /docker/fleet/.codex-studio/published/NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.md record the current pass state for print/export/exchange and SR6 supplement/house-rule families against route-local receipts and output proof surfaces.",
+    "python3 scripts/materialize_next90_m143_fleet_route_local_output_closeout_gates.py, python3 scripts/verify_next90_m143_fleet_route_local_output_closeout_gates.py --json, and python3 -m unittest tests.test_materialize_next90_m143_fleet_route_local_output_closeout_gates tests.test_verify_next90_m143_fleet_route_local_output_closeout_gates all exit 0.",
+]
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -28,12 +43,20 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _registry() -> dict:
-    return {"milestones": [{"id": 143, "work_tasks": [{"id": "143.6", "owner": "fleet"}]}]}
+def _registry(*, closeout_complete: bool) -> dict:
+    row = {
+        "id": "143.6",
+        "owner": "fleet",
+        "title": "Fail closeout when these families remain green only by broad family prose, missing outputs, or stale route-local receipts.",
+    }
+    if closeout_complete:
+        row["status"] = "complete"
+        row["evidence"] = list(REGISTRY_EVIDENCE)
+    return {"milestones": [{"id": 143, "work_tasks": [row]}]}
 
 
-def _queue_item() -> dict:
-    return {
+def _queue_item(*, closeout_complete: bool) -> dict:
+    row = {
         "title": "Fail closeout when these families remain green only by broad family prose, missing outputs, or stale route-local receipts.",
         "task": "Fail closeout when these families remain green only by broad family prose, missing outputs, or stale route-local receipts.",
         "package_id": "next90-m143-fleet-fail-closeout-when-these-families-remain-green-only-by-broad-family-pr",
@@ -45,6 +68,17 @@ def _queue_item() -> dict:
         "allowed_paths": ["scripts", "tests", ".codex-studio", "feedback"],
         "owned_surfaces": ["fail_closeout_when_these_families_remain_green_only_by_b:fleet"],
     }
+    if closeout_complete:
+        row["status"] = "complete"
+        row["completion_action"] = "verify_closed_package_only"
+        row["landed_commit"] = "unlanded"
+        row["do_not_reopen_reason"] = (
+            "M143 fleet route-local output closeout gate is complete; future shards must verify the repo-local gate scripts, "
+            "generated proof artifacts, and canonical queue/registry mirrors instead of reopening print or export or exchange "
+            "and SR6 supplement or house-rule parity closeout by broad family prose."
+        )
+        row["proof"] = list(QUEUE_PROOF)
+    return row
 
 
 def _workflow_pack_payload() -> dict:
@@ -129,7 +163,7 @@ def _parity_rows(*, direct: bool) -> list[dict]:
     ]
 
 
-def _fixture_tree(tmp_path: Path, *, direct: bool) -> dict[str, Path]:
+def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = True) -> dict[str, Path]:
     registry = tmp_path / "registry.yaml"
     fleet_queue = tmp_path / "fleet_queue.yaml"
     design_queue = tmp_path / "design_queue.yaml"
@@ -143,9 +177,9 @@ def _fixture_tree(tmp_path: Path, *, direct: bool) -> dict[str, Path]:
     rule_studio = tmp_path / "rule_studio.json"
     core_doc = tmp_path / "core_doc.md"
 
-    _write_yaml(registry, _registry())
-    _write_yaml(fleet_queue, {"items": [_queue_item()]})
-    _write_yaml(design_queue, {"items": [_queue_item()]})
+    _write_yaml(registry, _registry(closeout_complete=closeout_complete))
+    _write_yaml(fleet_queue, {"items": [_queue_item(closeout_complete=closeout_complete)]})
+    _write_yaml(design_queue, {"items": [_queue_item(closeout_complete=closeout_complete)]})
     _write_text(
         guide,
         "## Wave 22P - close human-tested parity proof and desktop executable trust before successor breadth\n"
@@ -315,6 +349,41 @@ class MaterializeNext90M143FleetRouteLocalOutputCloseoutGatesTest(unittest.TestC
                 "family prose" in item or "route-local receipts" in item or "receipt:workspace_exchange" in item
                 for item in payload["monitor_summary"]["runtime_blockers"]
             )
+
+    def test_materializer_fails_when_closeout_metadata_is_not_complete(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, direct=True, closeout_complete=False)
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--output", str(artifact),
+                    "--markdown-output", str(markdown),
+                    "--successor-registry", str(fixture["registry"]),
+                    "--fleet-queue-staging", str(fixture["fleet_queue"]),
+                    "--design-queue-staging", str(fixture["design_queue"]),
+                    "--next90-guide", str(fixture["guide"]),
+                    "--workflow-pack", str(fixture["workflow_pack"]),
+                    "--parity-audit", str(fixture["parity_audit"]),
+                    "--screenshot-review-gate", str(fixture["screenshot_gate"]),
+                    "--desktop-visual-familiarity-gate", str(fixture["visual_gate"]),
+                    "--section-host-ruleset-parity", str(fixture["section_host"]),
+                    "--generated-dialog-parity", str(fixture["dialog_parity"]),
+                    "--m114-rule-studio", str(fixture["rule_studio"]),
+                    "--core-m143-receipts-doc", str(fixture["core_doc"]),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            assert payload["status"] == "fail"
+            assert payload["package_closeout"]["ready"] is False
+            assert any("status must be complete" in item or "queue status drifted" in item for item in payload["package_closeout"]["reasons"])
 
 
 if __name__ == "__main__":
