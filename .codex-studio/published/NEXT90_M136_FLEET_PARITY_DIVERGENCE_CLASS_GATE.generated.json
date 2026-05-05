@@ -1,0 +1,144 @@
+{
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "canonical_monitors": {
+    "divergence_contract": {
+      "allowed_divergence_classes": [
+        "must_match",
+        "may_improve",
+        "may_remove_if_non_degrading"
+      ],
+      "issues": [],
+      "state": "pass"
+    },
+    "flagship_product_bar": {
+      "checks": {
+        "may_improve": true,
+        "may_remove_if_non_degrading": true,
+        "must_match": true,
+        "release_proof_classifies_intentional_divergence": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "next90_guide": {
+      "checks": {
+        "milestone_136": true,
+        "wave_23": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "parity_spec": {
+      "checks": {
+        "may_improve": true,
+        "may_remove_if_non_degrading": true,
+        "must_match": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "queue_alignment": {
+      "issues": [],
+      "state": "pass",
+      "warnings": [
+        "Fleet queue mirror row is still missing for work task 136.16."
+      ]
+    }
+  },
+  "contract_name": "fleet.next90_m136_parity_divergence_class_gate",
+  "frontier_id": 2977536653,
+  "generated_at": "2026-05-05T15:49:30Z",
+  "milestone_id": 136,
+  "monitor_summary": {
+    "classified_delta_count": 0,
+    "delta_row_count": 0,
+    "divergence_status": "warning",
+    "runtime_blocker_count": 0,
+    "runtime_blockers": [],
+    "unclassified_delta_count": 0,
+    "warning_count": 1
+  },
+  "owned_surfaces": [
+    "fail_parity_closeout_when_remaining_deltas_are_not_class:fleet"
+  ],
+  "package_closeout": {
+    "blockers": [],
+    "state": "pass",
+    "warnings": [
+      "Fleet queue mirror row is still missing for work task 136.16."
+    ]
+  },
+  "package_id": "next90-m136-fleet-fail-parity-closeout-when-remaining-deltas-are-not-classified-as-must",
+  "queue_title": "Fail parity closeout when remaining deltas are not classified as must-match, may-improve, or may-remove-if-non-degrading in the audit artifacts.",
+  "runtime_monitors": {
+    "classification": {
+      "classified_delta_ids": [],
+      "invalid_classifications": [],
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass",
+      "unclassified_delta_ids": []
+    },
+    "delta_rows": {
+      "delta_rows": [],
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass"
+    }
+  },
+  "source_inputs": {
+    "design_queue_staging": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "11cc1ecd96db0176604771f8f6f398998db558b6167a3e2bd37140a2124ddca6"
+    },
+    "flagship_product_bar": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PRODUCT_BAR.md",
+      "sha256": "8d450f2175f2bd290975db12c0deddbf6e26a3415bec20e906f1ac38cd01c84e"
+    },
+    "flagship_readiness_planes": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_READINESS_PLANES.yaml",
+      "sha256": "b4bd6b9ef9cc85be2fc4aff49dd713d88199cc1699fea8110fbde98f4272344f"
+    },
+    "flagship_release_acceptance": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_RELEASE_ACCEPTANCE.yaml",
+      "sha256": "a8e767c4d1b326f9e53fa34d7edc10814783cfe83270148c786c2adaa0729cc3"
+    },
+    "fleet_queue_staging": {
+      "generated_at": "",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "6da82d05213bc6ae4f536f75debf5dab04463c91c9b2992df970d392bd3972b1"
+    },
+    "next90_guide": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
+      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+    },
+    "parity_audit": {
+      "generated_at": "2026-05-05T15:48:48.580323Z",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
+      "sha256": "f467d80b462cb569ecac4402fc3f338dd7251181946b724d5a5898147c12ad03"
+    },
+    "parity_spec": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/CHUMMER5A_HUMAN_PARITY_ACCEPTANCE_SPEC.md",
+      "sha256": "d5bf2c75da97fce584ea56e971da3a3316b516aa04cc0693b76f484323477ead"
+    },
+    "successor_registry": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "641255112587cbec2c7c43a37dda5a90f6f59e0d2775206517fede2695c233e3"
+    }
+  },
+  "status": "pass",
+  "wave": "W23",
+  "work_task_id": "136.16"
+}
