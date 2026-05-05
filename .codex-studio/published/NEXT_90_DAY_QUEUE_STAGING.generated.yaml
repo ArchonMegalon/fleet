@@ -5707,4 +5707,33 @@ items:
   - feedback
   owned_surfaces:
   - bind_ready_for_tonight_gates_role_kit_registry_vtt_expor:fleet
+- title: Fail closeout when runner-passport proof, weekly dispatch cadence, creator operating-system fields, or LTD cadence
+    bindings are stale, missing, or contradicted by public posture.
+  task: Fail closeout when runner-passport proof, weekly dispatch cadence, creator operating-system fields, or LTD cadence
+    bindings are stale, missing, or contradicted by public posture.
+  package_id: next90-m140-fleet-fail-closeout-when-runner-passport-proof-weekly-dispatch-cadence-creat
+  work_task_id: '140.9'
+  frontier_id: 4145512253
+  milestone_id: 140
+  status: complete
+  wave: W27
+  repo: fleet
+  completion_action: verify_closed_package_only
+  landed_commit: unlanded
+  do_not_reopen_reason: M140 Fleet portability and cadence closeout gates are complete; future shards must verify the repo-local gate scripts, generated proof packet, and canonical queue mirrors instead of reopening runner-passport, dispatch cadence, creator operating-system, or LTD cadence closure through broad public posture prose.
+  proof:
+  - /docker/fleet/scripts/materialize_next90_m140_fleet_portability_and_cadence_closeout_gates.py
+  - /docker/fleet/scripts/verify_next90_m140_fleet_portability_and_cadence_closeout_gates.py
+  - /docker/fleet/tests/test_materialize_next90_m140_fleet_portability_and_cadence_closeout_gates.py
+  - /docker/fleet/tests/test_verify_next90_m140_fleet_portability_and_cadence_closeout_gates.py
+  - /docker/fleet/.codex-studio/published/NEXT90_M140_FLEET_PORTABILITY_AND_CADENCE_CLOSEOUT_GATES.generated.json
+  - /docker/fleet/.codex-studio/published/NEXT90_M140_FLEET_PORTABILITY_AND_CADENCE_CLOSEOUT_GATES.generated.md
+  - /docker/fleet/feedback/2026-05-05-next90-m140-fleet-portability-and-cadence-closeout.md
+  allowed_paths:
+  - scripts
+  - tests
+  - .codex-studio
+  - feedback
+  owned_surfaces:
+  - fail_closeout_when_runner_passport_proof_weekly_dispatch:fleet
 source_queue_fingerprint: 433cdfebb5d8504552c5cea941d1217970cac13840edd39e02ae392c785b1551

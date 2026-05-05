@@ -44,9 +44,7 @@
     "queue_alignment": {
       "issues": [],
       "state": "pass",
-      "warnings": [
-        "Fleet queue mirror row is still missing for work task 140.9."
-      ]
+      "warnings": []
     },
     "roadmap": {
       "checks": {
@@ -84,7 +82,7 @@
   },
   "contract_name": "fleet.next90_m140_portability_and_cadence_closeout_gates",
   "frontier_id": 4145512253,
-  "generated_at": "2026-05-05T19:13:58Z",
+  "generated_at": "2026-05-05T21:12:47Z",
   "milestone_id": 140,
   "monitor_summary": {
     "bounded_card_count": 1,
@@ -92,7 +90,7 @@
     "portability_and_cadence_closeout_status": "warning",
     "runtime_blocker_count": 0,
     "runtime_blockers": [],
-    "warning_count": 5
+    "warning_count": 4
   },
   "owned_surfaces": [
     "fail_closeout_when_runner_passport_proof_weekly_dispatch:fleet"
@@ -101,7 +99,6 @@
     "blockers": [],
     "state": "pass",
     "warnings": [
-      "Fleet queue mirror row is still missing for work task 140.9.",
       "FAQ.md does not yet mention creator posture in markdown form.",
       "No dedicated published `runner_passport` proof artifact is present yet.",
       "No dedicated published `world_dispatch` proof artifact is present yet.",
@@ -130,8 +127,8 @@
       ]
     },
     "flagship_readiness_alignment": {
-      "flagship_ready_status": "ready",
-      "generated_at": "2026-05-05T19:13:57Z",
+      "flagship_ready_status": "missing",
+      "generated_at": "2026-05-05T21:00:44Z",
       "issues": [],
       "runtime_blockers": [],
       "state": "pass"
@@ -148,24 +145,24 @@
   },
   "source_inputs": {
     "creator_operating_system": {
-      "generated_at": "2026-05-05T09:14:29Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/CREATOR_OPERATING_SYSTEM.md",
       "sha256": "35bf556cae9ff8bfc947fe10b49eb3d383099a953205d51fe42f27b100c4501a"
     },
     "design_queue_staging": {
-      "generated_at": "2026-05-05T17:41:28Z",
+      "generated_at": "2026-05-05T21:12:47Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "457ddf48178289c8089eb8d9ed944f1c0ecdb4edce45bc5bf53b6d99e4589422"
+      "sha256": "2f160b9708bc961e51775317efcb2bfcb027e0081d5ceabed07b84e8792bdb53"
     },
     "flagship_readiness": {
-      "generated_at": "2026-05-05T19:13:57Z",
+      "generated_at": "2026-05-05T21:00:44Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "9008edfc384868ff986d4bd67af1c855790ff59200df941e0eb816a9c0ad99f9"
+      "sha256": "fdebae7f492da2296446197c556733eddc95c217ee1e961bbcc5a7dfad948719"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-05-05T17:41:28Z",
+      "generated_at": "2026-05-05T21:12:47Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "e51913570323410871918a66d7d5774cc099d5b566192d05a84bfb56b221eeaa"
+      "sha256": "661e2df6d0d97211458441087fe37fd68073f64dd3915e7755112bd520bee33d"
     },
     "ltd_cadence_registry": {
       "generated_at": "2026-05-01T04:25:57Z",
@@ -183,7 +180,7 @@
       "sha256": "37b15f1b8d6105513c6cb675adc55bbe75192dd57d5b5a461161c826d50d6a3e"
     },
     "next90_guide": {
-      "generated_at": "2026-05-04T02:57:07Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
       "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
     },
@@ -208,7 +205,7 @@
       "sha256": "104c46bc68365be611735b6c6a4fc16a983eb87d7df2821f86e60e43affe3ce6"
     },
     "roadmap": {
-      "generated_at": "2026-05-03T18:50:24Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md",
       "sha256": "0563a1a363406fed29d2fba61ca8b638c383b0bba1abb4747d9b21b918f27da0"
     },
@@ -223,9 +220,9 @@
       "sha256": "85c536a2da90d6e61724918ec94580dbd7e5b644efe3ad97bec4a0b196da3d50"
     },
     "successor_registry": {
-      "generated_at": "2026-05-05T17:41:28Z",
+      "generated_at": "2026-05-05T20:56:27Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "65b71c750244782127e2dfb9b2aa7cf25050ac1ce5f35ef87d6870cee25aea1f"
+      "sha256": "9f4f93305afddf9cf95c2b515c6e9ceced71e435389e2a49fc0e0bc4f19395c7"
     },
     "world_dispatch_doc": {
       "generated_at": "2026-05-01T04:25:57Z",
