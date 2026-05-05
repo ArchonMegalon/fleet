@@ -23,6 +23,11 @@ def _write_yaml(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
+def _write_generated_queue_overlay(path: Path, item: dict) -> None:
+    payload = yaml.safe_dump({"items": [item]}, sort_keys=False)
+    _write_text(path, "- title: overlay legacy row\nmode: append\n" + payload)
+
+
 def _registry(*, deterministic_gate_status: str) -> dict:
     return {
         "program_wave": "next_90_day_product_advance",
@@ -193,6 +198,18 @@ class MaterializeNext90M132FleetDeterministicHorizonQueueTest(unittest.TestCase)
         self.assertTrue(monitor["deterministic_design_gate_task_done"])
         self.assertEqual(monitor["blocked_deterministic_queue_item_count"], 0)
         self.assertEqual(monitor["ready_deterministic_queue_item_count"], 1)
+
+    def test_reads_generated_queue_overlay_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, deterministic_gate_status="complete", complete_handoff=True)
+            _write_generated_queue_overlay(fixture["queue"], _queue_item())
+            _write_generated_queue_overlay(fixture["design_queue"], _queue_item())
+            payload = self._run_materializer(fixture, tmp_path / "artifact.json")
+
+        self.assertEqual(payload["status"], "pass")
+        self.assertFalse(any("Fleet queue row is missing." in blocker for blocker in payload["package_closeout"]["blockers"]))
+        self.assertFalse(any("Design queue row is missing." in blocker for blocker in payload["package_closeout"]["blockers"]))
 
 
 if __name__ == "__main__":
