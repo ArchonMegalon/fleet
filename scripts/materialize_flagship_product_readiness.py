@@ -100,6 +100,9 @@ DEFAULT_M139_OPERATIONAL_TRUST_CLOSEOUT_GATE = (
 DEFAULT_M140_PORTABILITY_AND_CADENCE_CLOSEOUT_GATE = (
     ROOT / ".codex-studio" / "published" / "NEXT90_M140_FLEET_PORTABILITY_AND_CADENCE_CLOSEOUT_GATES.generated.json"
 )
+DEFAULT_M141_IMPORT_ROUTE_CLOSEOUT_GATE = (
+    ROOT / ".codex-studio" / "published" / "NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.json"
+)
 DEFAULT_EXTERNAL_PROOF_RUNBOOK = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
 DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR = ROOT / ".codex-studio" / "published" / "external-proof-commands"
 DEFAULT_PARITY_LAB_DOCS_ROOT = ROOT / "docs" / "chummer5a-oracle"
@@ -510,6 +513,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--m140-portability-and-cadence-closeout-gate",
         default=str(DEFAULT_M140_PORTABILITY_AND_CADENCE_CLOSEOUT_GATE),
         help="path to NEXT90_M140_FLEET_PORTABILITY_AND_CADENCE_CLOSEOUT_GATES.generated.json",
+    )
+    parser.add_argument(
+        "--m141-import-route-closeout-gate",
+        default=str(DEFAULT_M141_IMPORT_ROUTE_CLOSEOUT_GATE),
+        help="path to NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.json",
     )
     parser.add_argument(
         "--external-proof-runbook",
@@ -1051,6 +1059,44 @@ def _m140_portability_and_cadence_closeout_gate_audit(payload: Dict[str, Any]) -
         "ready": not reasons,
         "status": status,
         "portability_and_cadence_closeout_status": portability_and_cadence_closeout_status,
+        "runtime_blockers": runtime_blockers,
+        "generated_at": generated_at,
+        "reasons": reasons,
+    }
+
+
+def _m141_import_route_closeout_gate_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
+    reasons: List[str] = []
+    if not payload:
+        reasons.append("M141 import-route closeout gate is missing.")
+        return {
+            "ready": False,
+            "status": "",
+            "import_route_closeout_status": "",
+            "generated_at": "",
+            "reasons": reasons,
+        }
+    status = str(payload.get("status") or "").strip().lower()
+    monitor_summary = dict(payload.get("monitor_summary") or {})
+    import_route_closeout_status = str(monitor_summary.get("import_route_closeout_status") or "").strip().lower()
+    runtime_blockers = [
+        str(item).strip()
+        for item in (monitor_summary.get("runtime_blockers") or [])
+        if str(item).strip()
+    ]
+    generated_at = str(payload.get("generated_at") or payload.get("generatedAt") or "").strip()
+    if status != "pass":
+        reasons.append("M141 import-route closeout gate package is not passing.")
+    if import_route_closeout_status not in {"pass", "ready"} and (
+        import_route_closeout_status != "warning" or runtime_blockers
+    ):
+        reasons.append("M141 import-route closeout gate still reports blocked runtime proof.")
+    if not generated_at:
+        reasons.append("M141 import-route closeout gate generated_at is missing.")
+    return {
+        "ready": not reasons,
+        "status": status,
+        "import_route_closeout_status": import_route_closeout_status,
         "runtime_blockers": runtime_blockers,
         "generated_at": generated_at,
         "reasons": reasons,
@@ -3894,6 +3940,7 @@ def build_flagship_product_readiness_payload(
     m138_hero_path_closeout_gate_path: Path = DEFAULT_M138_HERO_PATH_CLOSEOUT_GATE,
     m139_operational_trust_closeout_gate_path: Path = DEFAULT_M139_OPERATIONAL_TRUST_CLOSEOUT_GATE,
     m140_portability_and_cadence_closeout_gate_path: Path = DEFAULT_M140_PORTABILITY_AND_CADENCE_CLOSEOUT_GATE,
+    m141_import_route_closeout_gate_path: Path = DEFAULT_M141_IMPORT_ROUTE_CLOSEOUT_GATE,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
     effective_acceptance_path, acceptance = load_acceptance_with_fallback(acceptance_path)
@@ -3975,6 +4022,8 @@ def build_flagship_product_readiness_payload(
     m140_portability_and_cadence_closeout_gate_audit = _m140_portability_and_cadence_closeout_gate_audit(
         m140_portability_and_cadence_closeout_gate
     )
+    m141_import_route_closeout_gate = load_json(m141_import_route_closeout_gate_path)
+    m141_import_route_closeout_gate_audit = _m141_import_route_closeout_gate_audit(m141_import_route_closeout_gate)
     effective_external_proof_runbook_path = (
         external_proof_runbook_path if external_proof_runbook_path is not None else support_packets_path.parent / DEFAULT_EXTERNAL_PROOF_RUNBOOK.name
     )
@@ -7948,6 +7997,8 @@ def build_flagship_product_readiness_payload(
         flagship_plane_reasons.append("M139 operational trust closeout gate is not ready.")
     if not bool(m140_portability_and_cadence_closeout_gate_audit.get("ready")):
         flagship_plane_reasons.append("M140 portability/cadence closeout gate is not ready.")
+    if not bool(m141_import_route_closeout_gate_audit.get("ready")):
+        flagship_plane_reasons.append("M141 import-route closeout gate is not ready.")
     flagship_plane_status, flagship_plane = _coverage_entry(
         positives=(
             int(len(coverage_gap_keys) == 0)
@@ -7972,6 +8023,7 @@ def build_flagship_product_readiness_payload(
             + int(bool(m138_hero_path_closeout_gate_audit.get("ready")))
             + int(bool(m139_operational_trust_closeout_gate_audit.get("ready")))
             + int(bool(m140_portability_and_cadence_closeout_gate_audit.get("ready")))
+            + int(bool(m141_import_route_closeout_gate_audit.get("ready")))
         ),
         reasons=flagship_plane_reasons,
         summary_ready="Flagship replacement truth is fully green.",
@@ -8062,6 +8114,16 @@ def build_flagship_product_readiness_payload(
             "m140_portability_and_cadence_closeout_gate_reasons": list(
                 m140_portability_and_cadence_closeout_gate_audit.get("reasons") or []
             ),
+            "m141_import_route_closeout_gate_path": str(m141_import_route_closeout_gate_path),
+            "m141_import_route_closeout_gate_ready": bool(m141_import_route_closeout_gate_audit.get("ready")),
+            "m141_import_route_closeout_gate_status": str(m141_import_route_closeout_gate_audit.get("status") or ""),
+            "m141_import_route_closeout_monitor_status": str(
+                m141_import_route_closeout_gate_audit.get("import_route_closeout_status") or ""
+            ),
+            "m141_import_route_closeout_gate_generated_at": str(
+                m141_import_route_closeout_gate_audit.get("generated_at") or ""
+            ),
+            "m141_import_route_closeout_gate_reasons": list(m141_import_route_closeout_gate_audit.get("reasons") or []),
             "readiness_plane_contract_path": str(effective_flagship_readiness_planes_path),
             "readiness_plane_contract_present": bool(flagship_readiness_planes),
             "readiness_plane_contract_ids": declared_readiness_plane_ids,
@@ -8377,6 +8439,7 @@ def materialize_flagship_product_readiness(
     m138_hero_path_closeout_gate_path: Path = DEFAULT_M138_HERO_PATH_CLOSEOUT_GATE,
     m139_operational_trust_closeout_gate_path: Path = DEFAULT_M139_OPERATIONAL_TRUST_CLOSEOUT_GATE,
     m140_portability_and_cadence_closeout_gate_path: Path = DEFAULT_M140_PORTABILITY_AND_CADENCE_CLOSEOUT_GATE,
+    m141_import_route_closeout_gate_path: Path = DEFAULT_M141_IMPORT_ROUTE_CLOSEOUT_GATE,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
     payload = build_flagship_product_readiness_payload(
@@ -8392,6 +8455,7 @@ def materialize_flagship_product_readiness(
         m138_hero_path_closeout_gate_path=m138_hero_path_closeout_gate_path,
         m139_operational_trust_closeout_gate_path=m139_operational_trust_closeout_gate_path,
         m140_portability_and_cadence_closeout_gate_path=m140_portability_and_cadence_closeout_gate_path,
+        m141_import_route_closeout_gate_path=m141_import_route_closeout_gate_path,
         external_proof_runbook_path=external_proof_runbook_path,
         supervisor_state_path=supervisor_state_path,
         ooda_state_path=ooda_state_path,
@@ -8459,6 +8523,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         m138_hero_path_closeout_gate_path=Path(args.m138_hero_path_closeout_gate).resolve(),
         m139_operational_trust_closeout_gate_path=Path(args.m139_operational_trust_closeout_gate).resolve(),
         m140_portability_and_cadence_closeout_gate_path=Path(args.m140_portability_and_cadence_closeout_gate).resolve(),
+        m141_import_route_closeout_gate_path=Path(args.m141_import_route_closeout_gate).resolve(),
         feedback_loop_gate_path=Path(args.feedback_loop_gate).resolve(),
         external_proof_runbook_path=Path(args.external_proof_runbook).resolve() if str(args.external_proof_runbook or "").strip() else None,
         supervisor_state_path=Path(args.supervisor_state).resolve(),
