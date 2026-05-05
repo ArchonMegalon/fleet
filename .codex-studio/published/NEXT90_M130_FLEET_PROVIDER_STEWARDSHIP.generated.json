@@ -1,0 +1,365 @@
+{
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "canonical_alignment": {
+    "design_queue_status": "not_started",
+    "fleet_queue_status": "not_started",
+    "issues": [],
+    "registry_status": "not_started",
+    "state": "pass",
+    "work_task_status": "",
+    "work_task_title": "Add provider-health, credit-runway, kill-switch, fallback, and route-stewardship monitors for all governed external tools."
+  },
+  "canonical_monitors": {
+    "external_tools_plane": {
+      "checks": {
+        "activation_verification": true,
+        "fallback_behavior_exists": true,
+        "kill_switch_exists": true,
+        "kill_switch_rule": true,
+        "public_widget_fallback": true,
+        "release_gate_rule": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "governed_tool_inventory": {
+      "bounded_tool_count": 8,
+      "external_tools_plane_inventory_count": 40,
+      "fleet_assigned_tools": [
+        "ClickRank",
+        "NextStep",
+        "ProductLift",
+        "Signitic"
+      ],
+      "issues": [],
+      "non_product_tool_count": 1,
+      "promoted_tool_count": 27,
+      "research_tool_count": 1,
+      "state": "pass"
+    },
+    "provider_route_stewardship": {
+      "checks": {
+        "canary_before_default": true,
+        "fallback_hygiene": true,
+        "kill_switch_rule": true,
+        "lane_specific_benchmark": true,
+        "publish_the_reason": true,
+        "rollback_target": true,
+        "weekly_provider_scan": true
+      },
+      "issues": [],
+      "state": "pass"
+    }
+  },
+  "contract_name": "fleet.next90_m130_provider_stewardship_monitor",
+  "frontier_id": 7382989835,
+  "generated_at": "2026-05-05T12:28:27Z",
+  "governor_monitors": {
+    "canary_reason": "Canary green on all active lanes",
+    "canary_state": "ready",
+    "current_launch_action": "freeze_launch",
+    "current_launch_reason": "Freeze launch expansion while 1 golden journey(s) remain blocked and journey health is blocked.",
+    "freeze_launch_state": "active",
+    "issues": [],
+    "provider_canary_gate": {
+      "observed": "Canary green on all active lanes",
+      "required": "Canary green on all active lanes",
+      "state": "ready"
+    },
+    "rollback_reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
+    "rollback_state": "armed",
+    "state": "pass",
+    "warnings": [
+      "Rollback posture remains armed.",
+      "Current launch action is freeze_launch."
+    ]
+  },
+  "milestone_id": 130,
+  "owned_surfaces": [
+    "add_provider_health_credit_runway:fleet"
+  ],
+  "package_closeout": {
+    "blockers": [],
+    "state": "pass",
+    "warnings": [
+      "Fallback coverage is thin for core, core_authority, core_booster, core_rescue, groundwork.",
+      "Rollback posture remains armed.",
+      "Current launch action is freeze_launch."
+    ]
+  },
+  "package_id": "next90-m130-fleet-add-provider-health-credit-runway-kill-switch-fallback-a",
+  "queue_task": "Add provider-health, credit-runway, kill-switch, fallback, and route-stewardship monitors for all governed external tools.",
+  "queue_title": "Add provider-health, credit-runway, kill-switch, fallback, and route-stewardship monitors for all governed external tools.",
+  "runtime_monitors": {
+    "credit_runway": {
+      "active_lease_count": 2,
+      "basis_quality": "estimated",
+      "basis_summary": "ea_onemin_manager.aggregate+runway+fleet_runtime_leases",
+      "days_remaining_including_next_topup_at_7d_avg": null,
+      "depletes_before_next_topup": null,
+      "free_credits": 0,
+      "hours_remaining_at_current_pace_no_topup": null,
+      "hours_remaining_including_next_topup_at_current_pace": null,
+      "hours_until_next_topup": null,
+      "issues": [],
+      "max_credits": null,
+      "next_topup_at": "",
+      "provider": "1min",
+      "remaining_percent_total": null,
+      "state": "pass",
+      "topup_amount": null,
+      "topup_eta_source": "",
+      "warnings": []
+    },
+    "provider_routes": {
+      "fallback_thin_count": 5,
+      "fallback_thin_lanes": [
+        "core",
+        "core_authority",
+        "core_booster",
+        "core_rescue",
+        "groundwork"
+      ],
+      "governed_route_count": 12,
+      "issues": [],
+      "revert_now_count": 0,
+      "revert_now_lanes": [],
+      "review_due_count": 0,
+      "review_due_lanes": [],
+      "routes": [
+        {
+          "challenger_route": "onemin",
+          "configured_slots": 0,
+          "default_route": "gemini_vortex",
+          "fallback_route": "magixai",
+          "lane": "easy",
+          "merge_review_required": false,
+          "posture": "safe_today",
+          "ready_slots": 0,
+          "remaining_text": "quota unknown",
+          "review_required": false,
+          "runway": "unknown",
+          "state": "missing"
+        },
+        {
+          "challenger_route": "onemin",
+          "configured_slots": 0,
+          "default_route": "gemini_vortex",
+          "fallback_route": "magixai",
+          "lane": "repair",
+          "merge_review_required": false,
+          "posture": "safe_today",
+          "ready_slots": 0,
+          "remaining_text": "quota unknown",
+          "review_required": false,
+          "runway": "unknown",
+          "state": "missing"
+        },
+        {
+          "challenger_route": "",
+          "configured_slots": 0,
+          "default_route": "gemini_vortex",
+          "fallback_route": "",
+          "lane": "groundwork",
+          "merge_review_required": false,
+          "posture": "fallback_thin",
+          "ready_slots": 0,
+          "remaining_text": "quota unknown",
+          "review_required": false,
+          "runway": "unknown",
+          "state": "missing"
+        },
+        {
+          "challenger_route": "onemin",
+          "configured_slots": 0,
+          "default_route": "gemini_vortex",
+          "fallback_route": "chatplayground",
+          "lane": "review_light",
+          "merge_review_required": false,
+          "posture": "safe_today",
+          "ready_slots": 0,
+          "remaining_text": "quota unknown",
+          "review_required": false,
+          "runway": "unknown",
+          "state": "missing"
+        },
+        {
+          "challenger_route": "",
+          "configured_slots": 0,
+          "default_route": "onemin",
+          "fallback_route": "",
+          "lane": "core",
+          "merge_review_required": true,
+          "posture": "fallback_thin",
+          "ready_slots": 0,
+          "remaining_text": "quota unknown",
+          "review_required": false,
+          "runway": "unknown",
+          "state": "unconfigured"
+        },
+        {
+          "challenger_route": "",
+          "configured_slots": 0,
+          "default_route": "onemin",
+          "fallback_route": "",
+          "lane": "core_authority",
+          "merge_review_required": true,
+          "posture": "fallback_thin",
+          "ready_slots": 0,
+          "remaining_text": "quota unknown",
+          "review_required": false,
+          "runway": "unknown",
+          "state": "unconfigured"
+        },
+        {
+          "challenger_route": "",
+          "configured_slots": 0,
+          "default_route": "onemin",
+          "fallback_route": "",
+          "lane": "core_booster",
+          "merge_review_required": true,
+          "posture": "fallback_thin",
+          "ready_slots": 0,
+          "remaining_text": "quota unknown",
+          "review_required": false,
+          "runway": "unknown",
+          "state": "unconfigured"
+        },
+        {
+          "challenger_route": "",
+          "configured_slots": 0,
+          "default_route": "onemin",
+          "fallback_route": "",
+          "lane": "core_rescue",
+          "merge_review_required": true,
+          "posture": "fallback_thin",
+          "ready_slots": 0,
+          "remaining_text": "quota unknown",
+          "review_required": false,
+          "runway": "unknown",
+          "state": "unconfigured"
+        },
+        {
+          "challenger_route": "onemin",
+          "configured_slots": 0,
+          "default_route": "gemini_vortex",
+          "fallback_route": "chatplayground",
+          "lane": "review_shard",
+          "merge_review_required": false,
+          "posture": "safe_today",
+          "ready_slots": 0,
+          "remaining_text": "quota unknown",
+          "review_required": false,
+          "runway": "unknown",
+          "state": "missing"
+        },
+        {
+          "challenger_route": "onemin",
+          "configured_slots": 0,
+          "default_route": "gemini_vortex",
+          "fallback_route": "chatplayground",
+          "lane": "audit_shard",
+          "merge_review_required": true,
+          "posture": "safe_today",
+          "ready_slots": 0,
+          "remaining_text": "quota unknown",
+          "review_required": false,
+          "runway": "unknown",
+          "state": "missing"
+        },
+        {
+          "challenger_route": "onemin",
+          "configured_slots": 0,
+          "default_route": "gemini_vortex",
+          "fallback_route": "chatplayground",
+          "lane": "jury",
+          "merge_review_required": true,
+          "posture": "safe_today",
+          "ready_slots": 0,
+          "remaining_text": "quota unknown",
+          "review_required": false,
+          "runway": "unknown",
+          "state": "missing"
+        },
+        {
+          "challenger_route": "",
+          "configured_slots": 0,
+          "default_route": "gemini_vortex",
+          "fallback_route": "chatplayground",
+          "lane": "survival",
+          "merge_review_required": false,
+          "posture": "safe_today",
+          "ready_slots": 0,
+          "remaining_text": "quota unknown",
+          "review_required": false,
+          "runway": "unknown",
+          "state": "unavailable"
+        }
+      ],
+      "state": "pass",
+      "warnings": [
+        "Fallback coverage is thin for core, core_authority, core_booster, core_rescue, groundwork."
+      ]
+    },
+    "runtime_healing_summary": {
+      "generated_at": "2026-05-05T12:28:20Z",
+      "service_count": 4,
+      "source_age_seconds": 7
+    }
+  },
+  "source_inputs": {
+    "admin_status": {
+      "generated_at": "2026-05-05T12:28:21Z",
+      "path": "/docker/fleet/.codex-studio/published/NEXT90_M130_FLEET_PROVIDER_STEWARDSHIP.admin_status.generated.json",
+      "sha256": "945d0031e50dcdfc16ddc2cafb73481b9dfe7fd91257d75810d4c1bd90c951f1"
+    },
+    "design_queue_staging": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "62c5e8834313c32c4c4a3940e41356cfd8bdc4e29c1e934326f477ab6bfd902c"
+    },
+    "external_tools_plane": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/EXTERNAL_TOOLS_PLANE.md",
+      "sha256": "7894c569ebd73445b42b900d067b615e1a842749951c175d501fd5d0620271ee"
+    },
+    "ltd_capability_map": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/LTD_CAPABILITY_MAP.md",
+      "sha256": "720129880358d676f1aa7cc49620e2b2bdca2f4995dbdd051c4316375d67b4b7"
+    },
+    "provider_credit": {
+      "generated_at": "2026-05-05T12:28:27Z",
+      "path": "/docker/fleet/.codex-studio/published/NEXT90_M130_FLEET_PROVIDER_STEWARDSHIP.provider_credit.generated.json",
+      "sha256": "366489dabbb317da77bba7f248d28605d4e1be4df566224e849e4790be303d48"
+    },
+    "provider_route_stewardship": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PROVIDER_AND_ROUTE_STEWARDSHIP.md",
+      "sha256": "a735b8d7088c88fe20ff82cf427479ae071420c8954348cccc4d9f9e5b401ea0"
+    },
+    "queue_staging": {
+      "generated_at": "",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "3a41483a51e5e58551a1a68276b435491700420e87045c8a73c1e87251b34d9a"
+    },
+    "successor_registry": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "de2f7890168687d9aae458529621e550fc383852d29a16b91302678595f3c5c7"
+    },
+    "weekly_governor_packet": {
+      "generated_at": "2026-05-05T12:24:42Z",
+      "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+      "sha256": "0d4ed271a6f678c94c6d1ffd83ef9736736e584504813be19c5578d2d79469cd"
+    }
+  },
+  "status": "pass",
+  "wave": "W19",
+  "work_task_id": "130.2"
+}

@@ -1,0 +1,30 @@
+{
+  "active_lease_count": 2,
+  "active_lease_count_source": "fleet_runtime_backfill",
+  "active_onemin_accounts": [
+    "acct-ea-core"
+  ],
+  "active_onemin_projects": [
+    "design",
+    "mobile"
+  ],
+  "basis_quality": "estimated",
+  "basis_summary": "ea_onemin_manager.aggregate+runway+fleet_runtime_leases",
+  "days_remaining_including_next_topup_at_7d_avg": null,
+  "depletes_before_next_topup": null,
+  "free_credits": 0,
+  "generated_at": "2026-05-05T12:28:27Z",
+  "hours_remaining_at_current_pace_no_topup": null,
+  "hours_remaining_including_next_topup_at_current_pace": null,
+  "hours_until_next_topup": null,
+  "last_actual_balance_check_at": null,
+  "latest_member_reconciliation_at": null,
+  "max_credits": null,
+  "next_topup_at": null,
+  "provider": "1min",
+  "remaining_percent_total": null,
+  "slot_count_with_billing_snapshot": 0,
+  "slot_count_with_member_reconciliation": 0,
+  "topup_amount": null,
+  "topup_eta_source": null
+}
