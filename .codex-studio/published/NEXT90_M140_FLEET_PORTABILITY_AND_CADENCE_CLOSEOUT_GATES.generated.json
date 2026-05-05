@@ -1,0 +1,244 @@
+{
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "canonical_monitors": {
+    "creator_operating_system": {
+      "checks": {
+        "breakage_posture": true,
+        "discoverability_not_endorsement": true,
+        "graveyard_warning": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "ltd_cadence_registry": {
+      "issues": [],
+      "state": "pass"
+    },
+    "ltd_cadence_system": {
+      "checks": {
+        "amplify": true,
+        "no_shadow_authority": true,
+        "receipt_mirror": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "ltd_runtime_registry": {
+      "issues": [],
+      "state": "pass"
+    },
+    "next90_guide": {
+      "checks": {
+        "exit_contract": true,
+        "milestone_140": true,
+        "wave_27": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "queue_alignment": {
+      "issues": [],
+      "state": "pass",
+      "warnings": [
+        "Fleet queue mirror row is still missing for work task 140.9."
+      ]
+    },
+    "roadmap": {
+      "checks": {
+        "ritual_value_overlay": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "runner_passport_acceptance": {
+      "issues": [],
+      "state": "pass"
+    },
+    "runner_passport_doc": {
+      "checks": {
+        "not_dossier": true,
+        "not_social_score": true,
+        "portable_proof": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "world_dispatch_doc": {
+      "checks": {
+        "receipt_projection": true,
+        "return_prompt": true,
+        "ticker": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "world_dispatch_gates": {
+      "issues": [],
+      "state": "pass"
+    }
+  },
+  "contract_name": "fleet.next90_m140_portability_and_cadence_closeout_gates",
+  "frontier_id": 4145512253,
+  "generated_at": "2026-05-05T19:13:58Z",
+  "milestone_id": 140,
+  "monitor_summary": {
+    "bounded_card_count": 1,
+    "dedicated_proof_slot_count": 4,
+    "portability_and_cadence_closeout_status": "warning",
+    "runtime_blocker_count": 0,
+    "runtime_blockers": [],
+    "warning_count": 5
+  },
+  "owned_surfaces": [
+    "fail_closeout_when_runner_passport_proof_weekly_dispatch:fleet"
+  ],
+  "package_closeout": {
+    "blockers": [],
+    "state": "pass",
+    "warnings": [
+      "Fleet queue mirror row is still missing for work task 140.9.",
+      "FAQ.md does not yet mention creator posture in markdown form.",
+      "No dedicated published `runner_passport` proof artifact is present yet.",
+      "No dedicated published `world_dispatch` proof artifact is present yet.",
+      "No dedicated published `creator_operating_system` proof artifact is present yet."
+    ]
+  },
+  "package_id": "next90-m140-fleet-fail-closeout-when-runner-passport-proof-weekly-dispatch-cadence-creat",
+  "queue_title": "Fail closeout when runner-passport proof, weekly dispatch cadence, creator operating-system fields, or LTD cadence bindings are stale, missing, or contradicted by public posture.",
+  "runtime_monitors": {
+    "direct_proof_presence": {
+      "evidence": {
+        "creator_operating_system": [],
+        "ltd_cadence": [
+          "NEXT90_M111_FLEET_INSTALL_AWARE_FOLLOWTHROUGH.generated.json"
+        ],
+        "runner_passport": [],
+        "world_dispatch": []
+      },
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass",
+      "warnings": [
+        "No dedicated published `runner_passport` proof artifact is present yet.",
+        "No dedicated published `world_dispatch` proof artifact is present yet.",
+        "No dedicated published `creator_operating_system` proof artifact is present yet."
+      ]
+    },
+    "flagship_readiness_alignment": {
+      "flagship_ready_status": "ready",
+      "generated_at": "2026-05-05T19:13:57Z",
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass"
+    },
+    "public_posture": {
+      "bounded_card_count": 1,
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass",
+      "warnings": [
+        "FAQ.md does not yet mention creator posture in markdown form."
+      ]
+    }
+  },
+  "source_inputs": {
+    "creator_operating_system": {
+      "generated_at": "2026-05-05T09:14:29Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/CREATOR_OPERATING_SYSTEM.md",
+      "sha256": "35bf556cae9ff8bfc947fe10b49eb3d383099a953205d51fe42f27b100c4501a"
+    },
+    "design_queue_staging": {
+      "generated_at": "2026-05-05T17:41:28Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "457ddf48178289c8089eb8d9ed944f1c0ecdb4edce45bc5bf53b6d99e4589422"
+    },
+    "flagship_readiness": {
+      "generated_at": "2026-05-05T19:13:57Z",
+      "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+      "sha256": "9008edfc384868ff986d4bd67af1c855790ff59200df941e0eb816a9c0ad99f9"
+    },
+    "fleet_queue_staging": {
+      "generated_at": "2026-05-05T17:41:28Z",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "e51913570323410871918a66d7d5774cc099d5b566192d05a84bfb56b221eeaa"
+    },
+    "ltd_cadence_registry": {
+      "generated_at": "2026-05-01T04:25:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/LTD_CADENCE_AND_FOLLOWTHROUGH_REGISTRY.yaml",
+      "sha256": "1de7f209c102c57fe8bcce4497fceeb084443021e13c386f0afbd261f7dd6d42"
+    },
+    "ltd_cadence_system": {
+      "generated_at": "2026-05-01T04:25:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/LTD_CADENCE_AND_FOLLOWTHROUGH_SYSTEM.md",
+      "sha256": "f80518f2ffdfd16336896e769b0d21e22b3b0e07bf06622fd0af31da4a55329f"
+    },
+    "ltd_runtime_registry": {
+      "generated_at": "2026-05-03T12:32:26Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/LTD_RUNTIME_AND_PROJECTION_REGISTRY.yaml",
+      "sha256": "37b15f1b8d6105513c6cb675adc55bbe75192dd57d5b5a461161c826d50d6a3e"
+    },
+    "next90_guide": {
+      "generated_at": "2026-05-04T02:57:07Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
+      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+    },
+    "public_faq": {
+      "generated_at": "2026-05-05T16:00:32Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/FAQ.md",
+      "sha256": "e2dfd9abccd3fae0ca6e216baefb1cdfb034a367aaeb7dbe3e8e2b608f27fb8c"
+    },
+    "public_faq_registry": {
+      "generated_at": "2026-05-04T10:39:41Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FAQ_REGISTRY.yaml",
+      "sha256": "845cfafde512693e38495696b391ec36eb70d7078db17f89560619f5350363ef"
+    },
+    "public_feature_registry": {
+      "generated_at": "2026-05-04T09:39:41Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FEATURE_REGISTRY.yaml",
+      "sha256": "cb90a2b1429a943a514d3627ae4ee208dcece66584caac1805aea152ff3ef9b8"
+    },
+    "public_landing_manifest": {
+      "generated_at": "2026-05-04T09:39:41Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_LANDING_MANIFEST.yaml",
+      "sha256": "104c46bc68365be611735b6c6a4fc16a983eb87d7df2821f86e60e43affe3ce6"
+    },
+    "roadmap": {
+      "generated_at": "2026-05-03T18:50:24Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md",
+      "sha256": "0563a1a363406fed29d2fba61ca8b638c383b0bba1abb4747d9b21b918f27da0"
+    },
+    "runner_passport_acceptance": {
+      "generated_at": "2026-05-01T04:25:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/RUNNER_PASSPORT_ACCEPTANCE.yaml",
+      "sha256": "accd2a1601d4d00ba1dd85d45c858f01f1aeda1a0bd26ce1f35d4d71846bba26"
+    },
+    "runner_passport_doc": {
+      "generated_at": "2026-05-01T04:25:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/RUNNER_PASSPORT_AND_CROSS_COMMUNITY_TRUST.md",
+      "sha256": "85c536a2da90d6e61724918ec94580dbd7e5b644efe3ad97bec4a0b196da3d50"
+    },
+    "successor_registry": {
+      "generated_at": "2026-05-05T17:41:28Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "65b71c750244782127e2dfb9b2aa7cf25050ac1ce5f35ef87d6870cee25aea1f"
+    },
+    "world_dispatch_doc": {
+      "generated_at": "2026-05-01T04:25:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/WORLD_DISPATCH_AND_REACTIVATION_LOOP.md",
+      "sha256": "ae26bcbd36258aaa02efc2d5b3ab40eb4f20d86d478b770b239698df30cf1267"
+    },
+    "world_dispatch_gates": {
+      "generated_at": "2026-05-01T04:25:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/WORLD_DISPATCH_REACTIVATION_GATES.yaml",
+      "sha256": "0d095a8d7badf2583c1ed48c4b62eccaacf6c5bff733aa21bc1c4123bfd08c37"
+    }
+  },
+  "status": "pass",
+  "wave": "W27",
+  "work_task_id": "140.9"
+}
