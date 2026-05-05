@@ -5,11 +5,14 @@
 - ready: `False`
 
 ## Runtime blockers
+- FLAGSHIP_PRODUCT_READINESS status is not `pass`.
+- FLAGSHIP_PRODUCT_READINESS coverage.desktop_client is not `ready`.
 - UI_WINDOWS_DESKTOP_EXIT_GATE still cites release channel version `run-20260502-105804` while live RELEASE_CHANNEL is `run-20260503-163502`.
 - Windows startup-smoke receipt version `run-20260502-105804` no longer matches live RELEASE_CHANNEL version `run-20260503-163502`.
 - Windows startup-smoke receipt version `run-20260502-105804` does not match the promoted Windows artifact version `run-20260503-163502`.
-- DESKTOP_EXECUTABLE_EXIT_GATE still cites release channel version `run-20260502-105804` while live RELEASE_CHANNEL is `run-20260503-163502`.
+- DESKTOP_EXECUTABLE_EXIT_GATE status is not `pass`.
+- DESKTOP_EXECUTABLE_EXIT_GATE local_blocking_findings_count is `11` instead of `0`.
 - Windows tuple proof is older than the live release-channel publish and is still carrying forward stale promoted-version truth.
 
 ## Warnings
-- Fleet queue mirror row is still missing for work task 144.4.
+- none

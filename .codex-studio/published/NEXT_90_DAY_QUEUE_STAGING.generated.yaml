@@ -5591,4 +5591,33 @@ items:
   - feedback
   owned_surfaces:
   - fail_closeout_when_these_families_remain_green_only_by_b:fleet
+- title: Fail closeout when desktop-client readiness is green without matching executable-gate, startup-smoke, and release-channel
+    tuple proof.
+  task: Fail closeout when desktop-client readiness is green without matching executable-gate, startup-smoke, and release-channel
+    tuple proof.
+  package_id: next90-m144-fleet-fail-closeout-when-desktop-client-readiness-is-green-without-matching
+  work_task_id: '144.4'
+  frontier_id: 4185937434
+  milestone_id: 144
+  status: complete
+  wave: W22P
+  repo: fleet
+  completion_action: verify_closed_package_only
+  landed_commit: unlanded
+  do_not_reopen_reason: M144 fleet desktop proof integrity closeout gate is complete; future shards must verify the repo-local guard scripts, generated proof artifacts, and canonical queue mirrors instead of reopening desktop-client readiness closure while executable-gate, startup-smoke, and release-channel tuple proof drift.
+  proof:
+  - /docker/fleet/scripts/materialize_next90_m144_fleet_desktop_proof_integrity_closeout_gates.py
+  - /docker/fleet/scripts/verify_next90_m144_fleet_desktop_proof_integrity_closeout_gates.py
+  - /docker/fleet/tests/test_materialize_next90_m144_fleet_desktop_proof_integrity_closeout_gates.py
+  - /docker/fleet/tests/test_verify_next90_m144_fleet_desktop_proof_integrity_closeout_gates.py
+  - /docker/fleet/.codex-studio/published/NEXT90_M144_FLEET_DESKTOP_PROOF_INTEGRITY_CLOSEOUT_GATES.generated.json
+  - /docker/fleet/.codex-studio/published/NEXT90_M144_FLEET_DESKTOP_PROOF_INTEGRITY_CLOSEOUT_GATES.generated.md
+  - /docker/fleet/feedback/2026-05-05-next90-m144-fleet-desktop-proof-integrity-closeout.md
+  allowed_paths:
+  - scripts
+  - tests
+  - .codex-studio
+  - feedback
+  owned_surfaces:
+  - fail_closeout_when_desktop_client_readiness_is_green_wit:fleet
 source_queue_fingerprint: 433cdfebb5d8504552c5cea941d1217970cac13840edd39e02ae392c785b1551
