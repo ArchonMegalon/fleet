@@ -1,0 +1,361 @@
+{
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "canonical_monitors": {
+    "campaign_adoption_flow": {
+      "checks": {
+        "public_promise": true,
+        "required_output": true,
+        "start_from_today": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "community_hub_public_guide": {
+      "checks": {
+        "desktop_boundary": true,
+        "discord_boundary": true,
+        "future_stage": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "faq_markdown": {
+      "checks": {
+        "vtt_answer": true,
+        "vtt_question": true,
+        "windows_answer": true,
+        "windows_question": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "faq_registry": {
+      "issues": [],
+      "monitored_entries": [
+        {
+          "answer_length": 226,
+          "question": "Would I need a Windows PC to join a run?"
+        },
+        {
+          "answer_length": 180,
+          "question": "Is Chummer trying to replace Discord or VTTs?"
+        }
+      ],
+      "monitored_entry_count": 2,
+      "state": "pass"
+    },
+    "foundry_first_handoff": {
+      "checks": {
+        "non_goal": true,
+        "proof_package": true,
+        "truth_boundary": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "next90_guide": {
+      "checks": {
+        "exit_contract": true,
+        "milestone_138": true,
+        "wave_25": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "open_run_journey": {
+      "checks": {
+        "handoff_truth": true,
+        "mobile_goal": true,
+        "status": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "public_onboarding_paths": {
+      "checks": {
+        "acceptance_rule": true,
+        "desktop_boundary": true,
+        "hero_path": true,
+        "required_capability": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "queue_alignment": {
+      "issues": [],
+      "state": "pass",
+      "warnings": [
+        "Fleet queue mirror row is still missing for work task 138.9."
+      ]
+    },
+    "ready_for_tonight_gates": {
+      "issues": [],
+      "monitored_gate_count": 3,
+      "monitored_gates": [
+        {
+          "id": "player_readiness_verdict",
+          "required_input_count": 4,
+          "required_output_count": 5
+        },
+        {
+          "id": "gm_readiness_verdict",
+          "required_input_count": 5,
+          "required_output_count": 6
+        },
+        {
+          "id": "organizer_publishability_verdict",
+          "required_input_count": 5,
+          "required_output_count": 5
+        }
+      ],
+      "state": "pass"
+    },
+    "ready_for_tonight_mode": {
+      "checks": {
+        "cta": true,
+        "not_dashboard": true,
+        "organizer_view": true,
+        "output_contract": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "roadmap": {
+      "checks": {
+        "hero_path": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "role_kit_registry": {
+      "issues": [],
+      "monitored_role_kit_count": 6,
+      "monitored_role_kits": [
+        {
+          "id": "decker_starter",
+          "must_answer_count": 4
+        },
+        {
+          "id": "face_starter",
+          "must_answer_count": 4
+        },
+        {
+          "id": "general_survivor_starter",
+          "must_answer_count": 4
+        },
+        {
+          "id": "mage_starter",
+          "must_answer_count": 4
+        },
+        {
+          "id": "rigger_starter",
+          "must_answer_count": 4
+        },
+        {
+          "id": "street_sam_starter",
+          "must_answer_count": 4
+        }
+      ],
+      "state": "pass"
+    },
+    "role_kits_and_starter_loadouts": {
+      "checks": {
+        "explain_rule": true,
+        "governed_decisions": true,
+        "product_use": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "source_aware_explain": {
+      "checks": {
+        "no_cloud_upload": true,
+        "promoted_routes": true,
+        "public_trust": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "vtt_export_target_acceptance": {
+      "issues": [],
+      "required_proof_count": 4,
+      "secondary_target_count": 3,
+      "state": "pass"
+    }
+  },
+  "contract_name": "fleet.next90_m138_hero_path_closeout_gates",
+  "frontier_id": 4764536356,
+  "generated_at": "2026-05-05T16:33:58Z",
+  "milestone_id": 138,
+  "monitor_summary": {
+    "bounded_faq_count": 2,
+    "hero_path_closeout_status": "warning",
+    "projection_runtime_blocker_count": 0,
+    "runtime_blocker_count": 0,
+    "runtime_blockers": [],
+    "warning_count": 1
+  },
+  "owned_surfaces": [
+    "fail_closeout_when_the_90_second_newcomer_path_ready_for:fleet"
+  ],
+  "package_closeout": {
+    "blockers": [],
+    "state": "pass",
+    "warnings": [
+      "Fleet queue mirror row is still missing for work task 138.9."
+    ]
+  },
+  "package_id": "next90-m138-fleet-fail-closeout-when-the-90-second-newcomer-path-ready-for-tonight-verdi",
+  "queue_title": "Fail closeout when the 90-second newcomer path, Ready for Tonight verdicts, adoption-confidence receipts, or Foundry-first handoff receipts are stale, missing, or contradicted by public posture.",
+  "runtime_monitors": {
+    "flagship_readiness_alignment": {
+      "flagship_ready_status": "ready",
+      "generated_at": "2026-05-05T16:33:23Z",
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass"
+    },
+    "hero_path_projections": {
+      "age_hours": 0.02,
+      "generated_at": "2026-05-05T16:32:41Z",
+      "issues": [],
+      "projection_statuses": {
+        "adoption_confidence": "pass",
+        "foundry_first_handoff": "pass",
+        "newcomer_path": "pass",
+        "ready_for_tonight": "pass"
+      },
+      "runtime_blockers": [],
+      "state": "pass",
+      "warnings": []
+    },
+    "public_posture": {
+      "bounded_faq_count": 2,
+      "issues": [],
+      "live_claiming_public_card_count": 0,
+      "runtime_blockers": [],
+      "state": "pass",
+      "warnings": []
+    }
+  },
+  "source_inputs": {
+    "campaign_adoption_flow": {
+      "generated_at": "2026-05-03T19:07:21Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/CAMPAIGN_ADOPTION_START_FROM_TODAY_FLOW.md",
+      "sha256": "7c44667d1d0d3eccc774caab94fff80487fb904664ce96b2beaca088ae68cccf"
+    },
+    "design_queue_staging": {
+      "generated_at": "2026-05-05T16:27:11Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "d1080b139470e531cedee381c64a2fff06cc852a39bd421bc235e04a0b6789e2"
+    },
+    "flagship_readiness": {
+      "generated_at": "2026-05-05T16:33:23Z",
+      "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+      "sha256": "d159d20d97115162348d5de41c0ab7bcda1c53399c9cc472b0f21fc262c89f44"
+    },
+    "fleet_queue_staging": {
+      "generated_at": "2026-05-05T16:27:11Z",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "09a457d276b9a3dc26f91b428df1878ea148435526a733190cfa4846e2f3c096"
+    },
+    "foundry_first_handoff": {
+      "generated_at": "2026-04-30T21:57:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/FOUNDRY_FIRST_VTT_HANDOFF_PROOF.md",
+      "sha256": "9640961e364d41667dc92a42a8ceecf0f36086158da05036e1811734c9bf833b"
+    },
+    "hero_path_projections": {
+      "generated_at": "2026-05-05T16:32:41Z",
+      "path": "/docker/fleet/.codex-studio/published/NEXT90_M138_FLEET_HERO_PATH_PROJECTIONS.generated.json",
+      "sha256": "17e7cb399c9afb92bf987d07060ee32dbfc25f6a57f40559e13d3f41c938175e"
+    },
+    "next90_guide": {
+      "generated_at": "2026-05-04T02:57:07Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
+      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+    },
+    "open_run_journey": {
+      "generated_at": "2026-04-22T09:27:06Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/journeys/find-and-join-an-open-run.md",
+      "sha256": "6cf83e63cf56f9fb35e2ed30744fa20100f323eeb21b040e30d32093070f252d"
+    },
+    "public_faq": {
+      "generated_at": "2026-05-05T16:00:32Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/FAQ.md",
+      "sha256": "e2dfd9abccd3fae0ca6e216baefb1cdfb034a367aaeb7dbe3e8e2b608f27fb8c"
+    },
+    "public_faq_registry": {
+      "generated_at": "2026-05-04T10:39:41Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FAQ_REGISTRY.yaml",
+      "sha256": "845cfafde512693e38495696b391ec36eb70d7078db17f89560619f5350363ef"
+    },
+    "public_feature_registry": {
+      "generated_at": "2026-05-04T09:39:41Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FEATURE_REGISTRY.yaml",
+      "sha256": "cb90a2b1429a943a514d3627ae4ee208dcece66584caac1805aea152ff3ef9b8"
+    },
+    "public_guide_community_hub": {
+      "generated_at": "2026-05-05T16:00:32Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/HORIZONS/community-hub.md",
+      "sha256": "edf3631e3cdbe5cfd639c3e7353274114ab17c6155859acca79fe8a4449c3240"
+    },
+    "public_landing_manifest": {
+      "generated_at": "2026-05-04T09:39:41Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_LANDING_MANIFEST.yaml",
+      "sha256": "104c46bc68365be611735b6c6a4fc16a983eb87d7df2821f86e60e43affe3ce6"
+    },
+    "public_onboarding_paths": {
+      "generated_at": "2026-05-05T10:55:10Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_ONBOARDING_PATHS_FOR_NO_DESKTOP_USERS.md",
+      "sha256": "e0f64c43d22da1bd490f96e50fdaefbe24caf623895c5709fe02e9c78464d352"
+    },
+    "ready_for_tonight_gates": {
+      "generated_at": "2026-04-30T21:57:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/READY_FOR_TONIGHT_GATES.yaml",
+      "sha256": "7c611a6b772a04106f8826e3d3f4292478057a63ece9d2eee46316cebb7d0f69"
+    },
+    "ready_for_tonight_mode": {
+      "generated_at": "2026-05-03T19:07:19Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/READY_FOR_TONIGHT_MODE.md",
+      "sha256": "bfb4b8b64bfa7ae6a65e1182dd26f91f21de865ea2ad38325966d5277152a84c"
+    },
+    "roadmap": {
+      "generated_at": "2026-05-03T18:50:24Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md",
+      "sha256": "0563a1a363406fed29d2fba61ca8b638c383b0bba1abb4747d9b21b918f27da0"
+    },
+    "role_kit_registry": {
+      "generated_at": "2026-04-30T21:57:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/ROLE_KIT_REGISTRY.yaml",
+      "sha256": "843010fb40515c06495dc766fa194fd2b7922a4ea7916d982573b659e3340d9a"
+    },
+    "role_kits_and_starter_loadouts": {
+      "generated_at": "2026-04-30T21:57:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/ROLE_KITS_AND_STARTER_LOADOUTS.md",
+      "sha256": "2c9c093b9744bea74bf7ecca54aa9011986e6d1238839961e30b1abfad0be289"
+    },
+    "source_aware_explain": {
+      "generated_at": "2026-05-02T14:55:35Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/SOURCE_AWARE_EXPLAIN_PUBLIC_TRUST_HOOK.md",
+      "sha256": "fa14b7cd799cf32abe812a4d037c9952dcd632e78967a65932b9ebad077e8e0a"
+    },
+    "successor_registry": {
+      "generated_at": "2026-05-05T16:27:11Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "a4ee7b8faed11351903a71ab4fda5ed6f3edf94455e024398d8e1fb8b1fa760c"
+    },
+    "vtt_export_target_acceptance": {
+      "generated_at": "2026-04-30T21:57:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/VTT_EXPORT_TARGET_ACCEPTANCE.yaml",
+      "sha256": "d6051c2bcf50eda707e5fa56b5c78f18d06465ae1a9af9f542a03d3c8bfbbbff"
+    }
+  },
+  "status": "pass",
+  "wave": "W25",
+  "work_task_id": "138.9"
+}

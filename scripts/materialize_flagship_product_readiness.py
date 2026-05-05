@@ -91,6 +91,9 @@ DEFAULT_SUPPORT_PACKETS = ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_P
 DEFAULT_M136_AGGREGATE_READINESS_GATE = (
     ROOT / ".codex-studio" / "published" / "NEXT90_M136_FLEET_AGGREGATE_READINESS_PARITY_GATES.generated.json"
 )
+DEFAULT_M138_HERO_PATH_CLOSEOUT_GATE = (
+    ROOT / ".codex-studio" / "published" / "NEXT90_M138_FLEET_HERO_PATH_CLOSEOUT_GATES.generated.json"
+)
 DEFAULT_EXTERNAL_PROOF_RUNBOOK = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
 DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR = ROOT / ".codex-studio" / "published" / "external-proof-commands"
 DEFAULT_PARITY_LAB_DOCS_ROOT = ROOT / "docs" / "chummer5a-oracle"
@@ -486,6 +489,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--m136-aggregate-readiness-gate",
         default=str(DEFAULT_M136_AGGREGATE_READINESS_GATE),
         help="path to NEXT90_M136_FLEET_AGGREGATE_READINESS_PARITY_GATES.generated.json",
+    )
+    parser.add_argument(
+        "--m138-hero-path-closeout-gate",
+        default=str(DEFAULT_M138_HERO_PATH_CLOSEOUT_GATE),
+        help="path to NEXT90_M138_FLEET_HERO_PATH_CLOSEOUT_GATES.generated.json",
     )
     parser.add_argument(
         "--external-proof-runbook",
@@ -911,6 +919,44 @@ def _m136_aggregate_readiness_gate_audit(payload: Dict[str, Any]) -> Dict[str, A
         "ready": not reasons,
         "status": status,
         "aggregate_readiness_status": aggregate_readiness_status,
+        "runtime_blockers": runtime_blockers,
+        "generated_at": generated_at,
+        "reasons": reasons,
+    }
+
+
+def _m138_hero_path_closeout_gate_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
+    reasons: List[str] = []
+    if not payload:
+        reasons.append("M138 hero-path closeout gate is missing.")
+        return {
+            "ready": False,
+            "status": "",
+            "hero_path_closeout_status": "",
+            "generated_at": "",
+            "reasons": reasons,
+        }
+    status = str(payload.get("status") or "").strip().lower()
+    monitor_summary = dict(payload.get("monitor_summary") or {})
+    hero_path_closeout_status = str(monitor_summary.get("hero_path_closeout_status") or "").strip().lower()
+    runtime_blockers = [
+        str(item).strip()
+        for item in (monitor_summary.get("runtime_blockers") or [])
+        if str(item).strip()
+    ]
+    generated_at = str(payload.get("generated_at") or payload.get("generatedAt") or "").strip()
+    if status != "pass":
+        reasons.append("M138 hero-path closeout gate package is not passing.")
+    if hero_path_closeout_status not in {"pass", "ready"} and (
+        hero_path_closeout_status != "warning" or runtime_blockers
+    ):
+        reasons.append("M138 hero-path closeout gate still reports blocked runtime proof.")
+    if not generated_at:
+        reasons.append("M138 hero-path closeout gate generated_at is missing.")
+    return {
+        "ready": not reasons,
+        "status": status,
+        "hero_path_closeout_status": hero_path_closeout_status,
         "runtime_blockers": runtime_blockers,
         "generated_at": generated_at,
         "reasons": reasons,
@@ -3751,6 +3797,7 @@ def build_flagship_product_readiness_payload(
     ui_element_parity_audit_path: Path | None = None,
     ui_user_journey_tester_audit_path: Path | None = None,
     m136_aggregate_readiness_gate_path: Path = DEFAULT_M136_AGGREGATE_READINESS_GATE,
+    m138_hero_path_closeout_gate_path: Path = DEFAULT_M138_HERO_PATH_CLOSEOUT_GATE,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
     effective_acceptance_path, acceptance = load_acceptance_with_fallback(acceptance_path)
@@ -3822,6 +3869,8 @@ def build_flagship_product_readiness_payload(
     support_packets = load_json(support_packets_path)
     m136_aggregate_readiness_gate = load_json(m136_aggregate_readiness_gate_path)
     m136_aggregate_readiness_gate_audit = _m136_aggregate_readiness_gate_audit(m136_aggregate_readiness_gate)
+    m138_hero_path_closeout_gate = load_json(m138_hero_path_closeout_gate_path)
+    m138_hero_path_closeout_gate_audit = _m138_hero_path_closeout_gate_audit(m138_hero_path_closeout_gate)
     effective_external_proof_runbook_path = (
         external_proof_runbook_path if external_proof_runbook_path is not None else support_packets_path.parent / DEFAULT_EXTERNAL_PROOF_RUNBOOK.name
     )
@@ -7789,6 +7838,8 @@ def build_flagship_product_readiness_payload(
         flagship_plane_reasons.append("SR6 parity readiness plane is not ready.")
     if not bool(m136_aggregate_readiness_gate_audit.get("ready")):
         flagship_plane_reasons.append("M136 aggregate-readiness parity gate is not ready.")
+    if not bool(m138_hero_path_closeout_gate_audit.get("ready")):
+        flagship_plane_reasons.append("M138 hero-path closeout gate is not ready.")
     flagship_plane_status, flagship_plane = _coverage_entry(
         positives=(
             int(len(coverage_gap_keys) == 0)
@@ -7810,6 +7861,7 @@ def build_flagship_product_readiness_payload(
             + int(sr4_parity_status == "ready")
             + int(sr6_parity_status == "ready")
             + int(bool(m136_aggregate_readiness_gate_audit.get("ready")))
+            + int(bool(m138_hero_path_closeout_gate_audit.get("ready")))
         ),
         reasons=flagship_plane_reasons,
         summary_ready="Flagship replacement truth is fully green.",
@@ -7860,6 +7912,16 @@ def build_flagship_product_readiness_payload(
                 m136_aggregate_readiness_gate_audit.get("generated_at") or ""
             ),
             "m136_aggregate_readiness_gate_reasons": list(m136_aggregate_readiness_gate_audit.get("reasons") or []),
+            "m138_hero_path_closeout_gate_path": str(m138_hero_path_closeout_gate_path),
+            "m138_hero_path_closeout_gate_ready": bool(m138_hero_path_closeout_gate_audit.get("ready")),
+            "m138_hero_path_closeout_gate_status": str(m138_hero_path_closeout_gate_audit.get("status") or ""),
+            "m138_hero_path_closeout_monitor_status": str(
+                m138_hero_path_closeout_gate_audit.get("hero_path_closeout_status") or ""
+            ),
+            "m138_hero_path_closeout_gate_generated_at": str(
+                m138_hero_path_closeout_gate_audit.get("generated_at") or ""
+            ),
+            "m138_hero_path_closeout_gate_reasons": list(m138_hero_path_closeout_gate_audit.get("reasons") or []),
             "readiness_plane_contract_path": str(effective_flagship_readiness_planes_path),
             "readiness_plane_contract_present": bool(flagship_readiness_planes),
             "readiness_plane_contract_ids": declared_readiness_plane_ids,
@@ -8172,6 +8234,7 @@ def materialize_flagship_product_readiness(
     ui_element_parity_audit_path: Path | None = None,
     ui_user_journey_tester_audit_path: Path | None = None,
     m136_aggregate_readiness_gate_path: Path = DEFAULT_M136_AGGREGATE_READINESS_GATE,
+    m138_hero_path_closeout_gate_path: Path = DEFAULT_M138_HERO_PATH_CLOSEOUT_GATE,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
     payload = build_flagship_product_readiness_payload(
@@ -8184,6 +8247,7 @@ def materialize_flagship_product_readiness(
         journey_gates_path=journey_gates_path,
         support_packets_path=support_packets_path,
         m136_aggregate_readiness_gate_path=m136_aggregate_readiness_gate_path,
+        m138_hero_path_closeout_gate_path=m138_hero_path_closeout_gate_path,
         external_proof_runbook_path=external_proof_runbook_path,
         supervisor_state_path=supervisor_state_path,
         ooda_state_path=ooda_state_path,
@@ -8248,6 +8312,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         journey_gates_path=Path(args.journey_gates).resolve(),
         support_packets_path=Path(args.support_packets).resolve(),
         m136_aggregate_readiness_gate_path=Path(args.m136_aggregate_readiness_gate).resolve(),
+        m138_hero_path_closeout_gate_path=Path(args.m138_hero_path_closeout_gate).resolve(),
         feedback_loop_gate_path=Path(args.feedback_loop_gate).resolve(),
         external_proof_runbook_path=Path(args.external_proof_runbook).resolve() if str(args.external_proof_runbook or "").strip() else None,
         supervisor_state_path=Path(args.supervisor_state).resolve(),
