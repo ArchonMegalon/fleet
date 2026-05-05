@@ -1,0 +1,234 @@
+{
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "canonical_monitors": {
+    "accessibility_release_bar": {
+      "checks": {
+        "keyboard_first": true,
+        "mobile_glanceability": true,
+        "what_matters_now": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "community_safety_doc": {
+      "checks": {
+        "boundary": true,
+        "minimum_event_families": true,
+        "required_states": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "creator_analytics_doc": {
+      "checks": {
+        "claim_rule": true,
+        "discoverability_boundary": true,
+        "privacy_boundary": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "next90_guide": {
+      "checks": {
+        "exit_contract": true,
+        "milestone_139": true,
+        "wave_26": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "prep_packet_factory": {
+      "checks": {
+        "first_proof": true,
+        "proposal_scope": true,
+        "release_gate": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "queue_alignment": {
+      "issues": [],
+      "state": "pass",
+      "warnings": [
+        "Fleet queue mirror row is still missing for work task 139.9."
+      ]
+    },
+    "world_broadcast_cadence": {
+      "checks": {
+        "authority_rule": true,
+        "receipts": true,
+        "weekly_cadence": true
+      },
+      "issues": [],
+      "state": "pass"
+    }
+  },
+  "contract_name": "fleet.next90_m139_operational_trust_closeout_gates",
+  "frontier_id": 3411981369,
+  "generated_at": "2026-05-05T19:01:37Z",
+  "milestone_id": 139,
+  "monitor_summary": {
+    "bounded_faq_count": 2,
+    "dedicated_proof_slot_count": 5,
+    "operational_trust_closeout_status": "warning",
+    "projection_runtime_blocker_count": 0,
+    "runtime_blocker_count": 0,
+    "runtime_blockers": [],
+    "warning_count": 7
+  },
+  "owned_surfaces": [
+    "fail_closeout_when_tonight_pack_proof_broadcast_cadence:fleet"
+  ],
+  "package_closeout": {
+    "blockers": [],
+    "state": "pass",
+    "warnings": [
+      "Fleet queue mirror row is still missing for work task 139.9.",
+      "projection_packet: Fleet queue mirror row is still missing for work task 139.10.",
+      "No dedicated published `tonight_pack` proof artifact is present yet.",
+      "No dedicated published `world_broadcast_cadence` proof artifact is present yet.",
+      "No dedicated published `community_safety_moderation` proof artifact is present yet.",
+      "No dedicated published `creator_analytics_bounds` proof artifact is present yet.",
+      "No dedicated published `accessibility_cognitive_load` proof artifact is present yet."
+    ]
+  },
+  "package_id": "next90-m139-fleet-fail-closeout-when-tonight-pack-proof-broadcast-cadence-proof-moderati",
+  "queue_title": "Fail closeout when tonight-pack proof, broadcast cadence proof, moderation and appeals states, creator analytics bounds, or accessibility and cognitive-load gates are stale, missing, or contradictory.",
+  "runtime_monitors": {
+    "direct_proof_presence": {
+      "evidence": {
+        "accessibility_cognitive_load": [],
+        "community_safety_moderation": [],
+        "creator_analytics_bounds": [],
+        "tonight_pack": [],
+        "world_broadcast_cadence": []
+      },
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass",
+      "warnings": [
+        "No dedicated published `tonight_pack` proof artifact is present yet.",
+        "No dedicated published `world_broadcast_cadence` proof artifact is present yet.",
+        "No dedicated published `community_safety_moderation` proof artifact is present yet.",
+        "No dedicated published `creator_analytics_bounds` proof artifact is present yet.",
+        "No dedicated published `accessibility_cognitive_load` proof artifact is present yet."
+      ]
+    },
+    "flagship_readiness_alignment": {
+      "flagship_ready_status": "ready",
+      "generated_at": "2026-05-05T19:01:23Z",
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass"
+    },
+    "m139_projections": {
+      "age_hours": 0,
+      "generated_at": "2026-05-05T19:01:12Z",
+      "issues": [],
+      "projection_statuses": {
+        "accessibility_cognitive_load": "pass",
+        "community_safety_moderation": "pass",
+        "creator_analytics_bounds": "pass",
+        "tonight_pack": "pass",
+        "world_broadcast_cadence": "pass"
+      },
+      "runtime_blockers": [],
+      "state": "pass",
+      "warnings": [
+        "projection_packet: Fleet queue mirror row is still missing for work task 139.10."
+      ]
+    },
+    "public_truth": {
+      "bounded_faq_count": 2,
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass",
+      "warnings": []
+    }
+  },
+  "source_inputs": {
+    "accessibility_release_bar": {
+      "generated_at": "2026-04-30T21:57:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/ACCESSIBILITY_AND_COGNITIVE_LOAD_RELEASE_BAR.md",
+      "sha256": "cddea1d7cee20275b6966d70ac18b59d6e24e08ea45f1ab68c069e3ae5a89766"
+    },
+    "community_safety_doc": {
+      "generated_at": "2026-05-05T10:16:58Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/COMMUNITY_SAFETY_MODERATION_AND_APPEALS.md",
+      "sha256": "730962d324b74f071fa044959be89a94305f2d78da94939056867cd2fc5216bf"
+    },
+    "creator_analytics_doc": {
+      "generated_at": "2026-05-05T08:46:01Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/CREATOR_DASHBOARD_AND_ADOPTION_ANALYTICS.md",
+      "sha256": "734950509bf1fc90f7107c1812162df260f8371e4425a3af47eff394174a067f"
+    },
+    "design_queue_staging": {
+      "generated_at": "2026-05-05T17:41:28Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "457ddf48178289c8089eb8d9ed944f1c0ecdb4edce45bc5bf53b6d99e4589422"
+    },
+    "flagship_readiness": {
+      "generated_at": "2026-05-05T19:01:23Z",
+      "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+      "sha256": "a35b1064545c6c8b3d12f4d5ebd70c6ccdfd627a1cff4800ed6bb7d97203855e"
+    },
+    "fleet_queue_staging": {
+      "generated_at": "2026-05-05T17:41:28Z",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "e51913570323410871918a66d7d5774cc099d5b566192d05a84bfb56b221eeaa"
+    },
+    "next90_guide": {
+      "generated_at": "2026-05-04T02:57:07Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
+      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+    },
+    "prep_packet_factory": {
+      "generated_at": "2026-04-22T17:24:47Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PREP_PACKET_FACTORY_AND_PROCEDURAL_TABLES.md",
+      "sha256": "d1a2541dc9275862773abfe58b6d8d54b26c87fb21639fb12b9917ef911cffbf"
+    },
+    "public_faq": {
+      "generated_at": "2026-05-05T16:00:32Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/FAQ.md",
+      "sha256": "e2dfd9abccd3fae0ca6e216baefb1cdfb034a367aaeb7dbe3e8e2b608f27fb8c"
+    },
+    "public_faq_registry": {
+      "generated_at": "2026-05-04T10:39:41Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FAQ_REGISTRY.yaml",
+      "sha256": "845cfafde512693e38495696b391ec36eb70d7078db17f89560619f5350363ef"
+    },
+    "public_feature_registry": {
+      "generated_at": "2026-05-04T09:39:41Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FEATURE_REGISTRY.yaml",
+      "sha256": "cb90a2b1429a943a514d3627ae4ee208dcece66584caac1805aea152ff3ef9b8"
+    },
+    "public_landing_manifest": {
+      "generated_at": "2026-05-04T09:39:41Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_LANDING_MANIFEST.yaml",
+      "sha256": "104c46bc68365be611735b6c6a4fc16a983eb87d7df2821f86e60e43affe3ce6"
+    },
+    "release_health_public_trust_projections": {
+      "generated_at": "2026-05-05T19:01:12Z",
+      "path": "/docker/fleet/.codex-studio/published/NEXT90_M139_FLEET_RELEASE_HEALTH_PUBLIC_TRUST_PROJECTIONS.generated.json",
+      "sha256": "d8a2f3d01d47ab898893958f28b72f12c2fa309ee34aaf45c5e9c6c7c819b9d8"
+    },
+    "successor_registry": {
+      "generated_at": "2026-05-05T17:41:28Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "65b71c750244782127e2dfb9b2aa7cf25050ac1ce5f35ef87d6870cee25aea1f"
+    },
+    "world_broadcast_cadence": {
+      "generated_at": "2026-04-30T21:57:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/WORLD_BROADCAST_AND_FACTION_PROPAGANDA_CADENCE.md",
+      "sha256": "cbbb1ea4bfc311b51459e4ab9239a1d620dba77b9c42b7e25b8c7c4bc8c08762"
+    }
+  },
+  "status": "pass",
+  "wave": "W26",
+  "work_task_id": "139.9"
+}
