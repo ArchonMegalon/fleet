@@ -1,0 +1,248 @@
+{
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "canonical_monitors": {
+    "flagship_product_bar": {
+      "checks": {
+        "planes_machine_tracked": true,
+        "trust_outweighs_cosmetic_similarity": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "flagship_readiness_planes": {
+      "issues": [],
+      "required_plane_ids": [
+        "flagship_ready",
+        "sr5_veteran_ready",
+        "veteran_deep_workflow_ready",
+        "public_shelf_ready",
+        "data_durability_ready",
+        "rules_explainability_ready"
+      ],
+      "state": "pass",
+      "warnings": []
+    },
+    "next90_guide": {
+      "checks": {
+        "milestone_136": true,
+        "wave_23": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "queue_alignment": {
+      "issues": [],
+      "state": "pass",
+      "warnings": [
+        "Fleet queue mirror row is still missing for work task 136.11."
+      ]
+    }
+  },
+  "contract_name": "fleet.next90_m136_derived_release_health_planes",
+  "frontier_id": 8422537713,
+  "generated_at": "2026-05-05T15:45:00Z",
+  "milestone_id": 136,
+  "monitor_summary": {
+    "blocked_plane_ids": [
+      "veteran_deep_workflow_ready",
+      "data_durability_ready",
+      "flagship_ready"
+    ],
+    "derivation_status": "warning",
+    "required_plane_count": 7,
+    "runtime_blocker_count": 0,
+    "runtime_blockers": [],
+    "warning_count": 1
+  },
+  "owned_surfaces": [
+    "publish_derived_release_health_planes_from_live_proof_so:fleet"
+  ],
+  "package_closeout": {
+    "blockers": [],
+    "state": "pass",
+    "warnings": [
+      "Fleet queue mirror row is still missing for work task 136.11."
+    ]
+  },
+  "package_id": "next90-m136-fleet-publish-derived-release-health-planes-from-live-proof-so-structural-gr",
+  "queue_title": "Publish derived release-health planes from live proof so structural green cannot masquerade as SR5 veteran, durability, explainability, or public-shelf readiness.",
+  "runtime_monitors": {
+    "data_durability_projection": {
+      "actual_ready": false,
+      "checks": {
+        "families_below_task_proven_clear": true,
+        "install_claim_restore_continue_effective_ready": true,
+        "rules_engine_and_import_ready": true,
+        "ui_element_parity_gap_ids_clear": false
+      },
+      "expected_ready": false,
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass"
+    },
+    "flagship_projection": {
+      "actual_ready": false,
+      "checks": {
+        "coverage_gap_keys_clear": false,
+        "data_durability_ready_ready": false,
+        "families_below_gold_ready_clear": true,
+        "m136_aggregate_gate_ready": false,
+        "parity_lab_ready": true,
+        "public_shelf_ready_ready": true,
+        "registry_present": true,
+        "rules_explainability_ready_ready": true,
+        "sr5_veteran_ready_ready": true,
+        "structural_ready_ready": true,
+        "veteran_deep_workflow_ready_ready": false
+      },
+      "expected_ready": false,
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass"
+    },
+    "plane_presence": {
+      "issues": [],
+      "plane_statuses": {
+        "data_durability_ready": "warning",
+        "flagship_ready": "missing",
+        "public_shelf_ready": "ready",
+        "rules_explainability_ready": "ready",
+        "sr5_veteran_ready": "ready",
+        "structural_ready": "ready",
+        "veteran_deep_workflow_ready": "warning"
+      },
+      "runtime_blockers": [],
+      "state": "pass"
+    },
+    "public_shelf_projection": {
+      "actual_ready": true,
+      "checks": {
+        "hub_and_registry_ready": true,
+        "missing_required_platform_head_pairs_clear": true,
+        "primary_route_ready": true,
+        "release_channel_freshness_ok": true,
+        "windows_public_installer_not_mismatched": true
+      },
+      "expected_ready": true,
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass"
+    },
+    "rules_explainability_projection": {
+      "actual_ready": true,
+      "checks": {
+        "build_explain_publish_ready": true,
+        "rules_certification_ready": true,
+        "rules_engine_and_import_ready": true
+      },
+      "expected_ready": true,
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass"
+    },
+    "sr5_veteran_projection": {
+      "actual_ready": true,
+      "checks": {
+        "capture_non_negotiables_clear": true,
+        "capture_pack_present": true,
+        "families_below_target_clear": true,
+        "family_targets_present": true,
+        "invalid_targets_clear": true,
+        "missing_flagship_families_clear": true,
+        "parity_lab_ready": true,
+        "registry_present": true,
+        "required_landmarks_present": true,
+        "tasks_present": true,
+        "visual_gate_ready": true,
+        "whole_product_coverage_clear": true,
+        "workflow_non_negotiables_clear": true,
+        "workflow_pack_present": true
+      },
+      "expected_ready": true,
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass"
+    },
+    "structural_masquerade": {
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass",
+      "structural_ready": true
+    },
+    "structural_projection": {
+      "actual_ready": true,
+      "checks": {
+        "dispatchable_truth_ready": true,
+        "journey_effective_overall_state_ready": true,
+        "journey_local_blocker_autofix_routing_ready": true,
+        "journey_overall_desktop_scoped_blocked_clear": true,
+        "runtime_healing_alert_state_healthy": true,
+        "supervisor_recent_enough": true
+      },
+      "expected_ready": true,
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass"
+    },
+    "veteran_deep_projection": {
+      "actual_ready": false,
+      "checks": {
+        "desktop_client_ready": false,
+        "families_below_veteran_approved_clear": true,
+        "ui_element_parity_audit_required": true,
+        "ui_element_parity_gap_ids_clear": false,
+        "ui_element_parity_release_blocking_ready": false,
+        "workflow_receipts_resolved": true
+      },
+      "expected_ready": false,
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass"
+    }
+  },
+  "source_inputs": {
+    "design_queue_staging": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "11cc1ecd96db0176604771f8f6f398998db558b6167a3e2bd37140a2124ddca6"
+    },
+    "flagship_product_bar": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PRODUCT_BAR.md",
+      "sha256": "8d450f2175f2bd290975db12c0deddbf6e26a3415bec20e906f1ac38cd01c84e"
+    },
+    "flagship_product_readiness": {
+      "generated_at": "2026-05-05T15:44:41Z",
+      "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+      "sha256": "a747f602edb6e9bb3305642d0cf579b7430a6641221f1939a2b77f15f94c5450"
+    },
+    "flagship_readiness_planes": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_READINESS_PLANES.yaml",
+      "sha256": "b4bd6b9ef9cc85be2fc4aff49dd713d88199cc1699fea8110fbde98f4272344f"
+    },
+    "fleet_queue_staging": {
+      "generated_at": "",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "6da82d05213bc6ae4f536f75debf5dab04463c91c9b2992df970d392bd3972b1"
+    },
+    "next90_guide": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
+      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+    },
+    "successor_registry": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "641255112587cbec2c7c43a37dda5a90f6f59e0d2775206517fede2695c233e3"
+    }
+  },
+  "status": "pass",
+  "wave": "W23",
+  "work_task_id": "136.11"
+}
