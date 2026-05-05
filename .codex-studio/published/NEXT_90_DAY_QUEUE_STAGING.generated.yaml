@@ -4546,9 +4546,25 @@ items:
   work_task_id: '128.6'
   frontier_id: 7477646343
   milestone_id: 128
-  status: not_started
+  status: complete
   wave: W18
   repo: chummer6-design
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M128 chummer6-design trust-completion canon is complete; future shards must verify the localization,
+    telemetry, privacy-retention, feedback-status, and experience-metrics canon docs, validator, feedback closeout note,
+    and canonical registry plus Fleet queue rows instead of reopening this design slice.
+  proof:
+  - /docker/chummercomplete/chummer-design/products/chummer/LOCALIZATION_AND_LANGUAGE_SYSTEM.md
+  - /docker/chummercomplete/chummer-design/products/chummer/LOCALIZATION_PARITY_MATRIX.yaml
+  - /docker/chummercomplete/chummer-design/products/chummer/PRODUCT_USAGE_TELEMETRY_MODEL.md
+  - /docker/chummercomplete/chummer-design/products/chummer/PRODUCT_USAGE_TELEMETRY_EVENT_SCHEMA.md
+  - /docker/chummercomplete/chummer-design/products/chummer/PRIVACY_AND_RETENTION_BOUNDARIES.md
+  - /docker/chummercomplete/chummer-design/products/chummer/FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md
+  - /docker/chummercomplete/chummer-design/products/chummer/FEEDBACK_AND_CRASH_STATUS_MODEL.md
+  - /docker/chummercomplete/chummer-design/products/chummer/EXPERIENCE_SUCCESS_METRICS.md
+  - /docker/chummercomplete/chummer-design/products/chummer/METRICS_AND_SLOS.yaml
+  - /docker/chummercomplete/chummer-design/scripts/ai/validate_next90_m128_design_trust_completion_canon.py
+  - /docker/chummercomplete/chummer-design/products/chummer/maintenance/feedback_archive/2026-05-05-next90-m128-design-trust-completion-canon-closeout.md
   allowed_paths:
   - products
   - scripts
