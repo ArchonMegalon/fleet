@@ -1,0 +1,252 @@
+{
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "canonical_alignment": {
+    "design_queue_status": "not_started",
+    "fleet_queue_status": "not_started",
+    "issues": [],
+    "registry_status": "not_started",
+    "state": "pass",
+    "work_task_status": ""
+  },
+  "canonical_monitors": {
+    "growth_stack": {
+      "checks": {
+        "clickrank_entry": true,
+        "non_authority_boundary": true,
+        "source_patch": true,
+        "success_metric": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "guide_export_manifest": {
+      "checks": {
+        "clickrank_source_first": true,
+        "katteb_source_first": true,
+        "productlift_projection_only": true,
+        "root_horizon_authority": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "guide_policy": {
+      "checks": {
+        "clickrank_source_first": true,
+        "feature_map_guard": true,
+        "root_horizon_authority": true,
+        "subordinate_to_landing": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "katteb_lane": {
+      "checks": {
+        "golden_rule": true,
+        "no_direct_generated_edits": true,
+        "review_rule": true,
+        "unsupported_claim_guard": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "next90_guide": {
+      "checks": {
+        "exit_contract": true,
+        "milestone_131": true,
+        "wave_19": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "signal_pipeline": {
+      "checks": {
+        "canon_decision": true,
+        "claim_rejection": true,
+        "source_regeneration": true,
+        "upstream_canonical_edit": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "visibility_policy": {
+      "checks": {
+        "crawl_budget": true,
+        "low_value_duplicate_block": true,
+        "source_first": true,
+        "unsupported_claim_guard": true
+      },
+      "issues": [],
+      "state": "pass"
+    }
+  },
+  "contract_name": "fleet.next90_m131_public_guide_gates",
+  "frontier_id": 5694544514,
+  "generated_at": "2026-05-05T13:32:27Z",
+  "milestone_id": 131,
+  "monitor_summary": {
+    "flagship_queue_status": "fail",
+    "flagship_queue_task_count": 1,
+    "guide_repo_head_age_hours": 26.17,
+    "guide_repo_head_sha": "cb45dcf64ccedc810b16b006bfe500f4253dcbf5",
+    "guide_surface_gate_status": "blocked",
+    "public_guide_gate_status": "blocked",
+    "runtime_blocker_count": 4,
+    "runtime_blockers": [
+      "guide_surface_gate: Guide surface verifier blocked regeneration: RuntimeError: UPDATES/README.md is missing required change-log section: Latest substantial pushes",
+      "flagship_queue_gate: Flagship queue finding: guide_surface_verify:RuntimeError:UPDATES/README.md is missing required change-log section: Latest substantial pushes",
+      "flagship_queue_gate: Flagship queue finding: story_cast_signature:assets/hero/chummer6-hero.png:solo",
+      "flagship_queue_gate: Flagship queue finding: story_subject_weak:assets/hero/chummer6-hero.png:2/3"
+    ],
+    "warning_count": 2
+  },
+  "owned_surfaces": [
+    "verify_public_guide_regeneration_visibility:fleet"
+  ],
+  "package_closeout": {
+    "blockers": [],
+    "state": "pass",
+    "warnings": [
+      "guide_surface_gate: Guide surface verifier blocked regeneration: RuntimeError: UPDATES/README.md is missing required change-log section: Latest substantial pushes",
+      "flagship_queue_gate: Flagship queue finding: guide_surface_verify:RuntimeError:UPDATES/README.md is missing required change-log section: Latest substantial pushes",
+      "flagship_queue_gate: Flagship queue finding: story_cast_signature:assets/hero/chummer6-hero.png:solo",
+      "flagship_queue_gate: Flagship queue finding: story_subject_weak:assets/hero/chummer6-hero.png:2/3",
+      "Flagship queue cannot burn 1min credits at the current floor (43826189 / 150000000).",
+      "Guide repo has 8 uncommitted path(s)."
+    ]
+  },
+  "package_id": "next90-m131-fleet-verify-public-guide-regeneration-visibility-source-fresh",
+  "queue_task": "Verify public-guide regeneration, visibility-source freshness, crawl-budget discipline, and unsupported-claim rejection gates.",
+  "queue_title": "Verify public-guide regeneration, visibility-source freshness, crawl-budget discipline, and unsupported-claim rejection gates.",
+  "runtime_monitors": {
+    "flagship_queue_gate": {
+      "command": [
+        "/usr/bin/python3",
+        "/docker/fleet/scripts/materialize_chummer6_flagship_queue.py",
+        "--json"
+      ],
+      "findings": [
+        "guide_surface_verify:RuntimeError:UPDATES/README.md is missing required change-log section: Latest substantial pushes",
+        "story_cast_signature:assets/hero/chummer6-hero.png:solo",
+        "story_subject_weak:assets/hero/chummer6-hero.png:2/3"
+      ],
+      "flagship_queue_status": "fail",
+      "guide_root": "/docker/chummercomplete/Chummer6",
+      "issues": [],
+      "onemin_credit_burn_allowed": false,
+      "onemin_credit_floor": 150000000,
+      "onemin_total_remaining_credits": 43826189,
+      "queue_task_count": 1,
+      "queue_tasks": [
+        "Drive the Chummer6 public guide to hard flagship grade: patch the EA Chummer6 guide skill and rerun the guide/media refresh until first-contact copy stops downplaying the product, flagship images tell a short Shadowrun story, and smart AR overlays anticipate the runner's next useful questions where the scene supports it."
+      ],
+      "returncode": 0,
+      "runtime_blockers": [
+        "Flagship queue finding: guide_surface_verify:RuntimeError:UPDATES/README.md is missing required change-log section: Latest substantial pushes",
+        "Flagship queue finding: story_cast_signature:assets/hero/chummer6-hero.png:solo",
+        "Flagship queue finding: story_subject_weak:assets/hero/chummer6-hero.png:2/3"
+      ],
+      "state": "pass",
+      "warnings": [
+        "Flagship queue cannot burn 1min credits at the current floor (43826189 / 150000000)."
+      ]
+    },
+    "guide_repo_freshness": {
+      "dirty_path_count": 8,
+      "gate_status": "pass",
+      "head_age_hours": 26.17,
+      "head_committed_at": "2026-05-04T13:22:07+02:00",
+      "head_sha": "cb45dcf64ccedc810b16b006bfe500f4253dcbf5",
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass",
+      "warnings": [
+        "Guide repo has 8 uncommitted path(s)."
+      ]
+    },
+    "guide_surface_gate": {
+      "command": [
+        "/usr/bin/python3",
+        "/docker/fleet/scripts/verify_chummer6_guide_surface.py"
+      ],
+      "gate_status": "blocked",
+      "issues": [],
+      "returncode": 1,
+      "runtime_blockers": [
+        "Guide surface verifier blocked regeneration: RuntimeError: UPDATES/README.md is missing required change-log section: Latest substantial pushes"
+      ],
+      "state": "pass",
+      "summary": "RuntimeError: UPDATES/README.md is missing required change-log section: Latest substantial pushes",
+      "warnings": []
+    }
+  },
+  "source_inputs": {
+    "design_queue_staging": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "6a14b607acae557ff774034522b953c0a9eee697e92c42edb5cbfebcccf29d86"
+    },
+    "flagship_queue_script": {
+      "generated_at": "",
+      "path": "/docker/fleet/scripts/materialize_chummer6_flagship_queue.py",
+      "sha256": "5b31aa229837240962065d532c1021ea0023d7383d43afec6c367ce04ce05777"
+    },
+    "growth_stack": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_GROWTH_AND_VISIBILITY_STACK.md",
+      "sha256": "78674c1e770a4a99f8f2f9826e3e895ef10ad5d6e1cf7d6ca40f988769977416"
+    },
+    "guide_export_manifest": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_GUIDE_EXPORT_MANIFEST.yaml",
+      "sha256": "ec3d2825d7017030bd9421c89ea5e68eb7b6a88d25c7f86fa1671b1e850edad0"
+    },
+    "guide_policy": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_GUIDE_POLICY.md",
+      "sha256": "6f05cffeb5843a049d0cfefe0e6f14fa374e2f54f75df31d2c8f62d25b762a46"
+    },
+    "guide_verify_script": {
+      "generated_at": "",
+      "path": "/docker/fleet/scripts/verify_chummer6_guide_surface.py",
+      "sha256": "5fe3c9e3a7b514611abe2097b7d722325eb5f7ea427f2b9e1b9d994ff8bc584e"
+    },
+    "katteb_lane": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/KATTEB_PUBLIC_GUIDE_OPTIMIZATION_LANE.md",
+      "sha256": "78e4f259b43083ae2f4de05b9e72d70d638694c34eeb5719608f3b530ed436ec"
+    },
+    "next90_guide": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
+      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+    },
+    "queue_staging": {
+      "generated_at": "",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "e422a64356fd0874152562f6fc5869b57785110314e69466f347a4f603344b4b"
+    },
+    "signal_pipeline": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_SIGNAL_TO_CANON_PIPELINE.md",
+      "sha256": "fa9de073ddaac091b9bad88a3e2fbb3dccab184b1261b85bff5d3409f2ddac78"
+    },
+    "successor_registry": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "af36944c00869ca6261fa99cffe0c91d4e7eabf1c7ee9b215110897dded6db19"
+    },
+    "visibility_policy": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_SITE_VISIBILITY_AND_SEARCH_OPTIMIZATION.md",
+      "sha256": "aab31d941105ea22791cb3a4d4e37d55599763536b05ee094af97d95c6a194d0"
+    }
+  },
+  "status": "pass",
+  "wave": "W19",
+  "work_task_id": "131.5"
+}
