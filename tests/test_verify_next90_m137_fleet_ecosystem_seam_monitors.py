@@ -7,7 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from test_materialize_next90_m137_fleet_ecosystem_seam_monitors import _fixture_tree
+try:
+    from tests.test_materialize_next90_m137_fleet_ecosystem_seam_monitors import _fixture_tree
+except ModuleNotFoundError:
+    from test_materialize_next90_m137_fleet_ecosystem_seam_monitors import _fixture_tree
 
 
 MATERIALIZER = Path("/docker/fleet/scripts/materialize_next90_m137_fleet_ecosystem_seam_monitors.py")

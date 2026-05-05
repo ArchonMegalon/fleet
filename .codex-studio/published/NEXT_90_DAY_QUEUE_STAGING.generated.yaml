@@ -5620,4 +5620,33 @@ items:
   - feedback
   owned_surfaces:
   - fail_closeout_when_desktop_client_readiness_is_green_wit:fleet
+- title: Monitor unsupported ecosystem claims, stale seam proof, consent drift, and public-posture mismatch across first-party
+    and integration-ready lanes.
+  task: Monitor unsupported ecosystem claims, stale seam proof, consent drift, and public-posture mismatch across first-party
+    and integration-ready lanes.
+  package_id: next90-m137-fleet-monitor-unsupported-ecosystem-claims-stale-seam-proof-consent-drift-an
+  work_task_id: '137.7'
+  frontier_id: 9074685645
+  milestone_id: 137
+  status: complete
+  wave: W24
+  repo: fleet
+  completion_action: verify_closed_package_only
+  landed_commit: unlanded
+  do_not_reopen_reason: M137 Fleet ecosystem seam monitors are complete; future shards must verify the repo-local monitor scripts, generated proof artifacts, and canonical queue mirrors instead of reopening unsupported ecosystem-claim, stale seam-proof, consent-drift, or public-posture monitoring by prose alone.
+  proof:
+  - /docker/fleet/scripts/materialize_next90_m137_fleet_ecosystem_seam_monitors.py
+  - /docker/fleet/scripts/verify_next90_m137_fleet_ecosystem_seam_monitors.py
+  - /docker/fleet/tests/test_materialize_next90_m137_fleet_ecosystem_seam_monitors.py
+  - /docker/fleet/tests/test_verify_next90_m137_fleet_ecosystem_seam_monitors.py
+  - /docker/fleet/.codex-studio/published/NEXT90_M137_FLEET_ECOSYSTEM_SEAM_MONITORS.generated.json
+  - /docker/fleet/.codex-studio/published/NEXT90_M137_FLEET_ECOSYSTEM_SEAM_MONITORS.generated.md
+  - /docker/fleet/feedback/2026-05-05-next90-m137-fleet-ecosystem-seam-monitors-progress.md
+  allowed_paths:
+  - scripts
+  - tests
+  - .codex-studio
+  - feedback
+  owned_surfaces:
+  - monitor_unsupported_ecosystem_claims_stale_seam_proof_co:fleet
 source_queue_fingerprint: 433cdfebb5d8504552c5cea941d1217970cac13840edd39e02ae392c785b1551
