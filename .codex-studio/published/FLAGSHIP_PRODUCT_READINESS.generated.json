@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-05-05T01:01:01Z",
+  "generated_at": "2026-05-05T03:30:45Z",
   "status": "fail",
   "scoped_status": "fail",
   "ready_keys": [
@@ -88,8 +88,8 @@
       "avalonia:win-x64:windows"
     ],
     "runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-    "runbook_generated_at": "2026-05-05T01:01:01Z",
-    "runbook_plan_generated_at": "2026-05-05T01:00:55Z",
+    "runbook_generated_at": "2026-05-05T03:30:45Z",
+    "runbook_plan_generated_at": "2026-05-05T03:30:39Z",
     "runbook_release_channel_generated_at": "2026-05-04T09:07:49Z",
     "commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
     "command_bundle_sha256": "ca593c4ef62d69c36c9d04ddbbee024586c0bfb313bb3618439966b6469bfba6",
@@ -204,7 +204,7 @@
         "reason": "status_plane is stale."
       },
       {
-        "route_id": "route-e2d6d9663dd6",
+        "route_id": "route-a0e62e0eba90",
         "journey_id": "install_claim_restore_continue",
         "journey_state": "blocked",
         "owner_repo": "chummer6-hub",
@@ -212,7 +212,7 @@
         "package_id": "autofix-install-claim-restore-continue-chummer6-hub-2",
         "category_id": "",
         "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-        "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (331128s old > 172800s max)."
+        "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max)."
       },
       {
         "route_id": "route-1e4b203445b4",
@@ -224,6 +224,17 @@
         "category_id": "",
         "evidence_path": "",
         "reason": "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows."
+      },
+      {
+        "route_id": "route-3e981beaeb0a",
+        "journey_id": "organize_community_and_close_loop",
+        "journey_state": "blocked",
+        "owner_repo": "chummer6-hub",
+        "primary_lane": "repo_fix",
+        "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-2",
+        "category_id": "",
+        "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
+        "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max)."
       },
       {
         "route_id": "route-6f9ea93f2d12",
@@ -259,17 +270,6 @@
         "reason": "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory."
       },
       {
-        "route_id": "route-fe90674ade12",
-        "journey_id": "organize_community_and_close_loop",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-hub",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-2",
-        "category_id": "",
-        "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-        "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (331128s old > 172800s max)."
-      },
-      {
         "route_id": "route-a001a6955244",
         "journey_id": "recover_from_sync_conflict",
         "journey_state": "blocked",
@@ -281,7 +281,7 @@
         "reason": "status_plane is stale."
       },
       {
-        "route_id": "route-59f65b62b233",
+        "route_id": "route-f89c66b51321",
         "journey_id": "install_claim_restore_continue",
         "journey_state": "blocked",
         "owner_repo": "chummer6-mobile",
@@ -289,7 +289,18 @@
         "package_id": "autofix-install-claim-restore-continue-chummer6-mobile-7",
         "category_id": "",
         "evidence_path": ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
-        "reason": "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (329995s old > 172800s max)."
+        "reason": "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (338979s old > 172800s max)."
+      },
+      {
+        "route_id": "route-13584f759d7f",
+        "journey_id": "install_claim_restore_continue",
+        "journey_state": "blocked",
+        "owner_repo": "chummer6-ui",
+        "primary_lane": "repo_fix",
+        "package_id": "autofix-install-claim-restore-continue-chummer6-ui-6",
+        "category_id": "",
+        "evidence_path": ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+        "reason": "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (222129s old > 172800s max)."
       },
       {
         "route_id": "route-2813f29ebf0c",
@@ -323,17 +334,6 @@
         "category_id": "",
         "evidence_path": "",
         "reason": "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
-      },
-      {
-        "route_id": "route-88c1ceb767e5",
-        "journey_id": "install_claim_restore_continue",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-ui",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-install-claim-restore-continue-chummer6-ui-6",
-        "category_id": "",
-        "evidence_path": ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
-        "reason": "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (213145s old > 172800s max)."
       },
       {
         "route_id": "route-c45419337a62",
@@ -673,7 +673,7 @@
           "signitic",
           "teable"
         ],
-        "support_generated_at": "2026-05-05T01:00:55Z",
+        "support_generated_at": "2026-05-05T03:30:39Z",
         "support_generated_age_seconds": 6,
         "support_source_refresh_mode": "source_mirror_fallback",
         "support_open_packet_count": 1,
@@ -905,7 +905,7 @@
       "status": "missing",
       "summary": "Desktop flagship proof is still incomplete.",
       "reasons": [
-        "Executable desktop exit gate receipt is stale (213148s old; max 86400s).",
+        "Executable desktop exit gate receipt is stale (222132s old; max 86400s).",
         "Release channel does not publish any promoted Windows installer media.",
         "Release channel is missing promoted installer tuple proof for required desktop head(s): avalonia.",
         "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:windows.",
@@ -930,7 +930,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-05-02T13:48:33.504770Z",
-        "ui_executable_gate_age_seconds": 213148,
+        "ui_executable_gate_age_seconds": 222132,
         "ui_linux_exit_gate_status": "passed",
         "ui_linux_exit_gate_recovered_from_executable_gate": false,
         "ui_linux_exit_gate_effective_ready": true,
@@ -1122,7 +1122,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-05-04T09:07:49Z",
-        "release_channel_age_seconds": 57192,
+        "release_channel_age_seconds": 66176,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "preview",
@@ -1575,7 +1575,7 @@
             "reason": "status_plane is stale."
           },
           {
-            "route_id": "route-e2d6d9663dd6",
+            "route_id": "route-a0e62e0eba90",
             "journey_id": "install_claim_restore_continue",
             "journey_state": "blocked",
             "owner_repo": "chummer6-hub",
@@ -1583,7 +1583,7 @@
             "package_id": "autofix-install-claim-restore-continue-chummer6-hub-2",
             "category_id": "",
             "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-            "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (331128s old > 172800s max)."
+            "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max)."
           },
           {
             "route_id": "route-1e4b203445b4",
@@ -1595,6 +1595,17 @@
             "category_id": "",
             "evidence_path": "",
             "reason": "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows."
+          },
+          {
+            "route_id": "route-3e981beaeb0a",
+            "journey_id": "organize_community_and_close_loop",
+            "journey_state": "blocked",
+            "owner_repo": "chummer6-hub",
+            "primary_lane": "repo_fix",
+            "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-2",
+            "category_id": "",
+            "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
+            "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max)."
           },
           {
             "route_id": "route-6f9ea93f2d12",
@@ -1630,17 +1641,6 @@
             "reason": "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory."
           },
           {
-            "route_id": "route-fe90674ade12",
-            "journey_id": "organize_community_and_close_loop",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-hub",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-2",
-            "category_id": "",
-            "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-            "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (331128s old > 172800s max)."
-          },
-          {
             "route_id": "route-a001a6955244",
             "journey_id": "recover_from_sync_conflict",
             "journey_state": "blocked",
@@ -1652,7 +1652,7 @@
             "reason": "status_plane is stale."
           },
           {
-            "route_id": "route-59f65b62b233",
+            "route_id": "route-f89c66b51321",
             "journey_id": "install_claim_restore_continue",
             "journey_state": "blocked",
             "owner_repo": "chummer6-mobile",
@@ -1660,7 +1660,18 @@
             "package_id": "autofix-install-claim-restore-continue-chummer6-mobile-7",
             "category_id": "",
             "evidence_path": ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
-            "reason": "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (329995s old > 172800s max)."
+            "reason": "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (338979s old > 172800s max)."
+          },
+          {
+            "route_id": "route-13584f759d7f",
+            "journey_id": "install_claim_restore_continue",
+            "journey_state": "blocked",
+            "owner_repo": "chummer6-ui",
+            "primary_lane": "repo_fix",
+            "package_id": "autofix-install-claim-restore-continue-chummer6-ui-6",
+            "category_id": "",
+            "evidence_path": ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+            "reason": "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (222129s old > 172800s max)."
           },
           {
             "route_id": "route-2813f29ebf0c",
@@ -1696,17 +1707,6 @@
             "reason": "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
           },
           {
-            "route_id": "route-88c1ceb767e5",
-            "journey_id": "install_claim_restore_continue",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-ui",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-install-claim-restore-continue-chummer6-ui-6",
-            "category_id": "",
-            "evidence_path": ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
-            "reason": "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (213145s old > 172800s max)."
-          },
-          {
             "route_id": "route-c45419337a62",
             "journey_id": "install_claim_restore_continue",
             "journey_state": "blocked",
@@ -1720,7 +1720,7 @@
         ],
         "journey_local_blocker_unrouted_reason_sample": [],
         "history_snapshot_count": 21,
-        "support_packets_generated_at": "2026-05-05T01:00:55Z",
+        "support_packets_generated_at": "2026-05-05T03:30:39Z",
         "support_packets_generated_age_seconds": 6,
         "support_packets_refresh_mode": "source_mirror_fallback",
         "support_open_packet_count": 1,
@@ -1734,8 +1734,8 @@
         "external_proof_backlog_request_observation_count": 3,
         "external_proof_backlog_duplicate_observation_count": 2,
         "external_proof_runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-        "external_proof_runbook_generated_at": "2026-05-05T01:01:01Z",
-        "external_proof_runbook_plan_generated_at": "2026-05-05T01:00:55Z",
+        "external_proof_runbook_generated_at": "2026-05-05T03:30:45Z",
+        "external_proof_runbook_plan_generated_at": "2026-05-05T03:30:39Z",
         "external_proof_runbook_release_channel_generated_at": "2026-05-04T09:07:49Z",
         "external_proof_commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
         "external_proof_command_bundle_sha256": "ca593c4ef62d69c36c9d04ddbbee024586c0bfb313bb3618439966b6469bfba6",
@@ -1745,9 +1745,9 @@
         "external_proof_runbook_synced": true,
         "external_proof_runbook_sync_issue_count": 0,
         "dispatchable_truth_ready": false,
-        "active_shards_generated_at": "2026-05-05T01:01:01Z",
+        "active_shards_generated_at": "2026-05-05T03:30:44Z",
         "active_shards_manifest_kind": "configured_shard_topology",
-        "active_shards_count": 9,
+        "active_shards_count": 3,
         "configured_shards_count": 20,
         "active_shards_recent": true,
         "ooda_state_recovered_from_active_shards": false,
@@ -1758,7 +1758,7 @@
         "supervisor_completion_desktop_scoped": false,
         "supervisor_completion_routed_local_only": false,
         "supervisor_successor_wave_steering_ready": false,
-        "supervisor_updated_at": "2026-05-05T01:00:39Z",
+        "supervisor_updated_at": "2026-05-05T03:30:16Z",
         "supervisor_recent_enough": true,
         "supervisor_focus_profiles": [
           "top_flagship_grade",

@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-05T01:02:06Z'
+generated_at: '2026-05-05T03:33:22Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -31,18 +31,24 @@ focus:
   - whole_project_frontier
   owners:
   - chummer6-core
+  - chummer6-design
   - chummer6-hub
+  - chummer6-hub-registry
+  - chummer6-media-factory
   - chummer6-mobile
   - chummer6-ui
   - chummer6-ui-kit
   texts:
   - accessibility
+  - aftermath
   - automatic bugfixing
-  - companion
-  - continuity
+  - campaign
+  - contacts
   - crash
   - crash reporting
   - desktop client
+  - diary
+  - downtime
   - feedback
   - feedback loop
   - fit and finish
@@ -50,17 +56,14 @@ focus:
   - journey smoothness
   - localization
   - media artifacts
-  - mobile
   - mobile play shell
   - no lowered standards
-  - offline
   - performance
   - proof shelf
   - restore confidence
   - support
   - support routing
   - top flagship grade
-  - travel
   - ui kit and flagship polish
   - whole project frontier
   - whole-project frontier
@@ -69,9 +72,9 @@ completion_audit:
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260505T005129Z-shard-1 is not trusted: worker exit
-    124'
-  latest_run_id: 20260505T005129Z-shard-1
+  reason: 'latest worker receipt 20260505T031927Z-shard-18 is not trusted: worker
+    exit 124'
+  latest_run_id: 20260505T031927Z-shard-18
   latest_run_reason: worker exit 124
 journey_gate_audit:
   status: fail
@@ -80,14 +83,14 @@ journey_gate_audit:
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
   status: fail
-  reason: linux desktop exit gate proof is stale (213238s old)
+  reason: linux desktop exit gate proof is stale (222314s old)
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
   generated_at: '2026-05-02T13:48:07Z'
 weekly_pulse_audit:
   status: fail
   reason: weekly product pulse reports journey gate health as blocked
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-05T01:01:02Z'
+  generated_at: '2026-05-05T03:30:46Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -100,17 +103,17 @@ blocking_audits:
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 - component: linux_desktop_exit_gate
   title: Linux desktop exit-gate gaps
-  reason: linux desktop exit gate proof is stale (213238s old)
+  reason: linux desktop exit gate proof is stale (222314s old)
 - component: desktop_executable_exit_gate
   title: Desktop executable exit-gate gaps
-  reason: desktop executable exit gate proof is stale (213212s old)
+  reason: desktop executable exit gate proof is stale (222287s old)
 - component: weekly_pulse
   title: Weekly product pulse gaps
   reason: weekly product pulse reports journey gate health as blocked
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: 'latest worker receipt 20260505T005129Z-shard-1 is not trusted: worker exit
-    124'
+  reason: 'latest worker receipt 20260505T031927Z-shard-18 is not trusted: worker
+    exit 124'
 frontier_count: 0
 frontier_ids: []
 frontier: []

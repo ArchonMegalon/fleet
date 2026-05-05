@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-05T00:57:02Z'
+generated_at: '2026-05-05T03:59:50Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-3
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -69,9 +69,9 @@ completion_audit:
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260505T004613Z-shard-3 is not trusted: worker exit
+  reason: 'latest worker receipt 20260505T034855Z-shard-3 is not trusted: worker exit
     124'
-  latest_run_id: 20260505T004613Z-shard-3
+  latest_run_id: 20260505T034855Z-shard-3
   latest_run_reason: worker exit 124
 journey_gate_audit:
   status: fail
@@ -79,15 +79,16 @@ journey_gate_audit:
   blocked_journey_count: 6
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
-  status: fail
-  reason: linux desktop exit gate proof is stale (212639s old)
+  status: pass
+  reason: linux desktop binary build/start/test proof is ready on current repo-local
+    evidence
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-  generated_at: '2026-05-02T13:48:07Z'
+  generated_at: '2026-05-05T03:54:10Z'
 weekly_pulse_audit:
   status: fail
   reason: weekly product pulse reports journey gate health as blocked
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-05T00:31:02Z'
+  generated_at: '2026-05-05T03:30:46Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -98,18 +99,12 @@ blocking_audits:
 - component: journey_gate
   title: Golden journey release-proof gaps
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
-- component: linux_desktop_exit_gate
-  title: Linux desktop exit-gate gaps
-  reason: linux desktop exit gate proof is stale (212639s old)
-- component: desktop_executable_exit_gate
-  title: Desktop executable exit-gate gaps
-  reason: desktop executable exit gate proof is stale (212613s old)
 - component: weekly_pulse
   title: Weekly product pulse gaps
   reason: weekly product pulse reports journey gate health as blocked
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: 'latest worker receipt 20260505T004613Z-shard-3 is not trusted: worker exit
+  reason: 'latest worker receipt 20260505T034855Z-shard-3 is not trusted: worker exit
     124'
 frontier_count: 0
 frontier_ids: []

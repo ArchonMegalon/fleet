@@ -188,7 +188,7 @@
       }
     ]
   },
-  "generated_at": "2026-05-05T01:01:03Z",
+  "generated_at": "2026-05-05T03:30:48Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -224,9 +224,9 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-05-05T01:01:03Z",
+    "generated_at": "2026-05-05T03:30:48Z",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-05-12T01:01:03Z",
+    "next_packet_due_at": "2026-05-12T03:30:48Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -921,7 +921,7 @@
         "closure_health"
       ],
       "missing_actions": [],
-      "next_review_due_at": "2026-05-12T01:01:03Z",
+      "next_review_due_at": "2026-05-12T03:30:48Z",
       "required_actions": [
         "launch_expand",
         "freeze_launch",
@@ -969,7 +969,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Weekly pulse holds launch expansion: Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
-          "next_review_due_at": "2026-05-12T01:01:03Z",
+          "next_review_due_at": "2026-05-12T03:30:48Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "do_not_expand_launch",
           "receipt_id": "m106-launch_expand-38164eaf8d8eaff1",
@@ -988,7 +988,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
-          "next_review_due_at": "2026-05-12T01:01:03Z",
+          "next_review_due_at": "2026-05-12T03:30:48Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_launch_frozen",
           "receipt_id": "m106-freeze_launch-9b48bb27898ead58",
@@ -1005,7 +1005,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Canary green on all active lanes",
-          "next_review_due_at": "2026-05-12T01:01:03Z",
+          "next_review_due_at": "2026-05-12T03:30:48Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_canary_ready",
           "receipt_id": "m106-canary-afc3d2be95960739",
@@ -1027,7 +1027,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "next_review_due_at": "2026-05-12T01:01:03Z",
+          "next_review_due_at": "2026-05-12T03:30:48Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "prepare_rollback_or_revoke",
           "receipt_id": "m106-rollback-54b25698c3bf1ddd",
@@ -1044,7 +1044,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
-          "next_review_due_at": "2026-05-12T01:01:03Z",
+          "next_review_due_at": "2026-05-12T03:30:48Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "route_remaining_work_to_dependency_or_sibling_packages",
           "receipt_id": "m106-focus_shift-9e0a36a10f3ebf57",
@@ -2014,7 +2014,7 @@
     "freshness_policy": "refresh_before_public_status_or_operator_action_if_packet_is_overdue",
     "headline": "Launch expansion is frozen with rollback watch active.",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-05-12T01:01:03Z",
+    "next_packet_due_at": "2026-05-12T03:30:48Z",
     "schedule_ref": "governor_packet_schedule.next_packet_due_at",
     "state": "freeze_with_rollback_watch"
   },
@@ -2676,7 +2676,7 @@
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "cc47bdaf2e86e8b935bc191928b863e7894af2a1a6f919107affc0db29291a72",
+    "combined_source_sha256": "021ca51dcf939bac2d646d0d05f4e4e117a873dd679e081109ce7f7399a9194c",
     "missing_inputs": [],
     "rows": [
       {
@@ -2702,22 +2702,22 @@
       {
         "name": "weekly_pulse",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "3321d8a58c974c8872adfd77ad93e4677d4c6453635723b933cf875d3bd33464"
+        "source_sha256": "43d470436425f30020711261a4043c55c7e69b6db48af9b55aeff82b1f24d8e3"
       },
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "345fa355d1ae9ae0979c20ef111248cbc149c20da0b3ee6588cd6f4ff79470a0"
+        "source_sha256": "9c5a5b688136c14fb4eda8dac47887a226c90aba0980677baecaa8cb2724ab20"
       },
       {
         "name": "journey_gates",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "6307788a06b7234fecabfbbfc3e98d9ccaf176e08c8cba8900b8412343e53856"
+        "source_sha256": "d1248a0a5859a3aa6a4f490d6f2498d659c59fd994781cb44f5c2e90f3c14cc6"
       },
       {
         "name": "support_packets",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "0f8af1f2b0a227998e333ffd074ad274adcf03924f5076837132879a5949cccb"
+        "source_sha256": "c8e5c11f8a2f0600ddbd54f43185f60dd0dbdc4e5f7c602b2d23055ef7696620"
       },
       {
         "name": "status_plane",
@@ -2750,19 +2750,19 @@
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-05-05T01:01:01Z",
+        "generated_at": "2026-05-05T03:30:45Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "345fa355d1ae9ae0979c20ef111248cbc149c20da0b3ee6588cd6f4ff79470a0",
+        "source_sha256": "9c5a5b688136c14fb4eda8dac47887a226c90aba0980677baecaa8cb2724ab20",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-05-05T01:00:59Z",
+        "generated_at": "2026-05-05T03:30:43Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "6307788a06b7234fecabfbbfc3e98d9ccaf176e08c8cba8900b8412343e53856",
+        "source_sha256": "d1248a0a5859a3aa6a4f490d6f2498d659c59fd994781cb44f5c2e90f3c14cc6",
         "state": "present"
       },
       "launch_signal_truth_alignment": {
@@ -2958,19 +2958,19 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-05-05T01:00:55Z",
+        "generated_at": "2026-05-05T03:30:39Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "0f8af1f2b0a227998e333ffd074ad274adcf03924f5076837132879a5949cccb",
+        "source_sha256": "c8e5c11f8a2f0600ddbd54f43185f60dd0dbdc4e5f7c602b2d23055ef7696620",
         "state": "present",
         "successor_package_verification_status": "pass"
       },
       "weekly_pulse": {
-        "generated_at": "2026-05-05T01:01:02Z",
+        "generated_at": "2026-05-05T03:30:47Z",
         "required_key": "contract_name",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "3321d8a58c974c8872adfd77ad93e4677d4c6453635723b933cf875d3bd33464",
+        "source_sha256": "43d470436425f30020711261a4043c55c7e69b6db48af9b55aeff82b1f24d8e3",
         "state": "present"
       }
     },
@@ -3208,7 +3208,7 @@
   },
   "wave_id": "W8",
   "weekly_input_health": {
-    "generated_at": "2026-05-05T01:01:02Z",
+    "generated_at": "2026-05-05T03:30:47Z",
     "issues": [],
     "max_age_seconds": 691200,
     "required_launch_signals": [
