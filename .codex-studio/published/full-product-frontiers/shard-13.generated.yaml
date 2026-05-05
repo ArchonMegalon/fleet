@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T15:52:40Z'
+generated_at: '2026-05-05T16:33:22Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-13
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -70,7 +70,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T15:52:28Z'
+  generated_at: '2026-05-05T16:32:48Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -101,7 +101,7 @@ frontier:
     summary: 'Milestone ''Add travel and mobile starter continuity for primer and
       briefing artifacts'' remains open under the flagship closeout frontier. Outstanding
       readiness coverage: flagship readiness proof refresh.'
-    predicted_completion_at: '2026-05-06T06:22:04Z'
+    predicted_completion_at: '2026-05-06T07:02:46Z'
     range_low_hours: 8.1
     range_high_hours: 20.88
     remaining_open_milestones: 1
@@ -114,17 +114,3 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
-queue_package:
-  repo: chummer6-mobile
-  package_id: next90-m119-mobile-onboarding-continuity
-  title: Add travel and mobile starter continuity for primer and briefing artifacts
-  priority: 0
-  owned_surfaces:
-  - starter_onboarding:mobile
-  - first_session_briefing:mobile
-  allowed_paths:
-  - src
-  - tests
-  - docs
-  - scripts

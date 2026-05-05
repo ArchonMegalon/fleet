@@ -50,7 +50,7 @@
   },
   "contract_name": "fleet.next90_m145_explain_coverage_gate",
   "frontier_id": 1456045606,
-  "generated_at": "2026-05-05T08:48:29Z",
+  "generated_at": "2026-05-05T16:47:46Z",
   "milestone_id": 145,
   "package_closeout": {
     "blocked_reasons": [],
@@ -133,6 +133,9 @@
           "campaign_session_recover_recap",
           "install_claim_restore_continue",
           "migration_boundary_evidence",
+          "mobile_artifact_shelf",
+          "mobile_campaign_continuity",
+          "mobile_onboarding_continuity",
           "quality_release_hardening",
           "quick_explain_follow_up",
           "recover_from_sync_conflict"
@@ -218,7 +221,7 @@
         "missing_markers": []
       },
       "proof_passed": true,
-      "queue_status": "done",
+      "queue_status": "complete",
       "registry_status": "done",
       "shipped": true,
       "work_task_id": "145.7"

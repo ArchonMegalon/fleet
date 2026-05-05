@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T15:50:45Z'
+generated_at: '2026-05-05T16:31:05Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-2
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -71,7 +71,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T15:49:13Z'
+  generated_at: '2026-05-05T16:28:17Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -105,7 +105,7 @@ frontier:
     summary: 'Milestone ''Hub, registry, and public front door flagship finish'' remains
       open under the flagship closeout frontier. Outstanding readiness coverage: flagship
       readiness proof refresh.'
-    predicted_completion_at: '2026-05-06T08:41:45Z'
+    predicted_completion_at: '2026-05-06T09:22:05Z'
     range_low_hours: 9.5
     range_high_hours: 24.2
     remaining_open_milestones: 1

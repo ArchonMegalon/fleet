@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-05T15:58:58Z'
+generated_at: '2026-05-05T16:33:18Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-5
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -33,6 +33,11 @@ focus:
   - chummer6-core
   - chummer6-ui
   - chummer6-design
+  - chummer6-ui-kit
+  - chummer6-mobile
+  - chummer6-media-factory
+  - chummer6-hub
+  - chummer6-hub-registry
   texts:
   - top flagship grade
   - whole project frontier
@@ -61,10 +66,11 @@ completion_audit:
   status: fail
   reason: weekly product pulse reports release health as needs_attention
 receipt_audit:
-  status: pass
-  reason: recent supervisor history ends with a trusted structured worker receipt
-  latest_run_id: 20260505T154130Z-shard-5
-  latest_run_reason: ''
+  status: fail
+  reason: 'latest worker receipt 20260505T161421Z-shard-5 is not trusted: worker exit
+    124'
+  latest_run_id: 20260505T161421Z-shard-5
+  latest_run_reason: worker exit 124
 journey_gate_audit:
   status: pass
   reason: golden journey proof is ready
@@ -80,7 +86,7 @@ weekly_pulse_audit:
   status: fail
   reason: weekly product pulse reports release health as needs_attention
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-05T15:49:15Z'
+  generated_at: '2026-05-05T16:28:17Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -91,6 +97,10 @@ blocking_audits:
 - component: weekly_pulse
   title: Weekly product pulse gaps
   reason: weekly product pulse reports release health as needs_attention
+- component: trusted_completion_receipt
+  title: Trusted completion receipt
+  reason: 'latest worker receipt 20260505T161421Z-shard-5 is not trusted: worker exit
+    124'
 frontier_count: 0
 frontier_ids: []
 frontier: []
@@ -103,6 +113,6 @@ eta:
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Rules engine parity, explain trust, and import certification''
+  summary: 'Milestone ''Horizons, public guide, and flagship future-lane posture''
     remains open under the flagship closeout frontier. Outstanding readiness coverage:
     flagship readiness proof refresh.'

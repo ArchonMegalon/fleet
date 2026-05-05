@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T15:57:48Z'
+generated_at: '2026-05-05T16:31:35Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-6
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -67,40 +67,58 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: 'current repo-local completion proof is green; using a supervisor evidence
-    receipt because the latest worker outcome is non-material to proof trust: dispatch
-    launch selection is temporarily busy'
+  status: fail
+  reason: weekly product pulse reports release health as needs_attention
 full_product_audit:
-  status: pass
-  reason: flagship product readiness proof is current across desktop, rules, hub,
-    mobile, horizons, and operator lanes
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T15:57:13Z'
-  proof_status: pass
+  generated_at: '2026-05-05T16:28:17Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 0
-frontier_ids: []
-frontier: []
-eta:
-  status: flagship_delivery
-  eta_human: 11h-1.1d
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Rules engine parity, explain trust, and import certification''
-    remains open under the flagship closeout frontier. Outstanding readiness coverage:
-    flagship readiness proof refresh.'
-  predicted_completion_at: '2026-05-06T10:43:05Z'
-  range_low_hours: 10.86
-  range_high_hours: 26.65
-  remaining_open_milestones: 1
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 1
-  remaining_effort_units: 2.05
+frontier_count: 1
+frontier_ids:
+- 3109832007
+frontier:
+- id: 3109832007
+  title: Fleet and operator loop flagship finish
+  wave: flagship_product
+  status: not_started
+  owners:
+  - fleet
+  - executive-assistant
+  - chummer6-design
+  - chummer6-hub
+  dependencies: []
+  exit_criteria:
+  - Keep the product-governor, support, signal, and operator loop durable enough to
+    steer the full multi-repo product, not just the current milestone wave, with trustworthy
+    proofs, traces, ETAs, handoffs, and fail-closed anti-false-complete posture.
+  - Ensure the loop can keep decomposing full-product work across shards until flagship
+    readiness proof is current and trusted, and that actionable feedback, crash, and
+    support signals can auto-materialize into routed bugfix work without operator
+    babysitting.
+  eta:
+    status: flagship_delivery
+    eta_human: 9h-23h
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
+      the flagship closeout frontier. Outstanding readiness coverage: flagship readiness
+      proof refresh.'
+    predicted_completion_at: '2026-05-06T08:37:35Z'
+    range_low_hours: 9.0
+    range_high_hours: 23.2
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 2.0
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''

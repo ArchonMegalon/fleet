@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T15:57:50Z'
+generated_at: '2026-05-05T16:33:45Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -72,7 +72,7 @@ full_product_audit:
   reason: flagship product readiness proof is current across desktop, rules, hub,
     mobile, horizons, and operator lanes
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T15:57:13Z'
+  generated_at: '2026-05-05T16:33:23Z'
   proof_status: pass
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -93,7 +93,7 @@ eta:
   summary: 'Milestone ''Flagship desktop client and workbench finish'' remains open
     under the flagship closeout frontier. Outstanding readiness coverage: flagship
     readiness proof refresh.'
-  predicted_completion_at: '2026-05-06T10:43:08Z'
+  predicted_completion_at: '2026-05-06T11:19:03Z'
   range_low_hours: 10.86
   range_high_hours: 26.65
   remaining_open_milestones: 1

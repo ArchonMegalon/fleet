@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T15:55:33Z'
+generated_at: '2026-05-05T16:32:12Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-14
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -58,7 +58,6 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
-  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -69,35 +68,66 @@ completion_audit:
   status: fail
   reason: weekly product pulse reports release health as needs_attention
 full_product_audit:
-  status: pass
-  reason: flagship product readiness proof is current across desktop, rules, hub,
-    mobile, horizons, and operator lanes
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T15:54:16Z'
-  proof_status: pass
+  generated_at: '2026-05-05T16:28:17Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 0
-frontier_ids: []
-frontier: []
-eta:
-  status: flagship_delivery
-  eta_human: 9h-22h
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Publish public trust, status, release, and proof-shelf surfaces
-    from governor truth'' remains open under the flagship closeout frontier. Outstanding
-    readiness coverage: desktop_client.'
-  predicted_completion_at: '2026-05-06T07:05:27Z'
-  range_low_hours: 8.55
-  range_high_hours: 21.78
-  remaining_open_milestones: 1
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 1
-  remaining_effort_units: 1.8
+frontier_count: 1
+frontier_ids:
+- 2305272423
+frontier:
+- id: 2305272423
+  title: Publish public trust, status, release, and proof-shelf surfaces from registry
+    and governor truth.
+  wave: flagship_product
+  status: not_started
+  owners:
+  - chummer6-hub
+  dependencies: []
+  exit_criteria:
+  - Compile live, preview, fallback, revoked, fixed, blocked, proof freshness, support
+    pulse, and adoption health into public status surfaces.
+  - 'Own and prove the surface slice(s): public_trust_surface:v3, launch_health:public'
+  - 'Keep implementation scoped to the allowed paths: Chummer.Run.Api, scripts, tests'
+  - Refresh flagship proof and close out the queue slice honestly when this package
+    is landed for `chummer6-hub` (next90-m120-hub-public-launch-health).
+  eta:
+    status: flagship_delivery
+    eta_human: 9h-22h
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Publish public trust, status, release, and proof-shelf surfaces
+      from registry and governor truth.'' remains open under the flagship closeout
+      frontier. Outstanding readiness coverage: flagship readiness proof refresh.'
+    predicted_completion_at: '2026-05-06T07:42:06Z'
+    range_low_hours: 8.55
+    range_high_hours: 21.78
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 1.8
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
+source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
+queue_package:
+  repo: chummer6-hub
+  package_id: next90-m120-hub-public-launch-health
+  title: Publish public trust, status, release, and proof-shelf surfaces from registry
+    and governor truth.
+  priority: 0
+  owned_surfaces:
+  - public_trust_surface:v3
+  - launch_health:public
+  allowed_paths:
+  - Chummer.Run.Api
+  - scripts
+  - tests

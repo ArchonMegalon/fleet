@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-05T15:57:52Z'
+generated_at: '2026-05-05T16:33:47Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -65,7 +65,7 @@ completion_audit:
 receipt_audit:
   status: pass
   reason: recent supervisor history ends with a trusted structured worker receipt
-  latest_run_id: 20260505T150406Z-shard-1
+  latest_run_id: 20260505T161358Z-shard-1
   latest_run_reason: ''
 journey_gate_audit:
   status: pass
@@ -82,7 +82,7 @@ weekly_pulse_audit:
   status: fail
   reason: weekly product pulse reports release health as needs_attention
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-05T15:30:47Z'
+  generated_at: '2026-05-05T16:28:17Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry

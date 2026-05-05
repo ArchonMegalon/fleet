@@ -5,6 +5,7 @@ fleet_root="/docker/fleet"
 readiness_out="$fleet_root/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json"
 readiness_state_mirror_out="$fleet_root/state/chummer_design_supervisor/artifacts/FLAGSHIP_PRODUCT_READINESS.generated.json"
 readiness_design_mirror_out="$fleet_root/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json"
+state_root_default="$fleet_root/state/chummer_design_supervisor"
 ui_refresh_wait_timeout_seconds="${CHUMMER_FLAGSHIP_UI_REFRESH_WAIT_TIMEOUT_SECONDS:-1800}"
 ui_refresh_poll_interval_seconds="${CHUMMER_FLAGSHIP_UI_REFRESH_POLL_INTERVAL_SECONDS:-5}"
 
@@ -91,6 +92,46 @@ wait_for_ui_refresh() {
   fi
 }
 
+refresh_full_product_frontier() {
+  local requested_state_root="${CHUMMER_FLAGSHIP_STATE_ROOT:-$state_root_default}"
+  local state_roots=()
+  local shard_root
+
+  if [[ -d "$requested_state_root" ]]; then
+    state_roots+=("$requested_state_root")
+  fi
+
+  if [[ -d /var/lib/codex-fleet/chummer_design_supervisor ]]; then
+    for shard_root in /var/lib/codex-fleet/chummer_design_supervisor/shard-*; do
+      [[ -d "$shard_root" ]] || continue
+      if [[ " ${state_roots[*]} " != *" $shard_root "* ]]; then
+        state_roots+=("$shard_root")
+      fi
+    done
+  fi
+
+  if ((${#state_roots[@]} == 0)); then
+    echo "[flagship-readiness] FAIL: no supervisor state root available for full-product frontier refresh." >&2
+    return 1
+  fi
+
+  local state_root
+  for state_root in "${state_roots[@]}"; do
+    python3 - "$state_root" <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, "/docker/fleet/scripts")
+import chummer_design_supervisor as supervisor
+
+state_root = Path(sys.argv[1]).resolve()
+args = supervisor._runtime_snapshot_args_for_state_root(state_root)
+base = supervisor.derive_context(args)
+supervisor.derive_flagship_product_context(args, state_root, base_context=base)
+PY
+  done
+}
+
 if [[ ! -x "$b14_script" && ! -f "$b14_script" ]]; then
   echo "[flagship-readiness] FAIL: missing UI flagship proof script: $b14_script" >&2
   exit 1
@@ -111,6 +152,9 @@ wait_for_ui_refresh "$baseline_ui_flagship_mtime" "$baseline_ui_visual_mtime"
 cd "$fleet_root"
 python3 scripts/codex-shims/codexea_ui_parity_audit_probe.py
 python3 scripts/materialize_next90_m136_fleet_aggregate_readiness_parity_gates.py
+python3 scripts/materialize_next90_m138_fleet_hero_path_projections.py
+python3 scripts/materialize_next90_m138_fleet_hero_path_closeout_gates.py
 python3 scripts/materialize_flagship_product_readiness.py --out "$readiness_out" --mirror-out "$readiness_state_mirror_out"
 cp "$readiness_out" "$readiness_design_mirror_out"
 python3 scripts/materialize_weekly_governor_packet.py
+refresh_full_product_frontier

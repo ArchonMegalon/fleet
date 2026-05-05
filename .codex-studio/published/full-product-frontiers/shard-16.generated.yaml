@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T15:53:26Z'
+generated_at: '2026-05-05T16:33:22Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-16
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -70,7 +70,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T15:52:45Z'
+  generated_at: '2026-05-05T16:32:48Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -104,7 +104,7 @@ frontier:
     summary: 'Milestone ''Normalize adoption health, proof freshness, release channel,
       and revocation facts for public surfaces'' remains open under the flagship closeout
       frontier. Outstanding readiness coverage: flagship readiness proof refresh.'
-    predicted_completion_at: '2026-05-06T07:03:20Z'
+    predicted_completion_at: '2026-05-06T07:43:16Z'
     range_low_hours: 8.55
     range_high_hours: 21.78
     remaining_open_milestones: 1

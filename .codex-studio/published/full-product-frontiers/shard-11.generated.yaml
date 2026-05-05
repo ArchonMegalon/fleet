@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T15:52:59Z'
+generated_at: '2026-05-05T16:33:23Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-11
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -68,7 +68,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T15:52:45Z'
+  generated_at: '2026-05-05T16:32:48Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -100,7 +100,7 @@ frontier:
     summary: 'Milestone ''Build artifact shelf APIs and audience filters'' remains
       open under the flagship closeout frontier. Outstanding readiness coverage: flagship
       readiness proof refresh.'
-    predicted_completion_at: '2026-05-06T07:02:53Z'
+    predicted_completion_at: '2026-05-06T07:43:17Z'
     range_low_hours: 8.55
     range_high_hours: 21.78
     remaining_open_milestones: 1
@@ -113,16 +113,3 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
-queue_package:
-  repo: chummer6-hub
-  package_id: next90-m117-hub-artifact-shelf-v2
-  title: Build artifact shelf APIs and audience filters
-  priority: 0
-  owned_surfaces:
-  - artifact_shelf:v2
-  - artifact_audience_filters
-  allowed_paths:
-  - Chummer.Run.Api
-  - scripts
-  - tests

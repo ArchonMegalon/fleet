@@ -1,7 +1,7 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T16:04:56Z'
-mode: complete
+generated_at: '2026-05-05T16:32:22Z'
+mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -25,122 +25,197 @@ design_source_paths:
 - /docker/chummercomplete/chummer-design/products/chummer/projects/fleet.md
 primary_probe_shard: shard-1
 focus:
-  profiles: []
+  profiles:
+  - top_flagship_grade
+  - whole_project_frontier
   owners:
-  - chummer6-core
   - chummer6-design
   - chummer6-hub
-  - chummer6-hub-registry
   - chummer6-mobile
   - chummer6-ui
-  - executive-assistant
   - fleet
+  - chummer6-core
+  - chummer6-ui-kit
+  - chummer6-hub-registry
   texts:
   - accessibility
-  - advancement
-  - aftermath
   - automatic bugfixing
-  - build lab
-  - campaign
-  - chummer5a
-  - claim
-  - companion
-  - contacts
-  - continuity
   - crash
-  - crew-fit
-  - custom-data
+  - crash reporting
   - dashboard
-  - dedicated-tester
-  - desktop
-  - desktop-client
-  - diary
   - dice
-  - dossier
-  - downtime
-  - event
-  - exchange
-  - explain
-  - export
   - feedback
-  - flagship-readiness
-  - genesis
-  - gm
+  - feedback loop
+  - fit and finish
   - governance
-  - grade-bar
-  - hero lab
-  - import
   - initiative
-  - install
+  - journey smoothness
   - launch
   - localization
-  - master index
-  - materializer
-  - mobile
-  - offline
+  - no lowered standards
   - operator
-  - opposition
-  - oracle
-  - prep
+  - performance
+  - proof shelf
   - pulse
-  - quality
-  - recap
-  - recovery
-  - release truth
-  - release-proof
-  - replay
-  - restore
-  - roster
-  - rule-environment
-  - settings
-  - sourcebook
+  - restore confidence
   - support
-  - translator
-  - travel
+  - support routing
+  - top flagship grade
   - trust
-  - update
-  - user-journey-tester-audit
   - utility
-  - workbench
-  - xml
+  - whole project frontier
+  - whole-project frontier
 quality_policy:
-  bar: flagship_product
+  bar: top_flagship_grade
   whole_project_frontier: true
   desktop_is_only_one_head: true
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: recent supervisor history ends with a trusted structured worker receipt
+  status: fail
+  reason: weekly product pulse reports release health as needs_attention
 full_product_audit:
-  status: pass
-  reason: flagship product readiness proof is current across desktop, rules, hub,
-    mobile, horizons, and operator lanes
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T15:57:13Z'
-  proof_status: pass
+  generated_at: '2026-05-05T16:28:17Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 0
-frontier_ids: []
-frontier: []
+frontier_count: 3
+frontier_ids:
+- 4066417069
+- 3449507998
+- 2541792707
+frontier:
+- id: 4066417069
+  title: Flagship desktop client and workbench finish
+  wave: flagship_product
+  status: not_started
+  owners:
+  - chummer6-ui
+  - chummer6-core
+  - chummer6-ui-kit
+  dependencies: []
+  exit_criteria:
+  - Ship the flagship workbench/browser/desktop surface described in `projects/ui.md`
+    and `BUILD_LAB_PRODUCT_MODEL.md`, including builder, compare, explain, grouped
+    inspection, conditional toggles, desktop packaging, updater, and in-app support
+    polish.
+  - Keep the flagship desktop head centered on Avalonia with release-grade startup,
+    packaging, and support evidence rather than treating Linux exit-gate closure as
+    the whole product.
+  eta:
+    status: flagship_delivery
+    eta_human: 11h-1.1d
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Flagship desktop client and workbench finish'' remains open
+      under the flagship closeout frontier. Outstanding readiness coverage: flagship
+      readiness proof refresh.'
+    predicted_completion_at: '2026-05-06T11:17:40Z'
+    range_low_hours: 10.86
+    range_high_hours: 26.65
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 2.05
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
+- id: 3449507998
+  title: Rules engine parity, explain trust, and import certification
+  wave: flagship_product
+  status: not_started
+  owners:
+  - chummer6-core
+  - chummer6-ui
+  dependencies: []
+  exit_criteria:
+  - Close SR4, SR5, and SR6 character-build parity gaps using deterministic engine
+    truth, explain receipts, and legacy/import oracle evidence described in `projects/core.md`
+    and the roadmap.
+  - Make ruleset import, migration, and explain certification boring enough that flagship
+    desktop and mobile surfaces consume one grounded engine truth.
+  eta:
+    status: flagship_delivery
+    eta_human: 11h-1.1d
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Rules engine parity, explain trust, and import certification''
+      remains open under the flagship closeout frontier. Outstanding readiness coverage:
+      flagship readiness proof refresh.'
+    predicted_completion_at: '2026-05-06T11:17:40Z'
+    range_low_hours: 10.86
+    range_high_hours: 26.65
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 2.05
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
+- id: 2541792707
+  title: Hub, registry, and public front door flagship finish
+  wave: flagship_product
+  status: not_started
+  owners:
+  - chummer6-hub
+  - chummer6-hub-registry
+  - chummer6-design
+  dependencies: []
+  exit_criteria:
+  - Deliver the relationship/orchestration, publication, downloads, account, install,
+    update, proof-shelf, and support surfaces promised in `projects/hub.md`, `projects/hub-registry.md`,
+    and the product front door canon.
+  - Keep public landing, signed-in overlays, release heads, install guidance, and
+    support/control truth aligned with design-owned manifests instead of repo-local
+    improvisation.
+  eta:
+    status: flagship_delivery
+    eta_human: 10h-1d
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Hub, registry, and public front door flagship finish'' remains
+      open under the flagship closeout frontier. Outstanding readiness coverage: flagship
+      readiness proof refresh.'
+    predicted_completion_at: '2026-05-06T09:23:22Z'
+    range_low_hours: 9.5
+    range_high_hours: 24.2
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 2.0
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
 eta:
-  status: ready
-  eta_human: ready now
-  eta_confidence: high
-  basis: completion_audit_pass
-  scope_kind: repo_local_completion_ready
-  scope_label: Repo-local completion review
-  scope_warning: Repo-local completion evidence is green. External release, flagship,
-    or parity claims still depend on the broader readiness surfaces staying green.
+  status: flagship_delivery
+  eta_human: 1d-2.5d
+  eta_confidence: low
+  basis: full_product_frontier_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
   blocking_reason: ''
-  summary: Whole-product completion audit is green on current repo-local evidence.
-  predicted_completion_at: '2026-05-05T16:04:56Z'
-  range_low_hours: 0.0
-  range_high_hours: 0.0
-  remaining_open_milestones: 0
+  summary: 'Current closeout gates are green, but flagship product work still remains
+    across 3 synthetic slices. Outstanding readiness coverage: flagship readiness
+    proof refresh.'
+  predicted_completion_at: '2026-05-07T11:14:22Z'
+  range_low_hours: 24.4
+  range_high_hours: 61.0
+  remaining_open_milestones: 3
   remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 0
-  remaining_effort_units: 0.0
+  remaining_not_started_milestones: 3
+  remaining_effort_units: 6.1
