@@ -4034,6 +4034,7 @@ def build_flagship_product_readiness_payload(
     m140_portability_and_cadence_closeout_gate_path: Path = DEFAULT_M140_PORTABILITY_AND_CADENCE_CLOSEOUT_GATE,
     m141_import_route_closeout_gate_path: Path = DEFAULT_M141_IMPORT_ROUTE_CLOSEOUT_GATE,
     m142_route_local_proof_closeout_gate_path: Path = DEFAULT_M142_ROUTE_LOCAL_PROOF_CLOSEOUT_GATE,
+    m143_route_local_output_closeout_gate_path: Path = DEFAULT_M143_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATE,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
     effective_acceptance_path, acceptance = load_acceptance_with_fallback(acceptance_path)
@@ -4120,6 +4121,10 @@ def build_flagship_product_readiness_payload(
     m142_route_local_proof_closeout_gate = load_json(m142_route_local_proof_closeout_gate_path)
     m142_route_local_proof_closeout_gate_audit = _m142_route_local_proof_closeout_gate_audit(
         m142_route_local_proof_closeout_gate
+    )
+    m143_route_local_output_closeout_gate = load_json(m143_route_local_output_closeout_gate_path)
+    m143_route_local_output_closeout_gate_audit = _m143_route_local_output_closeout_gate_audit(
+        m143_route_local_output_closeout_gate
     )
     effective_external_proof_runbook_path = (
         external_proof_runbook_path if external_proof_runbook_path is not None else support_packets_path.parent / DEFAULT_EXTERNAL_PROOF_RUNBOOK.name
@@ -8098,6 +8103,8 @@ def build_flagship_product_readiness_payload(
         flagship_plane_reasons.append("M141 import-route closeout gate is not ready.")
     if not bool(m142_route_local_proof_closeout_gate_audit.get("ready")):
         flagship_plane_reasons.append("M142 route-local proof closeout gate is not ready.")
+    if not bool(m143_route_local_output_closeout_gate_audit.get("ready")):
+        flagship_plane_reasons.append("M143 route-local output closeout gate is not ready.")
     flagship_plane_status, flagship_plane = _coverage_entry(
         positives=(
             int(len(coverage_gap_keys) == 0)
@@ -8124,6 +8131,7 @@ def build_flagship_product_readiness_payload(
             + int(bool(m140_portability_and_cadence_closeout_gate_audit.get("ready")))
             + int(bool(m141_import_route_closeout_gate_audit.get("ready")))
             + int(bool(m142_route_local_proof_closeout_gate_audit.get("ready")))
+            + int(bool(m143_route_local_output_closeout_gate_audit.get("ready")))
         ),
         reasons=flagship_plane_reasons,
         summary_ready="Flagship replacement truth is fully green.",
@@ -8237,6 +8245,20 @@ def build_flagship_product_readiness_payload(
             ),
             "m142_route_local_proof_closeout_gate_reasons": list(
                 m142_route_local_proof_closeout_gate_audit.get("reasons") or []
+            ),
+            "m143_route_local_output_closeout_gate_path": str(m143_route_local_output_closeout_gate_path),
+            "m143_route_local_output_closeout_gate_ready": bool(m143_route_local_output_closeout_gate_audit.get("ready")),
+            "m143_route_local_output_closeout_gate_status": str(
+                m143_route_local_output_closeout_gate_audit.get("status") or ""
+            ),
+            "m143_route_local_output_closeout_monitor_status": str(
+                m143_route_local_output_closeout_gate_audit.get("route_local_output_closeout_status") or ""
+            ),
+            "m143_route_local_output_closeout_gate_generated_at": str(
+                m143_route_local_output_closeout_gate_audit.get("generated_at") or ""
+            ),
+            "m143_route_local_output_closeout_gate_reasons": list(
+                m143_route_local_output_closeout_gate_audit.get("reasons") or []
             ),
             "readiness_plane_contract_path": str(effective_flagship_readiness_planes_path),
             "readiness_plane_contract_present": bool(flagship_readiness_planes),
@@ -8555,6 +8577,7 @@ def materialize_flagship_product_readiness(
     m140_portability_and_cadence_closeout_gate_path: Path = DEFAULT_M140_PORTABILITY_AND_CADENCE_CLOSEOUT_GATE,
     m141_import_route_closeout_gate_path: Path = DEFAULT_M141_IMPORT_ROUTE_CLOSEOUT_GATE,
     m142_route_local_proof_closeout_gate_path: Path = DEFAULT_M142_ROUTE_LOCAL_PROOF_CLOSEOUT_GATE,
+    m143_route_local_output_closeout_gate_path: Path = DEFAULT_M143_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATE,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
     payload = build_flagship_product_readiness_payload(
@@ -8572,6 +8595,7 @@ def materialize_flagship_product_readiness(
         m140_portability_and_cadence_closeout_gate_path=m140_portability_and_cadence_closeout_gate_path,
         m141_import_route_closeout_gate_path=m141_import_route_closeout_gate_path,
         m142_route_local_proof_closeout_gate_path=m142_route_local_proof_closeout_gate_path,
+        m143_route_local_output_closeout_gate_path=m143_route_local_output_closeout_gate_path,
         external_proof_runbook_path=external_proof_runbook_path,
         supervisor_state_path=supervisor_state_path,
         ooda_state_path=ooda_state_path,
@@ -8641,6 +8665,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         m140_portability_and_cadence_closeout_gate_path=Path(args.m140_portability_and_cadence_closeout_gate).resolve(),
         m141_import_route_closeout_gate_path=Path(args.m141_import_route_closeout_gate).resolve(),
         m142_route_local_proof_closeout_gate_path=Path(args.m142_route_local_proof_closeout_gate).resolve(),
+        m143_route_local_output_closeout_gate_path=Path(args.m143_route_local_output_closeout_gate).resolve(),
         feedback_loop_gate_path=Path(args.feedback_loop_gate).resolve(),
         external_proof_runbook_path=Path(args.external_proof_runbook).resolve() if str(args.external_proof_runbook or "").strip() else None,
         supervisor_state_path=Path(args.supervisor_state).resolve(),
