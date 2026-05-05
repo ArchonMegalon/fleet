@@ -1,0 +1,319 @@
+{
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "canonical_alignment": {
+    "design_queue_status": "not_started",
+    "fleet_queue_status": "not_started",
+    "issues": [],
+    "registry_status": "not_started",
+    "state": "pass",
+    "work_task_status": ""
+  },
+  "canonical_monitors": {
+    "acceptance_matrix": {
+      "issues": [],
+      "platform_count": 3,
+      "platforms": {
+        "linux": {
+          "primary_package_kind": "deb",
+          "public_shelf_status": "preview_support_directed",
+          "signing_posture": "package_integrity_required",
+          "startup_smoke_gate": "required",
+          "supportability": "secondary",
+          "updater_mode": "in_app_or_installer_handoff"
+        },
+        "macOS": {
+          "primary_package_kind": "setup_script",
+          "public_shelf_status": "account_gated_setup_script_preview",
+          "signing_posture": "codesign_and_notarization_required",
+          "startup_smoke_gate": "required",
+          "supportability": "account_gated_setup_script_preview",
+          "updater_mode": "claimed_setup_script_then_dmg_handoff"
+        },
+        "windows": {
+          "primary_package_kind": "installer",
+          "public_shelf_status": "promoted_preview",
+          "signing_posture": "required_for_promoted_release",
+          "startup_smoke_gate": "required",
+          "supportability": "primary",
+          "updater_mode": "in_app_apply_helper"
+        }
+      },
+      "state": "pass",
+      "warnings": [
+        "Acceptance matrix keeps linux in preview_support_directed posture instead of a promoted public lane.",
+        "Acceptance matrix keeps macOS in account_gated_setup_script_preview posture instead of a promoted public lane."
+      ]
+    },
+    "next90_guide": {
+      "checks": {
+        "milestone_127": true,
+        "release_truth_chain": true,
+        "wave_18": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "public_auto_update_policy": {
+      "checks": {
+        "fixed_rule": true,
+        "paused_rollout": true,
+        "public_promises": true,
+        "registry_truth": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "public_downloads_policy": {
+      "checks": {
+        "authority": true,
+        "fallback_labels": true,
+        "proof_shelf": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "repo_hardening": {
+      "hygiene_marker_monitor": {
+        "checks": {
+          "blast_radius_limits": true,
+          "release_manifest_chain": true,
+          "user_loops": true,
+          "workflow_hardening": true
+        },
+        "issues": [],
+        "state": "pass"
+      },
+      "issues": [],
+      "state": "pass",
+      "target_initiative_ids": [
+        "RH-001",
+        "RH-002",
+        "RH-003",
+        "RH-005",
+        "RH-006"
+      ],
+      "target_initiatives": [
+        {
+          "id": "RH-001",
+          "owners": [
+            "fleet",
+            "chummer6-design"
+          ],
+          "status": "proposed",
+          "title": "Fleet hygiene and secret scrub"
+        },
+        {
+          "id": "RH-002",
+          "owners": [
+            "chummer6-hub-registry",
+            "fleet",
+            "chummer6-ui",
+            "chummer6-core",
+            "chummer6-design"
+          ],
+          "status": "proposed",
+          "title": "Signed release-manifest chain"
+        },
+        {
+          "id": "RH-003",
+          "owners": [
+            "fleet",
+            "chummer6-design"
+          ],
+          "status": "proposed",
+          "title": "Fleet blast-radius limits"
+        },
+        {
+          "id": "RH-005",
+          "owners": [
+            "chummer6-core",
+            "chummer6-ui",
+            "fleet",
+            "executive-assistant"
+          ],
+          "status": "proposed",
+          "title": "Workflow and action hardening"
+        },
+        {
+          "id": "RH-006",
+          "owners": [
+            "chummer6-ui",
+            "chummer6-hub",
+            "chummer6-hub-registry",
+            "chummer6-core",
+            "fleet",
+            "chummer6-design"
+          ],
+          "status": "proposed",
+          "title": "Chummer boring-user-loop proof"
+        }
+      ],
+      "warnings": [
+        "Repo hardening initiative RH-001 is still proposed.",
+        "Repo hardening initiative RH-002 is still proposed.",
+        "Repo hardening initiative RH-003 is still proposed.",
+        "Repo hardening initiative RH-005 is still proposed.",
+        "Repo hardening initiative RH-006 is still proposed."
+      ]
+    }
+  },
+  "contract_name": "fleet.next90_m127_release_truth_gate_monitor",
+  "frontier_id": 6924107419,
+  "gate_summary": {
+    "external_proof_unresolved_request_count": 0,
+    "fail_closed": true,
+    "flagship_status": "pass",
+    "gate_failures": [],
+    "hardening_initiative_statuses": {
+      "RH-001": "proposed",
+      "RH-002": "proposed",
+      "RH-003": "proposed",
+      "RH-005": "proposed",
+      "RH-006": "proposed"
+    },
+    "platforms": {
+      "linux": {
+        "primary_package_kind": "deb",
+        "public_shelf_status": "preview_support_directed",
+        "signing_posture": "package_integrity_required",
+        "startup_smoke_gate": "required",
+        "supportability": "secondary",
+        "updater_mode": "in_app_or_installer_handoff"
+      },
+      "macOS": {
+        "primary_package_kind": "setup_script",
+        "public_shelf_status": "account_gated_setup_script_preview",
+        "signing_posture": "codesign_and_notarization_required",
+        "startup_smoke_gate": "required",
+        "supportability": "account_gated_setup_script_preview",
+        "updater_mode": "claimed_setup_script_then_dmg_handoff"
+      },
+      "windows": {
+        "primary_package_kind": "installer",
+        "public_shelf_status": "promoted_preview",
+        "signing_posture": "required_for_promoted_release",
+        "startup_smoke_gate": "required",
+        "supportability": "primary",
+        "updater_mode": "in_app_apply_helper"
+      }
+    },
+    "release_gate_status": "pass"
+  },
+  "generated_at": "2026-05-05T13:03:26Z",
+  "milestone_id": 127,
+  "owned_surfaces": [
+    "promote_platform_acceptance_release_evidence:fleet"
+  ],
+  "package_closeout": {
+    "blockers": [],
+    "state": "pass",
+    "warnings": [
+      "Acceptance matrix keeps linux in preview_support_directed posture instead of a promoted public lane.",
+      "Acceptance matrix keeps macOS in account_gated_setup_script_preview posture instead of a promoted public lane.",
+      "Repo hardening initiative RH-001 is still proposed.",
+      "Repo hardening initiative RH-002 is still proposed.",
+      "Repo hardening initiative RH-003 is still proposed.",
+      "Repo hardening initiative RH-005 is still proposed.",
+      "Repo hardening initiative RH-006 is still proposed."
+    ]
+  },
+  "package_id": "next90-m127-fleet-promote-platform-acceptance-release-evidence-packs-repo",
+  "queue_task": "Promote platform acceptance, release evidence packs, repo hardening, and external-host proof orchestration into repeatable gates.",
+  "queue_title": "Promote platform acceptance, release evidence packs, repo hardening, and external-host proof orchestration into repeatable gates.",
+  "runtime_monitors": {
+    "external_proof_runbook": {
+      "capture_deadline_utc": "2026-05-06T12:19:53Z",
+      "command_bundle_sha256": "aeb158c27e9135ba38313a6a988012c27982cf11ae18c6389bb9a2eef5575102",
+      "gate_failures": [],
+      "generated_at": "2026-05-05T13:01:00Z",
+      "has_zero_backlog_note": true,
+      "issues": [],
+      "release_gate_status": "pass",
+      "retained_host_lane_count": 3,
+      "state": "pass",
+      "unresolved_request_count": 0,
+      "warnings": []
+    },
+    "flagship_product_readiness": {
+      "external_host_proof": {
+        "command_bundle_sha256": "aeb158c27e9135ba38313a6a988012c27982cf11ae18c6389bb9a2eef5575102",
+        "runbook_generated_at": "2026-05-05T13:01:00Z",
+        "runbook_synced": true,
+        "unresolved_request_count": 0
+      },
+      "external_host_proof_status": "pass",
+      "gate_failures": [],
+      "issues": [],
+      "release_gate_status": "pass",
+      "scoped_status": "pass",
+      "state": "pass",
+      "status": "pass",
+      "warnings": []
+    }
+  },
+  "source_inputs": {
+    "acceptance_matrix": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/DESKTOP_PLATFORM_ACCEPTANCE_MATRIX.yaml",
+      "sha256": "932e29baf04cdd9b2380fe10d44dd75d5e4b05457e1fd348ffdecb846a4c4a34"
+    },
+    "design_queue_staging": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "5b546490fa982f1b9d4497afcb3be5e056659382dc2884f29452e4ebd7cbec61"
+    },
+    "external_proof_runbook": {
+      "generated_at": "",
+      "path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
+      "sha256": "5f07243dfdb7172b41d471b951ef3ba14be03d7a3d88a1e667b3b2f089c2878d"
+    },
+    "flagship_product_readiness": {
+      "generated_at": "2026-05-05T13:01:00Z",
+      "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+      "sha256": "bc53dba55ec9a1767d98c48d281c8d2dc0be4b59dbb80f7c466024986a63fc93"
+    },
+    "next90_guide": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
+      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+    },
+    "public_auto_update_policy": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_AUTO_UPDATE_POLICY.md",
+      "sha256": "b7bef951a51fe7977dfb2dbb7e7d21ca9bfbfc776491ba0bcff847b343eaaf66"
+    },
+    "public_downloads_policy": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_DOWNLOADS_POLICY.md",
+      "sha256": "9b71db85e3519be256a627e9ea04e3663e2caa7a86d3dd4d9f243bafffd7a4ef"
+    },
+    "queue_staging": {
+      "generated_at": "",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "e75b48fb6092c0fc652080b0cb22dccbe1f273800d5ebeea56d4b8fcf4a8cbcd"
+    },
+    "repo_hardening_checklist": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/REPO_HARDENING_CHECKLIST.yaml",
+      "sha256": "242da1fdd12eb4c2abc4258353752e5dd33c4b9e53f526a7dc69db0385d4471f"
+    },
+    "repo_hygiene_policy": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/REPO_HYGIENE_RELEASE_TRUST_AND_AUTOMATION_SAFETY.md",
+      "sha256": "e245693eead08588a6ada95eda3b1553f401dffbe65c6751ff4f0e9cb7a60278"
+    },
+    "successor_registry": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "ee54bc616880b24913e1bb20f6bbc9b50204f3212b7d6f709eb0023d33c08085"
+    }
+  },
+  "status": "pass",
+  "wave": "W18",
+  "work_task_id": "127.4"
+}
