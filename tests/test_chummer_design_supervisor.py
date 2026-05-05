@@ -252,6 +252,38 @@ def _write_next_wave_registry(root: Path) -> None:
     )
 
 
+def _write_horizon_registry(root: Path, *, complete_handoff: bool) -> None:
+    product_root = root / ".codex-design" / "product"
+    product_root.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "product": "chummer",
+        "horizons": [
+            {
+                "id": "alice",
+                "title": "ALICE",
+                "owning_repos": ["chummer6-core", "chummer6-ui", "chummer6-hub"],
+                "owner_handoff_gate": "Core receipts and explicit apply flow required.",
+            },
+            {
+                "id": "jackpoint",
+                "title": "JACKPOINT",
+                "owning_repos": ["chummer6-hub", "chummer6-hub-registry", "chummer6-media-factory"],
+                "owner_handoff_gate": "Artifact lineage and publication proof required.",
+            },
+        ],
+    }
+    if complete_handoff:
+        for row in payload["horizons"]:
+            row["allowed_surfaces"] = ["build", "publication"]
+            row["proof_gate"] = "proof_contract_required"
+            row["public_claim_posture"] = "research_only_until_owner_proof"
+            row["stop_condition"] = "do_not_stage_when_owner_proof_is_missing"
+    (product_root / "HORIZON_REGISTRY.yaml").write_text(
+        yaml.safe_dump(payload, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
 def _args(root: Path) -> Namespace:
     return Namespace(
         command="once",
@@ -468,6 +500,7 @@ def test_successor_wave_queue_uses_fleet_implementation_order_before_file_order(
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
+        _write_horizon_registry(root, complete_handoff=True)
         (root / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml").write_text(
             yaml.safe_dump(
                 {
@@ -496,6 +529,14 @@ def test_successor_wave_queue_uses_fleet_implementation_order_before_file_order(
                             "status": "not_started",
                             "owners": ["fleet", "chummer6-design"],
                             "exit_criteria": ["Research-to-build gates hold."],
+                            "work_tasks": [
+                                {
+                                    "id": "126.1",
+                                    "owner": "chummer6-design",
+                                    "title": "Add horizon handoff gates.",
+                                    "status": "complete",
+                                }
+                            ],
                         },
                         {
                             "id": 130,
@@ -554,6 +595,216 @@ def test_successor_wave_queue_uses_fleet_implementation_order_before_file_order(
             selected.append(item["milestone_id"])
 
         assert selected == [130, 126, 132, 133]
+
+
+def test_successor_wave_queue_blocks_horizon_conversion_until_handoff_gate_is_ready() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_horizon_registry(root, complete_handoff=False)
+        (root / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "program_wave": "next_90_day_product_advance",
+                    "milestones": [
+                        {
+                            "id": 126,
+                            "title": "Horizon handoff gates",
+                            "wave": "W17",
+                            "status": "not_started",
+                            "owners": ["fleet", "chummer6-design", "chummer6-core"],
+                            "exit_criteria": ["Research-to-build gates hold."],
+                            "work_tasks": [
+                                {
+                                    "id": "126.1",
+                                    "owner": "chummer6-design",
+                                    "title": "Add horizon handoff gates.",
+                                    "status": "not_started",
+                                },
+                                {
+                                    "id": "126.3",
+                                    "owner": "chummer6-core",
+                                    "title": "Define deterministic proof contracts.",
+                                },
+                            ],
+                        },
+                        {
+                            "id": 132,
+                            "title": "Deterministic horizon implementation tranche",
+                            "wave": "W20",
+                            "status": "not_started",
+                            "owners": ["chummer6-core"],
+                            "exit_criteria": ["Deterministic horizon slices stay bounded."],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        _write_next_wave_queue(
+            root,
+            [
+                {
+                    "repo": "chummer6-design",
+                    "package_id": "next90-m126-handoff-canon",
+                    "title": "Horizon handoff gates",
+                    "task": "Add canonical handoff gates.",
+                    "work_task_id": "126.1",
+                    "milestone_id": 126,
+                },
+                {
+                    "repo": "chummer6-core",
+                    "package_id": "next90-m126-core-horizon-contracts",
+                    "title": "Simulation-adjacent horizons",
+                    "task": "Define deterministic proof contracts for horizons.",
+                    "work_task_id": "126.3",
+                    "milestone_id": 126,
+                },
+                {
+                    "repo": "chummer6-core",
+                    "package_id": "next90-m132-core-deterministic-horizons",
+                    "title": "Deterministic horizon implementation",
+                    "task": "Implement deterministic horizon slices.",
+                    "work_task_id": "132.1",
+                    "milestone_id": 132,
+                },
+            ],
+        )
+        args = _args(root)
+
+        state_root = root / "state" / "chummer_design_supervisor" / "shard-1"
+        state_root.mkdir(parents=True, exist_ok=True)
+        _payload, item = module._successor_wave_queue_payload_and_item_for_shard(args, state_root)
+        assert item is not None
+        assert item["work_task_id"] == "126.1"
+
+        state_root_two = root / "state" / "chummer_design_supervisor" / "shard-2"
+        state_root_two.mkdir(parents=True, exist_ok=True)
+        _payload_two, item_two = module._successor_wave_queue_payload_and_item_for_shard(args, state_root_two)
+        assert item_two is None
+
+
+def test_successor_wave_queue_blocks_horizon_conversion_until_registry_fields_are_complete() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_horizon_registry(root, complete_handoff=False)
+        (root / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "program_wave": "next_90_day_product_advance",
+                    "milestones": [
+                        {
+                            "id": 126,
+                            "title": "Horizon handoff gates",
+                            "wave": "W17",
+                            "status": "not_started",
+                            "owners": ["fleet", "chummer6-design", "chummer6-core"],
+                            "exit_criteria": ["Research-to-build gates hold."],
+                            "work_tasks": [
+                                {
+                                    "id": "126.1",
+                                    "owner": "chummer6-design",
+                                    "title": "Add horizon handoff gates.",
+                                    "status": "complete",
+                                }
+                            ],
+                        },
+                        {
+                            "id": 132,
+                            "title": "Deterministic horizon implementation tranche",
+                            "wave": "W20",
+                            "status": "not_started",
+                            "owners": ["chummer6-core"],
+                            "exit_criteria": ["Deterministic horizon slices stay bounded."],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        _write_next_wave_queue(
+            root,
+            [
+                {
+                    "repo": "chummer6-core",
+                    "package_id": "next90-m132-core-deterministic-horizons",
+                    "title": "Deterministic horizon implementation",
+                    "task": "Implement deterministic horizon slices.",
+                    "work_task_id": "132.1",
+                    "milestone_id": 132,
+                }
+            ],
+        )
+        args = _args(root)
+        state_root = root / "state" / "chummer_design_supervisor" / "shard-1"
+        state_root.mkdir(parents=True, exist_ok=True)
+
+        _payload, item = module._successor_wave_queue_payload_and_item_for_shard(args, state_root)
+
+        assert item is None
+
+
+def test_successor_wave_queue_blocks_horizon_conversion_when_registry_is_missing() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        product_root = root / ".codex-design" / "product"
+        product_root.mkdir(parents=True, exist_ok=True)
+        (root / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "program_wave": "next_90_day_product_advance",
+                    "milestones": [
+                        {
+                            "id": 126,
+                            "title": "Horizon handoff gates",
+                            "wave": "W17",
+                            "status": "not_started",
+                            "owners": ["fleet", "chummer6-design"],
+                            "exit_criteria": ["Research-to-build gates hold."],
+                            "work_tasks": [
+                                {
+                                    "id": "126.1",
+                                    "owner": "chummer6-design",
+                                    "title": "Add horizon handoff gates.",
+                                    "status": "complete",
+                                }
+                            ],
+                        },
+                        {
+                            "id": 133,
+                            "title": "Media/social horizon tranche",
+                            "wave": "W21",
+                            "status": "not_started",
+                            "owners": ["chummer6-media-factory"],
+                            "exit_criteria": ["Ghostwire stays bounded."],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        _write_next_wave_queue(
+            root,
+            [
+                {
+                    "repo": "chummer6-media-factory",
+                    "package_id": "next90-m133-ghostwire",
+                    "title": "GHOSTWIRE horizon work",
+                    "task": "Keep build ghosts bounded.",
+                    "work_task_id": "133.1",
+                    "milestone_id": 133,
+                }
+            ],
+        )
+        args = _args(root)
+        state_root = root / "state" / "chummer_design_supervisor" / "shard-1"
+        state_root.mkdir(parents=True, exist_ok=True)
+
+        _payload, item = module._successor_wave_queue_payload_and_item_for_shard(args, state_root)
+
+        assert item is None
 
 
 def _patch_launch_worker_fake_run(monkeypatch, module, fake_run) -> None:
@@ -25857,6 +26108,83 @@ def test_memory_dispatch_snapshot_caps_dispatch_to_live_provider_capacity(monkey
         assert snapshot["provider_dispatch_capacity"]["live_remaining_credits_total"] == 44198385
         assert snapshot["provider_dispatch_capacity"]["balance_basis_summary"] == "actual"
         assert "live provider capacity caps shard dispatch at 9/13" in snapshot["reason"]
+
+
+def test_provider_dispatch_capacity_resolves_sparse_focus_based_shard_profiles() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        aggregate_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            aggregate_root / "active_shards.json",
+            {
+                "generated_at": "2026-05-05T09:00:00Z",
+                "updated_at": "2026-05-05T09:00:00Z",
+                "manifest_kind": "configured_shard_topology",
+                "configured_shard_count": 3,
+                "configured_shards": [
+                    {
+                        "name": "shard-1",
+                        "index": 1,
+                        "focus_text": ["flagship-readiness", "release-proof"],
+                    },
+                    {
+                        "name": "shard-2",
+                        "index": 2,
+                        "focus_text": ["visual-similarity", "parity"],
+                    },
+                    {
+                        "name": "shard-3",
+                        "index": 3,
+                        "focus_text": ["desktop", "workbench"],
+                    },
+                ],
+                "active_run_count": 0,
+                "active_shards": [],
+            },
+        )
+        module._write_json(
+            aggregate_root / "ea_provider_health_cache.json",
+            {
+                "cached_at": module._iso_now(),
+                "source_url": "http://provider-health.internal:8090/v1/responses/_provider_health",
+                "payload": {
+                    "provider_registry": {
+                        "provider_config": {
+                            "hard_max_active_requests": 1,
+                        }
+                    },
+                    "providers": {
+                        "onemin": {
+                            "balance_basis_summary": "actual",
+                            "estimated_remaining_credits_total": 600000,
+                            "configured_slots": 4,
+                            "slots": [
+                                {"configured": True, "state": "ready"},
+                                {"configured": True, "state": "degraded"},
+                                {"configured": True, "state": "degraded"},
+                                {"configured": True, "state": "degraded"},
+                            ],
+                        }
+                    },
+                },
+            },
+        )
+
+        args = _args(root)
+        args.state_root = str(aggregate_root)
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+        args.worker_lane = "core"
+        args.worker_model = "ea-coder-hard"
+
+        capacity = module._provider_dispatch_capacity_snapshot(args, aggregate_root)
+
+        assert capacity["hard_ea_shard_count"] == 1
+        assert capacity["non_ea_shard_count"] == 2
+        assert capacity["ready_slots"] == 1
+        assert capacity["allowed_active_shards"] == 3
+        assert "supports the full configured shard set at 3/3" in capacity["reason"]
 
 
 def test_direct_worker_lane_health_snapshot_prefers_lane_detail_and_live_credit_fields(monkeypatch) -> None:

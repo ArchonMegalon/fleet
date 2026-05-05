@@ -1990,8 +1990,9 @@ def _provider_dispatch_capacity_snapshot(
     hard_ea_shard_count = 0
     non_ea_shard_count = 0
     for entry in configured_entries:
-        worker_bin = str(entry.get("worker_bin") or getattr(args, "worker_bin", "") or "").strip()
-        worker_model = str(entry.get("worker_model") or getattr(args, "worker_model", "") or "").strip().lower()
+        resolved_profile = _resolved_configured_shard_worker_profile(entry, args)
+        worker_bin = str(resolved_profile.get("worker_bin") or getattr(args, "worker_bin", "") or "").strip()
+        worker_model = str(resolved_profile.get("worker_model") or getattr(args, "worker_model", "") or "").strip().lower()
         if _worker_bin_uses_codexea(worker_bin) and worker_model.startswith("ea-coder-hard"):
             hard_ea_shard_count += 1
         else:
@@ -5639,6 +5640,107 @@ def _active_shard_manifest_entries(aggregate_root: Path) -> List[Dict[str, Any]]
     return []
 
 
+def _normalize_configured_shard_worker_model(worker_lane: str, worker_model: str) -> str:
+    lane = str(worker_lane or "").strip().lower()
+    model = str(worker_model or "").strip()
+    if lane in {"core", "core_authority", "core_booster", "core_rescue"}:
+        return model or "ea-coder-hard"
+    if lane == "review_shard" and model in {"", "ea-coder-hard", "ea-coder-hard-batch"}:
+        return "ea-review-light"
+    if lane == "audit_shard" and model in {"", "ea-coder-hard", "ea-coder-hard-batch"}:
+        return "ea-audit-jury"
+    if lane == "review_light" and not model:
+        return "ea-review-light"
+    if lane == "jury" and not model:
+        return "ea-audit-jury"
+    return model
+
+
+def _resolved_configured_shard_worker_profile(
+    entry: Dict[str, Any],
+    args: argparse.Namespace,
+) -> Dict[str, str]:
+    worker_bin = str(entry.get("worker_bin") or getattr(args, "worker_bin", "") or DEFAULT_WORKER_BIN).strip()
+    worker_lane = str(entry.get("worker_lane") or "").strip()
+    worker_model = str(entry.get("worker_model") or "").strip()
+    if not _worker_bin_uses_codexea(worker_bin):
+        return {
+            "worker_bin": worker_bin,
+            "worker_lane": worker_lane,
+            "worker_model": worker_model or str(getattr(args, "worker_model", "") or "").strip(),
+        }
+
+    if worker_lane in {"core", "core_authority", "core_booster", "core_rescue"}:
+        return {
+            "worker_bin": worker_bin,
+            "worker_lane": worker_lane,
+            "worker_model": _normalize_configured_shard_worker_model(worker_lane, worker_model),
+        }
+
+    if worker_lane in {"groundwork", "repair", "review_shard", "audit_shard", "survival", "easy", "jury", "review_light"}:
+        if _prefer_full_ea_lanes_enabled() and worker_lane in {"repair", "survival"}:
+            worker_lane = "core"
+            worker_model = "ea-coder-hard"
+        elif worker_lane == "easy":
+            worker_model = ""
+        return {
+            "worker_bin": worker_bin,
+            "worker_lane": worker_lane,
+            "worker_model": _normalize_configured_shard_worker_model(worker_lane, worker_model),
+        }
+
+    focus_text = " ".join(_manifest_text_list(entry.get("focus_text"))).lower()
+    if any(marker in focus_text for marker in ("bootstrap", "install-linking", "claim-restore", "handoff-tests", "download-tests")):
+        worker_lane = "repair"
+        worker_model = "ea-coder-fast"
+    elif any(marker in focus_text for marker in ("canon", "design-guide", "legacy-user")):
+        worker_lane = "easy"
+        worker_model = ""
+    elif any(marker in focus_text for marker in ("branding", "icon", "troll", "overlay-6", "assets", "desktop-brand")):
+        worker_lane = "groundwork"
+        worker_model = "ea-groundwork-gemini"
+    elif any(marker in focus_text for marker in ("downloads", "handoff", "dispatch", "exe-first", "linux-download", "account-gating")):
+        worker_lane = "groundwork"
+        worker_model = "ea-groundwork-gemini"
+    elif any(marker in focus_text for marker in ("supervisor", "ooda", "currentness", "autofix", "queue", "blockers")):
+        worker_lane = "survival"
+        worker_model = "ea-coder-survival"
+    elif any(
+        marker in focus_text
+        for marker in (
+            "desktop-exit-gate",
+            "platform-gates",
+            "startup-smoke",
+            "release-gates",
+            "release-proof",
+            "flagship-readiness",
+            "grade-bar",
+            "materializer",
+            "proof",
+        )
+    ):
+        worker_lane = "audit_shard"
+        worker_model = "ea-audit-jury"
+    elif any(marker in focus_text for marker in ("visual-similarity", "parity")):
+        worker_lane = "review_shard"
+        worker_model = "ea-review-light"
+
+    if _prefer_full_ea_lanes_enabled() and worker_lane in {"repair", "survival"}:
+        worker_lane = "core"
+        worker_model = "ea-coder-hard"
+
+    if not worker_lane:
+        worker_lane = str(getattr(args, "worker_lane", "") or "").strip()
+        if not worker_model:
+            worker_model = str(getattr(args, "worker_model", "") or "").strip()
+
+    return {
+        "worker_bin": worker_bin,
+        "worker_lane": worker_lane,
+        "worker_model": _normalize_configured_shard_worker_model(worker_lane, worker_model),
+    }
+
+
 def _active_shard_manifest_live_summaries(aggregate_root: Path) -> List[Dict[str, Any]]:
     manifest_path = _active_shard_manifest_path(aggregate_root)
     if not manifest_path.exists():
@@ -7169,6 +7271,143 @@ def _next_wave_registry_work_task_status_by_id(workspace_root: Path) -> Dict[str
     return statuses
 
 
+HORIZON_HANDOFF_GATE_DESIGN_TASK_ID = "126.1"
+HORIZON_HANDOFF_GATE_EXEMPT_WORK_TASK_IDS = {
+    HORIZON_HANDOFF_GATE_DESIGN_TASK_ID,
+    "126.2",
+}
+HORIZON_HANDOFF_REQUIRED_FIELDS = (
+    "owner_handoff_gate",
+    "owning_repos",
+    "allowed_surfaces",
+    "proof_gate",
+    "public_claim_posture",
+    "stop_condition",
+)
+
+
+def _horizon_registry_path(workspace_root: Path) -> Optional[Path]:
+    candidates = (
+        Path(workspace_root).resolve() / ".codex-design" / "product" / "HORIZON_REGISTRY.yaml",
+        Path("/docker/chummercomplete/chummer-design/products/chummer/HORIZON_REGISTRY.yaml"),
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _next_wave_registry_milestone_title_by_id(workspace_root: Path) -> Dict[int, str]:
+    payload = _next_wave_registry_payload(workspace_root)
+    if not payload:
+        return {}
+    rows: Dict[int, str] = {}
+    for raw in (payload.get("milestones") or []):
+        if not isinstance(raw, dict):
+            continue
+        milestone_id = _coerce_int(raw.get("id"), 0)
+        if milestone_id <= 0:
+            continue
+        rows[milestone_id] = str(raw.get("title") or "").strip()
+    return rows
+
+
+def _horizon_handoff_gate_readiness(workspace_root: Path) -> Dict[str, Any]:
+    path = _horizon_registry_path(workspace_root)
+    work_task_status_by_id = _next_wave_registry_work_task_status_by_id(workspace_root)
+    design_task_status = str(work_task_status_by_id.get(HORIZON_HANDOFF_GATE_DESIGN_TASK_ID) or "").strip().lower()
+    readiness: Dict[str, Any] = {
+        "path": str(path) if path is not None else "",
+        "design_gate_task_id": HORIZON_HANDOFF_GATE_DESIGN_TASK_ID,
+        "design_gate_task_status": design_task_status,
+        "design_gate_task_done": design_task_status in DONE_STATUSES,
+        "missing_by_repo": {},
+        "missing_horizon_count": 0,
+        "global_blockers": [],
+    }
+    if path is None:
+        readiness["missing_horizon_count"] = -1
+        readiness["global_blockers"] = ["horizon registry is missing"]
+        return readiness
+    payload = _read_yaml(path)
+    missing_by_repo: Dict[str, List[Dict[str, Any]]] = {}
+    missing_horizon_ids: Set[str] = set()
+    for raw in (payload.get("horizons") or []):
+        if not isinstance(raw, dict):
+            continue
+        horizon_id = str(raw.get("id") or "").strip()
+        owners = [str(value).strip() for value in (raw.get("owning_repos") or []) if str(value).strip()]
+        missing_fields: List[str] = []
+        for field in HORIZON_HANDOFF_REQUIRED_FIELDS:
+            value = raw.get(field)
+            if field == "owning_repos":
+                if not owners:
+                    missing_fields.append(field)
+                continue
+            if isinstance(value, list):
+                if not any(str(item).strip() for item in value):
+                    missing_fields.append(field)
+                continue
+            if not str(value or "").strip():
+                missing_fields.append(field)
+        if not missing_fields:
+            continue
+        if horizon_id:
+            missing_horizon_ids.add(horizon_id)
+        horizon_entry = {
+            "horizon_id": horizon_id,
+            "missing_fields": missing_fields,
+        }
+        for owner in owners or ["unowned"]:
+            missing_by_repo.setdefault(owner.lower(), []).append(dict(horizon_entry))
+    readiness["missing_by_repo"] = missing_by_repo
+    readiness["missing_horizon_count"] = len(missing_horizon_ids)
+    if (missing_by_repo.get("unowned") or []):
+        readiness["global_blockers"] = ["one or more horizons are missing owning_repos and cannot be handed off safely"]
+    return readiness
+
+
+def _queue_item_is_horizon_conversion_candidate(workspace_root: Path, item: Dict[str, Any]) -> bool:
+    work_task_id = str(item.get("work_task_id") or "").strip()
+    if work_task_id in HORIZON_HANDOFF_GATE_EXEMPT_WORK_TASK_IDS:
+        return False
+    milestone_id = _coerce_int(item.get("milestone_id"), 0)
+    milestone_title = _next_wave_registry_milestone_title_by_id(workspace_root).get(milestone_id, "")
+    haystack = " ".join(
+        [
+            milestone_title,
+            str(item.get("title") or ""),
+            str(item.get("task") or ""),
+            str(item.get("package_id") or ""),
+        ]
+    ).lower()
+    return "horizon" in haystack
+
+
+def _filter_horizon_handoff_gated_queue_items(
+    workspace_root: Path,
+    items: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    rows = [dict(item) for item in items if isinstance(item, dict)]
+    if not rows:
+        return []
+    readiness = _horizon_handoff_gate_readiness(workspace_root)
+    filtered_rows: List[Dict[str, Any]] = []
+    for item in rows:
+        if not _queue_item_is_horizon_conversion_candidate(workspace_root, item):
+            filtered_rows.append(item)
+            continue
+        if not bool(readiness.get("design_gate_task_done")):
+            continue
+        if readiness.get("global_blockers"):
+            continue
+        repo = str(item.get("repo") or "").strip().lower()
+        if repo and (readiness.get("missing_by_repo") or {}).get(repo):
+            continue
+        filtered_rows.append(item)
+    return filtered_rows
+
+
 def _prefer_open_successor_queue_items(
     workspace_root: Path,
     items: Sequence[Dict[str, Any]],
@@ -7390,6 +7629,7 @@ def _successor_wave_queue_payload_and_item_for_shard(
     preferred_items = _prefer_open_successor_queue_items(workspace_root, items)
     if preferred_items:
         items = preferred_items
+    items = _filter_horizon_handoff_gated_queue_items(workspace_root, items)
     items = _successor_wave_ordered_queue_items(workspace_root, items)
     item_index = shard_index - 1
     if 0 <= item_index < len(items):
