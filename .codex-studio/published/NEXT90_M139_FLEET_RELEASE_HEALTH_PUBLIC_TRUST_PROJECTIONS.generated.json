@@ -1,0 +1,407 @@
+{
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "canonical_monitors": {
+    "accessibility_gates": {
+      "issues": [],
+      "state": "pass"
+    },
+    "accessibility_release_bar": {
+      "checks": {
+        "keyboard_first": true,
+        "mobile_glanceability": true,
+        "what_matters_now": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "community_safety_doc": {
+      "checks": {
+        "boundary": true,
+        "minimum_event_families": true,
+        "required_states": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "community_safety_states": {
+      "issues": [],
+      "state": "pass"
+    },
+    "creator_analytics_doc": {
+      "checks": {
+        "claim_rule": true,
+        "discoverability_boundary": true,
+        "privacy_boundary": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "creator_analytics_schema": {
+      "issues": [],
+      "state": "pass"
+    },
+    "creator_trust_policy": {
+      "checks": {
+        "fallback": true,
+        "forbidden": true,
+        "truth_order": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "next90_guide": {
+      "checks": {
+        "milestone_139": true,
+        "wave_26": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "opposition_packet_registry": {
+      "issues": [],
+      "state": "pass"
+    },
+    "prep_packet_factory": {
+      "checks": {
+        "first_proof": true,
+        "proposal_scope": true,
+        "release_gate": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "product_analytics_model": {
+      "checks": {
+        "core_rule": true,
+        "privacy": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "public_faq_registry": {
+      "issues": [],
+      "state": "pass"
+    },
+    "public_feature_registry": {
+      "issues": [],
+      "state": "pass"
+    },
+    "public_landing_manifest": {
+      "issues": [],
+      "state": "pass"
+    },
+    "queue_alignment": {
+      "issues": [],
+      "state": "pass",
+      "warnings": [
+        "Fleet queue mirror row is still missing for work task 139.10."
+      ]
+    },
+    "world_broadcast_cadence": {
+      "checks": {
+        "authority_rule": true,
+        "receipts": true,
+        "weekly_cadence": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "world_broadcast_recipe_registry": {
+      "issues": [],
+      "state": "pass"
+    }
+  },
+  "contract_name": "fleet.next90_m139_release_health_public_trust_projections",
+  "frontier_id": 2565904250,
+  "generated_at": "2026-05-05T19:01:12Z",
+  "milestone_id": 139,
+  "owned_surfaces": [
+    "bind_community_safety_event_and_appeal_states_world_broa:fleet"
+  ],
+  "package_closeout": {
+    "blockers": [],
+    "state": "pass",
+    "warnings": [
+      "Fleet queue mirror row is still missing for work task 139.10."
+    ]
+  },
+  "package_id": "next90-m139-fleet-bind-community-safety-event-and-appeal-states-world-broadcast-recipe-r",
+  "projection_summary": {
+    "faq_question_count": 2,
+    "projection_count": 5,
+    "public_card_count": 6,
+    "public_route_count": 6,
+    "warning_count": 1
+  },
+  "projections": {
+    "accessibility_cognitive_load": {
+      "gate_ids": [
+        "keyboard_first_expert_workflow",
+        "mobile_glanceability",
+        "reduced_motion_safe_critical_flows",
+        "screen_reader_safe_trust_surfaces",
+        "warning_and_legality_clarity"
+      ],
+      "projection_kind": "release_bound_accessibility_and_cognitive_load",
+      "required_surfaces_by_gate": {
+        "keyboard_first_expert_workflow": [
+          "dense_builder",
+          "flagship_desktop_workbench",
+          "ready_for_tonight"
+        ],
+        "mobile_glanceability": [
+          "consequence_feed",
+          "ready_for_tonight",
+          "recap"
+        ],
+        "reduced_motion_safe_critical_flows": [
+          "install_and_first_run",
+          "recap_and_return_moment",
+          "recovery_and_restore"
+        ],
+        "screen_reader_safe_trust_surfaces": [
+          "explain",
+          "install_help",
+          "recovery",
+          "support"
+        ],
+        "warning_and_legality_clarity": [
+          "build_lab",
+          "explain_drawer",
+          "run_application_preflight"
+        ]
+      },
+      "status": "pass",
+      "truth_sources": [
+        "accessibility_cognitive_load_gates",
+        "accessibility_and_cognitive_load_release_bar"
+      ]
+    },
+    "community_safety_moderation": {
+      "event_family_count": 8,
+      "projection_kind": "moderation_and_appeals_state_machine",
+      "required_field_count": 6,
+      "state_count": 7,
+      "status": "pass",
+      "truth_sources": [
+        "community_safety_event_and_appeal_states",
+        "community_safety_moderation_and_appeals.audit_boundary"
+      ]
+    },
+    "creator_analytics_bounds": {
+      "claim_guards": [
+        "adoption_and_support_fields_must_be_banded_before_public_exposure",
+        "compatibility_posture_must_not_be_inferred_from_moderation_status",
+        "moderation_status_must_not_claim_build_or_rule_environment_fit",
+        "trust_ranking_posture_must_not_claim_creator_endorsement_or_platform_safety",
+        "unknown_compatibility_must_stay_visible_until_receipts_are_current"
+      ],
+      "field_ids": [
+        "adoption_band",
+        "compatibility_posture",
+        "media_collateral_status",
+        "moderation_status",
+        "support_issue_count_band",
+        "trust_ranking_posture",
+        "trust_ranking_reason_chips",
+        "update_request_count_band"
+      ],
+      "privacy_rules": [
+        "no_private_campaign_names",
+        "no_private_runner_names",
+        "no_raw_character_sheet_warehouse",
+        "no_sensitive_session_telemetry_exposure"
+      ],
+      "projection_kind": "bounded_creator_publication_analytics",
+      "status": "pass",
+      "truth_sources": [
+        "creator_publication_analytics_schema.fields",
+        "creator_publication_trust_and_compatibility_policy.truth_order",
+        "product_analytics_and_journey_proof_model.core_rule"
+      ]
+    },
+    "tonight_pack": {
+      "available_opposition_packet_families": [
+        "beginner_one_shot_bundle",
+        "corp_security_team",
+        "drone_team",
+        "ganger_squad",
+        "spirit_cell"
+      ],
+      "projection_kind": "governed_tonight_pack",
+      "required_pack_elements": [
+        "job_packet",
+        "opposition_packet",
+        "player_safe_brief",
+        "reward_model",
+        "foundry_or_vtt_hint"
+      ],
+      "status": "pass",
+      "truth_sources": [
+        "prep_packet_factory.first_proof",
+        "opposition_packet_registry.packet_families"
+      ]
+    },
+    "world_broadcast_cadence": {
+      "projection_kind": "weekly_world_publication_cadence",
+      "recipe_ids": [
+        "weekly_city_ticker",
+        "faction_spin_card",
+        "gm_job_digest",
+        "public_safe_media_card",
+        "recruitment_or_announcement_packet"
+      ],
+      "status": "pass",
+      "truth_sources": [
+        "world_broadcast_recipe_registry.recipes",
+        "world_broadcast_and_faction_propaganda_cadence.weekly_cadence"
+      ]
+    }
+  },
+  "public_truth_projection": {
+    "faq_entries": {
+      "Can I participate privately?": "Yes. Public recognition should remain opt-in, and private participation should still be possible even when badges or leaderboards exist.",
+      "What are badges and leaderboards for?": "They are recognition and visibility features, not authority. They should celebrate verified contribution without replacing review or the rules themselves."
+    },
+    "public_card_postures": {
+      "horizon_black_ledger": {
+        "badge": "Research",
+        "title": "BLACK LEDGER"
+      },
+      "horizon_community_hub": {
+        "badge": "Research",
+        "title": "COMMUNITY HUB"
+      },
+      "lane_creator": {
+        "badge": "Preview lane",
+        "title": "Creator"
+      },
+      "productlift_changelog": {
+        "badge": "Closeout",
+        "title": "User-requested changelog"
+      },
+      "productlift_feedback": {
+        "badge": "Public",
+        "title": "Public feedback board"
+      },
+      "productlift_roadmap": {
+        "badge": "Projection",
+        "title": "Public roadmap projection"
+      }
+    },
+    "public_route_purposes": {
+      "/artifacts": "teaser_gallery",
+      "/changelog": "release_history",
+      "/feedback": "public_feedback_entry",
+      "/roadmap": "horizon_summary",
+      "/roadmap/black-ledger": "roadmap_detail",
+      "/roadmap/community-hub": "roadmap_detail"
+    }
+  },
+  "queue_title": "Bind COMMUNITY_SAFETY_EVENT_AND_APPEAL_STATES, WORLD_BROADCAST_RECIPE_REGISTRY, CREATOR_PUBLICATION_ANALYTICS_SCHEMA, and ACCESSIBILITY_COGNITIVE_LOAD_GATES into machine-readable release-health and public-trust projections.",
+  "source_inputs": {
+    "accessibility_gates": {
+      "generated_at": "2026-04-30T21:57:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/ACCESSIBILITY_COGNITIVE_LOAD_GATES.yaml",
+      "sha256": "4ac8b85975c6050ad76da88d668aa5374fed31e62deb708d5fed41f2747fb058"
+    },
+    "accessibility_release_bar": {
+      "generated_at": "2026-04-30T21:57:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/ACCESSIBILITY_AND_COGNITIVE_LOAD_RELEASE_BAR.md",
+      "sha256": "cddea1d7cee20275b6966d70ac18b59d6e24e08ea45f1ab68c069e3ae5a89766"
+    },
+    "community_safety_doc": {
+      "generated_at": "2026-05-05T10:16:58Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/COMMUNITY_SAFETY_MODERATION_AND_APPEALS.md",
+      "sha256": "730962d324b74f071fa044959be89a94305f2d78da94939056867cd2fc5216bf"
+    },
+    "community_safety_states": {
+      "generated_at": "2026-04-30T21:57:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/COMMUNITY_SAFETY_EVENT_AND_APPEAL_STATES.yaml",
+      "sha256": "cc11c9de6cf775fa8249a23c29aeb7b3c9753acb8e1964421ade510c1c2de462"
+    },
+    "creator_analytics_doc": {
+      "generated_at": "2026-05-05T08:46:01Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/CREATOR_DASHBOARD_AND_ADOPTION_ANALYTICS.md",
+      "sha256": "734950509bf1fc90f7107c1812162df260f8371e4425a3af47eff394174a067f"
+    },
+    "creator_analytics_schema": {
+      "generated_at": "2026-05-05T08:46:01Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/CREATOR_PUBLICATION_ANALYTICS_SCHEMA.yaml",
+      "sha256": "e809ccd4e2a774d98ca2daa06b8c200ab7957465129bcd7558a6edb2ac8a07f2"
+    },
+    "creator_trust_policy": {
+      "generated_at": "2026-05-05T08:46:01Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/CREATOR_PUBLICATION_TRUST_AND_COMPATIBILITY_POLICY.md",
+      "sha256": "653010432e511a0f59d8952bbbb8ba3ba7a2306a17dd84dd0d30981c13a4191b"
+    },
+    "design_queue_staging": {
+      "generated_at": "2026-05-05T17:41:28Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "457ddf48178289c8089eb8d9ed944f1c0ecdb4edce45bc5bf53b6d99e4589422"
+    },
+    "fleet_queue_staging": {
+      "generated_at": "2026-05-05T17:41:28Z",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "e51913570323410871918a66d7d5774cc099d5b566192d05a84bfb56b221eeaa"
+    },
+    "next90_guide": {
+      "generated_at": "2026-05-04T02:57:07Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
+      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+    },
+    "opposition_packet_registry": {
+      "generated_at": "2026-04-22T06:58:25Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/OPPOSITION_PACKET_REGISTRY.yaml",
+      "sha256": "c8161f9c2448a99242ea77a73c4ddb8050f8ec1f0435f744e06c2be9624aa9c4"
+    },
+    "prep_packet_factory": {
+      "generated_at": "2026-04-22T17:24:47Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PREP_PACKET_FACTORY_AND_PROCEDURAL_TABLES.md",
+      "sha256": "d1a2541dc9275862773abfe58b6d8d54b26c87fb21639fb12b9917ef911cffbf"
+    },
+    "product_analytics_model": {
+      "generated_at": "2026-04-26T19:35:12Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PRODUCT_ANALYTICS_AND_JOURNEY_PROOF_MODEL.md",
+      "sha256": "8b05c6e2f194261307b01fd7a9cd78814d559756562ec5bd4536ae6cd784fca5"
+    },
+    "public_faq_registry": {
+      "generated_at": "2026-05-04T10:39:41Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FAQ_REGISTRY.yaml",
+      "sha256": "845cfafde512693e38495696b391ec36eb70d7078db17f89560619f5350363ef"
+    },
+    "public_feature_registry": {
+      "generated_at": "2026-05-04T09:39:41Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FEATURE_REGISTRY.yaml",
+      "sha256": "cb90a2b1429a943a514d3627ae4ee208dcece66584caac1805aea152ff3ef9b8"
+    },
+    "public_landing_manifest": {
+      "generated_at": "2026-05-04T09:39:41Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_LANDING_MANIFEST.yaml",
+      "sha256": "104c46bc68365be611735b6c6a4fc16a983eb87d7df2821f86e60e43affe3ce6"
+    },
+    "successor_registry": {
+      "generated_at": "2026-05-05T17:41:28Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "65b71c750244782127e2dfb9b2aa7cf25050ac1ce5f35ef87d6870cee25aea1f"
+    },
+    "world_broadcast_cadence": {
+      "generated_at": "2026-04-30T21:57:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/WORLD_BROADCAST_AND_FACTION_PROPAGANDA_CADENCE.md",
+      "sha256": "cbbb1ea4bfc311b51459e4ab9239a1d620dba77b9c42b7e25b8c7c4bc8c08762"
+    },
+    "world_broadcast_recipe_registry": {
+      "generated_at": "2026-04-30T21:57:57Z",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/WORLD_BROADCAST_RECIPE_REGISTRY.yaml",
+      "sha256": "1b8a23bb3ce2105eb51ada6672e24cf629a7718b8b9032fdcb7401c1e5776a6b"
+    }
+  },
+  "status": "pass",
+  "wave": "W26",
+  "work_task_id": "139.10"
+}
