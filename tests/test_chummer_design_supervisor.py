@@ -745,6 +745,145 @@ def test_successor_wave_queue_blocks_horizon_conversion_until_registry_fields_ar
         assert item is None
 
 
+def test_successor_wave_queue_blocks_deterministic_horizon_until_m132_design_gate_is_ready() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_horizon_registry(root, complete_handoff=True)
+        (root / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "program_wave": "next_90_day_product_advance",
+                    "milestones": [
+                        {
+                            "id": 126,
+                            "title": "Horizon handoff gates",
+                            "wave": "W17",
+                            "status": "not_started",
+                            "owners": ["fleet", "chummer6-design", "chummer6-core"],
+                            "exit_criteria": ["Research-to-build gates hold."],
+                            "work_tasks": [
+                                {
+                                    "id": "126.1",
+                                    "owner": "chummer6-design",
+                                    "title": "Add horizon handoff gates.",
+                                    "status": "complete",
+                                }
+                            ],
+                        },
+                        {
+                            "id": 132,
+                            "title": "Deterministic horizon implementation tranche",
+                            "wave": "W20",
+                            "status": "not_started",
+                            "owners": ["fleet", "chummer6-design", "chummer6-core"],
+                            "exit_criteria": ["Deterministic horizon slices stay bounded."],
+                            "work_tasks": [
+                                {
+                                    "id": "132.7",
+                                    "owner": "chummer6-design",
+                                    "title": "Close deterministic horizon canon.",
+                                    "status": "not_started",
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        _write_next_wave_queue(
+            root,
+            [
+                {
+                    "repo": "chummer6-core",
+                    "package_id": "next90-m132-core-deterministic-horizons",
+                    "title": "Deterministic horizon implementation",
+                    "task": "Implement deterministic horizon slices.",
+                    "work_task_id": "132.1",
+                    "milestone_id": 132,
+                }
+            ],
+        )
+        args = _args(root)
+        state_root = root / "state" / "chummer_design_supervisor" / "shard-1"
+        state_root.mkdir(parents=True, exist_ok=True)
+
+        _payload, item = module._successor_wave_queue_payload_and_item_for_shard(args, state_root)
+
+        assert item is None
+
+
+def test_successor_wave_queue_allows_deterministic_horizon_when_m132_design_gate_is_ready() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_horizon_registry(root, complete_handoff=True)
+        (root / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "program_wave": "next_90_day_product_advance",
+                    "milestones": [
+                        {
+                            "id": 126,
+                            "title": "Horizon handoff gates",
+                            "wave": "W17",
+                            "status": "not_started",
+                            "owners": ["fleet", "chummer6-design", "chummer6-core"],
+                            "exit_criteria": ["Research-to-build gates hold."],
+                            "work_tasks": [
+                                {
+                                    "id": "126.1",
+                                    "owner": "chummer6-design",
+                                    "title": "Add horizon handoff gates.",
+                                    "status": "complete",
+                                }
+                            ],
+                        },
+                        {
+                            "id": 132,
+                            "title": "Deterministic horizon implementation tranche",
+                            "wave": "W20",
+                            "status": "not_started",
+                            "owners": ["fleet", "chummer6-design", "chummer6-core"],
+                            "exit_criteria": ["Deterministic horizon slices stay bounded."],
+                            "work_tasks": [
+                                {
+                                    "id": "132.7",
+                                    "owner": "chummer6-design",
+                                    "title": "Close deterministic horizon canon.",
+                                    "status": "complete",
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        _write_next_wave_queue(
+            root,
+            [
+                {
+                    "repo": "chummer6-core",
+                    "package_id": "next90-m132-core-deterministic-horizons",
+                    "title": "Deterministic horizon implementation",
+                    "task": "Implement deterministic horizon slices.",
+                    "work_task_id": "132.1",
+                    "milestone_id": 132,
+                }
+            ],
+        )
+        args = _args(root)
+        state_root = root / "state" / "chummer_design_supervisor" / "shard-1"
+        state_root.mkdir(parents=True, exist_ok=True)
+
+        _payload, item = module._successor_wave_queue_payload_and_item_for_shard(args, state_root)
+
+        assert item is not None
+        assert item["work_task_id"] == "132.1"
+
+
 def test_successor_wave_queue_blocks_horizon_conversion_when_registry_is_missing() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:

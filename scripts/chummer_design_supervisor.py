@@ -7272,6 +7272,7 @@ def _next_wave_registry_work_task_status_by_id(workspace_root: Path) -> Dict[str
 
 
 HORIZON_HANDOFF_GATE_DESIGN_TASK_ID = "126.1"
+DETERMINISTIC_HORIZON_GATE_DESIGN_TASK_ID = "132.7"
 HORIZON_HANDOFF_GATE_EXEMPT_WORK_TASK_IDS = {
     HORIZON_HANDOFF_GATE_DESIGN_TASK_ID,
     "126.2",
@@ -7316,11 +7317,17 @@ def _horizon_handoff_gate_readiness(workspace_root: Path) -> Dict[str, Any]:
     path = _horizon_registry_path(workspace_root)
     work_task_status_by_id = _next_wave_registry_work_task_status_by_id(workspace_root)
     design_task_status = str(work_task_status_by_id.get(HORIZON_HANDOFF_GATE_DESIGN_TASK_ID) or "").strip().lower()
+    deterministic_design_task_status = str(
+        work_task_status_by_id.get(DETERMINISTIC_HORIZON_GATE_DESIGN_TASK_ID) or ""
+    ).strip().lower()
     readiness: Dict[str, Any] = {
         "path": str(path) if path is not None else "",
         "design_gate_task_id": HORIZON_HANDOFF_GATE_DESIGN_TASK_ID,
         "design_gate_task_status": design_task_status,
         "design_gate_task_done": design_task_status in DONE_STATUSES,
+        "deterministic_design_gate_task_id": DETERMINISTIC_HORIZON_GATE_DESIGN_TASK_ID,
+        "deterministic_design_gate_task_status": deterministic_design_task_status,
+        "deterministic_design_gate_task_done": deterministic_design_task_status in DONE_STATUSES,
         "missing_by_repo": {},
         "missing_horizon_count": 0,
         "global_blockers": [],
@@ -7384,6 +7391,22 @@ def _queue_item_is_horizon_conversion_candidate(workspace_root: Path, item: Dict
     return "horizon" in haystack
 
 
+def _queue_item_is_deterministic_horizon_candidate(workspace_root: Path, item: Dict[str, Any]) -> bool:
+    milestone_id = _coerce_int(item.get("milestone_id"), 0)
+    if milestone_id == 132:
+        return True
+    milestone_title = _next_wave_registry_milestone_title_by_id(workspace_root).get(milestone_id, "")
+    haystack = " ".join(
+        [
+            milestone_title,
+            str(item.get("title") or ""),
+            str(item.get("task") or ""),
+            str(item.get("package_id") or ""),
+        ]
+    ).lower()
+    return "deterministic horizon" in haystack
+
+
 def _filter_horizon_handoff_gated_queue_items(
     workspace_root: Path,
     items: Sequence[Dict[str, Any]],
@@ -7398,6 +7421,10 @@ def _filter_horizon_handoff_gated_queue_items(
             filtered_rows.append(item)
             continue
         if not bool(readiness.get("design_gate_task_done")):
+            continue
+        if _queue_item_is_deterministic_horizon_candidate(workspace_root, item) and not bool(
+            readiness.get("deterministic_design_gate_task_done")
+        ):
             continue
         if readiness.get("global_blockers"):
             continue

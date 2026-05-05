@@ -1,0 +1,97 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+from test_materialize_next90_m132_fleet_deterministic_horizon_queue import _fixture_tree
+
+
+MATERIALIZER = Path("/docker/fleet/scripts/materialize_next90_m132_fleet_deterministic_horizon_queue.py")
+VERIFIER = Path("/docker/fleet/scripts/verify_next90_m132_fleet_deterministic_horizon_queue.py")
+
+
+class VerifyNext90M132FleetDeterministicHorizonQueueTest(unittest.TestCase):
+    def _common_args(self, fixture: dict[str, Path], artifact: Path) -> list[str]:
+        return [
+            "--artifact",
+            str(artifact),
+            "--successor-registry",
+            str(fixture["registry"]),
+            "--queue-staging",
+            str(fixture["queue"]),
+            "--design-queue-staging",
+            str(fixture["design_queue"]),
+            "--horizon-registry",
+            str(fixture["horizon_registry"]),
+            "--next90-guide",
+            str(fixture["next90_guide"]),
+        ]
+
+    def test_verifier_accepts_matching_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, deterministic_gate_status="complete", complete_handoff=True)
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(MATERIALIZER),
+                    "--output",
+                    str(artifact),
+                    "--markdown-output",
+                    str(markdown),
+                    *self._common_args(fixture, artifact)[2:],
+                ],
+                check=True,
+            )
+            completed = subprocess.run(
+                [sys.executable, str(VERIFIER), *self._common_args(fixture, artifact), "--json"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        result = json.loads(completed.stdout)
+        self.assertEqual(result["status"], "pass")
+
+    def test_verifier_rejects_queue_gate_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, deterministic_gate_status="complete", complete_handoff=True)
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(MATERIALIZER),
+                    "--output",
+                    str(artifact),
+                    "--markdown-output",
+                    str(markdown),
+                    *self._common_args(fixture, artifact)[2:],
+                ],
+                check=True,
+            )
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            payload["queue_gate_monitor"]["ready_deterministic_queue_item_count"] = 0
+            artifact.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            completed = subprocess.run(
+                [sys.executable, str(VERIFIER), *self._common_args(fixture, artifact), "--json"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        result = json.loads(completed.stdout)
+        self.assertEqual(completed.returncode, 1)
+        self.assertEqual(result["status"], "fail")
+        self.assertTrue(any("queue gate monitor drifted" in issue for issue in result["issues"]))
+
+
+if __name__ == "__main__":
+    unittest.main()
