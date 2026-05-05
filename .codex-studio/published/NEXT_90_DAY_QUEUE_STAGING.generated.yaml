@@ -3034,9 +3034,28 @@ items:
   package_id: next90-m117-hub-artifact-shelf-v2
   work_task_id: 117.1
   milestone_id: 117
-  status: in_progress
+  status: complete
   wave: W13
   repo: chummer6-hub
+  landed_commit: TO_BE_FILLED_M117_COMMIT
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M117 chummer6-hub artifact shelf APIs and audience filters are complete; future shards must verify
+    the artifact-shelf release-proof receipts, canonical registry row, Fleet queue row, and design queue row instead of reopening
+    the signed-in and public artifact shelf slice.
+  proof:
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Controllers/PublicLandingController.cs
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/CampaignSpineService.cs
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/PublicCreatorPublicationDiscoveryService.cs
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/CreatorPublicationRegistryBridge.cs
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Views/PublicLanding/Shelf.cshtml
+  - /docker/chummercomplete/chummer6-hub/tests/RunServicesSmoke/Program.cs
+  - /docker/chummercomplete/chummer6-hub/scripts/materialize_hub_local_release_proof.py
+  - /docker/chummercomplete/chummer6-hub/scripts/verify_next90_m117_hub_artifact_shelf_v2.py
+  - /docker/chummercomplete/chummer6-hub/tests/test_next90_m117_hub_artifact_shelf_v2.py
+  - python3 scripts/verify_next90_m117_hub_artifact_shelf_v2.py
+  - python3 -m unittest tests/test_next90_m117_hub_artifact_shelf_v2.py
+  - bash scripts/ai/run_services_smoke.sh
   allowed_paths:
   - Chummer.Run.Api
   - scripts
@@ -5466,9 +5485,20 @@ items:
   work_task_id: '135.10'
   frontier_id: 4019469848
   milestone_id: 135
-  status: not_started
+  status: complete
   wave: W22
   repo: executive-assistant
+  landed_commit: unlanded
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M135 executive-assistant closure coverage is complete; future shards must verify the EA closure bundle, generated proof, source package guards, and canonical queue/registry mirrors instead of reopening the compile, signal, companion, public-copy, operator-packet, provider-digest, and followthrough closure slice.
+  proof:
+  - /docker/EA/docs/chummer_closure_coverage/CHUMMER_CLOSURE_COVERAGE_PACK.yaml
+  - /docker/EA/docs/chummer_closure_coverage/README.md
+  - /docker/EA/docs/chummer_closure_coverage/SUCCESSOR_HANDOFF_CLOSEOUT.yaml
+  - /docker/EA/scripts/materialize_next90_m135_ea_closure_coverage.py
+  - /docker/EA/scripts/verify_next90_m135_ea_closure_coverage.py
+  - /docker/EA/.codex-studio/published/NEXT90_M135_EA_CLOSURE_COVERAGE.generated.json
+  - /docker/EA/feedback/2026-05-05-next90-m135-ea-closure-coverage-progress.md
   allowed_paths:
   - scripts
   - feedback
@@ -5493,4 +5523,39 @@ items:
   - feedback
   owned_surfaces:
   - fail_closeout_when_any_of_the_five_route_or_family_rows:fleet
+- title: Fail closeout when any route in this milestone closes on family prose, stale captures, or missing task-speed and
+    runtime receipts.
+  task: Fail closeout when any route in this milestone closes on family prose, stale captures, or missing task-speed and runtime
+    receipts.
+  package_id: next90-m142-fleet-fail-closeout-when-any-route-in-this-milestone-closes-on-family-prose
+  work_task_id: '142.5'
+  frontier_id: 7414599441
+  milestone_id: 142
+  status: not_started
+  wave: W22P
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - .codex-studio
+  - feedback
+  owned_surfaces:
+  - fail_closeout_when_any_route_in_this_milestone_closes_on:fleet
+- title: Fail closeout when these families remain green only by broad family prose, missing outputs, or stale route-local
+    receipts.
+  task: Fail closeout when these families remain green only by broad family prose, missing outputs, or stale route-local receipts.
+  package_id: next90-m143-fleet-fail-closeout-when-these-families-remain-green-only-by-broad-family-pr
+  work_task_id: '143.6'
+  frontier_id: 8787562259
+  milestone_id: 143
+  status: not_started
+  wave: W22P
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - .codex-studio
+  - feedback
+  owned_surfaces:
+  - fail_closeout_when_these_families_remain_green_only_by_b:fleet
 source_queue_fingerprint: 433cdfebb5d8504552c5cea941d1217970cac13840edd39e02ae392c785b1551
