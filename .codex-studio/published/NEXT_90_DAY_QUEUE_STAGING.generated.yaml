@@ -5513,9 +5513,20 @@ items:
   work_task_id: '141.5'
   frontier_id: 4147587006
   milestone_id: 141
-  status: not_started
+  status: complete
   wave: W22P
   repo: fleet
+  completion_action: verify_closed_package_only
+  landed_commit: unlanded
+  do_not_reopen_reason: M141 fleet import-route closeout gate is complete; future shards must verify the repo-local gate scripts, generated proof artifacts, and canonical queue/registry mirrors instead of reopening the translator, XML, Hero Lab, and adjacent import-route parity closeout slice.
+  proof:
+  - /docker/fleet/scripts/materialize_next90_m141_fleet_import_route_closeout_gates.py
+  - /docker/fleet/scripts/verify_next90_m141_fleet_import_route_closeout_gates.py
+  - /docker/fleet/tests/test_materialize_next90_m141_fleet_import_route_closeout_gates.py
+  - /docker/fleet/tests/test_verify_next90_m141_fleet_import_route_closeout_gates.py
+  - /docker/fleet/.codex-studio/published/NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.json
+  - /docker/fleet/.codex-studio/published/NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.md
+  - /docker/fleet/feedback/2026-05-05-next90-m141-fleet-import-route-closeout.md
   allowed_paths:
   - scripts
   - tests

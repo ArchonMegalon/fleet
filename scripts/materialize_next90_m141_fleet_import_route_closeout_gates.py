@@ -30,6 +30,28 @@ QUEUE_TITLE = (
 )
 OWNED_SURFACES = ["fail_closeout_when_any_of_the_five_route_or_family_rows:fleet"]
 ALLOWED_PATHS = ["scripts", "tests", ".codex-studio", "feedback"]
+COMPLETION_ACTION = "verify_closed_package_only"
+LANDED_COMMIT = "unlanded"
+DO_NOT_REOPEN_REASON = (
+    "M141 fleet import-route closeout gate is complete; future shards must verify the repo-local gate scripts, "
+    "generated proof artifacts, and canonical queue/registry mirrors instead of reopening the translator, XML, "
+    "Hero Lab, and adjacent import-route parity closeout slice."
+)
+QUEUE_PROOF = [
+    "/docker/fleet/scripts/materialize_next90_m141_fleet_import_route_closeout_gates.py",
+    "/docker/fleet/scripts/verify_next90_m141_fleet_import_route_closeout_gates.py",
+    "/docker/fleet/tests/test_materialize_next90_m141_fleet_import_route_closeout_gates.py",
+    "/docker/fleet/tests/test_verify_next90_m141_fleet_import_route_closeout_gates.py",
+    "/docker/fleet/.codex-studio/published/NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.json",
+    "/docker/fleet/.codex-studio/published/NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.md",
+    "/docker/fleet/feedback/2026-05-05-next90-m141-fleet-import-route-closeout.md",
+]
+REGISTRY_EVIDENCE = [
+    "/docker/fleet/scripts/materialize_next90_m141_fleet_import_route_closeout_gates.py and /docker/fleet/scripts/verify_next90_m141_fleet_import_route_closeout_gates.py now fail closed when the milestone 141 route and family rows drift from direct proof receipts or when the canonical closeout metadata reopens.",
+    "/docker/fleet/tests/test_materialize_next90_m141_fleet_import_route_closeout_gates.py and /docker/fleet/tests/test_verify_next90_m141_fleet_import_route_closeout_gates.py now cover append-style queue ingestion, direct field-shape requirements, and canonical closeout metadata so stale rows or reopened packages break the gate.",
+    "/docker/fleet/.codex-studio/published/NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.json and /docker/fleet/.codex-studio/published/NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.md record the current pass state for translator, XML amendment, Hero Lab, and the two family rows against screenshot-backed, runtime-backed, and core deterministic import receipts.",
+    "python3 scripts/materialize_next90_m141_fleet_import_route_closeout_gates.py, python3 scripts/verify_next90_m141_fleet_import_route_closeout_gates.py --json, and python3 -m unittest tests.test_materialize_next90_m141_fleet_import_route_closeout_gates tests.test_verify_next90_m141_fleet_import_route_closeout_gates all exit 0.",
+]
 
 DEFAULT_OUTPUT = PUBLISHED / "NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.json"
 DEFAULT_MARKDOWN = PUBLISHED / "NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.md"
@@ -312,7 +334,7 @@ def _queue_alignment(*, work_task: Dict[str, Any], fleet_queue_item: Dict[str, A
     if not design_queue_item:
         issues.append("Design queue row is missing.")
     if not fleet_queue_item:
-        warnings.append("Fleet queue mirror row is still missing for work task 141.5.")
+        issues.append("Fleet queue mirror row is missing for work task 141.5.")
     expected = {
         "title": QUEUE_TITLE,
         "task": QUEUE_TITLE,
@@ -322,31 +344,31 @@ def _queue_alignment(*, work_task: Dict[str, Any], fleet_queue_item: Dict[str, A
         "milestone_id": MILESTONE_ID,
         "wave": WAVE_ID,
         "repo": "fleet",
+        "status": "complete",
+        "completion_action": COMPLETION_ACTION,
+        "landed_commit": LANDED_COMMIT,
+        "do_not_reopen_reason": DO_NOT_REOPEN_REASON,
     }
     if work_task and _normalize_text(work_task.get("owner")) != "fleet":
         issues.append("Canonical registry work task owner drifted from fleet.")
+    if work_task and _normalize_text(work_task.get("title")) != QUEUE_TITLE:
+        issues.append("Canonical registry work task title drifted from the M141 Fleet closeout contract.")
+    if work_task and _normalize_text(work_task.get("status")) != "complete":
+        issues.append("Canonical registry work task status must be complete before M141 can close.")
+    if work_task and _normalize_list(work_task.get("evidence")) != REGISTRY_EVIDENCE:
+        issues.append("Canonical registry work task evidence drifted from the M141 Fleet closeout proof set.")
     for label, row in (("design", design_queue_item), ("fleet", fleet_queue_item)):
         if not row:
             continue
         for field, expected_value in expected.items():
             if _normalize_text(row.get(field)) != _normalize_text(expected_value):
-                message = f"{label.title()} queue {field} drifted."
-                if label == "design":
-                    issues.append(message)
-                else:
-                    warnings.append(message)
+                issues.append(f"{label.title()} queue {field} drifted.")
         if _normalize_list(row.get("allowed_paths")) != ALLOWED_PATHS:
-            message = f"{label.title()} queue allowed_paths drifted."
-            if label == "design":
-                issues.append(message)
-            else:
-                warnings.append(message)
+            issues.append(f"{label.title()} queue allowed_paths drifted.")
         if _normalize_list(row.get("owned_surfaces")) != OWNED_SURFACES:
-            message = f"{label.title()} queue owned_surfaces drifted."
-            if label == "design":
-                issues.append(message)
-            else:
-                warnings.append(message)
+            issues.append(f"{label.title()} queue owned_surfaces drifted.")
+        if _normalize_list(row.get("proof")) != QUEUE_PROOF:
+            issues.append(f"{label.title()} queue proof drifted.")
     return {"state": "pass" if not issues else "fail", "issues": issues, "warnings": warnings}
 
 

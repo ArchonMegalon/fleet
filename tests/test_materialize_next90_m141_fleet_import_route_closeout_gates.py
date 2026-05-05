@@ -11,6 +11,21 @@ import yaml
 
 
 SCRIPT = Path("/docker/fleet/scripts/materialize_next90_m141_fleet_import_route_closeout_gates.py")
+QUEUE_PROOF = [
+    "/docker/fleet/scripts/materialize_next90_m141_fleet_import_route_closeout_gates.py",
+    "/docker/fleet/scripts/verify_next90_m141_fleet_import_route_closeout_gates.py",
+    "/docker/fleet/tests/test_materialize_next90_m141_fleet_import_route_closeout_gates.py",
+    "/docker/fleet/tests/test_verify_next90_m141_fleet_import_route_closeout_gates.py",
+    "/docker/fleet/.codex-studio/published/NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.json",
+    "/docker/fleet/.codex-studio/published/NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.md",
+    "/docker/fleet/feedback/2026-05-05-next90-m141-fleet-import-route-closeout.md",
+]
+REGISTRY_EVIDENCE = [
+    "/docker/fleet/scripts/materialize_next90_m141_fleet_import_route_closeout_gates.py and /docker/fleet/scripts/verify_next90_m141_fleet_import_route_closeout_gates.py now fail closed when the milestone 141 route and family rows drift from direct proof receipts or when the canonical closeout metadata reopens.",
+    "/docker/fleet/tests/test_materialize_next90_m141_fleet_import_route_closeout_gates.py and /docker/fleet/tests/test_verify_next90_m141_fleet_import_route_closeout_gates.py now cover append-style queue ingestion, direct field-shape requirements, and canonical closeout metadata so stale rows or reopened packages break the gate.",
+    "/docker/fleet/.codex-studio/published/NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.json and /docker/fleet/.codex-studio/published/NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.md record the current pass state for translator, XML amendment, Hero Lab, and the two family rows against screenshot-backed, runtime-backed, and core deterministic import receipts.",
+    "python3 scripts/materialize_next90_m141_fleet_import_route_closeout_gates.py, python3 scripts/verify_next90_m141_fleet_import_route_closeout_gates.py --json, and python3 -m unittest tests.test_materialize_next90_m141_fleet_import_route_closeout_gates tests.test_verify_next90_m141_fleet_import_route_closeout_gates all exit 0.",
+]
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -28,12 +43,20 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _registry() -> dict:
-    return {"milestones": [{"id": 141, "work_tasks": [{"id": "141.5", "owner": "fleet"}]}]}
+def _registry(*, closeout_complete: bool) -> dict:
+    row = {
+        "id": "141.5",
+        "owner": "fleet",
+        "title": "Fail closeout when any of the five route or family rows in this milestone remain `no`, blank, stale, or unsupported by direct proof receipts.",
+    }
+    if closeout_complete:
+        row["status"] = "complete"
+        row["evidence"] = list(REGISTRY_EVIDENCE)
+    return {"milestones": [{"id": 141, "work_tasks": [row]}]}
 
 
-def _queue_item() -> dict:
-    return {
+def _queue_item(*, closeout_complete: bool) -> dict:
+    row = {
         "title": "Fail closeout when any of the five route or family rows in this milestone remain `no`, blank, stale, or unsupported by direct proof receipts.",
         "task": "Fail closeout when any of the five route or family rows in this milestone remain `no`, blank, stale, or unsupported by direct proof receipts.",
         "package_id": "next90-m141-fleet-fail-closeout-when-any-of-the-five-route-or-family-rows-in-this-milest",
@@ -45,6 +68,17 @@ def _queue_item() -> dict:
         "allowed_paths": ["scripts", "tests", ".codex-studio", "feedback"],
         "owned_surfaces": ["fail_closeout_when_any_of_the_five_route_or_family_rows:fleet"],
     }
+    if closeout_complete:
+        row["status"] = "complete"
+        row["completion_action"] = "verify_closed_package_only"
+        row["landed_commit"] = "unlanded"
+        row["do_not_reopen_reason"] = (
+            "M141 fleet import-route closeout gate is complete; future shards must verify the repo-local gate scripts, "
+            "generated proof artifacts, and canonical queue/registry mirrors instead of reopening the translator, XML, "
+            "Hero Lab, and adjacent import-route parity closeout slice."
+        )
+        row["proof"] = list(QUEUE_PROOF)
+    return row
 
 
 def _parity_rows(use_old_shape: bool) -> list[dict]:
@@ -124,7 +158,7 @@ def _parity_rows(use_old_shape: bool) -> list[dict]:
     return rows
 
 
-def _fixture_tree(tmp_path: Path, *, use_old_shape: bool) -> dict[str, Path]:
+def _fixture_tree(tmp_path: Path, *, use_old_shape: bool, closeout_complete: bool = True) -> dict[str, Path]:
     registry = tmp_path / "registry.yaml"
     fleet_queue = tmp_path / "fleet_queue.yaml"
     design_queue = tmp_path / "design_queue.yaml"
@@ -139,9 +173,9 @@ def _fixture_tree(tmp_path: Path, *, use_old_shape: bool) -> dict[str, Path]:
     import_cert = tmp_path / "import_cert.json"
     engine_pack = tmp_path / "engine_pack.json"
 
-    _write_yaml(registry, _registry())
-    _write_yaml(fleet_queue, {"items": [_queue_item()]})
-    _write_yaml(design_queue, {"items": [_queue_item()]})
+    _write_yaml(registry, _registry(closeout_complete=closeout_complete))
+    _write_yaml(fleet_queue, {"items": [_queue_item(closeout_complete=closeout_complete)]})
+    _write_yaml(design_queue, {"items": [_queue_item(closeout_complete=closeout_complete)]})
     _write_text(
         guide,
         "## Wave 22P - close human-tested parity proof and desktop executable trust before successor breadth\n"
@@ -279,8 +313,8 @@ class MaterializeNext90M141FleetImportRouteCloseoutGatesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             fixture = _fixture_tree(tmp_path, use_old_shape=False)
-            _write_yaml(fixture["fleet_queue"], [_queue_item()])
-            _write_yaml(fixture["design_queue"], [_queue_item()])
+            _write_yaml(fixture["fleet_queue"], [_queue_item(closeout_complete=True)])
+            _write_yaml(fixture["design_queue"], [_queue_item(closeout_complete=True)])
             artifact = tmp_path / "artifact.json"
             markdown = tmp_path / "artifact.md"
             subprocess.run(
@@ -386,6 +420,42 @@ class MaterializeNext90M141FleetImportRouteCloseoutGatesTest(unittest.TestCase):
                 "present_in_chummer6 is missing or not `yes`" in item or "required `removable_if_not_in_chummer5a = no`" in item
                 for item in payload["monitor_summary"]["runtime_blockers"]
             )
+
+    def test_materializer_fails_when_closeout_metadata_is_not_complete(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, use_old_shape=False, closeout_complete=False)
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--output", str(artifact),
+                    "--markdown-output", str(markdown),
+                    "--successor-registry", str(fixture["registry"]),
+                    "--fleet-queue-staging", str(fixture["fleet_queue"]),
+                    "--design-queue-staging", str(fixture["design_queue"]),
+                    "--next90-guide", str(fixture["guide"]),
+                    "--parity-acceptance-matrix", str(fixture["matrix"]),
+                    "--legacy-chrome-policy", str(fixture["policy"]),
+                    "--parity-audit", str(fixture["parity_audit"]),
+                    "--visual-familiarity-gate", str(fixture["visual_gate"]),
+                    "--veteran-task-time-gate", str(fixture["veteran_gate"]),
+                    "--ui-release-gate", str(fixture["ui_release"]),
+                    "--import-receipts-doc", str(fixture["receipts_doc"]),
+                    "--import-parity-certification", str(fixture["import_cert"]),
+                    "--engine-proof-pack", str(fixture["engine_pack"]),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            assert payload["status"] == "fail"
+            assert payload["package_closeout"]["ready"] is False
+            assert any("status must be complete" in item or "queue status drifted" in item for item in payload["package_closeout"]["reasons"])
 
 
 if __name__ == "__main__":
