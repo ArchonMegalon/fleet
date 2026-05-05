@@ -5649,4 +5649,33 @@ items:
   - feedback
   owned_surfaces:
   - monitor_unsupported_ecosystem_claims_stale_seam_proof_co:fleet
+- title: Publish derived release-health planes from live proof so structural green cannot masquerade as SR5 veteran, durability,
+    explainability, or public-shelf readiness.
+  task: Publish derived release-health planes from live proof so structural green cannot masquerade as SR5 veteran, durability,
+    explainability, or public-shelf readiness.
+  package_id: next90-m136-fleet-publish-derived-release-health-planes-from-live-proof-so-structural-gr
+  work_task_id: '136.11'
+  frontier_id: 8422537713
+  milestone_id: 136
+  status: complete
+  wave: W23
+  repo: fleet
+  completion_action: verify_closed_package_only
+  landed_commit: unlanded
+  do_not_reopen_reason: M136 Fleet derived release-health planes are complete; future shards must verify the repo-local derivation scripts, generated plane packet, focused regressions, and canonical queue mirrors instead of reopening structural-green or flagship-ready closure on prose-only posture.
+  proof:
+  - /docker/fleet/scripts/materialize_next90_m136_fleet_derived_release_health_planes.py
+  - /docker/fleet/scripts/verify_next90_m136_fleet_derived_release_health_planes.py
+  - /docker/fleet/tests/test_materialize_next90_m136_fleet_derived_release_health_planes.py
+  - /docker/fleet/tests/test_verify_next90_m136_fleet_derived_release_health_planes.py
+  - /docker/fleet/.codex-studio/published/NEXT90_M136_FLEET_DERIVED_RELEASE_HEALTH_PLANES.generated.json
+  - /docker/fleet/.codex-studio/published/NEXT90_M136_FLEET_DERIVED_RELEASE_HEALTH_PLANES.generated.md
+  - /docker/fleet/feedback/2026-05-05-next90-m136-fleet-derived-release-health-planes-progress.md
+  allowed_paths:
+  - scripts
+  - tests
+  - .codex-studio
+  - feedback
+  owned_surfaces:
+  - publish_derived_release_health_planes_from_live_proof_so:fleet
 source_queue_fingerprint: 433cdfebb5d8504552c5cea941d1217970cac13840edd39e02ae392c785b1551

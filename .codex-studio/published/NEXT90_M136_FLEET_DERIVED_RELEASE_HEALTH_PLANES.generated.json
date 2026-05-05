@@ -38,26 +38,26 @@
     "queue_alignment": {
       "issues": [],
       "state": "pass",
-      "warnings": [
-        "Fleet queue mirror row is still missing for work task 136.11."
-      ]
+      "warnings": []
     }
   },
   "contract_name": "fleet.next90_m136_derived_release_health_planes",
   "frontier_id": 8422537713,
-  "generated_at": "2026-05-05T15:45:00Z",
+  "generated_at": "2026-05-05T21:09:17Z",
   "milestone_id": 136,
   "monitor_summary": {
     "blocked_plane_ids": [
+      "structural_ready",
       "veteran_deep_workflow_ready",
-      "data_durability_ready",
       "flagship_ready"
     ],
-    "derivation_status": "warning",
+    "derivation_status": "blocked",
     "required_plane_count": 7,
-    "runtime_blocker_count": 0,
-    "runtime_blockers": [],
-    "warning_count": 1
+    "runtime_blocker_count": 1,
+    "runtime_blockers": [
+      "structural_projection: structural_ready ready-state drifted from its direct proof: expected_ready=false, actual_ready=true."
+    ],
+    "warning_count": 0
   },
   "owned_surfaces": [
     "publish_derived_release_health_planes_from_live_proof_so:fleet"
@@ -66,21 +66,21 @@
     "blockers": [],
     "state": "pass",
     "warnings": [
-      "Fleet queue mirror row is still missing for work task 136.11."
+      "structural_projection: structural_ready ready-state drifted from its direct proof: expected_ready=false, actual_ready=true."
     ]
   },
   "package_id": "next90-m136-fleet-publish-derived-release-health-planes-from-live-proof-so-structural-gr",
   "queue_title": "Publish derived release-health planes from live proof so structural green cannot masquerade as SR5 veteran, durability, explainability, or public-shelf readiness.",
   "runtime_monitors": {
     "data_durability_projection": {
-      "actual_ready": false,
+      "actual_ready": true,
       "checks": {
         "families_below_task_proven_clear": true,
         "install_claim_restore_continue_effective_ready": true,
         "rules_engine_and_import_ready": true,
-        "ui_element_parity_gap_ids_clear": false
+        "ui_element_parity_gap_ids_clear": true
       },
-      "expected_ready": false,
+      "expected_ready": true,
       "issues": [],
       "runtime_blockers": [],
       "state": "pass"
@@ -89,9 +89,9 @@
       "actual_ready": false,
       "checks": {
         "coverage_gap_keys_clear": false,
-        "data_durability_ready_ready": false,
+        "data_durability_ready_ready": true,
         "families_below_gold_ready_clear": true,
-        "m136_aggregate_gate_ready": false,
+        "m136_aggregate_gate_ready": true,
         "parity_lab_ready": true,
         "public_shelf_ready_ready": true,
         "registry_present": true,
@@ -108,7 +108,7 @@
     "plane_presence": {
       "issues": [],
       "plane_statuses": {
-        "data_durability_ready": "warning",
+        "data_durability_ready": "ready",
         "flagship_ready": "missing",
         "public_shelf_ready": "ready",
         "rules_explainability_ready": "ready",
@@ -180,13 +180,15 @@
         "dispatchable_truth_ready": true,
         "journey_effective_overall_state_ready": true,
         "journey_local_blocker_autofix_routing_ready": true,
-        "journey_overall_desktop_scoped_blocked_clear": true,
+        "journey_overall_desktop_scoped_blocked_clear": false,
         "runtime_healing_alert_state_healthy": true,
         "supervisor_recent_enough": true
       },
-      "expected_ready": true,
+      "expected_ready": false,
       "issues": [],
-      "runtime_blockers": [],
+      "runtime_blockers": [
+        "structural_ready ready-state drifted from its direct proof: expected_ready=false, actual_ready=true."
+      ],
       "state": "pass"
     },
     "veteran_deep_projection": {
@@ -195,8 +197,8 @@
         "desktop_client_ready": false,
         "families_below_veteran_approved_clear": true,
         "ui_element_parity_audit_required": true,
-        "ui_element_parity_gap_ids_clear": false,
-        "ui_element_parity_release_blocking_ready": false,
+        "ui_element_parity_gap_ids_clear": true,
+        "ui_element_parity_release_blocking_ready": true,
         "workflow_receipts_resolved": true
       },
       "expected_ready": false,
@@ -209,7 +211,7 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "11cc1ecd96db0176604771f8f6f398998db558b6167a3e2bd37140a2124ddca6"
+      "sha256": "3333211b62d89faf1ec0409f6ed017313721effd8da391cd74fea630c8e2ebdb"
     },
     "flagship_product_bar": {
       "generated_at": "",
@@ -217,9 +219,9 @@
       "sha256": "8d450f2175f2bd290975db12c0deddbf6e26a3415bec20e906f1ac38cd01c84e"
     },
     "flagship_product_readiness": {
-      "generated_at": "2026-05-05T15:44:41Z",
+      "generated_at": "2026-05-05T21:00:44Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "a747f602edb6e9bb3305642d0cf579b7430a6641221f1939a2b77f15f94c5450"
+      "sha256": "fdebae7f492da2296446197c556733eddc95c217ee1e961bbcc5a7dfad948719"
     },
     "flagship_readiness_planes": {
       "generated_at": "",
@@ -229,7 +231,7 @@
     "fleet_queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "6da82d05213bc6ae4f536f75debf5dab04463c91c9b2992df970d392bd3972b1"
+      "sha256": "d23091b14928e6dc228bd28a901dcdb326d0a902fea74ebb33ac3beb48f94210"
     },
     "next90_guide": {
       "generated_at": "",
@@ -239,7 +241,7 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "641255112587cbec2c7c43a37dda5a90f6f59e0d2775206517fede2695c233e3"
+      "sha256": "9f4f93305afddf9cf95c2b515c6e9ceced71e435389e2a49fc0e0bc4f19395c7"
     }
   },
   "status": "pass",
