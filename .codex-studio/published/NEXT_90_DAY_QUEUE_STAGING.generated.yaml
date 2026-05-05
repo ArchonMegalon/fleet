@@ -5752,4 +5752,33 @@ items:
   - feedback
   owned_surfaces:
   - fail_closeout_when_runner_passport_proof_weekly_dispatch:fleet
+- title: Publish explicit SR4 and SR6 readiness-plane closeout from direct proofs instead of letting adjacent coverage inherit
+    from broad desktop readiness.
+  task: Publish explicit SR4 and SR6 readiness-plane closeout from direct proofs instead of letting adjacent coverage inherit
+    from broad desktop readiness.
+  package_id: next90-m136-fleet-publish-explicit-sr4-and-sr6-readiness-plane-closeout-from-direct-proo
+  work_task_id: '136.19'
+  frontier_id: 7496747405
+  milestone_id: 136
+  status: complete
+  wave: W23
+  repo: fleet
+  completion_action: verify_closed_package_only
+  landed_commit: unlanded
+  do_not_reopen_reason: M136 Fleet explicit SR4 and SR6 readiness closeout is complete; future shards must verify the repo-local ruleset-closeout scripts, generated packet, focused regressions, and canonical queue mirrors instead of reopening SR4 or SR6 parity closure through broad desktop readiness inheritance.
+  proof:
+  - /docker/fleet/scripts/materialize_next90_m136_fleet_sr4_sr6_readiness_closeout.py
+  - /docker/fleet/scripts/verify_next90_m136_fleet_sr4_sr6_readiness_closeout.py
+  - /docker/fleet/tests/test_materialize_next90_m136_fleet_sr4_sr6_readiness_closeout.py
+  - /docker/fleet/tests/test_verify_next90_m136_fleet_sr4_sr6_readiness_closeout.py
+  - /docker/fleet/.codex-studio/published/NEXT90_M136_FLEET_SR4_SR6_READINESS_CLOSEOUT.generated.json
+  - /docker/fleet/.codex-studio/published/NEXT90_M136_FLEET_SR4_SR6_READINESS_CLOSEOUT.generated.md
+  - /docker/fleet/feedback/2026-05-05-next90-m136-fleet-sr4-sr6-readiness-closeout-progress.md
+  allowed_paths:
+  - scripts
+  - tests
+  - .codex-studio
+  - feedback
+  owned_surfaces:
+  - publish_explicit_sr4_and_sr6_readiness_plane_closeout_fr:fleet
 source_queue_fingerprint: 433cdfebb5d8504552c5cea941d1217970cac13840edd39e02ae392c785b1551

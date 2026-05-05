@@ -20,6 +20,11 @@ def _write_yaml(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
+def _write_generated_queue_overlay(path: Path, item: dict) -> None:
+    payload = yaml.safe_dump({"items": [item]}, sort_keys=False)
+    _write_text(path, "- title: overlay legacy row\nmode: append\n" + payload)
+
+
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -263,3 +268,14 @@ class MaterializeNext90M136FleetSr4Sr6ReadinessCloseoutTest(unittest.TestCase):
             payload = self._run_materializer(fixture, tmp_path / "artifact.json", tmp_path / "artifact.md")
         self.assertEqual(payload["status"], "blocked")
         self.assertTrue(any("sr6_parity_ready" in issue for issue in payload["canonical_monitors"]["flagship_readiness_planes"]["issues"]))
+
+    def test_reads_generated_queue_overlay_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path)
+            _write_generated_queue_overlay(fixture["fleet_queue"], _queue_item())
+            _write_generated_queue_overlay(fixture["design_queue"], _queue_item())
+            payload = self._run_materializer(fixture, tmp_path / "artifact.json", tmp_path / "artifact.md")
+        self.assertEqual(payload["status"], "pass")
+        self.assertFalse(any("Fleet queue row is missing." in blocker for blocker in payload["package_closeout"]["blockers"]))
+        self.assertFalse(any("Design queue row is missing." in blocker for blocker in payload["package_closeout"]["blockers"]))

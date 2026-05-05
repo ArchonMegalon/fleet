@@ -30,22 +30,20 @@
     "queue_alignment": {
       "issues": [],
       "state": "pass",
-      "warnings": [
-        "Fleet queue mirror row is still missing for work task 136.19."
-      ]
+      "warnings": []
     }
   },
   "contract_name": "fleet.next90_m136_sr4_sr6_readiness_closeout",
   "frontier_id": 7496747405,
-  "generated_at": "2026-05-05T15:55:48Z",
+  "generated_at": "2026-05-05T21:22:00Z",
   "milestone_id": 136,
   "monitor_summary": {
-    "closeout_status": "warning",
+    "closeout_status": "pass",
     "runtime_blocker_count": 0,
     "runtime_blockers": [],
     "sr4_ready": true,
     "sr6_ready": true,
-    "warning_count": 1
+    "warning_count": 0
   },
   "owned_surfaces": [
     "publish_explicit_sr4_and_sr6_readiness_plane_closeout_fr:fleet"
@@ -53,9 +51,7 @@
   "package_closeout": {
     "blockers": [],
     "state": "pass",
-    "warnings": [
-      "Fleet queue mirror row is still missing for work task 136.19."
-    ]
+    "warnings": []
   },
   "package_id": "next90-m136-fleet-publish-explicit-sr4-and-sr6-readiness-plane-closeout-from-direct-proo",
   "queue_title": "Publish explicit SR4 and SR6 readiness-plane closeout from direct proofs instead of letting adjacent coverage inherit from broad desktop readiness.",
@@ -114,7 +110,7 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "11cc1ecd96db0176604771f8f6f398998db558b6167a3e2bd37140a2124ddca6"
+      "sha256": "adfe36be36db30d7c8852cbcf86aa78048f6e46d1ce52e78dfc87996bc7dacac"
     },
     "flagship_product_bar": {
       "generated_at": "",
@@ -122,9 +118,9 @@
       "sha256": "8d450f2175f2bd290975db12c0deddbf6e26a3415bec20e906f1ac38cd01c84e"
     },
     "flagship_product_readiness": {
-      "generated_at": "2026-05-05T15:54:16Z",
+      "generated_at": "2026-05-05T21:13:04Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "abd8703f46d6af69e8ddd82a7db35b665b752287578171fe72a0da85a50ea6ca"
+      "sha256": "7808c450ea381122f96ef75f9cb1a2fb398260b90bc36511e13afe29e2fb3130"
     },
     "flagship_readiness_planes": {
       "generated_at": "",
@@ -134,7 +130,7 @@
     "fleet_queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "6da82d05213bc6ae4f536f75debf5dab04463c91c9b2992df970d392bd3972b1"
+      "sha256": "6a246703f9a08edefcc05ecb631964bffc70afbfdd92a796450a7943d502a86e"
     },
     "next90_guide": {
       "generated_at": "",
@@ -159,7 +155,7 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "641255112587cbec2c7c43a37dda5a90f6f59e0d2775206517fede2695c233e3"
+      "sha256": "01daaab883b7c57322f1628596a5e22b936d1ee678a875376b580f59903452fd"
     }
   },
   "status": "pass",

@@ -7,7 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from test_materialize_next90_m136_fleet_sr4_sr6_readiness_closeout import _fixture_tree
+try:
+    from tests.test_materialize_next90_m136_fleet_sr4_sr6_readiness_closeout import _fixture_tree
+except ModuleNotFoundError:
+    from test_materialize_next90_m136_fleet_sr4_sr6_readiness_closeout import _fixture_tree
 
 
 MATERIALIZER = Path("/docker/fleet/scripts/materialize_next90_m136_fleet_sr4_sr6_readiness_closeout.py")
