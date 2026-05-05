@@ -55,6 +55,8 @@
     "NEXT90_M139_FLEET_RELEASE_HEALTH_PUBLIC_TRUST_PROJECTIONS.generated.md",
     "NEXT90_M140_FLEET_PORTABILITY_AND_CADENCE_CLOSEOUT_GATES.generated.json",
     "NEXT90_M140_FLEET_PORTABILITY_AND_CADENCE_CLOSEOUT_GATES.generated.md",
+    "NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.json",
+    "NEXT90_M141_FLEET_IMPORT_ROUTE_CLOSEOUT_GATES.generated.md",
     "NEXT90_M145_FLEET_EXPLAIN_COVERAGE_GATE.generated.json",
     "NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
     "PROGRESS_HISTORY.generated.json",
@@ -83,7 +85,7 @@
   },
   "dispatchable_truth_ready": true,
   "lifecycle": "live",
-  "published_at": "2026-05-05T19:13:58Z",
+  "published_at": "2026-05-05T19:47:27Z",
   "schema_version": "2026-03-10.v1",
   "stages": {
     "capacity_compile": true,

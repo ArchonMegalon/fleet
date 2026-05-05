@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T16:31:05Z'
+generated_at: '2026-05-05T19:44:16Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-2
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,8 +32,6 @@ focus:
   - chummer6-ui
   - chummer6-core
   - chummer6-design
-  - chummer6-hub
-  - chummer6-hub-registry
   texts:
   - top flagship grade
   - whole project frontier
@@ -71,7 +69,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T16:28:17Z'
+  generated_at: '2026-05-05T19:44:00Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -79,39 +77,37 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 2541792707
+- 3449507998
 frontier:
-- id: 2541792707
-  title: Hub, registry, and public front door flagship finish
+- id: 3449507998
+  title: Rules engine parity, explain trust, and import certification
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-hub
-  - chummer6-hub-registry
-  - chummer6-design
+  - chummer6-core
+  - chummer6-ui
   dependencies: []
   exit_criteria:
-  - Deliver the relationship/orchestration, publication, downloads, account, install,
-    update, proof-shelf, and support surfaces promised in `projects/hub.md`, `projects/hub-registry.md`,
-    and the product front door canon.
-  - Keep public landing, signed-in overlays, release heads, install guidance, and
-    support/control truth aligned with design-owned manifests instead of repo-local
-    improvisation.
+  - Close SR4, SR5, and SR6 character-build parity gaps using deterministic engine
+    truth, explain receipts, and legacy/import oracle evidence described in `projects/core.md`
+    and the roadmap.
+  - Make ruleset import, migration, and explain certification boring enough that flagship
+    desktop and mobile surfaces consume one grounded engine truth.
   eta:
     status: flagship_delivery
-    eta_human: 10h-1d
+    eta_human: 11h-1.1d
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Hub, registry, and public front door flagship finish'' remains
-      open under the flagship closeout frontier. Outstanding readiness coverage: flagship
-      readiness proof refresh.'
-    predicted_completion_at: '2026-05-06T09:22:05Z'
-    range_low_hours: 9.5
-    range_high_hours: 24.2
+    summary: 'Milestone ''Rules engine parity, explain trust, and import certification''
+      remains open under the flagship closeout frontier. Outstanding readiness coverage:
+      flagship readiness proof refresh.'
+    predicted_completion_at: '2026-05-06T14:29:34Z'
+    range_low_hours: 10.86
+    range_high_hours: 26.65
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 2.0
+    remaining_effort_units: 2.05
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''

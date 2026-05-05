@@ -1,7 +1,7 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-05T16:34:04Z'
-mode: flagship_product
+generated_at: '2026-05-05T19:43:18Z'
+mode: completion_review
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-8
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -33,7 +33,6 @@ focus:
   - chummer6-mobile
   - chummer6-hub
   - chummer6-ui
-  - chummer6-core
   texts:
   - top flagship grade
   - whole project frontier
@@ -50,22 +49,17 @@ focus:
   - mobile
   - companion
   - continuity
-  - whole-project frontier
-  - no lowered standards
-  - feedback loop
-  - crash reporting
-  - support routing
-  - journey smoothness
-  - performance
-  - proof shelf
 completion_audit:
-  status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  status: pass
+  reason: 'current repo-local completion proof is green; using a supervisor evidence
+    receipt because the latest worker outcome is non-material to proof trust: dispatch
+    parked this shard until provider capacity recovers'
 receipt_audit:
-  status: fail
-  reason: latest worker receipt 20260505T160637Z-shard-8 was an internal retryable
-    worker recycle; waiting for a fresh structured completion receipt
-  latest_run_id: 20260505T160637Z-shard-8
+  status: pass
+  reason: 'current repo-local completion proof is green; using a supervisor evidence
+    receipt because the latest worker outcome is non-material to proof trust: dispatch
+    parked this shard until provider capacity recovers'
+  latest_run_id: 20260505T163206Z-shard-8
   latest_run_reason: dispatch parked this shard until provider capacity recovers
 journey_gate_audit:
   status: pass
@@ -79,36 +73,31 @@ linux_desktop_exit_gate_audit:
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
   generated_at: '2026-05-05T03:54:10Z'
 weekly_pulse_audit:
-  status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  status: pass
+  reason: weekly product pulse is fresh and reports no remaining drift or blocker
+    pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-05T16:28:17Z'
+  generated_at: '2026-05-05T19:30:38Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
   open_item_count: 0
   open_project_count: 0
   open_items: []
-blocking_audits:
-- component: weekly_pulse
-  title: Weekly product pulse gaps
-  reason: weekly product pulse reports release health as needs_attention
-- component: trusted_completion_receipt
-  title: Trusted completion receipt
-  reason: latest worker receipt 20260505T160637Z-shard-8 was an internal retryable
-    worker recycle; waiting for a fresh structured completion receipt
+blocking_audits: []
 frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
-  status: flagship_delivery
-  eta_human: 11h-1.1d
+  status: tracked
+  eta_human: tracked
   eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
+  basis: aggregate_shard_eta_scope_mismatch
+  scope_kind: aggregate_shard_mixed_scope
+  scope_label: Aggregate multi-shard ETA
+  scope_warning: Aggregate shard status currently mixes multiple ETA scopes. Use the
+    ETA command for a fresh whole-fleet forecast instead of reading this as a single
+    parity horizon.
   blocking_reason: ''
-  summary: 'Milestone ''Rules engine parity, explain trust, and import certification''
-    remains open under the flagship closeout frontier. Outstanding readiness coverage:
-    flagship readiness proof refresh.'
+  summary: Aggregate shard state currently mixes ETA scopes (aggregate_shard_mixed_scope,
+    repo_local_completion_ready). 0 open milestones remain across the active frontier.

@@ -27,7 +27,7 @@
   },
   "agreement": {
     "design_queue_status": "in_progress",
-    "fleet_queue_status": "in_progress",
+    "fleet_queue_status": "complete",
     "queue_closure_matches_package": true,
     "queue_scope_matches_package": true,
     "registry_closure_matches_package": true,
@@ -45,7 +45,7 @@
   "as_of": "2026-05-05",
   "contract_name": "fleet.next90_m120_launch_pulse",
   "frontier_id": 2614855152,
-  "generated_at": "2026-05-05T16:19:45Z",
+  "generated_at": "2026-05-05T17:17:24Z",
   "launch_pulse": {
     "alignment_ok": true,
     "decision_alignment": {
@@ -74,29 +74,29 @@
     "missing_input_count": 0,
     "source_rows": {
       "flagship_readiness": {
-        "age_seconds": 428,
+        "age_seconds": 987,
         "exists": true,
-        "generated_at": "2026-05-05T16:12:37Z",
-        "generated_at_sha256": "b6a0197f72dfa23d14df93345c514ad56f631eee8b4aac22271b821f47eb841f",
+        "generated_at": "2026-05-05T17:00:57Z",
+        "generated_at_sha256": "a846ffb686191c153aec9126c07e48e44a1622adc4889366ddceb62921c90d9f",
         "max_age_seconds": 172800,
         "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "sha256": "46a28b85231076c59a117adc2b07b4c00955d29385e30cc2c3535c3045940129",
+        "sha256": "c92dd544d78ceef77f171b209d83379406d7f255dbfce48379dd89e034808d65",
         "state": "pass",
         "status": "pass"
       },
       "journey_gates": {
-        "age_seconds": 437,
+        "age_seconds": 989,
         "exists": true,
-        "generated_at": "2026-05-05T16:12:28Z",
-        "generated_at_sha256": "0fd7b9df8247fd796884cf3a0b8026356780257d4a37282927b4e1f2d0251e77",
+        "generated_at": "2026-05-05T17:00:55Z",
+        "generated_at_sha256": "bcf7bbdea9376536475661ffea99307c6d318fe8fe0bc298ffdb3f660af0f892",
         "max_age_seconds": 172800,
         "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "sha256": "461ab1f8ba36631f69899bb70ea84835c341e38fb41afd6b5b1b33802b02ae88",
+        "sha256": "1cc1164d572b08f96effa1ce0a2d9fd5948f9965c9395b32f4bece0dd2f03554",
         "state": "pass",
         "status": "pass"
       },
       "progress_report": {
-        "age_seconds": 12560,
+        "age_seconds": 16019,
         "exists": true,
         "generated_at": "2026-05-05T12:50:25Z",
         "generated_at_sha256": "206ea95cfa0fe9c7721a6947bf30d108b5a5964f6d34ecfef0ae070cf0fa507f",
@@ -107,7 +107,7 @@
         "status": "pass"
       },
       "proof_orchestration": {
-        "age_seconds": 1869,
+        "age_seconds": 5328,
         "exists": true,
         "generated_at": "2026-05-05T15:48:36Z",
         "generated_at_sha256": "0178f10ae932ebe3d38598553059e47eb42a2eef3f485dffb97bdef2878346b1",
@@ -118,7 +118,7 @@
         "status": "pass"
       },
       "status_plane": {
-        "age_seconds": 12654,
+        "age_seconds": 16113,
         "exists": true,
         "generated_at": "2026-05-05T12:48:51Z",
         "generated_at_sha256": "be4cfb86e881df1f210d66e0fb94bde833f0ffb7833e265f43f16fb027e05333",
@@ -129,35 +129,35 @@
         "status": "pass"
       },
       "support_packets": {
-        "age_seconds": 450,
+        "age_seconds": 992,
         "exists": true,
-        "generated_at": "2026-05-05T16:12:15Z",
-        "generated_at_sha256": "bb7565a216dbde899e39435fd288eb5a2c482191379f9b7714b17aae77182b64",
+        "generated_at": "2026-05-05T17:00:52Z",
+        "generated_at_sha256": "8c8119e118c4bd91e2003a20b87b7ec11286eb027495b002c859852a6f4ff095",
         "max_age_seconds": 172800,
         "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "sha256": "2dc1712084bd188a02155e81e8fac90dcf171784682871fd4658cec36b4c2916",
+        "sha256": "a57205fba6082a829a30e2019f1be788ac94088b6e5a740e65a6218c3a34f6a6",
         "state": "pass",
         "status": "pass"
       },
       "weekly_governor_packet": {
-        "age_seconds": 422,
+        "age_seconds": 985,
         "exists": true,
-        "generated_at": "2026-05-05T16:12:43Z",
-        "generated_at_sha256": "eca3e9d86955be9aef4c24a482212d9f7bce7f3ed00526086b47b6508d41be14",
+        "generated_at": "2026-05-05T17:00:59Z",
+        "generated_at_sha256": "396428ab886cb919faccd24b67af7dc33731e3c696b4bde64b6649418aee4004",
         "max_age_seconds": 172800,
         "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
-        "sha256": "8d0337cb12726595d1c084d26e19d70e48a7f904d9c107f2812a9eac6038d93b",
+        "sha256": "4d9708ea23c1a60f459f34fa8a464df8580a6a225f0e456de2ef068952467d33",
         "state": "pass",
         "status": "pass"
       },
       "weekly_product_pulse": {
-        "age_seconds": 427,
+        "age_seconds": 986,
         "exists": true,
-        "generated_at": "2026-05-05T16:12:38Z",
-        "generated_at_sha256": "1ad7a86cfd25a69854fec2717726f2a1f915d52eaec8f32567366839cbdf17dd",
+        "generated_at": "2026-05-05T17:00:58Z",
+        "generated_at_sha256": "0b57126a578000964c618f8d16c8319bd04b1c418857e1115a4bd271a83a984a",
         "max_age_seconds": 172800,
         "path": "/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
-        "sha256": "467c071a95c9f594eb12121b42a76742a392347470f1c9d9ed96c31819cf1e12",
+        "sha256": "11fcd0268e26b88236167e80cd9be04bddf642d8eb863c9c7eacd5e824479f4c",
         "state": "pass",
         "status": "pass"
       }
@@ -199,29 +199,29 @@
   "queue_title": "Compile launch pulse and adoption health into governor packets",
   "source_input_health": {
     "flagship_readiness": {
-      "age_seconds": 428,
+      "age_seconds": 987,
       "exists": true,
-      "generated_at": "2026-05-05T16:12:37Z",
-      "generated_at_sha256": "b6a0197f72dfa23d14df93345c514ad56f631eee8b4aac22271b821f47eb841f",
+      "generated_at": "2026-05-05T17:00:57Z",
+      "generated_at_sha256": "a846ffb686191c153aec9126c07e48e44a1622adc4889366ddceb62921c90d9f",
       "max_age_seconds": 172800,
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "46a28b85231076c59a117adc2b07b4c00955d29385e30cc2c3535c3045940129",
+      "sha256": "c92dd544d78ceef77f171b209d83379406d7f255dbfce48379dd89e034808d65",
       "state": "pass",
       "status": "pass"
     },
     "journey_gates": {
-      "age_seconds": 437,
+      "age_seconds": 989,
       "exists": true,
-      "generated_at": "2026-05-05T16:12:28Z",
-      "generated_at_sha256": "0fd7b9df8247fd796884cf3a0b8026356780257d4a37282927b4e1f2d0251e77",
+      "generated_at": "2026-05-05T17:00:55Z",
+      "generated_at_sha256": "bcf7bbdea9376536475661ffea99307c6d318fe8fe0bc298ffdb3f660af0f892",
       "max_age_seconds": 172800,
       "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-      "sha256": "461ab1f8ba36631f69899bb70ea84835c341e38fb41afd6b5b1b33802b02ae88",
+      "sha256": "1cc1164d572b08f96effa1ce0a2d9fd5948f9965c9395b32f4bece0dd2f03554",
       "state": "pass",
       "status": "pass"
     },
     "progress_report": {
-      "age_seconds": 12560,
+      "age_seconds": 16019,
       "exists": true,
       "generated_at": "2026-05-05T12:50:25Z",
       "generated_at_sha256": "206ea95cfa0fe9c7721a6947bf30d108b5a5964f6d34ecfef0ae070cf0fa507f",
@@ -232,7 +232,7 @@
       "status": "pass"
     },
     "proof_orchestration": {
-      "age_seconds": 1869,
+      "age_seconds": 5328,
       "exists": true,
       "generated_at": "2026-05-05T15:48:36Z",
       "generated_at_sha256": "0178f10ae932ebe3d38598553059e47eb42a2eef3f485dffb97bdef2878346b1",
@@ -243,7 +243,7 @@
       "status": "pass"
     },
     "status_plane": {
-      "age_seconds": 12654,
+      "age_seconds": 16113,
       "exists": true,
       "generated_at": "2026-05-05T12:48:51Z",
       "generated_at_sha256": "be4cfb86e881df1f210d66e0fb94bde833f0ffb7833e265f43f16fb027e05333",
@@ -254,35 +254,35 @@
       "status": "pass"
     },
     "support_packets": {
-      "age_seconds": 450,
+      "age_seconds": 992,
       "exists": true,
-      "generated_at": "2026-05-05T16:12:15Z",
-      "generated_at_sha256": "bb7565a216dbde899e39435fd288eb5a2c482191379f9b7714b17aae77182b64",
+      "generated_at": "2026-05-05T17:00:52Z",
+      "generated_at_sha256": "8c8119e118c4bd91e2003a20b87b7ec11286eb027495b002c859852a6f4ff095",
       "max_age_seconds": 172800,
       "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-      "sha256": "2dc1712084bd188a02155e81e8fac90dcf171784682871fd4658cec36b4c2916",
+      "sha256": "a57205fba6082a829a30e2019f1be788ac94088b6e5a740e65a6218c3a34f6a6",
       "state": "pass",
       "status": "pass"
     },
     "weekly_governor_packet": {
-      "age_seconds": 422,
+      "age_seconds": 985,
       "exists": true,
-      "generated_at": "2026-05-05T16:12:43Z",
-      "generated_at_sha256": "eca3e9d86955be9aef4c24a482212d9f7bce7f3ed00526086b47b6508d41be14",
+      "generated_at": "2026-05-05T17:00:59Z",
+      "generated_at_sha256": "396428ab886cb919faccd24b67af7dc33731e3c696b4bde64b6649418aee4004",
       "max_age_seconds": 172800,
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
-      "sha256": "8d0337cb12726595d1c084d26e19d70e48a7f904d9c107f2812a9eac6038d93b",
+      "sha256": "4d9708ea23c1a60f459f34fa8a464df8580a6a225f0e456de2ef068952467d33",
       "state": "pass",
       "status": "pass"
     },
     "weekly_product_pulse": {
-      "age_seconds": 427,
+      "age_seconds": 986,
       "exists": true,
-      "generated_at": "2026-05-05T16:12:38Z",
-      "generated_at_sha256": "1ad7a86cfd25a69854fec2717726f2a1f915d52eaec8f32567366839cbdf17dd",
+      "generated_at": "2026-05-05T17:00:58Z",
+      "generated_at_sha256": "0b57126a578000964c618f8d16c8319bd04b1c418857e1115a4bd271a83a984a",
       "max_age_seconds": 172800,
       "path": "/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
-      "sha256": "467c071a95c9f594eb12121b42a76742a392347470f1c9d9ed96c31819cf1e12",
+      "sha256": "11fcd0268e26b88236167e80cd9be04bddf642d8eb863c9c7eacd5e824479f4c",
       "state": "pass",
       "status": "pass"
     }

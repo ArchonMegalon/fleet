@@ -116,6 +116,123 @@ horizons:
   - what-if receipt packet
   public_signal_eligible: true
   owner_handoff_gate: Build-ghost comparison and apply flows must consume core-owned truth and explicit apply receipts rather than assistant-side heuristics or silent runner mutation.
+- id: quicksilver
+  title: QUICKSILVER
+  status: horizon
+  family: expert_speed_command_surfaces
+  canon_doc: products/chummer/horizons/quicksilver.md
+  public_guide:
+    enabled: false
+    order: 15
+  pain_label: Expert users still spend too much time on UI choreography for dense character work.
+  wow_promise: The workbench supports faster expert-flow moves without changing rules meaning or trust boundaries.
+  table_scene: A veteran user applies multiple edits, checks legality, and moves between checks quickly without losing context or introducing stale state.
+  build_path:
+    intent: eventual_product_lane
+    current_state: horizon
+    next_state: bounded_research
+  owning_repos:
+  - chummer6-ui
+  - chummer6-ui-kit
+  - chummer6-core
+  milestone_family: H3
+  release_blocking: false
+  foundations:
+  - D0
+  - D1
+  - D2
+  - E0
+  tool_posture:
+    promoted: []
+    bounded: []
+  success_signals:
+  - Latency, jump, and batch-edit behavior stay stable across dense-state sessions.
+  - Undo/cancel-safe edits do not mutate state without explicit user intent and visible receipts.
+  - Command and shortcut flows are additive and never hide legality or explainability seams.
+  artifact_types:
+  - command path receipt
+  - batch-edit audit packet
+  public_signal_eligible: false
+  owner_handoff_gate: Expert-speed seams must be deterministic and recoverable before speed features move beyond horizon.
+
+- id: edition-studio
+  title: EDITION STUDIO
+  status: horizon
+  family: ruleset_expression_authoring
+  canon_doc: products/chummer/horizons/edition-studio.md
+  public_guide:
+    enabled: false
+    order: 21
+  pain_label: Shared workflows still flatten differences between SR4, SR5, and SR6.
+  wow_promise: Chummer ships edition-specific authored expression without fragmenting the product into separate apps.
+  table_scene: A GM prepares a mission and sees semantics and phrasing align with the chosen edition without changing how the engine decides outcomes.
+  build_path:
+    intent: eventual_product_lane
+    current_state: horizon
+    next_state: bounded_research
+  owning_repos:
+  - chummer6-ui
+  - chummer6-ui-kit
+  - chummer6-core
+  milestone_family: H3
+  release_blocking: false
+  foundations:
+  - A1
+  - D0
+  - D2
+  tool_posture:
+    promoted: []
+    bounded: []
+  success_signals:
+  - Edition-specific UI and interaction patterns reflect rule semantics already accepted in core.
+  - The same core engine truth remains explicit under different authored expression layers.
+  - Shared shell controls can host edition-specific composition without semantic forks.
+  artifact_types:
+  - authored edition expression draft
+  - edition-specific inspector profile
+  public_signal_eligible: false
+  owner_handoff_gate: Edition-specific expression must remain authored and engine-grounded before promotion.
+
+- id: onramp
+  title: ONRAMP
+  status: horizon
+  family: guided_mastery_and_teaching
+  canon_doc: products/chummer/horizons/onramp.md
+  public_guide:
+    enabled: false
+    order: 23
+  pain_label: New and returning players still get stuck before they can complete a legal starter route.
+  wow_promise: Chummer guides people through first builds and recovery choices while preserving rules truth and manual control.
+  table_scene: A new player sees a guided sequence, gets legality-aware feedback, and finishes a valid starter build without lore-by-lore guesswork.
+  build_path:
+    intent: eventual_product_lane
+    current_state: horizon
+    next_state: bounded_research
+  owning_repos:
+  - chummer6-ui
+  - chummer6-core
+  - chummer6-hub
+  milestone_family: H3
+  release_blocking: false
+  foundations:
+  - A0
+  - D0
+  - D2
+  tool_posture:
+    promoted: []
+    bounded:
+    - Documentation.AI
+    - Prompting Systems
+  success_signals:
+  - Starter flow examples stay legal, explainable, and repairable from receipts.
+  - Recovery guidance is bounded and does not replace explicit user build decisions.
+  - Explainability remains tied to engine truth in error and recovery paths.
+  artifact_types:
+  - guided starter flow packet
+  - legality repair receipt
+  public_signal_eligible: false
+  owner_handoff_gate: Guided mastery can only move beyond horizon once starter legality and recovery behaviors are proven on the live path.
+
 - id: karma-forge
   title: KARMA FORGE
   status: horizon
@@ -271,6 +388,45 @@ horizons:
   free_later_intent: Long-run intent is broader access after editorial, narration, and provenance loops become cheaper and safer to operate at scale.
   recognition_eligible: true
   owner_handoff_gate: Registry manifests and media receipts must survive format changes before the studio is promoted beyond horizon.
+- id: run-control
+  title: RUN CONTROL
+  status: horizon
+  family: gm_operations_campaign_control
+  canon_doc: products/chummer/horizons/run-control.md
+  public_guide:
+    enabled: false
+    order: 45
+  pain_label: GM prep, live control, and recap handoff still require external surfaces for reliability.
+  wow_promise: Chummer keeps campaign prep, roster, scene, and recap operations in one bounded workspace.
+  table_scene: A GM starts from a connected campaign state, runs a scene with role-aware controls, and hands recap/notes back into campaign truth without spreadsheets.
+  build_path:
+    intent: eventual_product_lane
+    current_state: horizon
+    next_state: bounded_research
+  owning_repos:
+  - chummer6-hub
+  - chummer6-mobile
+  - chummer6-core
+  - chummer6-media-factory
+  milestone_family: H3
+  release_blocking: false
+  foundations:
+  - C0
+  - C1
+  - C1c
+  - D1
+  tool_posture:
+    promoted: []
+    bounded:
+    - BrowserAct
+    - PeekShot
+  success_signals:
+  - Campaign, roster, and scene operations remain in Chummer-owned truth.
+  - Reconnect and role-aware view behavior survive routine offline and handoff events.
+  - Recap and dossier handoff preserve provenance and publication safety.
+  public_signal_eligible: false
+  owner_handoff_gate: GM operations control must stay in campaign truth and remain recoverable before promotion.
+
 - id: black-ledger
   title: BLACK LEDGER
   status: horizon

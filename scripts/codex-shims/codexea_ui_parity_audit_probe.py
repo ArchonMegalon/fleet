@@ -18,7 +18,10 @@ WORKFLOW_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-s
 WORKFLOW_PARITY_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json")
 GENERATED_DIALOG_PARITY_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json")
 SECTION_HOST_PARITY_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json")
+VETERAN_TASK_TIME_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json")
+UI_RELEASE_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json")
 IMPORT_PARITY_CERT_PATH = Path("/docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json")
+IMPORT_RECEIPTS_DOC_PATH = Path("/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md")
 CORE_DATA_ROOT = Path("/docker/chummercomplete/chummer-core-engine/Chummer/data")
 READINESS_PATH = Path("/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json")
 STATE_PATH = Path("/docker/fleet/state/chummer_design_supervisor/state.json")
@@ -237,6 +240,7 @@ def _record(
     visual: bool,
     behavior: bool,
     present_in_chummer5a: bool,
+    present_in_chummer6: bool,
     removable_without_degrading: bool,
     reason: str,
     evidence: list[str],
@@ -248,6 +252,8 @@ def _record(
         "visual_parity": _text_yes(visual),
         "behavioral_parity": _text_yes(behavior),
         "present_in_chummer5a": _text_yes(present_in_chummer5a),
+        "present_in_chummer6": _text_yes(present_in_chummer6),
+        "removable_if_not_in_chummer5a": _text_yes(removable_without_degrading),
         "removable_without_workflow_degradation": _text_yes(removable_without_degrading),
         "reason": reason,
         "evidence": evidence,
@@ -721,12 +727,20 @@ def main() -> int:
                     visual=visual,
                     behavior=behavior,
                     present_in_chummer5a=True,
+                    present_in_chummer6=True,
                     removable_without_degrading=False,
                     reason=reason,
-                    evidence=[
-                        f"{PACK_PATH}#oracle_surface_extract.source_line_proofs.{group_name}",
-                        str(VISUAL_GATE_PATH),
-                    ],
+                    evidence=(
+                        [
+                            f"{PACK_PATH}#oracle_surface_extract.source_line_proofs.{group_name}",
+                            str(VISUAL_GATE_PATH),
+                        ]
+                        + (
+                            [str(VETERAN_TASK_TIME_GATE_PATH), str(UI_RELEASE_GATE_PATH), str(IMPORT_RECEIPTS_DOC_PATH)]
+                            if proof_id in {"translator_route", "xml_amendment_editor_route"}
+                            else [str(VETERAN_TASK_TIME_GATE_PATH), str(IMPORT_PARITY_CERT_PATH), str(IMPORT_RECEIPTS_DOC_PATH)]
+                        )
+                    ),
                 ),
                 seen,
             )
@@ -751,6 +765,7 @@ def main() -> int:
                 visual=visual,
                 behavior=behavior,
                 present_in_chummer5a=True,
+                present_in_chummer6=True,
                 removable_without_degrading=False,
                 reason=reason,
                 evidence=[str(SCREENSHOT_GATE_PATH), str(VISUAL_GATE_PATH)],
@@ -778,6 +793,7 @@ def main() -> int:
                 visual=visual,
                 behavior=behavior,
                 present_in_chummer5a=True,
+                present_in_chummer6=True,
                 removable_without_degrading=False,
                 reason=(
                     "The screenshot baseline and matching runtime interaction proof are both present."
@@ -829,6 +845,7 @@ def main() -> int:
                 visual=visual,
                 behavior=behavior,
                 present_in_chummer5a=True,
+                present_in_chummer6=True,
                 removable_without_degrading=False,
                 reason=reason,
                 evidence=[str(PACK_PATH), str(VISUAL_GATE_PATH)],
@@ -861,6 +878,7 @@ def main() -> int:
                 visual=visual,
                 behavior=behavior,
                 present_in_chummer5a=True,
+                present_in_chummer6=True,
                 removable_without_degrading=False,
                 reason=reason,
                 evidence=[str(VETERAN_PATH), str(VISUAL_GATE_PATH)],
@@ -903,6 +921,7 @@ def main() -> int:
                 visual=baseline_visual,
                 behavior=behavior,
                 present_in_chummer5a=True,
+                present_in_chummer6=True,
                 removable_without_degrading=False,
                 reason=reason,
                 evidence=[str(VETERAN_PATH), str(SCREENSHOT_GATE_PATH), str(VISUAL_GATE_PATH)],
@@ -935,9 +954,21 @@ def main() -> int:
                 visual=visual,
                 behavior=behavior,
                 present_in_chummer5a=True,
+                present_in_chummer6=True,
                 removable_without_degrading=False,
                 reason=reason,
-                evidence=[str(VETERAN_PATH), str(VISUAL_GATE_PATH), str(WORKFLOW_GATE_PATH)],
+                evidence=(
+                    [str(VETERAN_PATH), str(VISUAL_GATE_PATH), str(WORKFLOW_GATE_PATH)]
+                    + (
+                        [str(UI_RELEASE_GATE_PATH), str(VETERAN_TASK_TIME_GATE_PATH), str(IMPORT_RECEIPTS_DOC_PATH)]
+                        if family_id == "custom_data_xml_and_translator_bridge"
+                        else (
+                            [str(VETERAN_TASK_TIME_GATE_PATH), str(IMPORT_PARITY_CERT_PATH), str(IMPORT_RECEIPTS_DOC_PATH)]
+                            if family_id == "legacy_and_adjacent_import_oracles"
+                            else []
+                        )
+                    )
+                ),
             ),
             seen,
         )
@@ -960,6 +991,7 @@ def main() -> int:
                 visual=visual,
                 behavior=legacy_behavior,
                 present_in_chummer5a=True,
+                present_in_chummer6=True,
                 removable_without_degrading=False,
                 reason=reason,
                 evidence=[str(VISUAL_GATE_PATH)],
@@ -981,6 +1013,7 @@ def main() -> int:
                     visual=False,
                     behavior=False,
                     present_in_chummer5a=False,
+                    present_in_chummer6=True,
                     removable_without_degrading=True,
                     reason=f"{bucket_label} is present in Chummer6 proof but explicitly disallowed by the classic-parity gate.",
                     evidence=[str(VISUAL_GATE_PATH)],

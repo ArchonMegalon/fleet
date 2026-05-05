@@ -16228,6 +16228,14 @@ def derive_flagship_product_context(
     current_completion_audit = dict(completion_audit or _design_completion_audit(args, history))
     current_full_product_audit = dict(full_product_audit or _full_product_readiness_audit(args))
     full_frontier = _full_product_frontier(args)
+    readiness_is_green = (
+        str(current_full_product_audit.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
+        and not current_full_product_audit.get("unresolved_parity_families")
+        and not (
+            current_full_product_audit.get("coverage_gap_keys")
+            or current_full_product_audit.get("missing_coverage_keys")
+        )
+    )
     queue_item = _queue_item_for_shard(
         args,
         state_root,
@@ -16264,7 +16272,7 @@ def derive_flagship_product_context(
         else:
             frontier = _bounded_frontier(focused_full_frontier, limit=frontier_limit)
     pinned_frontier_ids = [int(value) for value in (args.frontier_id or []) if int(value or 0) > 0]
-    if not pinned_frontier_ids:
+    if not pinned_frontier_ids and not readiness_is_green:
         state_payload = _read_state(_state_payload_path(resolved_state_root))
         runtime_handoff_can_pin = bool(str(state_payload.get("active_run_id") or "").strip())
         if not runtime_handoff_can_pin:
@@ -16280,7 +16288,7 @@ def derive_flagship_product_context(
                 )
                 if runtime_has_explicit_frontier:
                     pinned_frontier_ids = [int(value) for value in runtime_frontier_ids if int(value or 0) > 0]
-    if pinned_frontier_ids:
+    if pinned_frontier_ids and not readiness_is_green:
         pinned_sources: List[Sequence[Milestone]] = [
             list(full_frontier),
             list(context.get("open_milestones") or []),
@@ -22610,6 +22618,7 @@ def _weekly_pulse_audit(args: argparse.Namespace) -> Dict[str, Any]:
 def _reconcile_weekly_pulse_audit_with_live_journey_truth(
     weekly_pulse_audit: Dict[str, Any],
     journey_gate_audit: Dict[str, Any],
+    full_product_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     audit = dict(weekly_pulse_audit or {})
     if str(audit.get("status") or "").strip().lower() == "pass":
@@ -22625,6 +22634,31 @@ def _reconcile_weekly_pulse_audit_with_live_journey_truth(
     design_drift_count = _coerce_int(audit.get("design_drift_count"), 0)
     public_promise_drift_count = _coerce_int(audit.get("public_promise_drift_count"), 0)
     oldest_blocker_days = _coerce_int(audit.get("oldest_blocker_days"), 0)
+    if "release health" in pulse_reason:
+        if active_wave_status not in DONE_STATUSES:
+            return audit
+        if age_seconds > WEEKLY_PULSE_MAX_AGE_SECONDS:
+            return audit
+        if design_drift_count > 0 or public_promise_drift_count > 0 or oldest_blocker_days > 0:
+            return audit
+        if journey_state != "ready":
+            return audit
+        full_product_status = str((full_product_audit or {}).get("status") or "").strip().lower()
+        if full_product_status != "pass":
+            return audit
+        audit.update(
+            {
+                "status": "pass",
+                "reason": (
+                    "weekly product pulse lags the live flagship readiness proof; "
+                    "journey, drift, and blocker signals remain green"
+                ),
+                "live_release_health_override": True,
+                "lagging_release_health_state": release_state,
+            }
+        )
+        return audit
+
     if "journey gate health" not in pulse_reason:
         return audit
     if journey_state not in {"warning", "blocked", "unknown"}:
@@ -23968,9 +24002,11 @@ def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[st
     linux_desktop_exit_gate_audit = _linux_desktop_exit_gate_audit(args)
     desktop_executable_exit_gate_audit = _desktop_executable_exit_gate_audit(args)
     weekly_pulse_audit = _weekly_pulse_audit(args)
+    full_product_audit = _full_product_readiness_audit(args)
     weekly_pulse_audit = _reconcile_weekly_pulse_audit_with_live_journey_truth(
         weekly_pulse_audit,
         journey_gate_audit,
+        full_product_audit,
     )
     repo_backlog_args = argparse.Namespace(**vars(args))
     repo_backlog_args.focus_owner = []

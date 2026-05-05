@@ -1,7 +1,7 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-05T15:48:11Z'
-mode: flagship_product
+generated_at: '2026-05-05T19:43:47Z'
+mode: completion_review
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-2
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -33,8 +33,6 @@ focus:
   - chummer6-ui
   - chummer6-core
   - chummer6-design
-  - chummer6-hub
-  - chummer6-hub-registry
   texts:
   - top flagship grade
   - whole project frontier
@@ -51,21 +49,13 @@ focus:
   - master index
   - roster
   - restore
-  - whole-project frontier
-  - no lowered standards
-  - feedback loop
-  - crash reporting
-  - support routing
-  - journey smoothness
-  - performance
-  - proof shelf
 completion_audit:
-  status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  status: pass
+  reason: recent supervisor history ends with a trusted structured worker receipt
 receipt_audit:
   status: pass
   reason: recent supervisor history ends with a trusted structured worker receipt
-  latest_run_id: 20260505T150423Z-shard-2
+  latest_run_id: 20260505T171408Z-shard-2
   latest_run_reason: ''
 journey_gate_audit:
   status: pass
@@ -79,32 +69,31 @@ linux_desktop_exit_gate_audit:
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
   generated_at: '2026-05-05T03:54:10Z'
 weekly_pulse_audit:
-  status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  status: pass
+  reason: weekly product pulse is fresh and reports no remaining drift or blocker
+    pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-05T15:30:47Z'
+  generated_at: '2026-05-05T19:30:38Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
   open_item_count: 0
   open_project_count: 0
   open_items: []
-blocking_audits:
-- component: weekly_pulse
-  title: Weekly product pulse gaps
-  reason: weekly product pulse reports release health as needs_attention
+blocking_audits: []
 frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
-  status: flagship_delivery
-  eta_human: 10h-1d
+  status: tracked
+  eta_human: tracked
   eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
+  basis: aggregate_shard_eta_scope_mismatch
+  scope_kind: aggregate_shard_mixed_scope
+  scope_label: Aggregate multi-shard ETA
+  scope_warning: Aggregate shard status currently mixes multiple ETA scopes. Use the
+    ETA command for a fresh whole-fleet forecast instead of reading this as a single
+    parity horizon.
   blocking_reason: ''
-  summary: 'Milestone ''Hub, registry, and public front door flagship finish'' remains
-    open under the flagship closeout frontier. Outstanding readiness coverage: flagship
-    readiness proof refresh.'
+  summary: Aggregate shard state currently mixes ETA scopes (aggregate_shard_mixed_scope,
+    repo_local_completion_ready). 0 open milestones remain across the active frontier.

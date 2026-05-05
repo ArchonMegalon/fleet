@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T16:32:09Z'
+generated_at: '2026-05-05T19:44:20Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-12
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -33,6 +33,9 @@ focus:
   - chummer6-design
   - chummer6-ui
   - chummer6-mobile
+  - chummer6-core
+  - chummer6-ui-kit
+  - chummer6-hub
   texts:
   - top flagship grade
   - whole project frontier
@@ -70,7 +73,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T16:28:17Z'
+  generated_at: '2026-05-05T19:44:00Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -78,53 +81,42 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 3371889980
+- 1300044932
 frontier:
-- id: 3371889980
-  title: Add mobile artifact shelf views for campaign, travel, and recap artifacts
+- id: 1300044932
+  title: Mobile and play-shell flagship finish
   wave: flagship_product
   status: not_started
   owners:
   - chummer6-mobile
+  - chummer6-core
+  - chummer6-ui-kit
+  - chummer6-hub
   dependencies: []
   exit_criteria:
-  - Add mobile artifact shelf views for campaign, travel, and recap artifacts.
-  - 'Own and prove the surface slice(s): artifact_shelf:mobile, artifact_recap_view:mobile'
-  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
-  - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-mobile` (next90-m117-mobile-artifact-shelf).
+  - Deliver the dedicated player/GM/session shell described in `projects/mobile.md`,
+    including local-first play, replay/resume, reconnect confidence, installable mobile
+    posture, and cross-device continuity.
+  - Keep mobile grounded on package-only engine/play/UI-kit seams rather than cloning
+    workbench or orchestration logic.
   eta:
     status: flagship_delivery
-    eta_human: 8h-21h
+    eta_human: 10h-1.1d
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Add mobile artifact shelf views for campaign, travel, and
-      recap artifacts'' remains open under the flagship closeout frontier. Outstanding
-      readiness coverage: flagship readiness proof refresh.'
-    predicted_completion_at: '2026-05-06T07:01:33Z'
-    range_low_hours: 8.1
-    range_high_hours: 20.88
+    summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open under
+      the flagship closeout frontier. Outstanding readiness coverage: flagship readiness
+      proof refresh.'
+    predicted_completion_at: '2026-05-06T13:46:44Z'
+    range_low_hours: 10.25
+    range_high_hours: 25.83
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.8
+    remaining_effort_units: 2.05
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
-queue_package:
-  repo: chummer6-mobile
-  package_id: next90-m117-mobile-artifact-shelf
-  title: Add mobile artifact shelf views for campaign, travel, and recap artifacts
-  priority: 0
-  owned_surfaces:
-  - artifact_shelf:mobile
-  - artifact_recap_view:mobile
-  allowed_paths:
-  - src
-  - tests
-  - docs
-  - scripts

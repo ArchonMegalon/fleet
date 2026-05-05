@@ -1,12 +1,12 @@
 # External Proof Runbook
 
-- generated_at: 2026-05-05T16:12:36Z
+- generated_at: 2026-05-05T19:30:37Z
 - unresolved_request_count: 0
 - unresolved_hosts: (none)
-- plan_generated_at: 2026-05-05T16:12:15Z
-- release_channel_generated_at: 2026-05-05T15:55:24Z
+- plan_generated_at: 2026-05-05T19:30:34Z
+- release_channel_generated_at: 2026-05-05T19:17:52Z
 - capture_deadline_hours: 24
-- capture_deadline_utc: 2026-05-06T15:55:24Z
+- capture_deadline_utc: 2026-05-06T19:17:52Z
 
 ## Prerequisites
 
@@ -30,7 +30,7 @@
   host_lane_script: `/docker/fleet/.codex-studio/published/external-proof-commands/run-linux-proof-lane.sh`
   command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/linux-proof-command-pack.tgz`
   command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/linux-proof-command-pack.tgz.sha256`
-  command_pack_sha256: `8fdbd228a9716fc74a48564c65c89a83c412964bb5b094fab67723321eee9b3f`
+  command_pack_sha256: `a95ff9575c20b560b317ff41fc45441a2ff0c58dce35abe9aa3b79b3b3ccbc6a`
 - host `macos`
   preflight_script: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-macos-proof.sh`
   capture_script: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-macos-proof.sh`
@@ -40,7 +40,7 @@
   host_lane_script: `/docker/fleet/.codex-studio/published/external-proof-commands/run-macos-proof-lane.sh`
   command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz`
   command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz.sha256`
-  command_pack_sha256: `7bcc874da9d9907195e3c03edeb847c78df9518a8181a0d12b4ed52b6c40f9be`
+  command_pack_sha256: `f3701d84d03a3d6023e3cf2a4accf1b3f6643ad130464ff6df79706f4c121291`
 - host `windows`
   preflight_script: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh`
   capture_script: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh`
@@ -50,7 +50,7 @@
   host_lane_script: `/docker/fleet/.codex-studio/published/external-proof-commands/run-windows-proof-lane.sh`
   command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz`
   command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz.sha256`
-  command_pack_sha256: `efe98a98fa760374ce4cc7e71e0529e8363312b9af33174682de6732537b8e74`
+  command_pack_sha256: `e07cf495c49b8deea8ab5500da25f2785d95abf60e374ac71f3892c1c9c10a6d`
   preflight_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.ps1`
   capture_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1`
   validation_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.ps1`
@@ -77,7 +77,7 @@ These command bundles stay materialized even with zero backlog so native-host pr
 - command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/linux-proof-command-pack.tgz`
 - command_pack_present: `true`
 - command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/linux-proof-command-pack.tgz.sha256`
-- command_pack_sha256: `8fdbd228a9716fc74a48564c65c89a83c412964bb5b094fab67723321eee9b3f`
+- command_pack_sha256: `a95ff9575c20b560b317ff41fc45441a2ff0c58dce35abe9aa3b79b3b3ccbc6a`
 
 ### Host: macos
 
@@ -93,7 +93,7 @@ These command bundles stay materialized even with zero backlog so native-host pr
 - command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz`
 - command_pack_present: `true`
 - command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz.sha256`
-- command_pack_sha256: `7bcc874da9d9907195e3c03edeb847c78df9518a8181a0d12b4ed52b6c40f9be`
+- command_pack_sha256: `f3701d84d03a3d6023e3cf2a4accf1b3f6643ad130464ff6df79706f4c121291`
 
 ### Host: windows
 
@@ -110,7 +110,7 @@ These command bundles stay materialized even with zero backlog so native-host pr
 - command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz`
 - command_pack_present: `true`
 - command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz.sha256`
-- command_pack_sha256: `efe98a98fa760374ce4cc7e71e0529e8363312b9af33174682de6732537b8e74`
+- command_pack_sha256: `e07cf495c49b8deea8ab5500da25f2785d95abf60e374ac71f3892c1c9c10a6d`
 
 ## Resume Commands
 

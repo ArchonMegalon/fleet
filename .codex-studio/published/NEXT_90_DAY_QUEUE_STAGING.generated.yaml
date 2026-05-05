@@ -1,3 +1,21 @@
+- title: Add deterministic reward, downtime, goal-update, and consequence receipt contracts consumed by adoption and BLACK
+    LEDGER flows.
+  task: Add deterministic reward, downtime, goal-update, and consequence receipt contracts consumed by adoption and BLACK
+    LEDGER flows.
+  package_id: next90-m122-core-add-deterministic-reward-downtime-goal-update-and-conseq
+  work_task_id: '122.2'
+  frontier_id: 1771239378
+  milestone_id: 122
+  status: not_started
+  wave: W15
+  repo: chummer6-core
+  allowed_paths:
+  - src
+  - tests
+  - docs
+  - scripts
+  owned_surfaces:
+  - add_deterministic_reward_downtime_goal:core
 mode: append
 program_wave: next_90_day_product_advance
 status: live_parallel_successor
@@ -3084,10 +3102,18 @@ items:
   task: Add mobile artifact shelf views for campaign, travel, and recap artifacts.
   package_id: next90-m117-mobile-artifact-shelf
   work_task_id: 117.4
+  frontier_id: 3440617449
   milestone_id: 117
-  status: in_progress
+  status: complete
   wave: W13
   repo: chummer6-mobile
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M117 chummer6-mobile artifact shelf is complete; future shards must verify this receipt, registry row, queue row, and design-queue row instead of reopening the mobile artifact shelf package.
+  proof:
+  - /docker/chummercomplete/chummer-play/docs/next90-m117-mobile-artifact-shelf.proof.md
+  - /docker/chummercomplete/chummer-play/scripts/verify_next90_m117_mobile_artifact_shelf.py
+  - /docker/chummercomplete/chummer-play/scripts/materialize_mobile_local_release_proof.py
+  - /docker/chummercomplete/chummer-play/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json
   allowed_paths:
   - src
   - tests
@@ -3400,9 +3426,11 @@ items:
   package_id: next90-m119-mobile-onboarding-continuity
   work_task_id: 119.3
   milestone_id: 119
-  status: in_progress
+  status: complete
   wave: W14
   repo: chummer6-mobile
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M119 chummer6-mobile is complete for starter primer continuity, first-session briefing continuity, and travel reopen follow-through. Future shards must verify the canonical projector, restore, shell, and artifact continuity evidence, as well as this closed-package guard and proof evidence, before reopening this slice.
   allowed_paths:
   - src
   - tests
@@ -3464,9 +3492,12 @@ items:
   package_id: next90-m120-fleet-launch-pulse
   work_task_id: 120.3
   milestone_id: 120
-  status: in_progress
+  status: complete
   wave: W14
   repo: fleet
+  do_not_reopen_reason: M120 fleet launch-pulse and governor adoption packet work is closed in this package; future shards must verify
+    package-local release-truth packet generation, verification, tests, and feedback closeout before reopening the successor-wave
+    task.
   allowed_paths:
   - scripts
   - tests
@@ -3475,6 +3506,15 @@ items:
   owned_surfaces:
   - launch_pulse
   - adoption_health:governor
+  proof:
+  - /docker/fleet/scripts/materialize_next90_m120_fleet_launch_pulse.py
+  - /docker/fleet/scripts/verify_next90_m120_fleet_launch_pulse.py
+  - /docker/fleet/tests/test_materialize_next90_m120_fleet_launch_pulse.py
+  - /docker/fleet/tests/test_verify_next90_m120_fleet_launch_pulse.py
+  - /docker/fleet/.codex-studio/published/NEXT90_M120_FLEET_LAUNCH_PULSE.generated.json
+  - /docker/fleet/.codex-studio/published/NEXT90_M120_FLEET_LAUNCH_PULSE.generated.md
+  - /docker/fleet/feedback/2026-05-05-next90-m120-fleet-launch-pulse-progress.md
+  - /docker/fleet/feedback/2026-05-05-next90-m120-fleet-launch-pulse-closeout.md
 - title: Normalize adoption health, proof freshness, release channel, and revocation facts for public surfaces
   task: Normalize adoption health, proof freshness, release channel, and revocation facts for public surfaces.
   package_id: next90-m120-hub-registry-launch-truth
@@ -3757,7 +3797,20 @@ items:
   work_task_id: '122.6'
   frontier_id: 2050325965
   milestone_id: 122
-  status: not_started
+  status: complete
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M122 chummer6-design BLACK LEDGER MVP receipt semantics, spoiler policy, and adoption confidence gates are complete. Future shards must verify the adoption receipt gate, consequence spoiler policy, and queue/registry lock markers before reopening this package.
+  proof:
+    - /docker/chummercomplete/chummer-design/products/chummer/CAMPAIGN_ADOPTION_WIZARD.md
+    - /docker/chummercomplete/chummer-design/products/chummer/CAMPAIGN_ADOPTION_START_FROM_TODAY_FLOW.md
+    - /docker/chummercomplete/chummer-design/products/chummer/BLACK_LEDGER_MVP_001.md
+    - /docker/chummercomplete/chummer-design/products/chummer/NEWSREEL_AND_CITY_TICKER_MODEL.md
+    - /docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml
+    - /docker/chummercomplete/chummer-design/products/chummer/maintenance/feedback_archive/2026-05-05-next90-m122-design-finalize-black-ledger-mvp-receipt-semantics-spoiler-poli-closeout.md
+    - /docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml
+    - /docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml
+    - /docker/chummercomplete/chummer-design/scripts/ai/validate_next90_m122_design_black_ledger_receipt_semantics.py
+    - /docker/chummercomplete/chummer-design/scripts/ai/verify.sh
   wave: W15
   repo: chummer6-design
   allowed_paths:
@@ -4483,7 +4536,7 @@ items:
   work_task_id: '145.7'
   frontier_id: 1457045707
   milestone_id: 145
-  status: complete
+  status: done
   wave: W28
   repo: chummer6-design
   completion_action: verify_closed_package_only
@@ -5309,9 +5362,37 @@ items:
   work_task_id: '135.6'
   frontier_id: 8351771106
   milestone_id: 135
-  status: not_started
+  status: complete
   wave: W22
   repo: chummer6-ui
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M135 chummer6-ui desktop surface coverage is complete; future shards must verify the closure receipt,
+    veteran-familiarity gate, focused desktop guards, canonical registry row, and queue mirrors instead of reopening
+    the workbench/publication/restore/support surface bundle.
+  proof:
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopHomeWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCreatorPublicationWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopOrganizerOperationsWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopRuleEnvironmentStudioWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopSupportWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/App.axaml.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Desktop.Runtime/DesktopStartupSurfaceCatalog.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/AccessibilitySignoffSmokeTests.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/Next90M135DesktopSurfaceCoverageGuardTests.cs
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M105_UI_RESTORE_CONTINUITY.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M114_UI_RULE_STUDIO.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M116_UI_CREATOR_PUBLICATION.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M118_UI_ORGANIZER_OPS.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M145_UI_DESKTOP_EXPLAIN_DRAWER_AND_FOLLOW_UP.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M135_UI_DESKTOP_SURFACE_COVERAGE.generated.json
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/veteran-task-time-evidence-gate.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/next90-m135-ui-desktop-surface-coverage-check.sh
+  - bash scripts/ai/milestones/veteran-task-time-evidence-gate.sh
+  - bash scripts/ai/milestones/next90-m135-ui-desktop-surface-coverage-check.sh
+  - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Next90M135DesktopSurfaceCoverageGuardTests" --no-restore
+  - dotnet test Chummer.Tests/Presentation/Chummer.Presentation.Signoff.Tests.csproj --filter "FullyQualifiedName~AccessibilitySignoffSmokeTests" --no-restore
   allowed_paths:
   - Chummer.Avalonia
   - Chummer.Desktop.Runtime

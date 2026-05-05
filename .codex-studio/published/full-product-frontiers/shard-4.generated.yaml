@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T16:31:22Z'
+generated_at: '2026-05-05T19:48:09Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-4
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,10 +32,8 @@ focus:
   - chummer6-ui
   - chummer6-core
   - chummer6-design
-  - chummer6-mobile
-  - chummer6-ui-kit
-  - chummer6-hub
   - chummer6-media-factory
+  - chummer6-hub
   - chummer6-hub-registry
   texts:
   - top flagship grade
@@ -74,7 +72,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T16:28:17Z'
+  generated_at: '2026-05-05T19:47:26Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -107,7 +105,7 @@ frontier:
     summary: 'Milestone ''Media, artifacts, publication, and recap flagship finish''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
       flagship readiness proof refresh.'
-    predicted_completion_at: '2026-05-06T09:47:34Z'
+    predicted_completion_at: '2026-05-06T13:04:21Z'
     range_low_hours: 9.74
     range_high_hours: 24.8
     remaining_open_milestones: 1

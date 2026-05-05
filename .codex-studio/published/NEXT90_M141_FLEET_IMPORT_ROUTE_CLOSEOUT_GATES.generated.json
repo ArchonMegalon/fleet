@@ -40,8 +40,11 @@
       "state": "pass"
     },
     "queue_alignment": {
-      "issues": [],
-      "state": "pass",
+      "issues": [
+        "Canonical registry work task is missing.",
+        "Design queue row is missing."
+      ],
+      "state": "fail",
       "warnings": [
         "Fleet queue mirror row is still missing for work task 141.5."
       ]
@@ -49,19 +52,13 @@
   },
   "contract_name": "fleet.next90_m141_import_route_closeout_gates",
   "frontier_id": 4147587006,
-  "generated_at": "2026-05-05T19:44:53Z",
+  "generated_at": "2026-05-05T19:47:18Z",
   "milestone_id": 141,
   "monitor_summary": {
-    "canonical_issue_count": 0,
-    "import_route_closeout_status": "blocked",
-    "runtime_blocker_count": 5,
-    "runtime_blockers": [
-      "source:translator_route: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact",
-      "source:xml_amendment_editor_route: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact",
-      "source:hero_lab_importer_route: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact",
-      "family:custom_data_xml_and_translator_bridge: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact",
-      "family:legacy_and_adjacent_import_oracles: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact"
-    ],
+    "canonical_issue_count": 2,
+    "import_route_closeout_status": "warning",
+    "runtime_blocker_count": 0,
+    "runtime_blockers": [],
     "warning_count": 1,
     "warnings": [
       "Fleet queue mirror row is still missing for work task 141.5."
@@ -70,11 +67,8 @@
   "package_closeout": {
     "ready": false,
     "reasons": [
-      "source:translator_route: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact",
-      "source:xml_amendment_editor_route: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact",
-      "source:hero_lab_importer_route: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact",
-      "family:custom_data_xml_and_translator_bridge: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact",
-      "family:legacy_and_adjacent_import_oracles: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact"
+      "Canonical registry work task is missing.",
+      "Design queue row is missing."
     ],
     "status": "blocked",
     "warnings": [
@@ -102,20 +96,18 @@
           "behavioral_parity": "yes",
           "evidence": [
             "/docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml#oracle_surface_extract.source_line_proofs.file_and_settings_routes",
-            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json",
+            "/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md"
           ],
           "id": "source:translator_route",
-          "issues": [
-            "present_in_chummer6 is missing or not `yes`",
-            "row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field",
-            "evidence does not cite a direct runtime proof artifact",
-            "evidence does not cite a direct core import-receipt artifact"
-          ],
+          "issues": [],
           "label": "Translator route",
           "present_in_chummer5a": "yes",
-          "present_in_chummer6": "",
+          "present_in_chummer6": "yes",
           "reason": "Catalog, presenter, dialog-factory, and dual-head acceptance proofs directly cover the Translator route.",
-          "removable_if_not_in_chummer5a": "",
+          "removable_if_not_in_chummer5a": "no",
           "removable_without_workflow_degradation": "no",
           "visual_parity": "yes",
           "warnings": [
@@ -126,20 +118,18 @@
           "behavioral_parity": "yes",
           "evidence": [
             "/docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml#oracle_surface_extract.source_line_proofs.file_and_settings_routes",
-            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json",
+            "/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md"
           ],
           "id": "source:xml_amendment_editor_route",
-          "issues": [
-            "present_in_chummer6 is missing or not `yes`",
-            "row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field",
-            "evidence does not cite a direct runtime proof artifact",
-            "evidence does not cite a direct core import-receipt artifact"
-          ],
+          "issues": [],
           "label": "XML amendment editor route",
           "present_in_chummer5a": "yes",
-          "present_in_chummer6": "",
+          "present_in_chummer6": "yes",
           "reason": "Catalog, presenter, dialog-factory, and dual-head acceptance proofs directly cover the XML Amendment Editor route.",
-          "removable_if_not_in_chummer5a": "",
+          "removable_if_not_in_chummer5a": "no",
           "removable_without_workflow_degradation": "no",
           "visual_parity": "yes",
           "warnings": [
@@ -150,20 +140,18 @@
           "behavioral_parity": "yes",
           "evidence": [
             "/docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml#oracle_surface_extract.source_line_proofs.file_and_settings_routes",
-            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json",
+            "/docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json",
+            "/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md"
           ],
           "id": "source:hero_lab_importer_route",
-          "issues": [
-            "present_in_chummer6 is missing or not `yes`",
-            "row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field",
-            "evidence does not cite a direct runtime proof artifact",
-            "evidence does not cite a direct core import-receipt artifact"
-          ],
+          "issues": [],
           "label": "Hero Lab importer route",
           "present_in_chummer5a": "yes",
-          "present_in_chummer6": "",
+          "present_in_chummer6": "yes",
           "reason": "Catalog, dialog-factory, and dialog-coordinator proofs directly cover the Hero Lab importer route.",
-          "removable_if_not_in_chummer5a": "",
+          "removable_if_not_in_chummer5a": "no",
           "removable_without_workflow_degradation": "no",
           "visual_parity": "yes",
           "warnings": [
@@ -175,20 +163,18 @@
           "evidence": [
             "/docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml",
             "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
-            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json",
+            "/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md"
           ],
           "id": "family:custom_data_xml_and_translator_bridge",
-          "issues": [
-            "present_in_chummer6 is missing or not `yes`",
-            "row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field",
-            "evidence does not cite a direct runtime proof artifact",
-            "evidence does not cite a direct core import-receipt artifact"
-          ],
+          "issues": [],
           "label": "Custom data/XML and translator bridge family",
           "present_in_chummer5a": "yes",
-          "present_in_chummer6": "",
+          "present_in_chummer6": "yes",
           "reason": "All declared compare artifacts for this Chummer5A family are directly backed by current parity proof: ['menu:translator', 'menu:xml_editor'].",
-          "removable_if_not_in_chummer5a": "",
+          "removable_if_not_in_chummer5a": "no",
           "removable_without_workflow_degradation": "no",
           "visual_parity": "yes",
           "warnings": [
@@ -200,20 +186,18 @@
           "evidence": [
             "/docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml",
             "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
-            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json",
+            "/docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json",
+            "/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md"
           ],
           "id": "family:legacy_and_adjacent_import_oracles",
-          "issues": [
-            "present_in_chummer6 is missing or not `yes`",
-            "row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field",
-            "evidence does not cite a direct runtime proof artifact",
-            "evidence does not cite a direct core import-receipt artifact"
-          ],
+          "issues": [],
           "label": "Legacy and adjacent import-oracle family",
           "present_in_chummer5a": "yes",
-          "present_in_chummer6": "",
+          "present_in_chummer6": "yes",
           "reason": "All declared compare artifacts for this Chummer5A family are directly backed by current parity proof: ['menu:hero_lab_importer', 'workflow:import_oracle'].",
-          "removable_if_not_in_chummer5a": "",
+          "removable_if_not_in_chummer5a": "no",
           "removable_without_workflow_degradation": "no",
           "visual_parity": "yes",
           "warnings": [
@@ -221,13 +205,7 @@
           ]
         }
       ],
-      "runtime_blockers": [
-        "source:translator_route: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact",
-        "source:xml_amendment_editor_route: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact",
-        "source:hero_lab_importer_route: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact",
-        "family:custom_data_xml_and_translator_bridge: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact",
-        "family:legacy_and_adjacent_import_oracles: present_in_chummer6 is missing or not `yes`; row still uses `removable_without_workflow_degradation` instead of the required `removable_if_not_in_chummer5a = no` field; evidence does not cite a direct runtime proof artifact; evidence does not cite a direct core import-receipt artifact"
-      ],
+      "runtime_blockers": [],
       "state": "pass"
     },
     "ui_route_proofs": {
@@ -239,10 +217,10 @@
   },
   "source_inputs": {
     "design_queue_staging": {
-      "generated_at": "2026-05-05T19:42:06Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "cb9e9b5d5b22fc1e65960c7812c1529047c62b78755b8e7299c89022abeed099"
+      "sha256": "11eaa96929405b0ae89d8dcbe0f2b6f47955f948354abc70f3bf0deaf95f708d"
     },
     "engine_proof_pack": {
       "generated_at": "2026-04-21T14:27:10Z",
@@ -275,7 +253,7 @@
       "sha256": "97e882cb1102e2e73dc3cf6bdbfedab479070e3aa6742e562c6710b6706d1400"
     },
     "next90_guide": {
-      "generated_at": "2026-05-04T02:57:07Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
       "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
@@ -287,16 +265,16 @@
       "sha256": "03459b1bfd51868a99ef7399a279c0a9ca9f4b1514a893638553d8c678b7d2ae"
     },
     "parity_audit": {
-      "generated_at": "2026-05-05T15:48:48.580323Z",
+      "generated_at": "2026-05-05T19:47:18.226745Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
-      "sha256": "f467d80b462cb569ecac4402fc3f338dd7251181946b724d5a5898147c12ad03"
+      "sha256": "1374e218119af0656384d451e178f3ea1a9ff86d30f334aa43a08f3830d21c0b"
     },
     "successor_registry": {
-      "generated_at": "2026-05-05T19:42:06Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "1cfb168ee25f3a4b1878d51071400f7abd60d980e4e96c01e6de1507f8583a4a"
+      "sha256": "32df3132e19517e97a2926c820065e067a1daa6853c4362afe5507bb540b9442"
     },
     "ui_release_gate": {
       "generated_at": "2026-05-02T14:05:07.728429Z",
@@ -317,7 +295,7 @@
       "sha256": "a8177012e1cff67255e3c136f44c8addc1d6670b3b8fcc03500f967d51508f0f"
     }
   },
-  "status": "pass",
+  "status": "fail",
   "wave": "W22P",
   "work_task_id": "141.5"
 }

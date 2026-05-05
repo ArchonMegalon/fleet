@@ -13713,6 +13713,40 @@ def test_design_completion_audit_keeps_weekly_pulse_fail_when_release_health_is_
         assert audit["weekly_pulse_audit"].get("live_journey_gate_override") is not True
 
 
+def test_design_completion_audit_accepts_lagging_weekly_pulse_release_health_when_live_readiness_is_green() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(
+            root,
+            journey_gate_health_state="ready",
+            release_health_state="needs_attention",
+        )
+        _write_flagship_product_readiness(root)
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-1",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            ],
+        )
+
+        assert audit["status"] == "pass"
+        assert audit["journey_gate_audit"]["status"] == "pass"
+        assert audit["weekly_pulse_audit"]["status"] == "pass"
+        assert audit["weekly_pulse_audit"]["live_release_health_override"] is True
+        assert audit["weekly_pulse_audit"]["lagging_release_health_state"] == "needs_attention"
+
+
 def test_design_completion_audit_fails_when_weekly_pulse_reports_automation_frontier_misalignment() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -24027,6 +24061,73 @@ def test_materialize_full_product_frontier_refreshes_stale_receipt_only_completi
         assert "latest worker receipt" not in payload["completion_audit"]["reason"]
         assert payload["completion_audit"]["reason"] == "desktop executable exit gate proof did not pass"
         assert payload["full_product_audit"]["status"] == "fail"
+
+
+def test_derive_flagship_product_context_does_not_resurrect_stale_runtime_handoff_frontier_when_readiness_is_green() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        _write_flagship_product_readiness(root, status="pass")
+        state_root = root / "state" / "shard-2"
+        state_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            state_root / "state.json",
+            {
+                "active_run_id": "run-stale-flagship",
+                "active_run": {
+                    "run_id": "run-stale-flagship",
+                    "frontier_ids": [3449507998],
+                },
+            },
+        )
+        runtime_handoff_path = state_root / "ACTIVE_RUN_HANDOFF.generated.md"
+        runtime_handoff_path.write_text(
+            "\n".join(
+                [
+                    "# Shard Runtime Handoff",
+                    "Generated at: 2026-05-05T19:01:09Z",
+                    "Frontier ids: 3449507998",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        args = _args(root)
+        context = module.derive_flagship_product_context(
+            args,
+            state_root,
+            base_context={
+                "registry_path": Path(args.registry_path).resolve(),
+                "program_milestones_path": Path(args.program_milestones_path).resolve(),
+                "roadmap_path": Path(args.roadmap_path).resolve(),
+                "handoff_path": Path(args.handoff_path).resolve(),
+                "runtime_handoff_path": runtime_handoff_path,
+                "workspace_root": Path(args.workspace_root).resolve(),
+                "state_root": state_root,
+                "scope_roots": [Path(item).resolve() for item in args.scope_root],
+                "open_milestones": [],
+                "wave_order": {},
+                "frontier": [],
+                "frontier_ids": [],
+                "focus_profiles": ["top_flagship_grade", "whole_project_frontier"],
+                "focus_owners": ["chummer6-core", "chummer6-ui", "chummer6-design"],
+                "focus_texts": ["desktop", "import", "explain"],
+                "prompt": "",
+            },
+            completion_audit={"status": "pass", "reason": "repo-local completion proof is green"},
+            full_product_audit=module._full_product_readiness_audit(args),
+        )
+
+        assert context["frontier"] == []
+        assert context["frontier_ids"] == []
+        frontier_payload = yaml.safe_load(Path(context["full_product_frontier_path"]).read_text(encoding="utf-8"))
+        assert frontier_payload["frontier_count"] == 0
+        assert frontier_payload["frontier_ids"] == []
 
 
 def test_materialize_full_product_frontier_refreshes_stale_full_product_audit() -> None:

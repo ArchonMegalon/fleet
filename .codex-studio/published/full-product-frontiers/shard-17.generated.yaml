@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T16:33:31Z'
+generated_at: '2026-05-05T19:48:29Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-17
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,7 +32,6 @@ focus:
   - chummer6-ui
   - chummer6-hub
   - chummer6-core
-  - executive-assistant
   texts:
   - top flagship grade
   - whole project frontier
@@ -67,12 +66,11 @@ completion_audit:
   status: fail
   reason: weekly product pulse reports release health as needs_attention
 full_product_audit:
-  status: pass
-  reason: flagship product readiness proof is current across desktop, rules, hub,
-    mobile, horizons, and operator lanes
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T16:33:23Z'
-  proof_status: pass
+  generated_at: '2026-05-05T19:47:26Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
@@ -80,3 +78,23 @@ full_product_audit:
 frontier_count: 0
 frontier_ids: []
 frontier: []
+eta:
+  status: tracked
+  eta_human: tracked
+  eta_confidence: low
+  basis: aggregate_shard_eta_scope_mismatch
+  scope_kind: aggregate_shard_mixed_scope
+  scope_label: Aggregate multi-shard ETA
+  scope_warning: Aggregate shard status currently mixes multiple ETA scopes. Use the
+    ETA command for a fresh whole-fleet forecast instead of reading this as a single
+    parity horizon.
+  blocking_reason: ''
+  summary: Aggregate shard state currently mixes ETA scopes (aggregate_shard_mixed_scope,
+    flagship_product_readiness). 9 open milestones remain across the active frontier.
+  predicted_completion_at: ''
+  range_low_hours: 0.0
+  range_high_hours: 0.0
+  remaining_open_milestones: 9
+  remaining_in_progress_milestones: 9
+  remaining_not_started_milestones: 0
+  remaining_effort_units: 0.0
