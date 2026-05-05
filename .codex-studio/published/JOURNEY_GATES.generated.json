@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-05-05T03:30:43Z",
+  "generated_at": "2026-05-05T04:28:24Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -21,37 +21,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-05-05T03:30:42Z",
+      "at": "2026-05-05T04:28:24Z",
       "state": "fresh",
-      "age_seconds": 1
+      "age_seconds": 0
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-05-02T14:47:36Z",
-      "state": "stale",
-      "age_seconds": 218587
+      "at": "2026-05-05T03:50:16Z",
+      "state": "fresh",
+      "age_seconds": 2288
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-05-02T13:57:35Z",
       "state": "fresh",
-      "age_seconds": 221588
+      "age_seconds": 225049
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-05-02T13:57:35Z",
       "state": "fresh",
-      "age_seconds": 221588
+      "age_seconds": 225049
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-05-05T03:30:39Z",
+      "at": "2026-05-05T04:28:21Z",
       "state": "fresh",
-      "age_seconds": 4
+      "age_seconds": 3
     }
   },
   "journeys": [
@@ -62,30 +62,20 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blockers": [
-        "status_plane is stale.",
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max).",
+        "status-plane project inventory is empty; cannot evaluate required project posture gates.",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but was ['avalonia:windows'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:win-x64:windows'].",
         "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows.",
-        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
-        "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
-        "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
-        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (222129s old > 172800s max).",
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (338979s old > 172800s max)."
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json."
       ],
       "blocking_reasons": [
-        "status_plane is stale.",
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max).",
+        "status-plane project inventory is empty; cannot evaluate required project posture gates.",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but was ['avalonia:windows'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:win-x64:windows'].",
         "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows.",
-        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
-        "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
-        "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
-        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (222129s old > 172800s max).",
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (338979s old > 172800s max)."
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json."
       ],
       "external_blocking_reasons": [
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows'].",
@@ -94,13 +84,8 @@
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json."
       ],
       "local_blocking_reasons": [
-        "status_plane is stale.",
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max).",
-        "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows.",
-        "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
-        "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
-        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (222129s old > 172800s max).",
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (338979s old > 172800s max)."
+        "status-plane project inventory is empty; cannot evaluate required project posture gates.",
+        "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows."
       ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [
@@ -388,7 +373,7 @@
       },
       "evidence": {
         "history_snapshot_count": 21,
-        "support_packets_generated_at": "2026-05-05T03:30:39Z",
+        "support_packets_generated_at": "2026-05-05T04:28:21Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -442,7 +427,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 11,
+        "blocking_reason_count": 6,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 1,
@@ -454,7 +439,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 4,
-        "local_blocking_reason_count": 7,
+        "local_blocking_reason_count": 2,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 1
       }
@@ -466,14 +451,14 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blockers": [
-        "status_plane is stale."
+        "status-plane project inventory is empty; cannot evaluate required project posture gates."
       ],
       "blocking_reasons": [
-        "status_plane is stale."
+        "status-plane project inventory is empty; cannot evaluate required project posture gates."
       ],
       "external_blocking_reasons": [],
       "local_blocking_reasons": [
-        "status_plane is stale."
+        "status-plane project inventory is empty; cannot evaluate required project posture gates."
       ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
@@ -823,7 +808,7 @@
       },
       "evidence": {
         "history_snapshot_count": 21,
-        "support_packets_generated_at": "2026-05-05T03:30:39Z",
+        "support_packets_generated_at": "2026-05-05T04:28:21Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -859,14 +844,14 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blockers": [
-        "status_plane is stale."
+        "status-plane project inventory is empty; cannot evaluate required project posture gates."
       ],
       "blocking_reasons": [
-        "status_plane is stale."
+        "status-plane project inventory is empty; cannot evaluate required project posture gates."
       ],
       "external_blocking_reasons": [],
       "local_blocking_reasons": [
-        "status_plane is stale."
+        "status-plane project inventory is empty; cannot evaluate required project posture gates."
       ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
@@ -1273,7 +1258,7 @@
       },
       "evidence": {
         "history_snapshot_count": 21,
-        "support_packets_generated_at": "2026-05-05T03:30:39Z",
+        "support_packets_generated_at": "2026-05-05T04:28:21Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1309,14 +1294,14 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blockers": [
-        "status_plane is stale."
+        "status-plane project inventory is empty; cannot evaluate required project posture gates."
       ],
       "blocking_reasons": [
-        "status_plane is stale."
+        "status-plane project inventory is empty; cannot evaluate required project posture gates."
       ],
       "external_blocking_reasons": [],
       "local_blocking_reasons": [
-        "status_plane is stale."
+        "status-plane project inventory is empty; cannot evaluate required project posture gates."
       ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
@@ -1392,7 +1377,7 @@
       },
       "evidence": {
         "history_snapshot_count": 21,
-        "support_packets_generated_at": "2026-05-05T03:30:39Z",
+        "support_packets_generated_at": "2026-05-05T04:28:21Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1428,27 +1413,21 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blockers": [
-        "status_plane is stale.",
+        "status-plane project inventory is empty; cannot evaluate required project posture gates.",
         "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows.",
-        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
-        "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
-        "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json."
       ],
       "blocking_reasons": [
-        "status_plane is stale.",
+        "status-plane project inventory is empty; cannot evaluate required project posture gates.",
         "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows.",
-        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
-        "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
-        "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json."
       ],
       "external_blocking_reasons": [
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json."
       ],
       "local_blocking_reasons": [
-        "status_plane is stale.",
-        "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows.",
-        "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
-        "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
+        "status-plane project inventory is empty; cannot evaluate required project posture gates.",
+        "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows."
       ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [
@@ -1666,7 +1645,7 @@
       },
       "evidence": {
         "history_snapshot_count": 21,
-        "support_packets_generated_at": "2026-05-05T03:30:39Z",
+        "support_packets_generated_at": "2026-05-05T04:28:21Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1719,7 +1698,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 5,
+        "blocking_reason_count": 3,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 1,
@@ -1731,7 +1710,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 1,
-        "local_blocking_reason_count": 4,
+        "local_blocking_reason_count": 2,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 1
       }
@@ -1743,30 +1722,21 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blockers": [
-        "status_plane is stale.",
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max).",
+        "status-plane project inventory is empty; cannot evaluate required project posture gates.",
         "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows.",
-        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
-        "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
-        "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json."
       ],
       "blocking_reasons": [
-        "status_plane is stale.",
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max).",
+        "status-plane project inventory is empty; cannot evaluate required project posture gates.",
         "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows.",
-        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
-        "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
-        "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json."
       ],
       "external_blocking_reasons": [
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json."
       ],
       "local_blocking_reasons": [
-        "status_plane is stale.",
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max).",
-        "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows.",
-        "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
-        "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
+        "status-plane project inventory is empty; cannot evaluate required project posture gates.",
+        "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows."
       ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [
@@ -1934,7 +1904,7 @@
       },
       "evidence": {
         "history_snapshot_count": 21,
-        "support_packets_generated_at": "2026-05-05T03:30:39Z",
+        "support_packets_generated_at": "2026-05-05T04:28:21Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1987,7 +1957,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 6,
+        "blocking_reason_count": 3,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 1,
@@ -1999,7 +1969,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 1,
-        "local_blocking_reason_count": 5,
+        "local_blocking_reason_count": 2,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 1
       }

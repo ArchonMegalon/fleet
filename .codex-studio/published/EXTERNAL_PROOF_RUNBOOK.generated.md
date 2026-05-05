@@ -1,12 +1,12 @@
 # External Proof Runbook
 
-- generated_at: 2026-05-05T03:30:45Z
+- generated_at: 2026-05-05T04:28:26Z
 - unresolved_request_count: 1
 - unresolved_hosts: windows
-- plan_generated_at: 2026-05-05T03:30:39Z
-- release_channel_generated_at: 2026-05-04T09:07:49Z
+- plan_generated_at: 2026-05-05T04:28:21Z
+- release_channel_generated_at: 2026-05-05T03:53:32Z
 - capture_deadline_hours: 24
-- capture_deadline_utc: 2026-05-05T09:07:49Z
+- capture_deadline_utc: 2026-05-06T03:53:32Z
 
 ## Prerequisites
 
@@ -77,8 +77,8 @@
   local_startup_smoke_receipt_state: `contract_mismatch`
   local_startup_smoke_receipt_path: `/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json`
   local_startup_smoke_receipt_recorded_at: `2026-05-01T08:43:57.7809811+00:00`
-  local_startup_smoke_receipt_age_seconds: `326801`
-  capture_deadline_utc: `2026-05-05T09:07:49Z`
+  local_startup_smoke_receipt_age_seconds: `330264`
+  capture_deadline_utc: `2026-05-06T03:53:32Z`
   capture_deadline_state: `pending`
   commands:
     - `REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" && export REPO_ROOT && DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads" && export DOWNLOADS_ROOT && INSTALLER_PATH="$DOWNLOADS_ROOT/files/chummer-avalonia-win-x64-installer.exe" && export INSTALLER_PATH && cd "$REPO_ROOT" && mkdir -p "$(dirname "$INSTALLER_PATH")" && python3 -c 'import hashlib, os, pathlib; p=pathlib.Path(os.environ['"'"'INSTALLER_PATH'"'"']); expected='"'"'0baa775bdf6a07833a0e7c753970da537356153169a4b4710e14e794a5e8781c'"'"'; import sys; sys.exit(0) if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); sys.exit(0) if digest==expected else print(f'"'"'installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}'"'"') or p.unlink()' && if [ ! -s "$INSTALLER_PATH" ]; then if [ -z "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}" ] && [ -z "${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}" ] && [ -z "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}" ] && [ "${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}" != "1" ]; then echo 'external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER, CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR (or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; exit 1; fi; curl_auth_args=(); if [ -n "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}" ]; then curl_auth_args+=( -H "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}" ); fi; if [ -n "${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}" ]; then curl_auth_args+=( -H "Cookie: ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}" ); fi; if [ -n "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}" ]; then curl_auth_args+=( --cookie "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}" ); fi; curl -fL --retry 3 --retry-delay 2 "${curl_auth_args[@]}" "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-win-x64-installer" -o "$INSTALLER_PATH"; fi; python3 -c 'import os, pathlib, sys; p=pathlib.Path(os.environ['"'"'INSTALLER_PATH'"'"']); expected_magic='"'"'MZ'"'"'; sys.exit(f'"'"'installer-download-missing:{p}'"'"') if (not p.is_file()) else None; probe=p.read_bytes()[:8192]; probe_text=probe.decode('"'"'latin-1'"'"', errors='"'"'ignore'"'"').lower(); auth_header_set=bool(str(os.environ.get('"'"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'"'"','"'"''"'"')).strip()); cookie_header_set=bool(str(os.environ.get('"'"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'"'"','"'"''"'"')).strip()); cookie_jar_set=bool(str(os.environ.get('"'"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'"'"','"'"''"'"')).strip()); html_like=('"'"'<!doctype html'"'"' in probe_text) or ('"'"'<html'"'"' in probe_text) or ('"'"'<head'"'"' in probe_text); sys.exit(f'"'"'installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-missing-auth'"'"') if html_like else None; sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode('"'"'latin-1'"'"'))) else sys.exit(f'"'"'installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=unexpected-binary-format-or-route-response'"'"')'; python3 -c 'import hashlib, os, pathlib, sys; p=pathlib.Path(os.environ['"'"'INSTALLER_PATH'"'"']); expected='"'"'0baa775bdf6a07833a0e7c753970da537356153169a4b4710e14e794a5e8781c'"'"'; sys.exit(f'"'"'installer-download-missing:{p}'"'"') if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); auth_header_set=bool(str(os.environ.get('"'"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'"'"','"'"''"'"')).strip()); cookie_header_set=bool(str(os.environ.get('"'"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'"'"','"'"''"'"')).strip()); cookie_jar_set=bool(str(os.environ.get('"'"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'"'"','"'"''"'"')).strip()); sys.exit(0) if digest==expected else sys.exit(f'"'"'installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-bytes-drift'"'"')'`

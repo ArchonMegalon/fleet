@@ -7,7 +7,7 @@
     "feedback_forge_candidate_count": 0,
     "first_part_complete_count": 0,
     "first_part_routed_count": 0,
-    "generated_at": "2026-05-05T03:30:39Z",
+    "generated_at": "2026-05-05T04:28:21Z",
     "karma_forge_candidate_count": 0,
     "ltd_discovery_system_missing_tools": [],
     "ltd_discovery_system_ready": true,
@@ -81,7 +81,7 @@
       "release_receipt_id_present": 0,
       "release_receipt_ready": 0
     },
-    "generated_at": "2026-05-05T03:30:39Z",
+    "generated_at": "2026-05-05T04:28:21Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -106,7 +106,7 @@
     "state_counts": {},
     "support_case_backed_count": 0
   },
-  "generated_at": "2026-05-05T03:30:39Z",
+  "generated_at": "2026-05-05T04:28:21Z",
   "packets": [
     {
       "affected_canon_files": [],
@@ -148,7 +148,7 @@
               "state": "present_sha256_mismatch"
             },
             "startup_smoke_receipt": {
-              "age_seconds": 326802,
+              "age_seconds": 330264,
               "contract_matches_expected": false,
               "max_age_seconds": 604800,
               "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
@@ -191,8 +191,8 @@
         "registry_release_channel_status": "published",
         "registry_release_proof_status": "passed",
         "registry_release_version": "run-20260503-163502",
-        "registry_rollout_state": "promoted_preview",
-        "registry_supportability_state": "preview_supported",
+        "registry_rollout_state": "coverage_incomplete",
+        "registry_supportability_state": "review_required",
         "tuple_present_on_promoted_shelf": false
       },
       "install_truth_state": "tuple_not_on_promoted_shelf",
@@ -231,7 +231,7 @@
     "blocked_receipt_mismatch_count": 0,
     "feedback_ready_count": 0,
     "fix_available_ready_count": 0,
-    "generated_at": "2026-05-05T03:30:39Z",
+    "generated_at": "2026-05-05T04:28:21Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -466,7 +466,7 @@
             "state": "present_sha256_mismatch"
           },
           "startup_smoke_receipt": {
-            "age_seconds": 326801,
+            "age_seconds": 330264,
             "contract_matches_expected": false,
             "max_age_seconds": 604800,
             "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
@@ -537,7 +537,7 @@
             "state": "present_sha256_mismatch"
           },
           "startup_smoke_receipt": {
-            "age_seconds": 326801,
+            "age_seconds": 330264,
             "contract_matches_expected": false,
             "max_age_seconds": 604800,
             "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
@@ -581,9 +581,9 @@
   },
   "unresolved_external_proof_execution_plan": {
     "capture_deadline_hours": 24,
-    "capture_deadline_utc": "2026-05-05T09:07:49Z",
+    "capture_deadline_utc": "2026-05-06T03:53:32Z",
     "command_root": "/docker/fleet/.codex-studio/published/external-proof-commands",
-    "generated_at": "2026-05-05T03:30:39Z",
+    "generated_at": "2026-05-05T04:28:21Z",
     "host_groups": {
       "windows": {
         "command_pack_path": "/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz",
@@ -598,7 +598,7 @@
         "request_count": 1,
         "requests": [
           {
-            "capture_deadline_utc": "2026-05-05T09:07:49Z",
+            "capture_deadline_utc": "2026-05-06T03:53:32Z",
             "channel_id": "preview",
             "expected_artifact_id": "avalonia-win-x64-installer",
             "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
@@ -616,7 +616,7 @@
                 "state": "present_sha256_mismatch"
               },
               "startup_smoke_receipt": {
-                "age_seconds": 326801,
+                "age_seconds": 330264,
                 "contract_matches_expected": false,
                 "max_age_seconds": 604800,
                 "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
@@ -662,7 +662,7 @@
       "windows"
     ],
     "recommended_action": "Only external host-proof gaps remain: windows: transfer /docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz, set CHUMMER_UI_REPO_ROOT and either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the signed-in proof cookies, run bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh, bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh, bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.sh, bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-windows-proof.sh, then return windows-proof-bundle.tgz and ingest it with bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-windows-proof-bundle.sh Use powershell -ExecutionPolicy Bypass -File /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1 if Git Bash capture is not available.",
-    "release_channel_generated_at": "2026-05-04T09:07:49Z",
+    "release_channel_generated_at": "2026-05-05T03:53:32Z",
     "request_count": 1
   }
 }

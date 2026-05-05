@@ -1,7 +1,7 @@
 {
   "contract_name": "chummer.weekly_product_pulse",
   "contract_version": 3,
-  "generated_at": "2026-05-05T03:30:47Z",
+  "generated_at": "2026-05-05T04:28:27Z",
   "as_of": "2026-05-05",
   "scorecard_source": "products/chummer/PRODUCT_HEALTH_SCORECARD.yaml",
   "progress_report_source": "products/chummer/PROGRESS_REPORT.generated.json",
@@ -42,13 +42,16 @@
   },
   "flagship_readiness": {
     "state": "watch",
-    "reason": "Published flagship readiness proof is fail. Coverage gaps remain: desktop_client, mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop. Readiness-plane gaps remain: structural_ready, flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, feedback_loop_ready, public_shelf_ready, recovery_trust_ready, rules_explainability_ready.",
+    "reason": "Published flagship readiness proof is fail. Coverage gaps remain: desktop_client, rules_engine_and_import, hub_and_registry, mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, horizons_and_public_surface, fleet_and_operator_loop. Readiness-plane gaps remain: structural_ready, flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, feedback_loop_ready, public_shelf_ready, data_durability_ready, recovery_trust_ready, rules_explainability_ready, custom_data_survival_ready, large_sheet_performance_ready.",
     "proof_status": "fail",
     "coverage_gap_keys": [
       "desktop_client",
+      "rules_engine_and_import",
+      "hub_and_registry",
       "mobile_play_shell",
       "ui_kit_and_flagship_polish",
       "media_artifacts",
+      "horizons_and_public_surface",
       "fleet_and_operator_loop"
     ],
     "readiness_plane_gap_keys": [
@@ -59,8 +62,11 @@
       "dense_workbench_ready",
       "feedback_loop_ready",
       "public_shelf_ready",
+      "data_durability_ready",
       "recovery_trust_ready",
-      "rules_explainability_ready"
+      "rules_explainability_ready",
+      "custom_data_survival_ready",
+      "large_sheet_performance_ready"
     ]
   },
   "rule_environment_trust": {
@@ -134,12 +140,12 @@
         "local_release_proof_status=passed",
         "flagship_readiness_state=watch",
         "flagship_readiness_proof_status=fail",
-        "provider_canary_status=Canary green on all active lanes",
+        "provider_canary_status=Canary evidence is still accumulating",
         "closure_health_state=watch",
         "successor_dependency_state=ready",
         "successor_open_dependency_ids=",
         "successor_open_dependency_work_task_ids=",
-        "status_plane_final_claim_status=pass"
+        "status_plane_final_claim_status=unknown"
       ]
     }
   ],
@@ -152,13 +158,16 @@
     },
     "flagship_readiness": {
       "state": "watch",
-      "reason": "Published flagship readiness proof is fail. Coverage gaps remain: desktop_client, mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop. Readiness-plane gaps remain: structural_ready, flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, feedback_loop_ready, public_shelf_ready, recovery_trust_ready, rules_explainability_ready.",
+      "reason": "Published flagship readiness proof is fail. Coverage gaps remain: desktop_client, rules_engine_and_import, hub_and_registry, mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, horizons_and_public_surface, fleet_and_operator_loop. Readiness-plane gaps remain: structural_ready, flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, feedback_loop_ready, public_shelf_ready, data_durability_ready, recovery_trust_ready, rules_explainability_ready, custom_data_survival_ready, large_sheet_performance_ready.",
       "proof_status": "fail",
       "coverage_gap_keys": [
         "desktop_client",
+        "rules_engine_and_import",
+        "hub_and_registry",
         "mobile_play_shell",
         "ui_kit_and_flagship_polish",
         "media_artifacts",
+        "horizons_and_public_surface",
         "fleet_and_operator_loop"
       ],
       "readiness_plane_gap_keys": [
@@ -169,8 +178,11 @@
         "dense_workbench_ready",
         "feedback_loop_ready",
         "public_shelf_ready",
+        "data_durability_ready",
         "recovery_trust_ready",
-        "rules_explainability_ready"
+        "rules_explainability_ready",
+        "custom_data_survival_ready",
+        "large_sheet_performance_ready"
       ]
     },
     "rule_environment_trust": {
@@ -244,12 +256,12 @@
           "local_release_proof_status=passed",
           "flagship_readiness_state=watch",
           "flagship_readiness_proof_status=fail",
-          "provider_canary_status=Canary green on all active lanes",
+          "provider_canary_status=Canary evidence is still accumulating",
           "closure_health_state=watch",
           "successor_dependency_state=ready",
           "successor_open_dependency_ids=",
           "successor_open_dependency_work_task_ids=",
-          "status_plane_final_claim_status=pass"
+          "status_plane_final_claim_status=unknown"
         ]
       }
     ],
@@ -263,10 +275,10 @@
     "longest_pole": "Core Engine",
     "launch_readiness": "Hold launch expansion pending route-canary validation. 6 golden journey(s) remain blocked.",
     "provider_route_stewardship": {
-      "default_status": "Pilot defaults are governed",
-      "canary_status": "Canary green on all active lanes",
-      "review_due": "2026-05-16",
-      "next_decision": "Keep the current pilot default until support closure returns to a clear posture."
+      "default_status": "Pilot defaults are not yet governed",
+      "canary_status": "Canary evidence is still accumulating",
+      "review_due": "2026-05-19",
+      "next_decision": "Hold broad promotion until public route canary coverage exists."
     },
     "successor_dependency_posture": {
       "state": "ready",

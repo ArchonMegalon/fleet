@@ -1,27 +1,29 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-05-05T03:30:45Z",
+  "generated_at": "2026-05-05T04:28:27Z",
   "status": "fail",
   "scoped_status": "fail",
-  "ready_keys": [
+  "ready_keys": [],
+  "warning_keys": [
     "rules_engine_and_import",
     "hub_and_registry",
-    "horizons_and_public_surface"
-  ],
-  "warning_keys": [
     "mobile_play_shell",
     "ui_kit_and_flagship_polish",
     "media_artifacts",
+    "horizons_and_public_surface",
     "fleet_and_operator_loop"
   ],
   "missing_keys": [
     "desktop_client"
   ],
   "scoped_warning_keys": [
+    "rules_engine_and_import",
+    "hub_and_registry",
     "mobile_play_shell",
     "ui_kit_and_flagship_polish",
     "media_artifacts",
+    "horizons_and_public_surface",
     "fleet_and_operator_loop"
   ],
   "scoped_missing_keys": [
@@ -30,7 +32,7 @@
   "deferred_warning_keys": [],
   "completion_audit": {
     "status": "fail",
-    "reason": "Flagship product readiness planes are not green: structural_ready, flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, feedback_loop_ready, public_shelf_ready, recovery_trust_ready, rules_explainability_ready.",
+    "reason": "Flagship product readiness planes are not green: structural_ready, flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, feedback_loop_ready, public_shelf_ready, data_durability_ready, recovery_trust_ready, rules_explainability_ready, custom_data_survival_ready, large_sheet_performance_ready.",
     "external_only": false,
     "unresolved_external_proof_request_count": 1,
     "unresolved_external_proof_request_hosts": [
@@ -42,34 +44,46 @@
   },
   "flagship_readiness_audit": {
     "status": "fail",
-    "reason": "flagship product readiness proof is not green: fail; missing coverage: desktop_client; readiness plane gaps: structural_ready, flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, feedback_loop_ready, public_shelf_ready, recovery_trust_ready, rules_explainability_ready",
+    "reason": "flagship product readiness proof is not green: fail; missing coverage: desktop_client; readiness plane gaps: structural_ready, flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, feedback_loop_ready, public_shelf_ready, data_durability_ready, recovery_trust_ready, rules_explainability_ready, custom_data_survival_ready, large_sheet_performance_ready",
     "coverage_gap_keys": [
+      "rules_engine_and_import",
+      "hub_and_registry",
       "mobile_play_shell",
       "ui_kit_and_flagship_polish",
       "media_artifacts",
+      "horizons_and_public_surface",
       "fleet_and_operator_loop",
       "desktop_client"
     ],
     "scoped_coverage_gap_keys": [
+      "rules_engine_and_import",
+      "hub_and_registry",
       "mobile_play_shell",
       "ui_kit_and_flagship_polish",
       "media_artifacts",
+      "horizons_and_public_surface",
       "fleet_and_operator_loop",
       "desktop_client"
     ],
     "warning_coverage_keys": [
+      "rules_engine_and_import",
+      "hub_and_registry",
       "mobile_play_shell",
       "ui_kit_and_flagship_polish",
       "media_artifacts",
+      "horizons_and_public_surface",
       "fleet_and_operator_loop"
     ],
     "missing_coverage_keys": [
       "desktop_client"
     ],
     "scoped_warning_coverage_keys": [
+      "rules_engine_and_import",
+      "hub_and_registry",
       "mobile_play_shell",
       "ui_kit_and_flagship_polish",
       "media_artifacts",
+      "horizons_and_public_surface",
       "fleet_and_operator_loop"
     ],
     "scoped_missing_coverage_keys": [
@@ -88,9 +102,9 @@
       "avalonia:win-x64:windows"
     ],
     "runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-    "runbook_generated_at": "2026-05-05T03:30:45Z",
-    "runbook_plan_generated_at": "2026-05-05T03:30:39Z",
-    "runbook_release_channel_generated_at": "2026-05-04T09:07:49Z",
+    "runbook_generated_at": "2026-05-05T04:28:26Z",
+    "runbook_plan_generated_at": "2026-05-05T04:28:21Z",
+    "runbook_release_channel_generated_at": "2026-05-05T03:53:32Z",
     "commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
     "command_bundle_sha256": "ca593c4ef62d69c36c9d04ddbbee024586c0bfb313bb3618439966b6469bfba6",
     "command_bundle_file_count": 26,
@@ -100,10 +114,10 @@
     "runbook_sync_reasons": []
   },
   "summary": {
-    "ready_count": 3,
-    "warning_count": 4,
+    "ready_count": 0,
+    "warning_count": 7,
     "missing_count": 1,
-    "scoped_warning_count": 4,
+    "scoped_warning_count": 7,
     "scoped_missing_count": 1,
     "deferred_warning_count": 0,
     "history_snapshot_count": 21
@@ -118,27 +132,26 @@
   "autofix_routing": {
     "status": "ready",
     "summary": "Local journey blockers are routed to owner repos.",
-    "total_local_blocker_count": 19,
-    "routed_local_blocker_count": 19,
+    "total_local_blocker_count": 9,
+    "routed_local_blocker_count": 9,
     "unrouted_local_blocker_count": 0,
     "owner_repo_counts": {
-      "chummer6-ui": 5,
-      "chummer6-hub": 8,
-      "chummer6-mobile": 1,
+      "chummer6-ui": 2,
       "chummer6-core": 1,
-      "chummer6-design": 4
+      "chummer6-hub": 4,
+      "chummer6-design": 2
     },
     "journey_local_blocker_counts": {
-      "install_claim_restore_continue": 7,
+      "install_claim_restore_continue": 2,
       "build_explain_publish": 1,
       "campaign_session_recover_recap": 1,
       "recover_from_sync_conflict": 1,
-      "report_cluster_release_notify": 4,
-      "organize_community_and_close_loop": 5
+      "report_cluster_release_notify": 2,
+      "organize_community_and_close_loop": 2
     },
     "routes": [
       {
-        "route_id": "route-4400c8daa751",
+        "route_id": "route-547ad69dd741",
         "journey_id": "build_explain_publish",
         "journey_state": "blocked",
         "owner_repo": "chummer6-core",
@@ -146,7 +159,7 @@
         "package_id": "autofix-build-explain-publish-chummer6-core-1",
         "category_id": "",
         "evidence_path": "",
-        "reason": "status_plane is stale."
+        "reason": "status-plane project inventory is empty; cannot evaluate required project posture gates."
       },
       {
         "route_id": "route-513f56dd7bbf",
@@ -160,7 +173,7 @@
         "reason": "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows."
       },
       {
-        "route_id": "route-6011e63fc05a",
+        "route_id": "route-93aaffdede4f",
         "journey_id": "report_cluster_release_notify",
         "journey_state": "blocked",
         "owner_repo": "chummer6-design",
@@ -168,32 +181,10 @@
         "package_id": "autofix-report-cluster-release-notify-chummer6-design-1",
         "category_id": "",
         "evidence_path": "",
-        "reason": "status_plane is stale."
+        "reason": "status-plane project inventory is empty; cannot evaluate required project posture gates."
       },
       {
-        "route_id": "route-9e10bf552b97",
-        "journey_id": "report_cluster_release_notify",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-design",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-report-cluster-release-notify-chummer6-design-4",
-        "category_id": "",
-        "evidence_path": "",
-        "reason": "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
-      },
-      {
-        "route_id": "route-e04012133fab",
-        "journey_id": "report_cluster_release_notify",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-design",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-report-cluster-release-notify-chummer6-design-3",
-        "category_id": "",
-        "evidence_path": "",
-        "reason": "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory."
-      },
-      {
-        "route_id": "route-b8b0c5153443",
+        "route_id": "route-9684fb59e7b6",
         "journey_id": "campaign_session_recover_recap",
         "journey_state": "blocked",
         "owner_repo": "chummer6-hub",
@@ -201,18 +192,7 @@
         "package_id": "autofix-campaign-session-recover-recap-chummer6-hub-1",
         "category_id": "",
         "evidence_path": "",
-        "reason": "status_plane is stale."
-      },
-      {
-        "route_id": "route-a0e62e0eba90",
-        "journey_id": "install_claim_restore_continue",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-hub",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-install-claim-restore-continue-chummer6-hub-2",
-        "category_id": "",
-        "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-        "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max)."
+        "reason": "status-plane project inventory is empty; cannot evaluate required project posture gates."
       },
       {
         "route_id": "route-1e4b203445b4",
@@ -220,35 +200,13 @@
         "journey_state": "blocked",
         "owner_repo": "chummer6-hub",
         "primary_lane": "repo_fix",
-        "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-3",
+        "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-2",
         "category_id": "",
         "evidence_path": "",
         "reason": "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows."
       },
       {
-        "route_id": "route-3e981beaeb0a",
-        "journey_id": "organize_community_and_close_loop",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-hub",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-2",
-        "category_id": "",
-        "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-        "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max)."
-      },
-      {
-        "route_id": "route-6f9ea93f2d12",
-        "journey_id": "organize_community_and_close_loop",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-hub",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-5",
-        "category_id": "",
-        "evidence_path": "",
-        "reason": "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
-      },
-      {
-        "route_id": "route-8919ae892a63",
+        "route_id": "route-bfe5ffde9951",
         "journey_id": "organize_community_and_close_loop",
         "journey_state": "blocked",
         "owner_repo": "chummer6-hub",
@@ -256,21 +214,10 @@
         "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-1",
         "category_id": "",
         "evidence_path": "",
-        "reason": "status_plane is stale."
+        "reason": "status-plane project inventory is empty; cannot evaluate required project posture gates."
       },
       {
-        "route_id": "route-ed9daaf4dd38",
-        "journey_id": "organize_community_and_close_loop",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-hub",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-4",
-        "category_id": "",
-        "evidence_path": "",
-        "reason": "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory."
-      },
-      {
-        "route_id": "route-a001a6955244",
+        "route_id": "route-5fad9b99bb82",
         "journey_id": "recover_from_sync_conflict",
         "journey_state": "blocked",
         "owner_repo": "chummer6-hub",
@@ -278,29 +225,7 @@
         "package_id": "autofix-recover-from-sync-conflict-chummer6-hub-1",
         "category_id": "",
         "evidence_path": "",
-        "reason": "status_plane is stale."
-      },
-      {
-        "route_id": "route-f89c66b51321",
-        "journey_id": "install_claim_restore_continue",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-mobile",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-install-claim-restore-continue-chummer6-mobile-7",
-        "category_id": "",
-        "evidence_path": ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
-        "reason": "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (338979s old > 172800s max)."
-      },
-      {
-        "route_id": "route-13584f759d7f",
-        "journey_id": "install_claim_restore_continue",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-ui",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-install-claim-restore-continue-chummer6-ui-6",
-        "category_id": "",
-        "evidence_path": ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
-        "reason": "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (222129s old > 172800s max)."
+        "reason": "status-plane project inventory is empty; cannot evaluate required project posture gates."
       },
       {
         "route_id": "route-2813f29ebf0c",
@@ -308,13 +233,13 @@
         "journey_state": "blocked",
         "owner_repo": "chummer6-ui",
         "primary_lane": "repo_fix",
-        "package_id": "autofix-install-claim-restore-continue-chummer6-ui-3",
+        "package_id": "autofix-install-claim-restore-continue-chummer6-ui-2",
         "category_id": "",
         "evidence_path": "",
         "reason": "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows."
       },
       {
-        "route_id": "route-3c04c5507bb2",
+        "route_id": "route-57bf6933fdd2",
         "journey_id": "install_claim_restore_continue",
         "journey_state": "blocked",
         "owner_repo": "chummer6-ui",
@@ -322,29 +247,7 @@
         "package_id": "autofix-install-claim-restore-continue-chummer6-ui-1",
         "category_id": "",
         "evidence_path": "",
-        "reason": "status_plane is stale."
-      },
-      {
-        "route_id": "route-61b38c8d828d",
-        "journey_id": "install_claim_restore_continue",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-ui",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-install-claim-restore-continue-chummer6-ui-5",
-        "category_id": "",
-        "evidence_path": "",
-        "reason": "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
-      },
-      {
-        "route_id": "route-c45419337a62",
-        "journey_id": "install_claim_restore_continue",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-ui",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-install-claim-restore-continue-chummer6-ui-4",
-        "category_id": "",
-        "evidence_path": "",
-        "reason": "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory."
+        "reason": "status-plane project inventory is empty; cannot evaluate required project posture gates."
       }
     ],
     "unrouted_reasons": []
@@ -355,7 +258,8 @@
       "summary": "Structural delivery truth is still incomplete or stale.",
       "reasons": [
         "Fleet compile manifest is not marked dispatchable truth ready.",
-        "Golden journey overall state is not ready."
+        "Golden journey overall state is not ready.",
+        "Runtime healing alert state is not healthy."
       ],
       "evidence": {
         "dispatchable_truth_ready": false,
@@ -365,22 +269,25 @@
         "journey_overall_desktop_scoped_blocked": false,
         "journey_local_blocker_autofix_routing_ready": true,
         "supervisor_recent_enough": true,
-        "runtime_healing_alert_state": "healthy"
+        "runtime_healing_alert_state": ""
       }
     },
     "flagship_ready": {
       "status": "missing",
       "summary": "Flagship replacement truth is still stricter than the current structural closure.",
       "reasons": [
-        "Whole-product coverage still has open flagship gaps: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.",
+        "Whole-product coverage still has open flagship gaps: rules_engine_and_import, hub_and_registry, mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, horizons_and_public_surface, fleet_and_operator_loop, desktop_client.",
         "Structural readiness plane is not ready.",
         "Primary-route readiness plane is not ready.",
         "Dense-workbench readiness plane is not ready.",
         "Feedback-loop readiness plane is not ready.",
         "Veteran deep-workflow readiness plane is not ready.",
         "Public-shelf readiness plane is not ready.",
+        "Data-durability readiness plane is not ready.",
         "Recovery-trust readiness plane is not ready.",
-        "Rules-explainability readiness plane is not ready."
+        "Rules-explainability readiness plane is not ready.",
+        "Custom-data-survival readiness plane is not ready.",
+        "Large-sheet-performance readiness plane is not ready."
       ],
       "evidence": {
         "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml",
@@ -405,9 +312,12 @@
         "parity_lab_workflow_missing_non_negotiable_ids": [],
         "parity_lab_missing_whole_product_coverage_keys": [],
         "coverage_gap_keys": [
+          "rules_engine_and_import",
+          "hub_and_registry",
           "mobile_play_shell",
           "ui_kit_and_flagship_polish",
           "media_artifacts",
+          "horizons_and_public_surface",
           "fleet_and_operator_loop",
           "desktop_client"
         ],
@@ -418,11 +328,11 @@
         "feedback_loop_ready": false,
         "veteran_deep_workflow_ready": false,
         "public_shelf_ready": false,
-        "data_durability_ready": true,
+        "data_durability_ready": false,
         "recovery_trust_ready": false,
         "rules_explainability_ready": false,
-        "custom_data_survival_ready": true,
-        "large_sheet_performance_ready": true,
+        "custom_data_survival_ready": false,
+        "large_sheet_performance_ready": false,
         "sr4_parity_ready": true,
         "sr6_parity_ready": true,
         "readiness_plane_contract_path": "/docker/fleet/.codex-design/product/FLAGSHIP_READINESS_PLANES.yaml",
@@ -673,7 +583,7 @@
           "signitic",
           "teable"
         ],
-        "support_generated_at": "2026-05-05T03:30:39Z",
+        "support_generated_at": "2026-05-05T04:28:21Z",
         "support_generated_age_seconds": 6,
         "support_source_refresh_mode": "source_mirror_fallback",
         "support_open_packet_count": 1,
@@ -728,11 +638,12 @@
       "status": "warning",
       "summary": "Public shelf and route truth are still inconsistent or stale.",
       "reasons": [
+        "Hub and registry coverage is not ready.",
         "Primary-route readiness plane is not ready.",
         "Release channel still has missing required platform/head pairs."
       ],
       "evidence": {
-        "hub_and_registry_ready": true,
+        "hub_and_registry_ready": false,
         "primary_route_ready": false,
         "release_channel_freshness_ok": true,
         "release_channel_has_windows_public_installer": false,
@@ -744,11 +655,13 @@
       }
     },
     "data_durability_ready": {
-      "status": "ready",
-      "summary": "Data durability and reversible migration proof are current.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Data durability or reversible migration proof is still incomplete.",
+      "reasons": [
+        "Rules/import coverage is not ready."
+      ],
       "evidence": {
-        "rules_engine_and_import_ready": true,
+        "rules_engine_and_import_ready": false,
         "install_claim_restore_continue_effective": "ready",
         "families_below_task_proven": [],
         "ui_element_parity_audit_gap_ids": []
@@ -774,30 +687,35 @@
       "status": "warning",
       "summary": "Rules explainability or import-certification proof is still incomplete.",
       "reasons": [
+        "Rules/import coverage is not ready.",
         "Build/explain/publish journey is not ready."
       ],
       "evidence": {
-        "rules_engine_and_import_ready": true,
+        "rules_engine_and_import_ready": false,
         "build_explain_publish": "blocked",
         "rules_certification_status": "passed"
       }
     },
     "custom_data_survival_ready": {
-      "status": "ready",
-      "summary": "Custom-data, translator, and rule-environment survival proof is current.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Custom-data, translator, or rule-environment survival proof is still incomplete.",
+      "reasons": [
+        "Rules/import coverage is not ready."
+      ],
       "evidence": {
-        "rules_engine_and_import_ready": true,
+        "rules_engine_and_import_ready": false,
         "families_below_task_proven": [],
         "ui_element_parity_audit_gap_ids": []
       }
     },
     "large_sheet_performance_ready": {
-      "status": "ready",
-      "summary": "Large-sheet and dense-roster performance proof is current.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Large-sheet or dense-roster performance proof is still incomplete.",
+      "reasons": [
+        "Rules/import coverage is not ready."
+      ],
       "evidence": {
-        "rules_engine_and_import_ready": true,
+        "rules_engine_and_import_ready": false,
         "rules_certification_status": "passed",
         "build_explain_publish_rules_scope_blocking_reason_count": 0
       }
@@ -825,8 +743,8 @@
     }
   },
   "readiness_plane_summary": {
-    "ready_count": 7,
-    "warning_count": 8,
+    "ready_count": 4,
+    "warning_count": 11,
     "missing_count": 1
   },
   "readiness_plane_gap_keys": [
@@ -837,8 +755,11 @@
     "dense_workbench_ready",
     "feedback_loop_ready",
     "public_shelf_ready",
+    "data_durability_ready",
     "recovery_trust_ready",
-    "rules_explainability_ready"
+    "rules_explainability_ready",
+    "custom_data_survival_ready",
+    "large_sheet_performance_ready"
   ],
   "source_documents": [
     "FLAGSHIP_PRODUCT_BAR.md",
@@ -892,12 +813,12 @@
   ],
   "coverage": {
     "desktop_client": "missing",
-    "rules_engine_and_import": "ready",
-    "hub_and_registry": "ready",
+    "rules_engine_and_import": "warning",
+    "hub_and_registry": "warning",
     "mobile_play_shell": "warning",
     "ui_kit_and_flagship_polish": "warning",
     "media_artifacts": "warning",
-    "horizons_and_public_surface": "ready",
+    "horizons_and_public_surface": "warning",
     "fleet_and_operator_loop": "warning"
   },
   "coverage_details": {
@@ -905,16 +826,14 @@
       "status": "missing",
       "summary": "Desktop flagship proof is still incomplete.",
       "reasons": [
-        "Executable desktop exit gate receipt is stale (222132s old; max 86400s).",
         "Release channel does not publish any promoted Windows installer media.",
         "Release channel is missing promoted installer tuple proof for required desktop head(s): avalonia.",
         "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:windows.",
-        "Release channel must set rolloutState=coverage_incomplete when required desktop tuple coverage is incomplete.",
-        "Release channel must set supportabilityState=review_required when required desktop tuple coverage is incomplete."
+        "UI project posture is unknown / unknown, below flagship desktop promotion."
       ],
       "evidence": {
-        "ui_stage": "publicly_promoted",
-        "ui_promotion": "public",
+        "ui_stage": "",
+        "ui_promotion": "",
         "ui_local_release_status": "pass",
         "ui_executable_exit_gate_status": "pass",
         "ui_executable_exit_gate_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
@@ -929,8 +848,8 @@
         },
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
-        "ui_executable_gate_generated_at": "2026-05-02T13:48:33.504770Z",
-        "ui_executable_gate_age_seconds": 222132,
+        "ui_executable_gate_generated_at": "2026-05-05T03:53:56.486187Z",
+        "ui_executable_gate_age_seconds": 2070,
         "ui_linux_exit_gate_status": "passed",
         "ui_linux_exit_gate_recovered_from_executable_gate": false,
         "ui_linux_exit_gate_effective_ready": true,
@@ -1121,8 +1040,8 @@
         "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
-        "release_channel_generated_at": "2026-05-04T09:07:49Z",
-        "release_channel_age_seconds": 66176,
+        "release_channel_generated_at": "2026-05-05T03:53:32Z",
+        "release_channel_age_seconds": 2095,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "preview",
@@ -1179,8 +1098,8 @@
         "release_channel_tuple_coverage_missing_pair_inventory_mismatch": [],
         "release_channel_tuple_coverage_missing_platform_inventory_mismatch": [],
         "release_channel_tuple_coverage_missing_head_inventory_mismatch": [],
-        "release_channel_rollout_state": "promoted_preview",
-        "release_channel_supportability_state": "preview_supported",
+        "release_channel_rollout_state": "coverage_incomplete",
+        "release_channel_supportability_state": "review_required",
         "ui_executable_gate_visual_required_promoted_heads": [
           "avalonia"
         ],
@@ -1251,7 +1170,7 @@
         "build_explain_publish": "blocked",
         "build_explain_publish_effective": "ready",
         "install_claim_restore_continue_external_blocking_reason_count": 4,
-        "install_claim_restore_continue_local_blocking_reason_count": 7,
+        "install_claim_restore_continue_local_blocking_reason_count": 2,
         "install_claim_restore_continue_external_proof_request_count": 1,
         "install_claim_restore_continue_external_proof_request_hosts": [
           "windows"
@@ -1325,11 +1244,13 @@
       }
     },
     "rules_engine_and_import": {
-      "status": "ready",
-      "summary": "Rules parity and import certification are explicitly proven.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Rules and import flagship proof is still incomplete.",
+      "reasons": [
+        "Core project readiness is unknown, below boundary-pure rules posture."
+      ],
       "evidence": {
-        "core_stage": "boundary_pure",
+        "core_stage": "",
         "build_explain_publish": "blocked",
         "build_explain_publish_local_blocking_reason_count": 1,
         "build_explain_publish_external_blocking_reason_count": 0,
@@ -1351,13 +1272,16 @@
       }
     },
     "hub_and_registry": {
-      "status": "ready",
-      "summary": "Hub, registry, and public release shelf proof are aligned.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Hub and registry flagship proof is still incomplete.",
+      "reasons": [
+        "Hub project posture is unknown / unknown, below flagship public support posture.",
+        "Hub-registry readiness is unknown, below boundary-pure publication posture."
+      ],
       "evidence": {
-        "hub_stage": "publicly_promoted",
-        "hub_promotion": "public",
-        "hub_registry_stage": "boundary_pure",
+        "hub_stage": "",
+        "hub_promotion": "",
+        "hub_registry_stage": "",
         "hub_local_release_status": "passed",
         "release_channel_status": "published",
         "release_channel_release_proof": "passed",
@@ -1371,7 +1295,7 @@
         "report_cluster_release_notify_release_proof_override": true,
         "report_cluster_release_notify_blocked_by_external_constraints_only": false,
         "report_cluster_release_notify_external_blocking_reason_count": 1,
-        "report_cluster_release_notify_local_blocking_reason_count": 4,
+        "report_cluster_release_notify_local_blocking_reason_count": 2,
         "report_cluster_release_notify_external_proof_request_count": 1
       }
     },
@@ -1379,11 +1303,12 @@
       "status": "warning",
       "summary": "Mobile and live-play flagship proof is still incomplete.",
       "reasons": [
-        "Recover-from-sync-conflict journey is blocked, not ready."
+        "Recover-from-sync-conflict journey is blocked, not ready.",
+        "Mobile project posture is unknown / unknown, below flagship play-shell promotion."
       ],
       "evidence": {
-        "mobile_stage": "publicly_promoted",
-        "mobile_promotion": "public",
+        "mobile_stage": "",
+        "mobile_promotion": "",
         "mobile_local_release_status": "passed",
         "campaign_session_recover_recap": "blocked",
         "campaign_session_recover_recap_effective_state": "ready",
@@ -1399,12 +1324,14 @@
       "status": "warning",
       "summary": "Shared UI and flagship polish proof is still incomplete.",
       "reasons": [
-        "Build/explain/publish journey is blocked, not ready."
+        "UI kit readiness is unknown, below boundary-pure shared-surface posture.",
+        "Build/explain/publish journey is blocked, not ready.",
+        "Workbench and mobile promoted posture is not yet jointly proven."
       ],
       "evidence": {
-        "ui_kit_stage": "boundary_pure",
-        "ui_stage": "publicly_promoted",
-        "mobile_stage": "publicly_promoted",
+        "ui_kit_stage": "",
+        "ui_stage": "",
+        "mobile_stage": "",
         "build_explain_publish": "blocked",
         "campaign_session_recover_recap": "blocked",
         "campaign_session_recover_recap_effective_state": "ready",
@@ -1419,21 +1346,24 @@
       "status": "warning",
       "summary": "Media and artifact flagship proof is still incomplete.",
       "reasons": [
+        "Media-factory readiness is unknown, below boundary-pure publication posture.",
         "Build/explain/publish journey is blocked, not ready."
       ],
       "evidence": {
-        "media_stage": "boundary_pure",
+        "media_stage": "",
         "build_explain_publish": "blocked",
         "media_proof_path": "/docker/fleet/repos/chummer-media-factory/.codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json",
         "media_proof_status": "passed"
       }
     },
     "horizons_and_public_surface": {
-      "status": "ready",
-      "summary": "Horizons posture and public surface proof are aligned with live release truth.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Horizons and public-surface flagship proof is still incomplete.",
+      "reasons": [
+        "Public Chummer group posture is not marked public."
+      ],
       "evidence": {
-        "public_group_deployment_status": "public",
+        "public_group_deployment_status": "",
         "progress_report_generated_at": "2026-05-02T13:57:35Z",
         "install_claim_restore_continue": "blocked",
         "install_claim_restore_continue_desktop_scoped_blocked": false,
@@ -1445,7 +1375,7 @@
         "report_cluster_release_notify_release_proof_override": true,
         "report_cluster_release_notify_blocked_by_external_constraints_only": false,
         "report_cluster_release_notify_external_blocking_reason_count": 1,
-        "report_cluster_release_notify_local_blocking_reason_count": 4,
+        "report_cluster_release_notify_local_blocking_reason_count": 2,
         "report_cluster_release_notify_external_proof_request_count": 1,
         "acceptance_path": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml",
         "flagship_bar_mirror_path": "/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_BAR.md",
@@ -1472,13 +1402,14 @@
       "status": "warning",
       "summary": "Fleet and operator-loop flagship proof is still incomplete.",
       "reasons": [
+        "Runtime healing alert state is missing.",
         "Supervisor state is not current flagship-pass proof (mode, completion status, or recency check failed).",
         "Journey-gate overall state is blocked, not ready.",
         "Fleet compile manifest is not marked dispatchable_truth_ready."
       ],
       "evidence": {
-        "runtime_healing_alert_state": "healthy",
-        "runtime_healing_last_event_at": "2026-05-01T09:22:44Z",
+        "runtime_healing_alert_state": "",
+        "runtime_healing_last_event_at": "",
         "runtime_healing_override_stale_incident": false,
         "journey_overall_state": "blocked",
         "journey_effective_overall_state": "blocked",
@@ -1488,28 +1419,27 @@
         "journey_effective_blocked_with_local_count": 1,
         "journey_overall_desktop_scoped_blocked": false,
         "journey_overall_routed_local_only": false,
-        "journey_local_blocker_count_total": 19,
-        "journey_local_blocker_routed_count": 19,
+        "journey_local_blocker_count_total": 9,
+        "journey_local_blocker_routed_count": 9,
         "journey_local_blocker_unrouted_count": 0,
         "journey_local_blocker_autofix_routing_ready": true,
         "journey_local_blocker_owner_repo_counts": {
-          "chummer6-ui": 5,
-          "chummer6-hub": 8,
-          "chummer6-mobile": 1,
+          "chummer6-ui": 2,
           "chummer6-core": 1,
-          "chummer6-design": 4
+          "chummer6-hub": 4,
+          "chummer6-design": 2
         },
         "journey_local_blocker_counts": {
-          "install_claim_restore_continue": 7,
+          "install_claim_restore_continue": 2,
           "build_explain_publish": 1,
           "campaign_session_recover_recap": 1,
           "recover_from_sync_conflict": 1,
-          "report_cluster_release_notify": 4,
-          "organize_community_and_close_loop": 5
+          "report_cluster_release_notify": 2,
+          "organize_community_and_close_loop": 2
         },
         "journey_local_blocker_route_sample": [
           {
-            "route_id": "route-4400c8daa751",
+            "route_id": "route-547ad69dd741",
             "journey_id": "build_explain_publish",
             "journey_state": "blocked",
             "owner_repo": "chummer6-core",
@@ -1517,7 +1447,7 @@
             "package_id": "autofix-build-explain-publish-chummer6-core-1",
             "category_id": "",
             "evidence_path": "",
-            "reason": "status_plane is stale."
+            "reason": "status-plane project inventory is empty; cannot evaluate required project posture gates."
           },
           {
             "route_id": "route-513f56dd7bbf",
@@ -1531,7 +1461,7 @@
             "reason": "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows."
           },
           {
-            "route_id": "route-6011e63fc05a",
+            "route_id": "route-93aaffdede4f",
             "journey_id": "report_cluster_release_notify",
             "journey_state": "blocked",
             "owner_repo": "chummer6-design",
@@ -1539,32 +1469,10 @@
             "package_id": "autofix-report-cluster-release-notify-chummer6-design-1",
             "category_id": "",
             "evidence_path": "",
-            "reason": "status_plane is stale."
+            "reason": "status-plane project inventory is empty; cannot evaluate required project posture gates."
           },
           {
-            "route_id": "route-9e10bf552b97",
-            "journey_id": "report_cluster_release_notify",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-design",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-report-cluster-release-notify-chummer6-design-4",
-            "category_id": "",
-            "evidence_path": "",
-            "reason": "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
-          },
-          {
-            "route_id": "route-e04012133fab",
-            "journey_id": "report_cluster_release_notify",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-design",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-report-cluster-release-notify-chummer6-design-3",
-            "category_id": "",
-            "evidence_path": "",
-            "reason": "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory."
-          },
-          {
-            "route_id": "route-b8b0c5153443",
+            "route_id": "route-9684fb59e7b6",
             "journey_id": "campaign_session_recover_recap",
             "journey_state": "blocked",
             "owner_repo": "chummer6-hub",
@@ -1572,18 +1480,7 @@
             "package_id": "autofix-campaign-session-recover-recap-chummer6-hub-1",
             "category_id": "",
             "evidence_path": "",
-            "reason": "status_plane is stale."
-          },
-          {
-            "route_id": "route-a0e62e0eba90",
-            "journey_id": "install_claim_restore_continue",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-hub",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-install-claim-restore-continue-chummer6-hub-2",
-            "category_id": "",
-            "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-            "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max)."
+            "reason": "status-plane project inventory is empty; cannot evaluate required project posture gates."
           },
           {
             "route_id": "route-1e4b203445b4",
@@ -1591,35 +1488,13 @@
             "journey_state": "blocked",
             "owner_repo": "chummer6-hub",
             "primary_lane": "repo_fix",
-            "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-3",
+            "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-2",
             "category_id": "",
             "evidence_path": "",
             "reason": "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows."
           },
           {
-            "route_id": "route-3e981beaeb0a",
-            "journey_id": "organize_community_and_close_loop",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-hub",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-2",
-            "category_id": "",
-            "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-            "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (340112s old > 172800s max)."
-          },
-          {
-            "route_id": "route-6f9ea93f2d12",
-            "journey_id": "organize_community_and_close_loop",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-hub",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-5",
-            "category_id": "",
-            "evidence_path": "",
-            "reason": "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
-          },
-          {
-            "route_id": "route-8919ae892a63",
+            "route_id": "route-bfe5ffde9951",
             "journey_id": "organize_community_and_close_loop",
             "journey_state": "blocked",
             "owner_repo": "chummer6-hub",
@@ -1627,21 +1502,10 @@
             "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-1",
             "category_id": "",
             "evidence_path": "",
-            "reason": "status_plane is stale."
+            "reason": "status-plane project inventory is empty; cannot evaluate required project posture gates."
           },
           {
-            "route_id": "route-ed9daaf4dd38",
-            "journey_id": "organize_community_and_close_loop",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-hub",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-4",
-            "category_id": "",
-            "evidence_path": "",
-            "reason": "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory."
-          },
-          {
-            "route_id": "route-a001a6955244",
+            "route_id": "route-5fad9b99bb82",
             "journey_id": "recover_from_sync_conflict",
             "journey_state": "blocked",
             "owner_repo": "chummer6-hub",
@@ -1649,29 +1513,7 @@
             "package_id": "autofix-recover-from-sync-conflict-chummer6-hub-1",
             "category_id": "",
             "evidence_path": "",
-            "reason": "status_plane is stale."
-          },
-          {
-            "route_id": "route-f89c66b51321",
-            "journey_id": "install_claim_restore_continue",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-mobile",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-install-claim-restore-continue-chummer6-mobile-7",
-            "category_id": "",
-            "evidence_path": ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
-            "reason": "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (338979s old > 172800s max)."
-          },
-          {
-            "route_id": "route-13584f759d7f",
-            "journey_id": "install_claim_restore_continue",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-ui",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-install-claim-restore-continue-chummer6-ui-6",
-            "category_id": "",
-            "evidence_path": ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
-            "reason": "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (222129s old > 172800s max)."
+            "reason": "status-plane project inventory is empty; cannot evaluate required project posture gates."
           },
           {
             "route_id": "route-2813f29ebf0c",
@@ -1679,13 +1521,13 @@
             "journey_state": "blocked",
             "owner_repo": "chummer6-ui",
             "primary_lane": "repo_fix",
-            "package_id": "autofix-install-claim-restore-continue-chummer6-ui-3",
+            "package_id": "autofix-install-claim-restore-continue-chummer6-ui-2",
             "category_id": "",
             "evidence_path": "",
             "reason": "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' must match tuple-derived canonical command sequence for avalonia:win-x64:windows."
           },
           {
-            "route_id": "route-3c04c5507bb2",
+            "route_id": "route-57bf6933fdd2",
             "journey_id": "install_claim_restore_continue",
             "journey_state": "blocked",
             "owner_repo": "chummer6-ui",
@@ -1693,34 +1535,12 @@
             "package_id": "autofix-install-claim-restore-continue-chummer6-ui-1",
             "category_id": "",
             "evidence_path": "",
-            "reason": "status_plane is stale."
-          },
-          {
-            "route_id": "route-61b38c8d828d",
-            "journey_id": "install_claim_restore_continue",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-ui",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-install-claim-restore-continue-chummer6-ui-5",
-            "category_id": "",
-            "evidence_path": "",
-            "reason": "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
-          },
-          {
-            "route_id": "route-c45419337a62",
-            "journey_id": "install_claim_restore_continue",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-ui",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-install-claim-restore-continue-chummer6-ui-4",
-            "category_id": "",
-            "evidence_path": "",
-            "reason": "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory."
+            "reason": "status-plane project inventory is empty; cannot evaluate required project posture gates."
           }
         ],
         "journey_local_blocker_unrouted_reason_sample": [],
         "history_snapshot_count": 21,
-        "support_packets_generated_at": "2026-05-05T03:30:39Z",
+        "support_packets_generated_at": "2026-05-05T04:28:21Z",
         "support_packets_generated_age_seconds": 6,
         "support_packets_refresh_mode": "source_mirror_fallback",
         "support_open_packet_count": 1,
@@ -1734,9 +1554,9 @@
         "external_proof_backlog_request_observation_count": 3,
         "external_proof_backlog_duplicate_observation_count": 2,
         "external_proof_runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-        "external_proof_runbook_generated_at": "2026-05-05T03:30:45Z",
-        "external_proof_runbook_plan_generated_at": "2026-05-05T03:30:39Z",
-        "external_proof_runbook_release_channel_generated_at": "2026-05-04T09:07:49Z",
+        "external_proof_runbook_generated_at": "2026-05-05T04:28:26Z",
+        "external_proof_runbook_plan_generated_at": "2026-05-05T04:28:21Z",
+        "external_proof_runbook_release_channel_generated_at": "2026-05-05T03:53:32Z",
         "external_proof_commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
         "external_proof_command_bundle_sha256": "ca593c4ef62d69c36c9d04ddbbee024586c0bfb313bb3618439966b6469bfba6",
         "external_proof_command_bundle_file_count": 26,
@@ -1745,9 +1565,9 @@
         "external_proof_runbook_synced": true,
         "external_proof_runbook_sync_issue_count": 0,
         "dispatchable_truth_ready": false,
-        "active_shards_generated_at": "2026-05-05T03:30:44Z",
+        "active_shards_generated_at": "2026-05-05T04:28:24Z",
         "active_shards_manifest_kind": "configured_shard_topology",
-        "active_shards_count": 3,
+        "active_shards_count": 4,
         "configured_shards_count": 20,
         "active_shards_recent": true,
         "ooda_state_recovered_from_active_shards": false,
@@ -1758,7 +1578,7 @@
         "supervisor_completion_desktop_scoped": false,
         "supervisor_completion_routed_local_only": false,
         "supervisor_successor_wave_steering_ready": false,
-        "supervisor_updated_at": "2026-05-05T03:30:16Z",
+        "supervisor_updated_at": "2026-05-05T04:28:06Z",
         "supervisor_recent_enough": true,
         "supervisor_focus_profiles": [
           "top_flagship_grade",
@@ -1777,7 +1597,7 @@
         "ooda_aggregate_stale": false,
         "ooda_timestamp_stale": false,
         "ooda_steady_complete_quiet": false,
-        "ooda_live_active_progress": false,
+        "ooda_live_active_progress": true,
         "ooda_recovered_from_current_supervisor_topology": false
       }
     }

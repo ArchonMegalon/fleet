@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T04:00:12Z'
+generated_at: '2026-05-05T04:36:04Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-17
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -57,9 +57,12 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
+  - rules engine and import
+  - hub and registry
   - mobile play shell
   - ui kit and flagship polish
   - media artifacts
+  - horizons and public surface
   - fleet and operator loop
   - desktop client
 quality_policy:
@@ -75,7 +78,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T03:30:45Z'
+  generated_at: '2026-05-05T04:28:27Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -109,9 +112,10 @@ frontier:
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Render release explainer, support closure, and public concierge
       companion bundles with captions, previews, and sibling notes'' remains open
-      under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
-      ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-05T18:57:48Z'
+      under the flagship closeout frontier. Outstanding readiness coverage: rules_engine_and_import,
+      hub_and_registry, mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts,
+      horizons_and_public_surface, fleet_and_operator_loop, desktop_client.'
+    predicted_completion_at: '2026-05-05T19:33:40Z'
     range_low_hours: 8.67
     range_high_hours: 21.25
     remaining_open_milestones: 1

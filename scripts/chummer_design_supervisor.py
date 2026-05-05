@@ -9545,7 +9545,24 @@ def _audit_review_wait_only_canary_blocks_hard_fallback(state_root: Path) -> boo
     jury_productive, jury_waiting, _jury_other = _active_direct_lane_progress_counts(state_root, "jury")
     total_productive = review_productive + jury_productive
     total_waiting = review_waiting + jury_waiting
-    return total_productive <= 0 and total_waiting > 0
+    if total_productive > 0 or total_waiting <= 0:
+        return False
+    workspace_root = _workspace_root_for_state_root(state_root)
+    grace_seconds = _hard_wait_only_canary_grace_seconds(workspace_root)
+    if grace_seconds <= 0.0:
+        return False
+    review_fresh, review_mature = _active_direct_lane_waiting_grace_counts(
+        state_root,
+        "review_light",
+        grace_seconds=grace_seconds,
+    )
+    jury_fresh, jury_mature = _active_direct_lane_waiting_grace_counts(
+        state_root,
+        "jury",
+        grace_seconds=grace_seconds,
+    )
+    # Fresh canaries are allowed to hold the hard lane briefly; mature waits are not.
+    return (review_mature + jury_mature) <= 0 and (review_fresh + jury_fresh) > 0
 
 
 def _routed_full_lane_direct_fallback_args(
