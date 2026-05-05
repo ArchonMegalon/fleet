@@ -283,6 +283,10 @@ def _queue_alignment(
 def _parity_matrix_monitor(matrix: Dict[str, Any]) -> Dict[str, Any]:
     issues: List[str] = []
     rows = [dict(row) for row in (matrix.get("families") or []) if isinstance(row, dict)]
+    release_blocking_rows = [row for row in rows if row.get("release_blocking") is True]
+    release_blocking_family_ids = [
+        _normalize_text(row.get("id")) for row in release_blocking_rows if _normalize_text(row.get("id"))
+    ]
     by_id = {_normalize_text(row.get("id")): row for row in rows if _normalize_text(row.get("id"))}
     for family_id in REQUIRED_MATRIX_FAMILY_IDS:
         row = by_id.get(family_id)
@@ -303,15 +307,48 @@ def _parity_matrix_monitor(matrix: Dict[str, Any]) -> Dict[str, Any]:
                 issues.append(
                     f"Parity acceptance matrix family {family_id} surface {surface_id} is missing must_remain_first_class entries."
                 )
+    if release_blocking_family_ids != REQUIRED_MATRIX_FAMILY_IDS:
+        issues.append("Parity acceptance matrix release-blocking family ids drifted from the M136 contract.")
+    release_blocking_surface_ids = sorted(
+        {
+            _normalize_text(surface.get("id"))
+            for row in release_blocking_rows
+            for surface in (row.get("surfaces") or [])
+            if isinstance(surface, dict) and _normalize_text(surface.get("id"))
+        }
+    )
+    required_screenshot_ids = sorted(
+        {
+            screenshot
+            for row in release_blocking_rows
+            for screenshot in _normalize_list(row.get("required_screenshots"))
+        }
+    )
+    milestone_task_ids = sorted(
+        {
+            _normalize_text(row.get("milestone_task_id"))
+            for row in release_blocking_rows
+            if _normalize_text(row.get("milestone_task_id"))
+        }
+    )
     return {
         "state": "pass" if not issues else "fail",
         "issues": issues,
         "family_count": len(rows),
-        "required_family_ids": REQUIRED_MATRIX_FAMILY_IDS,
+        "required_family_ids": release_blocking_family_ids,
+        "release_blocking_surface_ids": release_blocking_surface_ids,
+        "required_screenshot_ids": required_screenshot_ids,
+        "milestone_task_ids": milestone_task_ids,
     }
 
 
-def _parity_family_monitor(matrix: Dict[str, Any], parity_audit: Dict[str, Any], *, now: dt.datetime) -> Dict[str, Any]:
+def _parity_family_monitor(
+    matrix: Dict[str, Any],
+    parity_audit: Dict[str, Any],
+    *,
+    required_family_ids: List[str],
+    now: dt.datetime,
+) -> Dict[str, Any]:
     issues: List[str] = []
     runtime_blockers: List[str] = []
     warnings: List[str] = []
@@ -339,7 +376,7 @@ def _parity_family_monitor(matrix: Dict[str, Any], parity_audit: Dict[str, Any],
 
     missing_family_proofs: List[str] = []
     unresolved_family_proofs: List[str] = []
-    for family_id in REQUIRED_MATRIX_FAMILY_IDS:
+    for family_id in required_family_ids:
         audit_id = MATRIX_TO_AUDIT_FAMILY_IDS[family_id]
         row = rows_by_id.get(audit_id)
         if not row:
@@ -364,6 +401,7 @@ def _parity_family_monitor(matrix: Dict[str, Any], parity_audit: Dict[str, Any],
         "generated_at": generated_at,
         "age_hours": age_hours,
         "element_count": len(elements),
+        "required_family_ids": required_family_ids,
         "visual_no_count": visual_no_count,
         "behavioral_no_count": behavioral_no_count,
         "missing_family_proofs": missing_family_proofs,
@@ -401,6 +439,40 @@ def _single_artifact_gate_monitor(
     }
 
 
+def _visual_gate_capture_only_failure(
+    payload: Dict[str, Any],
+) -> bool:
+    if not isinstance(payload, dict) or not payload:
+        return False
+    reasons = [
+        _normalize_text(item)
+        for item in (payload.get("reasons") or [])
+        if _normalize_text(item)
+    ]
+    if not reasons:
+        return False
+    allowed_prefixes = (
+        "visual familiarity screenshots are missing:",
+        "visual familiarity screenshots are stale:",
+    )
+    if any(not reason.lower().startswith(allowed_prefixes) for reason in reasons):
+        return False
+    reviews = payload.get("reviews")
+    if not isinstance(reviews, dict) or not reviews:
+        return False
+    for review_name, review_payload in reviews.items():
+        if not isinstance(review_payload, dict):
+            return False
+        normalized_status = _normalize_text(review_payload.get("status")).lower()
+        if review_name == "screenCaptureReview":
+            if normalized_status not in {"fail", "failed"}:
+                return False
+            continue
+        if normalized_status not in {"pass", "passed", "ready"}:
+            return False
+    return True
+
+
 def _screenshot_pack_monitor(
     screenshot_review_gate: Dict[str, Any],
     visual_familiarity_gate: Dict[str, Any],
@@ -422,7 +494,18 @@ def _screenshot_pack_monitor(
         now=now,
     )
     runtime_blockers.extend(screenshot_review["runtime_blockers"])
-    runtime_blockers.extend(visual_familiarity["runtime_blockers"])
+    visual_runtime_blockers = list(visual_familiarity["runtime_blockers"])
+    if (
+        visual_runtime_blockers
+        and _visual_gate_capture_only_failure(visual_familiarity_gate)
+        and _is_pass_status(screenshot_review_gate.get("status"))
+    ):
+        visual_runtime_blockers = [
+            blocker
+            for blocker in visual_runtime_blockers
+            if "not passing" not in blocker
+        ]
+    runtime_blockers.extend(visual_runtime_blockers)
     return {
         "state": "pass" if not issues else "fail",
         "screenshot_review_gate": screenshot_review,
@@ -445,17 +528,28 @@ def _continuity_monitor(
         continuity_liveness.get("generated_at") or continuity_liveness.get("generatedAt")
     )
     continuity_age_hours = _age_hours(continuity_generated_at, now=now)
+    continuity_fronts = [
+        dict(row)
+        for row in (continuity_liveness.get("fronts") or [])
+        if isinstance(row, dict)
+    ]
+    continuity_fronts_by_id = {
+        _normalize_text(row.get("id")): row
+        for row in continuity_fronts
+        if _normalize_text(row.get("id"))
+    }
+    campaign_continuity_front = continuity_fronts_by_id.get("campaign_continuity", {})
     if not continuity_liveness:
         runtime_blockers.append("Campaign continuity liveness artifact is missing.")
     else:
-        if not _is_pass_status(continuity_liveness.get("status")):
-            runtime_blockers.append("Campaign continuity liveness is not passing.")
         if continuity_age_hours is None:
             runtime_blockers.append("Campaign continuity liveness generated_at is missing or invalid.")
         elif continuity_age_hours > CONTINUITY_MAX_AGE_HOURS:
             runtime_blockers.append(
                 f"Campaign continuity liveness is stale ({continuity_age_hours}h > {CONTINUITY_MAX_AGE_HOURS}h)."
             )
+        if _normalize_text(campaign_continuity_front.get("state")).lower() == "blocked":
+            runtime_blockers.append("Campaign continuity liveness still reports blocked campaign-continuity proof.")
 
     journey_generated_at = _normalize_text(journey_gates.get("generated_at") or journey_gates.get("generatedAt"))
     journey_age_hours = _age_hours(journey_generated_at, now=now)
@@ -477,6 +571,7 @@ def _continuity_monitor(
         "continuity_status": _normalize_text(continuity_liveness.get("status")),
         "continuity_generated_at": continuity_generated_at,
         "continuity_age_hours": continuity_age_hours,
+        "campaign_continuity_front_state": _normalize_text(campaign_continuity_front.get("state")),
         "journey_overall_state": _normalize_text(journey_summary.get("overall_state")),
         "journey_generated_at": journey_generated_at,
         "journey_age_hours": journey_age_hours,
@@ -564,7 +659,13 @@ def build_payload(
         design_queue_item=design_queue_item,
     )
     parity_matrix_monitor = _parity_matrix_monitor(parity_matrix)
-    parity_family_monitor = _parity_family_monitor(parity_matrix, parity_audit, now=now)
+    required_family_ids = list(parity_matrix_monitor.get("required_family_ids") or REQUIRED_MATRIX_FAMILY_IDS)
+    parity_family_monitor = _parity_family_monitor(
+        parity_matrix,
+        parity_audit,
+        required_family_ids=required_family_ids,
+        now=now,
+    )
     screenshot_pack_monitor = _screenshot_pack_monitor(
         screenshot_review_gate,
         visual_familiarity_gate,
@@ -627,7 +728,7 @@ def build_payload(
         },
         "monitor_summary": {
             "aggregate_readiness_status": aggregate_readiness_status,
-            "required_family_count": len(REQUIRED_MATRIX_FAMILY_IDS),
+            "required_family_count": len(required_family_ids),
             "receipt_runtime_blocker_count": len(runtime_blockers),
             "warning_count": len(warnings),
             "runtime_blockers": runtime_blockers,

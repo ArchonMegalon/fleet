@@ -6,9 +6,43 @@
     "feedback"
   ],
   "canonical_monitors": {
+    "flagship_product_bar": {
+      "checks": {
+        "matrix_governs_hard_families": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "flagship_readiness_planes": {
+      "issues": [],
+      "plane_ids": [
+        "custom_data_survival_ready",
+        "data_durability_ready",
+        "dense_workbench_ready",
+        "flagship_ready",
+        "large_sheet_performance_ready",
+        "primary_route_ready",
+        "public_shelf_ready",
+        "recovery_trust_ready",
+        "rules_explainability_ready",
+        "sr4_parity_ready",
+        "sr5_veteran_ready",
+        "sr6_parity_ready",
+        "veteran_deep_workflow_ready"
+      ],
+      "state": "pass"
+    },
+    "flagship_script_binding": {
+      "checks": {
+        "flagship_reason": true,
+        "gate_helper": true,
+        "gate_ready_evidence": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
     "next90_guide": {
       "checks": {
-        "exit_contract": true,
         "milestone_136": true,
         "wave_23": true
       },
@@ -16,7 +50,6 @@
       "state": "pass"
     },
     "parity_matrix": {
-      "family_count": 7,
       "issues": [],
       "milestone_task_ids": [
         "136.21",
@@ -26,6 +59,15 @@
         "136.25",
         "136.26",
         "136.27"
+      ],
+      "release_blocking_family_ids": [
+        "translator_xml_bridge",
+        "dense_builder_and_career",
+        "dice_initiative_and_table_utilities",
+        "identity_contacts_lifestyles_history",
+        "legacy_and_adjacent_import_oracles",
+        "sheet_export_print_viewer_exchange",
+        "sr6_supplements_designers_house_rules"
       ],
       "release_blocking_surface_ids": [
         "attributes_workspace",
@@ -52,15 +94,6 @@
         "table_utility_surface",
         "translator_dialog",
         "xml_amendment_editor"
-      ],
-      "required_family_ids": [
-        "translator_xml_bridge",
-        "dense_builder_and_career",
-        "dice_initiative_and_table_utilities",
-        "identity_contacts_lifestyles_history",
-        "legacy_and_adjacent_import_oracles",
-        "sheet_export_print_viewer_exchange",
-        "sr6_supplements_designers_house_rules"
       ],
       "required_screenshot_ids": [
         "contacts_dialog",
@@ -91,143 +124,107 @@
       ],
       "state": "pass"
     },
+    "parity_spec": {
+      "checks": {
+        "consume_matrix": true,
+        "machine_readable_companion": true,
+        "no_generic_flagship_ready": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
     "queue_alignment": {
       "design_queue_status": "not_started",
       "fleet_queue_status": "",
       "issues": [],
-      "runtime_blockers": [],
       "state": "pass",
       "warnings": [
-        "Fleet queue mirror row is still missing for work task 136.6."
+        "Fleet queue mirror row is still missing for work task 136.9."
       ],
       "work_task_status": ""
     }
   },
-  "contract_name": "fleet.next90_m136_aggregate_readiness_parity_gates",
-  "frontier_id": 2277811964,
-  "generated_at": "2026-05-05T15:36:18Z",
+  "contract_name": "fleet.next90_m136_parity_matrix_gate_binding",
+  "frontier_id": 4491585022,
+  "generated_at": "2026-05-05T15:36:20Z",
   "milestone_id": 136,
   "monitor_summary": {
-    "aggregate_readiness_status": "blocked",
-    "receipt_runtime_blocker_count": 2,
-    "required_family_count": 7,
-    "runtime_blockers": [
-      "parity_family_monitor: Chummer5A UI element parity audit is stale (73.52h > 72h).",
-      "screenshot_pack_monitor: Sub-dialog screenshot review gate is stale (73.52h > 72h)."
-    ],
+    "matrix_binding_status": "warning",
+    "release_blocking_family_count": 7,
+    "required_screenshot_count": 25,
+    "runtime_blocker_count": 0,
+    "runtime_blockers": [],
+    "surface_count": 24,
     "warning_count": 1
   },
   "owned_surfaces": [
-    "fail_closed_on_aggregate_readiness_when_family_level_par:fleet"
+    "bind_the_machine_readable_human_parity_matrix_into_audit:fleet"
   ],
   "package_closeout": {
     "blockers": [],
     "state": "pass",
     "warnings": [
-      "parity_family_monitor: Chummer5A UI element parity audit is stale (73.52h > 72h).",
-      "screenshot_pack_monitor: Sub-dialog screenshot review gate is stale (73.52h > 72h).",
-      "Fleet queue mirror row is still missing for work task 136.6."
+      "Fleet queue mirror row is still missing for work task 136.9."
     ]
   },
-  "package_id": "next90-m136-fleet-fail-closed-on-aggregate-readiness-when-family-level-parity-proof-sub",
-  "queue_title": "Fail closed on aggregate readiness when family-level parity proof, sub-dialog screenshot packs, dialog-level element inventories, or continuity journey receipts are stale or missing.",
+  "package_id": "next90-m136-fleet-bind-the-machine-readable-human-parity-matrix-into-audit-gate-consumpt",
+  "queue_title": "Bind the machine-readable human parity matrix into audit/gate consumption so hard families cannot close on prose-only proof.",
   "runtime_monitors": {
-    "aggregate_readiness": {
-      "age_hours": 0.09,
-      "generated_at": "2026-05-05T15:30:46Z",
+    "m136_gate_binding": {
+      "aggregate_readiness_status": "blocked",
       "issues": [],
       "runtime_blockers": [],
-      "state": "pass",
-      "status": "fail",
-      "warnings": []
+      "state": "pass"
     },
-    "continuity_receipts": {
-      "campaign_continuity_front_state": "warning",
-      "continuity_age_hours": 3.19,
-      "continuity_generated_at": "2026-05-05T12:24:42Z",
-      "continuity_status": "fail",
+    "parity_audit_binding": {
       "issues": [],
-      "journey_age_hours": 0.09,
-      "journey_generated_at": "2026-05-05T15:30:44Z",
-      "journey_overall_state": "ready",
+      "missing_family_rows": [],
+      "prose_only_family_rows": [],
       "runtime_blockers": [],
-      "state": "pass",
-      "warnings": []
+      "state": "pass"
     },
-    "parity_family_proof": {
-      "age_hours": 73.52,
-      "behavioral_no_count": 0,
-      "element_count": 84,
-      "generated_at": "2026-05-02T14:05:07.691499Z",
+    "published_flagship_contradiction": {
+      "flagship_status": "fail",
       "issues": [],
-      "missing_family_proofs": [],
-      "required_family_ids": [
-        "translator_xml_bridge",
-        "dense_builder_and_career",
-        "dice_initiative_and_table_utilities",
-        "identity_contacts_lifestyles_history",
-        "legacy_and_adjacent_import_oracles",
-        "sheet_export_print_viewer_exchange",
-        "sr6_supplements_designers_house_rules"
-      ],
-      "runtime_blockers": [
-        "Chummer5A UI element parity audit is stale (73.52h > 72h)."
-      ],
-      "state": "pass",
-      "unresolved_family_proofs": [],
-      "visual_no_count": 0,
-      "warnings": []
-    },
-    "screenshot_packs": {
-      "issues": [],
-      "runtime_blockers": [
-        "Sub-dialog screenshot review gate is stale (73.52h > 72h)."
-      ],
-      "screenshot_review_gate": {
-        "age_hours": 73.52,
-        "generated_at": "2026-05-02T14:05:08.068801Z",
-        "runtime_blockers": [
-          "Sub-dialog screenshot review gate is stale (73.52h > 72h)."
-        ],
-        "status": "pass"
-      },
-      "state": "pass",
-      "visual_familiarity_gate": {
-        "age_hours": 6.98,
-        "generated_at": "2026-05-05T08:37:19.632109Z",
-        "runtime_blockers": [
-          "Desktop visual familiarity gate is not passing."
-        ],
-        "status": "fail"
-      },
-      "warnings": []
+      "runtime_blockers": [],
+      "state": "pass"
     }
   },
   "source_inputs": {
-    "campaign_continuity_liveness": {
-      "generated_at": "2026-05-05T12:24:42Z",
-      "path": "/docker/fleet/.codex-studio/published/CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json",
-      "sha256": "06ec9c6bf88212d564f454c5d1ba169bc363d2261ebafcd4d8c409a7ff22bc1a"
-    },
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
       "sha256": "11cc1ecd96db0176604771f8f6f398998db558b6167a3e2bd37140a2124ddca6"
+    },
+    "flagship_product_bar": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PRODUCT_BAR.md",
+      "sha256": "8d450f2175f2bd290975db12c0deddbf6e26a3415bec20e906f1ac38cd01c84e"
     },
     "flagship_product_readiness": {
       "generated_at": "2026-05-05T15:30:46Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
       "sha256": "45129ba1662c813fa2feb74ce7f989f914cc977dbef2e9e35bca94f41d32963b"
     },
+    "flagship_readiness_planes": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_READINESS_PLANES.yaml",
+      "sha256": "b4bd6b9ef9cc85be2fc4aff49dd713d88199cc1699fea8110fbde98f4272344f"
+    },
+    "flagship_readiness_script": {
+      "generated_at": "",
+      "path": "/docker/fleet/scripts/materialize_flagship_product_readiness.py",
+      "sha256": "85174cec6bb80bd0a527cd7d7b242dab9cd0dbd78ae871b203491fa438e3ee07"
+    },
     "fleet_queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
       "sha256": "6da82d05213bc6ae4f536f75debf5dab04463c91c9b2992df970d392bd3972b1"
     },
-    "journey_gates": {
-      "generated_at": "2026-05-05T15:30:44Z",
-      "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-      "sha256": "75b999ec50bbd63a3f2c1c214c6af32597ad7c2ef296910b3d430e141c355a8d"
+    "m136_aggregate_gate": {
+      "generated_at": "2026-05-05T15:36:18Z",
+      "path": "/docker/fleet/.codex-studio/published/NEXT90_M136_FLEET_AGGREGATE_READINESS_PARITY_GATES.generated.json",
+      "sha256": "bcd363302b492db95b40211220d22ca84ee7f4bdb68c5de603ec3ecd1c94825b"
     },
     "next90_guide": {
       "generated_at": "",
@@ -244,23 +241,18 @@
       "path": "/docker/chummercomplete/chummer-design/products/chummer/CHUMMER5A_HUMAN_PARITY_ACCEPTANCE_MATRIX.yaml",
       "sha256": "03459b1bfd51868a99ef7399a279c0a9ca9f4b1514a893638553d8c678b7d2ae"
     },
-    "screenshot_review_gate": {
-      "generated_at": "2026-05-02T14:05:08.068801Z",
-      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
-      "sha256": "4947e5e23d35d4e9563c3016cb1c864a1b56eba9c5ec1d83f21daf6c3424c2bb"
+    "parity_spec": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/CHUMMER5A_HUMAN_PARITY_ACCEPTANCE_SPEC.md",
+      "sha256": "d5bf2c75da97fce584ea56e971da3a3316b516aa04cc0693b76f484323477ead"
     },
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
       "sha256": "641255112587cbec2c7c43a37dda5a90f6f59e0d2775206517fede2695c233e3"
-    },
-    "visual_familiarity_gate": {
-      "generated_at": "2026-05-05T08:37:19.632109Z",
-      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
-      "sha256": "2e84a486aff79cc29eaabeebaaf108a2915900b8f40881f22b5e7f55da7d8459"
     }
   },
   "status": "pass",
   "wave": "W23",
-  "work_task_id": "136.6"
+  "work_task_id": "136.9"
 }
