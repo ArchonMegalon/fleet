@@ -4309,9 +4309,18 @@ items:
   work_task_id: '127.4'
   frontier_id: 6924107419
   milestone_id: 127
-  status: not_started
+  status: complete
   wave: W18
   repo: fleet
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M127 Fleet release-truth gates are complete; future shards must verify the canonical registry row, both queue rows, the generated gate packet, and the focused queue-overlay regressions instead of reopening this release-truth closure guard.
+  proof:
+  - /docker/fleet/scripts/materialize_next90_m127_fleet_release_truth_gates.py
+  - /docker/fleet/scripts/verify_next90_m127_fleet_release_truth_gates.py
+  - /docker/fleet/tests/test_materialize_next90_m127_fleet_release_truth_gates.py
+  - /docker/fleet/tests/test_verify_next90_m127_fleet_release_truth_gates.py
+  - /docker/fleet/.codex-studio/published/NEXT90_M127_FLEET_RELEASE_TRUTH_GATES.generated.json
+  - /docker/fleet/feedback/2026-05-05-next90-m127-fleet-release-truth-gates-progress.md
   allowed_paths:
   - scripts
   - tests

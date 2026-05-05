@@ -9,6 +9,7 @@
 - Added a live `NEXT90_M127_FLEET_RELEASE_TRUTH_GATES` packet and verifier for release-truth, platform-acceptance, public-downloads, auto-update, repo-hardening, external-proof, and flagship-readiness gate posture.
 - Canonical queue, registry, and guide alignment are now checked in one repeatable Fleet packet.
 - Runtime gate posture is separated from package health so live preview or hardening warnings do not masquerade as implementation failure.
+- Hardened the packet against append-style generated queue overlays so live queue mirrors no longer false-fail as missing rows.
 
 ## Audit refinements
 
@@ -20,7 +21,7 @@
 
 - generated artifact: `.codex-studio/published/NEXT90_M127_FLEET_RELEASE_TRUTH_GATES.generated.json`
 - verifier: pass
-- release gate status: `pass`
+- release gate status: `blocked`
 - blocker count: `0`
 
 Current warnings are real but non-blocking:
@@ -28,3 +29,4 @@ Current warnings are real but non-blocking:
 - Linux remains `preview_support_directed`
 - macOS remains `account_gated_setup_script_preview`
 - repo-hardening initiatives `RH-001`, `RH-002`, `RH-003`, `RH-005`, and `RH-006` are still `proposed`
+- flagship readiness still reports `fail` / `fail` for the release-truth chain even though this Fleet-owned package is structurally closed

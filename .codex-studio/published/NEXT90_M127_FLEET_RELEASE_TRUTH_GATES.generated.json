@@ -6,12 +6,12 @@
     "feedback"
   ],
   "canonical_alignment": {
-    "design_queue_status": "not_started",
-    "fleet_queue_status": "not_started",
+    "design_queue_status": "complete",
+    "fleet_queue_status": "complete",
     "issues": [],
     "registry_status": "not_started",
     "state": "pass",
-    "work_task_status": ""
+    "work_task_status": "complete"
   },
   "canonical_monitors": {
     "acceptance_matrix": {
@@ -166,9 +166,12 @@
   "frontier_id": 6924107419,
   "gate_summary": {
     "external_proof_unresolved_request_count": 0,
-    "fail_closed": true,
-    "flagship_status": "pass",
-    "gate_failures": [],
+    "fail_closed": false,
+    "flagship_status": "fail",
+    "gate_failures": [
+      "flagship_product_readiness: Flagship readiness status is fail.",
+      "flagship_product_readiness: Flagship readiness scoped_status is fail."
+    ],
     "hardening_initiative_statuses": {
       "RH-001": "proposed",
       "RH-002": "proposed",
@@ -202,9 +205,9 @@
         "updater_mode": "in_app_apply_helper"
       }
     },
-    "release_gate_status": "pass"
+    "release_gate_status": "blocked"
   },
-  "generated_at": "2026-05-05T13:03:26Z",
+  "generated_at": "2026-05-05T21:29:39Z",
   "milestone_id": 127,
   "owned_surfaces": [
     "promote_platform_acceptance_release_evidence:fleet"
@@ -219,7 +222,9 @@
       "Repo hardening initiative RH-002 is still proposed.",
       "Repo hardening initiative RH-003 is still proposed.",
       "Repo hardening initiative RH-005 is still proposed.",
-      "Repo hardening initiative RH-006 is still proposed."
+      "Repo hardening initiative RH-006 is still proposed.",
+      "flagship_product_readiness: Flagship readiness status is fail.",
+      "flagship_product_readiness: Flagship readiness scoped_status is fail."
     ]
   },
   "package_id": "next90-m127-fleet-promote-platform-acceptance-release-evidence-packs-repo",
@@ -227,10 +232,10 @@
   "queue_title": "Promote platform acceptance, release evidence packs, repo hardening, and external-host proof orchestration into repeatable gates.",
   "runtime_monitors": {
     "external_proof_runbook": {
-      "capture_deadline_utc": "2026-05-06T12:19:53Z",
+      "capture_deadline_utc": "2026-05-06T19:17:52Z",
       "command_bundle_sha256": "aeb158c27e9135ba38313a6a988012c27982cf11ae18c6389bb9a2eef5575102",
       "gate_failures": [],
-      "generated_at": "2026-05-05T13:01:00Z",
+      "generated_at": "2026-05-05T21:00:44Z",
       "has_zero_backlog_note": true,
       "issues": [],
       "release_gate_status": "pass",
@@ -242,17 +247,20 @@
     "flagship_product_readiness": {
       "external_host_proof": {
         "command_bundle_sha256": "aeb158c27e9135ba38313a6a988012c27982cf11ae18c6389bb9a2eef5575102",
-        "runbook_generated_at": "2026-05-05T13:01:00Z",
+        "runbook_generated_at": "2026-05-05T21:00:44Z",
         "runbook_synced": true,
         "unresolved_request_count": 0
       },
       "external_host_proof_status": "pass",
-      "gate_failures": [],
+      "gate_failures": [
+        "Flagship readiness status is fail.",
+        "Flagship readiness scoped_status is fail."
+      ],
       "issues": [],
-      "release_gate_status": "pass",
-      "scoped_status": "pass",
+      "release_gate_status": "blocked",
+      "scoped_status": "fail",
       "state": "pass",
-      "status": "pass",
+      "status": "fail",
       "warnings": []
     }
   },
@@ -265,17 +273,17 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "5b546490fa982f1b9d4497afcb3be5e056659382dc2884f29452e4ebd7cbec61"
+      "sha256": "a319c099991fab4319061e24d50bb483a5e7321b7d7d8eb7d38467b1b2ae0088"
     },
     "external_proof_runbook": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-      "sha256": "5f07243dfdb7172b41d471b951ef3ba14be03d7a3d88a1e667b3b2f089c2878d"
+      "sha256": "521cbdfb8ba83c4f74d43ad79b76f3045cd68b0a591edf67092cfb42d780a581"
     },
     "flagship_product_readiness": {
-      "generated_at": "2026-05-05T13:01:00Z",
+      "generated_at": "2026-05-05T21:13:04Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "bc53dba55ec9a1767d98c48d281c8d2dc0be4b59dbb80f7c466024986a63fc93"
+      "sha256": "7808c450ea381122f96ef75f9cb1a2fb398260b90bc36511e13afe29e2fb3130"
     },
     "next90_guide": {
       "generated_at": "",
@@ -295,7 +303,7 @@
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "e75b48fb6092c0fc652080b0cb22dccbe1f273800d5ebeea56d4b8fcf4a8cbcd"
+      "sha256": "aa07198c466feb4520db46387ed12af288a88b10010e71f2e0180981beb9b10c"
     },
     "repo_hardening_checklist": {
       "generated_at": "",
@@ -310,7 +318,7 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "ee54bc616880b24913e1bb20f6bbc9b50204f3212b7d6f709eb0023d33c08085"
+      "sha256": "c3a5a3122537081e9982ca44d41070629b7b63aa99ac342ef952344df0481c5f"
     }
   },
   "status": "pass",

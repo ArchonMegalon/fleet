@@ -23,6 +23,11 @@ def _write_yaml(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
+def _write_generated_queue_overlay(path: Path, item: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("---\nitems:\n" + yaml.safe_dump([item], sort_keys=False), encoding="utf-8")
+
+
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -309,6 +314,20 @@ class MaterializeNext90M127FleetReleaseTruthGatesTests(unittest.TestCase):
             warnings = "\n".join(payload["package_closeout"]["warnings"])
             self.assertIn("External proof runbook unresolved_request_count is not zero.", warnings)
             self.assertIn("Flagship readiness external_host_proof.status is blocked", warnings)
+
+    def test_materialize_accepts_generated_queue_overlay_shape(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="fleet-m127-materialize-") as temp_dir:
+            paths = _fixture_tree(Path(temp_dir), unresolved_request_count=0, external_status="pass")
+            queue_item = _queue_item()
+            _write_generated_queue_overlay(paths["queue"], queue_item)
+            _write_generated_queue_overlay(paths["design_queue"], queue_item)
+            result = _run_materializer(paths)
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+            payload = json.loads(paths["artifact"].read_text(encoding="utf-8"))
+            self.assertEqual(payload["status"], "pass")
+            self.assertEqual(payload["canonical_alignment"]["state"], "pass")
+            self.assertFalse(payload["package_closeout"]["blockers"])
 
 
 if __name__ == "__main__":
