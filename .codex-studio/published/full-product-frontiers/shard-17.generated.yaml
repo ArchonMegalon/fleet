@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T00:38:41Z'
+generated_at: '2026-05-05T00:50:52Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-17
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -111,7 +111,7 @@ frontier:
       companion bundles with captions, previews, and sibling notes'' remains open
       under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
       ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-05T15:36:17Z'
+    predicted_completion_at: '2026-05-05T15:48:28Z'
     range_low_hours: 8.67
     range_high_hours: 21.25
     remaining_open_milestones: 1

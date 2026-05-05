@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T00:38:39Z'
+generated_at: '2026-05-05T00:50:28Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-6
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,8 +32,8 @@ focus:
   - chummer6-hub
   - chummer6-ui
   - chummer6-core
-  - chummer6-mobile
-  - chummer6-ui-kit
+  - chummer6-media-factory
+  - chummer6-hub-registry
   texts:
   - top flagship grade
   - whole project frontier
@@ -85,35 +85,35 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1300044932
+- 4355602193
 frontier:
-- id: 1300044932
-  title: Mobile and play-shell flagship finish
+- id: 4355602193
+  title: Media, artifacts, publication, and recap flagship finish
   wave: flagship_product
   status: blocked_external_host_proof
   owners:
-  - chummer6-mobile
-  - chummer6-core
-  - chummer6-ui-kit
+  - chummer6-media-factory
   - chummer6-hub
+  - chummer6-hub-registry
   dependencies: []
   exit_criteria:
-  - Deliver the dedicated player/GM/session shell described in `projects/mobile.md`,
-    including local-first play, replay/resume, reconnect confidence, installable mobile
-    posture, and cross-device continuity.
-  - Keep mobile grounded on package-only engine/play/UI-kit seams rather than cloning
-    workbench or orchestration logic.
+  - Make documents, previews, portraits, bounded video, recap artifacts, manifests,
+    and publication receipts dependable product surfaces instead of sidecar exports,
+    following `projects/media-factory.md`.
+  - Keep provenance, preview, publish, and restore evidence intact across Hub, Registry,
+    and Media Factory.
   eta:
     status: flagship_delivery
-    eta_human: 10h-1d
+    eta_human: 9h-24h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open under
-      the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
-      ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
-    predicted_completion_at: '2026-05-05T17:57:51Z'
-    range_low_hours: 9.84
-    range_high_hours: 24.8
+    summary: 'Milestone ''Media, artifacts, publication, and recap flagship finish''
+      remains open under the flagship closeout frontier. Outstanding readiness coverage:
+      mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop,
+      desktop_client.'
+    predicted_completion_at: '2026-05-05T17:23:46Z'
+    range_low_hours: 9.33
+    range_high_hours: 23.78
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
