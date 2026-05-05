@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-03T10:46:08Z'
+generated_at: '2026-05-05T00:38:27Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-18
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,7 +32,6 @@ focus:
   - fleet
   - chummer6-design
   - chummer6-ui
-  - chummer6-hub
   texts:
   - top flagship grade
   - whole project frontier
@@ -55,7 +54,11 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
+  - mobile play shell
+  - ui kit and flagship polish
+  - media artifacts
   - fleet and operator loop
+  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -69,42 +72,42 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-03T10:37:30Z'
+  generated_at: '2026-05-05T00:31:01Z'
   proof_status: fail
-  missing_coverage_keys: []
+  missing_coverage_keys:
+  - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1223557231
+- 1416961433
 frontier:
-- id: 1223557231
-  title: Keep campaign, support, and install-aware diagnostics tied to the same rule-environment
-    receipts
+- id: 1416961433
+  title: Surface campaign memory and consequences on desktop
   wave: flagship_product
-  status: not_started
+  status: blocked_external_host_proof
   owners:
-  - chummer6-hub
+  - chummer6-ui
   dependencies: []
   exit_criteria:
-  - Keep campaign, support, and install-aware diagnostics tied to the same rule-environment
-    receipts.
-  - 'Own and prove the surface slice(s): campaign_rule_environment_receipts, support_rule_environment_receipts,
-    install_aware_support_receipts'
-  - 'Keep implementation scoped to the allowed paths: Chummer.Run.Api, scripts, tests'
+  - Make campaign consequences, stale state, and next-session return actions visible
+    on the promoted desktop route.
+  - 'Own and prove the surface slice(s): campaign_workspace:memory, campaign_return_loop:desktop'
+  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
+    Chummer.Tests, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-hub` (next90-m114-hub-rule-environment-receipts).
+    is landed for `chummer6-ui` (next90-m112-ui-campaign-memory).
   eta:
     status: flagship_delivery
     eta_human: 9h-22h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Keep campaign, support, and install-aware diagnostics tied
-      to the same rule-environment receipts'' remains open under the flagship closeout
-      frontier. Outstanding readiness coverage: fleet_and_operator_loop.'
-    predicted_completion_at: '2026-05-04T01:56:02Z'
-    range_low_hours: 8.55
+    summary: 'Milestone ''Surface campaign memory and consequences on desktop'' remains
+      open under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+      ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
+    predicted_completion_at: '2026-05-05T15:51:03Z'
+    range_low_hours: 8.64
     range_high_hours: 21.78
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
@@ -118,16 +121,34 @@ frontier:
     scope_warning: ''
 source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
 queue_package:
-  repo: chummer6-hub
-  package_id: next90-m114-hub-rule-environment-receipts
-  title: Keep campaign, support, and install-aware diagnostics tied to the same rule-environment
-    receipts
+  repo: chummer6-ui
+  package_id: next90-m112-ui-campaign-memory
+  title: Surface campaign memory and consequences on desktop
   priority: 0
   owned_surfaces:
-  - campaign_rule_environment_receipts
-  - support_rule_environment_receipts
-  - install_aware_support_receipts
+  - campaign_workspace:memory
+  - campaign_return_loop:desktop
   allowed_paths:
-  - Chummer.Run.Api
+  - Chummer.Avalonia
+  - Chummer.Desktop.Runtime
+  - Chummer.Tests
   - scripts
-  - tests
+eta:
+  status: flagship_delivery
+  eta_human: 9h-22h
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: ''
+  summary: 'Milestone ''Surface campaign memory and consequences on desktop'' remains
+    open under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+    ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
+  predicted_completion_at: '2026-05-05T15:51:03Z'
+  range_low_hours: 8.64
+  range_high_hours: 21.78
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 1.8

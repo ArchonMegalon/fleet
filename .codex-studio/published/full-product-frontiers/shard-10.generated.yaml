@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-03T10:51:29Z'
+generated_at: '2026-05-05T00:38:43Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-10
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -33,7 +33,6 @@ focus:
   - chummer6-hub
   - chummer6-hub-registry
   - chummer6-ui
-  - chummer6-media-factory
   texts:
   - top flagship grade
   - whole project frontier
@@ -58,7 +57,11 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
+  - mobile play shell
+  - ui kit and flagship polish
+  - media artifacts
   - fleet and operator loop
+  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -72,47 +75,49 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-03T10:37:30Z'
+  generated_at: '2026-05-05T00:31:01Z'
   proof_status: fail
-  missing_coverage_keys: []
+  missing_coverage_keys:
+  - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 2642013094
+- 5201099814
 frontier:
-- id: 2642013094
-  title: Render release explainer, support closure, and public concierge companion
-    bundles with captions, previews, and sibling notes
+- id: 5201099814
+  title: Wire the desktop explain drawer, source-anchor launch, stale-state handling,
+    and text-first follow-up on promoted workbench routes.
   wave: flagship_product
-  status: not_started
+  status: blocked_external_host_proof
   owners:
-  - chummer6-media-factory
+  - chummer6-ui
   dependencies: []
   exit_criteria:
-  - Render install-aware release, support, and public concierge companions with captions,
-    previews, and bounded sibling notes.
-  - 'Own and prove the surface slice(s): release_explainer_artifacts, support_closure_artifacts,
-    public_concierge_companions'
-  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
+  - Wire packet-backed desktop explain drawers, source-anchor affordances, stale snapshot
+    handling, and text-first bounded follow-up across promoted workbench routes.
+  - 'Own and prove the surface slice(s): explain_every_value_drawer:ui, grounded_follow_up:desktop'
+  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
+    Chummer.Tests, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-media-factory` (next90-m111-media-factory-concierge-bundles).
+    is landed for `chummer6-ui` (next90-m145-ui-desktop-explain-drawer-and-follow-up).
   eta:
     status: flagship_delivery
     eta_human: 9h-22h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Render release explainer, support closure, and public concierge
-      companion bundles with captions, previews, and sibling notes'' remains open
-      under the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop.'
-    predicted_completion_at: '2026-05-04T02:24:47Z'
-    range_low_hours: 9.01
-    range_high_hours: 22.1
+    summary: 'Milestone ''Wire the desktop explain drawer, source-anchor launch, stale-state
+      handling, and text-first follow-up on promoted workbench routes.'' remains open
+      under the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+      ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'
+    predicted_completion_at: '2026-05-05T16:29:07Z'
+    range_low_hours: 9.18
+    range_high_hours: 22.5
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.7
+    remaining_effort_units: 1.8
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
@@ -121,36 +126,16 @@ frontier:
     scope_warning: ''
 source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
 queue_package:
-  repo: chummer6-media-factory
-  package_id: next90-m111-media-factory-concierge-bundles
-  title: Render release explainer, support closure, and public concierge companion
-    bundles with captions, previews, and sibling notes
+  repo: chummer6-ui
+  package_id: next90-m145-ui-desktop-explain-drawer-and-follow-up
+  title: Wire the desktop explain drawer, source-anchor launch, stale-state handling,
+    and text-first follow-up on promoted workbench routes.
   priority: 0
   owned_surfaces:
-  - release_explainer_artifacts
-  - support_closure_artifacts
-  - public_concierge_companions
+  - explain_every_value_drawer:ui
+  - grounded_follow_up:desktop
   allowed_paths:
-  - src
-  - tests
-  - docs
+  - Chummer.Avalonia
+  - Chummer.Desktop.Runtime
+  - Chummer.Tests
   - scripts
-eta:
-  status: flagship_delivery
-  eta_human: 9h-22h
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Render release explainer, support closure, and public concierge
-    companion bundles with captions, previews, and sibling notes'' remains open under
-    the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop.'
-  predicted_completion_at: '2026-05-04T02:24:47Z'
-  range_low_hours: 9.01
-  range_high_hours: 22.1
-  remaining_open_milestones: 1
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 1
-  remaining_effort_units: 1.7

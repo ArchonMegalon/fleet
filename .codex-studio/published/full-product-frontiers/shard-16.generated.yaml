@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-03T10:47:24Z'
+generated_at: '2026-05-05T00:38:36Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-16
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,6 +32,7 @@ focus:
   - chummer6-core
   - chummer6-ui
   - chummer6-design
+  - chummer6-media-factory
   texts:
   - top flagship grade
   - whole project frontier
@@ -56,7 +57,11 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
+  - mobile play shell
+  - ui kit and flagship polish
+  - media artifacts
   - fleet and operator loop
+  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -70,41 +75,44 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-03T10:37:30Z'
+  generated_at: '2026-05-05T00:31:01Z'
   proof_status: fail
-  missing_coverage_keys: []
+  missing_coverage_keys:
+  - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 4147090337
+- 2541246989
 frontier:
-- id: 4147090337
-  title: Publish rule-environment studio contracts and explain receipts
+- id: 2541246989
+  title: Render build explainer video, audio, preview-card, and packet siblings from
+    approved explain packets
   wave: flagship_product
-  status: not_started
+  status: blocked_external_host_proof
   owners:
-  - chummer6-core
+  - chummer6-media-factory
   dependencies: []
   exit_criteria:
-  - Build amend-package lifecycle, promotion, diff, and explain-receipt contracts
-    for downstream UI and support surfaces.
-  - 'Own and prove the surface slice(s): rule_environment_studio, explain_receipts:engine'
+  - Render approved Build Lab explain packets into video, audio, preview-card, and
+    packet companions without mutating engine truth.
+  - 'Own and prove the surface slice(s): build_explain_companion_rendering, explain_artifact_receipts'
   - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-core` (next90-m114-core-rule-environment-studio).
+    is landed for `chummer6-media-factory` (next90-m109-media-factory-build-explain-bundles).
   eta:
     status: flagship_delivery
-    eta_human: 9h-22h
+    eta_human: 9h-21h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Publish rule-environment studio contracts and explain receipts''
-      remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      fleet_and_operator_loop.'
-    predicted_completion_at: '2026-05-04T02:20:42Z'
-    range_low_hours: 9.01
-    range_high_hours: 22.1
+    summary: 'Milestone ''Render build explainer video, audio, preview-card, and packet
+      siblings from approved explain packets'' remains open under the flagship closeout
+      frontier. Outstanding readiness coverage: mobile_play_shell, ui_kit_and_flagship_polish,
+      media_artifacts, fleet_and_operator_loop, desktop_client.'
+    predicted_completion_at: '2026-05-05T15:36:12Z'
+    range_low_hours: 8.67
+    range_high_hours: 21.25
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
@@ -117,13 +125,14 @@ frontier:
     scope_warning: ''
 source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
 queue_package:
-  repo: chummer6-core
-  package_id: next90-m114-core-rule-environment-studio
-  title: Publish rule-environment studio contracts and explain receipts
+  repo: chummer6-media-factory
+  package_id: next90-m109-media-factory-build-explain-bundles
+  title: Render build explainer video, audio, preview-card, and packet siblings from
+    approved explain packets
   priority: 0
   owned_surfaces:
-  - rule_environment_studio
-  - explain_receipts:engine
+  - build_explain_companion_rendering
+  - explain_artifact_receipts
   allowed_paths:
   - src
   - tests

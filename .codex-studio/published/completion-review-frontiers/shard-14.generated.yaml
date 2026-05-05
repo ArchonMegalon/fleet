@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-03T10:48:38Z'
+generated_at: '2026-05-05T00:38:21Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-14
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -58,32 +58,36 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
+  - mobile play shell
+  - ui kit and flagship polish
+  - media artifacts
   - fleet and operator loop
+  - desktop client
 completion_audit:
   status: fail
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: latest worker receipt 20260503T104236Z-shard-14 was an internal retryable
-    worker recycle; waiting for a fresh structured completion receipt
-  latest_run_id: 20260503T104236Z-shard-14
-  latest_run_reason: dispatch launch selection is temporarily busy
+  reason: 'latest worker receipt 20260504T211932Z-shard-14 is not trusted: Error:
+    upstream_unavailable:planner_capacity_preflight:onemin_dispatchable=0; gemini_vortex=m...'
+  latest_run_id: 20260504T211932Z-shard-14
+  latest_run_reason: 'Error: upstream_unavailable:planner_capacity_preflight:onemin_dispatchable=0;
+    gemini_vortex=m...'
 journey_gate_audit:
   status: fail
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
-  blocked_journey_count: 2
+  blocked_journey_count: 6
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
-  status: pass
-  reason: linux desktop binary build/start/test proof is ready on current repo-local
-    evidence
+  status: fail
+  reason: linux desktop exit gate proof is stale (211534s old)
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
   generated_at: '2026-05-02T13:48:07Z'
 weekly_pulse_audit:
   status: fail
   reason: weekly product pulse reports journey gate health as blocked
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-03T10:37:31Z'
+  generated_at: '2026-05-05T00:31:02Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -94,25 +98,32 @@ blocking_audits:
 - component: journey_gate
   title: Golden journey release-proof gaps
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
+- component: linux_desktop_exit_gate
+  title: Linux desktop exit-gate gaps
+  reason: linux desktop exit gate proof is stale (211534s old)
+- component: desktop_executable_exit_gate
+  title: Desktop executable exit-gate gaps
+  reason: desktop executable exit gate proof is stale (211507s old)
 - component: weekly_pulse
   title: Weekly product pulse gaps
   reason: weekly product pulse reports journey gate health as blocked
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: latest worker receipt 20260503T104236Z-shard-14 was an internal retryable
-    worker recycle; waiting for a fresh structured completion receipt
+  reason: 'latest worker receipt 20260504T211932Z-shard-14 is not trusted: Error:
+    upstream_unavailable:planner_capacity_preflight:onemin_dispatchable=0; gemini_vortex=m...'
 frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
   status: flagship_delivery
-  eta_human: 9h-23h
+  eta_human: 8h-21h
   eta_confidence: low
   basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Add GM prep and roster movement surfaces to the desktop workspace''
-    remains open under the flagship closeout frontier. Outstanding readiness coverage:
-    fleet_and_operator_loop.'
+  summary: 'Milestone ''Fail closeout when visible values, warnings, or bounded what-if
+    answers ship without explain coverage and fallback proof.'' remains open under
+    the flagship closeout frontier. Outstanding readiness coverage: mobile_play_shell,
+    ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'

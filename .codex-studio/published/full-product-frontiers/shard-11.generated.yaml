@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-03T10:51:03Z'
+generated_at: '2026-05-05T00:38:23Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-11
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,7 +32,7 @@ focus:
   - fleet
   - chummer6-hub
   - chummer6-design
-  - chummer6-ui
+  - chummer6-mobile
   texts:
   - top flagship grade
   - whole project frontier
@@ -56,7 +56,11 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
+  - mobile play shell
+  - ui kit and flagship polish
+  - media artifacts
   - fleet and operator loop
+  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -70,41 +74,44 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-03T10:37:30Z'
+  generated_at: '2026-05-05T00:31:01Z'
   proof_status: fail
-  missing_coverage_keys: []
+  missing_coverage_keys:
+  - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1416961433
+- 3453650569
 frontier:
-- id: 1416961433
-  title: Surface campaign memory and consequences on desktop
+- id: 3453650569
+  title: Bring quick explain, source-anchor context, and bounded follow-up to mobile
+    and live-play shells.
   wave: flagship_product
-  status: not_started
+  status: blocked_external_host_proof
   owners:
-  - chummer6-ui
+  - chummer6-mobile
   dependencies: []
   exit_criteria:
-  - Make campaign consequences, stale state, and next-session return actions visible
-    on the promoted desktop route.
-  - 'Own and prove the surface slice(s): campaign_workspace:memory, campaign_return_loop:desktop'
-  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
-    Chummer.Tests, scripts'
+  - Bring packet-backed quick explain, source-anchor context, stale-state posture,
+    and bounded text-first follow-up to mobile and live-play shells.
+  - 'Own and prove the surface slice(s): quick_explain:mobile, grounded_follow_up:mobile'
+  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-ui` (next90-m112-ui-campaign-memory).
+    is landed for `chummer6-mobile` (next90-m145-mobile-quick-explain-and-follow-up).
   eta:
     status: flagship_delivery
-    eta_human: 9h-23h
+    eta_human: 9h-22h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Surface campaign memory and consequences on desktop'' remains
-      open under the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop.'
-    predicted_completion_at: '2026-05-04T02:41:27Z'
-    range_low_hours: 9.0
-    range_high_hours: 22.68
+    summary: 'Milestone ''Bring quick explain, source-anchor context, and bounded
+      follow-up to mobile and live-play shells.'' remains open under the flagship
+      closeout frontier. Outstanding readiness coverage: mobile_play_shell, ui_kit_and_flagship_polish,
+      media_artifacts, fleet_and_operator_loop, desktop_client.'
+    predicted_completion_at: '2026-05-05T16:28:47Z'
+    range_low_hours: 9.18
+    range_high_hours: 22.5
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
@@ -117,15 +124,16 @@ frontier:
     scope_warning: ''
 source_queue_fingerprint: 6e3cca8c63b6c482b449aec5da4cdc3fec4742d0
 queue_package:
-  repo: chummer6-ui
-  package_id: next90-m112-ui-campaign-memory
-  title: Surface campaign memory and consequences on desktop
+  repo: chummer6-mobile
+  package_id: next90-m145-mobile-quick-explain-and-follow-up
+  title: Bring quick explain, source-anchor context, and bounded follow-up to mobile
+    and live-play shells.
   priority: 0
   owned_surfaces:
-  - campaign_workspace:memory
-  - campaign_return_loop:desktop
+  - quick_explain:mobile
+  - grounded_follow_up:mobile
   allowed_paths:
-  - Chummer.Avalonia
-  - Chummer.Desktop.Runtime
-  - Chummer.Tests
+  - src
+  - tests
+  - docs
   - scripts

@@ -8,6 +8,9 @@ source_documents:
   - FLAGSHIP_PARITY_REGISTRY.yaml
   - DENSE_WORKBENCH_BUDGET.yaml
   - VETERAN_FIRST_MINUTE_GATE.yaml
+  - SR5_FIRST_MINUTE_TASKS.yaml
+  - SR5_SCREENSHOT_ORACLE_REGISTRY.yaml
+  - SR5_FLAGSHIP_VISUAL_PARITY_EXIT.yaml
   - PRIMARY_ROUTE_REGISTRY.yaml
   - FEEDBACK_LOOP_RELEASE_GATE.yaml
   - FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml
@@ -37,7 +40,7 @@ acceptance_axes:
   - id: desktop_familiarity_and_install_continuity
     rule: Desktop install, claim, restore, and workbench continuation preserve Chummer5a familiarity and avoid browser-ritual or dashboard-first detours on the promoted path.
   - id: desktop_head_authority_and_fallback_honesty
-    rule: Avalonia is the default primary desktop head; preview may still label Blazor Desktop as bounded fallback when the release shelf, platform matrix, and public copy explicitly say so, but any gold claim requires every shipped desktop head to independently meet the flagship bar for its promised scope.
+    rule: Avalonia is the default primary desktop head; no second desktop head is currently on the public shelf, and any future shipped head must independently meet the flagship bar for its promised scope.
   - id: dense_workbench_budget
     rule: The promoted desktop head stays within the dense-workbench budget for spacing, chrome, visible rows, and always-visible trust posture.
   - id: authored_ruleset_experience
@@ -75,9 +78,9 @@ surfaces:
       - chummer6-core
     must_prove:
       - One obvious flagship desktop head and install path per promoted platform.
-      - Avalonia is the primary promoted desktop head unless the release matrix explicitly elevates Blazor Desktop to flagship for that lane.
-      - Blazor Desktop only counts as fallback when the shelf labels it compatibility or fallback and Avalonia remains the primary public route.
-      - If Blazor Desktop is the only user-facing desktop head or the recommended download, it must satisfy the same desktop flagship proof lanes as Avalonia for the workflows it promises.
+      - Avalonia is the primary promoted desktop head for the current lane.
+      - No second desktop head is currently part of the public shelf.
+      - If a second desktop head is reintroduced later or becomes the recommended download, it must satisfy the same desktop flagship proof lanes as Avalonia for the workflows it promises.
       - A gold desktop claim is only true when every shipped desktop head independently satisfies startup, install, update, crash-recovery, feedback, workflow, and visual-familiarity proof.
       - The promoted desktop path starts with a guided product installer path instead of a framework chooser or browser ritual.
       - Install, claim, and restore land in the installer or app and open a workbench or restore continuation flow without a dashboard-first detour.
@@ -85,12 +88,14 @@ surfaces:
       - Companion text, chips, and voice affordances remain localized across shipping locales and fall back to first-party text when EA compile, media, or microphone access is unavailable.
       - Voice mode is strictly opt-in, requires explicit user gesture, and the flagship path remains complete in text-only mode.
       - The promoted desktop head clears the veteran first-minute gate and keeps key landmarks visible without hunting.
+      - The promoted SR5 desktop path clears the SR5-specific first-minute task pack and screenshot-oracle review before veteran-ready claims can advance.
       - Startup, install, update, crash-recovery, and feedback/reporting flows are boring on the promoted path.
       - Character, campaign, import, restore, and export state stay durable across update, rollback, migration, and device changes.
       - Important computed values, source anchors, and import outcomes remain explainable on the workbench route where trust is exercised.
       - Visible computed values, legality results, and warning states on promoted workbench routes either open a packet-backed explain drawer with source-anchor and stale-state posture or stay explicit release-blocking gaps.
       - The desktop shell keeps a real `File` menu, first-class master index and character roster routes, roster-first orientation, and other veteran Chummer5a familiarity anchors on the flagship path.
       - The promoted desktop head stays within the dense-workbench budget for spacing, chrome, visible rows, and status-strip permanence.
+      - Default SR5 flagship screenshots keep the center workbench dominant, avoid debug or payload panels, and prove the blocking workflows named in `SR5_FLAGSHIP_VISUAL_PARITY_EXIT.yaml`.
       - Builder, inspect, compare, explain, and active-effect flows stay dense-data comfortable for expert users.
       - SR4, SR5, and SR6 use authored labels, prompts, and interaction cues where the rules differ in meaning.
       - The active ruleset, preset, and amend-package set stay visible and previewable before a user trusts a build or explain result.
@@ -104,6 +109,9 @@ surfaces:
       - FLAGSHIP_UI_RELEASE_GATE.md
       - DENSE_WORKBENCH_BUDGET.yaml
       - VETERAN_FIRST_MINUTE_GATE.yaml
+      - SR5_FIRST_MINUTE_TASKS.yaml
+      - SR5_SCREENSHOT_ORACLE_REGISTRY.yaml
+      - SR5_FLAGSHIP_VISUAL_PARITY_EXIT.yaml
       - PRIMARY_ROUTE_REGISTRY.yaml
       - LEGACY_CLIENT_AND_ADJACENT_PARITY.md
       - LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml
@@ -204,6 +212,8 @@ surfaces:
       - FLAGSHIP_PARITY_REGISTRY.yaml
       - DENSE_WORKBENCH_BUDGET.yaml
       - VETERAN_FIRST_MINUTE_GATE.yaml
+      - SR5_FIRST_MINUTE_TASKS.yaml
+      - SR5_FLAGSHIP_VISUAL_PARITY_EXIT.yaml
       - PRIMARY_ROUTE_REGISTRY.yaml
       - PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md
       - PRODUCT_HEALTH_SCORECARD.yaml
@@ -213,12 +223,13 @@ surfaces:
 whole_product_release_rules:
   - Public release claims must stay within the surfaces that pass this matrix or carry an explicit, bounded preview explanation.
   - Structural completion and flagship replacement truth must be published separately; green milestones, empty uncovered-scope lists, or clean repo graphs are not a substitute for veteran-ready product proof.
-  - A desktop release claim is incomplete if it names Blazor Desktop as available without also stating whether it is fallback or flagship for that lane.
+  - A desktop release claim is incomplete if it names a second desktop head as available without also stating its exact release posture for that lane.
   - A fallback head does not satisfy flagship readiness by association; if it is the only user-facing desktop route or the recommended public route, it must pass the flagship bar directly.
   - A gold claim cannot ship a secondary desktop head on shell-only, visual-only, or borrowed proof; every shipped head must independently clear the flagship bar.
   - Installer bytes, release-channel truth, public shelf truth, in-app update truth, and support truth must agree; if they disagree, the affected release-health planes stay non-ready.
   - Empty backlog views, green repo tests, or clean worktrees are not sufficient proof of flagship-grade completion by themselves.
   - Legacy parity rows marked `covered` are necessary structural evidence, but release truth is tracked in `FLAGSHIP_PARITY_REGISTRY.yaml`; `covered` alone cannot justify veteran-ready or gold-ready claims.
+  - SR5 flagship readiness must stay non-ready while the promoted head lacks the SR5-specific first-minute task proof or screenshot-oracle visual parity proof defined in `SR5_FIRST_MINUTE_TASKS.yaml` and `SR5_FLAGSHIP_VISUAL_PARITY_EXIT.yaml`.
   - Parity doctrine must classify remaining differences as `must_match`, `may_improve`, or `may_remove_if_non_degrading`; unclassified drift does not count as flagship-ready modernization.
   - Reporter-facing support progress mail must be a sent, staged, receipt-bearing workflow from `wageslave@chummer.run`, not a vague promise that the support timeline exists somewhere.
   - Flagship release cannot claim no-step-back parity while any in-scope family marked `missing` or unbounded `partial` remains unresolved in `LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`; a `partial` family is only bounded when Fleet's flagship-readiness parity audit records a proof-backed successor route for that family, and families listed under `scope.excluded` there, including `plugin-framework`, do not block the claim.
