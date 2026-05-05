@@ -33,6 +33,11 @@ def _write_yaml(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
+def _write_generated_queue_overlay(path: Path, item: dict) -> None:
+    payload = yaml.safe_dump({"items": [item]}, sort_keys=False)
+    _write_text(path, "- title: overlay legacy row\nmode: append\n" + payload)
+
+
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -369,6 +374,21 @@ class MaterializeNext90M130FleetProviderStewardshipTests(unittest.TestCase):
         self.assertEqual(admin_status, expected_admin_status)
         self.assertEqual(provider_credit, expected_provider_credit)
         run_mock.assert_called_once()
+
+    def test_materialize_reads_generated_queue_overlay_shape(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="fleet-m130-materialize-") as temp_dir:
+            paths = _fixture_tree(Path(temp_dir))
+            _write_generated_queue_overlay(paths["queue"], _queue_item())
+            _write_generated_queue_overlay(paths["design_queue"], _queue_item())
+
+            result = _materialize(paths)
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+            payload = json.loads(paths["artifact"].read_text(encoding="utf-8"))
+            self.assertEqual(payload["status"], "pass")
+            self.assertEqual(payload["canonical_alignment"]["state"], "pass")
+            self.assertFalse(any("Fleet queue row is missing." in blocker for blocker in payload["package_closeout"]["blockers"]))
+            self.assertFalse(any("Design queue row is missing." in blocker for blocker in payload["package_closeout"]["blockers"]))
 
 
 if __name__ == "__main__":
