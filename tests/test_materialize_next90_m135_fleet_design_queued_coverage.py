@@ -49,6 +49,11 @@ def _write_yaml(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
+def _write_generated_queue_overlay(path: Path, item: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("---\nitems:\n" + yaml.safe_dump([item], sort_keys=False), encoding="utf-8")
+
+
 def _registry(*, design_status: str) -> dict:
     return {
         "program_wave": "next_90_day_product_advance",
@@ -336,6 +341,33 @@ class MaterializeNext90M135FleetDesignQueuedCoverageTest(unittest.TestCase):
         self.assertTrue(
             any("current PROGRAM_MILESTONES checksum" in row for row in payload["monitor_summary"]["runtime_blockers"])
         )
+
+    def test_generated_queue_overlay_shape_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(
+                tmp_path,
+                design_status="done",
+                include_ea_in_backlog=True,
+                include_ea_in_status_plane=True,
+                mirror_latest_at="2026-04-22T10:00:00Z",
+                last_reviewed="2026-04-22",
+                evidence_source_sha="fixture-sha",
+            )
+            queue_item = next(
+                row for row in _queue_items() if row["package_id"] == "next90-m135-fleet-add-full-design-queued-coverage-verification-mirror-fres"
+            )
+            _write_generated_queue_overlay(fixture["queue"], queue_item)
+            _write_generated_queue_overlay(fixture["design_queue"], queue_item)
+            artifact = tmp_path / "artifact.json"
+            payload = self._run_materializer(fixture, artifact)
+
+        self.assertEqual(payload["status"], "pass")
+        self.assertEqual(payload["monitor_summary"]["queued_work_task_count"], 1)
+        self.assertFalse(
+            any("135.2: design queue row missing" in row or "135.2: fleet queue row missing" in row for row in payload["monitor_summary"]["runtime_blockers"])
+        )
+        self.assertFalse(any("queue row is missing" in row for row in payload["package_closeout"]["blockers"]))
 
 
 if __name__ == "__main__":

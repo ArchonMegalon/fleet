@@ -6,12 +6,12 @@
     "feedback"
   ],
   "canonical_alignment": {
-    "design_queue_status": "not_started",
-    "fleet_queue_status": "not_started",
+    "design_queue_status": "complete",
+    "fleet_queue_status": "complete",
     "issues": [],
     "registry_status": "not_started",
     "state": "pass",
-    "work_task_status": ""
+    "work_task_status": "complete"
   },
   "canonical_monitors": {
     "next90_guide": {
@@ -52,7 +52,7 @@
   },
   "contract_name": "fleet.next90_m135_design_queued_coverage",
   "frontier_id": 7361549676,
-  "generated_at": "2026-05-05T15:01:16Z",
+  "generated_at": "2026-05-05T21:27:07Z",
   "milestone_id": 135,
   "monitor_summary": {
     "design_coverage_status": "blocked",
@@ -67,9 +67,9 @@
       "mirror_freshness_monitor: mirror evidence is older than PROGRAM_MILESTONES last_reviewed (2026-03-19T10:59:51Z < 2026-04-22).",
       "mirror_freshness_monitor: mirror evidence does not cover the current PROGRAM_MILESTONES checksum."
     ],
-    "shipped_work_task_count": 0,
+    "shipped_work_task_count": 4,
     "source_family_group_count": 18,
-    "warning_count": 2
+    "warning_count": 1
   },
   "owned_surfaces": [
     "add_full_design_queued_coverage:fleet"
@@ -83,7 +83,6 @@
       "mirror_freshness_monitor: mirror evidence is missing repo row(s): executive-assistant, fleet",
       "mirror_freshness_monitor: mirror evidence is older than PROGRAM_MILESTONES last_reviewed (2026-03-19T10:59:51Z < 2026-04-22).",
       "mirror_freshness_monitor: mirror evidence does not cover the current PROGRAM_MILESTONES checksum.",
-      "Milestone 135 currently has queued coverage but no shipped closeout tasks yet.",
       "Recurring WL-D018 mirror backlog is still fully queued."
     ]
   },
@@ -148,11 +147,9 @@
       "runtime_blockers": [
         "design coverage ledger task 135.1 is unknown."
       ],
-      "shipped_work_task_count": 0,
+      "shipped_work_task_count": 4,
       "state": "pass",
-      "warnings": [
-        "Milestone 135 currently has queued coverage but no shipped closeout tasks yet."
-      ],
+      "warnings": [],
       "work_tasks": [
         {
           "owner": "chummer6-design",
@@ -170,7 +167,7 @@
           "queued_in_fleet": true,
           "queued_ready": true,
           "reasons": [],
-          "registry_status": "unknown",
+          "registry_status": "complete",
           "title": "Add full-design queued-coverage verification, mirror freshness checks, missing-row detection, and status-plane reporting.",
           "work_task_id": "135.2"
         },
@@ -210,7 +207,7 @@
           "queued_in_fleet": true,
           "queued_ready": true,
           "reasons": [],
-          "registry_status": "unknown",
+          "registry_status": "complete",
           "title": "Close desktop workbench, Build Lab, GM Runboard, publication, restore, support, and veteran-familiarity surface coverage.",
           "work_task_id": "135.6"
         },
@@ -240,7 +237,7 @@
           "queued_in_fleet": true,
           "queued_ready": true,
           "reasons": [],
-          "registry_status": "unknown",
+          "registry_status": "complete",
           "title": "Close media contracts, render jobs, previews, manifests, archive, provider adapters, and asset lifecycle coverage.",
           "work_task_id": "135.9"
         },
@@ -250,14 +247,14 @@
           "queued_in_fleet": true,
           "queued_ready": true,
           "reasons": [],
-          "registry_status": "unknown",
+          "registry_status": "complete",
           "title": "Close EA compile, signal, companion, public copy, operator packet, provider digest, and followthrough coverage without canon authority.",
           "work_task_id": "135.10"
         }
       ]
     },
     "status_plane": {
-      "age_hours": 2.21,
+      "age_hours": 8.64,
       "expected_owner_project_ids": [
         "core",
         "design",
@@ -285,7 +282,7 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "4f368ba9f5a09cf3c8f2ce4ae055f8921565da2ef448440fe1a2fd8e09c085a8"
+      "sha256": "f0677a9b1137c248108082cda3a251e57ac27c526f2d8469dc52239bce209388"
     },
     "mirror_backlog": {
       "generated_at": "",
@@ -310,7 +307,7 @@
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "511411e3b79784fe3ed993d1617e56891d21e233905c5971818b81e272e6447c"
+      "sha256": "19139734cc9e7f808e34164d7dba7b6f0a81c6324165de062d3d16726361f14f"
     },
     "status_plane": {
       "generated_at": "2026-05-05T12:48:51Z",
@@ -320,7 +317,7 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "2cd7930846512536525928a52ea76a0c1dddee355e08641fd13dec92796b7ff2"
+      "sha256": "72ecc225c92571ba6215d17a3cd57913e32784c7d97637a4c8f0147f0a98004e"
     },
     "sync_manifest": {
       "generated_at": "",

@@ -8,13 +8,14 @@
 ## What landed
 
 - added the Fleet M135 materializer and verifier for final design queued-coverage, mirror freshness, missing-row detection, and status-plane posture
-- added focused tests for runtime blocker separation, stale mirror evidence, missing owner coverage, and verifier drift
+- hardened generated queue overlay parsing so the live append-style queue mirrors no longer false-fail as missing rows
+- added focused tests for runtime blocker separation, stale mirror evidence, missing owner coverage, queue-overlay drift, and verifier drift
 - generated the live Fleet packet and markdown artifact
 
 ## Live findings
 
 - full queued coverage is visible: `10 / 10` milestone-135 work tasks have Fleet and design queue rows
-- shipped completion is still `0 / 10`
+- shipped completion is now `3 / 10`
 - the design-owned coverage-ledger task `135.1` still has no landed status signal
 - mirror backlog is missing explicit rows for `fleet` and `executive-assistant`
 - mirror evidence is also missing explicit rows for `fleet` and `executive-assistant`
