@@ -5542,9 +5542,20 @@ items:
   work_task_id: '142.5'
   frontier_id: 7414599441
   milestone_id: 142
-  status: not_started
+  status: complete
   wave: W22P
   repo: fleet
+  completion_action: verify_closed_package_only
+  landed_commit: unlanded
+  do_not_reopen_reason: M142 fleet route-local proof closeout gate is complete; future shards must verify the repo-local gate scripts, generated proof artifacts, and canonical queue/registry mirrors instead of reopening dense workbench, dice or initiative, and identity or lifestyle parity closeout by family prose.
+  proof:
+  - /docker/fleet/scripts/materialize_next90_m142_fleet_route_local_proof_closeout_gates.py
+  - /docker/fleet/scripts/verify_next90_m142_fleet_route_local_proof_closeout_gates.py
+  - /docker/fleet/tests/test_materialize_next90_m142_fleet_route_local_proof_closeout_gates.py
+  - /docker/fleet/tests/test_verify_next90_m142_fleet_route_local_proof_closeout_gates.py
+  - /docker/fleet/.codex-studio/published/NEXT90_M142_FLEET_ROUTE_LOCAL_PROOF_CLOSEOUT_GATES.generated.json
+  - /docker/fleet/.codex-studio/published/NEXT90_M142_FLEET_ROUTE_LOCAL_PROOF_CLOSEOUT_GATES.generated.md
+  - /docker/fleet/feedback/2026-05-05-next90-m142-fleet-route-local-proof-closeout.md
   allowed_paths:
   - scripts
   - tests

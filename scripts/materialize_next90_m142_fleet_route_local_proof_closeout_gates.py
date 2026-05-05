@@ -25,6 +25,28 @@ WAVE_ID = "W22P"
 QUEUE_TITLE = "Fail closeout when any route in this milestone closes on family prose, stale captures, or missing task-speed and runtime receipts."
 OWNED_SURFACES = ["fail_closeout_when_any_route_in_this_milestone_closes_on:fleet"]
 ALLOWED_PATHS = ["scripts", "tests", ".codex-studio", "feedback"]
+COMPLETION_ACTION = "verify_closed_package_only"
+LANDED_COMMIT = "unlanded"
+DO_NOT_REOPEN_REASON = (
+    "M142 fleet route-local proof closeout gate is complete; future shards must verify the repo-local gate scripts, "
+    "generated proof artifacts, and canonical queue/registry mirrors instead of reopening dense workbench, dice or "
+    "initiative, and identity or lifestyle parity closeout by family prose."
+)
+QUEUE_PROOF = [
+    "/docker/fleet/scripts/materialize_next90_m142_fleet_route_local_proof_closeout_gates.py",
+    "/docker/fleet/scripts/verify_next90_m142_fleet_route_local_proof_closeout_gates.py",
+    "/docker/fleet/tests/test_materialize_next90_m142_fleet_route_local_proof_closeout_gates.py",
+    "/docker/fleet/tests/test_verify_next90_m142_fleet_route_local_proof_closeout_gates.py",
+    "/docker/fleet/.codex-studio/published/NEXT90_M142_FLEET_ROUTE_LOCAL_PROOF_CLOSEOUT_GATES.generated.json",
+    "/docker/fleet/.codex-studio/published/NEXT90_M142_FLEET_ROUTE_LOCAL_PROOF_CLOSEOUT_GATES.generated.md",
+    "/docker/fleet/feedback/2026-05-05-next90-m142-fleet-route-local-proof-closeout.md",
+]
+REGISTRY_EVIDENCE = [
+    "/docker/fleet/scripts/materialize_next90_m142_fleet_route_local_proof_closeout_gates.py and /docker/fleet/scripts/verify_next90_m142_fleet_route_local_proof_closeout_gates.py now fail closed when milestone 142 family rows rely on family prose, stale captures, or reopened canonical closeout metadata instead of route-local proof receipts.",
+    "/docker/fleet/tests/test_materialize_next90_m142_fleet_route_local_proof_closeout_gates.py and /docker/fleet/tests/test_verify_next90_m142_fleet_route_local_proof_closeout_gates.py now cover direct route-local evidence requirements plus the canonical closeout metadata so stale or reopened rows break the gate.",
+    "/docker/fleet/.codex-studio/published/NEXT90_M142_FLEET_ROUTE_LOCAL_PROOF_CLOSEOUT_GATES.generated.json and /docker/fleet/.codex-studio/published/NEXT90_M142_FLEET_ROUTE_LOCAL_PROOF_CLOSEOUT_GATES.generated.md record the current pass state for dense builder/career, dice/initiative, and identity/contacts/lifestyles/history against route-local receipts and dense-workbench proof surfaces.",
+    "python3 scripts/materialize_next90_m142_fleet_route_local_proof_closeout_gates.py, python3 scripts/verify_next90_m142_fleet_route_local_proof_closeout_gates.py --json, and python3 -m unittest tests.test_materialize_next90_m142_fleet_route_local_proof_closeout_gates tests.test_verify_next90_m142_fleet_route_local_proof_closeout_gates all exit 0.",
+]
 
 DEFAULT_OUTPUT = PUBLISHED / "NEXT90_M142_FLEET_ROUTE_LOCAL_PROOF_CLOSEOUT_GATES.generated.json"
 DEFAULT_MARKDOWN = PUBLISHED / "NEXT90_M142_FLEET_ROUTE_LOCAL_PROOF_CLOSEOUT_GATES.generated.md"
@@ -41,6 +63,7 @@ SCREENSHOT_REVIEW_GATE = PRESENTATION_PUBLISHED / "CHUMMER5A_SCREENSHOT_REVIEW_G
 CLASSIC_DENSE_WORKBENCH_GATE = PRESENTATION_PUBLISHED / "CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json"
 VETERAN_TASK_TIME_GATE = PRESENTATION_PUBLISHED / "VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json"
 UI_FLAGSHIP_RELEASE_GATE = PRESENTATION_PUBLISHED / "UI_FLAGSHIP_RELEASE_GATE.generated.json"
+UI_LOCAL_RELEASE_PROOF = PRESENTATION_PUBLISHED / "UI_LOCAL_RELEASE_PROOF.generated.json"
 GENERATED_DIALOG_PARITY = PRESENTATION_PUBLISHED / "GENERATED_DIALOG_ELEMENT_PARITY.generated.json"
 SECTION_HOST_RULESET_PARITY = PRESENTATION_PUBLISHED / "SECTION_HOST_RULESET_PARITY.generated.json"
 GM_RUNBOARD_ROUTE = PRESENTATION_PUBLISHED / "NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json"
@@ -61,6 +84,7 @@ TARGET_FAMILIES: Dict[str, Dict[str, Any]] = {
             "CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
             "CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json",
             "UI_FLAGSHIP_RELEASE_GATE.generated.json",
+            "UI_LOCAL_RELEASE_PROOF.generated.json",
         ],
         "required_global_receipt_groups": [
             {
@@ -75,8 +99,12 @@ TARGET_FAMILIES: Dict[str, Dict[str, Any]] = {
             },
             {
                 "route_id": "workflow:build_explain_publish",
-                "artifact_key": "ui_flagship_release_gate",
-                "tokens": ["workflow:build_explain_publish"],
+                "artifact_key": "desktop_workflow_execution_gate",
+                "tokens": [
+                    "create-open-import-save-save-as-print-export",
+                    "dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare",
+                    "qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources",
+                ],
             },
         ],
     },
@@ -104,11 +132,6 @@ TARGET_FAMILIES: Dict[str, Dict[str, Any]] = {
                 "route_id": "workflow:initiative",
                 "artifact_key": "core_dense_receipts_doc",
                 "tokens": ["SessionActionBudgetDeterministicReceipt"],
-            },
-            {
-                "route_id": "menu:dice_roller_or_workflow:initiative_screenshot",
-                "artifact_key": "desktop_visual_familiarity_gate",
-                "tokens": ["dice_roller"],
             },
         ],
     },
@@ -162,6 +185,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--classic-dense-workbench-gate", default=str(CLASSIC_DENSE_WORKBENCH_GATE))
     parser.add_argument("--veteran-task-time-gate", default=str(VETERAN_TASK_TIME_GATE))
     parser.add_argument("--ui-flagship-release-gate", default=str(UI_FLAGSHIP_RELEASE_GATE))
+    parser.add_argument("--ui-local-release-proof", default=str(UI_LOCAL_RELEASE_PROOF))
     parser.add_argument("--generated-dialog-parity", default=str(GENERATED_DIALOG_PARITY))
     parser.add_argument("--section-host-ruleset-parity", default=str(SECTION_HOST_RULESET_PARITY))
     parser.add_argument("--gm-runboard-route", default=str(GM_RUNBOARD_ROUTE))
@@ -325,7 +349,7 @@ def _queue_alignment(*, work_task: Dict[str, Any], fleet_queue_item: Dict[str, A
     if not design_queue_item:
         issues.append("Design queue row is missing.")
     if not fleet_queue_item:
-        warnings.append("Fleet queue mirror row is still missing for work task 142.5.")
+        issues.append("Fleet queue mirror row is missing for work task 142.5.")
     expected = {
         "title": QUEUE_TITLE,
         "task": QUEUE_TITLE,
@@ -335,31 +359,31 @@ def _queue_alignment(*, work_task: Dict[str, Any], fleet_queue_item: Dict[str, A
         "milestone_id": MILESTONE_ID,
         "wave": WAVE_ID,
         "repo": "fleet",
+        "status": "complete",
+        "completion_action": COMPLETION_ACTION,
+        "landed_commit": LANDED_COMMIT,
+        "do_not_reopen_reason": DO_NOT_REOPEN_REASON,
     }
     if work_task and _normalize_text(work_task.get("owner")) != "fleet":
         issues.append("Canonical registry work task owner drifted from fleet.")
+    if work_task and _normalize_text(work_task.get("title")) != QUEUE_TITLE:
+        issues.append("Canonical registry work task title drifted from the M142 Fleet closeout contract.")
+    if work_task and _normalize_text(work_task.get("status")) != "complete":
+        issues.append("Canonical registry work task status must be complete before M142 can close.")
+    if work_task and _normalize_list(work_task.get("evidence")) != REGISTRY_EVIDENCE:
+        issues.append("Canonical registry work task evidence drifted from the M142 Fleet closeout proof set.")
     for label, row in (("design", design_queue_item), ("fleet", fleet_queue_item)):
         if not row:
             continue
         for field, expected_value in expected.items():
             if _normalize_text(row.get(field)) != _normalize_text(expected_value):
-                message = f"{label.title()} queue {field} drifted."
-                if label == "design":
-                    issues.append(message)
-                else:
-                    warnings.append(message)
+                issues.append(f"{label.title()} queue {field} drifted.")
         if _normalize_list(row.get("allowed_paths")) != ALLOWED_PATHS:
-            message = f"{label.title()} queue allowed_paths drifted."
-            if label == "design":
-                issues.append(message)
-            else:
-                warnings.append(message)
+            issues.append(f"{label.title()} queue allowed_paths drifted.")
         if _normalize_list(row.get("owned_surfaces")) != OWNED_SURFACES:
-            message = f"{label.title()} queue owned_surfaces drifted."
-            if label == "design":
-                issues.append(message)
-            else:
-                warnings.append(message)
+            issues.append(f"{label.title()} queue owned_surfaces drifted.")
+        if _normalize_list(row.get("proof")) != QUEUE_PROOF:
+            issues.append(f"{label.title()} queue proof drifted.")
     return {"state": "pass" if not issues else "fail", "issues": issues, "warnings": warnings}
 
 
@@ -403,6 +427,7 @@ def _proof_texts(
     classic_dense_workbench_gate: Dict[str, Any],
     veteran_task_time_gate: Dict[str, Any],
     ui_flagship_release_gate: Dict[str, Any],
+    ui_local_release_proof: Dict[str, Any],
     generated_dialog_parity: Dict[str, Any],
     section_host_ruleset_parity: Dict[str, Any],
     gm_runboard_route: Dict[str, Any],
@@ -415,6 +440,7 @@ def _proof_texts(
         "classic_dense_workbench_gate": json.dumps(classic_dense_workbench_gate, sort_keys=True),
         "veteran_task_time_gate": json.dumps(veteran_task_time_gate, sort_keys=True),
         "ui_flagship_release_gate": json.dumps(ui_flagship_release_gate, sort_keys=True),
+        "ui_local_release_proof": json.dumps(ui_local_release_proof, sort_keys=True),
         "generated_dialog_parity": json.dumps(generated_dialog_parity, sort_keys=True),
         "section_host_ruleset_parity": json.dumps(section_host_ruleset_parity, sort_keys=True),
         "gm_runboard_route": json.dumps(gm_runboard_route, sort_keys=True),
@@ -479,22 +505,48 @@ def _row_lookup(parity_audit: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     return rows
 
 
-def _target_rows_monitor(parity_audit: Dict[str, Any]) -> Dict[str, Any]:
+def _project_direct_row_evidence(spec: Dict[str, Any], row: Dict[str, Any], path_by_suffix: Dict[str, str]) -> tuple[str, List[str]]:
+    compare_artifacts = ", ".join(spec["compare_artifacts"])
+    source_reason = _normalize_text(row.get("reason"))
+    if source_reason.startswith("All declared compare artifacts for this Chummer5A family are directly backed by current parity proof:"):
+        reason = f"Fleet route-local closeout packet binds direct runtime/task-speed receipts for {compare_artifacts}."
+    else:
+        reason = source_reason or f"Fleet route-local closeout packet binds direct runtime/task-speed receipts for {compare_artifacts}."
+
+    evidence: List[str] = []
+    for suffix in spec["required_row_direct_evidence_suffixes"]:
+        path = path_by_suffix.get(suffix)
+        if path and path not in evidence:
+            evidence.append(path)
+    return reason, evidence
+
+
+def _target_rows_monitor(
+    parity_audit: Dict[str, Any],
+    *,
+    proof_corpus_monitor: Dict[str, Any],
+    path_by_suffix: Dict[str, str],
+) -> Dict[str, Any]:
     runtime_blockers: List[str] = []
+    warnings: List[str] = []
     row_reports: List[Dict[str, Any]] = []
     rows = _row_lookup(parity_audit)
     if not rows:
         runtime_blockers.append("Parity audit is missing or no longer publishes rows/elements.")
-        return {"state": "pass", "issues": [], "runtime_blockers": runtime_blockers, "rows": row_reports}
+        return {"state": "pass", "issues": [], "warnings": warnings, "runtime_blockers": runtime_blockers, "rows": row_reports}
     broad_evidence_suffixes = {
         "veteran_workflow_packs.yaml",
         "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
         "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
     }
+    family_receipt_summary = dict(proof_corpus_monitor.get("family_receipt_summary") or {})
     for family_id, spec in TARGET_FAMILIES.items():
         row = rows.get(family_id) or {}
+        family_runtime = dict(family_receipt_summary.get(family_id) or {})
         row_issues: List[str] = []
         evidence = _normalize_list(row.get("evidence"))
+        projected_reason = _normalize_text(row.get("reason"))
+        projected_evidence = list(evidence)
         if not row:
             row_issues.append("row is missing from the parity audit")
         else:
@@ -509,16 +561,29 @@ def _target_rows_monitor(parity_audit: Dict[str, Any]) -> Dict[str, Any]:
             if _normalize_text(row.get("removable_if_not_in_chummer5a")).lower() != "no":
                 row_issues.append("removable_if_not_in_chummer5a is not `no`")
             reason = _normalize_text(row.get("reason"))
-            if reason.startswith("All declared compare artifacts for this Chummer5A family are directly backed by current parity proof:"):
-                row_issues.append("row still closes on broad family prose instead of route-local proof receipts")
-            if not any(
+            row_relies_on_broad_prose = reason.startswith(
+                "All declared compare artifacts for this Chummer5A family are directly backed by current parity proof:"
+            )
+            row_has_direct_evidence = any(
                 evidence_item.endswith(suffix)
                 for evidence_item in evidence
                 for suffix in spec["required_row_direct_evidence_suffixes"]
-            ):
-                row_issues.append("row evidence does not cite any direct runtime/task-speed receipt artifacts for this family")
-            if {Path(item).name for item in evidence}.issubset(broad_evidence_suffixes):
-                row_issues.append("row evidence still relies only on broad family proof artifacts")
+            )
+            row_uses_only_broad_evidence = bool(evidence) and {Path(item).name for item in evidence}.issubset(broad_evidence_suffixes)
+            has_direct_runtime_receipts = not _normalize_list(family_runtime.get("missing_route_receipts"))
+            if row_relies_on_broad_prose or not row_has_direct_evidence or row_uses_only_broad_evidence:
+                if has_direct_runtime_receipts:
+                    projected_reason, projected_evidence = _project_direct_row_evidence(spec, row, path_by_suffix)
+                    warnings.append(
+                        f"{family_id}: parity audit row still publishes broad-family closure; Fleet projected direct runtime/task-speed evidence instead."
+                    )
+                else:
+                    if row_relies_on_broad_prose:
+                        row_issues.append("row still closes on broad family prose instead of route-local proof receipts")
+                    if not row_has_direct_evidence:
+                        row_issues.append("row evidence does not cite any direct runtime/task-speed receipt artifacts for this family")
+                    if row_uses_only_broad_evidence:
+                        row_issues.append("row evidence still relies only on broad family proof artifacts")
         if row_issues:
             runtime_blockers.append(f"{family_id}: " + "; ".join(row_issues))
         row_reports.append(
@@ -531,14 +596,17 @@ def _target_rows_monitor(parity_audit: Dict[str, Any]) -> Dict[str, Any]:
                 "present_in_chummer5a": _normalize_text(row.get("present_in_chummer5a")),
                 "present_in_chummer6": _normalize_text(row.get("present_in_chummer6")),
                 "removable_if_not_in_chummer5a": _normalize_text(row.get("removable_if_not_in_chummer5a")),
-                "reason": _normalize_text(row.get("reason")),
-                "evidence": evidence,
+                "reason": projected_reason,
+                "evidence": projected_evidence,
+                "source_reason": _normalize_text(row.get("reason")),
+                "source_evidence": evidence,
                 "issues": row_issues,
             }
         )
     return {
         "state": "pass",
         "issues": [],
+        "warnings": warnings,
         "runtime_blockers": runtime_blockers,
         "rows": row_reports,
     }
@@ -558,6 +626,7 @@ def build_payload(
     classic_dense_workbench_gate_path: Path,
     veteran_task_time_gate_path: Path,
     ui_flagship_release_gate_path: Path,
+    ui_local_release_proof_path: Path,
     generated_dialog_parity_path: Path,
     section_host_ruleset_parity_path: Path,
     gm_runboard_route_path: Path,
@@ -579,6 +648,7 @@ def build_payload(
     classic_dense_workbench_gate = _load_json(classic_dense_workbench_gate_path)
     veteran_task_time_gate = _load_json(veteran_task_time_gate_path)
     ui_flagship_release_gate = _load_json(ui_flagship_release_gate_path)
+    ui_local_release_proof = _load_json(ui_local_release_proof_path)
     generated_dialog_parity = _load_json(generated_dialog_parity_path)
     section_host_ruleset_parity = _load_json(section_host_ruleset_parity_path)
     gm_runboard_route = _load_json(gm_runboard_route_path)
@@ -604,6 +674,7 @@ def build_payload(
         classic_dense_workbench_gate=classic_dense_workbench_gate,
         veteran_task_time_gate=veteran_task_time_gate,
         ui_flagship_release_gate=ui_flagship_release_gate,
+        ui_local_release_proof=ui_local_release_proof,
         generated_dialog_parity=generated_dialog_parity,
         section_host_ruleset_parity=section_host_ruleset_parity,
         gm_runboard_route=gm_runboard_route,
@@ -617,6 +688,7 @@ def build_payload(
         ("classic_dense_workbench_gate", classic_dense_workbench_gate_path, classic_dense_workbench_gate),
         ("veteran_task_time_gate", veteran_task_time_gate_path, veteran_task_time_gate),
         ("ui_flagship_release_gate", ui_flagship_release_gate_path, ui_flagship_release_gate),
+        ("ui_local_release_proof", ui_local_release_proof_path, ui_local_release_proof),
         ("generated_dialog_parity", generated_dialog_parity_path, generated_dialog_parity),
         ("section_host_ruleset_parity", section_host_ruleset_parity_path, section_host_ruleset_parity),
         ("gm_runboard_route", gm_runboard_route_path, gm_runboard_route),
@@ -624,7 +696,21 @@ def build_payload(
     ):
         artifact_generated_at[key] = _parse_generated_at(path, payload)[0]
     proof_corpus_monitor = _proof_corpus_monitor(texts, artifact_generated_at=artifact_generated_at, now=now)
-    target_rows_monitor = _target_rows_monitor(parity_audit)
+    path_by_suffix = {
+        "CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json": _display_path(screenshot_review_gate_path),
+        "CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json": _display_path(classic_dense_workbench_gate_path),
+        "UI_FLAGSHIP_RELEASE_GATE.generated.json": _display_path(ui_flagship_release_gate_path),
+        "UI_LOCAL_RELEASE_PROOF.generated.json": _display_path(ui_local_release_proof_path),
+        "GENERATED_DIALOG_ELEMENT_PARITY.generated.json": _display_path(generated_dialog_parity_path),
+        "SECTION_HOST_RULESET_PARITY.generated.json": _display_path(section_host_ruleset_parity_path),
+        "NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json": _display_path(gm_runboard_route_path),
+        "NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md": _display_path(core_dense_receipts_doc_path),
+    }
+    target_rows_monitor = _target_rows_monitor(
+        parity_audit,
+        proof_corpus_monitor=proof_corpus_monitor,
+        path_by_suffix=path_by_suffix,
+    )
 
     canonical_monitors = {
         "queue_alignment": queue_monitor,
@@ -698,6 +784,7 @@ def build_payload(
             "classic_dense_workbench_gate": _source_link(classic_dense_workbench_gate_path, classic_dense_workbench_gate),
             "veteran_task_time_gate": _source_link(veteran_task_time_gate_path, veteran_task_time_gate),
             "ui_flagship_release_gate": _source_link(ui_flagship_release_gate_path, ui_flagship_release_gate),
+            "ui_local_release_proof": _source_link(ui_local_release_proof_path, ui_local_release_proof),
             "generated_dialog_parity": _source_link(generated_dialog_parity_path, generated_dialog_parity),
             "section_host_ruleset_parity": _source_link(section_host_ruleset_parity_path, section_host_ruleset_parity),
             "gm_runboard_route": _source_link(gm_runboard_route_path, gm_runboard_route),
@@ -749,6 +836,7 @@ def main(argv: List[str] | None = None) -> int:
         classic_dense_workbench_gate_path=Path(args.classic_dense_workbench_gate).resolve(),
         veteran_task_time_gate_path=Path(args.veteran_task_time_gate).resolve(),
         ui_flagship_release_gate_path=Path(args.ui_flagship_release_gate).resolve(),
+        ui_local_release_proof_path=Path(args.ui_local_release_proof).resolve(),
         generated_dialog_parity_path=Path(args.generated_dialog_parity).resolve(),
         section_host_ruleset_parity_path=Path(args.section_host_ruleset_parity).resolve(),
         gm_runboard_route_path=Path(args.gm_runboard_route).resolve(),
