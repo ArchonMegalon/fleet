@@ -52,7 +52,7 @@
   },
   "contract_name": "fleet.next90_m135_design_queued_coverage",
   "frontier_id": 7361549676,
-  "generated_at": "2026-05-05T21:27:07Z",
+  "generated_at": "2026-05-05T21:38:10Z",
   "milestone_id": 135,
   "monitor_summary": {
     "design_coverage_status": "blocked",
@@ -254,7 +254,7 @@
       ]
     },
     "status_plane": {
-      "age_hours": 8.64,
+      "age_hours": 8.82,
       "expected_owner_project_ids": [
         "core",
         "design",
@@ -282,7 +282,7 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "f0677a9b1137c248108082cda3a251e57ac27c526f2d8469dc52239bce209388"
+      "sha256": "ba078e1c11ebe7c10bb0af49d29a9eaf19559c37b8676328964ab49e15cd54b5"
     },
     "mirror_backlog": {
       "generated_at": "",
@@ -307,7 +307,7 @@
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "19139734cc9e7f808e34164d7dba7b6f0a81c6324165de062d3d16726361f14f"
+      "sha256": "ba078e1c11ebe7c10bb0af49d29a9eaf19559c37b8676328964ab49e15cd54b5"
     },
     "status_plane": {
       "generated_at": "2026-05-05T12:48:51Z",
@@ -317,7 +317,7 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "72ecc225c92571ba6215d17a3cd57913e32784c7d97637a4c8f0147f0a98004e"
+      "sha256": "a3bb70f60c346a31dfa9b7f3b6ae720d2ee30eea685c1207c6e24feaa48c7425"
     },
     "sync_manifest": {
       "generated_at": "",
