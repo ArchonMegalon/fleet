@@ -1,0 +1,205 @@
+{
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "canonical_monitors": {
+    "next90_guide": {
+      "checks": {
+        "exit_contract": true,
+        "milestone_136": true,
+        "wave_23": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "parity_matrix": {
+      "family_count": 7,
+      "issues": [],
+      "required_family_ids": [
+        "translator_xml_bridge",
+        "dense_builder_and_career",
+        "dice_initiative_and_table_utilities",
+        "identity_contacts_lifestyles_history",
+        "legacy_and_adjacent_import_oracles",
+        "sheet_export_print_viewer_exchange",
+        "sr6_supplements_designers_house_rules"
+      ],
+      "state": "pass"
+    },
+    "queue_alignment": {
+      "design_queue_status": "not_started",
+      "fleet_queue_status": "",
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass",
+      "warnings": [
+        "Fleet queue mirror row is still missing for work task 136.6."
+      ],
+      "work_task_status": ""
+    }
+  },
+  "contract_name": "fleet.next90_m136_aggregate_readiness_parity_gates",
+  "frontier_id": 2277811964,
+  "generated_at": "2026-05-05T15:22:33Z",
+  "milestone_id": 136,
+  "monitor_summary": {
+    "aggregate_readiness_status": "blocked",
+    "receipt_runtime_blocker_count": 5,
+    "required_family_count": 7,
+    "runtime_blockers": [
+      "parity_family_monitor: Chummer5A UI element parity audit is stale (73.29h > 72h).",
+      "screenshot_pack_monitor: Sub-dialog screenshot review gate is stale (73.29h > 72h).",
+      "screenshot_pack_monitor: Desktop visual familiarity gate is not passing.",
+      "continuity_monitor: Campaign continuity liveness is not passing.",
+      "aggregate_readiness_monitor: Flagship product readiness is still green while direct parity or continuity proof is blocked."
+    ],
+    "warning_count": 1
+  },
+  "owned_surfaces": [
+    "fail_closed_on_aggregate_readiness_when_family_level_par:fleet"
+  ],
+  "package_closeout": {
+    "blockers": [],
+    "state": "pass",
+    "warnings": [
+      "parity_family_monitor: Chummer5A UI element parity audit is stale (73.29h > 72h).",
+      "screenshot_pack_monitor: Sub-dialog screenshot review gate is stale (73.29h > 72h).",
+      "screenshot_pack_monitor: Desktop visual familiarity gate is not passing.",
+      "continuity_monitor: Campaign continuity liveness is not passing.",
+      "aggregate_readiness_monitor: Flagship product readiness is still green while direct parity or continuity proof is blocked.",
+      "Fleet queue mirror row is still missing for work task 136.6."
+    ]
+  },
+  "package_id": "next90-m136-fleet-fail-closed-on-aggregate-readiness-when-family-level-parity-proof-sub",
+  "queue_title": "Fail closed on aggregate readiness when family-level parity proof, sub-dialog screenshot packs, dialog-level element inventories, or continuity journey receipts are stale or missing.",
+  "runtime_monitors": {
+    "aggregate_readiness": {
+      "age_hours": 0.36,
+      "generated_at": "2026-05-05T15:01:04Z",
+      "issues": [],
+      "runtime_blockers": [
+        "Flagship product readiness is still green while direct parity or continuity proof is blocked."
+      ],
+      "state": "pass",
+      "status": "pass",
+      "warnings": []
+    },
+    "continuity_receipts": {
+      "continuity_age_hours": 2.96,
+      "continuity_generated_at": "2026-05-05T12:24:42Z",
+      "continuity_status": "fail",
+      "issues": [],
+      "journey_age_hours": 0.36,
+      "journey_generated_at": "2026-05-05T15:01:01Z",
+      "journey_overall_state": "ready",
+      "runtime_blockers": [
+        "Campaign continuity liveness is not passing."
+      ],
+      "state": "pass",
+      "warnings": []
+    },
+    "parity_family_proof": {
+      "age_hours": 73.29,
+      "behavioral_no_count": 0,
+      "element_count": 84,
+      "generated_at": "2026-05-02T14:05:07.691499Z",
+      "issues": [],
+      "missing_family_proofs": [],
+      "runtime_blockers": [
+        "Chummer5A UI element parity audit is stale (73.29h > 72h)."
+      ],
+      "state": "pass",
+      "unresolved_family_proofs": [],
+      "visual_no_count": 0,
+      "warnings": []
+    },
+    "screenshot_packs": {
+      "issues": [],
+      "runtime_blockers": [
+        "Sub-dialog screenshot review gate is stale (73.29h > 72h).",
+        "Desktop visual familiarity gate is not passing."
+      ],
+      "screenshot_review_gate": {
+        "age_hours": 73.29,
+        "generated_at": "2026-05-02T14:05:08.068801Z",
+        "runtime_blockers": [
+          "Sub-dialog screenshot review gate is stale (73.29h > 72h)."
+        ],
+        "status": "pass"
+      },
+      "state": "pass",
+      "visual_familiarity_gate": {
+        "age_hours": 6.75,
+        "generated_at": "2026-05-05T08:37:19.632109Z",
+        "runtime_blockers": [
+          "Desktop visual familiarity gate is not passing."
+        ],
+        "status": "fail"
+      },
+      "warnings": []
+    }
+  },
+  "source_inputs": {
+    "campaign_continuity_liveness": {
+      "generated_at": "2026-05-05T12:24:42Z",
+      "path": "/docker/fleet/.codex-studio/published/CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json",
+      "sha256": "06ec9c6bf88212d564f454c5d1ba169bc363d2261ebafcd4d8c409a7ff22bc1a"
+    },
+    "design_queue_staging": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "11cc1ecd96db0176604771f8f6f398998db558b6167a3e2bd37140a2124ddca6"
+    },
+    "flagship_product_readiness": {
+      "generated_at": "2026-05-05T15:01:04Z",
+      "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+      "sha256": "682c6a508286a142e016a7f8ef5c66d3878720294071823ed39080cd9206cc9d"
+    },
+    "fleet_queue_staging": {
+      "generated_at": "",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "6da82d05213bc6ae4f536f75debf5dab04463c91c9b2992df970d392bd3972b1"
+    },
+    "journey_gates": {
+      "generated_at": "2026-05-05T15:01:01Z",
+      "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+      "sha256": "6c074ddda9bee430d44f243c41f58643c012a5ceff51924bbf310da69583967c"
+    },
+    "next90_guide": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
+      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+    },
+    "parity_audit": {
+      "generated_at": "2026-05-02T14:05:07.691499Z",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
+      "sha256": "3ec036f109c6783a7a55e317f55210e1460ee31798455a9e0f2caae96737ebbb"
+    },
+    "parity_matrix": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/CHUMMER5A_HUMAN_PARITY_ACCEPTANCE_MATRIX.yaml",
+      "sha256": "03459b1bfd51868a99ef7399a279c0a9ca9f4b1514a893638553d8c678b7d2ae"
+    },
+    "screenshot_review_gate": {
+      "generated_at": "2026-05-02T14:05:08.068801Z",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
+      "sha256": "4947e5e23d35d4e9563c3016cb1c864a1b56eba9c5ec1d83f21daf6c3424c2bb"
+    },
+    "successor_registry": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "641255112587cbec2c7c43a37dda5a90f6f59e0d2775206517fede2695c233e3"
+    },
+    "visual_familiarity_gate": {
+      "generated_at": "2026-05-05T08:37:19.632109Z",
+      "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+      "sha256": "2e84a486aff79cc29eaabeebaaf108a2915900b8f40881f22b5e7f55da7d8459"
+    }
+  },
+  "status": "pass",
+  "wave": "W23",
+  "work_task_id": "136.6"
+}

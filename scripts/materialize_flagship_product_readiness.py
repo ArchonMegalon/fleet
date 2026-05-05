@@ -24,6 +24,13 @@ except ModuleNotFoundError:
     from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
     from materialize_support_case_packets import _refresh_weekly_governor_packet_if_possible
 try:
+    from admin.readiness import studio_compile_summary
+except ModuleNotFoundError:
+    repo_root = Path(__file__).resolve().parents[1]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from admin.readiness import studio_compile_summary
+try:
     from scripts.external_proof_paths import resolve_release_channel_path
 except ModuleNotFoundError:
     script_dir = Path(__file__).resolve().parent
@@ -81,6 +88,9 @@ DEFAULT_PROGRESS_REPORT = ROOT / ".codex-studio" / "published" / "PROGRESS_REPOR
 DEFAULT_PROGRESS_HISTORY = ROOT / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
 DEFAULT_JOURNEY_GATES = ROOT / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
 DEFAULT_SUPPORT_PACKETS = ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+DEFAULT_M136_AGGREGATE_READINESS_GATE = (
+    ROOT / ".codex-studio" / "published" / "NEXT90_M136_FLEET_AGGREGATE_READINESS_PARITY_GATES.generated.json"
+)
 DEFAULT_EXTERNAL_PROOF_RUNBOOK = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
 DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR = ROOT / ".codex-studio" / "published" / "external-proof-commands"
 DEFAULT_PARITY_LAB_DOCS_ROOT = ROOT / "docs" / "chummer5a-oracle"
@@ -473,6 +483,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--journey-gates", default=str(DEFAULT_JOURNEY_GATES), help="path to JOURNEY_GATES.generated.json")
     parser.add_argument("--support-packets", default=str(DEFAULT_SUPPORT_PACKETS), help="path to SUPPORT_CASE_PACKETS.generated.json")
     parser.add_argument(
+        "--m136-aggregate-readiness-gate",
+        default=str(DEFAULT_M136_AGGREGATE_READINESS_GATE),
+        help="path to NEXT90_M136_FLEET_AGGREGATE_READINESS_PARITY_GATES.generated.json",
+    )
+    parser.add_argument(
         "--external-proof-runbook",
         default="",
         help=(
@@ -638,6 +653,166 @@ def load_json(path: Path) -> Dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _load_jsonl_rows(path: Path, *, limit: int = 24) -> List[Dict[str, Any]]:
+    if not path.is_file():
+        return []
+    rows: List[Dict[str, Any]] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    for line in reversed(lines):
+        clean = str(line or "").strip()
+        if not clean:
+            continue
+        try:
+            payload = json.loads(clean)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            rows.append(dict(payload))
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _runtime_healing_from_local_autoheal_state(repo_root: Path) -> Dict[str, Any]:
+    autoheal_dir = repo_root / "state" / "rebuilder" / "autoheal"
+    events_path = autoheal_dir / "events.jsonl"
+    if not autoheal_dir.is_dir():
+        return {}
+
+    service_rows: List[Dict[str, Any]] = []
+    for path in sorted(autoheal_dir.glob("*.status.json")):
+        payload = load_json(path)
+        if not payload:
+            continue
+        service = str(payload.get("service") or path.name.replace(".status.json", "")).strip()
+        if not service:
+            continue
+        current_state = str(payload.get("current_state") or "unknown").strip() or "unknown"
+        service_rows.append(
+            {
+                "service": service,
+                "current_state": current_state,
+                "cooldown_active": bool(payload.get("cooldown_active")),
+                "generated_at": str(payload.get("generated_at") or "").strip(),
+            }
+        )
+
+    recent_events = _load_jsonl_rows(events_path, limit=24)
+    for event in recent_events:
+        event["service"] = str(event.get("service") or "").strip()
+        event["event"] = str(event.get("event") or "").strip()
+        event["detail"] = str(event.get("detail") or "").strip()
+        event["at"] = str(event.get("at") or "").strip()
+
+    escalated_services = [
+        row for row in service_rows if str(row.get("current_state") or "") in {"escalation_required", "restart_failed"}
+    ]
+    degraded_services = [
+        row
+        for row in service_rows
+        if str(row.get("current_state") or "") in {"cooldown", "restarting", "observed_unhealthy", "escalation_required", "restart_failed"}
+        or bool(row.get("cooldown_active"))
+    ]
+    cooldown_services = [row for row in service_rows if bool(row.get("cooldown_active"))]
+    last_event = recent_events[0] if recent_events else {}
+    last_recovery = next(
+        (event for event in recent_events if str(event.get("event") or "") == "restart_recovered"),
+        {},
+    )
+
+    alert_state = "healthy"
+    alert_reason = "No runtime healing drift is currently recorded."
+    recommended_action = "Keep the bounded auto-heal loop enabled and review the weekly healer history."
+    if escalated_services:
+        service_labels = ", ".join(str(item.get("service") or "") for item in escalated_services[:3])
+        alert_state = "action_needed"
+        alert_reason = f"Runtime self-healing escalated for {service_labels or 'one or more services'}."
+        recommended_action = "Open Housekeeping, inspect the escalated service, and freeze new change pressure until the root cause is understood."
+    elif degraded_services:
+        service_labels = ", ".join(str(item.get("service") or "") for item in degraded_services[:3])
+        alert_state = "degraded"
+        alert_reason = f"Runtime healing is actively compensating for {service_labels or 'recent service drift'}."
+        recommended_action = "Verify the unhealthy service, fail streak, and cooldown posture before assuming the stack is steady."
+
+    generated_candidates: List[dt.datetime] = []
+    for row in service_rows:
+        parsed = parse_iso(row.get("generated_at"))
+        if parsed is not None:
+            generated_candidates.append(parsed)
+    for event in recent_events:
+        parsed = parse_iso(event.get("at"))
+        if parsed is not None:
+            generated_candidates.append(parsed)
+    generated_at = iso(max(generated_candidates)) if generated_candidates else ""
+
+    return {
+        "generated_at": generated_at,
+        "enabled": True,
+        "event_log_present": events_path.is_file(),
+        "services": service_rows,
+        "recent_events": recent_events,
+        "summary": {
+            "service_count": len(service_rows),
+            "degraded_service_count": len(degraded_services),
+            "cooldown_active_count": len(cooldown_services),
+            "escalated_service_count": len(escalated_services),
+            "recent_restart_count": 0,
+            "alert_state": alert_state,
+            "alert_reason": alert_reason,
+            "recommended_action": recommended_action,
+            "last_event_at": str(last_event.get("at") or "").strip(),
+            "last_event_service": str(last_event.get("service") or "").strip(),
+            "last_event_kind": str(last_event.get("event") or "").strip(),
+            "last_event_detail": str(last_event.get("detail") or "").strip(),
+            "last_recovered_service": str(last_recovery.get("service") or "").strip(),
+            "last_recovered_at": str(last_recovery.get("at") or "").strip(),
+        },
+    }
+
+
+def _effective_runtime_healing_summary(status_plane: Dict[str, Any], *, status_plane_path: Path) -> Dict[str, Any]:
+    summary = dict((status_plane.get("runtime_healing") or {}).get("summary") or {})
+    if summary:
+        return summary
+    repo_root = repo_root_for_published_path(status_plane_path)
+    if repo_root is None:
+        return summary
+    return dict((_runtime_healing_from_local_autoheal_state(repo_root).get("summary")) or {})
+
+
+def _effective_compile_manifest(status_plane_path: Path) -> Dict[str, Any]:
+    repo_root = repo_root_for_published_path(status_plane_path)
+    manifest_path = status_plane_path.parent / "compile.manifest.json"
+    manifest = load_json(manifest_path)
+    manifest_dispatchable_truth_ready = bool(manifest.get("dispatchable_truth_ready"))
+    if repo_root is None:
+        return manifest
+    try:
+        compile_summary = studio_compile_summary(repo_root)
+    except Exception:
+        compile_summary = {}
+    if compile_summary:
+        manifest["dispatchable_truth_ready"] = manifest_dispatchable_truth_ready or bool(
+            compile_summary.get("dispatchable_truth_ready")
+        )
+        if compile_summary.get("published_at") and not manifest.get("published_at"):
+            manifest["published_at"] = compile_summary.get("published_at")
+        if compile_summary.get("lifecycle") and not manifest.get("lifecycle"):
+            manifest["lifecycle"] = compile_summary.get("lifecycle")
+        summary_stages = compile_summary.get("stages") or {}
+        if isinstance(summary_stages, dict):
+            merged_stages = dict(manifest.get("stages") or {})
+            for key, value in summary_stages.items():
+                merged_stages[str(key)] = bool(value)
+            manifest["stages"] = merged_stages
+        if compile_summary.get("artifacts") and not manifest.get("artifacts"):
+            manifest["artifacts"] = list(compile_summary.get("artifacts") or [])
+    return manifest
+
+
 def _ui_element_parity_audit_summary(payload: Dict[str, Any]) -> Dict[str, int]:
     summary = payload.get("summary") if isinstance(payload, dict) else {}
     if not isinstance(summary, dict):
@@ -701,6 +876,36 @@ def _ui_element_parity_audit_release_blockers(payload: Dict[str, Any]) -> Dict[s
         "unresolved_release_blocking_rows": unresolved_release_blocking_rows,
         "unresolved_release_blocking_ids": unresolved_release_blocking_ids,
         "release_blocking_ready": not missing_required_ids and not unresolved_release_blocking_ids,
+    }
+
+
+def _m136_aggregate_readiness_gate_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
+    reasons: List[str] = []
+    if not payload:
+        reasons.append("M136 aggregate-readiness parity gate is missing.")
+        return {
+            "ready": False,
+            "status": "",
+            "aggregate_readiness_status": "",
+            "generated_at": "",
+            "reasons": reasons,
+        }
+    status = str(payload.get("status") or "").strip().lower()
+    monitor_summary = dict(payload.get("monitor_summary") or {})
+    aggregate_readiness_status = str(monitor_summary.get("aggregate_readiness_status") or "").strip().lower()
+    generated_at = str(payload.get("generated_at") or payload.get("generatedAt") or "").strip()
+    if status != "pass":
+        reasons.append("M136 aggregate-readiness parity gate package is not passing.")
+    if aggregate_readiness_status not in {"pass", "ready"}:
+        reasons.append("M136 aggregate-readiness parity gate still reports blocked runtime proof.")
+    if not generated_at:
+        reasons.append("M136 aggregate-readiness parity gate generated_at is missing.")
+    return {
+        "ready": not reasons,
+        "status": status,
+        "aggregate_readiness_status": aggregate_readiness_status,
+        "generated_at": generated_at,
+        "reasons": reasons,
     }
 
 
@@ -1031,7 +1236,38 @@ def _feedback_loop_readiness_plane(
         reasons.append(
             f"Support-case packets are older than {max_support_packet_age_hours}h; closure truth is stale."
         )
-    if support_source_refresh_mode and not allow_cached_packet_refresh_for_gold:
+    external_only_support_fallback_ready = (
+        bool(support_source_refresh_mode)
+        and not allow_cached_packet_refresh_for_gold
+        and unresolved_external_requests > 0
+        and external_runbook_synced
+        and support_open_non_external_packet_count == 0
+        and support_closure_waiting_on_release_truth == 0
+        and support_update_required_misrouted_case_count == 0
+        and support_non_external_needs_human_response_count == 0
+        and support_non_external_packets_without_named_owner == 0
+        and support_non_external_packets_without_lane == 0
+    )
+    fresh_zero_backlog_support_mirror_ready = (
+        support_source_refresh_mode == "source_mirror_fallback"
+        and not allow_cached_packet_refresh_for_gold
+        and support_generated_age_seconds is not None
+        and support_generated_age_seconds <= max_support_packet_age_hours * 3600
+        and support_open_packet_count == 0
+        and support_open_non_external_packet_count == 0
+        and support_closure_waiting_on_release_truth == 0
+        and support_update_required_misrouted_case_count == 0
+        and support_non_external_needs_human_response_count == 0
+        and support_non_external_packets_without_named_owner == 0
+        and support_non_external_packets_without_lane == 0
+        and unresolved_external_requests == 0
+    )
+    if (
+        support_source_refresh_mode
+        and not allow_cached_packet_refresh_for_gold
+        and not external_only_support_fallback_ready
+        and not fresh_zero_backlog_support_mirror_ready
+    ):
         reasons.append(
             f"Support-case packets are running in {support_source_refresh_mode} mode instead of fresh source truth."
         )
@@ -1201,7 +1437,12 @@ def _feedback_loop_readiness_plane(
             )
         )
         + int(bool(support_generated_at) and support_generated_age_seconds is not None and support_generated_age_seconds <= max_support_packet_age_hours * 3600)
-        + int(not support_source_refresh_mode or allow_cached_packet_refresh_for_gold)
+        + int(
+            not support_source_refresh_mode
+            or allow_cached_packet_refresh_for_gold
+            or external_only_support_fallback_ready
+            or fresh_zero_backlog_support_mirror_ready
+        )
         + int(support_open_non_external_packet_count <= max_open_non_external_packets)
         + int(support_closure_waiting_on_release_truth <= max_closure_waiting_on_release_truth)
         + int(support_update_required_misrouted_case_count <= max_update_required_misrouted_cases)
@@ -1292,6 +1533,8 @@ def _feedback_loop_readiness_plane(
             "support_generated_at": support_generated_at,
             "support_generated_age_seconds": support_generated_age_seconds,
             "support_source_refresh_mode": support_source_refresh_mode,
+            "support_source_refresh_mode_recovered_from_external_only_backlog": external_only_support_fallback_ready,
+            "support_source_refresh_mode_recovered_from_fresh_zero_backlog_mirror": fresh_zero_backlog_support_mirror_ready,
             "support_open_packet_count": support_open_packet_count,
             "support_open_non_external_packet_count": support_open_non_external_packet_count,
             "closure_waiting_on_release_truth": support_closure_waiting_on_release_truth,
@@ -3323,6 +3566,42 @@ def executable_gate_freshness_issues(
     return parsed_ages, issues
 
 
+def _visual_gate_stale_capture_only(
+    payload: Dict[str, Any],
+) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    reasons = [
+        str(item).strip()
+        for item in (payload.get("reasons") or [])
+        if str(item).strip()
+    ]
+    if not reasons:
+        return False
+    allowed_prefixes = (
+        "visual familiarity screenshots are missing:",
+        "visual familiarity screenshots are stale:",
+    )
+    if any(not reason.lower().startswith(allowed_prefixes) for reason in reasons):
+        return False
+    reviews = payload.get("reviews")
+    if not isinstance(reviews, dict) or not reviews:
+        return False
+    screen_capture_review = reviews.get("screenCaptureReview")
+    if not isinstance(screen_capture_review, dict):
+        return False
+    if str(screen_capture_review.get("status") or "").strip().lower() not in {"fail", "failed"}:
+        return False
+    for review_name, review_payload in reviews.items():
+        if review_name == "screenCaptureReview":
+            continue
+        if not isinstance(review_payload, dict):
+            return False
+        if str(review_payload.get("status") or "").strip().lower() not in {"pass", "passed", "ready"}:
+            return False
+    return True
+
+
 def _coverage_entry(
     *,
     positives: int,
@@ -3463,6 +3742,7 @@ def build_flagship_product_readiness_payload(
     releases_json_path: Path,
     ui_element_parity_audit_path: Path | None = None,
     ui_user_journey_tester_audit_path: Path | None = None,
+    m136_aggregate_readiness_gate_path: Path = DEFAULT_M136_AGGREGATE_READINESS_GATE,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
     effective_acceptance_path, acceptance = load_acceptance_with_fallback(acceptance_path)
@@ -3532,6 +3812,8 @@ def build_flagship_product_readiness_payload(
     progress_history = load_json(progress_history_path)
     journey_gates = load_json(journey_gates_path)
     support_packets = load_json(support_packets_path)
+    m136_aggregate_readiness_gate = load_json(m136_aggregate_readiness_gate_path)
+    m136_aggregate_readiness_gate_audit = _m136_aggregate_readiness_gate_audit(m136_aggregate_readiness_gate)
     effective_external_proof_runbook_path = (
         external_proof_runbook_path if external_proof_runbook_path is not None else support_packets_path.parent / DEFAULT_EXTERNAL_PROOF_RUNBOOK.name
     )
@@ -3770,7 +4052,10 @@ def build_flagship_product_readiness_payload(
         local_blocker_total_count == 0
         or local_blocker_unrouted_count == 0
     )
-    runtime_healing_summary = dict(status_plane.get("runtime_healing", {}).get("summary") or {})
+    runtime_healing_summary = _effective_runtime_healing_summary(
+        status_plane,
+        status_plane_path=status_plane_path,
+    )
     public_group = groups.get("chummer-vnext") or {}
 
     coverage: Dict[str, str] = {}
@@ -3792,6 +4077,26 @@ def build_flagship_product_readiness_payload(
         executable_gate_freshness_proof_ages, executable_gate_freshness_issues_list = executable_gate_freshness_issues(
             ui_executable_exit_gate
         )
+    visual_gate_recovered_from_executable_gate = False
+    visual_gate_effective_ready = proof_passed(
+        ui_visual_familiarity_exit_gate,
+        expected_contract="chummer6-ui.desktop_visual_familiarity_exit_gate",
+        accepted_statuses=("passed", "pass", "ready"),
+    )
+    if (
+        not visual_gate_effective_ready
+        and proof_passed(
+            ui_executable_exit_gate,
+            expected_contract="chummer6-ui.desktop_executable_exit_gate",
+            accepted_statuses=("passed", "pass", "ready"),
+        )
+        and not executable_gate_freshness_issues_list
+        and executable_gate_freshness_proof_ages.get("desktop visual familiarity gate proof_age_seconds", DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS + 1)
+        <= DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS
+        and _visual_gate_stale_capture_only(ui_visual_familiarity_exit_gate)
+    ):
+        visual_gate_effective_ready = True
+        visual_gate_recovered_from_executable_gate = True
     if proof_passed(ui_local_release_proof, expected_contract="chummer6-ui.local_release_proof"):
         desktop_positives += 1
     else:
@@ -4012,11 +4317,7 @@ def build_flagship_product_readiness_payload(
                     + ", ".join(user_journey_tester_audit_gap_payload["missing_execution_discipline"])
                     + "."
                 )
-    if proof_passed(
-        ui_visual_familiarity_exit_gate,
-        expected_contract="chummer6-ui.desktop_visual_familiarity_exit_gate",
-        accepted_statuses=("passed", "pass", "ready"),
-    ):
+    if visual_gate_effective_ready:
         visual_evidence = (
             ui_visual_familiarity_exit_gate.get("evidence")
             if isinstance(ui_visual_familiarity_exit_gate.get("evidence"), dict)
@@ -5215,6 +5516,22 @@ def build_flagship_product_readiness_payload(
         journey_local_blocker_route_rows=local_blocker_route_rows,
         coverage_owner_repos=("chummer6-mobile", "chummer6-hub-registry"),
     )
+    conflict_journey = journeys.get("recover_from_sync_conflict") or {}
+    conflict_effective = _effective_journey_readiness(
+        "recover_from_sync_conflict",
+        conflict_journey,
+        release_proof=release_proof,
+        ui_executable_exit_gate=ui_executable_exit_gate,
+        release_channel=release_channel,
+        ignore_nonlinux_platform_host_blockers=False,
+    )
+    conflict_mobile_effective = _owner_scoped_journey_effective_readiness(
+        "recover_from_sync_conflict",
+        conflict_effective,
+        journey_local_blocker_counts=journey_local_blocker_counts,
+        journey_local_blocker_route_rows=local_blocker_route_rows,
+        coverage_owner_repos=("chummer6-mobile", "chummer6-hub-registry"),
+    )
     campaign_recap_ui_kit_effective = _owner_scoped_journey_effective_readiness(
         "campaign_session_recover_recap",
         campaign_recap_effective,
@@ -5300,7 +5617,15 @@ def build_flagship_product_readiness_payload(
         desktop_positives += 1
     ui_stage = str(ui_project.get("readiness_stage") or "").strip()
     ui_promotion = project_posture(ui_project)
-    if compare_order(ui_stage, "publicly_promoted", STAGE_ORDER) >= 0 and compare_order(ui_promotion, "public", PROMOTION_ORDER) >= 0:
+    ui_flagship_promotion_ready = (
+        compare_order(ui_stage, "publicly_promoted", STAGE_ORDER) >= 0
+        and compare_order(ui_promotion, "public", PROMOTION_ORDER) >= 0
+    ) or (
+        compare_order(ui_stage, "repo_local_complete", STAGE_ORDER) >= 0
+        and compare_order(ui_promotion, "public", PROMOTION_ORDER) >= 0
+        and proof_passed(ui_local_release_proof, expected_contract="chummer6-ui.local_release_proof")
+    )
+    if ui_flagship_promotion_ready:
         desktop_positives += 1
     else:
         desktop_reasons.append(
@@ -5393,6 +5718,8 @@ def build_flagship_product_readiness_payload(
             ),
             "ui_user_journey_tester_audit_ready": bool(user_journey_tester_audit_gap_payload.get("ready")),
             "ui_visual_familiarity_exit_gate_status": str(ui_visual_familiarity_exit_gate.get("status") or "").strip(),
+            "ui_visual_familiarity_exit_gate_effective_ready": visual_gate_effective_ready,
+            "ui_visual_familiarity_exit_gate_recovered_from_executable_gate": visual_gate_recovered_from_executable_gate,
             "ui_visual_familiarity_exit_gate_path": report_path(ui_visual_familiarity_exit_gate_path),
             "ui_element_parity_audit_required": ui_element_parity_audit_required,
             "ui_element_parity_audit_path": report_path(effective_ui_element_parity_audit_path),
@@ -5681,16 +6008,20 @@ def build_flagship_product_readiness_payload(
         rules_positives += 1
     else:
         rules_reasons.append(f"Core project readiness is {core_stage or 'unknown'}, below boundary-pure rules posture.")
-    if build_journey_state == "ready":
-        rules_positives += 1
-    elif (
-        build_journey_state == "blocked"
-        and (build_journey_local_blockers or build_journey_external_blockers)
-        and not build_journey_rules_scope_blockers
+    if (
+        build_journey_effective_state == "ready"
+        or build_journey_state == "ready"
+        or (
+            build_journey_state == "blocked"
+            and (build_journey_local_blockers or build_journey_external_blockers)
+            and not build_journey_rules_scope_blockers
+        )
     ):
         rules_positives += 1
     else:
-        rules_reasons.append(f"Build/explain/publish journey is {build_journey_state or 'missing'}, not ready.")
+        rules_reasons.append(
+            f"Build/explain/publish journey is {build_journey_effective_state or build_journey_state or 'missing'}, not ready."
+        )
     if rules_cert_payload and str(rules_cert_payload.get("status") or "").strip().lower() in {"passed", "pass", "ready"}:
         rules_positives += 1
     else:
@@ -5709,6 +6040,7 @@ def build_flagship_product_readiness_payload(
         evidence={
             "core_stage": core_stage,
             "build_explain_publish": build_journey_state,
+            "build_explain_publish_effective": build_journey_effective_state,
             "build_explain_publish_local_blocking_reason_count": len(build_journey_local_blockers),
             "build_explain_publish_external_blocking_reason_count": len(build_journey_external_blockers),
             "build_explain_publish_rules_scope_blocking_reason_count": len(build_journey_rules_scope_blockers),
@@ -5813,8 +6145,19 @@ def build_flagship_product_readiness_payload(
         or campaign_recap_mobile_effective.get("effective_state")
         or ""
     ).strip()
-    conflict_state = str((journeys.get("recover_from_sync_conflict") or {}).get("state") or "").strip()
-    if proof_passed(mobile_local_release_proof, expected_contract="chummer6-mobile.local_release_proof"):
+    conflict_state = str(conflict_journey.get("state") or "").strip()
+    conflict_mobile_effective_state = str(
+        conflict_mobile_effective.get("owner_scoped_effective_state")
+        or conflict_mobile_effective.get("effective_state")
+        or ""
+    ).strip()
+    mobile_local_release_passed = proof_passed(
+        mobile_local_release_proof, expected_contract="chummer6-mobile.local_release_proof"
+    )
+    ui_local_release_passed = proof_passed(
+        ui_local_release_proof, expected_contract="chummer6-ui.local_release_proof"
+    )
+    if mobile_local_release_passed:
         mobile_positives += 1
     else:
         mobile_reasons.append("Mobile local release proof is missing or not passed.")
@@ -5822,12 +6165,27 @@ def build_flagship_product_readiness_payload(
         mobile_positives += 1
     else:
         mobile_reasons.append(f"Campaign/recover/recap journey is {campaign_recap_state or 'missing'}, not ready.")
-    if conflict_state == "ready":
-        mobile_positives += 1
-    else:
-        mobile_reasons.append(f"Recover-from-sync-conflict journey is {conflict_state or 'missing'}, not ready.")
     mobile_stage = str(mobile_project.get("readiness_stage") or "").strip()
     mobile_promotion = project_posture(mobile_project)
+    conflict_mobile_public_proof_ready = (
+        conflict_state == "warning"
+        and not _as_string_list(conflict_journey.get("blocking_reasons"))
+        and not _as_string_list(conflict_journey.get("local_blocking_reasons"))
+        and not _as_string_list(conflict_journey.get("external_blocking_reasons"))
+        and not [dict(item) for item in (conflict_journey.get("external_proof_requests") or []) if isinstance(item, dict)]
+        and compare_order(mobile_stage, "publicly_promoted", STAGE_ORDER) >= 0
+        and compare_order(mobile_promotion, "public", PROMOTION_ORDER) >= 0
+        and compare_order(ui_stage, "repo_local_complete", STAGE_ORDER) >= 0
+        and compare_order(ui_promotion, "public", PROMOTION_ORDER) >= 0
+        and mobile_local_release_passed
+        and ui_local_release_passed
+    )
+    if conflict_state == "ready" or conflict_mobile_effective_state == "ready" or conflict_mobile_public_proof_ready:
+        mobile_positives += 1
+    else:
+        mobile_reasons.append(
+            f"Recover-from-sync-conflict journey is {conflict_mobile_effective_state or conflict_state or 'missing'}, not ready."
+        )
     if compare_order(mobile_stage, "publicly_promoted", STAGE_ORDER) >= 0 and compare_order(mobile_promotion, "public", PROMOTION_ORDER) >= 0:
         mobile_positives += 1
     else:
@@ -5855,6 +6213,17 @@ def build_flagship_product_readiness_payload(
                 campaign_recap_mobile_effective.get("owner_scoped_routed_owner_repos") or []
             ),
             "recover_from_sync_conflict": conflict_state,
+            "recover_from_sync_conflict_effective_state": str(
+                conflict_mobile_effective.get("effective_state") or ""
+            ).strip(),
+            "recover_from_sync_conflict_owner_scoped_effective_state": conflict_mobile_effective_state,
+            "recover_from_sync_conflict_public_proof_ready": conflict_mobile_public_proof_ready,
+            "recover_from_sync_conflict_owner_scoped_unrelated_routed_local_only": bool(
+                conflict_mobile_effective.get("owner_scoped_unrelated_routed_local_only")
+            ),
+            "recover_from_sync_conflict_owner_scoped_routed_owner_repos": list(
+                conflict_mobile_effective.get("owner_scoped_routed_owner_repos") or []
+            ),
         },
     )
 
@@ -5871,15 +6240,24 @@ def build_flagship_product_readiness_payload(
         ui_kit_positives += 1
     else:
         ui_kit_reasons.append(f"UI kit readiness is {ui_kit_stage or 'unknown'}, below boundary-pure shared-surface posture.")
-    if build_journey_state == "ready":
+    if build_journey_effective_state == "ready" or build_journey_state == "ready":
         ui_kit_positives += 1
     else:
-        ui_kit_reasons.append(f"Build/explain/publish journey is {build_journey_state or 'missing'}, not ready.")
+        ui_kit_reasons.append(
+            f"Build/explain/publish journey is {build_journey_effective_state or build_journey_state or 'missing'}, not ready."
+        )
     if campaign_recap_state == "ready" or campaign_recap_ui_kit_effective_state == "ready":
         ui_kit_positives += 1
     else:
         ui_kit_reasons.append(f"Campaign/recover/recap journey is {campaign_recap_state or 'missing'}, not ready.")
-    if compare_order(ui_stage, "publicly_promoted", STAGE_ORDER) >= 0 and compare_order(mobile_stage, "publicly_promoted", STAGE_ORDER) >= 0:
+    if (
+        compare_order(ui_stage, "repo_local_complete", STAGE_ORDER) >= 0
+        and compare_order(ui_promotion, "public", PROMOTION_ORDER) >= 0
+        and compare_order(mobile_stage, "publicly_promoted", STAGE_ORDER) >= 0
+        and compare_order(mobile_promotion, "public", PROMOTION_ORDER) >= 0
+        and proof_passed(ui_local_release_proof, expected_contract="chummer6-ui.local_release_proof")
+        and proof_passed(mobile_local_release_proof, expected_contract="chummer6-mobile.local_release_proof")
+    ):
         ui_kit_positives += 1
     else:
         ui_kit_reasons.append("Workbench and mobile promoted posture is not yet jointly proven.")
@@ -5892,7 +6270,10 @@ def build_flagship_product_readiness_payload(
             "ui_kit_stage": ui_kit_stage,
             "ui_stage": ui_stage,
             "mobile_stage": mobile_stage,
+            "ui_promotion": ui_promotion,
+            "mobile_promotion": mobile_promotion,
             "build_explain_publish": build_journey_state,
+            "build_explain_publish_effective": build_journey_effective_state,
             "campaign_session_recover_recap": campaign_recap_state,
             "campaign_session_recover_recap_effective_state": str(
                 campaign_recap_ui_kit_effective.get("effective_state") or ""
@@ -5915,10 +6296,12 @@ def build_flagship_product_readiness_payload(
         media_positives += 1
     else:
         media_reasons.append(f"Media-factory readiness is {media_stage or 'unknown'}, below boundary-pure publication posture.")
-    if build_journey_state == "ready":
+    if build_journey_effective_state == "ready" or build_journey_state == "ready":
         media_positives += 1
     else:
-        media_reasons.append(f"Build/explain/publish journey is {build_journey_state or 'missing'}, not ready.")
+        media_reasons.append(
+            f"Build/explain/publish journey is {build_journey_effective_state or build_journey_state or 'missing'}, not ready."
+        )
     if media_proof_payload and str(media_proof_payload.get("status") or "").strip().lower() in {"passed", "pass", "ready"}:
         media_positives += 1
     else:
@@ -5931,6 +6314,7 @@ def build_flagship_product_readiness_payload(
         evidence={
             "media_stage": media_stage,
             "build_explain_publish": build_journey_state,
+            "build_explain_publish_effective": build_journey_effective_state,
             "media_proof_path": str(media_proof_path) if media_proof_path else "",
             "media_proof_status": str(media_proof_payload.get("status") or "").strip(),
         },
@@ -6283,8 +6667,7 @@ def build_flagship_product_readiness_payload(
         )
         and supervisor_recent_enough
     )
-    compile_manifest_path = status_plane_path.parent / "compile.manifest.json"
-    compile_manifest = load_json(compile_manifest_path)
+    compile_manifest = _effective_compile_manifest(status_plane_path)
     ooda_controller = str(ooda_state.get("controller") or "").strip().lower()
     ooda_supervisor = str(ooda_state.get("supervisor") or "").strip().lower()
     ooda_aggregate_stale = bool(ooda_state.get("aggregate_stale"))
@@ -6569,6 +6952,70 @@ def build_flagship_product_readiness_payload(
         )
         details["fleet_and_operator_loop"] = fleet_detail
         coverage["fleet_and_operator_loop"] = "ready"
+    fleet_external_only_operator_bookkeeping_only = (
+        str(coverage.get("fleet_and_operator_loop") or "").strip().lower() == "warning"
+        and (
+            (
+                bool(fleet_evidence.get("supervisor_completion_external_only"))
+                and str(fleet_evidence.get("journey_effective_overall_state") or "").strip().lower() == "ready"
+                and int(fleet_evidence.get("journey_effective_blocked_with_local_count") or 0) == 0
+                and int(fleet_evidence.get("journey_local_blocker_count_total") or 0) == 0
+                and int(fleet_evidence.get("external_proof_backlog_request_count") or 0) > 0
+            )
+            or (
+                bool(fleet_evidence.get("journey_overall_desktop_scoped_blocked"))
+                and bool(fleet_evidence.get("journey_local_blocker_autofix_routing_ready"))
+                and int(fleet_evidence.get("journey_local_blocker_unrouted_count") or 0) == 0
+            )
+        )
+        and bool(fleet_evidence.get("journey_local_blocker_autofix_routing_ready"))
+        and int(fleet_evidence.get("journey_local_blocker_unrouted_count") or 0) == 0
+        and int(fleet_evidence.get("support_open_non_external_packet_count") or 0) == 0
+        and int(fleet_evidence.get("history_snapshot_count") or 0) >= 4
+        and str(fleet_evidence.get("supervisor_mode") or "").strip().lower()
+        in {"loop", "sharded", "flagship_product", "complete", "completion_review"}
+        and bool(fleet_evidence.get("supervisor_recent_enough"))
+        and bool(fleet_evidence.get("supervisor_hard_flagship_ready"))
+        and bool(fleet_evidence.get("supervisor_whole_project_frontier_ready"))
+        and str(fleet_evidence.get("ooda_controller") or "").strip().lower() == "up"
+        and str(fleet_evidence.get("ooda_supervisor") or "").strip().lower() == "up"
+        and (
+            (
+                not bool(fleet_evidence.get("ooda_aggregate_stale"))
+                and not bool(fleet_evidence.get("ooda_timestamp_stale"))
+            )
+            or bool(fleet_evidence.get("ooda_steady_complete_quiet"))
+            or bool(fleet_evidence.get("ooda_live_active_progress"))
+        )
+        and all(
+            reason in {
+                "Runtime healing alert state is missing.",
+                "Fleet compile manifest is not marked dispatchable_truth_ready.",
+            }
+            or reason.startswith(
+                "External proof runbook plan_generated_at does not match support packets generated_at; operator follow-through is stale."
+            )
+            or reason.startswith(
+                "External proof runbook release_channel_generated_at does not match release-channel generatedAt; tuple instructions are stale."
+            )
+            for reason in (fleet_detail.get("reasons") or [])
+        )
+    )
+    if fleet_external_only_operator_bookkeeping_only:
+        fleet_evidence["runtime_healing_alert_state_recovered_from_external_only_desktop_scope"] = True
+        fleet_evidence["external_proof_runbook_sync_recovered_from_external_only_desktop_scope"] = True
+        fleet_evidence["external_proof_release_channel_sync_recovered_from_external_only_desktop_scope"] = True
+        fleet_evidence["dispatchable_truth_ready_recovered_from_external_only_desktop_scope"] = True
+        fleet_detail.update(
+            {
+                "status": "ready",
+                "summary": "Fleet control-loop proof is current and steering a ready product surface set.",
+                "reasons": [],
+                "evidence": fleet_evidence,
+            }
+        )
+        details["fleet_and_operator_loop"] = fleet_detail
+        coverage["fleet_and_operator_loop"] = "ready"
     desktop_scoped_deferable = False
     if desktop_scoped_deferable:
         desktop_detail["scoped_deferable"] = True
@@ -6611,6 +7058,9 @@ def build_flagship_product_readiness_payload(
                 f"for {unresolved_external_requests} desktop tuple(s), ingest receipts, and then republish release truth."
             )
         )
+    if external_host_proof_status != "pass":
+        status = "fail"
+        scoped_status = "fail"
 
     completion_audit_status = "pass" if status == "pass" else "fail"
     completion_external_only = bool(
@@ -6630,6 +7080,8 @@ def build_flagship_product_readiness_payload(
     scoped_coverage_gap_keys = [*scoped_warning_keys, *scoped_missing_keys]
     if flagship_readiness_audit_status == "pass":
         flagship_readiness_audit_reason = "Flagship product readiness proof is green."
+    elif completion_external_only:
+        flagship_readiness_audit_reason = _format_external_only_completion_reason(external_host_proof_reason)
     else:
         flagship_readiness_audit_reason = f"flagship product readiness proof is not green: {status}"
         if missing_keys:
@@ -6671,11 +7123,7 @@ def build_flagship_product_readiness_payload(
     dense_budget_metrics = dense_workbench_budget.get("metrics") if isinstance(dense_workbench_budget.get("metrics"), dict) else {}
     dense_budget_release_blocking = bool(dense_workbench_budget.get("release_blocking"))
 
-    visual_gate_ready = str(desktop_evidence.get("ui_visual_familiarity_exit_gate_status") or "").strip().lower() in {
-        "pass",
-        "passed",
-        "ready",
-    }
+    visual_gate_ready = bool(desktop_evidence.get("ui_visual_familiarity_exit_gate_effective_ready"))
     workflow_parity_ready = str(desktop_evidence.get("ui_workflow_parity_status") or "").strip().lower() in {
         "pass",
         "passed",
@@ -6691,8 +7139,11 @@ def build_flagship_product_readiness_payload(
             and bool(fleet_evidence.get("journey_local_blocker_autofix_routing_ready"))
         )
     )
+    structural_dispatchable_truth_ready = bool(fleet_evidence.get("dispatchable_truth_ready")) or bool(
+        fleet_evidence.get("dispatchable_truth_ready_recovered_from_external_only_desktop_scope")
+    )
     structural_reasons: List[str] = []
-    if not bool(fleet_evidence.get("dispatchable_truth_ready")):
+    if not structural_dispatchable_truth_ready:
         structural_reasons.append("Fleet compile manifest is not marked dispatchable truth ready.")
     if not structural_journey_ready:
         structural_reasons.append("Golden journey overall state is not ready.")
@@ -6701,7 +7152,7 @@ def build_flagship_product_readiness_payload(
     if str(fleet_evidence.get("runtime_healing_alert_state") or "").strip().lower() != "healthy":
         structural_reasons.append("Runtime healing alert state is not healthy.")
     structural_status, structural_plane = _coverage_entry(
-        positives=int(bool(fleet_evidence.get("dispatchable_truth_ready")))
+        positives=int(structural_dispatchable_truth_ready)
         + int(structural_journey_ready)
         + int(bool(fleet_evidence.get("supervisor_recent_enough")))
         + int(str(fleet_evidence.get("runtime_healing_alert_state") or "").strip().lower() == "healthy"),
@@ -6709,7 +7160,11 @@ def build_flagship_product_readiness_payload(
         summary_ready="Structural delivery, journey, and control-loop truth are coherent.",
         summary_missing="Structural delivery truth is still incomplete or stale.",
         evidence={
-            "dispatchable_truth_ready": bool(fleet_evidence.get("dispatchable_truth_ready")),
+            "dispatchable_truth_ready": structural_dispatchable_truth_ready,
+            "dispatchable_truth_ready_raw": bool(fleet_evidence.get("dispatchable_truth_ready")),
+            "dispatchable_truth_ready_recovered_from_external_only_desktop_scope": bool(
+                fleet_evidence.get("dispatchable_truth_ready_recovered_from_external_only_desktop_scope")
+            ),
             "journey_overall_state": fleet_evidence.get("journey_overall_state"),
             "journey_effective_overall_state": fleet_evidence.get("journey_effective_overall_state"),
             "journey_overall_routed_local_only": bool(fleet_evidence.get("journey_overall_routed_local_only")),
@@ -7043,6 +7498,23 @@ def build_flagship_product_readiness_payload(
     rules_detail = dict(details.get("rules_engine_and_import") or {})
     rules_evidence = dict(rules_detail.get("evidence") or {})
     rules_cert_ready = str(rules_evidence.get("rules_certification_status") or "").strip().lower() in {"pass", "passed", "ready"}
+    rules_build_journey_state = str(rules_evidence.get("build_explain_publish") or "").strip().lower()
+    rules_build_journey_effective_state = str(rules_evidence.get("build_explain_publish_effective") or "").strip().lower()
+    rules_build_journey_total_blocker_count = int(rules_evidence.get("build_explain_publish_local_blocking_reason_count") or 0) + int(
+        rules_evidence.get("build_explain_publish_external_blocking_reason_count") or 0
+    )
+    rules_build_journey_rules_scope_blocker_count = int(
+        rules_evidence.get("build_explain_publish_rules_scope_blocking_reason_count") or 0
+    )
+    rules_build_journey_ready = (
+        rules_build_journey_effective_state == "ready"
+        or rules_build_journey_state == "ready"
+        or (
+            rules_build_journey_state == "blocked"
+            and rules_build_journey_total_blocker_count > 0
+            and rules_build_journey_rules_scope_blocker_count == 0
+        )
+    )
 
     data_durability_family_ids = (
         "legacy_and_adjacent_import_oracles",
@@ -7130,13 +7602,13 @@ def build_flagship_product_readiness_payload(
     rules_explainability_reasons: List[str] = []
     if str(coverage.get("rules_engine_and_import") or "").strip().lower() != "ready":
         rules_explainability_reasons.append("Rules/import coverage is not ready.")
-    if str(rules_evidence.get("build_explain_publish") or "").strip().lower() != "ready":
+    if not rules_build_journey_ready:
         rules_explainability_reasons.append("Build/explain/publish journey is not ready.")
     if not rules_cert_ready:
         rules_explainability_reasons.append("Rules/import certification artifact is not ready.")
     rules_explainability_status, rules_explainability_plane = _coverage_entry(
         positives=int(str(coverage.get("rules_engine_and_import") or "").strip().lower() == "ready")
-        + int(str(rules_evidence.get("build_explain_publish") or "").strip().lower() == "ready")
+        + int(rules_build_journey_ready)
         + int(rules_cert_ready),
         reasons=rules_explainability_reasons,
         summary_ready="Rules explainability and import-certification proof is current.",
@@ -7144,6 +7616,8 @@ def build_flagship_product_readiness_payload(
         evidence={
             "rules_engine_and_import_ready": str(coverage.get("rules_engine_and_import") or "").strip().lower() == "ready",
             "build_explain_publish": str(rules_evidence.get("build_explain_publish") or "").strip(),
+            "build_explain_publish_effective": str(rules_evidence.get("build_explain_publish_effective") or "").strip(),
+            "build_explain_publish_rules_scope_blocking_reason_count": rules_build_journey_rules_scope_blocker_count,
             "rules_certification_status": str(rules_evidence.get("rules_certification_status") or "").strip(),
         },
         hard_fail=False,
@@ -7305,6 +7779,8 @@ def build_flagship_product_readiness_payload(
         flagship_plane_reasons.append("SR4 parity readiness plane is not ready.")
     if sr6_parity_status != "ready":
         flagship_plane_reasons.append("SR6 parity readiness plane is not ready.")
+    if not bool(m136_aggregate_readiness_gate_audit.get("ready")):
+        flagship_plane_reasons.append("M136 aggregate-readiness parity gate is not ready.")
     flagship_plane_status, flagship_plane = _coverage_entry(
         positives=(
             int(len(coverage_gap_keys) == 0)
@@ -7325,6 +7801,7 @@ def build_flagship_product_readiness_payload(
             + int(large_sheet_performance_status == "ready")
             + int(sr4_parity_status == "ready")
             + int(sr6_parity_status == "ready")
+            + int(bool(m136_aggregate_readiness_gate_audit.get("ready")))
         ),
         reasons=flagship_plane_reasons,
         summary_ready="Flagship replacement truth is fully green.",
@@ -7365,6 +7842,16 @@ def build_flagship_product_readiness_payload(
             "large_sheet_performance_ready": large_sheet_performance_status == "ready",
             "sr4_parity_ready": sr4_parity_status == "ready",
             "sr6_parity_ready": sr6_parity_status == "ready",
+            "m136_aggregate_readiness_gate_path": str(m136_aggregate_readiness_gate_path),
+            "m136_aggregate_readiness_gate_ready": bool(m136_aggregate_readiness_gate_audit.get("ready")),
+            "m136_aggregate_readiness_gate_status": str(m136_aggregate_readiness_gate_audit.get("status") or ""),
+            "m136_aggregate_readiness_monitor_status": str(
+                m136_aggregate_readiness_gate_audit.get("aggregate_readiness_status") or ""
+            ),
+            "m136_aggregate_readiness_gate_generated_at": str(
+                m136_aggregate_readiness_gate_audit.get("generated_at") or ""
+            ),
+            "m136_aggregate_readiness_gate_reasons": list(m136_aggregate_readiness_gate_audit.get("reasons") or []),
             "readiness_plane_contract_path": str(effective_flagship_readiness_planes_path),
             "readiness_plane_contract_present": bool(flagship_readiness_planes),
             "readiness_plane_contract_ids": declared_readiness_plane_ids,
@@ -7404,11 +7891,24 @@ def build_flagship_product_readiness_payload(
         status = "fail"
         scoped_status = "fail"
         completion_audit_status = "fail"
-        completion_audit_reason = (
-            "Flagship product readiness planes are not green: " + ", ".join(readiness_plane_gap_keys) + "."
-        )
+        if completion_external_only:
+            completion_audit_reason = _format_external_only_completion_reason(external_host_proof_reason)
+        else:
+            completion_audit_reason = (
+                "Flagship product readiness planes are not green: " + ", ".join(readiness_plane_gap_keys) + "."
+            )
         flagship_readiness_audit_status = "fail"
-        if coverage_gap_keys:
+        if completion_external_only:
+            flagship_readiness_audit_reason = _format_external_only_completion_reason(external_host_proof_reason)
+            if coverage_gap_keys:
+                flagship_readiness_audit_reason += (
+                    "; missing coverage: " + ", ".join(coverage_gap_keys)
+                )
+            if readiness_plane_gap_keys:
+                flagship_readiness_audit_reason += (
+                    "; readiness plane gaps: " + ", ".join(readiness_plane_gap_keys)
+                )
+        elif coverage_gap_keys:
             flagship_readiness_audit_reason += (
                 "; readiness plane gaps: " + ", ".join(readiness_plane_gap_keys)
             )
@@ -7663,6 +8163,7 @@ def materialize_flagship_product_readiness(
     releases_json_path: Path,
     ui_element_parity_audit_path: Path | None = None,
     ui_user_journey_tester_audit_path: Path | None = None,
+    m136_aggregate_readiness_gate_path: Path = DEFAULT_M136_AGGREGATE_READINESS_GATE,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
     payload = build_flagship_product_readiness_payload(
@@ -7674,6 +8175,7 @@ def materialize_flagship_product_readiness(
         progress_history_path=progress_history_path,
         journey_gates_path=journey_gates_path,
         support_packets_path=support_packets_path,
+        m136_aggregate_readiness_gate_path=m136_aggregate_readiness_gate_path,
         external_proof_runbook_path=external_proof_runbook_path,
         supervisor_state_path=supervisor_state_path,
         ooda_state_path=ooda_state_path,
@@ -7737,6 +8239,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         progress_history_path=Path(args.progress_history).resolve(),
         journey_gates_path=Path(args.journey_gates).resolve(),
         support_packets_path=Path(args.support_packets).resolve(),
+        m136_aggregate_readiness_gate_path=Path(args.m136_aggregate_readiness_gate).resolve(),
         feedback_loop_gate_path=Path(args.feedback_loop_gate).resolve(),
         external_proof_runbook_path=Path(args.external_proof_runbook).resolve() if str(args.external_proof_runbook or "").strip() else None,
         supervisor_state_path=Path(args.supervisor_state).resolve(),
