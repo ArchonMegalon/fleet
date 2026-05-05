@@ -131,9 +131,18 @@ def _read_json(path: Path) -> Dict[str, Any]:
 
 def _read_yaml(path: Path) -> Dict[str, Any]:
     try:
-        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
         return {}
+    try:
+        payload = yaml.safe_load(raw) or {}
+    except yaml.YAMLError:
+        if "\nitems:\n" not in raw:
+            return {}
+        try:
+            payload = yaml.safe_load("items:\n" + raw.split("\nitems:\n", 1)[1]) or {}
+        except yaml.YAMLError:
+            return {}
     return payload if isinstance(payload, dict) else {}
 
 
@@ -165,6 +174,10 @@ def _write_json_file(path: Path, payload: Dict[str, Any]) -> None:
 
 def _source_link(path: Path, payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"path": _display_path(path), "sha256": _sha256_file(path), "generated_at": _normalize_text(payload.get("generated_at"))}
+
+
+def _runtime_source_link(path: Path) -> Dict[str, Any]:
+    return {"path": _display_path(path), "sha256": "", "generated_at": ""}
 
 
 def _text_source_link(path: Path) -> Dict[str, Any]:
@@ -578,9 +591,9 @@ def build_payload(
             "privacy_boundaries": _text_source_link(privacy_boundaries_path),
             "crash_reporting": _text_source_link(crash_reporting_path),
             "support_status": _text_source_link(support_status_path),
-            "flagship_readiness": _source_link(flagship_readiness_path, flagship_readiness),
-            "support_packets": _source_link(support_packets_path, support_packets),
-            "weekly_product_pulse": _source_link(weekly_product_pulse_path, weekly_product_pulse),
+            "flagship_readiness": _runtime_source_link(flagship_readiness_path),
+            "support_packets": _runtime_source_link(support_packets_path),
+            "weekly_product_pulse": _runtime_source_link(weekly_product_pulse_path),
         },
     }
 

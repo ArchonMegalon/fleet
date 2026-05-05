@@ -28,6 +28,11 @@ def _write_yaml(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
+def _write_generated_queue_overlay(path: Path, item: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("---\nitems:\n" + yaml.safe_dump([item], sort_keys=False), encoding="utf-8")
+
+
 def _registry() -> dict:
     return {
         "program_wave": "next_90_day_product_advance",
@@ -404,6 +409,27 @@ class MaterializeNext90M128FleetTrustPlaneMonitorsTests(unittest.TestCase):
             self.assertEqual(payload["status"], "pass")
             self.assertEqual(payload["monitor_summary"]["trust_plane_status"], "blocked")
             self.assertIn("shipping locale set drifted", "\n".join(payload["monitor_summary"]["runtime_blockers"]))
+
+    def test_materialize_accepts_generated_queue_overlay_shape(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="fleet-m128-materialize-") as temp_dir:
+            paths = _fixture_tree(
+                Path(temp_dir),
+                runtime_locales=["en-us", "de-de", "fr-fr", "ja-jp", "pt-br", "zh-cn"],
+                feedback_status="ready",
+                refresh_mode="remote_live",
+                refresh_error="",
+                open_packet_count=0,
+            )
+            queue_item = _queue_item()
+            _write_generated_queue_overlay(paths["queue"], queue_item)
+            _write_generated_queue_overlay(paths["design_queue"], queue_item)
+            result = _run_materializer(paths)
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+            payload = json.loads(paths["artifact"].read_text(encoding="utf-8"))
+            self.assertEqual(payload["status"], "pass")
+            self.assertEqual(payload["canonical_alignment"]["state"], "pass")
+            self.assertFalse(payload["package_closeout"]["blockers"])
 
 
 if __name__ == "__main__":

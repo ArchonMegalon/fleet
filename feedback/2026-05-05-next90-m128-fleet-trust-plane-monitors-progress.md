@@ -15,6 +15,7 @@
 - Made freshness calculations deterministic off the packet `generated_at` so the standalone verifier can reproduce the live payload exactly.
 - Relaxed canon markers to the actual design-owned phrasing where the guide and telemetry model are intentionally shorter than the registry exit prose.
 - Kept source-mirror fallback and remote refresh failure as live warnings rather than package blockers.
+- Hardened append-style queue overlay parsing and stabilized volatile runtime source links so verifier failures track trust-plane truth instead of false row misses or unrelated weekly-pulse churn.
 
 ## Live posture
 

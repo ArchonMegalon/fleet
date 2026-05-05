@@ -6,12 +6,12 @@
     "feedback"
   ],
   "canonical_alignment": {
-    "design_queue_status": "not_started",
-    "fleet_queue_status": "not_started",
+    "design_queue_status": "complete",
+    "fleet_queue_status": "complete",
     "issues": [],
     "registry_status": "not_started",
     "state": "pass",
-    "work_task_status": ""
+    "work_task_status": "complete"
   },
   "canonical_monitors": {
     "crash_reporting_markers": {
@@ -85,14 +85,14 @@
   },
   "contract_name": "fleet.next90_m128_trust_plane_monitors",
   "frontier_id": 6911125913,
-  "generated_at": "2026-05-05T13:22:23Z",
+  "generated_at": "2026-05-05T21:33:52Z",
   "milestone_id": 128,
   "monitor_summary": {
     "feedback_loop_status": "ready",
     "runtime_blocker_count": 0,
     "runtime_blockers": [],
     "shipping_locale_count": 6,
-    "support_generated_at": "2026-05-05T13:00:54Z",
+    "support_generated_at": "2026-05-05T21:31:02Z",
     "trust_plane_status": "warning",
     "warning_count": 2
   },
@@ -146,8 +146,8 @@
       "runtime_blockers": [],
       "source_mirror_generated_at": "2026-05-03T10:37:25Z",
       "state": "pass",
-      "support_generated_age_seconds": 1289,
-      "support_generated_at": "2026-05-05T13:00:54Z",
+      "support_generated_age_seconds": 170,
+      "support_generated_at": "2026-05-05T21:31:02Z",
       "support_source_refresh_mode": "source_mirror_fallback",
       "warnings": [
         "Support packets are running on source_mirror_fallback. Mirror source generated_at=2026-05-03T10:37:25Z.",
@@ -167,17 +167,17 @@
     "crash_reporting": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md",
-      "sha256": "d558db37fae6968ba48ccc9f9544b2ea1cd1355163b793bdea47514ea632060d"
+      "sha256": "ff0738b697401a20a40932b080a8e870ba47ad9ed836c95da5afb8f31991760a"
     },
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "6a14b607acae557ff774034522b953c0a9eee697e92c42edb5cbfebcccf29d86"
+      "sha256": "ba078e1c11ebe7c10bb0af49d29a9eaf19559c37b8676328964ab49e15cd54b5"
     },
     "flagship_readiness": {
-      "generated_at": "2026-05-05T13:01:00Z",
+      "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "bc53dba55ec9a1767d98c48d281c8d2dc0be4b59dbb80f7c466024986a63fc93"
+      "sha256": ""
     },
     "localization_system": {
       "generated_at": "",
@@ -197,17 +197,17 @@
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "e422a64356fd0874152562f6fc5869b57785110314e69466f347a4f603344b4b"
+      "sha256": "ba078e1c11ebe7c10bb0af49d29a9eaf19559c37b8676328964ab49e15cd54b5"
     },
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "af36944c00869ca6261fa99cffe0c91d4e7eabf1c7ee9b215110897dded6db19"
+      "sha256": "0326e3305131780f97c75f3d09a5b1a8957de8f69d013df048397f38a6b9ec28"
     },
     "support_packets": {
-      "generated_at": "2026-05-05T13:00:54Z",
+      "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-      "sha256": "e6722efee968c680d72a94fe658260a2b90938f791ff7bc56b56d63cbf78ae0f"
+      "sha256": ""
     },
     "support_status": {
       "generated_at": "",
@@ -225,9 +225,9 @@
       "sha256": "33adb6530dc4cc8b93f33cd447713fd9aba878e7b9262a13191e13ece52ef836"
     },
     "weekly_product_pulse": {
-      "generated_at": "2026-05-05T13:01:01Z",
+      "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-      "sha256": "4fe1f8918420a682ad803deb973a8fc42d362cb403d4efdb512ba0ce12406cc9"
+      "sha256": ""
     }
   },
   "status": "pass",
