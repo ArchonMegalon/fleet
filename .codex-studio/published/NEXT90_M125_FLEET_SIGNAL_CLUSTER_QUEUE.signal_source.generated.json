@@ -1,0 +1,83 @@
+{
+  "count": 3,
+  "generated_at": "2026-05-05T12:40:19Z",
+  "items": [
+    {
+      "audience": "public",
+      "candidate_owner_repo": "chummer6-design",
+      "claim_sensitivity": "private_support",
+      "closeout_posture": "open",
+      "cluster_key": "next12_trust_publication_launch_scale",
+      "decision": "proposed_queue_candidate",
+      "decision_class": "docs/help fix",
+      "owner": "fleet",
+      "packet_id": "next12_trust_publication_launch_scale",
+      "recurrence_count": 2,
+      "signal_family": "public issue",
+      "source": "weekly_product_pulse",
+      "source_families": [
+        "ProductLift",
+        "public-guide",
+        "support"
+      ],
+      "source_refs": [
+        "products/chummer/ROADMAP.md",
+        "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml"
+      ],
+      "summary": "Next 12 Biggest Wins is the active pressure cluster: finish install-specific trust/support truth, creator publication and shelf posture, pulse-v3 launch governance, and no-step-back utility parity."
+    },
+    {
+      "audience": "public",
+      "candidate_owner_repo": "chummer6-design",
+      "claim_sensitivity": "private_support",
+      "closeout_posture": "open",
+      "cluster_key": "public_release_follow_through",
+      "decision": "proposed_queue_candidate",
+      "decision_class": "docs/help fix",
+      "owner": "fleet",
+      "packet_id": "public_release_follow_through",
+      "recurrence_count": 2,
+      "signal_family": "public issue",
+      "source": "weekly_product_pulse",
+      "source_families": [
+        "Katteb",
+        "ProductLift",
+        "public-guide",
+        "support"
+      ],
+      "source_refs": [
+        "products/chummer/PUBLIC_RELEASE_EXPERIENCE.yaml",
+        "products/chummer/FEEDBACK_AND_CRASH_STATUS_MODEL.md"
+      ],
+      "summary": "Downloads, updates, support closure, and channel-aware trust copy now exist as first-party surfaces and must keep moving in lockstep instead of drifting back into separate promises."
+    },
+    {
+      "audience": "public",
+      "candidate_owner_repo": "chummer6-design",
+      "claim_sensitivity": "private_support",
+      "closeout_posture": "open",
+      "cluster_key": "long_pole_visibility",
+      "decision": "proposed_queue_candidate",
+      "decision_class": "docs/help fix",
+      "owner": "fleet",
+      "packet_id": "long_pole_visibility",
+      "recurrence_count": 2,
+      "signal_family": "public issue",
+      "source": "weekly_product_pulse",
+      "source_families": [
+        "ClickRank",
+        "public-guide",
+        "support"
+      ],
+      "source_refs": [
+        "products/chummer/PROGRESS_REPORT.generated.json",
+        "products/chummer/RELEASE_EVIDENCE_PACK.md"
+      ],
+      "summary": "The current longest pole is Core Engine, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product."
+    }
+  ],
+  "source_summary": {
+    "support_packet_count": 0,
+    "weekly_pulse_cluster_count": 3
+  }
+}

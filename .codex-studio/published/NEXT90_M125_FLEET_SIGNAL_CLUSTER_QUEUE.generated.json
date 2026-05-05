@@ -1,0 +1,391 @@
+{
+  "allowed_paths": [
+    "scripts",
+    "tests",
+    ".codex-studio",
+    "feedback"
+  ],
+  "canonical_alignment": {
+    "design_queue_status": "not_started",
+    "fleet_queue_status": "not_started",
+    "issues": [],
+    "registry_status": "not_started",
+    "state": "pass",
+    "work_task_status": ""
+  },
+  "canonical_monitors": {
+    "clickrank_lane": {
+      "checks": {
+        "blocked_without_upstream_review": true,
+        "weekly_pulse_inputs": true,
+        "workflow": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "feedback_ooda_loop": {
+      "checks": {
+        "fleet_clustering": true,
+        "forbidden_shortcuts": true,
+        "packet_to_action_rule": true,
+        "signal_packet_rule": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "katteb_lane": {
+      "checks": {
+        "audit_workflow": true,
+        "required_source_packet": true,
+        "review_rule": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "productlift_bridge": {
+      "checks": {
+        "closeout_rule": true,
+        "status_mapping": true,
+        "support_misroutes": true,
+        "weekly_digest": true
+      },
+      "issues": [],
+      "state": "pass"
+    },
+    "public_signal_pipeline": {
+      "checks": {
+        "anti_patterns": true,
+        "closeout_requirements": true,
+        "core_rule": true,
+        "decision_classes": true,
+        "productlift_flow": true
+      },
+      "issues": [],
+      "state": "pass"
+    }
+  },
+  "contract_name": "fleet.next90_m125_signal_cluster_queue_synthesis",
+  "frontier_id": 5150581210,
+  "generated_at": "2026-05-05T12:40:19Z",
+  "milestone_id": 125,
+  "owned_surfaces": [
+    "add_signal_cluster_to_queue:fleet"
+  ],
+  "package_closeout": {
+    "blockers": [],
+    "state": "pass",
+    "warnings": [
+      "Queue candidates remain proposal-only until Product Governor and chummer6-design approve canon and owner routing."
+    ]
+  },
+  "package_id": "next90-m125-fleet-add-signal-cluster-to-queue-synthesis-for-repeated-produ",
+  "queue_synthesis": {
+    "cluster_count": 3,
+    "clusters": [
+      {
+        "audience": "public",
+        "candidate_owner_repo": "chummer6-design",
+        "claim_sensitivity": "private_support",
+        "cluster_key": "long_pole_visibility",
+        "packet_count": 1,
+        "repeated_signal_count": 2,
+        "routing_outcome": "docs/help fix",
+        "source_families": [
+          "ClickRank",
+          "public-guide",
+          "support"
+        ],
+        "source_items": [
+          {
+            "decision_class": "docs/help fix",
+            "packet_id": "long_pole_visibility",
+            "source": "weekly_product_pulse",
+            "source_families": [
+              "ClickRank",
+              "public-guide",
+              "support"
+            ],
+            "source_refs": [
+              "products/chummer/PROGRESS_REPORT.generated.json",
+              "products/chummer/RELEASE_EVIDENCE_PACK.md"
+            ],
+            "summary": "The current longest pole is Core Engine, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product."
+          }
+        ],
+        "summary": "The current longest pole is Core Engine, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product."
+      },
+      {
+        "audience": "public",
+        "candidate_owner_repo": "chummer6-design",
+        "claim_sensitivity": "private_support",
+        "cluster_key": "next12_trust_publication_launch_scale",
+        "packet_count": 1,
+        "repeated_signal_count": 2,
+        "routing_outcome": "docs/help fix",
+        "source_families": [
+          "ProductLift",
+          "public-guide",
+          "support"
+        ],
+        "source_items": [
+          {
+            "decision_class": "docs/help fix",
+            "packet_id": "next12_trust_publication_launch_scale",
+            "source": "weekly_product_pulse",
+            "source_families": [
+              "ProductLift",
+              "public-guide",
+              "support"
+            ],
+            "source_refs": [
+              "products/chummer/ROADMAP.md",
+              "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml"
+            ],
+            "summary": "Next 12 Biggest Wins is the active pressure cluster: finish install-specific trust/support truth, creator publication and shelf posture, pulse-v3 launch governance, and no-step-back utility parity."
+          }
+        ],
+        "summary": "Next 12 Biggest Wins is the active pressure cluster: finish install-specific trust/support truth, creator publication and shelf posture, pulse-v3 launch governance, and no-step-back utility parity."
+      },
+      {
+        "audience": "public",
+        "candidate_owner_repo": "chummer6-design",
+        "claim_sensitivity": "private_support",
+        "cluster_key": "public_release_follow_through",
+        "packet_count": 1,
+        "repeated_signal_count": 2,
+        "routing_outcome": "docs/help fix",
+        "source_families": [
+          "Katteb",
+          "ProductLift",
+          "public-guide",
+          "support"
+        ],
+        "source_items": [
+          {
+            "decision_class": "docs/help fix",
+            "packet_id": "public_release_follow_through",
+            "source": "weekly_product_pulse",
+            "source_families": [
+              "Katteb",
+              "ProductLift",
+              "public-guide",
+              "support"
+            ],
+            "source_refs": [
+              "products/chummer/PUBLIC_RELEASE_EXPERIENCE.yaml",
+              "products/chummer/FEEDBACK_AND_CRASH_STATUS_MODEL.md"
+            ],
+            "summary": "Downloads, updates, support closure, and channel-aware trust copy now exist as first-party surfaces and must keep moving in lockstep instead of drifting back into separate promises."
+          }
+        ],
+        "summary": "Downloads, updates, support closure, and channel-aware trust copy now exist as first-party surfaces and must keep moving in lockstep instead of drifting back into separate promises."
+      }
+    ],
+    "issues": [],
+    "missing_source_families": [],
+    "queue_candidate_count": 3,
+    "queue_candidates": [
+      {
+        "audience": "public",
+        "bounded_scope": [
+          "products/chummer/PROGRESS_REPORT.generated.json",
+          "products/chummer/RELEASE_EVIDENCE_PACK.md"
+        ],
+        "candidate_id": "m125_signal_long_pole_visibility",
+        "candidate_owner_repo": "chummer6-design",
+        "claim_sensitivity": "private_support",
+        "decision_authority": [
+          "Product Governor",
+          "chummer6-design"
+        ],
+        "proposal_state": "proposal_only",
+        "repeated_signal_count": 2,
+        "routing_outcome": "docs/help fix",
+        "source_families": [
+          "ClickRank",
+          "public-guide",
+          "support"
+        ],
+        "source_family_count": 3,
+        "source_items": [
+          {
+            "decision_class": "docs/help fix",
+            "packet_id": "long_pole_visibility",
+            "source": "weekly_product_pulse",
+            "source_families": [
+              "ClickRank",
+              "public-guide",
+              "support"
+            ],
+            "source_refs": [
+              "products/chummer/PROGRESS_REPORT.generated.json",
+              "products/chummer/RELEASE_EVIDENCE_PACK.md"
+            ],
+            "summary": "The current longest pole is Core Engine, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product."
+          }
+        ],
+        "title": "Synthesize long_pole_visibility ClickRank/public-guide/support signal cluster into one upstream public-guide/docs patch queue slice."
+      },
+      {
+        "audience": "public",
+        "bounded_scope": [
+          "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
+          "products/chummer/ROADMAP.md"
+        ],
+        "candidate_id": "m125_signal_next12_trust_publication_launch_scale",
+        "candidate_owner_repo": "chummer6-design",
+        "claim_sensitivity": "private_support",
+        "decision_authority": [
+          "Product Governor",
+          "chummer6-design"
+        ],
+        "proposal_state": "proposal_only",
+        "repeated_signal_count": 2,
+        "routing_outcome": "docs/help fix",
+        "source_families": [
+          "ProductLift",
+          "public-guide",
+          "support"
+        ],
+        "source_family_count": 3,
+        "source_items": [
+          {
+            "decision_class": "docs/help fix",
+            "packet_id": "next12_trust_publication_launch_scale",
+            "source": "weekly_product_pulse",
+            "source_families": [
+              "ProductLift",
+              "public-guide",
+              "support"
+            ],
+            "source_refs": [
+              "products/chummer/ROADMAP.md",
+              "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml"
+            ],
+            "summary": "Next 12 Biggest Wins is the active pressure cluster: finish install-specific trust/support truth, creator publication and shelf posture, pulse-v3 launch governance, and no-step-back utility parity."
+          }
+        ],
+        "title": "Synthesize next12_trust_publication_launch_scale ProductLift/public-guide/support signal cluster into one upstream public-guide/docs patch queue slice."
+      },
+      {
+        "audience": "public",
+        "bounded_scope": [
+          "products/chummer/FEEDBACK_AND_CRASH_STATUS_MODEL.md",
+          "products/chummer/PUBLIC_RELEASE_EXPERIENCE.yaml"
+        ],
+        "candidate_id": "m125_signal_public_release_follow_through",
+        "candidate_owner_repo": "chummer6-design",
+        "claim_sensitivity": "private_support",
+        "decision_authority": [
+          "Product Governor",
+          "chummer6-design"
+        ],
+        "proposal_state": "proposal_only",
+        "repeated_signal_count": 2,
+        "routing_outcome": "docs/help fix",
+        "source_families": [
+          "Katteb",
+          "ProductLift",
+          "public-guide",
+          "support"
+        ],
+        "source_family_count": 4,
+        "source_items": [
+          {
+            "decision_class": "docs/help fix",
+            "packet_id": "public_release_follow_through",
+            "source": "weekly_product_pulse",
+            "source_families": [
+              "Katteb",
+              "ProductLift",
+              "public-guide",
+              "support"
+            ],
+            "source_refs": [
+              "products/chummer/PUBLIC_RELEASE_EXPERIENCE.yaml",
+              "products/chummer/FEEDBACK_AND_CRASH_STATUS_MODEL.md"
+            ],
+            "summary": "Downloads, updates, support closure, and channel-aware trust copy now exist as first-party surfaces and must keep moving in lockstep instead of drifting back into separate promises."
+          }
+        ],
+        "title": "Synthesize public_release_follow_through Katteb/ProductLift/public-guide/support signal cluster into one upstream public-guide/docs patch queue slice."
+      }
+    ],
+    "signal_item_count": 3,
+    "source_family_counts": {
+      "ClickRank": 1,
+      "Katteb": 1,
+      "ProductLift": 2,
+      "public-guide": 3,
+      "support": 3
+    },
+    "source_summary": {
+      "support_packet_count": 0,
+      "weekly_pulse_cluster_count": 3
+    },
+    "state": "pass",
+    "warnings": []
+  },
+  "queue_task": "Add signal-cluster-to-queue synthesis for repeated ProductLift, Katteb, ClickRank, support, and public-guide findings.",
+  "queue_title": "Add signal-cluster-to-queue synthesis for repeated ProductLift, Katteb, ClickRank, support, and public-guide findings.",
+  "source_inputs": {
+    "clickrank_lane": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_SITE_VISIBILITY_AND_SEARCH_OPTIMIZATION.md",
+      "sha256": "aab31d941105ea22791cb3a4d4e37d55599763536b05ee094af97d95c6a194d0"
+    },
+    "design_queue_staging": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "7a3cdb54f98a4267c4739a0acb12e2e128cfd14187a651b20a7d4e5edd72c235"
+    },
+    "feedback_ooda_loop": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/FEEDBACK_AND_SIGNAL_OODA_LOOP.md",
+      "sha256": "cd57947f88f5df476a55024ca7d7fab36f67589015e790d3decb4ae9eda97f1b"
+    },
+    "katteb_lane": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/KATTEB_PUBLIC_GUIDE_OPTIMIZATION_LANE.md",
+      "sha256": "78e4f259b43083ae2f4de05b9e72d70d638694c34eeb5719608f3b530ed436ec"
+    },
+    "productlift_bridge": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PRODUCTLIFT_FEEDBACK_ROADMAP_BRIDGE.md",
+      "sha256": "7617dba6fe7319cf28934a531e9b763e07c2d8cdc21573dce4cf129aa7e1c8d2"
+    },
+    "public_signal_pipeline": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_SIGNAL_TO_CANON_PIPELINE.md",
+      "sha256": "fa9de073ddaac091b9bad88a3e2fbb3dccab184b1261b85bff5d3409f2ddac78"
+    },
+    "queue_staging": {
+      "generated_at": "",
+      "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+      "sha256": "bcb13136711f8ce9da4d504edeaff4ccfa3795869110b4003f41df86e63c5878"
+    },
+    "signal_source": {
+      "generated_at": "2026-05-05T12:40:19Z",
+      "path": "/docker/fleet/.codex-studio/published/NEXT90_M125_FLEET_SIGNAL_CLUSTER_QUEUE.signal_source.generated.json",
+      "sha256": "e3eb0ada390a9d36ed14c926eab83cd212599f21419212955f5db1d8d2469796"
+    },
+    "successor_registry": {
+      "generated_at": "",
+      "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+      "sha256": "a406e365b832d83bc8387bdd72fb39665ec21a959e70d888ba1005a8fb1a0480"
+    },
+    "support_case_packets": {
+      "generated_at": "2026-05-05T12:30:01Z",
+      "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+      "sha256": "36dda328aceb928ff45440dcf74244f2f0d79db06d9f264f5c99fa9cfe14c6e5"
+    },
+    "weekly_product_pulse": {
+      "generated_at": "2026-05-05T12:30:17Z",
+      "path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
+      "sha256": "5dac6cbc3b1432c2a7dc51cca2437cd71e030b9af6af0dec33a572ed30248ff3"
+    }
+  },
+  "status": "pass",
+  "wave": "W17",
+  "work_task_id": "125.3"
+}
