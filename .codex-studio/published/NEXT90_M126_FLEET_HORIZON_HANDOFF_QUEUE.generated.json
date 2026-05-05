@@ -6,8 +6,8 @@
     "feedback"
   ],
   "canonical_alignment": {
-    "design_queue_status": "not_started",
-    "fleet_queue_status": "not_started",
+    "design_queue_status": "complete",
+    "fleet_queue_status": "complete",
     "issues": [],
     "registry_status": "not_started",
     "state": "pass",
@@ -16,7 +16,7 @@
   "canonical_monitors": {
     "horizon_registry": {
       "global_blockers": [],
-      "horizon_count": 12,
+      "horizon_count": 16,
       "issues": [],
       "missing_by_repo": {
         "chummer6-core": [
@@ -39,6 +39,33 @@
             ]
           },
           {
+            "horizon_id": "quicksilver",
+            "missing_fields": [
+              "allowed_surfaces",
+              "proof_gate",
+              "public_claim_posture",
+              "stop_condition"
+            ]
+          },
+          {
+            "horizon_id": "edition-studio",
+            "missing_fields": [
+              "allowed_surfaces",
+              "proof_gate",
+              "public_claim_posture",
+              "stop_condition"
+            ]
+          },
+          {
+            "horizon_id": "onramp",
+            "missing_fields": [
+              "allowed_surfaces",
+              "proof_gate",
+              "public_claim_posture",
+              "stop_condition"
+            ]
+          },
+          {
             "horizon_id": "karma-forge",
             "missing_fields": [
               "allowed_surfaces",
@@ -49,6 +76,15 @@
           },
           {
             "horizon_id": "knowledge-fabric",
+            "missing_fields": [
+              "allowed_surfaces",
+              "proof_gate",
+              "public_claim_posture",
+              "stop_condition"
+            ]
+          },
+          {
+            "horizon_id": "run-control",
             "missing_fields": [
               "allowed_surfaces",
               "proof_gate",
@@ -104,6 +140,15 @@
             ]
           },
           {
+            "horizon_id": "onramp",
+            "missing_fields": [
+              "allowed_surfaces",
+              "proof_gate",
+              "public_claim_posture",
+              "stop_condition"
+            ]
+          },
+          {
             "horizon_id": "karma-forge",
             "missing_fields": [
               "allowed_surfaces",
@@ -123,6 +168,15 @@
           },
           {
             "horizon_id": "jackpoint",
+            "missing_fields": [
+              "allowed_surfaces",
+              "proof_gate",
+              "public_claim_posture",
+              "stop_condition"
+            ]
+          },
+          {
+            "horizon_id": "run-control",
             "missing_fields": [
               "allowed_surfaces",
               "proof_gate",
@@ -234,6 +288,15 @@
             ]
           },
           {
+            "horizon_id": "run-control",
+            "missing_fields": [
+              "allowed_surfaces",
+              "proof_gate",
+              "public_claim_posture",
+              "stop_condition"
+            ]
+          },
+          {
             "horizon_id": "black-ledger",
             "missing_fields": [
               "allowed_surfaces",
@@ -299,6 +362,15 @@
             ]
           },
           {
+            "horizon_id": "run-control",
+            "missing_fields": [
+              "allowed_surfaces",
+              "proof_gate",
+              "public_claim_posture",
+              "stop_condition"
+            ]
+          },
+          {
             "horizon_id": "black-ledger",
             "missing_fields": [
               "allowed_surfaces",
@@ -346,6 +418,33 @@
             ]
           },
           {
+            "horizon_id": "quicksilver",
+            "missing_fields": [
+              "allowed_surfaces",
+              "proof_gate",
+              "public_claim_posture",
+              "stop_condition"
+            ]
+          },
+          {
+            "horizon_id": "edition-studio",
+            "missing_fields": [
+              "allowed_surfaces",
+              "proof_gate",
+              "public_claim_posture",
+              "stop_condition"
+            ]
+          },
+          {
+            "horizon_id": "onramp",
+            "missing_fields": [
+              "allowed_surfaces",
+              "proof_gate",
+              "public_claim_posture",
+              "stop_condition"
+            ]
+          },
+          {
             "horizon_id": "knowledge-fabric",
             "missing_fields": [
               "allowed_surfaces",
@@ -374,6 +473,26 @@
           },
           {
             "horizon_id": "local-co-processor",
+            "missing_fields": [
+              "allowed_surfaces",
+              "proof_gate",
+              "public_claim_posture",
+              "stop_condition"
+            ]
+          }
+        ],
+        "chummer6-ui-kit": [
+          {
+            "horizon_id": "quicksilver",
+            "missing_fields": [
+              "allowed_surfaces",
+              "proof_gate",
+              "public_claim_posture",
+              "stop_condition"
+            ]
+          },
+          {
+            "horizon_id": "edition-studio",
             "missing_fields": [
               "allowed_surfaces",
               "proof_gate",
@@ -421,6 +540,7 @@
         "chummer6-media-factory",
         "chummer6-mobile",
         "chummer6-ui",
+        "chummer6-ui-kit",
         "executive-assistant",
         "fleet"
       ],
@@ -439,7 +559,7 @@
   },
   "contract_name": "fleet.next90_m126_horizon_handoff_queue_guard",
   "frontier_id": 6039766471,
-  "generated_at": "2026-05-05T12:56:17Z",
+  "generated_at": "2026-05-05T21:36:11Z",
   "milestone_id": 126,
   "owned_surfaces": [
     "teach_the_supervisor_to_stage:fleet"
@@ -459,7 +579,7 @@
         "package_id": "next90-m126-core-define-deterministic-proof-contracts-for-alice-karma-for",
         "reasons": [
           "design handoff gate task 126.1 is not done",
-          "horizon registry still lacks required handoff fields for chummer6-core: alice, black-ledger, ghostwire, karma-forge, knowledge-fabric, local-co-processor, nexus-pan"
+          "horizon registry still lacks required handoff fields for chummer6-core: alice, black-ledger, edition-studio, ghostwire, karma-forge, knowledge-fabric, local-co-processor, nexus-pan, onramp, quicksilver, run-control"
         ],
         "repo": "chummer6-core",
         "title": "Define deterministic proof contracts for ALICE, KARMA FORGE, Table Pulse, rule-environment, and simulation-adjacent horizons.",
@@ -469,17 +589,17 @@
         "package_id": "next90-m126-hub-define-hosted-proof-contracts-for-open-runs-shadowcaster",
         "reasons": [
           "design handoff gate task 126.1 is not done",
-          "horizon registry still lacks required handoff fields for chummer6-hub: alice, black-ledger, community-hub, ghostwire, jackpoint, karma-forge, knowledge-fabric, nexus-pan, runbook-press, runsite, table-pulse"
+          "horizon registry still lacks required handoff fields for chummer6-hub: alice, black-ledger, community-hub, ghostwire, jackpoint, karma-forge, knowledge-fabric, nexus-pan, onramp, run-control, runbook-press, runsite, table-pulse"
         ],
         "repo": "chummer6-hub",
-        "title": "Define hosted proof contracts for Open Runs, Shadowcasters, public signal, community, and account-aware horizon conversions.",
+        "title": "Define hosted proof contracts for Open Runs, Community Hub, public signal, community, and account-aware horizon conversions.",
         "work_task_id": "126.4"
       },
       {
         "package_id": "next90-m126-ui-define-desktop-proof-contracts-for-horizon-entry-points",
         "reasons": [
           "design handoff gate task 126.1 is not done",
-          "horizon registry still lacks required handoff fields for chummer6-ui: alice, black-ledger, community-hub, knowledge-fabric, local-co-processor"
+          "horizon registry still lacks required handoff fields for chummer6-ui: alice, black-ledger, community-hub, edition-studio, knowledge-fabric, local-co-processor, onramp, quicksilver"
         ],
         "repo": "chummer6-ui",
         "title": "Define desktop proof contracts for horizon entry points that must appear in Build, Runboard, publication, and workspace surfaces.",
@@ -489,7 +609,7 @@
         "package_id": "next90-m126-mobile-define-mobile-proof-contracts-for-nexus-pan-table-pulse",
         "reasons": [
           "design handoff gate task 126.1 is not done",
-          "horizon registry still lacks required handoff fields for chummer6-mobile: black-ledger, community-hub, ghostwire, local-co-processor, nexus-pan"
+          "horizon registry still lacks required handoff fields for chummer6-mobile: black-ledger, community-hub, ghostwire, local-co-processor, nexus-pan, run-control"
         ],
         "repo": "chummer6-mobile",
         "title": "Define mobile proof contracts for NEXUS-PAN, table-pulse, reconnect, recap, and travel-cache horizon conversions.",
@@ -499,7 +619,7 @@
         "package_id": "next90-m126-media-factory-define-media-proof-contracts-for-creator-press-route-art",
         "reasons": [
           "design handoff gate task 126.1 is not done",
-          "horizon registry still lacks required handoff fields for chummer6-media-factory: black-ledger, community-hub, ghostwire, jackpoint, runbook-press, runsite, table-pulse"
+          "horizon registry still lacks required handoff fields for chummer6-media-factory: black-ledger, community-hub, ghostwire, jackpoint, run-control, runbook-press, runsite, table-pulse"
         ],
         "repo": "chummer6-media-factory",
         "title": "Define media proof contracts for creator press, route artifacts, narrated recap, preview, and bounded video horizons.",
@@ -509,7 +629,7 @@
         "package_id": "next90-m132-core-implement-deterministic-contracts-for-nexus-pan-replay-a",
         "reasons": [
           "design handoff gate task 126.1 is not done",
-          "horizon registry still lacks required handoff fields for chummer6-core: alice, black-ledger, ghostwire, karma-forge, knowledge-fabric, local-co-processor, nexus-pan"
+          "horizon registry still lacks required handoff fields for chummer6-core: alice, black-ledger, edition-studio, ghostwire, karma-forge, knowledge-fabric, local-co-processor, nexus-pan, onramp, quicksilver, run-control"
         ],
         "repo": "chummer6-core",
         "title": "Implement deterministic contracts for NEXUS-PAN replay, ALICE comparisons, KARMA FORGE amend packs, Knowledge Fabric source refs, and Local Co-Processor acceleration.",
@@ -519,7 +639,7 @@
         "package_id": "next90-m132-hub-orchestrate-hosted-research-packets-approvals-campaign-a",
         "reasons": [
           "design handoff gate task 126.1 is not done",
-          "horizon registry still lacks required handoff fields for chummer6-hub: alice, black-ledger, community-hub, ghostwire, jackpoint, karma-forge, knowledge-fabric, nexus-pan, runbook-press, runsite, table-pulse"
+          "horizon registry still lacks required handoff fields for chummer6-hub: alice, black-ledger, community-hub, ghostwire, jackpoint, karma-forge, knowledge-fabric, nexus-pan, onramp, run-control, runbook-press, runsite, table-pulse"
         ],
         "repo": "chummer6-hub",
         "title": "Orchestrate hosted research packets, approvals, campaign/account context, and public-signal intake for deterministic horizons.",
@@ -539,7 +659,7 @@
         "package_id": "next90-m132-ui-surface-alice-karma-forge-knowledge-fabric-and-source-an",
         "reasons": [
           "design handoff gate task 126.1 is not done",
-          "horizon registry still lacks required handoff fields for chummer6-ui: alice, black-ledger, community-hub, knowledge-fabric, local-co-processor"
+          "horizon registry still lacks required handoff fields for chummer6-ui: alice, black-ledger, community-hub, edition-studio, knowledge-fabric, local-co-processor, onramp, quicksilver"
         ],
         "repo": "chummer6-ui",
         "title": "Surface ALICE, KARMA FORGE, Knowledge Fabric, and source-anchor horizon entry points on desktop with proof and preview boundaries.",
@@ -549,7 +669,7 @@
         "package_id": "next90-m132-mobile-surface-nexus-pan-reconnect-replay-and-local-co-processo",
         "reasons": [
           "design handoff gate task 126.1 is not done",
-          "horizon registry still lacks required handoff fields for chummer6-mobile: black-ledger, community-hub, ghostwire, local-co-processor, nexus-pan"
+          "horizon registry still lacks required handoff fields for chummer6-mobile: black-ledger, community-hub, ghostwire, local-co-processor, nexus-pan, run-control"
         ],
         "repo": "chummer6-mobile",
         "title": "Surface NEXUS-PAN reconnect/replay and local co-processor confidence posture on mobile without owning rules truth.",
@@ -578,10 +698,10 @@
         "package_id": "next90-m133-hub-implement-hosted-orchestration-for-jackpoint-artifact-st",
         "reasons": [
           "design handoff gate task 126.1 is not done",
-          "horizon registry still lacks required handoff fields for chummer6-hub: alice, black-ledger, community-hub, ghostwire, jackpoint, karma-forge, knowledge-fabric, nexus-pan, runbook-press, runsite, table-pulse"
+          "horizon registry still lacks required handoff fields for chummer6-hub: alice, black-ledger, community-hub, ghostwire, jackpoint, karma-forge, knowledge-fabric, nexus-pan, onramp, run-control, runbook-press, runsite, table-pulse"
         ],
         "repo": "chummer6-hub",
-        "title": "Implement hosted orchestration for JACKPOINT artifact studio, RUNBOOK PRESS creator workflows, RUNSITE packs, TABLE PULSE, GHOSTWIRE, and Shadowcasters surfaces.",
+        "title": "Implement hosted orchestration for JACKPOINT artifact studio, RUNBOOK PRESS creator workflows, RUNSITE packs, TABLE PULSE, GHOSTWIRE, and Community Hub surfaces.",
         "work_task_id": "133.1"
       },
       {
@@ -598,7 +718,7 @@
         "package_id": "next90-m133-media-factory-render-route-preview-narrated-recap-creator-press-table",
         "reasons": [
           "design handoff gate task 126.1 is not done",
-          "horizon registry still lacks required handoff fields for chummer6-media-factory: black-ledger, community-hub, ghostwire, jackpoint, runbook-press, runsite, table-pulse"
+          "horizon registry still lacks required handoff fields for chummer6-media-factory: black-ledger, community-hub, ghostwire, jackpoint, run-control, runbook-press, runsite, table-pulse"
         ],
         "repo": "chummer6-media-factory",
         "title": "Render route, preview, narrated recap, creator press, table-pulse, replay/forensics, and open-run media artifacts from approved manifests.",
@@ -608,20 +728,20 @@
         "package_id": "next90-m133-ui-surface-artifact-studio-creator-press-replay-forensics-r",
         "reasons": [
           "design handoff gate task 126.1 is not done",
-          "horizon registry still lacks required handoff fields for chummer6-ui: alice, black-ledger, community-hub, knowledge-fabric, local-co-processor"
+          "horizon registry still lacks required handoff fields for chummer6-ui: alice, black-ledger, community-hub, edition-studio, knowledge-fabric, local-co-processor, onramp, quicksilver"
         ],
         "repo": "chummer6-ui",
-        "title": "Surface artifact studio, creator press, replay/forensics, route packs, table-pulse, and Shadowcasters entry points on desktop.",
+        "title": "Surface artifact studio, creator press, replay/forensics, route packs, table-pulse, and Community Hub entry points on desktop.",
         "work_task_id": "133.4"
       },
       {
         "package_id": "next90-m133-mobile-surface-mobile-travel-route-recap-observer-table-pulse-a",
         "reasons": [
           "design handoff gate task 126.1 is not done",
-          "horizon registry still lacks required handoff fields for chummer6-mobile: black-ledger, community-hub, ghostwire, local-co-processor, nexus-pan"
+          "horizon registry still lacks required handoff fields for chummer6-mobile: black-ledger, community-hub, ghostwire, local-co-processor, nexus-pan, run-control"
         ],
         "repo": "chummer6-mobile",
-        "title": "Surface mobile travel, route, recap, observer, table-pulse, and Shadowcasters horizon moments with consent and offline posture.",
+        "title": "Surface mobile travel, route, recap, observer, table-pulse, and Community Hub horizon moments with consent and offline posture.",
         "work_task_id": "133.5"
       },
       {
@@ -672,12 +792,12 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "5b546490fa982f1b9d4497afcb3be5e056659382dc2884f29452e4ebd7cbec61"
+      "sha256": "ba078e1c11ebe7c10bb0af49d29a9eaf19559c37b8676328964ab49e15cd54b5"
     },
     "horizon_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/HORIZON_REGISTRY.yaml",
-      "sha256": "3141f5f24d39df06bd0b35fa7b2093cafbb35c6abc50f884f6cb237aa7730ab1"
+      "sha256": "3e1b5910263561b644602f6f80acb666571ca6199a5ca6d8b4a0595abebd2167"
     },
     "next90_guide": {
       "generated_at": "",
@@ -687,12 +807,12 @@
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "e75b48fb6092c0fc652080b0cb22dccbe1f273800d5ebeea56d4b8fcf4a8cbcd"
+      "sha256": "ba078e1c11ebe7c10bb0af49d29a9eaf19559c37b8676328964ab49e15cd54b5"
     },
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "ee54bc616880b24913e1bb20f6bbc9b50204f3212b7d6f709eb0023d33c08085"
+      "sha256": "cd355384935da32df2a72e03252a6d4df0bfd809d4a3315e08a76618eb916d4f"
     }
   },
   "status": "pass",

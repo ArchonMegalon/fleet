@@ -7,7 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from test_materialize_next90_m126_fleet_horizon_handoff_queue import _fixture_tree
+try:
+    from tests.test_materialize_next90_m126_fleet_horizon_handoff_queue import _fixture_tree
+except ModuleNotFoundError:
+    from test_materialize_next90_m126_fleet_horizon_handoff_queue import _fixture_tree
 
 
 VERIFIER = Path("/docker/fleet/scripts/verify_next90_m126_fleet_horizon_handoff_queue.py")

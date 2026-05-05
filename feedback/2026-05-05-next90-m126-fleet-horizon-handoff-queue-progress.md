@@ -15,6 +15,7 @@
 - Added fail-closed handling for a missing `HORIZON_REGISTRY.yaml`.
 - Added fail-closed handling for horizons that cannot be attributed to an owning repo.
 - Added focused regression tests for design-gate, incomplete-registry, and missing-registry cases.
+- Hardened append-style queue overlay parsing so live queue mirrors no longer false-fail as missing rows when the guard recomputes its canonical alignment.
 
 ## Live posture
 
