@@ -1,7 +1,7 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-05T00:32:49Z'
-mode: completion_review
+generated_at: '2026-05-05T01:02:06Z'
+mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -26,18 +26,53 @@ project_supervisor_contract:
     ui_linux_desktop_exit_gate: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
     ui_desktop_executable_exit_gate: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
 focus:
-  profiles: []
-  owners: []
-  texts: []
+  profiles:
+  - top_flagship_grade
+  - whole_project_frontier
+  owners:
+  - chummer6-core
+  - chummer6-hub
+  - chummer6-mobile
+  - chummer6-ui
+  - chummer6-ui-kit
+  texts:
+  - accessibility
+  - automatic bugfixing
+  - companion
+  - continuity
+  - crash
+  - crash reporting
+  - desktop client
+  - feedback
+  - feedback loop
+  - fit and finish
+  - fleet and operator loop
+  - journey smoothness
+  - localization
+  - media artifacts
+  - mobile
+  - mobile play shell
+  - no lowered standards
+  - offline
+  - performance
+  - proof shelf
+  - restore confidence
+  - support
+  - support routing
+  - top flagship grade
+  - travel
+  - ui kit and flagship polish
+  - whole project frontier
+  - whole-project frontier
 completion_audit:
   status: fail
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: latest worker receipt 20260504T223955Z-shard-3 was an internal retryable
-    worker recycle; waiting for a fresh structured completion receipt
-  latest_run_id: 20260504T223955Z-shard-3
-  latest_run_reason: dispatch launch selection is temporarily busy
+  reason: 'latest worker receipt 20260505T005129Z-shard-1 is not trusted: worker exit
+    124'
+  latest_run_id: 20260505T005129Z-shard-1
+  latest_run_reason: worker exit 124
 journey_gate_audit:
   status: fail
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
@@ -45,14 +80,14 @@ journey_gate_audit:
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
   status: fail
-  reason: linux desktop exit gate proof is stale (211482s old)
+  reason: linux desktop exit gate proof is stale (213238s old)
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
   generated_at: '2026-05-02T13:48:07Z'
 weekly_pulse_audit:
   status: fail
   reason: weekly product pulse reports journey gate health as blocked
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-05T00:31:02Z'
+  generated_at: '2026-05-05T01:01:02Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -65,126 +100,29 @@ blocking_audits:
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 - component: linux_desktop_exit_gate
   title: Linux desktop exit-gate gaps
-  reason: linux desktop exit gate proof is stale (211482s old)
+  reason: linux desktop exit gate proof is stale (213238s old)
 - component: desktop_executable_exit_gate
   title: Desktop executable exit-gate gaps
-  reason: desktop executable exit gate proof is stale (211456s old)
+  reason: desktop executable exit gate proof is stale (213212s old)
 - component: weekly_pulse
   title: Weekly product pulse gaps
   reason: weekly product pulse reports journey gate health as blocked
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: latest worker receipt 20260504T223955Z-shard-3 was an internal retryable
-    worker recycle; waiting for a fresh structured completion receipt
-frontier_count: 5
-frontier_ids:
-- 3194227093
-- 1651087602
-- 4373825539
-- 1469377624
-- 2321811557
-frontier:
-- id: 3194227093
-  title: 'Completion gate: Install, claim, restore, continue'
-  wave: completion_review
-  status: review_required
-  owners:
-  - chummer6-ui
-  - chummer6-hub
-  - chummer6-hub-registry
-  - fleet
-  dependencies: []
-  exit_criteria:
-  - status_plane is stale.
-  - repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json
-    is stale (329327s old > 172800s max).
-  - repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json
-    field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows'].
-  - repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json
-    field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but
-    was ['avalonia:windows'].
-  - 'release_channel.generated.json field ''desktopTupleCoverage.missingRequiredPlatformHeadRidTuples''
-    external proof request: capture promoted_installer_artifact, startup_smoke_receipt
-    on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId
-    avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe,
-    public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt
-    startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.'
-- id: 1651087602
-  title: 'Completion gate: Build, explain, publish'
-  wave: completion_review
-  status: review_required
-  owners:
-  - chummer6-core
-  - chummer6-ui
-  - chummer6-hub
-  - chummer6-media-factory
-  - fleet
-  dependencies: []
-  exit_criteria:
-  - status_plane is stale.
-- id: 4373825539
-  title: 'Completion gate: Campaign, session, recover, recap'
-  wave: completion_review
-  status: review_required
-  owners:
-  - chummer6-hub
-  - chummer6-mobile
-  - chummer6-ui
-  - chummer6-core
-  - fleet
-  - executive-assistant
-  dependencies: []
-  exit_criteria:
-  - status_plane is stale.
-- id: 1469377624
-  title: 'Completion gate: Recover from sync conflict'
-  wave: completion_review
-  status: review_required
-  owners:
-  - chummer6-hub
-  - chummer6-mobile
-  - chummer6-ui
-  - fleet
-  dependencies: []
-  exit_criteria:
-  - status_plane is stale.
-- id: 2321811557
-  title: 'Completion gate: Report, cluster, release, notify'
-  wave: completion_review
-  status: review_required
-  owners:
-  - chummer6-design
-  - chummer6-hub
-  - chummer6-ui
-  - chummer6-hub-registry
-  - fleet
-  - executive-assistant
-  dependencies: []
-  exit_criteria:
-  - status_plane is stale.
-  - release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands'
-    must match tuple-derived canonical command sequence for avalonia:win-x64:windows.
-  - release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete'
-    while desktopTupleCoverage reports missing platform/head/tuple inventory.
-  - release_channel.generated.json field 'supportabilityState' must be 'review_required'
-    while desktopTupleCoverage reports missing platform/head/tuple inventory.
-  - 'release_channel.generated.json field ''desktopTupleCoverage.missingRequiredPlatformHeadRidTuples''
-    external proof request: capture promoted_installer_artifact, startup_smoke_receipt
-    on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId
-    avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe,
-    public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt
-    startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.'
+  reason: 'latest worker receipt 20260505T005129Z-shard-1 is not trusted: worker exit
+    124'
+frontier_count: 0
+frontier_ids: []
+frontier: []
 eta:
-  status: recovery
-  eta_human: 8h-22h
+  status: flagship_delivery
+  eta_human: 1d-2.6d
   eta_confidence: low
-  basis: completion_review_recovery
-  scope_kind: completion_review_recovery
-  scope_label: Completion review and proof recovery
-  scope_warning: This ETA covers registry trust, proof, and review recovery. It is
-    still narrower than a final flagship parity claim unless full-product readiness
-    is also green.
+  basis: full_product_frontier_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
   blocking_reason: ''
-  summary: Registry closure is not yet trustworthy; recovery still needs trusted completion
-    receipt, golden journey proof, Linux desktop exit gate. Blocked journeys=6, warning
-    journeys=0, review frontier=5, decomposed_frontier=0, backlog_tail=0.
+  summary: 'Current closeout gates are green, but flagship product work still remains
+    across 3 synthetic slices. Outstanding readiness coverage: mobile_play_shell,
+    ui_kit_and_flagship_polish, media_artifacts, fleet_and_operator_loop, desktop_client.'

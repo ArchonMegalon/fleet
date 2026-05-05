@@ -7,7 +7,7 @@
     "feedback_forge_candidate_count": 0,
     "first_part_complete_count": 0,
     "first_part_routed_count": 0,
-    "generated_at": "2026-05-05T00:30:55Z",
+    "generated_at": "2026-05-05T01:00:55Z",
     "karma_forge_candidate_count": 0,
     "ltd_discovery_system_missing_tools": [],
     "ltd_discovery_system_ready": true,
@@ -81,7 +81,7 @@
       "release_receipt_id_present": 0,
       "release_receipt_ready": 0
     },
-    "generated_at": "2026-05-05T00:30:55Z",
+    "generated_at": "2026-05-05T01:00:55Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -106,7 +106,7 @@
     "state_counts": {},
     "support_case_backed_count": 0
   },
-  "generated_at": "2026-05-05T00:30:55Z",
+  "generated_at": "2026-05-05T01:00:55Z",
   "packets": [
     {
       "affected_canon_files": [],
@@ -148,7 +148,7 @@
               "state": "present_sha256_mismatch"
             },
             "startup_smoke_receipt": {
-              "age_seconds": 316017,
+              "age_seconds": 317818,
               "contract_matches_expected": false,
               "max_age_seconds": 604800,
               "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
@@ -231,7 +231,7 @@
     "blocked_receipt_mismatch_count": 0,
     "feedback_ready_count": 0,
     "fix_available_ready_count": 0,
-    "generated_at": "2026-05-05T00:30:55Z",
+    "generated_at": "2026-05-05T01:00:55Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -466,7 +466,7 @@
             "state": "present_sha256_mismatch"
           },
           "startup_smoke_receipt": {
-            "age_seconds": 316017,
+            "age_seconds": 317818,
             "contract_matches_expected": false,
             "max_age_seconds": 604800,
             "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
@@ -537,7 +537,7 @@
             "state": "present_sha256_mismatch"
           },
           "startup_smoke_receipt": {
-            "age_seconds": 316017,
+            "age_seconds": 317818,
             "contract_matches_expected": false,
             "max_age_seconds": 604800,
             "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
@@ -583,7 +583,7 @@
     "capture_deadline_hours": 24,
     "capture_deadline_utc": "2026-05-05T09:07:49Z",
     "command_root": "/docker/fleet/.codex-studio/published/external-proof-commands",
-    "generated_at": "2026-05-05T00:30:55Z",
+    "generated_at": "2026-05-05T01:00:55Z",
     "host_groups": {
       "windows": {
         "command_pack_path": "/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz",
@@ -616,7 +616,7 @@
                 "state": "present_sha256_mismatch"
               },
               "startup_smoke_receipt": {
-                "age_seconds": 316017,
+                "age_seconds": 317818,
                 "contract_matches_expected": false,
                 "max_age_seconds": 604800,
                 "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",

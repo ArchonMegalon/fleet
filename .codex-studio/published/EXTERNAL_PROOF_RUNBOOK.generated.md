@@ -1,9 +1,9 @@
 # External Proof Runbook
 
-- generated_at: 2026-05-05T00:31:01Z
+- generated_at: 2026-05-05T01:01:01Z
 - unresolved_request_count: 1
 - unresolved_hosts: windows
-- plan_generated_at: 2026-05-05T00:30:55Z
+- plan_generated_at: 2026-05-05T01:00:55Z
 - release_channel_generated_at: 2026-05-04T09:07:49Z
 - capture_deadline_hours: 24
 - capture_deadline_utc: 2026-05-05T09:07:49Z
@@ -77,7 +77,7 @@
   local_startup_smoke_receipt_state: `contract_mismatch`
   local_startup_smoke_receipt_path: `/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json`
   local_startup_smoke_receipt_recorded_at: `2026-05-01T08:43:57.7809811+00:00`
-  local_startup_smoke_receipt_age_seconds: `316017`
+  local_startup_smoke_receipt_age_seconds: `317818`
   capture_deadline_utc: `2026-05-05T09:07:49Z`
   capture_deadline_state: `pending`
   commands:
