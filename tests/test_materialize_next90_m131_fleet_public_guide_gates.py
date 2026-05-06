@@ -28,6 +28,11 @@ def _write_yaml(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
+def _write_generated_queue_overlay(path: Path, item: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("---\nitems:\n" + yaml.safe_dump([item], sort_keys=False), encoding="utf-8")
+
+
 def _registry() -> dict:
     return {
         "program_wave": "next_90_day_product_advance",
@@ -329,6 +334,26 @@ class MaterializeNext90M131FleetPublicGuideGatesTest(unittest.TestCase):
         self.assertTrue(
             any("visibility_policy" in row for row in payload["package_closeout"]["blockers"])
         )
+
+    def test_generated_queue_overlay_shape_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(
+                tmp_path,
+                guide_verify_success=True,
+                flagship_status="pass",
+                flagship_findings=[],
+                burn_allowed=True,
+            )
+            queue_item = _queue_item()
+            _write_generated_queue_overlay(fixture["queue"], queue_item)
+            _write_generated_queue_overlay(fixture["design_queue"], queue_item)
+            artifact = tmp_path / "artifact.json"
+            payload = self._run_materializer(fixture, artifact)
+
+        self.assertEqual(payload["status"], "pass")
+        self.assertEqual(payload["canonical_alignment"]["state"], "pass")
+        self.assertFalse(payload["package_closeout"]["blockers"])
 
 
 if __name__ == "__main__":
