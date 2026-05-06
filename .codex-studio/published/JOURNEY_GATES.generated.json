@@ -1,57 +1,57 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-05-06T20:00:48Z",
+  "generated_at": "2026-05-06T20:04:12Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
-    "overall_state": "blocked",
+    "overall_state": "ready",
     "total_journey_count": 6,
-    "ready_count": 4,
+    "ready_count": 6,
     "warning_count": 0,
-    "blocked_count": 2,
+    "blocked_count": 0,
     "blocked_external_only_count": 0,
-    "blocked_with_local_count": 2,
-    "blocking_mode": "local",
+    "blocked_with_local_count": 0,
+    "blocking_mode": "none",
     "blocked_external_only_hosts": [],
     "blocked_external_only_host_counts": {},
     "blocked_external_only_tuples": [],
-    "recommended_action": "Resolve the blocking golden-journey gaps before widening publish claims."
+    "recommended_action": "Journey proof is steady on current published evidence."
   },
   "artifact_freshness": {
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-05-06T20:00:48Z",
+      "at": "2026-05-06T20:04:11Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 1
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-05-06T12:01:56Z",
       "state": "fresh",
-      "age_seconds": 28732
+      "age_seconds": 28936
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-05-06T19:37:36Z",
       "state": "fresh",
-      "age_seconds": 1392
+      "age_seconds": 1596
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-05-06T19:37:36Z",
       "state": "fresh",
-      "age_seconds": 1392
+      "age_seconds": 1596
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-05-06T20:00:46Z",
       "state": "fresh",
-      "age_seconds": 2
+      "age_seconds": 206
     }
   },
   "journeys": [
@@ -59,21 +59,12 @@
       "id": "install_claim_restore_continue",
       "title": "Install, claim, restore, continue",
       "user_promise": "A person can install the flagship client, claim it, restore the right workspace, and continue safely on a known install.",
-      "state": "blocked",
-      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
-      "blockers": [
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks.",
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks."
-      ],
-      "blocking_reasons": [
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks.",
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks."
-      ],
+      "state": "ready",
+      "recommended_action": "Keep the journey under routine weekly proof.",
+      "blockers": [],
+      "blocking_reasons": [],
       "external_blocking_reasons": [],
-      "local_blocking_reasons": [
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks.",
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks."
-      ],
+      "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
       "warning_reasons": [],
@@ -334,7 +325,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 2,
+        "blocking_reason_count": 0,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -346,7 +337,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 2,
+        "local_blocking_reason_count": 0,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }
@@ -1515,18 +1506,12 @@
       "id": "organize_community_and_close_loop",
       "title": "Organize community and close the loop",
       "user_promise": "Organizer and community operation stays on the same account, campaign, and closure spine instead of splintering into side spreadsheets and oral tradition.",
-      "state": "blocked",
-      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
-      "blockers": [
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks."
-      ],
-      "blocking_reasons": [
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks."
-      ],
+      "state": "ready",
+      "recommended_action": "Keep the journey under routine weekly proof.",
+      "blockers": [],
+      "blocking_reasons": [],
       "external_blocking_reasons": [],
-      "local_blocking_reasons": [
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks."
-      ],
+      "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
       "warning_reasons": [],
@@ -1666,7 +1651,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 1,
+        "blocking_reason_count": 0,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -1678,7 +1663,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 1,
+        "local_blocking_reason_count": 0,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }

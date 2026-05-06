@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-06T20:01:14Z'
+generated_at: '2026-05-06T20:04:15Z'
 mode: flagship_product
-state_root: /docker/fleet/state/chummer_design_supervisor/shard-4
+state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-4
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -32,28 +32,32 @@ focus:
   - chummer6-ui
   - chummer6-core
   - chummer6-design
-  - chummer6-ui-kit
-  - chummer6-mobile
+  - chummer6-hub
+  - chummer6-hub-registry
   texts:
+  - top flagship grade
+  - whole project frontier
+  - feedback
+  - automatic bugfixing
+  - crash
+  - support
+  - accessibility
+  - localization
+  - restore confidence
+  - fit and finish
   - sourcebook
   - settings
   - custom-data
   - xml
   - translator
-  - top flagship grade
   - whole-project frontier
   - no lowered standards
   - feedback loop
-  - automatic bugfixing
   - crash reporting
   - support routing
   - journey smoothness
-  - restore confidence
-  - accessibility
-  - localization
   - performance
   - proof shelf
-  - fit and finish
   - hub and registry
   - mobile play shell
   - ui kit and flagship polish
@@ -65,7 +69,7 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: weekly product pulse reports release health as needs_attention
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
@@ -104,7 +108,7 @@ frontier:
     summary: 'Milestone ''Hub, registry, and public front door flagship finish'' remains
       open under the flagship closeout frontier. Outstanding readiness coverage: hub_and_registry,
       mobile_play_shell, ui_kit_and_flagship_polish.'
-    predicted_completion_at: '2026-05-07T12:52:14Z'
+    predicted_completion_at: '2026-05-07T12:55:15Z'
     range_low_hours: 9.5
     range_high_hours: 24.2
     remaining_open_milestones: 1
@@ -117,22 +121,3 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-eta:
-  status: flagship_delivery
-  eta_human: 10h-1.1d
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Shared design system, accessibility, localization, and flagship
-    polish'' remains open under the flagship closeout frontier. Outstanding readiness
-    coverage: hub_and_registry, mobile_play_shell, ui_kit_and_flagship_polish.'
-  predicted_completion_at: '2026-05-07T14:03:38Z'
-  range_low_hours: 10.25
-  range_high_hours: 25.83
-  remaining_open_milestones: 1
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 1
-  remaining_effort_units: 2.05

@@ -1,61 +1,40 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-05-06T20:00:50Z",
-  "status": "fail",
-  "scoped_status": "fail",
+  "generated_at": "2026-05-06T20:04:15Z",
+  "status": "pass",
+  "scoped_status": "pass",
   "ready_keys": [
     "desktop_client",
     "rules_engine_and_import",
+    "hub_and_registry",
+    "mobile_play_shell",
+    "ui_kit_and_flagship_polish",
     "media_artifacts",
     "horizons_and_public_surface",
     "fleet_and_operator_loop"
   ],
-  "warning_keys": [
-    "hub_and_registry",
-    "mobile_play_shell",
-    "ui_kit_and_flagship_polish"
-  ],
+  "warning_keys": [],
   "missing_keys": [],
-  "scoped_warning_keys": [
-    "hub_and_registry",
-    "mobile_play_shell",
-    "ui_kit_and_flagship_polish"
-  ],
+  "scoped_warning_keys": [],
   "scoped_missing_keys": [],
   "deferred_warning_keys": [],
   "completion_audit": {
-    "status": "fail",
-    "reason": "Flagship product readiness planes are not green: flagship_ready, public_shelf_ready.",
+    "status": "pass",
+    "reason": "Flagship product readiness proof is green.",
     "external_only": false,
     "unresolved_external_proof_request_count": 0,
     "unresolved_external_proof_request_hosts": [],
     "unresolved_external_proof_request_tuples": []
   },
   "flagship_readiness_audit": {
-    "status": "fail",
-    "reason": "flagship product readiness proof is not green: fail; warning coverage: hub_and_registry, mobile_play_shell, ui_kit_and_flagship_polish; readiness plane gaps: flagship_ready, public_shelf_ready",
-    "coverage_gap_keys": [
-      "hub_and_registry",
-      "mobile_play_shell",
-      "ui_kit_and_flagship_polish"
-    ],
-    "scoped_coverage_gap_keys": [
-      "hub_and_registry",
-      "mobile_play_shell",
-      "ui_kit_and_flagship_polish"
-    ],
-    "warning_coverage_keys": [
-      "hub_and_registry",
-      "mobile_play_shell",
-      "ui_kit_and_flagship_polish"
-    ],
+    "status": "pass",
+    "reason": "Flagship product readiness proof is green.",
+    "coverage_gap_keys": [],
+    "scoped_coverage_gap_keys": [],
+    "warning_coverage_keys": [],
     "missing_coverage_keys": [],
-    "scoped_warning_coverage_keys": [
-      "hub_and_registry",
-      "mobile_play_shell",
-      "ui_kit_and_flagship_polish"
-    ],
+    "scoped_warning_coverage_keys": [],
     "scoped_missing_coverage_keys": [],
     "deferred_warning_coverage_keys": []
   },
@@ -66,7 +45,7 @@
     "unresolved_hosts": [],
     "unresolved_tuples": [],
     "runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-    "runbook_generated_at": "2026-05-06T20:00:49Z",
+    "runbook_generated_at": "2026-05-06T20:04:14Z",
     "runbook_plan_generated_at": "2026-05-06T20:00:46Z",
     "runbook_release_channel_generated_at": "2026-05-06T19:36:59Z",
     "commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
@@ -78,10 +57,10 @@
     "runbook_sync_reasons": []
   },
   "summary": {
-    "ready_count": 5,
-    "warning_count": 3,
+    "ready_count": 8,
+    "warning_count": 0,
     "missing_count": 0,
-    "scoped_warning_count": 3,
+    "scoped_warning_count": 0,
     "scoped_missing_count": 0,
     "deferred_warning_count": 0,
     "history_snapshot_count": 23
@@ -96,52 +75,12 @@
   "autofix_routing": {
     "status": "ready",
     "summary": "Local journey blockers are routed to owner repos.",
-    "total_local_blocker_count": 3,
-    "routed_local_blocker_count": 3,
+    "total_local_blocker_count": 0,
+    "routed_local_blocker_count": 0,
     "unrouted_local_blocker_count": 0,
-    "owner_repo_counts": {
-      "chummer6-hub": 2,
-      "chummer6-mobile": 1
-    },
-    "journey_local_blocker_counts": {
-      "install_claim_restore_continue": 2,
-      "organize_community_and_close_loop": 1
-    },
-    "routes": [
-      {
-        "route_id": "route-d004b4f3bd86",
-        "journey_id": "install_claim_restore_continue",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-hub",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-install-claim-restore-continue-chummer6-hub-1",
-        "category_id": "",
-        "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-        "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks."
-      },
-      {
-        "route_id": "route-4a262da1c38d",
-        "journey_id": "organize_community_and_close_loop",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-hub",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-1",
-        "category_id": "",
-        "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-        "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks."
-      },
-      {
-        "route_id": "route-4d25ee7510b7",
-        "journey_id": "install_claim_restore_continue",
-        "journey_state": "blocked",
-        "owner_repo": "chummer6-mobile",
-        "primary_lane": "repo_fix",
-        "package_id": "autofix-install-claim-restore-continue-chummer6-mobile-2",
-        "category_id": "",
-        "evidence_path": ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
-        "reason": "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks."
-      }
-    ],
+    "owner_repo_counts": {},
+    "journey_local_blocker_counts": {},
+    "routes": [],
     "unrouted_reasons": []
   },
   "readiness_planes": {
@@ -153,9 +92,9 @@
         "dispatchable_truth_ready": true,
         "dispatchable_truth_ready_raw": true,
         "dispatchable_truth_ready_recovered_from_external_only_desktop_scope": false,
-        "journey_overall_state": "blocked",
+        "journey_overall_state": "ready",
         "journey_effective_overall_state": "ready",
-        "journey_overall_routed_local_only": true,
+        "journey_overall_routed_local_only": false,
         "journey_overall_desktop_scoped_blocked": false,
         "journey_local_blocker_autofix_routing_ready": true,
         "supervisor_recent_enough": true,
@@ -163,12 +102,9 @@
       }
     },
     "flagship_ready": {
-      "status": "warning",
-      "summary": "Flagship replacement truth is still stricter than the current structural closure.",
-      "reasons": [
-        "Whole-product coverage still has open flagship gaps: hub_and_registry, mobile_play_shell, ui_kit_and_flagship_polish.",
-        "Public-shelf readiness plane is not ready."
-      ],
+      "status": "ready",
+      "summary": "Flagship replacement truth is fully green.",
+      "reasons": [],
       "evidence": {
         "registry_path": "/docker/fleet/.codex-design/product/FLAGSHIP_PARITY_REGISTRY.yaml",
         "registry_present": true,
@@ -191,18 +127,14 @@
         "parity_lab_capture_missing_non_negotiable_ids": [],
         "parity_lab_workflow_missing_non_negotiable_ids": [],
         "parity_lab_missing_whole_product_coverage_keys": [],
-        "coverage_gap_keys": [
-          "hub_and_registry",
-          "mobile_play_shell",
-          "ui_kit_and_flagship_polish"
-        ],
+        "coverage_gap_keys": [],
         "structural_ready": true,
         "veteran_ready": true,
         "primary_route_ready": true,
         "dense_workbench_ready": true,
         "feedback_loop_ready": true,
         "veteran_deep_workflow_ready": true,
-        "public_shelf_ready": false,
+        "public_shelf_ready": true,
         "data_durability_ready": true,
         "recovery_trust_ready": true,
         "rules_explainability_ready": true,
@@ -502,7 +434,7 @@
           "teable"
         ],
         "support_generated_at": "2026-05-06T20:00:46Z",
-        "support_generated_age_seconds": 3,
+        "support_generated_age_seconds": 209,
         "support_source_refresh_mode": "source_mirror_fallback",
         "support_source_refresh_mode_recovered_from_external_only_backlog": false,
         "support_source_refresh_mode_recovered_from_fresh_zero_backlog_mirror": true,
@@ -555,13 +487,11 @@
       }
     },
     "public_shelf_ready": {
-      "status": "warning",
-      "summary": "Public shelf and route truth are still inconsistent or stale.",
-      "reasons": [
-        "Hub and registry coverage is not ready."
-      ],
+      "status": "ready",
+      "summary": "Public shelf, route truth, and registry posture are aligned.",
+      "reasons": [],
       "evidence": {
-        "hub_and_registry_ready": false,
+        "hub_and_registry_ready": true,
         "primary_route_ready": true,
         "release_channel_freshness_ok": true,
         "release_channel_has_windows_public_installer": true,
@@ -649,14 +579,11 @@
     }
   },
   "readiness_plane_summary": {
-    "ready_count": 14,
-    "warning_count": 2,
+    "ready_count": 16,
+    "warning_count": 0,
     "missing_count": 0
   },
-  "readiness_plane_gap_keys": [
-    "flagship_ready",
-    "public_shelf_ready"
-  ],
+  "readiness_plane_gap_keys": [],
   "source_documents": [
     "FLAGSHIP_PRODUCT_BAR.md",
     "FLAGSHIP_READINESS_PLANES.yaml",
@@ -710,9 +637,9 @@
   "coverage": {
     "desktop_client": "ready",
     "rules_engine_and_import": "ready",
-    "hub_and_registry": "warning",
-    "mobile_play_shell": "warning",
-    "ui_kit_and_flagship_polish": "warning",
+    "hub_and_registry": "ready",
+    "mobile_play_shell": "ready",
+    "ui_kit_and_flagship_polish": "ready",
     "media_artifacts": "ready",
     "horizons_and_public_surface": "ready",
     "fleet_and_operator_loop": "ready"
@@ -740,7 +667,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-05-06T00:17:08.637885Z",
-        "ui_executable_gate_age_seconds": 71021,
+        "ui_executable_gate_age_seconds": 71226,
         "ui_linux_exit_gate_status": "passed",
         "ui_linux_exit_gate_recovered_from_executable_gate": true,
         "ui_linux_exit_gate_effective_ready": true,
@@ -1000,7 +927,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-05-06T19:36:59Z",
-        "release_channel_age_seconds": 1430,
+        "release_channel_age_seconds": 1636,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "preview",
@@ -1116,12 +1043,12 @@
         "ui_executable_gate_macos_passing_tuple_count": 0,
         "ui_executable_gate_macos_missing_or_failing_keys": [],
         "ui_executable_gate_macos_stale_promoted_tuple_keys": [],
-        "install_claim_restore_continue": "blocked",
+        "install_claim_restore_continue": "ready",
         "install_claim_restore_continue_effective": "ready",
         "build_explain_publish": "ready",
         "build_explain_publish_effective": "ready",
         "install_claim_restore_continue_external_blocking_reason_count": 0,
-        "install_claim_restore_continue_local_blocking_reason_count": 2,
+        "install_claim_restore_continue_local_blocking_reason_count": 0,
         "install_claim_restore_continue_external_proof_request_count": 0,
         "install_claim_restore_continue_external_proof_request_hosts": [],
         "install_claim_restore_continue_external_proof_request_tuples": [],
@@ -1180,19 +1107,17 @@
       }
     },
     "hub_and_registry": {
-      "status": "warning",
-      "summary": "Hub and registry flagship proof is still incomplete.",
-      "reasons": [
-        "Hub local release proof is missing or not passed."
-      ],
+      "status": "ready",
+      "summary": "Hub, registry, and public release shelf proof are aligned.",
+      "reasons": [],
       "evidence": {
         "hub_stage": "publicly_promoted",
         "hub_promotion": "public",
         "hub_registry_stage": "boundary_pure",
-        "hub_local_release_status": "",
+        "hub_local_release_status": "passed",
         "release_channel_status": "published",
         "release_channel_release_proof": "passed",
-        "install_claim_restore_continue": "blocked",
+        "install_claim_restore_continue": "ready",
         "install_claim_restore_continue_desktop_scoped_blocked": false,
         "install_claim_restore_continue_effective_state": "ready",
         "install_claim_restore_continue_release_proof_override": true,
@@ -1207,15 +1132,13 @@
       }
     },
     "mobile_play_shell": {
-      "status": "warning",
-      "summary": "Mobile and live-play flagship proof is still incomplete.",
-      "reasons": [
-        "Mobile local release proof is missing or not passed."
-      ],
+      "status": "ready",
+      "summary": "Mobile play-shell continuity and reconnect proof are current.",
+      "reasons": [],
       "evidence": {
         "mobile_stage": "publicly_promoted",
         "mobile_promotion": "public",
-        "mobile_local_release_status": "",
+        "mobile_local_release_status": "passed",
         "campaign_session_recover_recap": "ready",
         "campaign_session_recover_recap_effective_state": "ready",
         "campaign_session_recover_recap_owner_scoped_effective_state": "ready",
@@ -1230,11 +1153,9 @@
       }
     },
     "ui_kit_and_flagship_polish": {
-      "status": "warning",
-      "summary": "Shared UI and flagship polish proof is still incomplete.",
-      "reasons": [
-        "Workbench and mobile promoted posture is not yet jointly proven."
-      ],
+      "status": "ready",
+      "summary": "Shared UI, accessibility, and flagship polish proof is current across heads.",
+      "reasons": [],
       "evidence": {
         "ui_kit_stage": "boundary_pure",
         "ui_stage": "publicly_promoted",
@@ -1269,7 +1190,7 @@
       "evidence": {
         "public_group_deployment_status": "public",
         "progress_report_generated_at": "2026-05-06T19:37:36Z",
-        "install_claim_restore_continue": "blocked",
+        "install_claim_restore_continue": "ready",
         "install_claim_restore_continue_desktop_scoped_blocked": false,
         "install_claim_restore_continue_effective_state": "ready",
         "install_claim_restore_continue_release_proof_override": true,
@@ -1310,65 +1231,25 @@
         "runtime_healing_alert_state": "healthy",
         "runtime_healing_last_event_at": "2026-05-01T09:22:44Z",
         "runtime_healing_override_stale_incident": false,
-        "journey_overall_state": "blocked",
+        "journey_overall_state": "ready",
         "journey_effective_overall_state": "ready",
         "journey_blocked_external_only_count": 0,
-        "journey_blocked_with_local_count": 2,
+        "journey_blocked_with_local_count": 0,
         "journey_effective_blocked_external_only_count": 0,
         "journey_effective_blocked_with_local_count": 0,
         "journey_overall_desktop_scoped_blocked": false,
-        "journey_overall_routed_local_only": true,
-        "journey_local_blocker_count_total": 3,
-        "journey_local_blocker_routed_count": 3,
+        "journey_overall_routed_local_only": false,
+        "journey_local_blocker_count_total": 0,
+        "journey_local_blocker_routed_count": 0,
         "journey_local_blocker_unrouted_count": 0,
         "journey_local_blocker_autofix_routing_ready": true,
-        "journey_local_blocker_owner_repo_counts": {
-          "chummer6-hub": 2,
-          "chummer6-mobile": 1
-        },
-        "journey_local_blocker_counts": {
-          "install_claim_restore_continue": 2,
-          "organize_community_and_close_loop": 1
-        },
-        "journey_local_blocker_route_sample": [
-          {
-            "route_id": "route-d004b4f3bd86",
-            "journey_id": "install_claim_restore_continue",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-hub",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-install-claim-restore-continue-chummer6-hub-1",
-            "category_id": "",
-            "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-            "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks."
-          },
-          {
-            "route_id": "route-4a262da1c38d",
-            "journey_id": "organize_community_and_close_loop",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-hub",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-organize-community-and-close-loop-chummer6-hub-1",
-            "category_id": "",
-            "evidence_path": ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-            "reason": "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks."
-          },
-          {
-            "route_id": "route-4d25ee7510b7",
-            "journey_id": "install_claim_restore_continue",
-            "journey_state": "blocked",
-            "owner_repo": "chummer6-mobile",
-            "primary_lane": "repo_fix",
-            "package_id": "autofix-install-claim-restore-continue-chummer6-mobile-2",
-            "category_id": "",
-            "evidence_path": ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
-            "reason": "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is not valid json, cannot enforce structured checks."
-          }
-        ],
+        "journey_local_blocker_owner_repo_counts": {},
+        "journey_local_blocker_counts": {},
+        "journey_local_blocker_route_sample": [],
         "journey_local_blocker_unrouted_reason_sample": [],
         "history_snapshot_count": 23,
         "support_packets_generated_at": "2026-05-06T20:00:46Z",
-        "support_packets_generated_age_seconds": 3,
+        "support_packets_generated_age_seconds": 209,
         "support_packets_refresh_mode": "source_mirror_fallback",
         "support_open_packet_count": 0,
         "support_open_non_external_packet_count": 0,
@@ -1381,7 +1262,7 @@
         "external_proof_backlog_request_observation_count": 0,
         "external_proof_backlog_duplicate_observation_count": 0,
         "external_proof_runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-        "external_proof_runbook_generated_at": "2026-05-06T20:00:49Z",
+        "external_proof_runbook_generated_at": "2026-05-06T20:04:14Z",
         "external_proof_runbook_plan_generated_at": "2026-05-06T20:00:46Z",
         "external_proof_runbook_release_channel_generated_at": "2026-05-06T19:36:59Z",
         "external_proof_commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
@@ -1392,7 +1273,7 @@
         "external_proof_runbook_synced": true,
         "external_proof_runbook_sync_issue_count": 0,
         "dispatchable_truth_ready": true,
-        "active_shards_generated_at": "2026-05-06T20:00:49Z",
+        "active_shards_generated_at": "2026-05-06T20:04:15Z",
         "active_shards_manifest_kind": "configured_shard_topology",
         "active_shards_count": 0,
         "configured_shards_count": 20,
@@ -1405,7 +1286,7 @@
         "supervisor_completion_desktop_scoped": false,
         "supervisor_completion_routed_local_only": false,
         "supervisor_successor_wave_steering_ready": false,
-        "supervisor_updated_at": "2026-05-06T20:00:33Z",
+        "supervisor_updated_at": "2026-05-06T20:04:05Z",
         "supervisor_recent_enough": true,
         "supervisor_focus_profiles": [
           "top_flagship_grade",

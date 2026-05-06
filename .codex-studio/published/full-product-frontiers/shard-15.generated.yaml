@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-06T20:03:01Z'
+generated_at: '2026-05-06T20:04:15Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-15
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,6 +32,9 @@ focus:
   - chummer6-hub
   - chummer6-hub-registry
   - chummer6-design
+  - chummer6-mobile
+  - chummer6-core
+  - chummer6-ui-kit
   texts:
   - top flagship grade
   - whole project frontier
@@ -67,13 +70,14 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: weekly product pulse reports release health as needs_attention
 full_product_audit:
-  status: fail
-  reason: 'flagship product readiness proof is not green: fail'
+  status: pass
+  reason: flagship product readiness proof is current across desktop, rules, hub,
+    mobile, horizons, and operator lanes
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-06T20:00:50Z'
-  proof_status: fail
+  generated_at: '2026-05-06T20:04:15Z'
+  proof_status: pass
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
