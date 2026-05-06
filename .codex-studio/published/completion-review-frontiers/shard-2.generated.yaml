@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-06T19:54:16Z'
+generated_at: '2026-05-06T20:03:51Z'
 mode: completion_review
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-2
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -73,7 +73,7 @@ weekly_pulse_audit:
   reason: weekly product pulse is fresh and reports no remaining drift or blocker
     pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-06T19:37:39Z'
+  generated_at: '2026-05-06T20:03:32Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -86,16 +86,13 @@ frontier_ids: []
 frontier: []
 eta:
   status: tracked
-  eta_human: tracked
+  eta_human: 10h-1.1d
   eta_confidence: low
   basis: aggregate_shard_parallel_scope
-  scope_kind: aggregate_shard_mixed_scope
-  scope_label: Aggregate multi-shard ETA
-  scope_warning: Aggregate shard status currently mixes multiple ETA scopes. Use the
-    ETA command for a fresh whole-fleet forecast instead of reading this as a single
-    parity horizon.
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
   blocking_reason: ''
-  summary: 19967043494962549559168424483296557491842862945585617142085603393420149671058973262164980723387254587176604508443252897462449509328
-    open milestones remain (19967043494962549559168424483296557491842862945585617142085603393420149671058973262164980723387254587176604508443252897462449509328
-    in progress, 0 not started). Aggregate shard status is parallelized across 1 active
-    shards under Aggregate multi-shard ETA.
+  summary: 16 open milestones remain (16 in progress, 0 not started). Aggregate shard
+    status is parallelized across 5 active shards under Full Chummer5A parity and
+    flagship proof closeout.
