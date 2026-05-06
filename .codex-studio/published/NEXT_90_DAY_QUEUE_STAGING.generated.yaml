@@ -20,6 +20,7 @@ mode: append
 program_wave: next_90_day_product_advance
 status: live_parallel_successor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml
+source_design_queue_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml
 activation_rule: Use these items immediately on shards whose current flagship closeout slice is empty; do not let them replace
   active shards already assigned to the current closeout frontier.
 items:
@@ -2521,14 +2522,26 @@ items:
   package_id: next90-m112-mobile-campaign-continuity
   work_task_id: 112.4
   milestone_id: 112
-  status: in_progress
+  status: complete
   wave: W11
   repo: chummer6-mobile
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M112 chummer6-mobile travel and mobile campaign continuity is complete; future shards must verify the closed-package guard, package proof, regression coverage, and canonical queue plus registry rows instead of reopening this slice.
   allowed_paths:
   - src
   - tests
   - docs
   - scripts
+  proof:
+  - /docker/chummercomplete/chummer-play/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceLiteProjector.cs
+  - /docker/chummercomplete/chummer-play/src/Chummer.Play.Core/Roaming/RoamingWorkspaceSyncPlanner.cs
+  - /docker/chummercomplete/chummer-play/src/Chummer.Play.Core/Application/PlayEntryRecoveryProjector.cs
+  - /docker/chummercomplete/chummer-play/src/Chummer.Play.Web/wwwroot/index.html
+  - /docker/chummercomplete/chummer-play/src/Chummer.Play.RegressionChecks/Program.cs
+  - /docker/chummercomplete/chummer-play/docs/next90-m112-mobile-campaign-continuity.proof.md
+  - /docker/chummercomplete/chummer-play/scripts/verify_next90_m112_mobile_campaign_continuity.py
+  - python3 scripts/verify_next90_m112_mobile_campaign_continuity.py
+  - scripts/ai/with-package-plane.sh dotnet run --project src/Chummer.Play.RegressionChecks/Chummer.Play.RegressionChecks.csproj
   owned_surfaces:
   - campaign_memory:travel
   - campaign_state:mobile
@@ -2723,9 +2736,13 @@ items:
   package_id: next90-m114-core-rule-environment-studio
   work_task_id: 114.1
   milestone_id: 114
-  status: in_progress
+  status: complete
   wave: W12
   repo: chummer6-core
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M114 chummer6-core rule-environment studio contracts are complete; future shards must verify the
+    engine rule-environment studio receipt, standalone verifier, canonical registry row, and queue mirrors instead of
+    reopening the contract slice.
   allowed_paths:
   - src
   - tests
@@ -3186,9 +3203,12 @@ items:
   package_id: next90-m117-hub-registry-artifact-shelf
   work_task_id: 117.2
   milestone_id: 117
-  status: in_progress
+  status: complete
   wave: W13
   repo: chummer6-hub-registry
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M117 chummer6-hub-registry shelf ref normalization is complete; future shards must verify the
+    registry contracts, manifest projection, queue mirrors, and proof hooks instead of reopening this slice.
   allowed_paths:
   - Chummer.Hub.Registry
   - scripts
@@ -3524,9 +3544,13 @@ items:
   package_id: next90-m119-mobile-onboarding-continuity
   work_task_id: 119.3
   milestone_id: 119
-  status: in_progress
+  status: complete
   wave: W14
   repo: chummer6-mobile
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M119 chummer6-mobile starter-lane continuity is complete; future shards must verify the mobile
+    onboarding continuity proof, standalone verifier, generated release proof, canonical registry row, and queue mirrors
+    instead of reopening the mobile starter-lane slice.
   allowed_paths:
   - src
   - tests
@@ -6998,9 +7022,26 @@ items:
   work_task_id: '141.1'
   frontier_id: 2354698282
   milestone_id: 141
-  status: not_started
+  status: complete
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M141 chummer6-ui translator, XML amendment, and Hero Lab direct route proof is complete; future shards must verify the closed-package receipt, focused guard test, runtime-backed screenshot gates, canonical registry row, and queue mirrors instead of reopening this slice.
   wave: W22P
   repo: chummer6-ui
+  proof:
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/CharacterOverviewPresenterTests.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DualHeadAcceptanceTests.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/Next90M141DirectImportRouteProofGuardTests.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Chummer.Tests.csproj
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/chummer5a-screenshot-review-gate.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/veteran-task-time-evidence-gate.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/b14-flagship-ui-release-gate.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/next90-m141-ui-direct-import-route-proof-check.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/verify.sh
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M141_UI_DIRECT_IMPORT_ROUTE_PROOF.generated.json
+  - bash scripts/ai/milestones/next90-m141-ui-direct-import-route-proof-check.sh
+  - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Next90M141DirectImportRouteProofGuardTests" --no-restore
   allowed_paths:
   - Chummer.Avalonia
   - Chummer.Desktop.Runtime
@@ -7016,9 +7057,25 @@ items:
   work_task_id: '141.2'
   frontier_id: 4304178368
   milestone_id: 141
-  status: not_started
+  status: complete
+  landed_commit: unlanded
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M141 chummer6-core import-route deterministic receipt lane is complete; future shards must verify the closed-package receipt, Python guard tests, canonical registry row, and queue mirrors instead of reopening this slice.
   wave: W22P
   repo: chummer6-core
+  proof:
+  - /docker/chummercomplete/chummer-core-engine/Chummer.Contracts/Api/ToolCatalogModels.cs
+  - /docker/chummercomplete/chummer-core-engine/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs
+  - /docker/chummercomplete/chummer-core-engine/Chummer.Tests/ToolCatalogServiceTests.cs
+  - /docker/chummercomplete/chummer-core-engine/Chummer.Tests/ApiIntegrationTests.cs
+  - /docker/chummercomplete/chummer-core-engine/scripts/verify-next90-m141-import-route-receipts.py
+  - /docker/chummercomplete/chummer-core-engine/tests/test_next90_m141_import_route_receipts.py
+  - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+  - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_CLOSEOUT.md
+  - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
+  - python3 tests/test_next90_m141_import_route_receipts.py
+  - python3 scripts/verify-next90-m141-import-route-receipts.py --repo-root . --out .codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json --check
+  - bash scripts/ai/verify.sh
   allowed_paths:
   - src
   - tests
@@ -7034,9 +7091,32 @@ items:
   work_task_id: '141.3'
   frontier_id: 4062147200
   milestone_id: 141
-  status: not_started
+  status: complete
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M141 chummer6-hub import-route review-required guard is complete; future shards must verify the
+    route/support/publication proof receipt, canonical registry row, queue mirrors, and local+served Hub proof instead of
+    reopening this slice.
   wave: W22P
   repo: chummer6-hub
+  proof:
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/ImportRouteParityProofGuardService.cs
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/PublicReleaseManifestService.cs
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/PublicTrustPulseService.cs
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/SignedInTrustStatusService.cs
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Controllers/PublicLandingController.cs
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Controllers/DownloadsCompatibilityController.cs
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Controllers/CampaignSpineController.cs
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Views/PublicLanding/PublicCreatorPublication.cshtml
+  - /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Views/PublicLanding/Shelf.cshtml
+  - /docker/chummercomplete/chummer6-hub/scripts/materialize_hub_local_release_proof.py
+  - /docker/chummercomplete/chummer6-hub/scripts/verify_next90_m141_hub_import_route_review_required.py
+  - /docker/chummercomplete/chummer6-hub/tests/test_next90_m141_hub_import_route_review_required.py
+  - /docker/chummercomplete/chummer6-hub/tests/test_hub_local_release_proof_native_support_route.py
+  - /docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json
+  - python3 scripts/verify_next90_m141_hub_import_route_review_required.py
+  - python3 -m unittest tests/test_next90_m141_hub_import_route_review_required.py
+  - python3 -m unittest tests/test_hub_local_release_proof_native_support_route.py
+  - bash scripts/ai/verify.sh
   allowed_paths:
   - Chummer.Run.Api
   - scripts
@@ -7099,9 +7179,27 @@ items:
   work_task_id: '142.1'
   frontier_id: 9095697868
   milestone_id: 142
-  status: not_started
+  status: complete
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M142 chummer6-ui dense builder/career, dice/initiative, and contacts/lifestyles/notes direct proof is complete; future shards must verify the closed-package receipt, focused guard test, route-local gates, canonical registry row, and queue mirrors instead of reopening this slice.
   wave: W22P
   repo: chummer6-ui
+  proof:
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/Next90M142DirectWorkflowProofGuardTests.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Chummer.Tests.csproj
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/next90-m142-ui-direct-workflow-proof-check.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/chummer5a-screenshot-review-gate.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/b14-flagship-ui-release-gate.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/verify.sh
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json
+  - bash scripts/ai/milestones/next90-m142-ui-direct-workflow-proof-check.sh
+  - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Next90M142DirectWorkflowProofGuardTests" --no-restore
   allowed_paths:
   - Chummer.Avalonia
   - Chummer.Desktop.Runtime
@@ -7197,9 +7295,30 @@ items:
   work_task_id: '143.1'
   frontier_id: 6764868619
   milestone_id: 143
-  status: not_started
+  status: complete
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M143 chummer6-ui print/export/exchange and SR6 supplement/house-rule direct proof is complete; future shards must verify the closed-package receipt, focused guard test, route-local output gates, canonical registry row, and queue mirrors instead of reopening this slice.
   wave: W22P
   repo: chummer6-ui
+  proof:
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/Next90M143DirectOutputProofGuardTests.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Chummer.Tests.csproj
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/next90-m143-ui-direct-output-proof-check.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/chummer5a-screenshot-review-gate.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/section-host-ruleset-parity-check.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/generated-dialog-element-parity-check.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/next90-m114-ui-rule-studio-check.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/milestones/b14-flagship-ui-release-gate.sh
+  - /docker/chummercomplete/chummer-presentation/scripts/ai/verify.sh
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M114_UI_RULE_STUDIO.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M143_UI_DIRECT_OUTPUT_PROOF.generated.json
+  - bash scripts/ai/milestones/next90-m143-ui-direct-output-proof-check.sh
+  - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Next90M143DirectOutputProofGuardTests" --no-restore
   allowed_paths:
   - Chummer.Avalonia
   - Chummer.Desktop.Runtime
@@ -7215,9 +7334,28 @@ items:
   work_task_id: '143.2'
   frontier_id: 2778308338
   milestone_id: 143
-  status: not_started
+  status: complete
+  completion_action: verify_closed_package_only
+  do_not_reopen_reason: M143 chummer6-core deterministic export/print/supplement and rule-environment receipts are complete; future shards must verify the checked-in receipt, focused parity tests, canonical registry row, and queue mirrors instead of reopening this slice.
   wave: W22P
   repo: chummer6-core
+  proof:
+  - /docker/chummercomplete/chummer-core-engine/Chummer.Contracts/Api/ToolCatalogModels.cs
+  - /docker/chummercomplete/chummer-core-engine/Chummer.Contracts/Workspaces/CharacterWorkspaceModels.cs
+  - /docker/chummercomplete/chummer-core-engine/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs
+  - /docker/chummercomplete/chummer-core-engine/Chummer.Application/Workspaces/WorkspaceService.cs
+  - /docker/chummercomplete/chummer-core-engine/Chummer.CoreEngine.Tests/Program.cs
+  - /docker/chummercomplete/chummer-core-engine/Chummer.Tests/ToolCatalogServiceTests.cs
+  - /docker/chummercomplete/chummer-core-engine/Chummer.Tests/WorkspaceServiceTests.cs
+  - /docker/chummercomplete/chummer-core-engine/Chummer.Tests/ApiIntegrationTests.cs
+  - /docker/chummercomplete/chummer-core-engine/scripts/ai/verify.sh
+  - /docker/chummercomplete/chummer-core-engine/scripts/verify-next90-m143-export-print-supplement-rule-environment-receipts.py
+  - /docker/chummercomplete/chummer-core-engine/tests/test_next90_m143_export_print_supplement_rule_environment_receipts.py
+  - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md
+  - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.generated.json
+  - CHUMMER_CORE_ENGINE_TEST_FILTER=parity-m143 dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -m:1 -p:UseSharedCompilation=false
+  - python3 tests/test_next90_m143_export_print_supplement_rule_environment_receipts.py
+  - python3 scripts/verify-next90-m143-export-print-supplement-rule-environment-receipts.py --repo-root . --out .codex-studio/published/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.generated.json --check
   allowed_paths:
   - src
   - tests
