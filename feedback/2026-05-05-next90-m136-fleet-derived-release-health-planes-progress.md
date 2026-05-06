@@ -6,8 +6,8 @@
 - date: `2026-05-05`
 
 The derived release-health plane package is complete and the focused Fleet verifier passes.
-The published packet stays fail-closed when structural green tries to masquerade as veteran, durability, explainability, or public-shelf readiness.
+The published packet stays fail-closed when structural green tries to masquerade as veteran, durability, explainability, or public-shelf readiness, and the current live recomputation now resolves cleanly.
 
 Current live warning set:
 
-- `structural_ready` still overclaims readiness relative to direct proof.
+- none
