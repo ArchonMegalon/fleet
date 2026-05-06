@@ -23,12 +23,14 @@ try:
         write_compile_manifest,
         write_text_atomic,
     )
+    from scripts.next90_queue_staging import read_next90_queue_staging_yaml
 except ModuleNotFoundError:
     from materialize_compile_manifest import (
         repo_root_for_published_path,
         write_compile_manifest,
         write_text_atomic,
     )
+    from next90_queue_staging import read_next90_queue_staging_yaml
 
 
 ROOT = Path("/docker/fleet")
@@ -622,9 +624,14 @@ def _read_yaml(path: Path) -> Dict[str, Any]:
     if not path.is_file():
         return {}
     try:
-        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if path.name.endswith("NEXT_90_DAY_QUEUE_STAGING.generated.yaml"):
+            payload = read_next90_queue_staging_yaml(path)
+        else:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except Exception:
         return {}
+    if path.resolve() == QUEUE_STAGING.resolve() and isinstance(payload, dict):
+        payload.setdefault("source_design_queue_path", str(DESIGN_QUEUE_STAGING))
     return payload if isinstance(payload, dict) else {}
 
 

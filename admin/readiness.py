@@ -428,6 +428,8 @@ def _load_milestone_capability_queue(project_cfg: Dict[str, Any], source_cfg: Di
 
 
 def _load_next90_queue_staging_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+    from scripts.next90_queue_staging import read_next90_queue_staging_yaml
+
     path = _resolve_project_file(
         project_cfg,
         str(source_cfg.get("path", "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml")),
@@ -435,7 +437,7 @@ def _load_next90_queue_staging_queue(project_cfg: Dict[str, Any], source_cfg: Di
     if not path.exists() or not path.is_file():
         return []
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        data = read_next90_queue_staging_yaml(path)
     except Exception:
         return []
     raw_items = list((data.get("items") or []) if isinstance(data, dict) else [])

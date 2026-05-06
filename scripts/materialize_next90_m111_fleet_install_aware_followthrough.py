@@ -10,6 +10,11 @@ from typing import Any, Dict, Iterable, List
 
 import yaml
 
+try:
+    from scripts.next90_queue_staging import read_next90_queue_staging_yaml
+except ModuleNotFoundError:
+    from next90_queue_staging import read_next90_queue_staging_yaml
+
 
 ROOT = Path("/docker/fleet")
 PUBLISHED = ROOT / ".codex-studio" / "published"
@@ -86,7 +91,10 @@ def _read_json(path: Path) -> Dict[str, Any]:
 
 def _read_yaml(path: Path) -> Dict[str, Any]:
     try:
-        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if path.name.endswith("NEXT_90_DAY_QUEUE_STAGING.generated.yaml"):
+            payload = read_next90_queue_staging_yaml(path)
+        else:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError):
         return {}
     return payload if isinstance(payload, dict) else {}

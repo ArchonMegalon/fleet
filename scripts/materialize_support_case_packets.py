@@ -22,6 +22,10 @@ import yaml
 
 from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
 try:
+    from scripts.next90_queue_staging import read_next90_queue_staging_yaml
+except ModuleNotFoundError:
+    from next90_queue_staging import read_next90_queue_staging_yaml
+try:
     from scripts.external_proof_paths import (
         REGISTRY_RELEASE_CHANNEL_PATH,
         UI_DOCKER_DOWNLOADS_ROOT,
@@ -1283,7 +1287,10 @@ def _normalize_text(value: Any, fallback: str = "") -> str:
 def _load_yaml_mapping_first(*paths: Path) -> tuple[Path, Dict[str, Any]]:
     for path in paths:
         try:
-            payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            if path.name.endswith("NEXT_90_DAY_QUEUE_STAGING.generated.yaml"):
+                payload = read_next90_queue_staging_yaml(path)
+            else:
+                payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except (OSError, yaml.YAMLError):
             continue
         if isinstance(payload, dict):
@@ -1840,7 +1847,10 @@ def _load_yaml_mapping(path: str | Path) -> Dict[str, Any]:
     if not target.is_file():
         return {}
     try:
-        payload = yaml.safe_load(target.read_text(encoding="utf-8")) or {}
+        if target.name.endswith("NEXT_90_DAY_QUEUE_STAGING.generated.yaml"):
+            payload = read_next90_queue_staging_yaml(target)
+        else:
+            payload = yaml.safe_load(target.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError):
         return {}
     return dict(payload) if isinstance(payload, dict) else {}
@@ -1895,6 +1905,8 @@ def _find_successor_work_tasks(milestone: Dict[str, Any]) -> List[Dict[str, Any]
 def _successor_queue_source_path(queue: Dict[str, Any], queue_path: Path) -> Path | None:
     raw = _normalize_text(queue.get("source_design_queue_path"))
     if not raw:
+        if queue_path.resolve() == NEXT_90_QUEUE_STAGING_PATH.resolve():
+            return _canonical_design_next_90_queue_staging_path()
         return None
     source_path = Path(raw)
     if not source_path.is_absolute():

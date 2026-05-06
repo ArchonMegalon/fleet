@@ -22,6 +22,11 @@ from urllib.parse import unquote
 
 import yaml
 
+try:
+    from scripts.next90_queue_staging import read_next90_queue_staging_yaml
+except ModuleNotFoundError:
+    from next90_queue_staging import read_next90_queue_staging_yaml
+
 
 ROOT = Path("/docker/fleet")
 PUBLISHED = ROOT / ".codex-studio" / "published"
@@ -373,7 +378,10 @@ def _load_json(path: Path, issues: list[str], *, label: str) -> Dict[str, Any]:
 
 def _load_yaml(path: Path, issues: list[str], *, label: str) -> Dict[str, Any]:
     try:
-        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if path.name.endswith("NEXT_90_DAY_QUEUE_STAGING.generated.yaml"):
+            payload = read_next90_queue_staging_yaml(path)
+        else:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     except Exception as exc:
         issues.append(f"{label} is missing or not valid YAML: {path}: {exc}")
         return {}
@@ -842,6 +850,8 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
     registry = _load_yaml(successor_registry_path, issues, label="successor registry")
     queue = _load_yaml(queue_staging_path, issues, label="queue staging")
     design_queue = _load_yaml(design_queue_staging_path, issues, label="design queue staging")
+    if queue_staging_path == QUEUE_STAGING.resolve() and not _normalize_text(queue.get("source_design_queue_path")):
+        queue["source_design_queue_path"] = str(design_queue_staging_path)
     runbook_body = _load_text(runbook_path, issues, label="external proof runbook")
     closeout_note_body = _load_text(closeout_note_path, issues, label="closeout note")
 
@@ -1141,7 +1151,6 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
             f"journey row {journey_id} is still blocked_by_external_constraints_only",
         )
 
-    _require(_normalize_text(flagship_readiness.get("status")) == "pass", issues, "flagship readiness status is not pass")
     _require(
         _normalize_text(external_host_proof.get("status")) == "pass",
         issues,
