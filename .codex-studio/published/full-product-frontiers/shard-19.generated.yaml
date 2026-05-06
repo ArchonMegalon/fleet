@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-06T19:36:47Z'
+generated_at: '2026-05-06T20:03:09Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-19
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -56,7 +56,9 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
-  - desktop client
+  - hub and registry
+  - mobile play shell
+  - ui kit and flagship polish
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -65,37 +67,17 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-06T19:35:27Z'
+  generated_at: '2026-05-06T20:00:50Z'
   proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 0
 frontier_ids: []
 frontier: []
-eta:
-  status: tracked
-  eta_human: 11h-1.1d
-  eta_confidence: low
-  basis: aggregate_shard_parallel_scope
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 2 open milestones remain (2 in progress, 0 not started). Aggregate shard
-    status is parallelized across 3 active shards under Full Chummer5A parity and
-    flagship proof closeout.
-  predicted_completion_at: '2026-05-07T14:22:04Z'
-  range_low_hours: 10.86
-  range_high_hours: 26.65
-  remaining_open_milestones: 2
-  remaining_in_progress_milestones: 2
-  remaining_not_started_milestones: 0
-  remaining_effort_units: 2.05

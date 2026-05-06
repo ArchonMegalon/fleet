@@ -1,8 +1,8 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-06T19:59:44Z'
-mode: completion_review
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-5
+generated_at: '2026-05-06T20:01:22Z'
+mode: flagship_product
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-5
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 projects_dir: /docker/fleet/config/projects
@@ -34,37 +34,41 @@ focus:
   - chummer6-ui
   - chummer6-design
   texts:
-  - top flagship grade
-  - whole project frontier
-  - feedback
-  - automatic bugfixing
-  - crash
-  - support
-  - accessibility
-  - localization
-  - restore confidence
-  - fit and finish
   - import
   - oracle
   - chummer5a
   - hero lab
   - genesis
+  - top flagship grade
+  - whole-project frontier
+  - no lowered standards
+  - feedback loop
+  - automatic bugfixing
+  - crash reporting
+  - support routing
+  - journey smoothness
+  - restore confidence
+  - accessibility
+  - localization
+  - performance
+  - proof shelf
+  - fit and finish
+  - hub and registry
+  - mobile play shell
+  - ui kit and flagship polish
 completion_audit:
-  status: pass
-  reason: 'current repo-local completion proof is green; using a supervisor evidence
-    receipt because the latest worker outcome is non-material to proof trust: worker
-    exit 124'
+  status: fail
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
-  status: pass
-  reason: 'current repo-local completion proof is green; using a supervisor evidence
-    receipt because the latest worker outcome is non-material to proof trust: worker
-    exit 124'
+  status: fail
+  reason: 'latest worker receipt 20260506T110759Z-shard-5 is not trusted: worker exit
+    124'
   latest_run_id: 20260506T110759Z-shard-5
   latest_run_reason: worker exit 124
 journey_gate_audit:
-  status: pass
-  reason: golden journey proof is ready
-  blocked_journey_count: 0
+  status: fail
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  blocked_journey_count: 2
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
   status: pass
@@ -84,22 +88,26 @@ repo_backlog_audit:
   open_item_count: 0
   open_project_count: 0
   open_items: []
-blocking_audits: []
+blocking_audits:
+- component: journey_gate
+  title: Golden journey release-proof gaps
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+- component: trusted_completion_receipt
+  title: Trusted completion receipt
+  reason: 'latest worker receipt 20260506T110759Z-shard-5 is not trusted: worker exit
+    124'
 frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
-  status: tracked
-  eta_human: tracked
+  status: flagship_delivery
+  eta_human: 6h-10h
   eta_confidence: low
-  basis: aggregate_shard_parallel_scope
-  scope_kind: aggregate_shard_mixed_scope
-  scope_label: Aggregate multi-shard ETA
-  scope_warning: Aggregate shard status currently mixes multiple ETA scopes. Use the
-    ETA command for a fresh whole-fleet forecast instead of reading this as a single
-    parity horizon.
+  basis: full_product_frontier_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
   blocking_reason: ''
-  summary: 2259206263042918658297468760318916100438564328812578611940879120342973558862355262731360218681626100041651992577350060123268943692286759591754417907543546595004048866770611771104536662
-    open milestones remain (2259206263042918658297468760318916100438564328812578611940879120342973558862355262731360218681626100041651992577350060123268943692286759591754417907543546595004048866770611771104536662
-    in progress, 0 not started). Aggregate shard status is parallelized across 1 active
-    shards under Aggregate multi-shard ETA.
+  summary: 'Current closeout gates are green, but flagship product work still remains
+    across 0 synthetic slices. Outstanding readiness coverage: hub_and_registry, mobile_play_shell,
+    ui_kit_and_flagship_polish.'

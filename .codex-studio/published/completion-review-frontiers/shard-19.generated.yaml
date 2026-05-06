@@ -1,7 +1,7 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-06T19:59:51Z'
-mode: completion_review
+generated_at: '2026-05-06T20:02:44Z'
+mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-19
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -49,18 +49,29 @@ focus:
   - replay
   - recap
   - export
+  - whole-project frontier
+  - no lowered standards
+  - feedback loop
+  - crash reporting
+  - support routing
+  - journey smoothness
+  - performance
+  - proof shelf
+  - hub and registry
+  - mobile play shell
+  - ui kit and flagship polish
 completion_audit:
   status: fail
-  reason: no supervisor run history recorded; explicit completion review is required
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
   reason: no supervisor run history recorded; explicit completion review is required
   latest_run_id: ''
   latest_run_reason: ''
 journey_gate_audit:
-  status: pass
-  reason: golden journey proof is ready
-  blocked_journey_count: 0
+  status: fail
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  blocked_journey_count: 2
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
   status: pass
@@ -81,6 +92,9 @@ repo_backlog_audit:
   open_project_count: 0
   open_items: []
 blocking_audits:
+- component: journey_gate
+  title: Golden journey release-proof gaps
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 - component: trusted_completion_receipt
   title: Trusted completion receipt
   reason: no supervisor run history recorded; explicit completion review is required
@@ -89,16 +103,13 @@ frontier_ids: []
 frontier: []
 eta:
   status: tracked
-  eta_human: tracked
+  eta_human: 10h-1.1d
   eta_confidence: low
   basis: aggregate_shard_parallel_scope
-  scope_kind: aggregate_shard_mixed_scope
-  scope_label: Aggregate multi-shard ETA
-  scope_warning: Aggregate shard status currently mixes multiple ETA scopes. Use the
-    ETA command for a fresh whole-fleet forecast instead of reading this as a single
-    parity horizon.
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
   blocking_reason: ''
-  summary: 289176409883081416909224428656289242155826078972496170013638653716300897403796663244441698594071314684657594796099322597209680651187231138370006561444947031510242938472733147087451449584
-    open milestones remain (289176409883081416909224428656289242155826078972496170013638653716300897403796663244441698594071314684657594796099322597209680651187231138370006561444947031510242938472733147087451449584
-    in progress, 0 not started). Aggregate shard status is parallelized across 1 active
-    shards under Aggregate multi-shard ETA.
+  summary: 4 open milestones remain (4 in progress, 0 not started). Aggregate shard
+    status is parallelized across 7 active shards under Full Chummer5A parity and
+    flagship proof closeout.

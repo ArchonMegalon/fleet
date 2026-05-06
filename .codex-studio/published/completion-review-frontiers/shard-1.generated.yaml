@@ -1,8 +1,8 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-06T19:59:35Z'
-mode: completion_review
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-1
+generated_at: '2026-05-06T20:00:54Z'
+mode: flagship_product
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 projects_dir: /docker/fleet/config/projects
@@ -34,33 +34,40 @@ focus:
   - chummer6-design
   - chummer6-ui
   texts:
-  - top flagship grade
-  - whole project frontier
-  - feedback
-  - automatic bugfixing
-  - crash
-  - support
-  - accessibility
-  - localization
-  - restore confidence
-  - fit and finish
   - flagship-readiness
   - desktop-client
   - release-proof
   - grade-bar
   - materializer
+  - top flagship grade
+  - whole-project frontier
+  - no lowered standards
+  - feedback loop
+  - automatic bugfixing
+  - crash reporting
+  - support routing
+  - journey smoothness
+  - restore confidence
+  - accessibility
+  - localization
+  - performance
+  - proof shelf
+  - fit and finish
+  - hub and registry
+  - mobile play shell
+  - ui kit and flagship polish
 completion_audit:
-  status: pass
-  reason: recent supervisor history ends with a trusted structured worker receipt
+  status: fail
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: pass
   reason: recent supervisor history ends with a trusted structured worker receipt
   latest_run_id: 20260506T193055Z-shard-1
   latest_run_reason: ''
 journey_gate_audit:
-  status: pass
-  reason: golden journey proof is ready
-  blocked_journey_count: 0
+  status: fail
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  blocked_journey_count: 2
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
   status: pass
@@ -80,22 +87,24 @@ repo_backlog_audit:
   open_item_count: 0
   open_project_count: 0
   open_items: []
-blocking_audits: []
+blocking_audits:
+- component: journey_gate
+  title: Golden journey release-proof gaps
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
-  status: tracked
-  eta_human: tracked
+  status: flagship_delivery
+  eta_human: 7h-17h
   eta_confidence: low
-  basis: aggregate_shard_parallel_scope
-  scope_kind: aggregate_shard_mixed_scope
-  scope_label: Aggregate multi-shard ETA
-  scope_warning: Aggregate shard status currently mixes multiple ETA scopes. Use the
-    ETA command for a fresh whole-fleet forecast instead of reading this as a single
-    parity horizon.
+  basis: full_product_single_milestone_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
   blocking_reason: ''
-  summary: 17650187332782944388816477874619150308912465086708699685311565683790066272285314462491829256150589781323833075855458643254188505509674034522571947063018113491993714705189434805145167
-    open milestones remain (17650187332782944388816477874619150308912465086708699685311565683790066272285314462491829256150589781323833075855458643254188505509674034522571947063018113491993714705189434805145167
-    in progress, 0 not started). Aggregate shard status is parallelized across 1 active
-    shards under Aggregate multi-shard ETA.
+  summary: 'Milestone ''Auto-detect and repair recurring `fleet` mirror drift after
+    15925 repeated audit observations; keep one bounded queue slice for the affected
+    local design mirror bundle instead of reopening one-off mirror refresh work.''
+    remains open under the flagship closeout frontier. Outstanding readiness coverage:
+    hub_and_registry, mobile_play_shell, ui_kit_and_flagship_polish.'

@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-06T19:37:12Z'
+generated_at: '2026-05-06T20:02:59Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-14
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -49,6 +49,17 @@ focus:
   - desktop-client
   - release-proof
   - materializer
+  - whole-project frontier
+  - no lowered standards
+  - feedback loop
+  - crash reporting
+  - support routing
+  - journey smoothness
+  - performance
+  - proof shelf
+  - hub and registry
+  - mobile play shell
+  - ui kit and flagship polish
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -56,15 +67,14 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: recent supervisor history ends with a trusted structured worker receipt
+  status: fail
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 full_product_audit:
-  status: pass
-  reason: flagship product readiness proof is current across desktop, rules, hub,
-    mobile, horizons, and operator lanes
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-06T19:37:09Z'
-  proof_status: pass
+  generated_at: '2026-05-06T20:00:50Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
@@ -74,20 +84,20 @@ frontier_ids: []
 frontier: []
 eta:
   status: tracked
-  eta_human: 11h-1.1d
+  eta_human: 10h-1.1d
   eta_confidence: low
   basis: aggregate_shard_parallel_scope
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 2 open milestones remain (2 in progress, 0 not started). Aggregate shard
-    status is parallelized across 3 active shards under Full Chummer5A parity and
+  summary: 4 open milestones remain (4 in progress, 0 not started). Aggregate shard
+    status is parallelized across 7 active shards under Full Chummer5A parity and
     flagship proof closeout.
-  predicted_completion_at: '2026-05-07T14:22:30Z'
-  range_low_hours: 10.86
-  range_high_hours: 26.65
-  remaining_open_milestones: 2
-  remaining_in_progress_milestones: 2
+  predicted_completion_at: '2026-05-07T14:05:23Z'
+  range_low_hours: 10.25
+  range_high_hours: 25.83
+  remaining_open_milestones: 4
+  remaining_in_progress_milestones: 4
   remaining_not_started_milestones: 0
-  remaining_effort_units: 2.05
+  remaining_effort_units: 0

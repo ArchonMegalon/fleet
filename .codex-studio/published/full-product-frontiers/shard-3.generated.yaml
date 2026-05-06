@@ -1,7 +1,7 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-06T19:39:12Z'
-mode: complete
+generated_at: '2026-05-06T20:01:07Z'
+mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-3
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -32,12 +32,30 @@ focus:
   - chummer6-hub
   - chummer6-hub-registry
   - fleet
+  - chummer6-design
   texts:
   - install
   - update
   - recovery
   - claim
   - release truth
+  - top flagship grade
+  - whole-project frontier
+  - no lowered standards
+  - feedback loop
+  - automatic bugfixing
+  - crash reporting
+  - support routing
+  - journey smoothness
+  - restore confidence
+  - accessibility
+  - localization
+  - performance
+  - proof shelf
+  - fit and finish
+  - hub and registry
+  - mobile play shell
+  - ui kit and flagship polish
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -45,39 +63,74 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: 'current repo-local completion proof is green; using a supervisor evidence
-    receipt because the latest worker outcome is non-material to proof trust: dispatch
-    parked this shard until provider capacity recovers'
+  status: fail
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 full_product_audit:
-  status: pass
-  reason: flagship product readiness proof is current across desktop, rules, hub,
-    mobile, horizons, and operator lanes
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-06T19:37:09Z'
-  proof_status: pass
+  generated_at: '2026-05-06T20:00:50Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 0
-frontier_ids: []
-frontier: []
+frontier_count: 1
+frontier_ids:
+- 4182074715
+frontier:
+- id: 4182074715
+  title: Shared design system, accessibility, localization, and flagship polish
+  wave: flagship_product
+  status: not_started
+  owners:
+  - chummer6-ui-kit
+  - chummer6-ui
+  - chummer6-mobile
+  dependencies: []
+  exit_criteria:
+  - Make shared tokens, dense-data primitives, accessibility primitives, localization
+    readiness, and flagship-grade visual polish real across workbench and play surfaces
+    as described in `projects/ui-kit.md`.
+  - Keep package-only shared UI discipline intact while raising the product to a flagship
+    quality bar instead of repo-local one-off chrome.
+  eta:
+    status: flagship_delivery
+    eta_human: 10h-1.1d
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Shared design system, accessibility, localization, and flagship
+      polish'' remains open under the flagship closeout frontier. Outstanding readiness
+      coverage: hub_and_registry, mobile_play_shell, ui_kit_and_flagship_polish.'
+    predicted_completion_at: '2026-05-07T14:03:31Z'
+    range_low_hours: 10.25
+    range_high_hours: 25.83
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 2.05
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
 eta:
-  status: ready
-  eta_human: ready now
-  eta_confidence: high
-  basis: completion_audit_pass
-  scope_kind: repo_local_completion_ready
-  scope_label: Repo-local completion review
-  scope_warning: Repo-local completion evidence is green. External release, flagship,
-    or parity claims still depend on the broader readiness surfaces staying green.
+  status: flagship_delivery
+  eta_human: 10h-1d
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
   blocking_reason: ''
-  summary: Whole-product completion audit is green on current repo-local evidence.
-  predicted_completion_at: '2026-05-06T19:39:12Z'
-  range_low_hours: 0.0
-  range_high_hours: 0.0
-  remaining_open_milestones: 0
+  summary: 'Milestone ''Hub, registry, and public front door flagship finish'' remains
+    open under the flagship closeout frontier. Outstanding readiness coverage: hub_and_registry,
+    mobile_play_shell, ui_kit_and_flagship_polish.'
+  predicted_completion_at: '2026-05-07T12:52:07Z'
+  range_low_hours: 9.5
+  range_high_hours: 24.2
+  remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 0
-  remaining_effort_units: 0.0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 2.0
