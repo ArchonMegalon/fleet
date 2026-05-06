@@ -6,12 +6,12 @@
     "feedback"
   ],
   "canonical_alignment": {
-    "design_queue_status": "not_started",
-    "fleet_queue_status": "not_started",
+    "design_queue_status": "complete",
+    "fleet_queue_status": "complete",
     "issues": [],
     "registry_status": "not_started",
     "state": "pass",
-    "work_task_status": ""
+    "work_task_status": "complete"
   },
   "canonical_monitors": {
     "build_explain_artifact_truth_policy": {
@@ -42,43 +42,13 @@
       "state": "pass"
     },
     "horizon_registry": {
-      "issues": [
-        "Horizon `jackpoint` is missing required `allowed_surfaces`.",
-        "Horizon `jackpoint` is missing required `proof_gate`.",
-        "Horizon `jackpoint` is missing required `public_claim_posture`.",
-        "Horizon `jackpoint` is missing required `stop_condition`.",
-        "Horizon `community-hub` is missing required `allowed_surfaces`.",
-        "Horizon `community-hub` is missing required `proof_gate`.",
-        "Horizon `community-hub` is missing required `public_claim_posture`.",
-        "Horizon `community-hub` is missing required `stop_condition`.",
-        "Horizon `runsite` is missing required `allowed_surfaces`.",
-        "Horizon `runsite` is missing required `proof_gate`.",
-        "Horizon `runsite` is missing required `public_claim_posture`.",
-        "Horizon `runsite` is missing required `stop_condition`.",
-        "Horizon `runbook-press` is missing required `allowed_surfaces`.",
-        "Horizon `runbook-press` is missing required `proof_gate`.",
-        "Horizon `runbook-press` is missing required `public_claim_posture`.",
-        "Horizon `runbook-press` is missing required `stop_condition`.",
-        "Horizon `ghostwire` is missing required `allowed_surfaces`.",
-        "Horizon `ghostwire` is missing required `proof_gate`.",
-        "Horizon `ghostwire` is missing required `public_claim_posture`.",
-        "Horizon `ghostwire` is missing required `stop_condition`.",
-        "Horizon `table-pulse` is missing required `allowed_surfaces`.",
-        "Horizon `table-pulse` is missing required `proof_gate`.",
-        "Horizon `table-pulse` is missing required `public_claim_posture`.",
-        "Horizon `table-pulse` is missing required `stop_condition`."
-      ],
+      "issues": [],
       "monitored_horizons": [
         {
           "current_state": "horizon",
           "id": "jackpoint",
-          "missing_required_field_count": 4,
-          "missing_required_fields": [
-            "allowed_surfaces",
-            "proof_gate",
-            "public_claim_posture",
-            "stop_condition"
-          ],
+          "missing_required_field_count": 0,
+          "missing_required_fields": [],
           "next_state": "bounded_research",
           "owner_handoff_gate": "Registry manifests and media receipts must survive format changes before the studio is promoted beyond horizon.",
           "owning_repo_count": 3,
@@ -87,13 +57,8 @@
         {
           "current_state": "horizon",
           "id": "community-hub",
-          "missing_required_field_count": 4,
-          "missing_required_fields": [
-            "allowed_surfaces",
-            "proof_gate",
-            "public_claim_posture",
-            "stop_condition"
-          ],
+          "missing_required_field_count": 0,
+          "missing_required_fields": [],
           "next_state": "bounded_research",
           "owner_handoff_gate": "Open-run listing, accepted roster, meeting handoff, observer consent, and reputation events must stay Chummer-owned even when third-party meeting or analysis tools are in the loop.",
           "owning_repo_count": 6,
@@ -102,13 +67,8 @@
         {
           "current_state": "horizon",
           "id": "runsite",
-          "missing_required_field_count": 4,
-          "missing_required_fields": [
-            "allowed_surfaces",
-            "proof_gate",
-            "public_claim_posture",
-            "stop_condition"
-          ],
+          "missing_required_field_count": 0,
+          "missing_required_fields": [],
           "next_state": "bounded_research",
           "owner_handoff_gate": "Spatial artifacts must remain clearly outside live mechanics and combat truth before any promotion.",
           "owning_repo_count": 2,
@@ -117,13 +77,8 @@
         {
           "current_state": "horizon",
           "id": "runbook-press",
-          "missing_required_field_count": 4,
-          "missing_required_fields": [
-            "allowed_surfaces",
-            "proof_gate",
-            "public_claim_posture",
-            "stop_condition"
-          ],
+          "missing_required_field_count": 0,
+          "missing_required_fields": [],
           "next_state": "bounded_research",
           "owner_handoff_gate": "Publication and compatibility metadata must remain registry-owned before this lane becomes research-ready.",
           "owning_repo_count": 3,
@@ -132,13 +87,8 @@
         {
           "current_state": "horizon",
           "id": "ghostwire",
-          "missing_required_field_count": 4,
-          "missing_required_fields": [
-            "allowed_surfaces",
-            "proof_gate",
-            "public_claim_posture",
-            "stop_condition"
-          ],
+          "missing_required_field_count": 0,
+          "missing_required_fields": [],
           "next_state": "bounded_research",
           "owner_handoff_gate": "Replay must prove reducer-safe, receipt-backed reconstruction before it can leave horizon status.",
           "owning_repo_count": 4,
@@ -147,20 +97,15 @@
         {
           "current_state": "horizon",
           "id": "table-pulse",
-          "missing_required_field_count": 4,
-          "missing_required_fields": [
-            "allowed_surfaces",
-            "proof_gate",
-            "public_claim_posture",
-            "stop_condition"
-          ],
+          "missing_required_field_count": 0,
+          "missing_required_fields": [],
           "next_state": "bounded_research",
           "owner_handoff_gate": "Coaching analysis must remain opt-in, post-session, privacy-bounded, and clearly separate from session truth before it moves beyond horizon.",
           "owning_repo_count": 2,
           "title": "TABLE PULSE"
         }
       ],
-      "state": "fail",
+      "state": "pass",
       "target_horizon_count": 6
     },
     "ltd_integration_guide": {
@@ -193,16 +138,17 @@
   },
   "contract_name": "fleet.next90_m133_media_social_horizon_monitors",
   "frontier_id": 2336165027,
-  "generated_at": "2026-05-05T14:53:22Z",
+  "generated_at": "2026-05-06T03:44:05Z",
   "milestone_id": 133,
   "monitor_summary": {
     "journey_count": 3,
     "media_proof_status": "passed",
     "media_social_status": "blocked",
-    "provider_canary_gate_state": "ready",
-    "runtime_blocker_count": 1,
+    "provider_canary_gate_state": "accumulating",
+    "runtime_blocker_count": 2,
     "runtime_blockers": [
-      "publication_proof_monitor: release_channel: Release channel proof freshness exceeded threshold (381071s > 172800s)."
+      "publication_proof_monitor: release_channel: Release channel proof freshness exceeded threshold (427314s > 172800s).",
+      "provider_stop_condition_monitor: Provider canary gate is accumulating."
     ],
     "warning_count": 3
   },
@@ -210,38 +156,14 @@
     "monitor_media_social_horizon_proof:fleet"
   ],
   "package_closeout": {
-    "blockers": [
-      "horizon_registry: Horizon `jackpoint` is missing required `allowed_surfaces`.",
-      "horizon_registry: Horizon `jackpoint` is missing required `proof_gate`.",
-      "horizon_registry: Horizon `jackpoint` is missing required `public_claim_posture`.",
-      "horizon_registry: Horizon `jackpoint` is missing required `stop_condition`.",
-      "horizon_registry: Horizon `community-hub` is missing required `allowed_surfaces`.",
-      "horizon_registry: Horizon `community-hub` is missing required `proof_gate`.",
-      "horizon_registry: Horizon `community-hub` is missing required `public_claim_posture`.",
-      "horizon_registry: Horizon `community-hub` is missing required `stop_condition`.",
-      "horizon_registry: Horizon `runsite` is missing required `allowed_surfaces`.",
-      "horizon_registry: Horizon `runsite` is missing required `proof_gate`.",
-      "horizon_registry: Horizon `runsite` is missing required `public_claim_posture`.",
-      "horizon_registry: Horizon `runsite` is missing required `stop_condition`.",
-      "horizon_registry: Horizon `runbook-press` is missing required `allowed_surfaces`.",
-      "horizon_registry: Horizon `runbook-press` is missing required `proof_gate`.",
-      "horizon_registry: Horizon `runbook-press` is missing required `public_claim_posture`.",
-      "horizon_registry: Horizon `runbook-press` is missing required `stop_condition`.",
-      "horizon_registry: Horizon `ghostwire` is missing required `allowed_surfaces`.",
-      "horizon_registry: Horizon `ghostwire` is missing required `proof_gate`.",
-      "horizon_registry: Horizon `ghostwire` is missing required `public_claim_posture`.",
-      "horizon_registry: Horizon `ghostwire` is missing required `stop_condition`.",
-      "horizon_registry: Horizon `table-pulse` is missing required `allowed_surfaces`.",
-      "horizon_registry: Horizon `table-pulse` is missing required `proof_gate`.",
-      "horizon_registry: Horizon `table-pulse` is missing required `public_claim_posture`.",
-      "horizon_registry: Horizon `table-pulse` is missing required `stop_condition`."
-    ],
-    "state": "blocked",
+    "blockers": [],
+    "state": "pass",
     "warnings": [
-      "publication_proof_monitor: release_channel: Release channel proof freshness exceeded threshold (381071s > 172800s).",
+      "publication_proof_monitor: release_channel: Release channel proof freshness exceeded threshold (427314s > 172800s).",
+      "provider_stop_condition_monitor: Provider canary gate is accumulating.",
       "Provider fallback coverage is thin for core, core_authority, core_booster, core_rescue, groundwork",
       "Governor current_launch_action is freeze_launch.",
-      "Governor rollback posture remains armed."
+      "Governor rollback posture remains watch."
     ]
   },
   "package_id": "next90-m133-fleet-monitor-media-social-horizon-proof-freshness-consent-gat",
@@ -296,23 +218,25 @@
       "current_launch_action": "freeze_launch",
       "fallback_thin_count": 5,
       "issues": [],
-      "provider_canary_gate_state": "ready",
+      "provider_canary_gate_state": "accumulating",
       "provider_packet_status": "pass",
       "revert_now_count": 0,
       "review_due_count": 0,
-      "rollback_state": "armed",
-      "runtime_blockers": [],
+      "rollback_state": "watch",
+      "runtime_blockers": [
+        "Provider canary gate is accumulating."
+      ],
       "state": "pass",
       "warnings": [
         "Provider fallback coverage is thin for core, core_authority, core_booster, core_rescue, groundwork",
         "Governor current_launch_action is freeze_launch.",
-        "Governor rollback posture remains armed."
+        "Governor rollback posture remains watch."
       ]
     },
     "publication_proof": {
       "hub_local_release": {
-        "age_hours": 1.96,
-        "generated_at": "2026-05-05T12:55:39Z",
+        "age_hours": 1.26,
+        "generated_at": "2026-05-06T02:28:35Z",
         "issues": [],
         "path": "/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
         "runtime_blockers": [],
@@ -322,8 +246,8 @@
       },
       "issues": [],
       "media_local_release": {
-        "age_hours": 0.13,
-        "generated_at": "2026-05-05T14:45:23Z",
+        "age_hours": 7.59,
+        "generated_at": "2026-05-05T20:08:45Z",
         "issues": [],
         "path": "/docker/fleet/repos/chummer-media-factory/.codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json",
         "runtime_blockers": [],
@@ -332,22 +256,22 @@
         "warnings": []
       },
       "release_channel": {
-        "age_hours": 2.56,
-        "generated_at": "2026-05-05T12:19:53Z",
+        "age_hours": 8.44,
+        "generated_at": "2026-05-05T19:17:52Z",
         "issues": [],
         "path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
-        "release_proof_age_hours": 105.85,
+        "release_proof_age_hours": 118.7,
         "release_proof_generated_at": "2026-05-01T05:02:11Z",
         "release_proof_status": "passed",
         "runtime_blockers": [
-          "Release channel proof freshness exceeded threshold (381071s > 172800s)."
+          "Release channel proof freshness exceeded threshold (427314s > 172800s)."
         ],
         "state": "pass",
         "status": "published",
         "warnings": []
       },
       "runtime_blockers": [
-        "release_channel: Release channel proof freshness exceeded threshold (381071s > 172800s)."
+        "release_channel: Release channel proof freshness exceeded threshold (427314s > 172800s)."
       ],
       "state": "pass",
       "warnings": []
@@ -367,7 +291,7 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "b3f14460b765032c5a3f69c59f2839aa116d09cfa92a58768a37f9b941fc94f1"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "external_tools_plane": {
       "generated_at": "",
@@ -375,29 +299,29 @@
       "sha256": "7894c569ebd73445b42b900d067b615e1a842749951c175d501fd5d0620271ee"
     },
     "flagship_readiness": {
-      "generated_at": "2026-05-05T14:30:57Z",
+      "generated_at": "2026-05-06T03:30:51Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "e616034de1cf179fe9a5f2cf08b1a0c3a986faf576280f8a2cdb3056fe7762c6"
+      "sha256": "80f497c3f6ee64f867ccfc62ba2028eb3fa812f3379d5cf9c91df2fc26b8fe02"
     },
     "horizon_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/HORIZON_REGISTRY.yaml",
-      "sha256": "3141f5f24d39df06bd0b35fa7b2093cafbb35c6abc50f884f6cb237aa7730ab1"
+      "sha256": "78d6076474964e9753cbfeec0532a132910072abe13d4883105dcf07a630ee25"
     },
     "hub_local_release_proof": {
-      "generated_at": "2026-05-05T12:55:39Z",
+      "generated_at": "2026-05-06T02:28:35Z",
       "path": "/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-      "sha256": "6a4c7cae3be27dc97aa5c512c66ac470c7c1c15c0c8e23197f43515fb33da22a"
+      "sha256": "4ffd722a8cafbc19530095c34f6af2f789dbba113b1f266678c69a92720510f1"
     },
     "journey_gates": {
-      "generated_at": "2026-05-05T14:30:54Z",
+      "generated_at": "2026-05-06T03:30:49Z",
       "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-      "sha256": "923a5d2dd37cd48a1e4f54045abdbed911f5fe656fd579e13f5bb2c0c994639c"
+      "sha256": "1dde84be59a2203912047189fe389c724621a3d2195edd1230e78e00c957345a"
     },
     "media_local_release_proof": {
-      "generated_at": "2026-05-05T14:45:23Z",
+      "generated_at": "2026-05-05T20:08:45Z",
       "path": "/docker/fleet/repos/chummer-media-factory/.codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json",
-      "sha256": "48d482cba84d3a902aa14ef0e13291aa4649db2d6c38d60c386df28a1fb73329"
+      "sha256": "1a8563614e9d4e91609f40e59904cab4e0c4dd6ffa0c9b0ec2270616339b5161"
     },
     "media_social_ltd_guide": {
       "generated_at": "",
@@ -410,27 +334,27 @@
       "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
     },
     "provider_stewardship": {
-      "generated_at": "2026-05-05T12:28:27Z",
+      "generated_at": "2026-05-05T21:16:02Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT90_M130_FLEET_PROVIDER_STEWARDSHIP.generated.json",
-      "sha256": "5edc8de1439b9dfd0ab199da5141b51e897c771dcbb1aea73dea67c597629d07"
+      "sha256": "726e49df427ae40e05ceda285359cdeaec7459228fcb222d733c386c2f5183f3"
     },
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "4aee46532691930d0395e4bfcadbe275f6bb8d3aa93682ec91ec35e5da35626d"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "release_channel": {
-      "generated_at": "2026-05-05T12:19:53Z",
+      "generated_at": "2026-05-05T19:17:52Z",
       "path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
-      "sha256": "5eed1a7e2cebcf061e6b6fba2e33b3ff8956bc10745b038dc77f3d29ebd8357a"
+      "sha256": "6899d169bab50f885bc4c1df9fea4027d31bca6a0357b7142e3fd5f194cfb02d"
     },
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "e366f215aeb2e03c8130019790509603132f6ca5b57eadf8303b93c3787f7d06"
+      "sha256": "e360e1a7a36249a35a10be5f9a97e7f37053041171905b494db3bac67dd49ab1"
     }
   },
-  "status": "blocked",
+  "status": "pass",
   "wave": "W21",
   "work_task_id": "133.7"
 }
