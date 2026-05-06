@@ -10,7 +10,8 @@ from pathlib import Path
 import yaml
 
 
-SCRIPT = Path("/docker/fleet/scripts/materialize_next90_m144_fleet_desktop_proof_integrity_closeout_gates.py")
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts" / "materialize_next90_m144_fleet_desktop_proof_integrity_closeout_gates.py"
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -231,6 +232,44 @@ class MaterializeNext90M144FleetDesktopProofIntegrityCloseoutGatesTest(unittest.
             assert payload["monitor_summary"]["desktop_proof_integrity_closeout_status"] == "pass"
             assert payload["package_closeout"]["ready"] is True
 
+    def test_materializer_accepts_digest_bound_startup_smoke_version_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, stale_versions=False)
+            startup_smoke_payload = json.loads(fixture["startup_smoke"].read_text(encoding="utf-8"))
+            startup_smoke_payload["version"] = "run-0"
+            startup_smoke_payload["releaseVersion"] = "run-0"
+            _write_json(fixture["startup_smoke"], startup_smoke_payload)
+            windows_gate_payload = json.loads(fixture["windows_gate"].read_text(encoding="utf-8"))
+            windows_gate_payload["checks"]["startup_smoke_version"] = "run-0"
+            _write_json(fixture["windows_gate"], windows_gate_payload)
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--output", str(artifact),
+                    "--markdown-output", str(markdown),
+                    "--successor-registry", str(fixture["registry"]),
+                    "--fleet-queue-staging", str(fixture["fleet_queue"]),
+                    "--design-queue-staging", str(fixture["design_queue"]),
+                    "--next90-guide", str(fixture["guide"]),
+                    "--flagship-readiness", str(fixture["flagship"]),
+                    "--ui-windows-exit-gate", str(fixture["windows_gate"]),
+                    "--desktop-executable-exit-gate", str(fixture["executable_gate"]),
+                    "--release-channel", str(fixture["release_channel"]),
+                    "--startup-smoke-receipt", str(fixture["startup_smoke"]),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            assert payload["status"] == "pass"
+            assert payload["monitor_summary"]["desktop_proof_integrity_closeout_status"] == "pass"
+
     def test_materializer_blocks_when_flagship_green_uses_stale_carried_forward_release_channel_truth(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -261,6 +300,7 @@ class MaterializeNext90M144FleetDesktopProofIntegrityCloseoutGatesTest(unittest.
             payload = json.loads(artifact.read_text(encoding="utf-8"))
             assert payload["status"] == "pass"
             assert payload["monitor_summary"]["desktop_proof_integrity_closeout_status"] == "blocked"
+            assert payload["package_closeout"]["ready"] is False
             assert any("release channel version" in item or "stale promoted-version truth" in item for item in payload["monitor_summary"]["runtime_blockers"])
 
 

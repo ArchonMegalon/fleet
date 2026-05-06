@@ -7,11 +7,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from test_materialize_next90_m144_fleet_desktop_proof_integrity_closeout_gates import _fixture_tree
+try:
+    from tests.test_materialize_next90_m144_fleet_desktop_proof_integrity_closeout_gates import _fixture_tree
+except ModuleNotFoundError:
+    from test_materialize_next90_m144_fleet_desktop_proof_integrity_closeout_gates import _fixture_tree
 
 
-MATERIALIZE = Path("/docker/fleet/scripts/materialize_next90_m144_fleet_desktop_proof_integrity_closeout_gates.py")
-VERIFY = Path("/docker/fleet/scripts/verify_next90_m144_fleet_desktop_proof_integrity_closeout_gates.py")
+ROOT = Path(__file__).resolve().parents[1]
+MATERIALIZE = ROOT / "scripts" / "materialize_next90_m144_fleet_desktop_proof_integrity_closeout_gates.py"
+VERIFY = ROOT / "scripts" / "verify_next90_m144_fleet_desktop_proof_integrity_closeout_gates.py"
 
 
 class VerifyNext90M144FleetDesktopProofIntegrityCloseoutGatesTest(unittest.TestCase):

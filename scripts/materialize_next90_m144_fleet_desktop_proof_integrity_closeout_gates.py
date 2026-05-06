@@ -235,8 +235,34 @@ def _normalize_status(value: Any) -> str:
     return _normalize_text(value).lower()
 
 
+def _normalize_token(value: Any) -> str:
+    return _normalize_text(value).lower()
+
+
 def _artifact_status_ok(value: Any) -> bool:
     return _normalize_status(value) in {"pass", "passed", "published", "ready"}
+
+
+def _startup_smoke_version_proves_release(
+    startup_smoke_version: str,
+    release_channel_version: str,
+    startup_smoke_artifact_digest: str,
+    expected_startup_smoke_digest: str,
+) -> bool:
+    version = _normalize_text(startup_smoke_version)
+    release_version = _normalize_text(release_channel_version)
+    startup_digest = _normalize_token(startup_smoke_artifact_digest)
+    expected_digest = _normalize_token(expected_startup_smoke_digest)
+    if not release_version:
+        return True
+    if expected_digest and startup_digest == expected_digest:
+        return True
+    if not version:
+        return False
+    if version == release_version:
+        return True
+    placeholder_version = version.lower().startswith("smoke-")
+    return placeholder_version and bool(expected_digest) and startup_digest == expected_digest
 
 
 def _flagship_monitor(flagship_readiness: Dict[str, Any]) -> Dict[str, Any]:
@@ -342,11 +368,21 @@ def _windows_gate_monitor(
         runtime_blockers.append(
             f"UI_WINDOWS_DESKTOP_EXIT_GATE still cites release channel version `{checks_version}` while live RELEASE_CHANNEL is `{release_channel_version}`."
         )
-    if release_channel_version and startup_version and startup_version != release_channel_version:
+    if release_channel_version and startup_version and not _startup_smoke_version_proves_release(
+        startup_version,
+        release_channel_version,
+        startup_digest,
+        expected_digest,
+    ):
         runtime_blockers.append(
             f"Windows startup-smoke receipt version `{startup_version}` no longer matches live RELEASE_CHANNEL version `{release_channel_version}`."
         )
-    if artifact_version and startup_version and artifact_version != startup_version:
+    if artifact_version and startup_version and not _startup_smoke_version_proves_release(
+        startup_version,
+        artifact_version,
+        startup_digest,
+        expected_digest,
+    ):
         runtime_blockers.append(
             f"Windows startup-smoke receipt version `{startup_version}` does not match the promoted Windows artifact version `{artifact_version}`."
         )
