@@ -45,23 +45,21 @@
     "queue_alignment": {
       "issues": [],
       "state": "pass",
-      "warnings": [
-        "Fleet queue mirror row is still missing for work task 136.16."
-      ]
+      "warnings": []
     }
   },
   "contract_name": "fleet.next90_m136_parity_divergence_class_gate",
   "frontier_id": 2977536653,
-  "generated_at": "2026-05-05T15:49:30Z",
+  "generated_at": "2026-05-06T03:48:08Z",
   "milestone_id": 136,
   "monitor_summary": {
     "classified_delta_count": 0,
     "delta_row_count": 0,
-    "divergence_status": "warning",
+    "divergence_status": "pass",
     "runtime_blocker_count": 0,
     "runtime_blockers": [],
     "unclassified_delta_count": 0,
-    "warning_count": 1
+    "warning_count": 0
   },
   "owned_surfaces": [
     "fail_parity_closeout_when_remaining_deltas_are_not_class:fleet"
@@ -69,9 +67,7 @@
   "package_closeout": {
     "blockers": [],
     "state": "pass",
-    "warnings": [
-      "Fleet queue mirror row is still missing for work task 136.16."
-    ]
+    "warnings": []
   },
   "package_id": "next90-m136-fleet-fail-parity-closeout-when-remaining-deltas-are-not-classified-as-must",
   "queue_title": "Fail parity closeout when remaining deltas are not classified as must-match, may-improve, or may-remove-if-non-degrading in the audit artifacts.",
@@ -95,7 +91,7 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "11cc1ecd96db0176604771f8f6f398998db558b6167a3e2bd37140a2124ddca6"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "flagship_product_bar": {
       "generated_at": "",
@@ -115,7 +111,7 @@
     "fleet_queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "6da82d05213bc6ae4f536f75debf5dab04463c91c9b2992df970d392bd3972b1"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "next90_guide": {
       "generated_at": "",
@@ -123,9 +119,9 @@
       "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
     },
     "parity_audit": {
-      "generated_at": "2026-05-05T15:48:48.580323Z",
+      "generated_at": "2026-05-05T20:18:25.423992Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
-      "sha256": "f467d80b462cb569ecac4402fc3f338dd7251181946b724d5a5898147c12ad03"
+      "sha256": "57747a3e1b9571e52beb1f629eb1ca35fc4c7088b24458c311f6a1bdc974359d"
     },
     "parity_spec": {
       "generated_at": "",
@@ -135,7 +131,7 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "641255112587cbec2c7c43a37dda5a90f6f59e0d2775206517fede2695c233e3"
+      "sha256": "e360e1a7a36249a35a10be5f9a97e7f37053041171905b494db3bac67dd49ab1"
     }
   },
   "status": "pass",

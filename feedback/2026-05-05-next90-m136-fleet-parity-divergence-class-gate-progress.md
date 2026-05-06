@@ -10,6 +10,7 @@
 - added the Fleet M136.16 materializer and verifier for parity divergence-class closeout
 - bound the gate to the published divergence doctrine in `FLAGSHIP_READINESS_PLANES.yaml`, `FLAGSHIP_PRODUCT_BAR.md`, `FLAGSHIP_RELEASE_ACCEPTANCE.yaml`, and `CHUMMER5A_HUMAN_PARITY_ACCEPTANCE_SPEC.md`
 - taught Fleet to fail parity closeout when any remaining audit delta lacks a machine-readable `must_match`, `may_improve`, or `may_remove_if_non_degrading` classification
+- hardened queue staging ingestion so append-style generated queue overlays do not false-block the closeout packet
 
 ## Live findings
 

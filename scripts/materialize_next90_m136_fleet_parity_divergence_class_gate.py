@@ -89,9 +89,21 @@ def _normalize_list(values: Any) -> List[str]:
 
 def _load_yaml(path: Path) -> Dict[str, Any]:
     try:
-        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
         return {}
+    try:
+        payload = yaml.safe_load(raw) or {}
+    except yaml.YAMLError:
+        marker = "\nitems:\n"
+        if marker not in raw:
+            return {}
+        try:
+            payload = yaml.safe_load("items:\n" + raw.split(marker, 1)[1]) or {}
+        except yaml.YAMLError:
+            return {}
+    if isinstance(payload, list):
+        return {"items": payload}
     return payload if isinstance(payload, dict) else {}
 
 

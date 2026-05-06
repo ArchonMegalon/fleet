@@ -7,11 +7,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from test_materialize_next90_m136_fleet_parity_divergence_class_gate import _fixture_tree
+try:
+    from tests.test_materialize_next90_m136_fleet_parity_divergence_class_gate import _fixture_tree
+except ModuleNotFoundError:
+    from test_materialize_next90_m136_fleet_parity_divergence_class_gate import _fixture_tree
 
 
-MATERIALIZER = Path("/docker/fleet/scripts/materialize_next90_m136_fleet_parity_divergence_class_gate.py")
-VERIFIER = Path("/docker/fleet/scripts/verify_next90_m136_fleet_parity_divergence_class_gate.py")
+ROOT = Path(__file__).resolve().parents[1]
+MATERIALIZER = ROOT / "scripts" / "materialize_next90_m136_fleet_parity_divergence_class_gate.py"
+VERIFIER = ROOT / "scripts" / "verify_next90_m136_fleet_parity_divergence_class_gate.py"
 
 
 class VerifyNext90M136FleetParityDivergenceClassGateTest(unittest.TestCase):

@@ -10,7 +10,8 @@ from pathlib import Path
 import yaml
 
 
-SCRIPT = Path("/docker/fleet/scripts/materialize_next90_m136_fleet_parity_divergence_class_gate.py")
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts" / "materialize_next90_m136_fleet_parity_divergence_class_gate.py"
 PACKAGE_ID = "next90-m136-fleet-fail-parity-closeout-when-remaining-deltas-are-not-classified-as-must"
 QUEUE_TITLE = "Fail parity closeout when remaining deltas are not classified as must-match, may-improve, or may-remove-if-non-degrading in the audit artifacts."
 
@@ -18,6 +19,15 @@ QUEUE_TITLE = "Fail parity closeout when remaining deltas are not classified as 
 def _write_yaml(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+
+def _write_generated_queue_overlay(path: Path, payload: dict) -> None:
+    serialized = yaml.safe_dump(payload, sort_keys=False)
+    _, marker, tail = serialized.partition("items:\n")
+    if not marker:
+        raise AssertionError("queue payload must contain an items collection")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("[append-only queue overlay\nitems:\n" + tail, encoding="utf-8")
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -216,3 +226,13 @@ class MaterializeNext90M136FleetParityDivergenceClassGateTest(unittest.TestCase)
             payload = self._run_materializer(fixture, tmp_path / "artifact.json", tmp_path / "artifact.md")
         self.assertEqual(payload["status"], "blocked")
         self.assertTrue(any("divergence_classes drifted" in issue for issue in payload["canonical_monitors"]["divergence_contract"]["issues"]))
+
+    def test_generated_queue_overlay_shape_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, classified=True)
+            _write_generated_queue_overlay(fixture["fleet_queue"], {"items": [_queue_item()]})
+            _write_generated_queue_overlay(fixture["design_queue"], {"items": [_queue_item()]})
+            payload = self._run_materializer(fixture, tmp_path / "artifact.json", tmp_path / "artifact.md")
+        self.assertEqual(payload["status"], "pass")
+        self.assertEqual(payload["canonical_monitors"]["queue_alignment"]["state"], "pass")
