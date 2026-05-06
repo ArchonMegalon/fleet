@@ -105,6 +105,50 @@ def _write_synced_external_runbook(module, runbook_path: Path, commands_dir: Pat
     )
 
 
+def test_preferred_ui_repo_root_prefers_passing_desktop_proof_worktree(tmp_path: Path, monkeypatch) -> None:
+    module = _load_module()
+    failing_root = tmp_path / "failing-ui"
+    passing_root = tmp_path / "passing-ui"
+    _write_json(
+        failing_root / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+        {"status": "fail"},
+    )
+    _write_json(
+        passing_root / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+        {"status": "pass"},
+    )
+    _write_json(
+        passing_root / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
+        {"status": "passed"},
+    )
+    _write_json(
+        passing_root / ".codex-studio" / "published" / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json",
+        {"status": "passed"},
+    )
+    _write_json(
+        passing_root / ".codex-studio" / "published" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
+        {"status": "passed"},
+    )
+    _write_json(
+        passing_root / ".codex-studio" / "published" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
+        {"status": "passed"},
+    )
+
+    monkeypatch.delenv("CHUMMER_UI_REPO_ROOT", raising=False)
+    monkeypatch.setattr(
+        module,
+        "Path",
+        lambda raw: {
+            "/docker/chummercomplete/chummer-presentation-clean": passing_root,
+            "/docker/chummercomplete/chummer6-ui": failing_root,
+            "/docker/chummercomplete/chummer6-ui-finish": tmp_path / "missing-finish",
+            "/docker/chummercomplete/chummer-presentation": failing_root,
+        }.get(raw, Path(raw)),
+    )
+
+    assert module._preferred_ui_repo_root() == passing_root
+
+
 def _base_acceptance() -> dict:
     return {
         "product": "chummer",
@@ -172,6 +216,8 @@ def _materialize_flagship_readiness_with_parity_lab(
     ooda_state_payload=None,
     synced_external_runbook: bool = False,
     journey_gates_payload: dict | None = None,
+    ui_workflow_parity_payload: dict | None = None,
+    ui_workflow_execution_gate_payload: dict | None = None,
     user_journey_tester_audit_payload: dict | None = None,
     ui_element_parity_audit_payload: dict | None = None,
     executable_platforms: tuple[str, ...] = ("linux", "windows", "macos"),
@@ -284,7 +330,8 @@ def _materialize_flagship_readiness_with_parity_lab(
     )
     _write_json(
         ui_workflow_execution_gate_path,
-        {"contract_name": "chummer6-ui.desktop_workflow_execution_gate", "status": "pass", "evidence": {}},
+        ui_workflow_execution_gate_payload
+        or {"contract_name": "chummer6-ui.desktop_workflow_execution_gate", "status": "pass", "evidence": {}},
     )
     _write_json(ui_visual_familiarity_exit_gate_path, _desktop_visual_familiarity_pass_payload(module))
     _write_json(
@@ -295,7 +342,11 @@ def _materialize_flagship_readiness_with_parity_lab(
         ui_user_journey_tester_audit_path,
         user_journey_tester_audit_payload or _user_journey_tester_audit_pass_payload(module),
     )
-    _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
+    _write_json(
+        ui_workflow_parity_path,
+        ui_workflow_parity_payload
+        or {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"},
+    )
     _write_json(
         sr4_workflow_parity_path,
         sr4_workflow_parity_payload
@@ -751,7 +802,8 @@ def test_materialize_flagship_product_readiness_honors_effective_journey_and_pub
     for project in status_plane["projects"]:
         if project["id"] == "ui":
             project["readiness_stage"] = "repo_local_complete"
-            break
+        if project["id"] == "core":
+            project["readiness_stage"] = "repo_local_complete"
     journey_gates = _base_journey_gates()
     for journey in journey_gates["journeys"]:
         if journey["id"] == "build_explain_publish":
@@ -1377,6 +1429,52 @@ def test_reason_targets_rules_engine_and_import_scope_distinguishes_core_from_no
         )
         is False
     )
+
+
+def test_rules_certification_status_accepts_engine_pack_when_rules_specific_proofs_are_green() -> None:
+    module = _load_module()
+
+    status = module._rules_certification_status(
+        {
+            "contract_name": "chummer6-core.engine_proof_pack",
+            "status": "failed",
+            "oracle_suite_summary": {"coverage_status": "passed"},
+            "performance_budget_summary": {"coverage_status": "passed"},
+            "import_oracle_discipline": {"status": "passed"},
+            "unresolved": {
+                "oracle_suites": [],
+                "performance_budgets": [],
+                "release_commands": [],
+                "import_oracle_discipline": [],
+                "successor_wave_authority": ["source_registry"],
+                "release_channel_binding": ["required_promoted_tuple:avalonia:macos:osx-arm64"],
+            },
+        }
+    )
+
+    assert status == "passed"
+
+
+def test_rules_certification_status_keeps_engine_pack_failed_when_rules_specific_proofs_are_red() -> None:
+    module = _load_module()
+
+    status = module._rules_certification_status(
+        {
+            "contract_name": "chummer6-core.engine_proof_pack",
+            "status": "failed",
+            "oracle_suite_summary": {"coverage_status": "passed"},
+            "performance_budget_summary": {"coverage_status": "failed"},
+            "import_oracle_discipline": {"status": "passed"},
+            "unresolved": {
+                "oracle_suites": [],
+                "performance_budgets": ["missing_required_budget:import"],
+                "release_commands": [],
+                "import_oracle_discipline": [],
+            },
+        }
+    )
+
+    assert status == "failed"
 
 
 def test_feedback_loop_readiness_plane_marks_clean_release_truth_backed_closure_ready() -> None:
@@ -8322,6 +8420,7 @@ def test_materialize_flagship_product_readiness_refreshes_compile_manifest(tmp_p
     published = repo_root / ".codex-studio" / "published"
     out_path = published / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = repo_root / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+    state_mirror_path = repo_root / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 
     _write_yaml(acceptance_path, _base_acceptance())
     _write_yaml(published / "STATUS_PLANE.generated.yaml", {"runtime_healing": {"summary": {"alert_state": "warning"}}, "projects": [], "groups": []})
@@ -8341,7 +8440,7 @@ def test_materialize_flagship_product_readiness_refreshes_compile_manifest(tmp_p
             "--out",
             str(out_path),
             "--mirror-out",
-            str(repo_root / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"),
+            str(state_mirror_path),
             "--acceptance",
             str(acceptance_path),
             "--status-plane",
@@ -8397,6 +8496,89 @@ def test_materialize_flagship_product_readiness_refreshes_compile_manifest(tmp_p
     assert result.returncode == 0, result.stderr
     manifest_payload = json.loads((published / "compile.manifest.json").read_text(encoding="utf-8"))
     assert "FLAGSHIP_PRODUCT_READINESS.generated.json" in manifest_payload["artifacts"]
+    assert state_mirror_path.is_file()
+
+
+def test_materialize_flagship_product_readiness_rejects_design_mirror_output_path(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    published = repo_root / ".codex-studio" / "published"
+    product_dir = repo_root / ".codex-design" / "product"
+    out_path = published / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    acceptance_path = product_dir / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+
+    _write_yaml(acceptance_path, _base_acceptance())
+    _write_yaml(published / "STATUS_PLANE.generated.yaml", {"runtime_healing": {"summary": {"alert_state": "warning"}}, "projects": [], "groups": []})
+    _write_json(published / "PROGRESS_REPORT.generated.json", {"generated_at": "2026-04-01T08:00:00Z", "history_snapshot_count": 1})
+    _write_json(published / "PROGRESS_HISTORY.generated.json", {"snapshot_count": 1})
+    _write_json(published / "JOURNEY_GATES.generated.json", {"summary": {"overall_state": "warning"}, "journeys": []})
+    _write_json(published / "SUPPORT_CASE_PACKETS.generated.json", {"generated_at": "2026-04-01T08:00:00Z"})
+    _write_json(repo_root / "state" / "chummer_design_supervisor" / "state.json", _base_supervisor_state())
+    _write_json(repo_root / "state" / "design_supervisor_ooda" / "current_8h" / "state.json", _base_ooda_state())
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(repo_root),
+            "--out",
+            str(out_path),
+            "--mirror-out",
+            str(product_dir / "FLAGSHIP_PRODUCT_READINESS.generated.json"),
+            "--acceptance",
+            str(acceptance_path),
+            "--status-plane",
+            str(published / "STATUS_PLANE.generated.yaml"),
+            "--progress-report",
+            str(published / "PROGRESS_REPORT.generated.json"),
+            "--progress-history",
+            str(published / "PROGRESS_HISTORY.generated.json"),
+            "--journey-gates",
+            str(published / "JOURNEY_GATES.generated.json"),
+            "--support-packets",
+            str(published / "SUPPORT_CASE_PACKETS.generated.json"),
+            "--supervisor-state",
+            str(repo_root / "state" / "chummer_design_supervisor" / "state.json"),
+            "--ooda-state",
+            str(repo_root / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"),
+            "--ui-local-release-proof",
+            str(repo_root / "missing-ui.json"),
+            "--ui-linux-exit-gate",
+            str(repo_root / "missing-exit.json"),
+            "--ui-windows-exit-gate",
+            str(repo_root / "missing-ui-windows-exit.json"),
+            "--ui-executable-exit-gate",
+            str(repo_root / "missing-ui-executable-exit.json"),
+            "--ui-workflow-execution-gate",
+            str(repo_root / "missing-ui-workflow-execution.json"),
+            "--ui-visual-familiarity-exit-gate",
+            str(repo_root / "missing-ui-visual-familiarity-exit.json"),
+            "--ui-localization-release-gate",
+            str(repo_root / "missing-ui-localization-release-gate.json"),
+            "--ui-workflow-parity-proof",
+            str(repo_root / "missing-ui-workflow-parity.json"),
+            "--sr4-workflow-parity-proof",
+            str(repo_root / "missing-ui-sr4-workflow-parity.json"),
+            "--sr6-workflow-parity-proof",
+            str(repo_root / "missing-ui-sr6-workflow-parity.json"),
+            "--sr4-sr6-frontier-receipt",
+            str(repo_root / "missing-ui-sr4-sr6-frontier.json"),
+            "--hub-local-release-proof",
+            str(repo_root / "missing-hub.json"),
+            "--mobile-local-release-proof",
+            str(repo_root / "missing-mobile.json"),
+            "--release-channel",
+            str(repo_root / "missing-channel.json"),
+            "--releases-json",
+            str(repo_root / "missing-releases.json"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "must stay in Fleet-owned publish/state roots" in result.stderr
 
 
 def test_materialize_flagship_product_readiness_requires_desktop_canon_in_design_mirror(tmp_path: Path) -> None:
@@ -13034,6 +13216,44 @@ def test_materialize_flagship_product_readiness_recovers_desktop_and_fleet_from_
     assert fleet_evidence["journey_effective_overall_state"] == "ready"
     assert fleet_evidence["supervisor_completion_status"] == "fail"
     assert fleet_evidence["supervisor_completion_status_recovered_from_current_readiness"] is True
+
+
+def test_materialize_flagship_product_readiness_recovers_stale_legacy_parity_receipts_from_direct_workflow_execution_gate(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        ui_workflow_parity_payload={
+            "contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity",
+            "status": "fail",
+        },
+        ui_workflow_execution_gate_payload={
+            "contract_name": "chummer6-ui.desktop_workflow_execution_gate",
+            "status": "pass",
+            "evidence": {
+                "direct_flagship_slice_runtime_proof_closes_direct_workflow_gate": True,
+            },
+        },
+        sr6_workflow_parity_payload={
+            "contract_name": "chummer6-ui.sr6_desktop_workflow_parity",
+            "status": "fail",
+        },
+    )
+
+    assert payload["coverage"]["desktop_client"] == "ready"
+    assert payload["coverage_details"]["desktop_client"]["reasons"] == []
+    desktop_evidence = payload["coverage_details"]["desktop_client"]["evidence"]
+    assert desktop_evidence["ui_workflow_parity_status"] == "fail"
+    assert desktop_evidence["ui_workflow_parity_effective_ready"] is True
+    assert desktop_evidence["ui_workflow_parity_recovered_from_workflow_execution_gate"] is True
+    assert desktop_evidence["sr6_workflow_parity_status"] == "fail"
+    assert desktop_evidence["sr6_workflow_parity_effective_ready"] is True
+    assert desktop_evidence["ui_workflow_execution_gate_direct_flagship_slice_runtime_proof"] is True
+    assert payload["readiness_planes"]["dense_workbench_ready"]["status"] == "ready"
+    assert payload["readiness_planes"]["recovery_trust_ready"]["status"] == "ready"
+    assert payload["readiness_planes"]["sr6_parity_ready"]["status"] == "ready"
 
 
 def test_flagship_product_readiness_binds_parity_lab_evidence_into_veteran_ready_truth(tmp_path: Path) -> None:

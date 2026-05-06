@@ -383,6 +383,114 @@ def test_ea_veteran_workflow_pack_covers_every_flagship_parity_family() -> None:
     assert required_family_ids <= packed_family_ids
 
 
+def test_ea_veteran_workflow_pack_includes_family_local_m142_proof_packs() -> None:
+    workflow_pack = _yaml(WORKFLOW_PACK_PATH)
+
+    pack_rows = [dict(row) for row in (workflow_pack.get("family_local_proof_packs") or [])]
+    pack_by_family = {str(row.get("family_id") or "").strip(): row for row in pack_rows}
+
+    assert {
+        "dense_builder_and_career_workflows",
+        "dice_initiative_and_table_utilities",
+        "identity_contacts_lifestyles_history",
+    } <= set(pack_by_family)
+
+    dense = pack_by_family["dense_builder_and_career_workflows"]
+    assert list(dense.get("compare_artifacts") or []) == [
+        "oracle:tabs",
+        "oracle:workspace_actions",
+        "workflow:build_explain_publish",
+    ]
+    assert list(dict(dense.get("screenshot_pack") or {}).get("screenshots") or []) == [
+        "05-dense-section-light.png",
+        "06-dense-section-dark.png",
+        "07-loaded-runner-tabs-light.png",
+    ]
+    assert any(
+        str(item).endswith("UI_LOCAL_RELEASE_PROOF.generated.json")
+        for item in (dict(dense.get("interaction_pack") or {}).get("runtime_receipts") or [])
+    )
+
+    dice = pack_by_family["dice_initiative_and_table_utilities"]
+    assert list(dice.get("compare_artifacts") or []) == ["menu:dice_roller", "workflow:initiative"]
+    assert any(
+        str(item).endswith("NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json")
+        for item in (dict(dice.get("interaction_pack") or {}).get("runtime_receipts") or [])
+    )
+    assert "ResolveRunboardInitiativeSummary" in set(
+        str(item).strip() for item in (dict(dice.get("interaction_pack") or {}).get("required_tokens") or [])
+    )
+
+    identity = pack_by_family["identity_contacts_lifestyles_history"]
+    assert list(dict(identity.get("screenshot_pack") or {}).get("screenshots") or []) == [
+        "10-contacts-section-light.png",
+        "11-diary-dialog-light.png",
+    ]
+    assert "workflow:lifestyles" in set(
+        str(item).strip() for item in (dict(identity.get("interaction_pack") or {}).get("required_tokens") or [])
+    )
+
+
+def test_ea_veteran_workflow_pack_includes_route_specific_m143_compare_packs() -> None:
+    workflow_pack = _yaml(WORKFLOW_PACK_PATH)
+
+    pack_rows = [dict(row) for row in (workflow_pack.get("route_specific_compare_packs") or [])]
+    pack_by_family = {str(row.get("family_id") or "").strip(): row for row in pack_rows}
+
+    assert {
+        "sheet_export_print_viewer_and_exchange",
+        "sr6_supplements_designers_and_house_rules",
+    } <= set(pack_by_family)
+
+    sheet = pack_by_family["sheet_export_print_viewer_and_exchange"]
+    assert list(sheet.get("compare_artifacts") or []) == [
+        "menu:open_for_printing",
+        "menu:open_for_export",
+        "menu:file_print_multiple",
+    ]
+    sheet_routes = {
+        str(route.get("route_id") or "").strip(): dict(route)
+        for route in (sheet.get("route_proofs") or [])
+        if isinstance(route, dict)
+    }
+    assert set(sheet_routes) == {
+        "menu:open_for_printing",
+        "menu:open_for_export",
+        "menu:file_print_multiple",
+    }
+    assert any(
+        str(item).endswith("NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md")
+        for item in (dict(sheet.get("artifact_proofs") or {}).get("output_receipts") or [])
+    )
+    assert "WorkspaceExchangeDeterministicReceipt" in set(
+        str(item).strip() for item in (dict(sheet.get("artifact_proofs") or {}).get("required_output_tokens") or [])
+    )
+
+    sr6 = pack_by_family["sr6_supplements_designers_and_house_rules"]
+    assert list(sr6.get("compare_artifacts") or []) == [
+        "workflow:sr6_supplements",
+        "workflow:house_rules",
+    ]
+    sr6_routes = {
+        str(route.get("route_id") or "").strip(): dict(route)
+        for route in (sr6.get("route_proofs") or [])
+        if isinstance(route, dict)
+    }
+    assert set(sr6_routes) == {
+        "workflow:sr6_supplements",
+        "workflow:house_rules",
+        "surface:rule_environment_studio",
+    }
+    assert "Sr6SuccessorLaneDeterministicReceipt" in set(
+        str(item).strip() for item in (sr6_routes["workflow:sr6_supplements"].get("required_tokens") or [])
+    )
+    assert list(dict(sr6.get("artifact_proofs") or {}).get("required_screenshot_markers") or []) == [
+        "sr6_rule_environment",
+        "sr6_supplements",
+        "house_rules",
+    ]
+
+
 def test_ea_veteran_workflow_pack_asserts_desktop_non_negotiables() -> None:
     workflow_pack = _yaml(WORKFLOW_PACK_PATH)
     non_negotiables = dict(workflow_pack.get("desktop_non_negotiables_asserted") or {})

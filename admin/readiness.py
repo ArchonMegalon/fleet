@@ -5,6 +5,7 @@ import hashlib
 import json
 import pathlib
 import re
+import sys
 from typing import Any, Dict, List, Optional
 
 import yaml
@@ -43,6 +44,8 @@ READINESS_LABELS = {
 PROMOTED_DEPLOYMENT_STAGES = {"promoted_preview", "release_candidate", "public_stable"}
 BOUNDARY_PURE_SCORE_FLOOR = 0.70
 FLEET_ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(FLEET_ROOT) not in sys.path:
+    sys.path.insert(0, str(FLEET_ROOT))
 PROJECTS_CONFIG_DIR = FLEET_ROOT / "config" / "projects"
 QUEUE_ARTIFACT = "QUEUE.generated.yaml"
 WORKPACKAGES_ARTIFACT = "WORKPACKAGES.generated.yaml"

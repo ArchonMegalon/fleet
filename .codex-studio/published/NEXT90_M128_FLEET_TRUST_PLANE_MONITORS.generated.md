@@ -4,11 +4,11 @@
 - trust_plane_status: warning
 - package_id: next90-m128-fleet-add-freshness-and-contradiction-monitors-for-telemetry-p
 - frontier_id: 6911125913
-- generated_at: 2026-05-05T21:33:52Z
+- generated_at: 2026-05-06T04:08:24Z
 
 ## Runtime summary
 - feedback_loop_status: ready
-- support_generated_at: 2026-05-05T21:31:02Z
+- support_generated_at: 2026-05-06T04:01:25Z
 - runtime_blocker_count: 0
 - warning_count: 2
 

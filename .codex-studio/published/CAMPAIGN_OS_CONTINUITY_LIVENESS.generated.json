@@ -1,17 +1,17 @@
 {
   "contract_name": "fleet.campaign_os_continuity_liveness",
   "schema_version": 1,
-  "generated_at": "2026-05-05T15:48:35Z",
+  "generated_at": "2026-05-06T12:01:59Z",
   "status": "fail",
   "monitor_state": "blocked",
   "summary": {
     "blocking_issue_count": 1,
-    "warning_issue_count": 1,
+    "warning_issue_count": 0,
     "warming_up_front_count": 0,
-    "coverage_window_days": 43,
+    "coverage_window_days": 44,
     "required_window_days": 120,
-    "snapshot_count": 22,
-    "recent_28d_snapshot_count": 11,
+    "snapshot_count": 23,
+    "recent_28d_snapshot_count": 12,
     "largest_gap_days": 7,
     "recommended_action": "Keep the 4-month monitor running until coverage reaches the target window."
   },
@@ -25,18 +25,16 @@
   "coverage": {
     "state": "warming_up",
     "earliest_snapshot_date": "2026-03-23",
-    "latest_snapshot_date": "2026-05-05"
+    "latest_snapshot_date": "2026-05-06"
   },
   "fronts": [
     {
       "id": "campaign_continuity",
       "title": "Campaign continuity proof front",
-      "state": "warning",
-      "reasons": [
-        "flagship readiness status is fail"
-      ],
+      "state": "healthy",
+      "reasons": [],
       "signals": {
-        "flagship_readiness_status": "fail",
+        "flagship_readiness_status": "pass",
         "flagship_readiness_freshness": "fresh",
         "journey_gates_state": "ready",
         "journey_gates_freshness": "fresh"
@@ -47,18 +45,17 @@
       "title": "Publication quality and continuity history front",
       "state": "blocked",
       "reasons": [
-        "progress report backlog count (112) disagrees with completion frontier backlog count (0)",
-        "public progress still claims completion while current closeout proof is failing",
-        "observed history covers 43 of 120 required days"
+        "progress report backlog count (2) disagrees with completion frontier backlog count (0)",
+        "observed history covers 44 of 120 required days"
       ],
       "signals": {
-        "coverage_window_days": 43,
+        "coverage_window_days": 44,
         "required_window_days": 120,
-        "snapshot_count": 22,
-        "recent_28d_snapshot_count": 11,
+        "snapshot_count": 23,
+        "recent_28d_snapshot_count": 12,
         "largest_gap_days": 7,
         "progress_report_status": "complete",
-        "progress_report_backlog_open_item_count": 112,
+        "progress_report_backlog_open_item_count": 2,
         "completion_frontier_backlog_open_item_count": 0,
         "progress_report_flagship_status": "warning",
         "weekly_governor_action": "missing"
@@ -80,35 +77,35 @@
   "evidence": {
     "flagship_product_readiness": {
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "generated_at": "2026-05-05T15:48:16Z",
+      "generated_at": "2026-05-06T12:01:35Z",
       "freshness": "fresh"
     },
     "journey_gates": {
       "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-      "generated_at": "2026-05-05T15:30:44Z",
+      "generated_at": "2026-05-06T12:01:58Z",
       "freshness": "fresh"
     },
     "support_case_packets": {
       "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-      "generated_at": "2026-05-05T15:30:41Z",
+      "generated_at": "2026-05-06T12:01:29Z",
       "freshness": "fresh"
     },
     "progress_history": {
       "path": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
-      "generated_at": "2026-05-05T12:50:25Z"
+      "generated_at": "2026-05-06T12:01:47Z"
     },
     "progress_report": {
       "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
-      "generated_at": "2026-05-05T12:50:25Z"
+      "generated_at": "2026-05-06T12:01:47Z"
     },
     "weekly_governor_packet": {
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
-      "generated_at": "2026-05-05T15:48:22Z",
+      "generated_at": "2026-05-06T12:01:59Z",
       "freshness": "fresh"
     },
     "completion_review_frontier": {
       "path": "/docker/fleet/.codex-studio/published/COMPLETION_REVIEW_FRONTIER.generated.yaml",
-      "generated_at": "2026-05-05T15:32:07Z"
+      "generated_at": "2026-05-06T12:01:30Z"
     }
   }
 }

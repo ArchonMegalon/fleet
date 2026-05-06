@@ -1,12 +1,12 @@
 # External Proof Runbook
 
-- generated_at: 2026-05-05T19:30:37Z
+- generated_at: 2026-05-06T20:03:31Z
 - unresolved_request_count: 0
 - unresolved_hosts: (none)
-- plan_generated_at: 2026-05-05T19:30:34Z
-- release_channel_generated_at: 2026-05-05T19:17:52Z
+- plan_generated_at: 2026-05-06T20:03:26Z
+- release_channel_generated_at: 2026-05-06T19:36:59Z
 - capture_deadline_hours: 24
-- capture_deadline_utc: 2026-05-06T19:17:52Z
+- capture_deadline_utc: 2026-05-07T19:36:59Z
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@
 ## Generated Command Files
 
 - commands_dir: `/docker/fleet/.codex-studio/published/external-proof-commands`
-- command_bundle_sha256: `aeb158c27e9135ba38313a6a988012c27982cf11ae18c6389bb9a2eef5575102`
+- command_bundle_sha256: `6e4d89c896b996b55d387ac31ba32d991748d1a11a2be3e05194a5bac396d30a`
 - command_bundle_file_count: 26
 - host `linux`
   preflight_script: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-linux-proof.sh`
@@ -30,7 +30,7 @@
   host_lane_script: `/docker/fleet/.codex-studio/published/external-proof-commands/run-linux-proof-lane.sh`
   command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/linux-proof-command-pack.tgz`
   command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/linux-proof-command-pack.tgz.sha256`
-  command_pack_sha256: `a95ff9575c20b560b317ff41fc45441a2ff0c58dce35abe9aa3b79b3b3ccbc6a`
+  command_pack_sha256: `71584e0a26424dd17737c010e7aa1883a70c51edf9fada467094341df209e25a`
 - host `macos`
   preflight_script: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-macos-proof.sh`
   capture_script: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-macos-proof.sh`
@@ -40,7 +40,7 @@
   host_lane_script: `/docker/fleet/.codex-studio/published/external-proof-commands/run-macos-proof-lane.sh`
   command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz`
   command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz.sha256`
-  command_pack_sha256: `f3701d84d03a3d6023e3cf2a4accf1b3f6643ad130464ff6df79706f4c121291`
+  command_pack_sha256: `92064489eea228ba3c97923b2fe50d045cde8371b3015115a1ac4c2adcf49d56`
 - host `windows`
   preflight_script: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh`
   capture_script: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh`
@@ -50,7 +50,7 @@
   host_lane_script: `/docker/fleet/.codex-studio/published/external-proof-commands/run-windows-proof-lane.sh`
   command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz`
   command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz.sha256`
-  command_pack_sha256: `e07cf495c49b8deea8ab5500da25f2785d95abf60e374ac71f3892c1c9c10a6d`
+  command_pack_sha256: `7e9d360aa88ca5054a4af09d17e9786f26956c13a389eab72eb19f1fd1695042`
   preflight_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.ps1`
   capture_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1`
   validation_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.ps1`
@@ -77,7 +77,7 @@ These command bundles stay materialized even with zero backlog so native-host pr
 - command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/linux-proof-command-pack.tgz`
 - command_pack_present: `true`
 - command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/linux-proof-command-pack.tgz.sha256`
-- command_pack_sha256: `a95ff9575c20b560b317ff41fc45441a2ff0c58dce35abe9aa3b79b3b3ccbc6a`
+- command_pack_sha256: `71584e0a26424dd17737c010e7aa1883a70c51edf9fada467094341df209e25a`
 
 ### Host: macos
 
@@ -93,7 +93,7 @@ These command bundles stay materialized even with zero backlog so native-host pr
 - command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz`
 - command_pack_present: `true`
 - command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz.sha256`
-- command_pack_sha256: `f3701d84d03a3d6023e3cf2a4accf1b3f6643ad130464ff6df79706f4c121291`
+- command_pack_sha256: `92064489eea228ba3c97923b2fe50d045cde8371b3015115a1ac4c2adcf49d56`
 
 ### Host: windows
 
@@ -110,7 +110,7 @@ These command bundles stay materialized even with zero backlog so native-host pr
 - command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz`
 - command_pack_present: `true`
 - command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz.sha256`
-- command_pack_sha256: `e07cf495c49b8deea8ab5500da25f2785d95abf60e374ac71f3892c1c9c10a6d`
+- command_pack_sha256: `7e9d360aa88ca5054a4af09d17e9786f26956c13a389eab72eb19f1fd1695042`
 
 ## Resume Commands
 
@@ -175,7 +175,7 @@ cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .c
 cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
 cd /docker/fleet && python3 scripts/materialize_external_proof_runbook.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --journey-gates /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json --release-channel /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md
 cd /docker/fleet && python3 scripts/verify_external_proof_closure.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --journey-gates .codex-studio/published/JOURNEY_GATES.generated.json --release-channel /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json --external-proof-runbook .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --external-proof-commands-dir .codex-studio/published/external-proof-commands
-cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out /docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json
+cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out /docker/fleet/state/chummer_design_supervisor/artifacts/FLAGSHIP_PRODUCT_READINESS.generated.json
 cd /docker/chummercomplete/chummer-design && python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py --out products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
 ```
 

@@ -20,6 +20,7 @@ try:
         PARITY_MATRIX,
         SCREENSHOT_REVIEW_GATE,
         SUCCESSOR_REGISTRY,
+        UI_DIRECT_WORKFLOW_PROOF,
         VISUAL_FAMILIARITY_GATE,
         FLEET_QUEUE_STAGING,
         build_payload,
@@ -37,6 +38,7 @@ except ModuleNotFoundError:
         PARITY_MATRIX,
         SCREENSHOT_REVIEW_GATE,
         SUCCESSOR_REGISTRY,
+        UI_DIRECT_WORKFLOW_PROOF,
         VISUAL_FAMILIARITY_GATE,
         FLEET_QUEUE_STAGING,
         build_payload,
@@ -65,6 +67,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--parity-audit", default=str(PARITY_AUDIT))
     parser.add_argument("--screenshot-review-gate", default=str(SCREENSHOT_REVIEW_GATE))
     parser.add_argument("--visual-familiarity-gate", default=str(VISUAL_FAMILIARITY_GATE))
+    parser.add_argument("--ui-direct-workflow-proof", default=str(UI_DIRECT_WORKFLOW_PROOF))
     parser.add_argument("--json", action="store_true")
     return parser.parse_args()
 
@@ -100,6 +103,7 @@ def main() -> int:
             parity_audit_path=Path(args.parity_audit).resolve(),
             screenshot_review_gate_path=Path(args.screenshot_review_gate).resolve(),
             visual_familiarity_gate_path=Path(args.visual_familiarity_gate).resolve(),
+            ui_direct_workflow_proof_path=Path(args.ui_direct_workflow_proof).resolve(),
             generated_at=str(actual.get("generated_at") or "").strip() or None,
         )
         if actual.get("contract_name") != "fleet.next90_m136_aggregate_readiness_parity_gates":

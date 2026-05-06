@@ -82,7 +82,7 @@
   },
   "contract_name": "fleet.next90_m140_portability_and_cadence_closeout_gates",
   "frontier_id": 4145512253,
-  "generated_at": "2026-05-05T21:12:47Z",
+  "generated_at": "2026-05-06T04:08:52Z",
   "milestone_id": 140,
   "monitor_summary": {
     "bounded_card_count": 1,
@@ -127,8 +127,8 @@
       ]
     },
     "flagship_readiness_alignment": {
-      "flagship_ready_status": "missing",
-      "generated_at": "2026-05-05T21:00:44Z",
+      "flagship_ready_status": "ready",
+      "generated_at": "2026-05-06T04:01:39Z",
       "issues": [],
       "runtime_blockers": [],
       "state": "pass"
@@ -150,19 +150,19 @@
       "sha256": "35bf556cae9ff8bfc947fe10b49eb3d383099a953205d51fe42f27b100c4501a"
     },
     "design_queue_staging": {
-      "generated_at": "2026-05-05T21:12:47Z",
+      "generated_at": "2026-05-06T04:00:26Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "2f160b9708bc961e51775317efcb2bfcb027e0081d5ceabed07b84e8792bdb53"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "flagship_readiness": {
-      "generated_at": "2026-05-05T21:00:44Z",
+      "generated_at": "2026-05-06T04:01:39Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "fdebae7f492da2296446197c556733eddc95c217ee1e961bbcc5a7dfad948719"
+      "sha256": "6407de1f137d225d951be3f4c4164f8a46f1ba7422b597cff5b3adb46c2a5e48"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-05-05T21:12:47Z",
+      "generated_at": "2026-05-06T04:00:26Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "661e2df6d0d97211458441087fe37fd68073f64dd3915e7755112bd520bee33d"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "ltd_cadence_registry": {
       "generated_at": "2026-05-01T04:25:57Z",
@@ -220,9 +220,9 @@
       "sha256": "85c536a2da90d6e61724918ec94580dbd7e5b644efe3ad97bec4a0b196da3d50"
     },
     "successor_registry": {
-      "generated_at": "2026-05-05T20:56:27Z",
+      "generated_at": "2026-05-06T04:08:01Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "9f4f93305afddf9cf95c2b515c6e9ceced71e435389e2a49fc0e0bc4f19395c7"
+      "sha256": "3614d3f739de335843fcf1e7c54a85c6892c310e03ac5e565fffd6de4e399010"
     },
     "world_dispatch_doc": {
       "generated_at": "2026-05-01T04:25:57Z",

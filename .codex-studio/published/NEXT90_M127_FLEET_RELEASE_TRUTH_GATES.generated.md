@@ -3,11 +3,11 @@
 - status: pass
 - package_id: next90-m127-fleet-promote-platform-acceptance-release-evidence-packs-repo
 - frontier_id: 6924107419
-- generated_at: 2026-05-05T21:29:39Z
+- generated_at: 2026-05-06T04:08:22Z
 
 ## Gate summary
 - external proof unresolved requests: 0
-- flagship status: fail
+- flagship status: pass
 
 ## Platform posture
 - windows: promoted_preview / installer / in_app_apply_helper
@@ -24,5 +24,3 @@
   - Repo hardening initiative RH-003 is still proposed.
   - Repo hardening initiative RH-005 is still proposed.
   - Repo hardening initiative RH-006 is still proposed.
-  - flagship_product_readiness: Flagship readiness status is fail.
-  - flagship_product_readiness: Flagship readiness scoped_status is fail.

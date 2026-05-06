@@ -3439,6 +3439,63 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertEqual(aggregate["active_lease_count_source"], "fleet_runtime_backfill")
             self.assertEqual(aggregate["active_onemin_accounts"], ["acct-ea-core"])
 
+    def test_ea_onemin_manager_billing_aggregate_falls_back_to_cached_browseract_refresh(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime_root = Path(tmpdir)
+            cached_path = runtime_root / "onemin_aggregate_billing_full_refresh_latest.json"
+            cached_path.write_text(
+                json.dumps(
+                    {
+                        "sum_free_credits": 43_826_189,
+                        "sum_max_credits": 0,
+                        "remaining_percent_total": 42.67,
+                        "hours_until_next_topup": 0.0,
+                        "hours_remaining_at_current_pace_no_topup": 253.29,
+                        "days_remaining_including_next_topup_at_7d_avg": 10.55,
+                        "slot_count_with_billing_snapshot": 69,
+                        "slot_count_with_member_reconciliation": 41,
+                        "basis_summary": "actual_billing_usage_page x69",
+                        "basis_counts": {"actual_billing_usage_page": 10, "actual_provider_api": 59},
+                        "latest_member_reconciliation_at": 1767225600,
+                        "last_actual_balance_check_at": 1767312000,
+                        "recorded_at_utc": "2026-04-28T17:03:52Z",
+                        "payload_source": "browseract_refresh_summary",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            old_runtime_root = self.controller.ONEMIN_AGGREGATE_RUNTIME_ROOT
+            self.controller.ONEMIN_AGGREGATE_RUNTIME_ROOT = runtime_root
+            self.addCleanup(setattr, self.controller, "ONEMIN_AGGREGATE_RUNTIME_ROOT", old_runtime_root)
+            self.controller.ea_onemin_manager_status = lambda force=False, cache_only=False: {
+                "aggregate": {
+                    "sum_free_credits": 1000,
+                    "sum_max_credits": 2000,
+                    "active_lease_count": 0,
+                    "actual_billing_account_count": 0,
+                    "accounts": [],
+                },
+                "runway": {
+                    "current_burn_per_hour": 25,
+                    "hours_remaining_current_pace": 40,
+                },
+            }
+            self.controller.onemin_runtime_lease_payload = lambda cache_only=False: {
+                "active_onemin_codexers": 0,
+                "active_onemin_projects": ["fleet"],
+                "active_onemin_accounts": ["acct-ea-core"],
+            }
+
+            aggregate = self.controller.ea_onemin_manager_billing_aggregate()
+
+        self.assertEqual(aggregate["source"], "browseract_refresh_summary")
+        self.assertEqual(aggregate["slot_count_with_billing_snapshot"], 69)
+        self.assertEqual(aggregate["slot_count_with_member_reconciliation"], 41)
+        self.assertEqual(aggregate["latest_member_reconciliation_at"], "2026-01-01T00:00:00Z")
+        self.assertEqual(aggregate["last_actual_balance_check_at"], "2026-01-02T00:00:00Z")
+        self.assertEqual(aggregate["active_onemin_projects"], ["fleet"])
+
     def test_ea_onemin_manager_billing_aggregate_infers_topup_eta_from_billing_cycle(self) -> None:
         fixed_now = self.controller.dt.datetime(2026, 3, 23, 11, 10, 2, tzinfo=self.controller.dt.timezone.utc)
         with mock.patch.object(self.controller, "utc_now", return_value=fixed_now):
@@ -3927,6 +3984,41 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(item["design_owner"], "fleet-platform")
         self.assertEqual(item["allowed_paths"], [".codex-design"])
         self.assertEqual(item["owned_surfaces"], ["design_mirror:fleet"])
+
+    def test_auto_publish_ignores_resolved_published_audit_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.init_db()
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO audit_task_candidates(
+                        scope_type, scope_id, finding_key, task_index, title, detail, task_meta_json, status, source,
+                        first_seen_at, last_seen_at, resolved_at
+                    )
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "project",
+                        "fleet",
+                        "project.design_mirror_missing_or_stale",
+                        0,
+                        "Refresh local design mirror",
+                        "Sync the approved Chummer design bundle into `fleet` under `.codex-design/`.",
+                        "{}",
+                        "published",
+                        "fleet-auditor",
+                        now,
+                        now,
+                        now,
+                    ),
+                )
+
+            published = self.controller.auto_publish_approved_audit_candidates({"projects": [], "project_groups": []})
+
+            self.assertEqual(published, 0)
 
     def test_apply_queue_overlay_preserves_structured_items(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -9941,6 +10033,57 @@ mirrors:
                 "journey doc",
             )
             self.assertFalse((repo_root / ".codex-design" / "product" / "build-and-inspect-a-character.md").exists())
+            self.assertEqual(
+                (repo_root / ".codex-design" / "repo" / "IMPLEMENTATION_SCOPE.md").read_text(encoding="utf-8"),
+                "repo scope",
+            )
+            self.assertEqual(
+                (repo_root / ".codex-design" / "review" / "REVIEW_CONTEXT.md").read_text(encoding="utf-8"),
+                "review scope",
+            )
+
+    def test_sync_design_repo_mirrors_repairs_drift_even_when_skip_dirty_repos_is_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            design_root = root / "design"
+            repo_root = root / "fleet"
+            (design_root / "products" / "chummer" / "projects").mkdir(parents=True, exist_ok=True)
+            (design_root / "products" / "chummer" / "review").mkdir(parents=True, exist_ok=True)
+            repo_root.mkdir()
+            (repo_root / ".git").mkdir()
+
+            (design_root / "products" / "chummer" / "README.md").write_text("canonical readme", encoding="utf-8")
+            (design_root / "products" / "chummer" / "projects" / "fleet.md").write_text("repo scope", encoding="utf-8")
+            (design_root / "products" / "chummer" / "review" / "fleet.AGENTS.template.md").write_text("review scope", encoding="utf-8")
+            (design_root / "products" / "chummer" / "sync").mkdir(parents=True, exist_ok=True)
+            (design_root / "products" / "chummer" / "sync" / "sync-manifest.yaml").write_text(
+                """
+product_source_groups:
+  base_governance:
+    - products/chummer/README.md
+mirrors:
+  - repo: fleet
+    product_groups: [base_governance]
+    repo_source: products/chummer/projects/fleet.md
+    review_source: products/chummer/review/fleet.AGENTS.template.md
+""".strip(),
+                encoding="utf-8",
+            )
+            drifted_path = repo_root / ".codex-design" / "product" / "README.md"
+            drifted_path.parent.mkdir(parents=True, exist_ok=True)
+            drifted_path.write_text("drifted readme", encoding="utf-8")
+            config = {
+                "projects": [
+                    {"id": "design", "path": str(design_root)},
+                    {"id": "fleet", "path": str(repo_root)},
+                ]
+            }
+
+            with mock.patch.object(self.controller, "git_has_changes", side_effect=AssertionError("should not query repo dirtiness")):
+                results = self.controller.sync_design_repo_mirrors(config, skip_dirty_repos=True)
+
+            self.assertEqual(len(results), 1)
+            self.assertEqual(drifted_path.read_text(encoding="utf-8"), "canonical readme")
             self.assertEqual(
                 (repo_root / ".codex-design" / "repo" / "IMPLEMENTATION_SCOPE.md").read_text(encoding="utf-8"),
                 "repo scope",

@@ -25,6 +25,9 @@ try:
         SECTION_HOST_RULESET_PARITY,
         SUCCESSOR_REGISTRY,
         UI_FLAGSHIP_RELEASE_GATE,
+        UI_DIRECT_WORKFLOW_PROOF,
+        UI_KIT_LOCAL_RELEASE_PROOF,
+        UI_LOCAL_RELEASE_PROOF,
         VETERAN_TASK_TIME_GATE,
         WORKFLOW_PACK,
         build_payload,
@@ -47,6 +50,9 @@ except ModuleNotFoundError:
         SECTION_HOST_RULESET_PARITY,
         SUCCESSOR_REGISTRY,
         UI_FLAGSHIP_RELEASE_GATE,
+        UI_DIRECT_WORKFLOW_PROOF,
+        UI_KIT_LOCAL_RELEASE_PROOF,
+        UI_LOCAL_RELEASE_PROOF,
         VETERAN_TASK_TIME_GATE,
         WORKFLOW_PACK,
         build_payload,
@@ -77,6 +83,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--classic-dense-workbench-gate", default=str(CLASSIC_DENSE_WORKBENCH_GATE))
     parser.add_argument("--veteran-task-time-gate", default=str(VETERAN_TASK_TIME_GATE))
     parser.add_argument("--ui-flagship-release-gate", default=str(UI_FLAGSHIP_RELEASE_GATE))
+    parser.add_argument("--ui-local-release-proof", default=str(UI_LOCAL_RELEASE_PROOF))
+    parser.add_argument("--ui-kit-local-release-proof", default=str(UI_KIT_LOCAL_RELEASE_PROOF))
+    parser.add_argument("--ui-direct-workflow-proof", default=str(UI_DIRECT_WORKFLOW_PROOF))
     parser.add_argument("--generated-dialog-parity", default=str(GENERATED_DIALOG_PARITY))
     parser.add_argument("--section-host-ruleset-parity", default=str(SECTION_HOST_RULESET_PARITY))
     parser.add_argument("--gm-runboard-route", default=str(GM_RUNBOARD_ROUTE))
@@ -88,6 +97,21 @@ def parse_args() -> argparse.Namespace:
 def _normalized_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     normalized = dict(payload)
     normalized.pop("generated_at", None)
+    if "source_inputs" in normalized:
+        normalized["source_inputs"] = _normalized_source_inputs(normalized.get("source_inputs") or {})
+    return normalized
+
+
+def _normalized_source_inputs(payload: Dict[str, Any]) -> Dict[str, Any]:
+    normalized: Dict[str, Any] = {}
+    for key, value in (payload or {}).items():
+        if not isinstance(value, dict):
+            normalized[key] = value
+            continue
+        entry = dict(value)
+        if entry.get("generated_at_source") == "file_mtime":
+            entry.pop("generated_at", None)
+        normalized[key] = entry
     return normalized
 
 
@@ -117,6 +141,9 @@ def main() -> int:
             classic_dense_workbench_gate_path=Path(args.classic_dense_workbench_gate).resolve(),
             veteran_task_time_gate_path=Path(args.veteran_task_time_gate).resolve(),
             ui_flagship_release_gate_path=Path(args.ui_flagship_release_gate).resolve(),
+            ui_local_release_proof_path=Path(args.ui_local_release_proof).resolve(),
+            ui_kit_local_release_proof_path=Path(args.ui_kit_local_release_proof).resolve(),
+            ui_direct_workflow_proof_path=Path(args.ui_direct_workflow_proof).resolve(),
             generated_dialog_parity_path=Path(args.generated_dialog_parity).resolve(),
             section_host_ruleset_parity_path=Path(args.section_host_ruleset_parity).resolve(),
             gm_runboard_route_path=Path(args.gm_runboard_route).resolve(),
@@ -134,9 +161,10 @@ def main() -> int:
                 ("runtime_monitors", "runtime monitors drifted from recomputed M142 truth"),
                 ("monitor_summary", "monitor summary drifted from recomputed M142 truth"),
                 ("package_closeout", "package closeout drifted from recomputed M142 truth"),
-                ("source_inputs", "source input links drifted from recomputed source truth"),
             ):
                 _compare(issues, actual, expected, key, message)
+            if _normalized_source_inputs(actual.get("source_inputs") or {}) != _normalized_source_inputs(expected.get("source_inputs") or {}):
+                issues.append("source input links drifted from recomputed source truth")
             if not issues:
                 issues.append("generated artifact contains unexpected drift outside the allowed generated_at field")
 

@@ -11,6 +11,7 @@ import yaml
 
 
 SCRIPT = Path("/docker/fleet/scripts/materialize_next90_m142_fleet_route_local_proof_closeout_gates.py")
+LANDED_COMMIT = "c931e462"
 QUEUE_PROOF = [
     "/docker/fleet/scripts/materialize_next90_m142_fleet_route_local_proof_closeout_gates.py",
     "/docker/fleet/scripts/verify_next90_m142_fleet_route_local_proof_closeout_gates.py",
@@ -69,6 +70,78 @@ def _workflow_pack_payload() -> dict:
                 "compare_artifacts": ["workflow:contacts", "workflow:lifestyles", "workflow:notes"],
             },
         ],
+        "family_local_proof_packs": [
+            {
+                "family_id": "dense_builder_and_career_workflows",
+                "compare_artifacts": ["oracle:tabs", "oracle:workspace_actions", "workflow:build_explain_publish"],
+                "screenshot_pack": {
+                    "screenshots": ["05-dense-section-light.png", "06-dense-section-dark.png", "07-loaded-runner-tabs-light.png"],
+                    "review_receipts": [
+                        "/tmp/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
+                        "/tmp/CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json",
+                    ],
+                },
+                "interaction_pack": {
+                    "runtime_receipts": [
+                        "/tmp/SECTION_HOST_RULESET_PARITY.generated.json",
+                        "/tmp/UI_FLAGSHIP_RELEASE_GATE.generated.json",
+                        "/tmp/UI_LOCAL_RELEASE_PROOF.generated.json",
+                        "/tmp/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json",
+                    ],
+                    "required_tokens": ["tab-info", "tab-skills", "tab-qualities", "workflow:build_explain_publish"],
+                },
+            },
+            {
+                "family_id": "dice_initiative_and_table_utilities",
+                "compare_artifacts": ["menu:dice_roller", "workflow:initiative"],
+                "screenshot_pack": {
+                    "screenshots": ["02-menu-open-light.png", "04-loaded-runner-light.png"],
+                    "review_receipts": [
+                        "/tmp/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+                        "/tmp/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
+                    ],
+                },
+                "interaction_pack": {
+                    "runtime_receipts": [
+                        "/tmp/GENERATED_DIALOG_ELEMENT_PARITY.generated.json",
+                        "/tmp/SECTION_HOST_RULESET_PARITY.generated.json",
+                        "/tmp/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json",
+                        "/tmp/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
+                    ],
+                    "required_tokens": [
+                        "dialog.dice_roller",
+                        "dice_roller",
+                        "Initiative lane:",
+                        "ResolveRunboardInitiativeSummary",
+                        "SessionActionBudgetDeterministicReceipt",
+                    ],
+                },
+            },
+            {
+                "family_id": "identity_contacts_lifestyles_history",
+                "compare_artifacts": ["workflow:contacts", "workflow:lifestyles", "workflow:notes"],
+                "screenshot_pack": {
+                    "screenshots": ["10-contacts-section-light.png", "11-diary-dialog-light.png"],
+                    "review_receipts": [
+                        "/tmp/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+                        "/tmp/UI_FLAGSHIP_RELEASE_GATE.generated.json",
+                    ],
+                },
+                "interaction_pack": {
+                    "runtime_receipts": [
+                        "/tmp/SECTION_HOST_RULESET_PARITY.generated.json",
+                        "/tmp/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
+                        "/tmp/UI_FLAGSHIP_RELEASE_GATE.generated.json",
+                    ],
+                    "required_tokens": [
+                        "tab-contacts.contacts",
+                        "tab-notes.metadata",
+                        "workflow:lifestyles",
+                        "WorkspaceWorkflowDeterministicReceipt",
+                    ],
+                },
+            },
+        ],
     }
 
 
@@ -100,7 +173,7 @@ def _queue_item(*, closeout_complete: bool) -> dict:
     if closeout_complete:
         row["status"] = "complete"
         row["completion_action"] = "verify_closed_package_only"
-        row["landed_commit"] = "unlanded"
+        row["landed_commit"] = LANDED_COMMIT
         row["do_not_reopen_reason"] = (
             "M142 fleet route-local proof closeout gate is complete; future shards must verify the repo-local gate scripts, "
             "generated proof artifacts, and canonical queue/registry mirrors instead of reopening dense workbench, dice or "
@@ -115,15 +188,20 @@ def _parity_rows(*, direct: bool) -> list[dict]:
         "dense": [
             "/tmp/SECTION_HOST_RULESET_PARITY.generated.json",
             "/tmp/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
+            "/tmp/CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json",
+            "/tmp/UI_FLAGSHIP_RELEASE_GATE.generated.json",
+            "/tmp/UI_LOCAL_RELEASE_PROOF.generated.json",
         ],
         "dice": [
             "/tmp/GENERATED_DIALOG_ELEMENT_PARITY.generated.json",
+            "/tmp/SECTION_HOST_RULESET_PARITY.generated.json",
             "/tmp/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json",
             "/tmp/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
         ],
         "identity": [
             "/tmp/SECTION_HOST_RULESET_PARITY.generated.json",
             "/tmp/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
+            "/tmp/UI_FLAGSHIP_RELEASE_GATE.generated.json",
         ],
     }
     broad = [
@@ -183,10 +261,12 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     veteran_gate = tmp_path / "veteran_gate.json"
     ui_release = tmp_path / "ui_release.json"
     ui_local_release = tmp_path / "ui_local_release.json"
+    ui_kit_local_release = tmp_path / "ui_kit_local_release.json"
     dialog_parity = tmp_path / "dialog_parity.json"
     section_host = tmp_path / "section_host.json"
     gm_runboard = tmp_path / "gm_runboard.json"
     core_doc = tmp_path / "core_doc.md"
+    direct_workflow_proof = tmp_path / "direct_workflow_proof.json"
 
     _write_yaml(registry, _registry(closeout_complete=closeout_complete))
     _write_yaml(fleet_queue, {"items": [_queue_item(closeout_complete=closeout_complete)]})
@@ -260,6 +340,49 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
         },
     )
     _write_json(
+        direct_workflow_proof,
+        {
+            "generatedAt": "2026-05-05T12:00:00Z",
+            "status": "pass",
+            "evidence": {
+                "familyChecks": {
+                    "family:dense_builder_and_career_workflows": {
+                        "row_present": True,
+                        "visual_parity_yes": True,
+                        "behavioral_parity_yes": True,
+                        "required_suffixes_present": True,
+                        "disallowed_external_receipts_clear": True,
+                    },
+                    "family:dice_initiative_and_table_utilities": {
+                        "row_present": True,
+                        "visual_parity_yes": True,
+                        "behavioral_parity_yes": True,
+                        "required_suffixes_present": True,
+                        "disallowed_external_receipts_clear": True,
+                    },
+                    "family:identity_contacts_lifestyles_history": {
+                        "row_present": True,
+                        "visual_parity_yes": True,
+                        "behavioral_parity_yes": True,
+                        "required_suffixes_present": True,
+                        "disallowed_external_receipts_clear": True,
+                    },
+                }
+            },
+        },
+    )
+    _write_json(
+        ui_kit_local_release,
+        {
+            "generated_at": "2026-05-05T12:00:00Z",
+            "status": "passed",
+            "evidence": {
+                "m142_classic_dense_workbench_evidence_path": "/tmp/docs/m142-classic-dense-workbench-evidence.md",
+                "worklist_path": "/tmp/WORKLIST.md",
+            },
+        },
+    )
+    _write_json(
         dialog_parity,
         {
             "generated_at": "2026-05-05T12:00:00Z",
@@ -305,6 +428,8 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
         "veteran_gate": veteran_gate,
         "ui_release": ui_release,
         "ui_local_release": ui_local_release,
+        "ui_kit_local_release": ui_kit_local_release,
+        "ui_direct_workflow_proof": direct_workflow_proof,
         "dialog_parity": dialog_parity,
         "section_host": section_host,
         "gm_runboard": gm_runboard,
@@ -338,6 +463,8 @@ class MaterializeNext90M142FleetRouteLocalProofCloseoutGatesTest(unittest.TestCa
                     "--veteran-task-time-gate", str(fixture["veteran_gate"]),
                     "--ui-flagship-release-gate", str(fixture["ui_release"]),
                     "--ui-local-release-proof", str(fixture["ui_local_release"]),
+                    "--ui-kit-local-release-proof", str(fixture["ui_kit_local_release"]),
+                    "--ui-direct-workflow-proof", str(fixture["ui_direct_workflow_proof"]),
                     "--generated-dialog-parity", str(fixture["dialog_parity"]),
                     "--section-host-ruleset-parity", str(fixture["section_host"]),
                     "--gm-runboard-route", str(fixture["gm_runboard"]),
@@ -352,9 +479,68 @@ class MaterializeNext90M142FleetRouteLocalProofCloseoutGatesTest(unittest.TestCa
             assert payload["status"] == "pass"
             assert payload["monitor_summary"]["route_local_proof_closeout_status"] == "pass"
             assert payload["package_closeout"]["ready"] is True
+            assert "ui_kit_local_release_proof" in payload["source_inputs"]
             dense_row = next(row for row in payload["runtime_monitors"]["target_rows"]["rows"] if row["id"] == "family:dense_builder_and_career_workflows")
             assert any(item.endswith("SECTION_HOST_RULESET_PARITY.generated.json") for item in dense_row["evidence"])
             assert any(item.endswith("CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json") for item in dense_row["evidence"])
+            assert any(item.endswith("CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json") for item in dense_row["evidence"])
+            assert any(item.endswith("UI_LOCAL_RELEASE_PROOF.generated.json") for item in dense_row["evidence"])
+
+    def test_materializer_blocks_when_dense_row_omits_required_route_local_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, direct=True)
+            parity_audit = json.loads(fixture["parity_audit"].read_text(encoding="utf-8"))
+            dense_row = next(row for row in parity_audit["rows"] if row["id"] == "family:dense_builder_and_career_workflows")
+            dense_row["evidence"] = [
+                item
+                for item in dense_row["evidence"]
+                if not item.endswith("CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json")
+                and not item.endswith("UI_LOCAL_RELEASE_PROOF.generated.json")
+            ]
+            parity_audit["elements"] = parity_audit["rows"]
+            fixture["parity_audit"].write_text(json.dumps(parity_audit, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--output", str(artifact),
+                    "--markdown-output", str(markdown),
+                    "--successor-registry", str(fixture["registry"]),
+                    "--fleet-queue-staging", str(fixture["fleet_queue"]),
+                    "--design-queue-staging", str(fixture["design_queue"]),
+                    "--next90-guide", str(fixture["guide"]),
+                    "--workflow-pack", str(fixture["workflow_pack"]),
+                    "--parity-audit", str(fixture["parity_audit"]),
+                    "--desktop-visual-familiarity-gate", str(fixture["visual_gate"]),
+                    "--desktop-workflow-execution-gate", str(fixture["workflow_gate"]),
+                    "--screenshot-review-gate", str(fixture["screenshot_gate"]),
+                    "--classic-dense-workbench-gate", str(fixture["dense_gate"]),
+                    "--veteran-task-time-gate", str(fixture["veteran_gate"]),
+                    "--ui-flagship-release-gate", str(fixture["ui_release"]),
+                    "--ui-local-release-proof", str(fixture["ui_local_release"]),
+                    "--ui-kit-local-release-proof", str(fixture["ui_kit_local_release"]),
+                    "--ui-direct-workflow-proof", str(fixture["ui_direct_workflow_proof"]),
+                    "--generated-dialog-parity", str(fixture["dialog_parity"]),
+                    "--section-host-ruleset-parity", str(fixture["section_host"]),
+                    "--gm-runboard-route", str(fixture["gm_runboard"]),
+                    "--core-dense-receipts-doc", str(fixture["core_doc"]),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            assert payload["monitor_summary"]["route_local_proof_closeout_status"] == "warning"
+            assert payload["package_closeout"]["ready"] is True
+            assert any(
+                "UI direct workflow proof is authoritative and current" in item
+                for item in payload["monitor_summary"]["warnings"]
+            )
 
     def test_materializer_blocks_when_rows_still_close_on_family_prose_and_broad_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -384,6 +570,8 @@ class MaterializeNext90M142FleetRouteLocalProofCloseoutGatesTest(unittest.TestCa
                     "--veteran-task-time-gate", str(fixture["veteran_gate"]),
                     "--ui-flagship-release-gate", str(fixture["ui_release"]),
                     "--ui-local-release-proof", str(fixture["ui_local_release"]),
+                    "--ui-kit-local-release-proof", str(fixture["ui_kit_local_release"]),
+                    "--ui-direct-workflow-proof", str(fixture["ui_direct_workflow_proof"]),
                     "--generated-dialog-parity", str(fixture["dialog_parity"]),
                     "--section-host-ruleset-parity", str(fixture["section_host"]),
                     "--gm-runboard-route", str(fixture["gm_runboard"]),
@@ -439,6 +627,8 @@ class MaterializeNext90M142FleetRouteLocalProofCloseoutGatesTest(unittest.TestCa
                     "--veteran-task-time-gate", str(fixture["veteran_gate"]),
                     "--ui-flagship-release-gate", str(fixture["ui_release"]),
                     "--ui-local-release-proof", str(fixture["ui_local_release"]),
+                    "--ui-kit-local-release-proof", str(fixture["ui_kit_local_release"]),
+                    "--ui-direct-workflow-proof", str(fixture["ui_direct_workflow_proof"]),
                     "--generated-dialog-parity", str(fixture["dialog_parity"]),
                     "--section-host-ruleset-parity", str(fixture["section_host"]),
                     "--gm-runboard-route", str(fixture["gm_runboard"]),
@@ -454,9 +644,10 @@ class MaterializeNext90M142FleetRouteLocalProofCloseoutGatesTest(unittest.TestCa
             assert payload["package_closeout"]["ready"] is True
             dense_row = next(row for row in payload["runtime_monitors"]["target_rows"]["rows"] if row["id"] == "family:dense_builder_and_career_workflows")
             assert dense_row["source_reason"].startswith("All declared compare artifacts")
-            assert dense_row["reason"].startswith("Fleet route-local closeout packet binds direct runtime/task-speed receipts")
+            assert dense_row["reason"].startswith("Fleet accepted the current UI M142 direct workflow proof receipt")
             assert any(item.endswith("ui_local_release.json") for item in dense_row["evidence"])
-            assert not dense_row["issues"]
+            assert any(item.endswith("direct_workflow_proof.json") for item in dense_row["evidence"])
+            assert dense_row["issues"] == []
 
     def test_materializer_accepts_live_workflow_pack_family_shape(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -483,6 +674,7 @@ class MaterializeNext90M142FleetRouteLocalProofCloseoutGatesTest(unittest.TestCa
                     "--veteran-task-time-gate", str(fixture["veteran_gate"]),
                     "--ui-flagship-release-gate", str(fixture["ui_release"]),
                     "--ui-local-release-proof", str(fixture["ui_local_release"]),
+                    "--ui-kit-local-release-proof", str(fixture["ui_kit_local_release"]),
                     "--generated-dialog-parity", str(fixture["dialog_parity"]),
                     "--section-host-ruleset-parity", str(fixture["section_host"]),
                     "--gm-runboard-route", str(fixture["gm_runboard"]),
@@ -495,6 +687,105 @@ class MaterializeNext90M142FleetRouteLocalProofCloseoutGatesTest(unittest.TestCa
 
             payload = json.loads(artifact.read_text(encoding="utf-8"))
             assert payload["canonical_monitors"]["workflow_pack_contract"]["state"] == "pass"
+
+    def test_materializer_fails_closed_when_ui_kit_preset_proof_is_not_passing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, direct=True)
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            _write_json(
+                fixture["ui_kit_local_release"],
+                {
+                    "generated_at": "2026-05-05T12:00:00Z",
+                    "status": "failed",
+                    "evidence": {},
+                },
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--output", str(artifact),
+                    "--markdown-output", str(markdown),
+                    "--successor-registry", str(fixture["registry"]),
+                    "--fleet-queue-staging", str(fixture["fleet_queue"]),
+                    "--design-queue-staging", str(fixture["design_queue"]),
+                    "--next90-guide", str(fixture["guide"]),
+                    "--workflow-pack", str(fixture["workflow_pack"]),
+                    "--parity-audit", str(fixture["parity_audit"]),
+                    "--desktop-visual-familiarity-gate", str(fixture["visual_gate"]),
+                    "--desktop-workflow-execution-gate", str(fixture["workflow_gate"]),
+                    "--screenshot-review-gate", str(fixture["screenshot_gate"]),
+                    "--classic-dense-workbench-gate", str(fixture["dense_gate"]),
+                    "--veteran-task-time-gate", str(fixture["veteran_gate"]),
+                    "--ui-flagship-release-gate", str(fixture["ui_release"]),
+                    "--ui-local-release-proof", str(fixture["ui_local_release"]),
+                    "--ui-kit-local-release-proof", str(fixture["ui_kit_local_release"]),
+                    "--generated-dialog-parity", str(fixture["dialog_parity"]),
+                    "--section-host-ruleset-parity", str(fixture["section_host"]),
+                    "--gm-runboard-route", str(fixture["gm_runboard"]),
+                    "--core-dense-receipts-doc", str(fixture["core_doc"]),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            assert payload["package_closeout"]["ready"] is False
+            assert any(
+                "ui_kit_local_release_proof is missing a passing status" in item
+                for item in payload["monitor_summary"]["runtime_blockers"]
+            )
+
+    def test_materializer_fails_when_family_local_pack_contract_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, direct=True)
+            workflow_pack = yaml.safe_load(fixture["workflow_pack"].read_text(encoding="utf-8"))
+            workflow_pack["family_local_proof_packs"] = [
+                row
+                for row in (workflow_pack.get("family_local_proof_packs") or [])
+                if row.get("family_id") != "dice_initiative_and_table_utilities"
+            ]
+            fixture["workflow_pack"].write_text(yaml.safe_dump(workflow_pack, sort_keys=False), encoding="utf-8")
+
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--output", str(artifact),
+                    "--markdown-output", str(markdown),
+                    "--successor-registry", str(fixture["registry"]),
+                    "--fleet-queue-staging", str(fixture["fleet_queue"]),
+                    "--design-queue-staging", str(fixture["design_queue"]),
+                    "--next90-guide", str(fixture["guide"]),
+                    "--workflow-pack", str(fixture["workflow_pack"]),
+                    "--parity-audit", str(fixture["parity_audit"]),
+                    "--desktop-visual-familiarity-gate", str(fixture["visual_gate"]),
+                    "--desktop-workflow-execution-gate", str(fixture["workflow_gate"]),
+                    "--screenshot-review-gate", str(fixture["screenshot_gate"]),
+                    "--classic-dense-workbench-gate", str(fixture["dense_gate"]),
+                    "--veteran-task-time-gate", str(fixture["veteran_gate"]),
+                    "--ui-flagship-release-gate", str(fixture["ui_release"]),
+                    "--ui-local-release-proof", str(fixture["ui_local_release"]),
+                    "--ui-kit-local-release-proof", str(fixture["ui_kit_local_release"]),
+                    "--generated-dialog-parity", str(fixture["dialog_parity"]),
+                    "--section-host-ruleset-parity", str(fixture["section_host"]),
+                    "--gm-runboard-route", str(fixture["gm_runboard"]),
+                    "--core-dense-receipts-doc", str(fixture["core_doc"]),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            assert payload["status"] == "fail"
+            assert "Workflow pack is missing family-local proof pack `dice_initiative_and_table_utilities`." in payload["package_closeout"]["reasons"]
 
     def test_materializer_fails_when_closeout_metadata_is_not_complete(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -521,6 +812,7 @@ class MaterializeNext90M142FleetRouteLocalProofCloseoutGatesTest(unittest.TestCa
                     "--veteran-task-time-gate", str(fixture["veteran_gate"]),
                     "--ui-flagship-release-gate", str(fixture["ui_release"]),
                     "--ui-local-release-proof", str(fixture["ui_local_release"]),
+                    "--ui-kit-local-release-proof", str(fixture["ui_kit_local_release"]),
                     "--generated-dialog-parity", str(fixture["dialog_parity"]),
                     "--section-host-ruleset-parity", str(fixture["section_host"]),
                     "--gm-runboard-route", str(fixture["gm_runboard"]),

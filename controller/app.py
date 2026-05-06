@@ -448,6 +448,12 @@ _RUNTIME_INTERRUPT_OVERRIDES: Dict[str, Dict[str, Any]] = {}
 RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
 RUNTIME_CACHE_KEY_EA_CODEX_STATUS = "ea_codex_status"
 RUNTIME_CACHE_KEY_EA_ONEMIN_MANAGER_STATUS = "ea_onemin_manager_status"
+ONEMIN_AGGREGATE_RUNTIME_ROOT = FLEET_MOUNT_ROOT / "state" / "browseract_bootstrap" / "runtime"
+ONEMIN_AGGREGATE_RUNTIME_PATTERNS = (
+    "onemin_aggregate_billing_full_refresh_latest.json",
+    "onemin_aggregate_billing_full_refresh_*.json",
+    "onemin_aggregate_full_billing_refresh_*.json",
+)
 RUNTIME_CACHE_KEY_QUARTERMASTER_STATUS = "quartermaster_status"
 RUNTIME_CACHE_KEY_QUARTERMASTER_PLAN = "quartermaster_capacity_plan"
 RUNTIME_CACHE_KEY_QUARTERMASTER_TICK_STATE = "quartermaster_tick_state"
@@ -5291,6 +5297,113 @@ def _latest_iso_value(values: Sequence[Any]) -> Optional[str]:
     return latest_text or None
 
 
+def _normalized_onemin_aggregate_timestamp(value: Any) -> Optional[dt.datetime]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        clean = value.strip()
+        if not clean:
+            return None
+        parsed = parse_iso(clean)
+        if parsed is not None:
+            return parsed
+        value = clean
+    numeric = float_or_none(value)
+    if numeric is None:
+        return None
+    try:
+        return dt.datetime.fromtimestamp(float(numeric), tz=UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _onemin_manager_aggregate_has_billing_evidence(aggregate: Dict[str, Any]) -> bool:
+    if not aggregate:
+        return False
+    if max(
+        0,
+        int(float_or_none(aggregate.get("slot_count_with_billing_snapshot")) or 0),
+        int(float_or_none(aggregate.get("slot_count_with_member_reconciliation")) or 0),
+        int(float_or_none(aggregate.get("actual_billing_account_count")) or 0),
+    ) > 0:
+        return True
+    for item in aggregate.get("accounts") or []:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("last_billing_snapshot_at") or "").strip():
+            return True
+        if str(item.get("last_member_reconciliation_at") or "").strip():
+            return True
+    return False
+
+
+def _cached_onemin_billing_aggregate_payload() -> Dict[str, Any]:
+    if not ONEMIN_AGGREGATE_RUNTIME_ROOT.is_dir():
+        return {}
+
+    candidate_paths: List[pathlib.Path] = []
+    seen_paths: set[pathlib.Path] = set()
+    for pattern in ONEMIN_AGGREGATE_RUNTIME_PATTERNS:
+        for path in sorted(ONEMIN_AGGREGATE_RUNTIME_ROOT.glob(pattern)):
+            if not path.is_file() or path in seen_paths:
+                continue
+            seen_paths.add(path)
+            candidate_paths.append(path)
+
+    best_payload: Dict[str, Any] = {}
+    best_timestamp: Optional[dt.datetime] = None
+    for path in candidate_paths:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        slot_count_with_billing_snapshot = max(0, int(float_or_none(payload.get("slot_count_with_billing_snapshot")) or 0))
+        slot_count_with_member_reconciliation = max(
+            0,
+            int(float_or_none(payload.get("slot_count_with_member_reconciliation")) or 0),
+        )
+        hours_remaining_at_current_pace_no_topup = float_or_none(payload.get("hours_remaining_at_current_pace_no_topup"))
+        hours_until_next_topup = float_or_none(payload.get("hours_until_next_topup"))
+        if max(slot_count_with_billing_snapshot, slot_count_with_member_reconciliation) <= 0:
+            continue
+        if hours_remaining_at_current_pace_no_topup is None or hours_until_next_topup is None:
+            continue
+        candidate_timestamp = (
+            _normalized_onemin_aggregate_timestamp(payload.get("recorded_at_utc"))
+            or _normalized_onemin_aggregate_timestamp(payload.get("last_probe_at"))
+            or _normalized_onemin_aggregate_timestamp(payload.get("latest_member_reconciliation_at"))
+            or _normalized_onemin_aggregate_timestamp(payload.get("last_actual_balance_check_at"))
+        )
+        if candidate_timestamp is None:
+            try:
+                candidate_timestamp = dt.datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+            except OSError:
+                candidate_timestamp = None
+        if best_timestamp is not None and candidate_timestamp is not None and candidate_timestamp <= best_timestamp:
+            continue
+
+        normalized = dict(payload)
+        if normalized.get("sum_free_credits") in (None, "") and normalized.get("free_credits") not in (None, ""):
+            normalized["sum_free_credits"] = normalized.get("free_credits")
+        if normalized.get("remaining_percent_total") in (None, "") and normalized.get("percent_remaining") not in (None, ""):
+            normalized["remaining_percent_total"] = normalized.get("percent_remaining")
+        for key in ("latest_member_reconciliation_at", "last_actual_balance_check_at", "next_topup_at"):
+            parsed = _normalized_onemin_aggregate_timestamp(normalized.get(key))
+            if parsed is not None:
+                normalized[key] = iso(parsed)
+        normalized["hours_remaining_at_current_pace_no_topup"] = hours_remaining_at_current_pace_no_topup
+        normalized["hours_until_next_topup"] = hours_until_next_topup
+        if normalized.get("source") in (None, ""):
+            normalized["source"] = str(normalized.get("payload_source") or "browseract_bootstrap_runtime_cache").strip() or "browseract_bootstrap_runtime_cache"
+        if not str(normalized.get("basis_summary") or "").strip():
+            normalized["basis_summary"] = str(normalized.get("source") or "browseract_bootstrap_runtime_cache")
+        best_payload = normalized
+        best_timestamp = candidate_timestamp
+    return best_payload
+
+
 def ea_onemin_manager_status(force: bool = False, *, cache_only: bool = False) -> Dict[str, Any]:
     now = time.time()
     cached = _EA_ONEMIN_MANAGER_CACHE.get("payload")
@@ -5366,6 +5479,30 @@ def ea_onemin_manager_billing_aggregate(force: bool = False, *, cache_only: bool
     except TypeError:
         manager_payload = ea_onemin_manager_status(force=force)
     aggregate = dict(manager_payload.get("aggregate") or {})
+    cached_aggregate = (
+        _cached_onemin_billing_aggregate_payload()
+        if not _onemin_manager_aggregate_has_billing_evidence(aggregate)
+        else {}
+    )
+    if cached_aggregate:
+        runtime_lease_payload = onemin_runtime_lease_payload(cache_only=cache_only)
+        reported_active_lease_count = max(0, int(float_or_none(cached_aggregate.get("active_lease_count")) or 0))
+        runtime_active_lease_count = max(0, int(runtime_lease_payload.get("active_onemin_codexers") or 0))
+        effective_active_lease_count = max(reported_active_lease_count, runtime_active_lease_count)
+        active_lease_count_source = (
+            "fleet_runtime_backfill"
+            if effective_active_lease_count > reported_active_lease_count
+            else str(cached_aggregate.get("source") or "browseract_bootstrap_runtime_cache")
+        )
+        return {
+            **cached_aggregate,
+            "active_lease_count": effective_active_lease_count,
+            "reported_active_lease_count": reported_active_lease_count,
+            "runtime_active_lease_count": runtime_active_lease_count,
+            "active_lease_count_source": active_lease_count_source,
+            "active_onemin_projects": list(runtime_lease_payload.get("active_onemin_projects") or []),
+            "active_onemin_accounts": list(runtime_lease_payload.get("active_onemin_accounts") or []),
+        }
     runway = dict(manager_payload.get("runway") or {})
     accounts = [dict(item) for item in aggregate.get("accounts") or [] if isinstance(item, dict)]
     if not aggregate:
@@ -8668,7 +8805,8 @@ def auto_publish_approved_audit_candidates(config: Dict[str, Any]) -> int:
             """
             SELECT *
             FROM audit_task_candidates
-            WHERE status IN ('open', 'approved', 'published')
+            WHERE status IN ('open', 'approved')
+               OR (status='published' AND resolved_at IS NULL)
             ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
                      CASE scope_type WHEN 'group' THEN 0 ELSE 1 END,
                      scope_id,
@@ -17307,6 +17445,8 @@ def load_milestone_capability_queue(project_cfg: Dict[str, Any], source_cfg: Dic
 
 
 def load_next90_queue_staging_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+    from scripts.next90_queue_staging import read_next90_queue_staging_yaml
+
     path = resolve_project_file(
         project_cfg,
         str(source_cfg.get("path", "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml")),
@@ -17315,7 +17455,7 @@ def load_next90_queue_staging_queue(project_cfg: Dict[str, Any], source_cfg: Dic
         return []
 
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        data = read_next90_queue_staging_yaml(path)
     except Exception:
         return []
 

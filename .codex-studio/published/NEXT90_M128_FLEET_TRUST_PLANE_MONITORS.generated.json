@@ -85,14 +85,14 @@
   },
   "contract_name": "fleet.next90_m128_trust_plane_monitors",
   "frontier_id": 6911125913,
-  "generated_at": "2026-05-05T21:33:52Z",
+  "generated_at": "2026-05-06T04:08:24Z",
   "milestone_id": 128,
   "monitor_summary": {
     "feedback_loop_status": "ready",
     "runtime_blocker_count": 0,
     "runtime_blockers": [],
     "shipping_locale_count": 6,
-    "support_generated_at": "2026-05-05T21:31:02Z",
+    "support_generated_at": "2026-05-06T04:01:25Z",
     "trust_plane_status": "warning",
     "warning_count": 2
   },
@@ -146,8 +146,8 @@
       "runtime_blockers": [],
       "source_mirror_generated_at": "2026-05-03T10:37:25Z",
       "state": "pass",
-      "support_generated_age_seconds": 170,
-      "support_generated_at": "2026-05-05T21:31:02Z",
+      "support_generated_age_seconds": 419,
+      "support_generated_at": "2026-05-06T04:01:25Z",
       "support_source_refresh_mode": "source_mirror_fallback",
       "warnings": [
         "Support packets are running on source_mirror_fallback. Mirror source generated_at=2026-05-03T10:37:25Z.",
@@ -172,7 +172,7 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "ba078e1c11ebe7c10bb0af49d29a9eaf19559c37b8676328964ab49e15cd54b5"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "flagship_readiness": {
       "generated_at": "",
@@ -197,12 +197,12 @@
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "ba078e1c11ebe7c10bb0af49d29a9eaf19559c37b8676328964ab49e15cd54b5"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "0326e3305131780f97c75f3d09a5b1a8957de8f69d013df048397f38a6b9ec28"
+      "sha256": "3614d3f739de335843fcf1e7c54a85c6892c310e03ac5e565fffd6de4e399010"
     },
     "support_packets": {
       "generated_at": "",

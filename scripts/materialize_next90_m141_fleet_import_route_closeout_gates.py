@@ -31,7 +31,7 @@ QUEUE_TITLE = (
 OWNED_SURFACES = ["fail_closeout_when_any_of_the_five_route_or_family_rows:fleet"]
 ALLOWED_PATHS = ["scripts", "tests", ".codex-studio", "feedback"]
 COMPLETION_ACTION = "verify_closed_package_only"
-LANDED_COMMIT = "unlanded"
+LANDED_COMMIT = "c099200f"
 DO_NOT_REOPEN_REASON = (
     "M141 fleet import-route closeout gate is complete; future shards must verify the repo-local gate scripts, "
     "generated proof artifacts, and canonical queue/registry mirrors instead of reopening the translator, XML, "

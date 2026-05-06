@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T20:08:53Z'
-mode: flagship_product
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-11
+generated_at: '2026-05-06T19:39:39Z'
+mode: complete
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-11
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -32,30 +32,12 @@ focus:
   - fleet
   - chummer6-hub
   - chummer6-design
-  - chummer6-media-factory
   texts:
-  - top flagship grade
-  - whole project frontier
-  - feedback
-  - automatic bugfixing
-  - crash
-  - support
-  - accessibility
-  - localization
-  - restore confidence
-  - fit and finish
   - trust
+  - support
   - pulse
   - launch
   - governance
-  - whole-project frontier
-  - no lowered standards
-  - feedback loop
-  - crash reporting
-  - support routing
-  - journey smoothness
-  - performance
-  - proof shelf
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -63,68 +45,39 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  status: pass
+  reason: 'current repo-local completion proof is green; using a supervisor evidence
+    receipt because the latest worker outcome is non-material to proof trust: dispatch
+    parked this shard until provider capacity recovers'
 full_product_audit:
-  status: fail
-  reason: 'flagship product readiness proof is not green: fail'
+  status: pass
+  reason: flagship product readiness proof is current across desktop, rules, hub,
+    mobile, horizons, and operator lanes
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T20:01:09Z'
-  proof_status: fail
+  generated_at: '2026-05-06T19:37:09Z'
+  proof_status: pass
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 1
-frontier_ids:
-- 1137972326
-frontier:
-- id: 1137972326
-  title: Render opposition and GM prep packets from governed source packs
-  wave: flagship_product
-  status: not_started
-  owners:
-  - chummer6-media-factory
-  dependencies: []
-  exit_criteria:
-  - Produce packet, preview, and optional briefing artifacts for opposition, scenes,
-    and prep-library entries.
-  - 'Own and prove the surface slice(s): gm_prep_packets, opposition_packet_artifacts'
-  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
-  - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-media-factory` (next90-m113-media-factory-gm-prep-packets).
-  eta:
-    status: flagship_delivery
-    eta_human: 8h-20h
-    eta_confidence: low
-    basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Render opposition and GM prep packets from governed source
-      packs'' remains open under the flagship closeout frontier. Outstanding readiness
-      coverage: flagship readiness proof refresh.'
-    predicted_completion_at: '2026-05-06T09:49:59Z'
-    range_low_hours: 7.65
-    range_high_hours: 19.72
-    remaining_open_milestones: 1
-    remaining_in_progress_milestones: 0
-    remaining_not_started_milestones: 1
-    remaining_effort_units: 1.7
-    history_sample_count: 0
-    observed_burn_milestones_per_day: 0.0
-    blocking_reason: ''
-    scope_kind: flagship_product_readiness
-    scope_label: Full Chummer5A parity and flagship proof closeout
-    scope_warning: ''
-source_queue_fingerprint: 433cdfebb5d8504552c5cea941d1217970cac13840edd39e02ae392c785b1551
-queue_package:
-  repo: chummer6-media-factory
-  package_id: next90-m113-media-factory-gm-prep-packets
-  title: Render opposition and GM prep packets from governed source packs
-  priority: 0
-  owned_surfaces:
-  - gm_prep_packets
-  - opposition_packet_artifacts
-  allowed_paths:
-  - src
-  - tests
-  - docs
-  - scripts
+frontier_count: 0
+frontier_ids: []
+frontier: []
+eta:
+  status: ready
+  eta_human: ready now
+  eta_confidence: high
+  basis: completion_audit_pass
+  scope_kind: repo_local_completion_ready
+  scope_label: Repo-local completion review
+  scope_warning: Repo-local completion evidence is green. External release, flagship,
+    or parity claims still depend on the broader readiness surfaces staying green.
+  blocking_reason: ''
+  summary: Whole-product completion audit is green on current repo-local evidence.
+  predicted_completion_at: '2026-05-06T19:39:38Z'
+  range_low_hours: 0.0
+  range_high_hours: 0.0
+  remaining_open_milestones: 0
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 0
+  remaining_effort_units: 0.0

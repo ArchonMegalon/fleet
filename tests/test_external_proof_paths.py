@@ -219,10 +219,12 @@ def test_resolve_release_channel_path_ignores_stale_registry_mirror_when_same_re
     assert resolved == portal
 
 
-def test_resolve_release_channel_path_keeps_registry_truth_over_same_release_ui_docker_mirror(
+def test_resolve_release_channel_path_keeps_fresh_registry_truth_over_same_release_ui_docker_mirror(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
     module = _load_module()
+    monkeypatch.setattr(module, "_utc_now", lambda: module.datetime.fromisoformat("2026-05-05T06:00:00+00:00"))
     registry = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
     docker = tmp_path / "chummer6-ui" / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
     registry.parent.mkdir(parents=True, exist_ok=True)
@@ -234,12 +236,12 @@ def test_resolve_release_channel_path_keeps_registry_truth_over_same_release_ui_
                 "channelId": "preview",
                 "version": "run-20260503-163502",
                 "generatedAt": "2026-05-05T05:16:58Z",
-                "artifacts": [{"artifactId": "avalonia-win-x64-archive"}],
+                "artifacts": [{"artifactId": "avalonia-win-x64-installer"}],
                 "desktopTupleCoverage": {
-                    "missingRequiredPlatforms": ["windows"],
-                    "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
-                    "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
-                    "externalProofRequests": [{"tupleId": "avalonia:win-x64:windows"}],
+                    "missingRequiredPlatforms": [],
+                    "missingRequiredPlatformHeadPairs": [],
+                    "missingRequiredPlatformHeadRidTuples": [],
+                    "externalProofRequests": [],
                 },
             },
             indent=2,
@@ -271,3 +273,39 @@ def test_resolve_release_channel_path_keeps_registry_truth_over_same_release_ui_
     resolved = module.resolve_release_channel_path(candidates=(registry, docker))
 
     assert resolved == registry
+
+
+def test_resolve_release_channel_path_prefers_fresh_same_release_ui_docker_mirror_when_registry_is_stale(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_utc_now", lambda: module.datetime.fromisoformat("2026-05-06T19:31:15+00:00"))
+    registry = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    docker = tmp_path / "chummer6-ui" / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    docker.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "status": "published",
+        "channelId": "preview",
+        "version": "run-20260503-163502",
+        "artifacts": [{"artifactId": "avalonia-win-x64-installer"}],
+        "desktopTupleCoverage": {
+            "missingRequiredPlatforms": [],
+            "missingRequiredPlatformHeadPairs": [],
+            "missingRequiredPlatformHeadRidTuples": [],
+            "externalProofRequests": [],
+        },
+    }
+    registry.write_text(
+        json.dumps({**payload, "generatedAt": "2026-05-05T19:17:52Z"}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    docker.write_text(
+        json.dumps({**payload, "generatedAt": "2026-05-06T18:31:51Z"}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    resolved = module.resolve_release_channel_path(candidates=(registry, docker))
+
+    assert resolved == docker

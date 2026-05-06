@@ -48,6 +48,17 @@ def _write_yaml(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
+def _write_split_queue_yaml(path: Path, item: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = (
+        yaml.safe_dump([item], sort_keys=False)
+        + "mode: append\n"
+        + "items:\n"
+        + yaml.safe_dump([item], sort_keys=False)
+    )
+    path.write_text(payload, encoding="utf-8")
+
+
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -151,6 +162,24 @@ def _parity_audit(*, generated_at: str) -> dict:
     }
 
 
+def _ui_direct_workflow_proof(*, generated_at: str, dense_ready: bool = True) -> dict:
+    return {
+        "generatedAt": generated_at,
+        "status": "pass" if dense_ready else "fail",
+        "evidence": {
+            "familyChecks": {
+                "family:dense_builder_and_career_workflows": {
+                    "row_present": dense_ready,
+                    "visual_parity_yes": dense_ready,
+                    "behavioral_parity_yes": dense_ready,
+                    "required_suffixes_present": dense_ready,
+                    "disallowed_external_receipts_clear": dense_ready,
+                }
+            }
+        },
+    }
+
+
 def _screenshot_gate(*, generated_at: str, status: str = "pass") -> dict:
     return {
         "generated_at": generated_at,
@@ -211,6 +240,7 @@ def _fixture_tree(
     parity_audit_path = tmp_path / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
     screenshot_path = tmp_path / "CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json"
     visual_path = tmp_path / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    ui_direct_workflow_proof_path = tmp_path / "NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json"
 
     _write_yaml(registry_path, _registry())
     _write_yaml(
@@ -229,6 +259,10 @@ def _fixture_tree(
     _write_json(parity_audit_path, _parity_audit(generated_at=parity_audit_generated_at))
     _write_json(screenshot_path, _screenshot_gate(generated_at=screenshot_review_generated_at))
     _write_json(visual_path, _visual_gate(generated_at=visual_gate_generated_at, status=visual_gate_status))
+    _write_json(
+        ui_direct_workflow_proof_path,
+        _ui_direct_workflow_proof(generated_at=parity_audit_generated_at),
+    )
     return {
         "registry": registry_path,
         "fleet_queue": fleet_queue_path,
@@ -241,6 +275,7 @@ def _fixture_tree(
         "parity_audit": parity_audit_path,
         "screenshot": screenshot_path,
         "visual": visual_path,
+        "ui_direct_workflow_proof": ui_direct_workflow_proof_path,
     }
 
 
@@ -273,6 +308,8 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
                 str(fixture["journey"]),
                 "--parity-audit",
                 str(fixture["parity_audit"]),
+                "--ui-direct-workflow-proof",
+                str(fixture["ui_direct_workflow_proof"]),
                 "--screenshot-review-gate",
                 str(fixture["screenshot"]),
                 "--visual-familiarity-gate",
@@ -358,6 +395,31 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
         self.assertEqual(payload["monitor_summary"]["aggregate_readiness_status"], "pass")
         self.assertEqual(payload["monitor_summary"]["receipt_runtime_blocker_count"], 0)
 
+    def test_split_queue_yaml_fallback_preserves_queue_alignment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(
+                tmp_path,
+                include_fleet_queue_row=True,
+                parity_audit_generated_at="2026-05-05T12:00:00Z",
+                screenshot_review_generated_at="2026-05-05T12:00:00Z",
+                visual_gate_generated_at="2026-05-05T12:00:00Z",
+                visual_gate_status="pass",
+                continuity_status="pass",
+                continuity_generated_at="2026-05-05T12:00:00Z",
+                journey_generated_at="2026-05-05T12:00:00Z",
+                flagship_status="fail",
+            )
+            queue_item = _design_queue_item()
+            _write_split_queue_yaml(fixture["fleet_queue"], queue_item)
+            _write_split_queue_yaml(fixture["design_queue"], queue_item)
+            artifact = tmp_path / "artifact.json"
+            payload = self._run_materializer(fixture, artifact)
+
+        self.assertEqual(payload["status"], "pass")
+        self.assertEqual(payload["canonical_monitors"]["queue_alignment"]["state"], "pass")
+        self.assertEqual(payload["package_closeout"]["state"], "pass")
+
     def test_missing_generated_at_uses_file_mtime_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -394,6 +456,40 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
             payload["source_inputs"]["screenshot_review_gate"]["generated_at"],
             "2026-05-05T12:00:00Z",
         )
+
+    def test_ui_direct_workflow_proof_can_override_stale_dense_family_row(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(
+                tmp_path,
+                include_fleet_queue_row=True,
+                parity_audit_generated_at="2026-05-05T12:00:00Z",
+                screenshot_review_generated_at="2026-05-05T12:00:00Z",
+                visual_gate_generated_at="2026-05-05T12:00:00Z",
+                visual_gate_status="pass",
+                continuity_status="pass",
+                continuity_generated_at="2026-05-05T12:00:00Z",
+                journey_generated_at="2026-05-05T12:00:00Z",
+                flagship_status="fail",
+            )
+            parity_audit = json.loads(fixture["parity_audit"].read_text(encoding="utf-8"))
+            parity_audit["summary"]["visual_no_count"] = 1
+            parity_audit["summary"]["behavioral_no_count"] = 1
+            dense_row = next(row for row in parity_audit["elements"] if row["id"] == "family:dense_builder_and_career_workflows")
+            dense_row["visual_parity"] = "no"
+            dense_row["behavioral_parity"] = "no"
+            fixture["parity_audit"].write_text(json.dumps(parity_audit, indent=2) + "\n", encoding="utf-8")
+
+            artifact = tmp_path / "artifact.json"
+            payload = self._run_materializer(fixture, artifact)
+
+        self.assertEqual(payload["monitor_summary"]["aggregate_readiness_status"], "pass")
+        self.assertEqual(
+            payload["runtime_monitors"]["parity_family_proof"]["overridden_family_proofs"],
+            ["dense_builder_and_career"],
+        )
+        self.assertEqual(payload["runtime_monitors"]["parity_family_proof"]["effective_visual_no_count"], 0)
+        self.assertEqual(payload["runtime_monitors"]["parity_family_proof"]["effective_behavioral_no_count"], 0)
 
 
 if __name__ == "__main__":

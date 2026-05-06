@@ -15,3 +15,5 @@
   - a real `File` menu, first-class master-index and character-roster routes, workbench-first startup instead of decorative landing or mainframe shell, and in-product installer or first-run claim handling instead of browser-only claim-code ritual are required.
 - Reject generic dashboard shell or framework-first installer choice as acceptable modernization:
   - Fleet must fail closed until the shipped desktop proof reads like Chummer rather than a themed scaffold.
+- Reject any change that writes generated Fleet proof artifacts back into `.codex-design/`:
+  - the local design mirror is manifest-backed canon, not a sink for repo-local generated readiness or proof receipts.

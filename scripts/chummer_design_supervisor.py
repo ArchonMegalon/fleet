@@ -175,21 +175,127 @@ DEFAULT_DESKTOP_EXECUTABLE_EXIT_GATES_PATH = DEFAULT_FLEET_PRODUCT_MIRROR_ROOT /
 DEFAULT_DESKTOP_VISUAL_FAMILIARITY_GATE_PATH = (
     DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.md"
 )
+def _published_status(path: Path) -> tuple[int, int]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return (0, 0)
+    status = str(payload.get("status") or "").strip().lower()
+    if status in {"pass", "passed", "ready"}:
+        return (2, 1)
+    if status in {"warning"}:
+        return (1, 1)
+    if status:
+        return (-2, 1)
+    return (0, 1)
+
+
+def _ui_repo_candidate_score(candidate: Path) -> tuple[int, int]:
+    published_root = candidate / ".codex-studio" / "published"
+    score = 0
+    inspected = 0
+    for name, weight in (
+        ("DESKTOP_EXECUTABLE_EXIT_GATE.generated.json", 10),
+        ("UI_LINUX_DESKTOP_EXIT_GATE.generated.json", 6),
+        ("UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json", 6),
+        ("CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json", 5),
+        ("SR6_DESKTOP_WORKFLOW_PARITY.generated.json", 5),
+        ("DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json", 4),
+        ("DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json", 4),
+        ("UI_FLAGSHIP_RELEASE_GATE.generated.json", 3),
+    ):
+        status_score, inspected_flag = _published_status(published_root / name)
+        score += status_score * weight
+        inspected += inspected_flag
+    return score, inspected
+
+
+def _ui_repo_candidate_freshness(candidate: Path) -> float:
+    published_root = candidate / ".codex-studio" / "published"
+    latest = 0.0
+    for name in (
+        "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+        "UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
+        "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json",
+        "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
+        "SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
+        "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
+        "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+        "UI_FLAGSHIP_RELEASE_GATE.generated.json",
+    ):
+        artifact_path = published_root / name
+        try:
+            latest = max(latest, artifact_path.stat().st_mtime)
+        except OSError:
+            continue
+    return latest
+
+
+def _ui_repo_candidate_sort_key(candidate: Path) -> tuple[int, int, float]:
+    score, inspected = _ui_repo_candidate_score(candidate)
+    return score, inspected, _ui_repo_candidate_freshness(candidate)
+
+
+def _ui_repo_candidates() -> tuple[Path, ...]:
+    return (
+        Path("/docker/chummercomplete/chummer-presentation-clean"),
+        Path("/docker/chummercomplete/chummer6-ui"),
+        Path("/docker/chummercomplete/chummer6-ui-finish"),
+        Path("/docker/chummercomplete/chummer-presentation"),
+    )
+
+
+def _ui_repo_required_gate_sort_key(candidate: Path) -> tuple[int, float, int, float]:
+    published_root = candidate / ".codex-studio" / "published"
+    executable_status, _ = _published_status(published_root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json")
+    linux_status, _ = _published_status(published_root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
+    executable_mtime = 0.0
+    linux_mtime = 0.0
+    try:
+        executable_mtime = (published_root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").stat().st_mtime
+    except OSError:
+        pass
+    try:
+        linux_mtime = (published_root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json").stat().st_mtime
+    except OSError:
+        pass
+    return executable_status, executable_mtime, linux_status, linux_mtime
+
+
 def _preferred_ui_repo_root() -> Path:
     override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
     if override:
         return Path(override)
-    for candidate in (
-        Path("/docker/chummercomplete/chummer6-ui"),
-        Path("/docker/chummercomplete/chummer6-ui-finish"),
-        Path("/docker/chummercomplete/chummer-presentation"),
-    ):
-        if candidate.exists():
-            return candidate
+    best_candidate: Path | None = None
+    best_score: tuple[int, float, int, float, int, int, float] | None = None
+    for candidate in _ui_repo_candidates():
+        if not candidate.exists():
+            continue
+        aggregate_score, inspected, freshness = _ui_repo_candidate_sort_key(candidate)
+        candidate_score = (*_ui_repo_required_gate_sort_key(candidate), aggregate_score, inspected, freshness)
+        if best_candidate is None or candidate_score > (best_score or (0, 0.0, 0, 0.0, 0, 0, 0.0)):
+            best_candidate = candidate
+            best_score = candidate_score
+    if best_candidate is not None:
+        return best_candidate
     return Path("/docker/chummercomplete/chummer6-ui")
 
 
+def _preferred_mobile_repo_root() -> Path:
+    override = str(os.environ.get("CHUMMER_MOBILE_REPO_ROOT", "") or "").strip()
+    if override:
+        return Path(override)
+    for candidate in (
+        Path("/docker/chummercomplete/chummer-play"),
+        Path("/docker/chummercomplete/chummer6-mobile"),
+    ):
+        if candidate.exists():
+            return candidate
+    return Path("/docker/chummercomplete/chummer-play")
+
+
 PREFERRED_UI_REPO_ROOT = _preferred_ui_repo_root()
+PREFERRED_MOBILE_REPO_ROOT = _preferred_mobile_repo_root()
 DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT = PREFERRED_UI_REPO_ROOT
 DEFAULT_UI_LINUX_DESKTOP_EXIT_GATE_PATH = (
     PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
@@ -3206,7 +3312,9 @@ def _ea_provider_health_failure_cooldown_seconds() -> float:
 
 def _ea_provider_health_cache_path(args: argparse.Namespace) -> Path:
     state_root_raw = str(getattr(args, "state_root", "") or "").strip()
-    state_root = Path(state_root_raw or DEFAULT_STATE_ROOT).resolve()
+    state_root = _canonicalize_design_supervisor_state_root(
+        Path(state_root_raw or DEFAULT_STATE_ROOT)
+    )
     return _aggregate_state_root(state_root) / "ea_provider_health_cache.json"
 
 
@@ -3313,13 +3421,17 @@ def _ea_onemin_provider_api_repair_cooldown_seconds(reason: str = "") -> float:
 
 def _ea_onemin_provider_api_repair_state_path(args: argparse.Namespace) -> Path:
     state_root_raw = str(getattr(args, "state_root", "") or "").strip()
-    state_root = Path(state_root_raw or DEFAULT_STATE_ROOT).resolve()
+    state_root = _canonicalize_design_supervisor_state_root(
+        Path(state_root_raw or DEFAULT_STATE_ROOT)
+    )
     return _aggregate_state_root(state_root) / "onemin_provider_api_repair_state.json"
 
 
 def _ea_onemin_provider_api_repair_log_path(args: argparse.Namespace) -> Path:
     state_root_raw = str(getattr(args, "state_root", "") or "").strip()
-    state_root = Path(state_root_raw or DEFAULT_STATE_ROOT).resolve()
+    state_root = _canonicalize_design_supervisor_state_root(
+        Path(state_root_raw or DEFAULT_STATE_ROOT)
+    )
     return _aggregate_state_root(state_root) / "onemin_provider_api_repair.log"
 
 
@@ -4500,7 +4612,7 @@ def _direct_worker_lane_health_snapshot(
 
     workspace_root = Path(getattr(args, "workspace_root", DEFAULT_WORKSPACE_ROOT)).resolve()
     state_root_raw = str(getattr(args, "state_root", "") or "").strip()
-    state_root = Path(state_root_raw or DEFAULT_STATE_ROOT).resolve()
+    state_root = _canonicalize_design_supervisor_state_root(Path(state_root_raw or DEFAULT_STATE_ROOT))
     lane_rows = _provider_registry_lane_rows(dict(payload or {}))
     for profile, row in _synthetic_onemin_provider_registry_lane_rows(
         dict(payload or {}),
@@ -6418,6 +6530,7 @@ def _completion_review_frontier_payload(
     completion_audit: Dict[str, Any],
     eta: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
+    state_root = _canonicalize_design_supervisor_state_root(state_root)
     repo_backlog_audit = dict(completion_audit.get("repo_backlog_audit") or {})
     receipt_audit = dict(completion_audit.get("receipt_audit") or {})
     journey_gate_audit = dict(completion_audit.get("journey_gate_audit") or {})
@@ -6536,6 +6649,7 @@ def _materialize_completion_review_frontier(
     completion_audit: Dict[str, Any],
     eta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, str]:
+    state_root = _canonicalize_design_supervisor_state_root(state_root)
     published_path, mirror_path = _completion_review_frontier_paths(
         Path(args.workspace_root).resolve(),
         state_root=state_root,
@@ -7745,7 +7859,11 @@ def _queue_driven_full_product_frontier(
         and not (audit.get("coverage_gap_keys") or audit.get("missing_coverage_keys"))
     ):
         return []
-    queue_item = _queue_item_for_shard(args, Path(args.state_root).resolve(), base_frontier=base_frontier)
+    queue_item = _queue_item_for_shard(
+        args,
+        _canonicalize_design_supervisor_state_root(Path(args.state_root)),
+        base_frontier=base_frontier,
+    )
     if not queue_item:
         return []
     frontier_status = _full_product_frontier_status(audit)
@@ -7953,11 +8071,104 @@ def _fresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Opti
     return payload
 
 
+def _fresh_weekly_product_pulse_artifact(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
+    max_age_seconds = _live_refresh_readiness_cache_seconds()
+    if max_age_seconds <= 0:
+        return None
+    weekly_pulse_path = Path(str(getattr(args, "weekly_pulse_path", "") or "")).resolve()
+    if not weekly_pulse_path.is_file():
+        return None
+    payload = _read_state(weekly_pulse_path)
+    generated_at = _status_generated_at(payload)
+    if generated_at is None:
+        return None
+    if (_utc_now() - generated_at).total_seconds() > max_age_seconds:
+        return None
+    return payload
+
+
+def _weekly_product_pulse_needs_refresh(
+    args: argparse.Namespace,
+    readiness_payload: Optional[Dict[str, Any]],
+) -> bool:
+    readiness = dict(readiness_payload or {})
+    if str(readiness.get("status") or "").strip().lower() != "pass":
+        return False
+    weekly_pulse_path = Path(str(getattr(args, "weekly_pulse_path", "") or "")).resolve()
+    if not weekly_pulse_path.is_file():
+        return True
+    weekly_payload = _read_state(weekly_pulse_path)
+    if not weekly_payload:
+        return True
+    release_health = dict(weekly_payload.get("release_health") or {})
+    release_health_state = str(release_health.get("state") or "").strip().lower()
+    if release_health_state not in {"green", "green_or_explained", "ready"}:
+        return True
+    active_wave_status = str(weekly_payload.get("active_wave_status") or "").strip().lower()
+    if active_wave_status not in {"complete", "closed", "done"}:
+        return True
+    journey_gate_health = dict(weekly_payload.get("journey_gate_health") or {})
+    journey_gate_health_state = str(journey_gate_health.get("state") or "").strip().lower()
+    if journey_gate_health_state not in {"green", "green_or_explained", "ready"}:
+        return True
+    readiness_generated_at = _status_generated_at(readiness)
+    weekly_generated_at = _status_generated_at(weekly_payload)
+    if readiness_generated_at is not None and weekly_generated_at is not None:
+        return weekly_generated_at < readiness_generated_at
+    return weekly_generated_at is None
+
+
+def _refresh_weekly_product_pulse_artifact(
+    args: argparse.Namespace,
+    readiness_payload: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    if Path(args.workspace_root).resolve() != DEFAULT_WORKSPACE_ROOT.resolve():
+        return None
+    weekly_pulse_path = Path(str(getattr(args, "weekly_pulse_path", "") or "")).resolve()
+    if not _weekly_product_pulse_needs_refresh(args, readiness_payload):
+        return _fresh_weekly_product_pulse_artifact(args) or _read_state(weekly_pulse_path)
+    script_path = Path("/docker/chummercomplete/chummer-design/scripts/ai/materialize_weekly_product_pulse_snapshot.py")
+    if not script_path.is_file():
+        return None
+    refresh_timeout_seconds = _live_refresh_subcommand_timeout_seconds()
+    try:
+        completed = subprocess.run(
+            ["python3", str(script_path), "--out", str(weekly_pulse_path)],
+            cwd=str(Path(args.workspace_root).resolve()),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=refresh_timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout_tail = str(exc.stdout or "").strip()[-800:]
+        stderr_tail = str(exc.stderr or "").strip()[-800:]
+        print(
+            f"[fleet-supervisor] weekly product pulse refresh timed out after {refresh_timeout_seconds}s: "
+            f"stdout={stdout_tail!r} stderr={stderr_tail!r}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return None
+    if completed.returncode != 0:
+        stdout_tail = str(completed.stdout or "").strip()[-800:]
+        stderr_tail = str(completed.stderr or "").strip()[-800:]
+        print(
+            f"[fleet-supervisor] weekly product pulse refresh failed: "
+            f"exit={completed.returncode} stdout={stdout_tail!r} stderr={stderr_tail!r}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return None
+    return _read_state(weekly_pulse_path)
+
+
 def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
     if Path(args.workspace_root).resolve() != DEFAULT_WORKSPACE_ROOT.resolve():
         return None
     fresh_readiness = _fresh_flagship_product_readiness_artifact(args)
     if fresh_readiness is not None:
+        _refresh_weekly_product_pulse_artifact(args, fresh_readiness)
         return fresh_readiness
     try:
         try:
@@ -8061,7 +8272,7 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
         supervisor_state_path = _state_payload_path(aggregate_state_root)
         candidate_state_root_raw = str(getattr(args, "state_root", "") or "").strip()
         if candidate_state_root_raw:
-            candidate_state_root = Path(candidate_state_root_raw).resolve()
+            candidate_state_root = _canonicalize_design_supervisor_state_root(Path(candidate_state_root_raw))
             candidate_state_path = _state_payload_path(candidate_state_root)
             candidate_aggregate_root = _aggregate_state_root(candidate_state_root)
             readiness_mirror_path = candidate_aggregate_root / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
@@ -8082,7 +8293,7 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
         )
         if _hard_flagship_requested(args):
             ignore_nonlinux_desktop_host_proof_blockers = False
-        return materialize_flagship_product_readiness(
+        payload = materialize_flagship_product_readiness(
             out_path=Path(args.flagship_product_readiness_path).resolve(),
             mirror_path=readiness_mirror_path,
             acceptance_path=acceptance_mirror_path,
@@ -8110,11 +8321,13 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
             sr6_workflow_parity_proof_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
             sr4_sr6_frontier_receipt_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
             hub_local_release_proof_path=Path("/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json"),
-            mobile_local_release_proof_path=Path("/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json"),
+            mobile_local_release_proof_path=PREFERRED_MOBILE_REPO_ROOT / ".codex-studio" / "published" / "MOBILE_LOCAL_RELEASE_PROOF.generated.json",
             release_channel_path=resolved_release_channel_path,
             releases_json_path=resolved_releases_json_path,
             ignore_nonlinux_desktop_host_proof_blockers=ignore_nonlinux_desktop_host_proof_blockers,
         )
+        _refresh_weekly_product_pulse_artifact(args, payload)
+        return payload
     except Exception as exc:
         print(f"[fleet-supervisor] flagship readiness materialization failed: {exc}", file=sys.stderr, flush=True)
         return None
@@ -8133,6 +8346,7 @@ def _full_product_frontier_payload(
     full_product_audit: Dict[str, Any],
     eta: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
+    state_root = _canonicalize_design_supervisor_state_root(state_root)
     product_root = Path(args.program_milestones_path).resolve().parent
     profile_set = {str(item).strip() for item in focus_profiles if str(item).strip()}
     generated_at = _iso_now()
@@ -8275,6 +8489,7 @@ def _materialize_full_product_frontier(
     full_product_audit: Dict[str, Any],
     eta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, str]:
+    state_root = _canonicalize_design_supervisor_state_root(state_root)
     effective_completion_audit = dict(completion_audit or {})
     effective_full_product_audit = dict(full_product_audit or {})
     receipt_audit = dict(effective_completion_audit.get("receipt_audit") or {})
@@ -14506,10 +14721,20 @@ def _refresh_aggregate_history_snapshot(state_root: Path, *, history_limit: int 
     _write_jsonl(_history_payload_path(aggregate_root), combined_history[-normalized_limit:])
 
 
+def _canonicalize_design_supervisor_state_root(state_root: Path) -> Path:
+    resolved_state_root = Path(state_root).resolve()
+    if resolved_state_root.name == "design-supervisor" and resolved_state_root.parent.name == "state":
+        return resolved_state_root.parent / "chummer_design_supervisor"
+    if resolved_state_root.parent.name == "design-supervisor" and resolved_state_root.parent.parent.name == "state":
+        return resolved_state_root.parent.parent / "chummer_design_supervisor" / resolved_state_root.name
+    return resolved_state_root
+
+
 def _aggregate_state_root(state_root: Path) -> Path:
-    if state_root.name.startswith("shard-") and state_root.parent.exists():
-        return state_root.parent
-    return state_root
+    resolved_state_root = _canonicalize_design_supervisor_state_root(state_root)
+    if resolved_state_root.name.startswith("shard-") and resolved_state_root.parent.exists():
+        return _canonicalize_design_supervisor_state_root(resolved_state_root.parent)
+    return resolved_state_root
 
 
 def _completion_review_history(state_root: Path, *, limit: int) -> List[Dict[str, Any]]:
@@ -15717,7 +15942,7 @@ def _render_eta(eta: Dict[str, Any]) -> str:
 
 
 def derive_eta(args: argparse.Namespace) -> Dict[str, Any]:
-    state_root = Path(args.state_root).resolve()
+    state_root = _canonicalize_design_supervisor_state_root(Path(args.state_root))
     state, history = _effective_supervisor_state(state_root, history_limit=ETA_HISTORY_LIMIT)
     _refresh_flagship_product_readiness_artifact(args)
     live_state, history = _live_state_with_current_completion_audit(
@@ -15883,7 +16108,7 @@ def derive_context(args: argparse.Namespace, *, state_root: Optional[Path] = Non
     roadmap_path = Path(args.roadmap_path).resolve()
     handoff_path = Path(args.handoff_path).resolve()
     workspace_root = Path(args.workspace_root).resolve()
-    resolved_state_root = Path(state_root or args.state_root).resolve()
+    resolved_state_root = _canonicalize_design_supervisor_state_root(state_root or Path(args.state_root))
     runtime_handoff_path = _existing_runtime_handoff_path(resolved_state_root)
     if runtime_handoff_path is None:
         _write_runtime_handoff(resolved_state_root)
@@ -16470,7 +16695,7 @@ def _live_state_with_current_completion_audit(
     refresh_flagship_readiness: bool = True,
 ) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
     effective_args = argparse.Namespace(**vars(args))
-    effective_args.state_root = str(Path(state_root).resolve())
+    effective_args.state_root = str(_canonicalize_design_supervisor_state_root(state_root))
     if refresh_flagship_readiness:
         _refresh_flagship_product_readiness_artifact(effective_args)
     context = derive_context(effective_args, state_root=state_root)
@@ -21832,7 +22057,9 @@ def _active_worker_state_root(args: argparse.Namespace) -> Path:
                 return candidate
         except Exception:
             pass
-    return Path(str(getattr(args, "state_root", "") or "")).resolve()
+    return _canonicalize_design_supervisor_state_root(
+        Path(str(getattr(args, "state_root", "") or ""))
+    )
 
 
 def _worker_status_block_message(args: argparse.Namespace, blocked_reason: str) -> str:
@@ -24170,7 +24397,7 @@ def _render_trace(state: Dict[str, Any], history: List[Dict[str, Any]]) -> str:
 
 
 def run_once(args: argparse.Namespace) -> int:
-    state_root = Path(args.state_root).resolve()
+    state_root = _canonicalize_design_supervisor_state_root(Path(args.state_root))
     _ensure_dir(state_root)
     _prune_run_artifacts_from_args(args, state_root)
     if _running_inside_container():
@@ -24623,7 +24850,7 @@ def run_once(args: argparse.Namespace) -> int:
 
 
 def run_loop(args: argparse.Namespace) -> int:
-    state_root = Path(args.state_root).resolve()
+    state_root = _canonicalize_design_supervisor_state_root(Path(args.state_root))
     _ensure_dir(state_root)
     _prune_run_artifacts_from_args(args, state_root)
     if _running_inside_container():
@@ -25158,6 +25385,10 @@ def run_loop(args: argparse.Namespace) -> int:
 
 def main() -> None:
     args = parse_args()
+    try:
+        args.state_root = str(_canonicalize_design_supervisor_state_root(Path(args.state_root)))
+    except Exception:
+        pass
     if bool(getattr(args, "ignore_nonlinux_desktop_host_proof_blockers", False)):
         os.environ["CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS"] = "1"
     if args.command in {"status", "eta"} and _inside_active_worker_run():
@@ -25176,7 +25407,7 @@ def main() -> None:
             raise SystemExit(2)
         raise SystemExit(0)
     if args.command == "status":
-        state_root = Path(args.state_root).resolve()
+        state_root = _canonicalize_design_supervisor_state_root(Path(args.state_root))
         include_shards = not state_root.name.startswith("shard-")
         if args.live_refresh:
             state, history = _effective_supervisor_state(
@@ -25237,7 +25468,7 @@ def main() -> None:
             print(_render_eta(eta))
         return
     if args.command == "trace":
-        state_root = Path(args.state_root).resolve()
+        state_root = _canonicalize_design_supervisor_state_root(Path(args.state_root))
         state, history = _effective_supervisor_state(state_root, history_limit=max(0, int(args.limit)))
         include_shards = not state_root.name.startswith("shard-")
         state, history = _live_state_with_current_completion_audit(
@@ -25260,7 +25491,7 @@ def main() -> None:
             print(_render_trace(state, history))
         return
     if args.command == "active-shards":
-        aggregate_root = _aggregate_state_root(Path(args.state_root).resolve())
+        aggregate_root = _aggregate_state_root(_canonicalize_design_supervisor_state_root(Path(args.state_root)))
         _write_active_shard_manifest_snapshot(aggregate_root)
         if getattr(args, "json", False):
             payload = _read_state(_active_shard_manifest_path(aggregate_root))

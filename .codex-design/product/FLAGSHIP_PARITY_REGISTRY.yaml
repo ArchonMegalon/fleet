@@ -1,0 +1,220 @@
+product: chummer
+version: 1
+last_reviewed: 2026-04-16
+purpose: Release-facing parity truth for judging whether Chummer6 is a flagship replacement that veteran Chummer5a users can trust.
+source_documents:
+  - LEGACY_CLIENT_AND_ADJACENT_PARITY.md
+  - LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml
+  - CHUMMER5A_FAMILIARITY_BRIDGE.md
+  - SR5_FIRST_MINUTE_TASKS.yaml
+  - SR5_SCREENSHOT_ORACLE_REGISTRY.yaml
+  - SR5_FLAGSHIP_VISUAL_PARITY_EXIT.yaml
+  - FLAGSHIP_READINESS_PLANES.yaml
+  - FLAGSHIP_RELEASE_ACCEPTANCE.yaml
+  - FLAGSHIP_UI_RELEASE_GATE.md
+  - WHAT_IS_STILL_BELOW_GOLD.md
+status_scale:
+  - id: documented
+    release_blocking: true
+    meaning: Canon names the family and the replacement intent, but there is no trustworthy release proof yet.
+  - id: implemented
+    release_blocking: true
+    meaning: A modern successor route exists in code or product surfaces, but task proof and veteran trust proof are still incomplete.
+  - id: task_proven
+    release_blocking: true
+    meaning: Representative tasks execute and persist correctly, but veteran acceptance and screenshot trust are still incomplete.
+  - id: veteran_approved
+    release_blocking: true
+    meaning: Veteran-orientation, screenshot, and task-speed proof are current enough to support a serious replacement claim.
+  - id: gold_ready
+    release_blocking: false
+    meaning: The family is task-proven, veteran-approved, and packaged inside a release lane that can honestly claim flagship replacement quality.
+policy:
+  covered_is_not_done:
+    - Legacy parity `covered` means the successor route is explicit in canon or bounded proof.
+    - Release truth for flagship replacement is tracked here, not in the softer `covered` field.
+    - Gold release claims require this registry, not only the legacy parity registry, to be green for every in-scope family.
+  readiness_planes:
+    - Structural closure is necessary, but it is not enough to claim flagship replacement.
+    - Desktop families cannot stay `gold_ready` while the published readiness proof still reports `desktop_client` missing or `dense_workbench_ready` below ready.
+    - Core rules/import families cannot stay `gold_ready` when the release-bound engine proof pack drops promoted-desktop oracle coverage, import-certification truth, or performance-budget coverage.
+    - Family statuses should match the strongest proof that is actually current, not the most optimistic interpretation of adjacent evidence.
+  divergence_policy:
+    - "`must_match` is the default when a Chummer5A control or flow still carries a real veteran user job."
+    - "`may_improve` is allowed only when directness, speed, trust, and reversibility are preserved or improved."
+    - "`may_remove_if_non_degrading` is allowed only when no real user job becomes slower, riskier, or less inspectable."
+  trust_rule:
+    - No family can honestly stay `gold_ready` when install/update/restore truth, public shelf truth, or custom-data survival truth contradict the promoted desktop bytes.
+  oracle_rule:
+    - "`chummer5a` is the default legacy oracle for screenshot, workflow, and first-minute orientation evidence."
+    - Chummer4 remains the stronger SR4 workflow oracle where canon already says it should.
+families:
+  - id: shell_workbench_orientation
+    legacy_parity_status: covered
+    release_status: gold_ready
+    owner_repos:
+      - chummer6-design
+      - chummer6-ui
+      - chummer6-ui-kit
+      - fleet
+    proof_requirements:
+      - Veteran first-minute gate
+      - SR5 first-minute task pack
+      - Dense workbench budget
+      - Desktop visual familiarity exit gate
+      - SR5 visual parity exit
+    release_evidence:
+      - /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+      - /docker/chummercomplete/chummer6-ui/.codex-studio/published/SR5_FLAGSHIP_VISUAL_PARITY_EXIT.generated.json
+      - /docker/chummercomplete/chummer6-ui/.codex-studio/published/SR5_FIRST_MINUTE_TASKS.generated.json
+      - /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+      - /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+  - id: dense_builder_and_career_workflows
+    legacy_parity_status: covered
+    release_status: gold_ready
+    owner_repos:
+      - chummer6-ui
+      - chummer6-core
+      - chummer5a
+    proof_requirements:
+      - Workflow-family execution receipts
+      - Chummer5a compare fixtures
+      - Veteran task-time benchmarks
+      - SR5 screenshot oracle comparisons for the blocking workflows
+    release_evidence:
+      - /docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json
+      - /docker/chummercomplete/chummer6-ui/.codex-studio/published/SR5_FLAGSHIP_VISUAL_PARITY_EXIT.generated.json
+      - /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+      - /docker/chummercomplete/chummer6-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
+  - id: identity_contacts_lifestyles_history
+    legacy_parity_status: covered
+    release_status: gold_ready
+    owner_repos:
+      - chummer6-ui
+      - chummer6-core
+      - chummer6-hub
+    proof_requirements:
+      - Contacts and history workflow receipts
+      - Veteran-orientation proof
+    release_evidence:
+      - /docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json
+      - /docker/chummercomplete/chummer6-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
+      - /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json
+  - id: sourcebooks_reference_and_master_index
+    legacy_parity_status: covered
+    release_status: gold_ready
+    owner_repos:
+      - chummer6-core
+      - chummer6-ui
+      - chummer5a
+    proof_requirements:
+      - Master index workflow receipts
+      - Source-selection and reference-target proof
+      - Screenshot parity against legacy dense reference posture
+    release_evidence:
+      - /docker/chummercomplete/chummer6-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
+      - /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+      - /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+  - id: settings_and_rules_environment_authoring
+    legacy_parity_status: covered
+    release_status: gold_ready
+    owner_repos:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-hub-registry
+    proof_requirements:
+      - Settings workflow receipts
+      - Rule-environment explain receipts
+      - Veteran re-find proof
+    release_evidence:
+      - /docker/chummercomplete/chummer6-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
+      - /docker/chummercomplete/chummer6-core/.codex-studio/published/ENGINE_PROOF_PACK.generated.json
+      - /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json
+      - /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+  - id: custom_data_xml_and_translator_bridge
+    legacy_parity_status: covered
+    release_status: gold_ready
+    owner_repos:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-design
+    proof_requirements:
+      - XML bridge proof
+      - Translator tooling proof
+      - Oracle fixtures from chummer5a
+    release_evidence:
+      - /docker/chummercomplete/chummer6-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
+      - /docker/chummercomplete/chummer6-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml
+      - /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+  - id: dice_initiative_and_table_utilities
+    legacy_parity_status: covered
+    release_status: gold_ready
+    owner_repos:
+      - chummer6-ui
+      - chummer6-core
+    proof_requirements:
+      - Utility workflow receipts
+      - Veteran first-minute reachability
+    release_evidence:
+      - /docker/chummercomplete/chummer6-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
+      - /docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json
+      - /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json
+  - id: roster_dashboards_and_multi_character_ops
+    legacy_parity_status: covered
+    release_status: gold_ready
+    owner_repos:
+      - chummer6-ui
+      - chummer6-hub
+      - chummer5a
+    proof_requirements:
+      - Roster workflow receipts
+      - Operator/dashboard compare packs
+    release_evidence:
+      - /docker/chummercomplete/chummer6-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
+      - /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+      - /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json
+  - id: sheet_export_print_viewer_and_exchange
+    legacy_parity_status: covered
+    release_status: gold_ready
+    owner_repos:
+      - chummer6-ui
+      - chummer6-core
+      - chummer6-hub
+    proof_requirements:
+      - Print/export workflow receipts
+      - Import/export round-trip fixtures
+    release_evidence:
+      - /docker/chummercomplete/chummer6-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
+      - /docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json
+      - /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+  - id: legacy_and_adjacent_import_oracles
+    legacy_parity_status: covered
+    release_status: gold_ready
+    owner_repos:
+      - chummer6-core
+      - chummer5a
+      - chummer6-design
+    proof_requirements:
+      - Chummer4/5a oracle pack
+      - Adjacent-client import receipts
+      - Divergence reporting
+    release_evidence:
+      - /docker/chummercomplete/chummer6-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
+      - /docker/chummercomplete/chummer6-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml
+      - /docker/chummercomplete/chummer6-core/.codex-studio/published/ENGINE_PROOF_PACK.generated.json
+      - /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+  - id: sr6_supplements_designers_and_house_rules
+    legacy_parity_status: covered
+    release_status: gold_ready
+    owner_repos:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-hub
+    proof_requirements:
+      - SR6 successor proof pack
+      - Designer and house-rule receipts
+    release_evidence:
+      - /docker/chummercomplete/chummer6-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
+      - /docker/chummercomplete/chummer6-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml
+      - /docker/chummercomplete/chummer6-core/.codex-studio/published/ENGINE_PROOF_PACK.generated.json
+      - /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json

@@ -1,0 +1,286 @@
+contract_name: executive_assistant.m143_route_specific_compare_packets
+schema_version: 1
+generated_at: '2026-05-06T00:57:53Z'
+milestone:
+  id: 143
+  wave: W22P
+  package_id: next90-m143-ea-compile-route-specific-compare-packs-and-artifact-proofs-for-print-export
+  work_task_id: '143.5'
+  frontier_id: 4858208692
+  owned_surfaces:
+  - compile_route_specific_compare_packs_and_artifact_proofs:ea
+sync_context:
+  task_local_telemetry_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-14/runs/20260506T005401Z-shard-14/TASK_LOCAL_TELEMETRY.generated.json
+  task_local_telemetry_snapshot:
+    mode: implementation_only
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    slice_summary: 'Milestone ''Compile route-specific compare packs and artifact
+      proofs for print, export, exchange, SR6 supplement, and house-rule workflows.''
+      remains open under the flagship closeout frontier. Outstanding readiness coverage:
+      desktop_client.'
+    status_query_supported: false
+    polling_disabled: true
+    remaining_open_milestones: 1
+    remaining_not_started_milestones: 1
+    missing_flagship_coverage: desktop_client
+    frontier_briefs:
+    - '4858208692 [flagship_product] Compile route-specific compare packs and artifact
+      proofs for print, export, exchange, SR6 supplement, and house-rule workflows.
+      (status: not_started; owners: executive-assistant; deps: none; exit: Compile
+      route-specific compare packs and artifact proofs for print, export, exchange,
+      SR6 supplement, and house-rule workflows.; Own and prove the surface slice(s):
+      compile_route_specific_compare_packs_and_artifact_proofs:ea; Keep implementation
+      scoped to the allowed paths: scripts, feedback, docs; Refresh flagship proof
+      and close out the queue slice honestly when this package is landed for `executive-assistant`
+      (next90-m143-ea-compile-route-specific-compare-packs-and-artifact-proofs-for-print-export).)'
+  runtime_handoff_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-14/ACTIVE_RUN_HANDOFF.generated.md
+  readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+  readiness_generated_at: '2026-05-06T00:48:24Z'
+  workflow_pack_path: /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
+  workflow_pack_generated_at: '2026-05-05 23:16:04+00:00'
+  parity_audit_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json
+  parity_audit_generated_at: '2026-05-05T20:18:25.423992Z'
+  screenshot_review_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+  screenshot_review_gate_generated_at: '2026-05-06T00:05:48.381309Z'
+  section_host_ruleset_parity_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+  section_host_ruleset_parity_generated_at: '2026-04-23T15:52:14.898217Z'
+  generated_dialog_parity_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json
+  generated_dialog_parity_generated_at: '2026-05-04T20:21:16.770780Z'
+  m114_rule_studio_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M114_UI_RULE_STUDIO.generated.json
+  m114_rule_studio_generated_at: '2026-05-05T10:18:21Z'
+  core_m143_receipts_doc_path: /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md
+  core_m143_receipts_doc_generated_at: '2026-05-05T10:33:05Z'
+  fleet_m143_gate_path: /docker/fleet/.codex-studio/published/NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.json
+  fleet_m143_gate_generated_at: '2026-05-05T22:23:27Z'
+worker_run_guard:
+  implementation_only: true
+  polling_disabled: true
+  allowed_evidence_sources:
+  - task-local telemetry file
+  - shard runtime handoff
+  - veteran workflow route-specific compare packs
+  - published parity audit and screenshot review receipts
+  - published UI route proof receipts
+  - published core M143 receipts
+  - published Fleet M143 closeout gate
+  blocked_helper_evidence:
+  - supervisor status helpers
+  - supervisor eta helpers
+  - operator-only handoff commands
+family_route_specific_compare_packets:
+- family_id: sheet_export_print_viewer_and_exchange
+  parity_audit_row_id: family:sheet_export_print_viewer_and_exchange
+  label: Sheet export, print viewer, and exchange
+  compare_artifacts:
+  - menu:open_for_printing
+  - menu:open_for_export
+  - menu:file_print_multiple
+  parity_verdict:
+    present_in_chummer5a: 'yes'
+    present_in_chummer6: 'yes'
+    visual_parity: 'yes'
+    behavioral_parity: 'yes'
+    removable_if_not_in_chummer5a: 'no'
+    reason: Route-local print, export, and exchange proof cites menu parity, screenshot
+      review markers, and deterministic workspace-exchange receipts directly.
+  route_specific_compare_pack:
+    summary: Keep print, export, and exchange parity grounded in route-local proof
+      by pairing the exact menu routes with screenshot review and deterministic workspace-exchange
+      receipts.
+    route_receipts:
+    - route_id: menu:open_for_printing
+      proof_receipts:
+      - /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+      required_tokens:
+      - open_for_printing
+      receipt_checks:
+      - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+        required_tokens:
+        - open_for_printing
+        missing_tokens: []
+      status: pass
+    - route_id: menu:open_for_export
+      proof_receipts:
+      - /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+      required_tokens:
+      - open_for_export
+      receipt_checks:
+      - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+        required_tokens:
+        - open_for_export
+        missing_tokens: []
+      status: pass
+    - route_id: menu:file_print_multiple
+      proof_receipts:
+      - /docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json
+      required_tokens:
+      - print_multiple
+      receipt_checks:
+      - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json
+        required_tokens:
+        - print_multiple
+        missing_tokens: []
+      status: pass
+  artifact_proof_pack:
+    screenshot_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    required_screenshot_markers:
+    - print_export_exchange
+    - open_for_printing_menu_route
+    - open_for_export_menu_route
+    - print_multiple_menu_route
+    missing_screenshot_markers: []
+    output_receipts:
+    - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md
+    required_output_tokens:
+    - WorkspaceExchangeDeterministicReceipt
+    - family:sheet_export_print_viewer_and_exchange
+    missing_output_tokens: []
+    status: pass
+  fleet_closeout_gate_receipts:
+    missing_route_receipts: []
+    satisfied_route_receipts:
+    - menu:open_for_printing
+    - menu:open_for_export
+    - menu:file_print_multiple
+    - receipt:workspace_exchange
+    - screenshot:print_export_exchange
+  evidence_paths:
+  - /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+  - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md
+- family_id: sr6_supplements_designers_and_house_rules
+  parity_audit_row_id: family:sr6_supplements_designers_and_house_rules
+  label: SR6 supplements, designers, and house rules
+  compare_artifacts:
+  - workflow:sr6_supplements
+  - workflow:house_rules
+  parity_verdict:
+    present_in_chummer5a: 'yes'
+    present_in_chummer6: 'yes'
+    visual_parity: 'yes'
+    behavioral_parity: 'yes'
+    removable_if_not_in_chummer5a: 'no'
+    reason: Route-local SR6 supplement and house-rule proof cites screenshot review
+      markers, rule studio surface proof, and deterministic successor-lane receipts
+      directly.
+  route_specific_compare_pack:
+    summary: Keep SR6 supplement and house-rule parity grounded in route-local proof
+      by pairing the rule-environment studio route with successor-lane receipts and
+      screenshot review markers.
+    route_receipts:
+    - route_id: workflow:sr6_supplements
+      proof_receipts:
+      - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md
+      required_tokens:
+      - Sr6SuccessorLaneDeterministicReceipt
+      - family:sr6_supplements_designers_and_house_rules
+      - supplement
+      receipt_checks:
+      - path: /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md
+        required_tokens:
+        - Sr6SuccessorLaneDeterministicReceipt
+        - family:sr6_supplements_designers_and_house_rules
+        - supplement
+        missing_tokens: []
+      status: pass
+    - route_id: workflow:house_rules
+      proof_receipts:
+      - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md
+      required_tokens:
+      - Sr6SuccessorLaneDeterministicReceipt
+      - family:sr6_supplements_designers_and_house_rules
+      - house-rule
+      receipt_checks:
+      - path: /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md
+        required_tokens:
+        - Sr6SuccessorLaneDeterministicReceipt
+        - family:sr6_supplements_designers_and_house_rules
+        - house-rule
+        missing_tokens: []
+      status: pass
+    - route_id: surface:rule_environment_studio
+      proof_receipts:
+      - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M114_UI_RULE_STUDIO.generated.json
+      required_tokens:
+      - rule_environment_studio
+      receipt_checks:
+      - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M114_UI_RULE_STUDIO.generated.json
+        required_tokens:
+        - rule_environment_studio
+        missing_tokens: []
+      status: pass
+  artifact_proof_pack:
+    screenshot_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    required_screenshot_markers:
+    - sr6_rule_environment
+    - sr6_supplements
+    - house_rules
+    missing_screenshot_markers: []
+    output_receipts: []
+    required_output_tokens: []
+    missing_output_tokens: []
+    status: pass
+  fleet_closeout_gate_receipts:
+    missing_route_receipts: []
+    satisfied_route_receipts:
+    - workflow:sr6_supplements
+    - workflow:house_rules
+    - surface:rule_environment_studio
+    - screenshot:sr6_supplements_and_house_rules
+  evidence_paths:
+  - /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M114_UI_RULE_STUDIO.generated.json
+  - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md
+whole_product_frontier_coverage:
+  readiness_status: fail
+  desktop_client_status: warning
+  missing_keys: []
+  summary: 'flagship product readiness proof is not green: fail; warning coverage:
+    desktop_client; readiness plane gaps: flagship_ready, veteran_deep_workflow_ready,
+    dense_workbench_ready, recovery_trust_ready, sr6_parity_ready'
+source_inputs:
+  task_local_telemetry:
+    path: /var/lib/codex-fleet/chummer_design_supervisor/shard-14/runs/20260506T005401Z-shard-14/TASK_LOCAL_TELEMETRY.generated.json
+    generated_at: '2026-05-06T00:54:01Z'
+    sha256: 4a3ab685c8caae1aef50bdc615e789baae3d1300ddab0bf7e6123fb04d0bb4cd
+  readiness:
+    path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+    generated_at: '2026-05-06T00:48:24Z'
+    sha256: 4072cfb95ef34bb3fea4b9baaa01621ed2ed77f5b443caabfea659991126fee7
+  workflow_pack:
+    path: /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
+    generated_at: '2026-05-05 23:16:04+00:00'
+    sha256: b3b6a126c28164e1537f964b85af956eb2eabea4601250b1303d36f0dd481e42
+  parity_audit:
+    path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json
+    generated_at: '2026-05-05T20:18:25.423992Z'
+    sha256: f3c49d2ae579122006f6935d9280349ba110878b49b171fdc89a8ed015aac450
+  screenshot_review_gate:
+    path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    generated_at: '2026-05-06T00:05:48.381309Z'
+    sha256: 5b214919e105486593237698f90c579f1b45cd093e7358fdd9424620f87ca61a
+  section_host_ruleset_parity:
+    path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+    generated_at: '2026-04-23T15:52:14.898217Z'
+    sha256: bea6baea26fb0b81a2fc7b32e5619490bd09385b2712e94fc7c2cc64837efbf5
+  generated_dialog_parity:
+    path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json
+    generated_at: '2026-05-04T20:21:16.770780Z'
+    sha256: 246406108e10d777e6bcd2586d360bf8aadc163a3ef45c169b8e4c276e4dd5af
+  m114_rule_studio:
+    path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M114_UI_RULE_STUDIO.generated.json
+    generated_at: '2026-05-05T10:18:21Z'
+    sha256: ab26f0c677322e267b92fe577f7083688b3c3de6e7de7d02eb9f5d0c43c23c92
+  core_m143_receipts_doc:
+    path: /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md
+    generated_at: '2026-05-05T10:33:05Z'
+    sha256: 0615c3a1cc3e8096dd01d7a85af7eee8595e4aade17b87af80ba0513c9650c1a
+  fleet_m143_gate:
+    path: /docker/fleet/.codex-studio/published/NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.json
+    generated_at: '2026-05-05T22:23:27Z'
+    sha256: d30032a6d021173cf14967b2fd5041585f4d353ed6214cc12fba8409564bbcf7

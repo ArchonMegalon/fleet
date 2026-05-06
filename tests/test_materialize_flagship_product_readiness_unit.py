@@ -41,3 +41,17 @@ def test_live_fleet_horizon_mirror_matches_canonical_doc_set() -> None:
 
     assert canonical_names
     assert mirror_names == canonical_names
+
+
+def test_supervisor_state_root_alias_to_chummer_design_supervisor() -> None:
+    module = _load_module()
+
+    assert module._supervisor_state_root(Path("/docker/fleet/state/design-supervisor/state.json")) == Path(
+        "/docker/fleet/state/chummer_design_supervisor"
+    )
+    assert module._supervisor_state_root(Path("/docker/fleet/state/design-supervisor/shard-7")) == Path(
+        "/docker/fleet/state/chummer_design_supervisor/shard-7"
+    )
+    assert module._supervisor_state_root(Path("/docker/fleet/state/design-supervisor/orphaned-shard-7")) == Path(
+        "/docker/fleet/state/chummer_design_supervisor/orphaned-shard-7"
+    )

@@ -7,11 +7,11 @@
   ],
   "canonical_alignment": {
     "design_queue_status": "complete",
-    "fleet_queue_status": "not_started",
+    "fleet_queue_status": "complete",
     "issues": [],
     "registry_status": "not_started",
     "state": "pass",
-    "work_task_status": "",
+    "work_task_status": "complete",
     "work_task_title": "Add provider-health, credit-runway, kill-switch, fallback, and route-stewardship monitors for all governed external tools."
   },
   "canonical_monitors": {
@@ -58,12 +58,12 @@
   },
   "contract_name": "fleet.next90_m130_provider_stewardship_monitor",
   "frontier_id": 7382989835,
-  "generated_at": "2026-05-05T21:16:02Z",
+  "generated_at": "2026-05-06T10:38:54Z",
   "governor_monitors": {
     "canary_reason": "Canary evidence is still accumulating",
     "canary_state": "accumulating",
     "current_launch_action": "freeze_launch",
-    "current_launch_reason": "Freeze launch expansion while 1 golden journey(s) remain blocked and journey health is blocked.",
+    "current_launch_reason": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
     "freeze_launch_state": "active",
     "issues": [],
     "provider_canary_gate": {
@@ -72,11 +72,11 @@
       "state": "accumulating"
     },
     "rollback_reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-    "rollback_state": "watch",
+    "rollback_state": "armed",
     "state": "pass",
     "warnings": [
       "Provider canary remains accumulating.",
-      "Rollback posture remains watch.",
+      "Rollback posture remains armed.",
       "Current launch action is freeze_launch."
     ]
   },
@@ -90,7 +90,7 @@
     "warnings": [
       "Fallback coverage is thin for core, core_authority, core_booster, core_rescue, groundwork.",
       "Provider canary remains accumulating.",
-      "Rollback posture remains watch.",
+      "Rollback posture remains armed.",
       "Current launch action is freeze_launch."
     ]
   },
@@ -309,21 +309,21 @@
       ]
     },
     "runtime_healing_summary": {
-      "generated_at": "2026-05-05T21:13:42Z",
+      "generated_at": "2026-05-06T10:38:48Z",
       "service_count": 4,
-      "source_age_seconds": 140
+      "source_age_seconds": 6
     }
   },
   "source_inputs": {
     "admin_status": {
-      "generated_at": "2026-05-05T21:13:43Z",
+      "generated_at": "2026-05-06T10:38:49Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT90_M130_FLEET_PROVIDER_STEWARDSHIP.admin_status.generated.json",
-      "sha256": "3408f3795256726fdd1ada78f60bd66efb106d6e4bcc5e5bec40171093fdc424"
+      "sha256": "ae16900c22ec3f77fb2ff01e75dd57349ebcea2be024012ea71985010c484428"
     },
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "becc30893c8f7951a63d1396f49925893dc3430fd6cbbe8ef6fa5d5d4d9b71e0"
+      "sha256": "7acb185a4361263f439c6a4810d41e1e1b7dde9d0e48680b072a62efaee9dd5a"
     },
     "external_tools_plane": {
       "generated_at": "",
@@ -336,9 +336,9 @@
       "sha256": "720129880358d676f1aa7cc49620e2b2bdca2f4995dbdd051c4316375d67b4b7"
     },
     "provider_credit": {
-      "generated_at": "2026-05-05T21:13:49Z",
+      "generated_at": "2026-05-06T10:38:54Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT90_M130_FLEET_PROVIDER_STEWARDSHIP.provider_credit.generated.json",
-      "sha256": "2a2061e90f83caac034af05ff0d6711b8cd52c920a45b748c2ac5b3a33cd15cf"
+      "sha256": "32c7283def8f7bc3f2b7d3d0b5db80feaf1e7bec6d5a782ac7af699dea0131f1"
     },
     "provider_route_stewardship": {
       "generated_at": "",
@@ -348,17 +348,17 @@
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "661e2df6d0d97211458441087fe37fd68073f64dd3915e7755112bd520bee33d"
+      "sha256": "205f5ec82ad2e88c7004babb69da5ff41828070eea185b5308d82ad77bfdb85c"
     },
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "9f4f93305afddf9cf95c2b515c6e9ceced71e435389e2a49fc0e0bc4f19395c7"
+      "sha256": "bea71f9b1acef8933909460febac9eb8bde65ed06fb32556b3257138647f4e63"
     },
     "weekly_governor_packet": {
-      "generated_at": "2026-05-05T21:13:09Z",
+      "generated_at": "2026-05-06T10:31:12Z",
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
-      "sha256": "c96f2c935f702d67debd749f060d5f1e73c9f1afb34604254ec1d69013ba9873"
+      "sha256": "c9fe97e23997eabdebb7500bf700850a35b65aba6005345921db0ac2ec7846e9"
     }
   },
   "status": "pass",

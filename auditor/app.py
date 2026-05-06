@@ -2215,7 +2215,15 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
                 )
 
         stale_tasks = conn.execute(
-            "SELECT scope_type, scope_id, finding_key, task_index FROM audit_task_candidates WHERE source='fleet-auditor' AND status IN ('open','approved','published')"
+            """
+            SELECT scope_type, scope_id, finding_key, task_index
+            FROM audit_task_candidates
+            WHERE source='fleet-auditor'
+              AND (
+                status IN ('open', 'approved')
+                OR (status='published' AND resolved_at IS NULL)
+              )
+            """
         ).fetchall()
         for row in stale_tasks:
             key = (row["scope_type"], row["scope_id"], row["finding_key"], int(row["task_index"]))

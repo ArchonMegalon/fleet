@@ -4,7 +4,6 @@ set -euo pipefail
 fleet_root="/docker/fleet"
 readiness_out="$fleet_root/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json"
 readiness_state_mirror_out="$fleet_root/state/chummer_design_supervisor/artifacts/FLAGSHIP_PRODUCT_READINESS.generated.json"
-readiness_design_mirror_out="$fleet_root/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json"
 state_root_default="$fleet_root/state/chummer_design_supervisor"
 ui_refresh_wait_timeout_seconds="${CHUMMER_FLAGSHIP_UI_REFRESH_WAIT_TIMEOUT_SECONDS:-1800}"
 ui_refresh_poll_interval_seconds="${CHUMMER_FLAGSHIP_UI_REFRESH_POLL_INTERVAL_SECONDS:-5}"
@@ -212,10 +211,13 @@ wait_for_ui_refresh "$baseline_ui_flagship_mtime" "$baseline_ui_visual_mtime"
 
 cd "$fleet_root"
 python3 scripts/codex-shims/codexea_ui_parity_audit_probe.py
+python3 scripts/materialize_next90_m142_ea_family_local_proof_packs.py
+python3 scripts/verify_next90_m142_ea_family_local_proof_packs.py
+python3 scripts/materialize_next90_m142_fleet_route_local_proof_closeout_gates.py
+python3 scripts/verify_next90_m142_fleet_route_local_proof_closeout_gates.py --json
 python3 scripts/materialize_next90_m136_fleet_aggregate_readiness_parity_gates.py
 python3 scripts/materialize_next90_m138_fleet_hero_path_projections.py
 python3 scripts/materialize_next90_m138_fleet_hero_path_closeout_gates.py
 python3 scripts/materialize_flagship_product_readiness.py --out "$readiness_out" --mirror-out "$readiness_state_mirror_out"
-cp "$readiness_out" "$readiness_design_mirror_out"
 python3 scripts/materialize_weekly_governor_packet.py
 refresh_full_product_frontier

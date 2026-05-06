@@ -52,7 +52,7 @@
   },
   "contract_name": "fleet.next90_m135_design_queued_coverage",
   "frontier_id": 7361549676,
-  "generated_at": "2026-05-06T04:09:59Z",
+  "generated_at": "2026-05-06T04:08:44Z",
   "milestone_id": 135,
   "monitor_summary": {
     "design_coverage_status": "warning",
@@ -230,7 +230,7 @@
       ]
     },
     "status_plane": {
-      "age_hours": 15.35,
+      "age_hours": 15.33,
       "expected_owner_project_ids": [
         "core",
         "design",

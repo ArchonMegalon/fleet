@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -71,7 +72,7 @@ def _queue_item(*, closeout_complete: bool) -> dict:
     if closeout_complete:
         row["status"] = "complete"
         row["completion_action"] = "verify_closed_package_only"
-        row["landed_commit"] = "unlanded"
+        row["landed_commit"] = "c851228a"
         row["do_not_reopen_reason"] = (
             "M143 fleet route-local output closeout gate is complete; future shards must verify the repo-local gate scripts, "
             "generated proof artifacts, and canonical queue/registry mirrors instead of reopening print or export or exchange "
@@ -101,6 +102,78 @@ def _workflow_pack_payload() -> dict:
             {
                 "id": "sr6_supplements_designers_and_house_rules",
                 "compare_artifacts": ["workflow:sr6_supplements", "workflow:house_rules"],
+            },
+        ],
+        "route_specific_compare_packs": [
+            {
+                "family_id": "sheet_export_print_viewer_and_exchange",
+                "compare_artifacts": ["menu:open_for_printing", "menu:open_for_export", "menu:file_print_multiple"],
+                "route_proofs": [
+                    {
+                        "route_id": "menu:open_for_printing",
+                        "proof_receipts": ["/tmp/SECTION_HOST_RULESET_PARITY.generated.json"],
+                        "required_tokens": ["open_for_printing"],
+                    },
+                    {
+                        "route_id": "menu:open_for_export",
+                        "proof_receipts": ["/tmp/SECTION_HOST_RULESET_PARITY.generated.json"],
+                        "required_tokens": ["open_for_export"],
+                    },
+                    {
+                        "route_id": "menu:file_print_multiple",
+                        "proof_receipts": ["/tmp/GENERATED_DIALOG_ELEMENT_PARITY.generated.json"],
+                        "required_tokens": ["print_multiple"],
+                    },
+                ],
+                "artifact_proofs": {
+                    "screenshot_receipts": ["/tmp/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json"],
+                    "required_screenshot_markers": [
+                        "print_export_exchange",
+                        "open_for_printing_menu_route",
+                        "open_for_export_menu_route",
+                        "print_multiple_menu_route",
+                    ],
+                    "output_receipts": ["/tmp/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md"],
+                    "required_output_tokens": [
+                        "WorkspaceExchangeDeterministicReceipt",
+                        "family:sheet_export_print_viewer_and_exchange",
+                    ],
+                },
+            },
+            {
+                "family_id": "sr6_supplements_designers_and_house_rules",
+                "compare_artifacts": ["workflow:sr6_supplements", "workflow:house_rules"],
+                "route_proofs": [
+                    {
+                        "route_id": "workflow:sr6_supplements",
+                        "proof_receipts": ["/tmp/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md"],
+                        "required_tokens": [
+                            "Sr6SuccessorLaneDeterministicReceipt",
+                            "family:sr6_supplements_designers_and_house_rules",
+                            "supplement",
+                        ],
+                    },
+                    {
+                        "route_id": "workflow:house_rules",
+                        "proof_receipts": ["/tmp/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md"],
+                        "required_tokens": [
+                            "Sr6SuccessorLaneDeterministicReceipt",
+                            "family:sr6_supplements_designers_and_house_rules",
+                            "house-rule",
+                        ],
+                    },
+                    {
+                        "route_id": "surface:rule_environment_studio",
+                        "proof_receipts": ["/tmp/NEXT90_M114_UI_RULE_STUDIO.generated.json"],
+                        "required_tokens": ["rule_environment_studio"],
+                    },
+                ],
+                "artifact_proofs": {
+                    "screenshot_receipts": ["/tmp/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json"],
+                    "required_screenshot_markers": ["sr6_rule_environment", "sr6_supplements", "house_rules"],
+                    "output_receipts": [],
+                    "required_output_tokens": [],
+                },
             },
         ],
     }
@@ -311,6 +384,7 @@ class MaterializeNext90M143FleetRouteLocalOutputCloseoutGatesTest(unittest.TestC
             assert payload["status"] == "pass"
             assert payload["monitor_summary"]["route_local_output_closeout_status"] == "pass"
             assert payload["package_closeout"]["ready"] is True
+            assert markdown.read_text(encoding="utf-8").count("compare_artifacts=") == 2
 
     def test_materializer_blocks_when_rows_still_close_on_family_prose_and_missing_receipts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -384,6 +458,46 @@ class MaterializeNext90M143FleetRouteLocalOutputCloseoutGatesTest(unittest.TestC
             assert payload["status"] == "fail"
             assert payload["package_closeout"]["ready"] is False
             assert any("status must be complete" in item or "queue status drifted" in item for item in payload["package_closeout"]["reasons"])
+
+    def test_materializer_blocks_when_route_local_receipts_doc_is_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, direct=True)
+            stale_timestamp = 0
+            os.utime(fixture["core_doc"], (stale_timestamp, stale_timestamp))
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--output", str(artifact),
+                    "--markdown-output", str(markdown),
+                    "--successor-registry", str(fixture["registry"]),
+                    "--fleet-queue-staging", str(fixture["fleet_queue"]),
+                    "--design-queue-staging", str(fixture["design_queue"]),
+                    "--next90-guide", str(fixture["guide"]),
+                    "--workflow-pack", str(fixture["workflow_pack"]),
+                    "--parity-audit", str(fixture["parity_audit"]),
+                    "--screenshot-review-gate", str(fixture["screenshot_gate"]),
+                    "--desktop-visual-familiarity-gate", str(fixture["visual_gate"]),
+                    "--section-host-ruleset-parity", str(fixture["section_host"]),
+                    "--generated-dialog-parity", str(fixture["dialog_parity"]),
+                    "--m114-rule-studio", str(fixture["rule_studio"]),
+                    "--core-m143-receipts-doc", str(fixture["core_doc"]),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            assert payload["status"] == "pass"
+            assert payload["package_closeout"]["ready"] is False
+            assert any(
+                "core_m143_receipts_doc is stale" in item
+                for item in payload["monitor_summary"]["runtime_blockers"]
+            )
 
 
 if __name__ == "__main__":

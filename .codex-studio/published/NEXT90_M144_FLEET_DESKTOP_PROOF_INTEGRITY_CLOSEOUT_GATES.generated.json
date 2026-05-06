@@ -17,7 +17,7 @@
   },
   "contract_name": "fleet.next90_m144_desktop_proof_integrity_closeout_gates",
   "frontier_id": 4185937434,
-  "generated_at": "2026-05-06T03:53:17Z",
+  "generated_at": "2026-05-06T04:48:09Z",
   "milestone_id": 144,
   "monitor_summary": {
     "canonical_issue_count": 0,
@@ -1123,7 +1123,7 @@
         "parity_registry_unresolved_families": [],
         "parity_registry_unresolved_family_count": 0,
         "parity_registry_unresolved_family_ids": [],
-        "release_channel_age_seconds": 30503,
+        "release_channel_age_seconds": 34177,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_generated_at": "2026-05-05T19:17:52Z",
@@ -1189,16 +1189,16 @@
           "avalonia:win-x64"
         ],
         "sr4_sr6_frontier_receipt_external_only_missing_api_surface_contract": true,
-        "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
+        "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer-presentation-clean/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
         "sr4_sr6_frontier_receipt_status": "pass",
         "sr4_workflow_parity_effective_ready": true,
         "sr4_workflow_parity_external_only_missing_api_surface_contract": false,
-        "sr4_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
+        "sr4_workflow_parity_path": "/docker/chummercomplete/chummer-presentation-clean/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
         "sr4_workflow_parity_status": "pass",
         "sr6_workflow_parity_effective_ready": true,
         "sr6_workflow_parity_external_only_missing_api_surface_contract": false,
-        "sr6_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
-        "sr6_workflow_parity_status": "fail",
+        "sr6_workflow_parity_path": "/docker/chummercomplete/chummer-presentation-clean/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
+        "sr6_workflow_parity_status": "pass",
         "ui_element_parity_audit_behavioral_no_count": 0,
         "ui_element_parity_audit_missing_required_ids": [],
         "ui_element_parity_audit_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
@@ -1229,7 +1229,7 @@
         "ui_executable_exit_gate_reason_count": 0,
         "ui_executable_exit_gate_reasons": [],
         "ui_executable_exit_gate_status": "pass",
-        "ui_executable_gate_age_seconds": 12546,
+        "ui_executable_gate_age_seconds": 16220,
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_freshness_max_age_seconds": 86400,
@@ -1516,11 +1516,16 @@
         ],
         "ui_workflow_execution_gate_unresolved_receipts_sr4_sr6_only": true,
         "ui_workflow_parity_effective_ready": true,
-        "ui_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
+        "ui_workflow_parity_path": "/docker/chummercomplete/chummer-presentation-clean/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
         "ui_workflow_parity_recovered_from_workflow_execution_gate": true,
-        "ui_workflow_parity_status": "fail"
+        "ui_workflow_parity_status": "pass"
       },
       "flagship_status": "pass",
+      "issues": [],
+      "runtime_blockers": [],
+      "state": "pass"
+    },
+    "promoted_tuple_matrix": {
       "issues": [],
       "runtime_blockers": [],
       "state": "pass"
@@ -1671,10 +1676,10 @@
   },
   "source_inputs": {
     "design_queue_staging": {
-      "generated_at": "2026-05-06T03:52:37Z",
+      "generated_at": "2026-05-06T04:44:49Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
+      "sha256": "05fe2feeafae90da905daddb4ca72f757e22bea85ce8e9f8563a823e316308af"
     },
     "desktop_executable_exit_gate": {
       "generated_at": "2026-05-06T00:17:08.637885Z",
@@ -1683,16 +1688,16 @@
       "sha256": "ca0b1a64f8829cbdd01b6ff72d4e9b5334325f21eecbbb3807da22077151169d"
     },
     "flagship_readiness": {
-      "generated_at": "2026-05-06T03:46:15Z",
+      "generated_at": "2026-05-06T04:47:31Z",
       "generated_at_source": "payload",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "6b0deebe8c7badddd81a8c735cceee33aec8ca7cfed5b655239860d3c431e5ef"
+      "sha256": "8c0b788abe5d9baa6337c5633d326a71a38accab4c686d4b7b1aae2d7818dac0"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-05-06T03:52:37Z",
+      "generated_at": "2026-05-06T04:44:49Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
+      "sha256": "94c5042dc2adb91991decdfdabcd2c9a5d09352df51f9ce19917fb7ed7380c6a"
     },
     "next90_guide": {
       "generated_at": "2026-05-05T19:47:04Z",
@@ -1713,10 +1718,10 @@
       "sha256": "a93c1801197886ae22ea192d0be5cf602a17efcd77881bac83fa16c5ef08b55f"
     },
     "successor_registry": {
-      "generated_at": "2026-05-06T03:52:37Z",
+      "generated_at": "2026-05-06T04:44:49Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "e360e1a7a36249a35a10be5f9a97e7f37053041171905b494db3bac67dd49ab1"
+      "sha256": "57f005675cf6c790f22a77d0b033697d3d713a1eb6722be26886f9c87ed585e6"
     },
     "ui_windows_exit_gate": {
       "generated_at": "2026-05-05T23:47:20Z",

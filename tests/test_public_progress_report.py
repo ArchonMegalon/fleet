@@ -595,6 +595,24 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertIn("desktop visual-familiarity gate is green", payload["parity"]["summary"])
         self.assertTrue(any(risk.get("key") == "flagship_release_truth" for risk in payload["top_risks"]))
 
+    def test_design_supervisor_state_root_aliases_to_chummer_design_supervisor(self) -> None:
+        self.assertEqual(
+            self.progress._design_supervisor_state_root(Path("/docker/fleet/state/design-supervisor/state.json")),
+            Path("/docker/fleet/state/chummer_design_supervisor"),
+        )
+        self.assertEqual(
+            self.progress._design_supervisor_state_root(
+                Path("/docker/fleet/state/design-supervisor/shard-7/state.json"),
+            ),
+            Path("/docker/fleet/state/chummer_design_supervisor/shard-7"),
+        )
+        self.assertEqual(
+            self.progress._design_supervisor_state_root(
+                Path("/docker/fleet/state/design-supervisor/orphaned-shard-7/state.json"),
+            ),
+            Path("/docker/fleet/state/chummer_design_supervisor/orphaned-shard-7"),
+        )
+
     def test_repo_local_backlog_snapshot_dedupes_same_task_across_multiple_queue_sources(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -840,11 +858,42 @@ class PublicProgressReportTests(unittest.TestCase):
             if str(row.get("path") or "").strip()
         }
 
-        expected_report = self.progress.build_progress_report_payload(
-            repo_root=repo_root,
-            as_of=dt.date.fromisoformat(str(actual_report["as_of"])),
-            commit_counter=lambda repo: commit_counts.get(Path(repo).resolve(), 0),
-        )
+        actual_full_queue = actual_report["full_product_queue"]
+        actual_full_queue_eta = actual_full_queue.get("eta") or {}
+        supervisor_state_snapshot = {
+            "mode": actual_full_queue.get("mode"),
+            "frontier_ids": list(actual_full_queue.get("active_frontier_ids") or []),
+            "open_milestone_ids": list(actual_full_queue.get("open_milestone_ids") or []),
+            "active_runs_count": int(actual_full_queue.get("active_runs_count") or 0),
+            "active_runs": [],
+            "eta": {
+                "eta_human": actual_full_queue_eta.get("eta_human"),
+                "scope_kind": actual_full_queue_eta.get("scope_kind"),
+                "scope_label": actual_full_queue_eta.get("scope_label"),
+                "scope_warning": actual_full_queue_eta.get("scope_warning"),
+                "remaining_open_milestones": int(
+                    actual_full_queue_eta.get("remaining_open_milestones") or 0
+                ),
+                "remaining_in_progress_milestones": int(
+                    actual_full_queue_eta.get("remaining_in_progress_milestones") or 0
+                ),
+                "remaining_not_started_milestones": int(
+                    actual_full_queue_eta.get("remaining_not_started_milestones") or 0
+                ),
+                "status": actual_full_queue_eta.get("eta_status") or "unknown",
+            },
+        }
+
+        with mock.patch.object(
+            self.progress,
+            "_load_chummer_design_supervisor_state",
+            return_value=supervisor_state_snapshot,
+        ):
+            expected_report = self.progress.build_progress_report_payload(
+                repo_root=repo_root,
+                as_of=dt.date.fromisoformat(str(actual_report["as_of"])),
+                commit_counter=lambda repo: commit_counts.get(Path(repo).resolve(), 0),
+            )
         expected_history = self.progress.merge_progress_history(actual_history, expected_report)
         expected_report["history_snapshot_count"] = int(expected_history.get("snapshot_count") or 0)
         expected_report.setdefault("method", {})["history_snapshot_count"] = int(expected_history.get("snapshot_count") or 0)

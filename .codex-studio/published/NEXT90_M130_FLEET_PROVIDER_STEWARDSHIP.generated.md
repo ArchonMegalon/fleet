@@ -3,7 +3,7 @@
 - status: pass
 - package_id: next90-m130-fleet-add-provider-health-credit-runway-kill-switch-fallback-a
 - frontier_id: 7382989835
-- generated_at: 2026-05-05T21:16:02Z
+- generated_at: 2026-05-06T10:38:54Z
 
 ## Runtime posture
 - governed routes: 12
@@ -17,7 +17,7 @@
 ## Governor posture
 - launch action: freeze_launch
 - canary state: accumulating
-- rollback state: watch
+- rollback state: armed
 
 ## Canon posture
 - external-tool inventory count: 40
@@ -30,5 +30,5 @@
 - warnings:
   - Fallback coverage is thin for core, core_authority, core_booster, core_rescue, groundwork.
   - Provider canary remains accumulating.
-  - Rollback posture remains watch.
+  - Rollback posture remains armed.
   - Current launch action is freeze_launch.

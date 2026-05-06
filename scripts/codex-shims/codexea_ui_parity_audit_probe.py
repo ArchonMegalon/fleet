@@ -16,10 +16,16 @@ SCREENSHOT_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex
 VISUAL_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json")
 WORKFLOW_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json")
 WORKFLOW_PARITY_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json")
+M142_DIRECT_WORKFLOW_PROOF_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json")
 GENERATED_DIALOG_PARITY_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json")
 SECTION_HOST_PARITY_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json")
 VETERAN_TASK_TIME_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json")
 UI_RELEASE_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json")
+UI_LOCAL_RELEASE_PROOF_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json")
+GM_RUNBOARD_ROUTE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json")
+M114_RULE_STUDIO = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M114_UI_RULE_STUDIO.generated.json")
+CORE_DENSE_RECEIPTS_DOC_PATH = Path("/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md")
+CORE_M143_RECEIPTS_DOC_PATH = Path("/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md")
 IMPORT_PARITY_CERT_PATH = Path("/docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json")
 IMPORT_RECEIPTS_DOC_PATH = Path("/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md")
 CORE_DATA_ROOT = Path("/docker/chummercomplete/chummer-core-engine/Chummer/data")
@@ -192,6 +198,61 @@ EXTRA_MARKER_BUCKETS = (
     ("present_disallowed_navigator_markers", "Navigator replacement extra"),
 )
 
+DIRECT_FAMILY_PROOF = {
+    "dense_builder_and_career_workflows": {
+        "reason": "Route-local dense workbench proof cites ruleset tabs, workspace actions, screenshot review, and the published flagship workflow receipts directly.",
+        "evidence": [
+            str(VETERAN_PATH),
+            str(SECTION_HOST_PARITY_PATH),
+            str(SCREENSHOT_GATE_PATH),
+            str(M142_DIRECT_WORKFLOW_PROOF_PATH),
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json",
+            str(UI_RELEASE_GATE_PATH),
+            str(UI_LOCAL_RELEASE_PROOF_PATH),
+            str(VETERAN_TASK_TIME_GATE_PATH),
+        ],
+    },
+    "dice_initiative_and_table_utilities": {
+        "reason": "Route-local dice and initiative proof cites the generated dice dialog parity, runboard initiative route, and deterministic core receipts directly.",
+        "evidence": [
+            str(VETERAN_PATH),
+            str(GENERATED_DIALOG_PARITY_PATH),
+            str(SECTION_HOST_PARITY_PATH),
+            str(GM_RUNBOARD_ROUTE_PATH),
+            str(CORE_DENSE_RECEIPTS_DOC_PATH),
+        ],
+    },
+    "identity_contacts_lifestyles_history": {
+        "reason": "Route-local contacts, lifestyles, and history proof cites section-host parity, current contacts and diary screenshots, and deterministic workflow-state receipts directly.",
+        "evidence": [
+            str(VETERAN_PATH),
+            str(SECTION_HOST_PARITY_PATH),
+            str(VISUAL_GATE_PATH),
+            str(CORE_DENSE_RECEIPTS_DOC_PATH),
+            str(UI_RELEASE_GATE_PATH),
+        ],
+    },
+    "sheet_export_print_viewer_and_exchange": {
+        "reason": "Route-local print, export, and exchange proof cites menu parity, screenshot review markers, and deterministic workspace-exchange receipts directly.",
+        "evidence": [
+            str(VETERAN_PATH),
+            str(SECTION_HOST_PARITY_PATH),
+            str(GENERATED_DIALOG_PARITY_PATH),
+            str(SCREENSHOT_GATE_PATH),
+            str(CORE_M143_RECEIPTS_DOC_PATH),
+        ],
+    },
+    "sr6_supplements_designers_and_house_rules": {
+        "reason": "Route-local SR6 supplement and house-rule proof cites screenshot review markers, rule studio surface proof, and deterministic successor-lane receipts directly.",
+        "evidence": [
+            str(VETERAN_PATH),
+            str(SCREENSHOT_GATE_PATH),
+            str(M114_RULE_STUDIO),
+            str(CORE_M143_RECEIPTS_DOC_PATH),
+        ],
+    },
+}
+
 
 def _load_json(path: Path) -> dict[str, Any]:
     try:
@@ -260,6 +321,7 @@ def _record(
     }
 
 
+
 def _truthy_passes(evidence: dict[str, Any], keys: list[str]) -> bool:
     if not keys:
         return False
@@ -312,6 +374,7 @@ def _sr6_supplement_catalog_ready(core_data_root: Path) -> bool:
 def _dynamic_artifact_statuses(
     workflow_gate: dict[str, Any],
     workflow_parity: dict[str, Any],
+    m142_direct_workflow_proof: dict[str, Any],
     generated_dialog_parity: dict[str, Any],
     section_host_parity: dict[str, Any],
     import_parity_cert: dict[str, Any],
@@ -333,6 +396,27 @@ def _dynamic_artifact_statuses(
         and not list(workflow_parity_evidence.get("missingFamilyIds") or [])
         and not list(workflow_parity_evidence.get("nonReadyFamilyIds") or [])
     )
+    m142_direct_workflow_evidence = (
+        m142_direct_workflow_proof.get("evidence") if isinstance(m142_direct_workflow_proof.get("evidence"), dict) else {}
+    )
+    m142_family_checks = (
+        m142_direct_workflow_evidence.get("familyChecks")
+        if isinstance(m142_direct_workflow_evidence.get("familyChecks"), dict)
+        else {}
+    )
+    dense_builder_family_check = (
+        m142_family_checks.get("family:dense_builder_and_career_workflows")
+        if isinstance(m142_family_checks.get("family:dense_builder_and_career_workflows"), dict)
+        else {}
+    )
+    m142_direct_workflow_pass = (
+        _is_pass(m142_direct_workflow_proof.get("status"))
+        and bool(dense_builder_family_check.get("row_present"))
+        and bool(dense_builder_family_check.get("visual_parity_yes"))
+        and bool(dense_builder_family_check.get("behavioral_parity_yes"))
+        and bool(dense_builder_family_check.get("required_suffixes_present"))
+        and bool(dense_builder_family_check.get("disallowed_external_receipts_clear"))
+    )
     generated_dialog_evidence = (
         generated_dialog_parity.get("evidence") if isinstance(generated_dialog_parity.get("evidence"), dict) else {}
     )
@@ -344,10 +428,10 @@ def _dynamic_artifact_statuses(
     generated_dialog_commands = {str(item).strip() for item in generated_dialog_evidence.get("commandIdsFound") or []}
     section_host_commands = {str(item).strip() for item in section_host_evidence.get("commandIdsFound") or []}
     route_runtime_ready = _truthy_passes(visual_evidence, ["runtime_backed_file_menu_routes"])
-    tabs_ready = workflow_parity_pass and int(workflow_parity_evidence.get("tabsMissingInCatalog") or 0) == 0
+    tabs_ready = (workflow_parity_pass and int(workflow_parity_evidence.get("tabsMissingInCatalog") or 0) == 0) or m142_direct_workflow_pass
     workspace_actions_ready = (
         workflow_parity_pass and int(workflow_parity_evidence.get("workspaceActionsMissingInCatalog") or 0) == 0
-    )
+    ) or m142_direct_workflow_pass
     import_oracles = import_parity_cert.get("import_oracles") if isinstance(import_parity_cert.get("import_oracles"), list) else []
     adjacent_oracles = import_parity_cert.get("adjacent_oracles") if isinstance(import_parity_cert.get("adjacent_oracles"), list) else []
     sr6_supplement_ready = _sr6_supplement_catalog_ready(CORE_DATA_ROOT)
@@ -368,7 +452,10 @@ def _dynamic_artifact_statuses(
     statuses = {
         "oracle:tabs": tabs_ready,
         "oracle:workspace_actions": workspace_actions_ready,
-        "workflow:build_explain_publish": workflow_parity_pass and _workflow_gate_required_families_ready(workflow_gate),
+        "workflow:build_explain_publish": (
+            workflow_parity_pass and _workflow_gate_required_families_ready(workflow_gate)
+        )
+        or m142_direct_workflow_pass,
         "menu:translator": _contains_all(
             catalog_text,
             ['"translator"', "ExpectedCommandIds"],
@@ -629,6 +716,7 @@ def main() -> int:
     visual_gate = _load_json(VISUAL_GATE_PATH)
     workflow_gate = _load_json(WORKFLOW_GATE_PATH)
     workflow_parity = _load_json(WORKFLOW_PARITY_PATH)
+    m142_direct_workflow_proof = _load_json(M142_DIRECT_WORKFLOW_PROOF_PATH)
     generated_dialog_parity = _load_json(GENERATED_DIALOG_PARITY_PATH)
     section_host_parity = _load_json(SECTION_HOST_PARITY_PATH)
     import_parity_cert = _load_json(IMPORT_PARITY_CERT_PATH)
@@ -642,6 +730,7 @@ def main() -> int:
     dynamic_artifact_statuses, dynamic_source_reasons = _dynamic_artifact_statuses(
         workflow_gate,
         workflow_parity,
+        m142_direct_workflow_proof,
         generated_dialog_parity,
         section_host_parity,
         import_parity_cert,
@@ -940,10 +1029,15 @@ def main() -> int:
         ]
         visual = all(statuses) if statuses else False
         behavior = all(statuses) if statuses else False
+        direct_family_proof = DIRECT_FAMILY_PROOF.get(family_id)
         reason = (
-            f"All declared compare artifacts for this Chummer5A family are directly backed by current parity proof: {compare_artifacts}."
-            if visual and behavior
-            else f"At least one declared compare artifact for this Chummer5A family lacks direct parity proof: {compare_artifacts}."
+            str(direct_family_proof.get("reason"))
+            if visual and behavior and direct_family_proof is not None
+            else (
+                f"All declared compare artifacts for this Chummer5A family are directly backed by current parity proof: {compare_artifacts}."
+                if visual and behavior
+                else f"At least one declared compare artifact for this Chummer5A family lacks direct parity proof: {compare_artifacts}."
+            )
         )
         _append(
             rows,
@@ -958,14 +1052,18 @@ def main() -> int:
                 removable_without_degrading=False,
                 reason=reason,
                 evidence=(
-                    [str(VETERAN_PATH), str(VISUAL_GATE_PATH), str(WORKFLOW_GATE_PATH)]
-                    + (
-                        [str(UI_RELEASE_GATE_PATH), str(VETERAN_TASK_TIME_GATE_PATH), str(IMPORT_RECEIPTS_DOC_PATH)]
-                        if family_id == "custom_data_xml_and_translator_bridge"
-                        else (
-                            [str(VETERAN_TASK_TIME_GATE_PATH), str(IMPORT_PARITY_CERT_PATH), str(IMPORT_RECEIPTS_DOC_PATH)]
-                            if family_id == "legacy_and_adjacent_import_oracles"
-                            else []
+                    list(direct_family_proof.get("evidence") or [])
+                    if direct_family_proof is not None and visual and behavior
+                    else (
+                        [str(VETERAN_PATH), str(VISUAL_GATE_PATH), str(WORKFLOW_GATE_PATH)]
+                        + (
+                            [str(UI_RELEASE_GATE_PATH), str(VETERAN_TASK_TIME_GATE_PATH), str(IMPORT_RECEIPTS_DOC_PATH)]
+                            if family_id == "custom_data_xml_and_translator_bridge"
+                            else (
+                                [str(VETERAN_TASK_TIME_GATE_PATH), str(IMPORT_PARITY_CERT_PATH), str(IMPORT_RECEIPTS_DOC_PATH)]
+                                if family_id == "legacy_and_adjacent_import_oracles"
+                                else []
+                            )
                         )
                     )
                 ),

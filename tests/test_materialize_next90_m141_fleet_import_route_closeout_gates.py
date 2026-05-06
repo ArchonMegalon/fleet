@@ -71,7 +71,7 @@ def _queue_item(*, closeout_complete: bool) -> dict:
     if closeout_complete:
         row["status"] = "complete"
         row["completion_action"] = "verify_closed_package_only"
-        row["landed_commit"] = "unlanded"
+        row["landed_commit"] = "c099200f"
         row["do_not_reopen_reason"] = (
             "M141 fleet import-route closeout gate is complete; future shards must verify the repo-local gate scripts, "
             "generated proof artifacts, and canonical queue/registry mirrors instead of reopening the translator, XML, "

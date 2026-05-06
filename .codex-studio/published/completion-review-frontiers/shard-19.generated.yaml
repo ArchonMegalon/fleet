@@ -1,7 +1,7 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-05T20:00:13Z'
-mode: flagship_product
+generated_at: '2026-05-06T19:54:23Z'
+mode: completion_review
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-19
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -49,17 +49,9 @@ focus:
   - replay
   - recap
   - export
-  - whole-project frontier
-  - no lowered standards
-  - feedback loop
-  - crash reporting
-  - support routing
-  - journey smoothness
-  - performance
-  - proof shelf
 completion_audit:
   status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  reason: no supervisor run history recorded; explicit completion review is required
 receipt_audit:
   status: fail
   reason: no supervisor run history recorded; explicit completion review is required
@@ -75,12 +67,13 @@ linux_desktop_exit_gate_audit:
   reason: linux desktop binary build/start/test proof is ready on current repo-local
     evidence
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-  generated_at: '2026-05-05T03:54:10Z'
+  generated_at: '2026-05-06T00:11:38Z'
 weekly_pulse_audit:
-  status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  status: pass
+  reason: weekly product pulse is fresh and reports no remaining drift or blocker
+    pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-05T19:58:59Z'
+  generated_at: '2026-05-06T19:37:39Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -88,9 +81,6 @@ repo_backlog_audit:
   open_project_count: 0
   open_items: []
 blocking_audits:
-- component: weekly_pulse
-  title: Weekly product pulse gaps
-  reason: weekly product pulse reports release health as needs_attention
 - component: trusted_completion_receipt
   title: Trusted completion receipt
   reason: no supervisor run history recorded; explicit completion review is required
@@ -101,12 +91,14 @@ eta:
   status: tracked
   eta_human: tracked
   eta_confidence: low
-  basis: aggregate_shard_eta_scope_mismatch
+  basis: aggregate_shard_parallel_scope
   scope_kind: aggregate_shard_mixed_scope
   scope_label: Aggregate multi-shard ETA
   scope_warning: Aggregate shard status currently mixes multiple ETA scopes. Use the
     ETA command for a fresh whole-fleet forecast instead of reading this as a single
     parity horizon.
   blocking_reason: ''
-  summary: Aggregate shard state currently mixes ETA scopes (aggregate_shard_mixed_scope,
-    flagship_product_readiness). 9 open milestones remain across the active frontier.
+  summary: 15326834450540207376632042945641448095789589405063838156633133651437864929485106867684053826544965810654448511921759360559377067682861
+    open milestones remain (15326834450540207376632042945641448095789589405063838156633133651437864929485106867684053826544965810654448511921759360559377067682861
+    in progress, 0 not started). Aggregate shard status is parallelized across 1 active
+    shards under Aggregate multi-shard ETA.

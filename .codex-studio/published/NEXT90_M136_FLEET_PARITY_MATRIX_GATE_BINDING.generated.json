@@ -134,26 +134,30 @@
       "state": "pass"
     },
     "queue_alignment": {
-      "design_queue_status": "not_started",
+      "design_queue_status": "",
       "fleet_queue_status": "",
-      "issues": [],
-      "state": "pass",
+      "issues": [
+        "Design queue row is missing."
+      ],
+      "state": "fail",
       "warnings": [
         "Fleet queue mirror row is still missing for work task 136.9."
       ],
-      "work_task_status": ""
+      "work_task_status": "complete"
     }
   },
   "contract_name": "fleet.next90_m136_parity_matrix_gate_binding",
   "frontier_id": 4491585022,
-  "generated_at": "2026-05-05T15:36:20Z",
+  "generated_at": "2026-05-06T04:08:46Z",
   "milestone_id": 136,
   "monitor_summary": {
-    "matrix_binding_status": "warning",
+    "matrix_binding_status": "blocked",
     "release_blocking_family_count": 7,
     "required_screenshot_count": 25,
-    "runtime_blocker_count": 0,
-    "runtime_blockers": [],
+    "runtime_blocker_count": 1,
+    "runtime_blockers": [
+      "m136_gate_binding: M136 aggregate-readiness parity gate package is not passing."
+    ],
     "surface_count": 24,
     "warning_count": 1
   },
@@ -161,9 +165,12 @@
     "bind_the_machine_readable_human_parity_matrix_into_audit:fleet"
   ],
   "package_closeout": {
-    "blockers": [],
-    "state": "pass",
+    "blockers": [
+      "queue_alignment: Design queue row is missing."
+    ],
+    "state": "blocked",
     "warnings": [
+      "m136_gate_binding: M136 aggregate-readiness parity gate package is not passing.",
       "Fleet queue mirror row is still missing for work task 136.9."
     ]
   },
@@ -171,9 +178,11 @@
   "queue_title": "Bind the machine-readable human parity matrix into audit/gate consumption so hard families cannot close on prose-only proof.",
   "runtime_monitors": {
     "m136_gate_binding": {
-      "aggregate_readiness_status": "blocked",
+      "aggregate_readiness_status": "pass",
       "issues": [],
-      "runtime_blockers": [],
+      "runtime_blockers": [
+        "M136 aggregate-readiness parity gate package is not passing."
+      ],
       "state": "pass"
     },
     "parity_audit_binding": {
@@ -184,7 +193,7 @@
       "state": "pass"
     },
     "published_flagship_contradiction": {
-      "flagship_status": "fail",
+      "flagship_status": "pass",
       "issues": [],
       "runtime_blockers": [],
       "state": "pass"
@@ -194,7 +203,7 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "11cc1ecd96db0176604771f8f6f398998db558b6167a3e2bd37140a2124ddca6"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "flagship_product_bar": {
       "generated_at": "",
@@ -202,9 +211,9 @@
       "sha256": "8d450f2175f2bd290975db12c0deddbf6e26a3415bec20e906f1ac38cd01c84e"
     },
     "flagship_product_readiness": {
-      "generated_at": "2026-05-05T15:30:46Z",
+      "generated_at": "2026-05-06T04:01:39Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "45129ba1662c813fa2feb74ce7f989f914cc977dbef2e9e35bca94f41d32963b"
+      "sha256": "6407de1f137d225d951be3f4c4164f8a46f1ba7422b597cff5b3adb46c2a5e48"
     },
     "flagship_readiness_planes": {
       "generated_at": "",
@@ -214,17 +223,17 @@
     "flagship_readiness_script": {
       "generated_at": "",
       "path": "/docker/fleet/scripts/materialize_flagship_product_readiness.py",
-      "sha256": "85174cec6bb80bd0a527cd7d7b242dab9cd0dbd78ae871b203491fa438e3ee07"
+      "sha256": "3f27c23e8e8bd76f4133e7ce13d4c91d067e91e85470339c4fed69c068d71602"
     },
     "fleet_queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "6da82d05213bc6ae4f536f75debf5dab04463c91c9b2992df970d392bd3972b1"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "m136_aggregate_gate": {
-      "generated_at": "2026-05-05T15:36:18Z",
+      "generated_at": "2026-05-06T04:08:44Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT90_M136_FLEET_AGGREGATE_READINESS_PARITY_GATES.generated.json",
-      "sha256": "bcd363302b492db95b40211220d22ca84ee7f4bdb68c5de603ec3ecd1c94825b"
+      "sha256": "2608b9b339008d53b1e8f2fdf4738bfedc55369c459b8b13c77426801d1bb501"
     },
     "next90_guide": {
       "generated_at": "",
@@ -232,9 +241,9 @@
       "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
     },
     "parity_audit": {
-      "generated_at": "2026-05-02T14:05:07.691499Z",
+      "generated_at": "2026-05-05T20:18:25.423992Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
-      "sha256": "3ec036f109c6783a7a55e317f55210e1460ee31798455a9e0f2caae96737ebbb"
+      "sha256": "57747a3e1b9571e52beb1f629eb1ca35fc4c7088b24458c311f6a1bdc974359d"
     },
     "parity_matrix": {
       "generated_at": "",
@@ -249,10 +258,10 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "641255112587cbec2c7c43a37dda5a90f6f59e0d2775206517fede2695c233e3"
+      "sha256": "3614d3f739de335843fcf1e7c54a85c6892c310e03ac5e565fffd6de4e399010"
     }
   },
-  "status": "pass",
+  "status": "blocked",
   "wave": "W23",
   "work_task_id": "136.9"
 }

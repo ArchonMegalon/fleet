@@ -7,7 +7,7 @@
     "feedback_forge_candidate_count": 0,
     "first_part_complete_count": 0,
     "first_part_routed_count": 0,
-    "generated_at": "2026-05-05T19:30:34Z",
+    "generated_at": "2026-05-06T20:03:26Z",
     "karma_forge_candidate_count": 0,
     "ltd_discovery_system_missing_tools": [],
     "ltd_discovery_system_ready": true,
@@ -81,7 +81,7 @@
       "release_receipt_id_present": 0,
       "release_receipt_ready": 0
     },
-    "generated_at": "2026-05-05T19:30:34Z",
+    "generated_at": "2026-05-06T20:03:26Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -106,7 +106,7 @@
     "state_counts": {},
     "support_case_backed_count": 0
   },
-  "generated_at": "2026-05-05T19:30:34Z",
+  "generated_at": "2026-05-06T20:03:26Z",
   "packets": [],
   "reporter_followthrough_plan": {
     "action_groups": {
@@ -122,7 +122,7 @@
     "blocked_receipt_mismatch_count": 0,
     "feedback_ready_count": 0,
     "fix_available_ready_count": 0,
-    "generated_at": "2026-05-05T19:30:34Z",
+    "generated_at": "2026-05-06T20:03:26Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -171,7 +171,7 @@
     "design_queue_source_item_count": 0,
     "design_queue_source_item_found": false,
     "design_queue_source_milestone_id": -1,
-    "design_queue_source_path": "",
+    "design_queue_source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
     "design_queue_source_repo": "",
     "design_queue_source_status": "",
     "design_queue_source_task": "",
@@ -432,13 +432,13 @@
   },
   "unresolved_external_proof_execution_plan": {
     "capture_deadline_hours": 24,
-    "capture_deadline_utc": "2026-05-06T19:17:52Z",
+    "capture_deadline_utc": "2026-05-07T19:36:59Z",
     "command_root": "/docker/fleet/.codex-studio/published/external-proof-commands",
-    "generated_at": "2026-05-05T19:30:34Z",
+    "generated_at": "2026-05-06T20:03:26Z",
     "host_groups": {},
     "hosts": [],
     "recommended_action": "No unresolved external desktop host-proof requests remain.",
-    "release_channel_generated_at": "2026-05-05T19:17:52Z",
+    "release_channel_generated_at": "2026-05-06T19:36:59Z",
     "request_count": 0
   }
 }

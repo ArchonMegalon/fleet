@@ -278,6 +278,11 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "### Commands (PowerShell Preflight Wrappers)" in payload
     assert "### Commands (PowerShell Wrappers)" in payload
     assert "### Commands (PowerShell Validation Wrappers)" in payload
+    post_capture_payload = post_capture.read_text(encoding="utf-8")
+    assert (
+        "--mirror-out /docker/fleet/state/chummer_design_supervisor/artifacts/"
+        "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    ) in post_capture_payload
     assert "### Commands (PowerShell Bundle Wrappers)" in payload
     assert "### Commands (PowerShell Ingest Wrappers)" in payload
     assert "```powershell" in payload

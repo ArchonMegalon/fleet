@@ -164,6 +164,35 @@ def test_design_mirror_includes_flagship_desktop_scope_and_review_bar() -> None:
     assert "generic dashboard shell or framework-first installer choice as acceptable modernization" in review_context
 
 
+def test_design_mirror_includes_rules_import_and_flagship_readiness_canon() -> None:
+    required = {
+        "ROADMAP.md",
+        "NEXT_12_BIGGEST_WINS_GUIDE.md",
+        "NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
+        "CONFIDENCE_READINESS_AND_CONTINUITY_GUIDE.md",
+        "CONFIDENCE_READINESS_AND_CONTINUITY_REGISTRY.yaml",
+        "FLAGSHIP_PARITY_REGISTRY.yaml",
+        "CHUMMER5A_HUMAN_PARITY_ACCEPTANCE_SPEC.md",
+        "CHUMMER5A_HUMAN_PARITY_ACCEPTANCE_MATRIX.yaml",
+        "VETERAN_FIRST_MINUTE_GATE.yaml",
+        "DENSE_WORKBENCH_BUDGET.yaml",
+        "PRIMARY_ROUTE_REGISTRY.yaml",
+        "SOURCE_ANCHOR_AND_LOCAL_RULEBOOK_BINDING.md",
+        "RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md",
+        "RULE_ENVIRONMENT_GROUNDED_MEDIA_POLICY.md",
+        "KARMA_FORGE_DISCOVERY_AND_HOUSE_RULE_INTAKE.md",
+        "HOUSE_RULE_DISCOVERY_REGISTRY.yaml",
+    }
+
+    for name in required:
+        assert (PRODUCT_ROOT / name).exists(), name
+
+
+def test_design_mirror_excludes_repo_local_generated_proof_receipts() -> None:
+    assert not (PRODUCT_ROOT / "FLAGSHIP_PRODUCT_READINESS.generated.json").exists()
+    assert not (REVIEW_ROOT / "MIRROR_DRIFT_REPAIR_RECEIPT.generated.json").exists()
+
+
 def test_design_mirror_journey_files_live_under_journeys_directory() -> None:
     required = {
         "build-and-inspect-a-character.md",

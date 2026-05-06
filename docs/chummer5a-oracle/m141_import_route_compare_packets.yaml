@@ -1,0 +1,345 @@
+contract_name: executive_assistant.m141_route_local_compare_packets
+schema_version: 1
+generated_at: '2026-05-06T00:04:56Z'
+milestone:
+  id: 141
+  wave: W22P
+  package_id: next90-m141-ea-compile-route-local-screenshot-packs-and-compare-packets-for-translator-x
+  work_task_id: '141.4'
+  frontier_id: 2841916304
+  owned_surfaces:
+  - compile_route_local_screenshot_packs_and_compare_packets:ea
+sync_context:
+  task_local_telemetry_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-5/runs/20260506T000258Z-shard-5/TASK_LOCAL_TELEMETRY.generated.json
+  task_local_telemetry_snapshot:
+    mode: implementation_only
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    slice_summary: 'Milestone ''Compile route-local screenshot packs and compare packets
+      for translator, XML amendment, Hero Lab, and import-oracle proof without inventing
+      parity.'' remains open under the flagship closeout frontier. Outstanding readiness
+      coverage: desktop_client.'
+    status_query_supported: false
+    polling_disabled: true
+    remaining_open_milestones: 1
+    remaining_not_started_milestones: 1
+    missing_flagship_coverage: desktop_client
+    frontier_briefs:
+    - '2841916304 [flagship_product] Compile route-local screenshot packs and compare
+      packets for translator, XML amendment, Hero Lab, and import-oracle proof without
+      inventing parity. (status: not_started; owners: executive-assistant; deps: none;
+      exit: Compile route-local screenshot packs and compare packets for translator,
+      XML amendment, Hero Lab, and import-oracle proof without inventing parity.;
+      Own and prove the surface slice(s): compile_route_local_screenshot_packs_and_compare_packets:ea;
+      Keep implementation scoped to the allowed paths: scripts, feedback, docs; Refresh
+      flagship proof and close out the queue slice honestly when this package is landed
+      for `executive-assistant` (next90-m141-ea-compile-route-local-screenshot-packs-and-compare-packets-for-translator-x).)'
+  runtime_handoff_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-5/ACTIVE_RUN_HANDOFF.generated.md
+  readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+  readiness_generated_at: '2026-05-05T23:58:17Z'
+  parity_audit_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json
+  parity_audit_generated_at: '2026-05-05T20:18:25.423992Z'
+  screenshot_review_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+  screenshot_review_gate_generated_at: '2026-05-05T23:09:10.229745Z'
+  desktop_visual_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+  desktop_visual_gate_generated_at: '2026-05-06T00:00:28.536600Z'
+  veteran_task_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+  veteran_task_gate_generated_at: '2026-05-05T21:49:04.982611Z'
+  ui_release_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+  ui_release_gate_generated_at: '2026-05-02T14:05:07.728429Z'
+  import_receipts_doc_path: /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+  import_receipts_json_path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
+  import_receipts_json_generated_at: '2026-05-05T22:51:06Z'
+  import_parity_certification_path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+  import_parity_certification_generated_at: '2026-04-04T19:20:00Z'
+worker_run_guard:
+  implementation_only: true
+  polling_disabled: true
+  allowed_evidence_sources:
+  - task-local telemetry file
+  - shard runtime handoff
+  - Chummer5A oracle capture pack
+  - published parity audit and screenshot review receipts
+  - published veteran-task and UI release receipts
+  - published core M141 import receipts
+  blocked_helper_evidence:
+  - supervisor status helpers
+  - supervisor eta helpers
+  - operator-only handoff commands
+route_local_screenshot_packs:
+- id: translator_route
+  parity_audit_row_id: source:translator_route
+  label: Translator route
+  legacy_source_anchor:
+    id: translator_route
+    file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+    line: 808
+    expected_substring: this.mnuToolsTranslator.Text = "&Translator";
+  compare_artifacts:
+  - menu:translator
+  - source:translator_route
+  parity_verdict:
+    present_in_chummer5a: 'yes'
+    present_in_chummer6: 'yes'
+    visual_parity: 'yes'
+    behavioral_parity: 'yes'
+    removable_if_not_in_chummer5a: 'no'
+    reason: Catalog, presenter, dialog-factory, and dual-head acceptance proofs directly
+      cover the Translator route.
+  route_local_screenshot_pack:
+    receipt_id: translator_xml_custom_data
+    workflow_family_id: improvements-explain-result-parity
+    legacy_behavior_lineage: Chummer5a Translator and XML editor bridge continuity.
+    screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
+    screenshots:
+    - 38-translator-dialog-light.png
+    route_ids:
+    - translator
+    - xml_editor
+    - source:translator_route
+    - source:xml_amendment_editor_route
+    - family:custom_data_xml_and_translator_bridge
+  runtime_compare_packet:
+    veteran_task_gate_receipt_id: translator_xml_custom_data
+    required_tokens:
+    - translator_xml_custom_data
+    - ExecuteCommandAsync_translator_opens_dialog_with_master_index_lane_posture
+    evidence_paths:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+  core_compare_packet:
+    required_tokens:
+    - translatorDeterministicReceipt
+    evidence_paths:
+    - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+    - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
+    - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+  parity_evidence_paths:
+  - /docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml#oracle_surface_extract.source_line_proofs.file_and_settings_routes
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+  - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+- id: xml_amendment_editor_route
+  parity_audit_row_id: source:xml_amendment_editor_route
+  label: XML amendment editor route
+  legacy_source_anchor:
+    id: xml_amendment_editor_route
+    file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+    line: 823
+    expected_substring: this.mnuXmlEditor.Text = "&XML Amendment Editor";
+  compare_artifacts:
+  - menu:xml_editor
+  - source:xml_amendment_editor_route
+  parity_verdict:
+    present_in_chummer5a: 'yes'
+    present_in_chummer6: 'yes'
+    visual_parity: 'yes'
+    behavioral_parity: 'yes'
+    removable_if_not_in_chummer5a: 'no'
+    reason: Catalog, presenter, dialog-factory, and dual-head acceptance proofs directly
+      cover the XML Amendment Editor route.
+  route_local_screenshot_pack:
+    receipt_id: translator_xml_custom_data
+    workflow_family_id: improvements-explain-result-parity
+    legacy_behavior_lineage: Chummer5a Translator and XML editor bridge continuity.
+    screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
+    screenshots:
+    - 39-xml-editor-dialog-light.png
+    route_ids:
+    - translator
+    - xml_editor
+    - source:translator_route
+    - source:xml_amendment_editor_route
+    - family:custom_data_xml_and_translator_bridge
+  runtime_compare_packet:
+    veteran_task_gate_receipt_id: translator_xml_custom_data
+    required_tokens:
+    - translator_xml_custom_data
+    - ExecuteCommandAsync_xml_editor_opens_dialog_with_xml_bridge_posture
+    evidence_paths:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+  core_compare_packet:
+    required_tokens:
+    - customDataXmlBridgeDeterministicReceipt
+    evidence_paths:
+    - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+    - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
+    - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+  parity_evidence_paths:
+  - /docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml#oracle_surface_extract.source_line_proofs.file_and_settings_routes
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+  - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+- id: hero_lab_importer_route
+  parity_audit_row_id: source:hero_lab_importer_route
+  label: Hero Lab importer route
+  legacy_source_anchor:
+    id: hero_lab_importer_route
+    file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+    line: 838
+    expected_substring: this.mnuHeroLabImporter.Text = "&Hero Lab Importer";
+  compare_artifacts:
+  - menu:hero_lab_importer
+  - source:hero_lab_importer_route
+  parity_verdict:
+    present_in_chummer5a: 'yes'
+    present_in_chummer6: 'yes'
+    visual_parity: 'yes'
+    behavioral_parity: 'yes'
+    removable_if_not_in_chummer5a: 'no'
+    reason: Catalog, dialog-factory, and dialog-coordinator proofs directly cover
+      the Hero Lab importer route.
+  route_local_screenshot_pack:
+    receipt_id: hero_lab_import_oracle
+    workflow_family_id: create-open-import-save-save-as-print-export
+    legacy_behavior_lineage: Chummer5a Hero Lab importer and adjacent import-oracle
+      continuity.
+    screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
+    screenshots:
+    - 40-hero-lab-importer-dialog-light.png
+    route_ids:
+    - hero_lab_importer
+    - source:hero_lab_importer_route
+    - family:legacy_and_adjacent_import_oracles
+  runtime_compare_packet:
+    veteran_task_gate_receipt_id: hero_lab_import_oracle
+    required_tokens:
+    - hero_lab_import_oracle
+    - ExecuteCommandAsync_hero_lab_importer_opens_dialog_with_import_oracle_lane_posture
+    evidence_paths:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+  core_compare_packet:
+    required_tokens:
+    - importOracleDeterministicReceipt
+    evidence_paths:
+    - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+    - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
+    - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+  parity_evidence_paths:
+  - /docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml#oracle_surface_extract.source_line_proofs.file_and_settings_routes
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+  - /docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+  - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+family_compare_packets:
+- id: custom_data_xml_and_translator_bridge
+  parity_audit_row_id: family:custom_data_xml_and_translator_bridge
+  label: Custom data/XML and translator bridge family
+  compare_artifacts:
+  - menu:translator
+  - menu:xml_editor
+  workflow_pack_compare_artifacts:
+  - menu:translator
+  - menu:xml_editor
+  parity_verdict:
+    present_in_chummer5a: 'yes'
+    present_in_chummer6: 'yes'
+    visual_parity: 'yes'
+    behavioral_parity: 'yes'
+    removable_if_not_in_chummer5a: 'no'
+    reason: 'All declared compare artifacts for this Chummer5A family are directly
+      backed by current parity proof: [''menu:translator'', ''menu:xml_editor''].'
+  route_local_screenshot_pack:
+    receipt_id: translator_xml_custom_data
+    workflow_family_id: improvements-explain-result-parity
+    legacy_behavior_lineage: Chummer5a Translator and XML editor bridge continuity.
+    screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
+    screenshots:
+    - 38-translator-dialog-light.png
+    - 39-xml-editor-dialog-light.png
+    route_ids:
+    - translator
+    - xml_editor
+    - source:translator_route
+    - source:xml_amendment_editor_route
+    - family:custom_data_xml_and_translator_bridge
+  runtime_compare_packet:
+    required_tokens:
+    - translator_xml_custom_data
+    - ExecuteCommandAsync_translator_opens_dialog_with_master_index_lane_posture
+    - ExecuteCommandAsync_xml_editor_opens_dialog_with_xml_bridge_posture
+    evidence_paths:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+  core_compare_packet:
+    required_tokens:
+    - customDataXmlBridgeDeterministicReceipt
+    - translatorDeterministicReceipt
+    - family:custom_data_xml_and_translator_bridge
+    evidence_paths:
+    - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+    - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
+    - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+  parity_evidence_paths:
+  - /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+  - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+- id: legacy_and_adjacent_import_oracles
+  parity_audit_row_id: family:legacy_and_adjacent_import_oracles
+  label: Legacy and adjacent import-oracle family
+  compare_artifacts:
+  - menu:hero_lab_importer
+  - workflow:import_oracle
+  workflow_pack_compare_artifacts:
+  - menu:hero_lab_importer
+  - workflow:import_oracle
+  parity_verdict:
+    present_in_chummer5a: 'yes'
+    present_in_chummer6: 'yes'
+    visual_parity: 'yes'
+    behavioral_parity: 'yes'
+    removable_if_not_in_chummer5a: 'no'
+    reason: 'All declared compare artifacts for this Chummer5A family are directly
+      backed by current parity proof: [''menu:hero_lab_importer'', ''workflow:import_oracle''].'
+  route_local_screenshot_pack:
+    receipt_id: hero_lab_import_oracle
+    workflow_family_id: create-open-import-save-save-as-print-export
+    legacy_behavior_lineage: Chummer5a Hero Lab importer and adjacent import-oracle
+      continuity.
+    screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
+    screenshots:
+    - 40-hero-lab-importer-dialog-light.png
+    route_ids:
+    - hero_lab_importer
+    - source:hero_lab_importer_route
+    - family:legacy_and_adjacent_import_oracles
+  runtime_compare_packet:
+    required_tokens:
+    - hero_lab_import_oracle
+    - ExecuteCommandAsync_hero_lab_importer_opens_dialog_with_import_oracle_lane_posture
+    evidence_paths:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+  core_compare_packet:
+    required_tokens:
+    - importOracleDeterministicReceipt
+    - family:legacy_and_adjacent_import_oracles
+    evidence_paths:
+    - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+    - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
+    - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+  parity_evidence_paths:
+  - /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json
+  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+  - /docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+  - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+live_readiness_projection:
+  coverage_key: desktop_client
+  status: warning
+  summary: Desktop flagship proof is still incomplete.
+  missing_keys: []
+notes:
+- This packet compiles direct route-local screenshot packs and compare packets for
+  milestone 141; it does not overwrite live readiness receipts.
+- Every screenshot, runtime token, and deterministic core receipt token is projected
+  from already-published proof instead of inventing new parity claims.

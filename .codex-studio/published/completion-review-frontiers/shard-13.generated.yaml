@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-05T19:57:55Z'
+generated_at: '2026-05-06T19:54:11Z'
 mode: completion_review
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-13
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -67,13 +67,13 @@ linux_desktop_exit_gate_audit:
   reason: linux desktop binary build/start/test proof is ready on current repo-local
     evidence
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-  generated_at: '2026-05-05T03:54:10Z'
+  generated_at: '2026-05-06T00:11:38Z'
 weekly_pulse_audit:
   status: pass
   reason: weekly product pulse is fresh and reports no remaining drift or blocker
     pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-05T19:49:41Z'
+  generated_at: '2026-05-06T19:37:39Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -98,5 +98,7 @@ eta:
     ETA command for a fresh whole-fleet forecast instead of reading this as a single
     parity horizon.
   blocking_reason: ''
-  summary: 1 open milestones remain (1 in progress, 0 not started). Aggregate shard
-    status is parallelized across 1 active shards under Aggregate multi-shard ETA.
+  summary: 9983542059795185490307377200934808347053548321603196921671810333961841224126403327914571860311725037009532043648220698868658555830
+    open milestones remain (9983542059795185490307377200934808347053548321603196921671810333961841224126403327914571860311725037009532043648220698868658555830
+    in progress, 0 not started). Aggregate shard status is parallelized across 1 active
+    shards under Aggregate multi-shard ETA.

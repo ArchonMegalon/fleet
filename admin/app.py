@@ -55,7 +55,10 @@ except ImportError:  # pragma: no cover - test stubs can expose only partial res
 
 ADMIN_DIR = pathlib.Path(__file__).resolve().parent
 # In containerized runs, Fleet bind-mounts the repo at `/docker`. Prefer that for helper modules.
-_MOUNTED_ADMIN_DIR = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet")) / "admin"
+_MOUNTED_FLEET_ROOT = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet"))
+_MOUNTED_ADMIN_DIR = _MOUNTED_FLEET_ROOT / "admin"
+if _MOUNTED_FLEET_ROOT.exists() and str(_MOUNTED_FLEET_ROOT) not in sys.path:
+    sys.path.insert(0, str(_MOUNTED_FLEET_ROOT))
 if (_MOUNTED_ADMIN_DIR / "consistency.py").exists() and str(_MOUNTED_ADMIN_DIR) not in sys.path:
     sys.path.insert(0, str(_MOUNTED_ADMIN_DIR))
 if str(ADMIN_DIR) not in sys.path:
@@ -384,6 +387,12 @@ _EA_ONEMIN_MANAGER_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
 RUNTIME_CACHE_KEY_EA_CODEX_STATUS = "ea_codex_status"
 RUNTIME_CACHE_KEY_EA_ONEMIN_MANAGER_STATUS = "ea_onemin_manager_status"
+ONEMIN_AGGREGATE_RUNTIME_ROOT = FLEET_MOUNT_ROOT / "state" / "browseract_bootstrap" / "runtime"
+ONEMIN_AGGREGATE_RUNTIME_PATTERNS = (
+    "onemin_aggregate_billing_full_refresh_latest.json",
+    "onemin_aggregate_billing_full_refresh_*.json",
+    "onemin_aggregate_full_billing_refresh_*.json",
+)
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DEFAULT_CAPTAIN_POLICY = {
     "priority": 100,
@@ -2118,7 +2127,11 @@ def audit_candidate_materialization_texts(scope_type: str, scope_id: str) -> Lis
             """
             SELECT title, detail
             FROM audit_task_candidates
-            WHERE scope_type=? AND scope_id=? AND status IN ('open', 'approved', 'published')
+            WHERE scope_type=? AND scope_id=?
+              AND (
+                status IN ('open', 'approved')
+                OR (status='published' AND resolved_at IS NULL)
+              )
             ORDER BY last_seen_at DESC, task_index ASC
             """,
             (scope_type, scope_id),
@@ -5094,6 +5107,113 @@ def _latest_iso_value(values: Sequence[Any]) -> Optional[str]:
     return latest_text or None
 
 
+def _normalized_onemin_aggregate_timestamp(value: Any) -> Optional[dt.datetime]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        clean = value.strip()
+        if not clean:
+            return None
+        parsed = parse_iso(clean)
+        if parsed is not None:
+            return parsed
+        value = clean
+    numeric = float_or_none(value)
+    if numeric is None:
+        return None
+    try:
+        return dt.datetime.fromtimestamp(float(numeric), tz=UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _onemin_manager_aggregate_has_billing_evidence(aggregate: Dict[str, Any]) -> bool:
+    if not aggregate:
+        return False
+    if max(
+        0,
+        int(float_or_none(aggregate.get("slot_count_with_billing_snapshot")) or 0),
+        int(float_or_none(aggregate.get("slot_count_with_member_reconciliation")) or 0),
+        int(float_or_none(aggregate.get("actual_billing_account_count")) or 0),
+    ) > 0:
+        return True
+    for item in aggregate.get("accounts") or []:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("last_billing_snapshot_at") or "").strip():
+            return True
+        if str(item.get("last_member_reconciliation_at") or "").strip():
+            return True
+    return False
+
+
+def _cached_onemin_billing_aggregate_payload() -> Dict[str, Any]:
+    if not ONEMIN_AGGREGATE_RUNTIME_ROOT.is_dir():
+        return {}
+
+    candidate_paths: List[pathlib.Path] = []
+    seen_paths: set[pathlib.Path] = set()
+    for pattern in ONEMIN_AGGREGATE_RUNTIME_PATTERNS:
+        for path in sorted(ONEMIN_AGGREGATE_RUNTIME_ROOT.glob(pattern)):
+            if not path.is_file() or path in seen_paths:
+                continue
+            seen_paths.add(path)
+            candidate_paths.append(path)
+
+    best_payload: Dict[str, Any] = {}
+    best_timestamp: Optional[dt.datetime] = None
+    for path in candidate_paths:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        slot_count_with_billing_snapshot = max(0, int(float_or_none(payload.get("slot_count_with_billing_snapshot")) or 0))
+        slot_count_with_member_reconciliation = max(
+            0,
+            int(float_or_none(payload.get("slot_count_with_member_reconciliation")) or 0),
+        )
+        hours_remaining_at_current_pace_no_topup = float_or_none(payload.get("hours_remaining_at_current_pace_no_topup"))
+        hours_until_next_topup = float_or_none(payload.get("hours_until_next_topup"))
+        if max(slot_count_with_billing_snapshot, slot_count_with_member_reconciliation) <= 0:
+            continue
+        if hours_remaining_at_current_pace_no_topup is None or hours_until_next_topup is None:
+            continue
+        candidate_timestamp = (
+            _normalized_onemin_aggregate_timestamp(payload.get("recorded_at_utc"))
+            or _normalized_onemin_aggregate_timestamp(payload.get("last_probe_at"))
+            or _normalized_onemin_aggregate_timestamp(payload.get("latest_member_reconciliation_at"))
+            or _normalized_onemin_aggregate_timestamp(payload.get("last_actual_balance_check_at"))
+        )
+        if candidate_timestamp is None:
+            try:
+                candidate_timestamp = dt.datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+            except OSError:
+                candidate_timestamp = None
+        if best_timestamp is not None and candidate_timestamp is not None and candidate_timestamp <= best_timestamp:
+            continue
+
+        normalized = dict(payload)
+        if normalized.get("sum_free_credits") in (None, "") and normalized.get("free_credits") not in (None, ""):
+            normalized["sum_free_credits"] = normalized.get("free_credits")
+        if normalized.get("remaining_percent_total") in (None, "") and normalized.get("percent_remaining") not in (None, ""):
+            normalized["remaining_percent_total"] = normalized.get("percent_remaining")
+        for key in ("latest_member_reconciliation_at", "last_actual_balance_check_at", "next_topup_at"):
+            parsed = _normalized_onemin_aggregate_timestamp(normalized.get(key))
+            if parsed is not None:
+                normalized[key] = iso(parsed)
+        normalized["hours_remaining_at_current_pace_no_topup"] = hours_remaining_at_current_pace_no_topup
+        normalized["hours_until_next_topup"] = hours_until_next_topup
+        if normalized.get("source") in (None, ""):
+            normalized["source"] = str(normalized.get("payload_source") or "browseract_bootstrap_runtime_cache").strip() or "browseract_bootstrap_runtime_cache"
+        if not str(normalized.get("basis_summary") or "").strip():
+            normalized["basis_summary"] = str(normalized.get("source") or "browseract_bootstrap_runtime_cache")
+        best_payload = normalized
+        best_timestamp = candidate_timestamp
+    return best_payload
+
+
 def ea_onemin_manager_status(force: bool = False, *, cache_only: bool = False) -> Dict[str, Any]:
     now = time.time()
     cached = _EA_ONEMIN_MANAGER_CACHE.get("payload")
@@ -5168,6 +5288,30 @@ def ea_onemin_manager_status(force: bool = False, *, cache_only: bool = False) -
 def ea_onemin_manager_billing_aggregate(force: bool = False, *, cache_only: bool = False) -> Dict[str, Any]:
     manager_payload = ea_onemin_manager_status(force=force, cache_only=cache_only)
     aggregate = dict(manager_payload.get("aggregate") or {})
+    cached_aggregate = (
+        _cached_onemin_billing_aggregate_payload()
+        if not _onemin_manager_aggregate_has_billing_evidence(aggregate)
+        else {}
+    )
+    if cached_aggregate:
+        runtime_lease_payload = onemin_codexer_runtime_payload(cache_only=cache_only)
+        reported_active_lease_count = max(0, int(float_or_none(cached_aggregate.get("active_lease_count")) or 0))
+        runtime_active_lease_count = max(0, int(runtime_lease_payload.get("active_onemin_codexers") or 0))
+        effective_active_lease_count = max(reported_active_lease_count, runtime_active_lease_count)
+        active_lease_count_source = (
+            "fleet_runtime_backfill"
+            if effective_active_lease_count > reported_active_lease_count
+            else str(cached_aggregate.get("source") or "browseract_bootstrap_runtime_cache")
+        )
+        return {
+            **cached_aggregate,
+            "active_lease_count": effective_active_lease_count,
+            "reported_active_lease_count": reported_active_lease_count,
+            "runtime_active_lease_count": runtime_active_lease_count,
+            "active_lease_count_source": active_lease_count_source,
+            "active_onemin_projects": list(runtime_lease_payload.get("active_onemin_projects") or []),
+            "active_onemin_accounts": list(runtime_lease_payload.get("active_onemin_accounts") or []),
+        }
     runway = dict(manager_payload.get("runway") or {})
     accounts = [dict(item) for item in aggregate.get("accounts") or [] if isinstance(item, dict)]
     if not aggregate:
@@ -9377,9 +9521,41 @@ def load_design_supervisor_active_shards_payload() -> Dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _completion_frontier_state_root_matches(payload: Dict[str, Any], expected_root: pathlib.Path) -> bool:
+    raw_state_root = str(payload.get("state_root") or "").strip()
+    if not raw_state_root:
+        return False
+    try:
+        return pathlib.Path(raw_state_root).resolve() == expected_root.resolve()
+    except Exception:
+        return False
+
+
 def load_completion_review_frontier_payload() -> Dict[str, Any]:
-    payload = load_published_yaml_payload("COMPLETION_REVIEW_FRONTIER.generated.yaml")
-    return payload if isinstance(payload, dict) else {}
+    published = load_published_yaml_payload("COMPLETION_REVIEW_FRONTIER.generated.yaml")
+    published = published if isinstance(published, dict) else {}
+
+    canonical_root = _normalized_design_supervisor_state_root().resolve()
+    mirror_path = canonical_root / "artifacts" / "COMPLETION_REVIEW_FRONTIER.generated.yaml"
+    mirror = load_yaml(mirror_path) if mirror_path.exists() else {}
+    mirror = mirror if isinstance(mirror, dict) else {}
+
+    published_matches = _completion_frontier_state_root_matches(published, canonical_root)
+    mirror_matches = _completion_frontier_state_root_matches(mirror, canonical_root)
+
+    if mirror_matches and not published_matches:
+        return mirror
+    if mirror_matches and published_matches:
+        published_at = parse_iso(str(published.get("generated_at") or "").strip())
+        mirror_at = parse_iso(str(mirror.get("generated_at") or "").strip())
+        if mirror_at and (published_at is None or mirror_at >= published_at):
+            return mirror
+    if published:
+        return published
+    if mirror:
+        return mirror
+    return {}
+
 
 
 def _count_by_clean_state(items: Sequence[Any], key: str, *, default: str = "unknown") -> Dict[str, int]:
@@ -10456,7 +10632,17 @@ def resolve_onemin_topup_window(
 
 def _normalized_design_supervisor_state_root() -> pathlib.Path:
     root = DESIGN_SUPERVISOR_STATE_ROOT
-    return root.parent if root.name == "state.json" else root
+    try:
+        resolved_root = root.resolve()
+    except Exception:
+        resolved_root = root
+    if resolved_root.name == "state.json":
+        resolved_root = resolved_root.parent
+    if resolved_root.name == "design-supervisor" and resolved_root.parent.name == "state":
+        return resolved_root.parent / "chummer_design_supervisor"
+    if resolved_root.parent.name == "design-supervisor" and resolved_root.parent.parent.name == "state":
+        return resolved_root.parent.parent / "chummer_design_supervisor" / resolved_root.name
+    return resolved_root
 
 
 def _configured_account_auth_kind_map() -> Dict[str, str]:
@@ -12250,11 +12436,19 @@ def publish_readiness_payload(
             weekly_governor_public_state = str(
                 weekly_governor_public_status.get("state") or ""
             ).strip().lower()
+            weekly_governor_public_reason = str(weekly_governor_public_status.get("body") or "").strip()
             weekly_governor_reason = str(
-                weekly_governor_decision_board.get("current_launch_reason")
-                or weekly_governor_public_status.get("body")
-                or resolved_weekly_governor_packet.get("status_reason")
-                or "Weekly governor packet is not ready for launch expansion."
+                (
+                    weekly_governor_public_reason
+                    if weekly_governor_public_state in {"freeze_launch", "freeze_with_rollback_watch"}
+                    and weekly_governor_public_reason
+                    else (
+                        weekly_governor_decision_board.get("current_launch_reason")
+                        or weekly_governor_public_reason
+                        or resolved_weekly_governor_packet.get("status_reason")
+                        or "Weekly governor packet is not ready for launch expansion."
+                    )
+                )
             ).strip()
             if weekly_governor_public_state == "freeze_with_rollback_watch" or bool(
                 weekly_governor_loop.get("rollback_watch")

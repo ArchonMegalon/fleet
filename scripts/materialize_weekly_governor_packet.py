@@ -3413,28 +3413,45 @@ def build_payload(
             ),
         },
     }
+    launch_reason = str(launch_decision.get("reason") or "").strip()
+    launch_expand_reason = (
+        "All measured launch gates are green."
+        if launch_allowed
+        else (
+            (
+                "Weekly pulse holds launch expansion: " + launch_reason
+                if launch_reason
+                else "freeze_launch remains the current weekly launch decision"
+            )
+            if not launch_action_allows_expansion
+            else "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green."
+        )
+    )
+    if not freeze_active:
+        freeze_launch_reason = (
+            launch_reason
+            or "Freeze remains the fail-closed default when launch gates are incomplete."
+        )
+    elif launch_reason and not launch_action_allows_expansion:
+        freeze_launch_reason = launch_reason
+    elif rollback_watch:
+        freeze_launch_reason = "Release or support truth requires rollback watch before any broader launch move."
+    elif launch_action_allows_expansion:
+        freeze_launch_reason = launch_expand_reason
+    else:
+        freeze_launch_reason = (
+            "Measured launch gates are incomplete, so the weekly governor packet holds broad promotion."
+        )
     decision_board = {
         "current_launch_action": launch_action,
-        "current_launch_reason": str(launch_decision.get("reason") or "").strip(),
+        "current_launch_reason": launch_reason,
         "launch_expand": {
             "state": "allowed" if launch_allowed else "blocked",
-            "reason": (
-                "All measured launch gates are green."
-                if launch_allowed
-                else (
-                    "Weekly pulse holds launch expansion: "
-                    + str(
-                        launch_decision.get("reason")
-                        or "freeze_launch remains the current weekly launch decision"
-                    ).strip()
-                )
-                if not launch_action_allows_expansion
-                else "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green."
-            ),
+            "reason": launch_expand_reason,
         },
         "freeze_launch": {
             "state": "active" if freeze_active else "available",
-            "reason": str(launch_decision.get("reason") or "Freeze remains the fail-closed default when launch gates are incomplete.").strip(),
+            "reason": freeze_launch_reason,
         },
         "canary": {
             "state": "ready" if canary_status == "Canary green on all active lanes" else "accumulating",
@@ -3571,7 +3588,7 @@ def build_payload(
         "public_status_copy": _status_copy(
             launch_allowed=launch_allowed,
             rollback_watch=rollback_watch,
-            launch_reason=launch_reason,
+            launch_reason=freeze_launch_reason,
             schedule=governor_packet_schedule,
         ),
         "package_closeout": {

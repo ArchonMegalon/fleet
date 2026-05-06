@@ -4,7 +4,7 @@
 - media_social_status: blocked
 - package_id: next90-m133-fleet-monitor-media-social-horizon-proof-freshness-consent-gat
 - frontier_id: 2336165027
-- generated_at: 2026-05-06T03:44:05Z
+- generated_at: 2026-05-06T04:08:43Z
 
 ## Runtime summary
 - journey_count: 3
@@ -16,8 +16,8 @@
 ## Package closeout
 - state: pass
 - warnings:
-  - publication_proof_monitor: release_channel: Release channel proof freshness exceeded threshold (427314s > 172800s).
+  - publication_proof_monitor: release_channel: Release channel proof freshness exceeded threshold (428792s > 172800s).
   - provider_stop_condition_monitor: Provider canary gate is accumulating.
   - Provider fallback coverage is thin for core, core_authority, core_booster, core_rescue, groundwork
   - Governor current_launch_action is freeze_launch.
-  - Governor rollback posture remains watch.
+  - Governor rollback posture remains armed.

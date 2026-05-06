@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-05T20:08:51Z'
-mode: flagship_product
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-8
+generated_at: '2026-05-06T19:39:28Z'
+mode: complete
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-8
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -32,32 +32,12 @@ focus:
   - chummer6-mobile
   - chummer6-hub
   - chummer6-ui
-  - chummer6-hub-registry
-  - chummer6-design
   texts:
-  - top flagship grade
-  - whole project frontier
-  - feedback
-  - automatic bugfixing
-  - crash
-  - support
-  - accessibility
-  - localization
-  - restore confidence
-  - fit and finish
   - travel
   - offline
   - mobile
   - companion
   - continuity
-  - whole-project frontier
-  - no lowered standards
-  - feedback loop
-  - crash reporting
-  - support routing
-  - journey smoothness
-  - performance
-  - proof shelf
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -65,56 +45,37 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  status: pass
+  reason: recent supervisor history ends with a trusted structured worker receipt
 full_product_audit:
-  status: fail
-  reason: 'flagship product readiness proof is not green: fail'
+  status: pass
+  reason: flagship product readiness proof is current across desktop, rules, hub,
+    mobile, horizons, and operator lanes
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-05T20:01:09Z'
-  proof_status: fail
+  generated_at: '2026-05-06T19:37:09Z'
+  proof_status: pass
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 1
-frontier_ids:
-- 2541792707
-frontier:
-- id: 2541792707
-  title: Hub, registry, and public front door flagship finish
-  wave: flagship_product
-  status: not_started
-  owners:
-  - chummer6-hub
-  - chummer6-hub-registry
-  - chummer6-design
-  dependencies: []
-  exit_criteria:
-  - Deliver the relationship/orchestration, publication, downloads, account, install,
-    update, proof-shelf, and support surfaces promised in `projects/hub.md`, `projects/hub-registry.md`,
-    and the product front door canon.
-  - Keep public landing, signed-in overlays, release heads, install guidance, and
-    support/control truth aligned with design-owned manifests instead of repo-local
-    improvisation.
-  eta:
-    status: flagship_delivery
-    eta_human: 10h-1d
-    eta_confidence: low
-    basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Hub, registry, and public front door flagship finish'' remains
-      open under the flagship closeout frontier. Outstanding readiness coverage: flagship
-      readiness proof refresh.'
-    predicted_completion_at: '2026-05-06T12:59:51Z'
-    range_low_hours: 9.5
-    range_high_hours: 24.2
-    remaining_open_milestones: 1
-    remaining_in_progress_milestones: 0
-    remaining_not_started_milestones: 1
-    remaining_effort_units: 2.0
-    history_sample_count: 0
-    observed_burn_milestones_per_day: 0.0
-    blocking_reason: ''
-    scope_kind: flagship_product_readiness
-    scope_label: Full Chummer5A parity and flagship proof closeout
-    scope_warning: ''
+frontier_count: 0
+frontier_ids: []
+frontier: []
+eta:
+  status: ready
+  eta_human: ready now
+  eta_confidence: high
+  basis: completion_audit_pass
+  scope_kind: repo_local_completion_ready
+  scope_label: Repo-local completion review
+  scope_warning: Repo-local completion evidence is green. External release, flagship,
+    or parity claims still depend on the broader readiness surfaces staying green.
+  blocking_reason: ''
+  summary: Whole-product completion audit is green on current repo-local evidence.
+  predicted_completion_at: '2026-05-06T19:39:28Z'
+  range_low_hours: 0.0
+  range_high_hours: 0.0
+  remaining_open_milestones: 0
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 0
+  remaining_effort_units: 0.0

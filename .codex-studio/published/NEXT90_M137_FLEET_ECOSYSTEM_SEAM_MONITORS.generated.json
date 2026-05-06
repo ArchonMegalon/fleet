@@ -227,19 +227,15 @@
   },
   "contract_name": "fleet.next90_m137_ecosystem_seam_monitors",
   "frontier_id": 9074685645,
-  "generated_at": "2026-05-05T21:07:28Z",
+  "generated_at": "2026-05-06T04:08:47Z",
   "milestone_id": 137,
   "monitor_summary": {
-    "dependency_runtime_blocker_count": 3,
-    "ecosystem_seam_status": "blocked",
+    "dependency_runtime_blocker_count": 0,
+    "ecosystem_seam_status": "pass",
     "monitored_horizon_count": 6,
     "monitored_public_card_count": 5,
-    "runtime_blocker_count": 3,
-    "runtime_blockers": [
-      "dependency_proof: FLAGSHIP_PRODUCT_READINESS flagship_ready plane is missing.",
-      "dependency_proof: m133: M133 media/social horizon monitors status is blocked.",
-      "dependency_proof: flagship: FLAGSHIP_PRODUCT_READINESS status is fail."
-    ],
+    "runtime_blocker_count": 0,
+    "runtime_blockers": [],
     "warning_count": 0
   },
   "owned_surfaces": [
@@ -248,30 +244,24 @@
   "package_closeout": {
     "blockers": [],
     "state": "pass",
-    "warnings": [
-      "dependency_proof: FLAGSHIP_PRODUCT_READINESS flagship_ready plane is missing.",
-      "dependency_proof: m133: M133 media/social horizon monitors status is blocked.",
-      "dependency_proof: flagship: FLAGSHIP_PRODUCT_READINESS status is fail."
-    ]
+    "warnings": []
   },
   "package_id": "next90-m137-fleet-monitor-unsupported-ecosystem-claims-stale-seam-proof-consent-drift-an",
   "queue_title": "Monitor unsupported ecosystem claims, stale seam proof, consent drift, and public-posture mismatch across first-party and integration-ready lanes.",
   "runtime_monitors": {
     "dependency_proof": {
       "flagship_readiness": {
-        "age_hours": 0.11,
-        "generated_at": "2026-05-05T21:00:44Z",
+        "age_hours": 0.12,
+        "generated_at": "2026-05-06T04:01:39Z",
         "issues": [],
-        "runtime_blockers": [
-          "FLAGSHIP_PRODUCT_READINESS status is fail."
-        ],
+        "runtime_blockers": [],
         "state": "pass",
-        "status": "fail"
+        "status": "pass"
       },
       "issues": [],
       "journeys": {
-        "age_hours": 0.11,
-        "generated_at": "2026-05-05T21:00:42Z",
+        "age_hours": 0.12,
+        "generated_at": "2026-05-06T04:01:33Z",
         "issues": [],
         "monitored_journeys": [
           {
@@ -297,28 +287,22 @@
         "state": "pass"
       },
       "m131_public_guide": {
-        "age_hours": 7.58,
-        "generated_at": "2026-05-05T13:32:27Z",
+        "age_hours": 0.0,
+        "generated_at": "2026-05-06T04:08:40Z",
         "issues": [],
         "runtime_blockers": [],
         "state": "pass",
         "status": "pass"
       },
       "m133_media_social": {
-        "age_hours": 6.24,
-        "generated_at": "2026-05-05T14:53:22Z",
+        "age_hours": 0.0,
+        "generated_at": "2026-05-06T04:08:43Z",
         "issues": [],
-        "runtime_blockers": [
-          "M133 media/social horizon monitors status is blocked."
-        ],
+        "runtime_blockers": [],
         "state": "pass",
-        "status": "blocked"
+        "status": "pass"
       },
-      "runtime_blockers": [
-        "FLAGSHIP_PRODUCT_READINESS flagship_ready plane is missing.",
-        "m133: M133 media/social horizon monitors status is blocked.",
-        "flagship: FLAGSHIP_PRODUCT_READINESS status is fail."
-      ],
+      "runtime_blockers": [],
       "state": "pass"
     },
     "public_feature_posture": {
@@ -385,7 +369,7 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "680ada3e8ed8d78d5408b0181fa29f0c1a68ee94136b931c9948f4adc63ccc00"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "external_tools_plane": {
       "generated_at": "",
@@ -393,24 +377,24 @@
       "sha256": "7894c569ebd73445b42b900d067b615e1a842749951c175d501fd5d0620271ee"
     },
     "flagship_readiness": {
-      "generated_at": "2026-05-05T21:00:44Z",
+      "generated_at": "2026-05-06T04:01:39Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "fdebae7f492da2296446197c556733eddc95c217ee1e961bbcc5a7dfad948719"
+      "sha256": "6407de1f137d225d951be3f4c4164f8a46f1ba7422b597cff5b3adb46c2a5e48"
     },
     "fleet_queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "33cb4059802ba78fe7150176897a1cd50dd7de8bc48f1107cdbe8d5e5bd6eae0"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "horizon_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/HORIZON_REGISTRY.yaml",
-      "sha256": "3e1b5910263561b644602f6f80acb666571ca6199a5ca6d8b4a0595abebd2167"
+      "sha256": "78d6076474964e9753cbfeec0532a132910072abe13d4883105dcf07a630ee25"
     },
     "journey_gates": {
-      "generated_at": "2026-05-05T21:00:42Z",
+      "generated_at": "2026-05-06T04:01:33Z",
       "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-      "sha256": "15607b547f36afcc9c7814cc8576df9a39a32c91239a01a91418d1e90fd5a21d"
+      "sha256": "618f12fdd4488e474b8b97fadab23c64b5c677444f4950f829ef403396758e3a"
     },
     "ltd_integration_guide": {
       "generated_at": "",
@@ -418,14 +402,14 @@
       "sha256": "5c52f92a8833d7d7b6a2493faca673cf5b3f1c646e617d5102b8d993a6e7985e"
     },
     "m131_public_guide_gates": {
-      "generated_at": "2026-05-05T13:32:27Z",
+      "generated_at": "2026-05-06T04:08:40Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT90_M131_FLEET_PUBLIC_GUIDE_GATES.generated.json",
-      "sha256": "dfb3c3b27b8f73933d62d474674d83abd61c33e841921c6e2975ae82ab012c87"
+      "sha256": "716cc32e3ebdd26874fc7a5a6bfaa84c6a267e6d4510c7e77fde62861ba8feb3"
     },
     "m133_media_social_monitors": {
-      "generated_at": "2026-05-05T14:53:22Z",
+      "generated_at": "2026-05-06T04:08:43Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT90_M133_FLEET_MEDIA_SOCIAL_HORIZON_MONITORS.generated.json",
-      "sha256": "efe8d6457330a1dd6d1c9000befc051f1dff7bdf95c8af8f91c47feb4bab3298"
+      "sha256": "d1c9fc9d6d430731ad1b3aa19dd48a6f060218e20d8a843dcbe493e67b7c501a"
     },
     "next90_guide": {
       "generated_at": "",
@@ -475,7 +459,7 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "9f4f93305afddf9cf95c2b515c6e9ceced71e435389e2a49fc0e0bc4f19395c7"
+      "sha256": "3614d3f739de335843fcf1e7c54a85c6892c310e03ac5e565fffd6de4e399010"
     }
   },
   "status": "pass",

@@ -43,7 +43,7 @@
   },
   "contract_name": "fleet.next90_m136_derived_release_health_planes",
   "frontier_id": 8422537713,
-  "generated_at": "2026-05-06T03:58:02Z",
+  "generated_at": "2026-05-06T04:08:45Z",
   "milestone_id": 136,
   "monitor_summary": {
     "blocked_plane_ids": [],
@@ -209,9 +209,9 @@
       "sha256": "8d450f2175f2bd290975db12c0deddbf6e26a3415bec20e906f1ac38cd01c84e"
     },
     "flagship_product_readiness": {
-      "generated_at": "2026-05-06T03:46:15Z",
+      "generated_at": "2026-05-06T04:01:39Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "6b0deebe8c7badddd81a8c735cceee33aec8ca7cfed5b655239860d3c431e5ef"
+      "sha256": "6407de1f137d225d951be3f4c4164f8a46f1ba7422b597cff5b3adb46c2a5e48"
     },
     "flagship_readiness_planes": {
       "generated_at": "",
@@ -231,7 +231,7 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "e360e1a7a36249a35a10be5f9a97e7f37053041171905b494db3bac67dd49ab1"
+      "sha256": "3614d3f739de335843fcf1e7c54a85c6892c310e03ac5e565fffd6de4e399010"
     }
   },
   "status": "pass",

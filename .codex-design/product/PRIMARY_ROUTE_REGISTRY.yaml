@@ -1,0 +1,93 @@
+version: 1
+last_reviewed: 2026-04-16
+purpose: One-primary-route contract for major Chummer jobs so flagship release truth can fail when fallback starts masquerading as the real product.
+default_primary_head: Chummer.Avalonia
+policy:
+  one_primary_route_per_job: true
+  fallback_must_be_bounded_and_labeled: true
+  fallback_must_carry_reason_and_expiry: true
+  web_surface_must_not_replace_desktop_primary_route: true
+  release_blocking: true
+jobs:
+  - id: build_character
+    release_state: veteran_approved
+    primary_route:
+      repo: chummer6-ui
+      head: Chummer.Avalonia
+      surface: workbench
+    required_evidence:
+      - DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+      - DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+      - CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json
+      - SR5_FLAGSHIP_VISUAL_PARITY_EXIT.generated.json
+      - SR5_FIRST_MINUTE_TASKS.generated.json
+    fallback_routes: []
+  - id: import_and_open_existing_runner
+    release_state: veteran_approved
+    primary_route:
+      repo: chummer6-ui
+      head: Chummer.Avalonia
+      surface: workbench_file_and_import_flows
+    required_evidence:
+      - DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+      - CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json
+      - ORACLE_IMPORT_CERTIFICATION.generated.json
+    fallback_routes: []
+  - id: settings_and_rules_environment_review
+    release_state: task_proven
+    primary_route:
+      repo: chummer6-ui
+      head: Chummer.Avalonia
+      surface: character_settings_and_master_index
+    required_evidence:
+      - CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json
+      - JOURNEY_GATES.generated.json
+      - DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+      - SR5_FIRST_MINUTE_TASKS.generated.json
+    fallback_routes: []
+  - id: print_export_and_exchange
+    release_state: task_proven
+    primary_route:
+      repo: chummer6-ui
+      head: Chummer.Avalonia
+      surface: build_lab_and_desktop_export_routes
+    required_evidence:
+      - CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json
+      - JOURNEY_GATES.generated.json
+    fallback_routes: []
+  - id: claim_update_and_recovery
+    release_state: task_proven
+    primary_route:
+      repo: chummer6-ui
+      head: Chummer.Avalonia
+      surface: desktop_native_registry_and_support_flows
+    required_evidence:
+      - DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+      - JOURNEY_GATES.generated.json
+      - FEEDBACK_LOOP_RELEASE_GATE.yaml
+    fallback_routes:
+      - repo: chummer6-hub
+        head: web_supporting_surface
+        posture: supporting_surface_only
+        reason: desktop_handoff_only_not_product_replacement
+        expiry_target: keep_supporting_only_until_desktop_can_complete_the_flow_end_to_end
+        label_required_in_public_copy: true
+        condition: used_only_when_the_desktop_route_opens_or_completes_the_flow
+  - id: support_and_issue_followthrough
+    release_state: task_proven
+    primary_route:
+      repo: chummer6-ui
+      head: Chummer.Avalonia
+      surface: in_app_support_and_report_issue_flows
+    required_evidence:
+      - JOURNEY_GATES.generated.json
+      - FEEDBACK_LOOP_RELEASE_GATE.yaml
+      - FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml
+    fallback_routes:
+      - repo: chummer6-hub
+        head: web_supporting_surface
+        posture: supporting_surface_only
+        reason: desktop_handoff_only_not_product_replacement
+        expiry_target: keep_supporting_only_until_desktop_can_complete_the_flow_end_to_end
+        label_required_in_public_copy: true
+        condition: used_only_when_the_desktop_route_opens_or_completes_the_flow

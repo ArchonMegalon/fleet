@@ -138,7 +138,7 @@
   },
   "contract_name": "fleet.next90_m133_media_social_horizon_monitors",
   "frontier_id": 2336165027,
-  "generated_at": "2026-05-06T03:44:05Z",
+  "generated_at": "2026-05-06T04:08:43Z",
   "milestone_id": 133,
   "monitor_summary": {
     "journey_count": 3,
@@ -147,7 +147,7 @@
     "provider_canary_gate_state": "accumulating",
     "runtime_blocker_count": 2,
     "runtime_blockers": [
-      "publication_proof_monitor: release_channel: Release channel proof freshness exceeded threshold (427314s > 172800s).",
+      "publication_proof_monitor: release_channel: Release channel proof freshness exceeded threshold (428792s > 172800s).",
       "provider_stop_condition_monitor: Provider canary gate is accumulating."
     ],
     "warning_count": 3
@@ -159,11 +159,11 @@
     "blockers": [],
     "state": "pass",
     "warnings": [
-      "publication_proof_monitor: release_channel: Release channel proof freshness exceeded threshold (427314s > 172800s).",
+      "publication_proof_monitor: release_channel: Release channel proof freshness exceeded threshold (428792s > 172800s).",
       "provider_stop_condition_monitor: Provider canary gate is accumulating.",
       "Provider fallback coverage is thin for core, core_authority, core_booster, core_rescue, groundwork",
       "Governor current_launch_action is freeze_launch.",
-      "Governor rollback posture remains watch."
+      "Governor rollback posture remains armed."
     ]
   },
   "package_id": "next90-m133-fleet-monitor-media-social-horizon-proof-freshness-consent-gat",
@@ -222,7 +222,7 @@
       "provider_packet_status": "pass",
       "revert_now_count": 0,
       "review_due_count": 0,
-      "rollback_state": "watch",
+      "rollback_state": "armed",
       "runtime_blockers": [
         "Provider canary gate is accumulating."
       ],
@@ -230,12 +230,12 @@
       "warnings": [
         "Provider fallback coverage is thin for core, core_authority, core_booster, core_rescue, groundwork",
         "Governor current_launch_action is freeze_launch.",
-        "Governor rollback posture remains watch."
+        "Governor rollback posture remains armed."
       ]
     },
     "publication_proof": {
       "hub_local_release": {
-        "age_hours": 1.26,
+        "age_hours": 1.67,
         "generated_at": "2026-05-06T02:28:35Z",
         "issues": [],
         "path": "/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
@@ -246,7 +246,7 @@
       },
       "issues": [],
       "media_local_release": {
-        "age_hours": 7.59,
+        "age_hours": 8.0,
         "generated_at": "2026-05-05T20:08:45Z",
         "issues": [],
         "path": "/docker/fleet/repos/chummer-media-factory/.codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json",
@@ -256,22 +256,22 @@
         "warnings": []
       },
       "release_channel": {
-        "age_hours": 8.44,
+        "age_hours": 8.85,
         "generated_at": "2026-05-05T19:17:52Z",
         "issues": [],
         "path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
-        "release_proof_age_hours": 118.7,
+        "release_proof_age_hours": 119.11,
         "release_proof_generated_at": "2026-05-01T05:02:11Z",
         "release_proof_status": "passed",
         "runtime_blockers": [
-          "Release channel proof freshness exceeded threshold (427314s > 172800s)."
+          "Release channel proof freshness exceeded threshold (428792s > 172800s)."
         ],
         "state": "pass",
         "status": "published",
         "warnings": []
       },
       "runtime_blockers": [
-        "release_channel: Release channel proof freshness exceeded threshold (427314s > 172800s)."
+        "release_channel: Release channel proof freshness exceeded threshold (428792s > 172800s)."
       ],
       "state": "pass",
       "warnings": []
@@ -299,9 +299,9 @@
       "sha256": "7894c569ebd73445b42b900d067b615e1a842749951c175d501fd5d0620271ee"
     },
     "flagship_readiness": {
-      "generated_at": "2026-05-06T03:30:51Z",
+      "generated_at": "2026-05-06T04:01:39Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "80f497c3f6ee64f867ccfc62ba2028eb3fa812f3379d5cf9c91df2fc26b8fe02"
+      "sha256": "6407de1f137d225d951be3f4c4164f8a46f1ba7422b597cff5b3adb46c2a5e48"
     },
     "horizon_registry": {
       "generated_at": "",
@@ -314,9 +314,9 @@
       "sha256": "4ffd722a8cafbc19530095c34f6af2f789dbba113b1f266678c69a92720510f1"
     },
     "journey_gates": {
-      "generated_at": "2026-05-06T03:30:49Z",
+      "generated_at": "2026-05-06T04:01:33Z",
       "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-      "sha256": "1dde84be59a2203912047189fe389c724621a3d2195edd1230e78e00c957345a"
+      "sha256": "618f12fdd4488e474b8b97fadab23c64b5c677444f4950f829ef403396758e3a"
     },
     "media_local_release_proof": {
       "generated_at": "2026-05-05T20:08:45Z",
@@ -334,9 +334,9 @@
       "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
     },
     "provider_stewardship": {
-      "generated_at": "2026-05-05T21:16:02Z",
+      "generated_at": "2026-05-06T04:08:39Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT90_M130_FLEET_PROVIDER_STEWARDSHIP.generated.json",
-      "sha256": "726e49df427ae40e05ceda285359cdeaec7459228fcb222d733c386c2f5183f3"
+      "sha256": "d9195668d1b2718e112a4b9836afda6b241aac70239cfdc26c95b517393a6d6f"
     },
     "queue_staging": {
       "generated_at": "",
@@ -351,7 +351,7 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "e360e1a7a36249a35a10be5f9a97e7f37053041171905b494db3bac67dd49ab1"
+      "sha256": "3614d3f739de335843fcf1e7c54a85c6892c310e03ac5e565fffd6de4e399010"
     }
   },
   "status": "pass",

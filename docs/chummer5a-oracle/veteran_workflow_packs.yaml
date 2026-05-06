@@ -1,32 +1,39 @@
 contract_name: executive_assistant.veteran_compare_packs
 schema_version: 1
-generated_at: 2026-05-05 19:49:40+00:00
+generated_at: 2026-05-05 23:16:04+00:00
 milestone:
   id: 103
   package_id: next90-m103-ea-parity-lab
   owned_surfaces:
   - veteran_compare_packs
 sync_context:
-  task_local_telemetry_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-3/runs/20260505T194421Z-shard-3/TASK_LOCAL_TELEMETRY.generated.json
+  task_local_telemetry_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-9/runs/20260505T231252Z-shard-9/TASK_LOCAL_TELEMETRY.generated.json
   task_local_telemetry_snapshot:
     mode: implementation_only
     scope_label: Full Chummer5A parity and flagship proof closeout
-    slice_summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open
-      under the flagship closeout frontier. Outstanding readiness coverage: flagship
-      readiness proof refresh.'
+    slice_summary: 'Milestone ''Compile family-local screenshot and interaction packs
+      for these workflows without collapsing them into broad family prose.'' remains
+      open under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
     status_query_supported: false
     polling_disabled: true
-    package_id: ''
-    frontier_id: 1300044932
-    milestone_id: 0
-    owned_surfaces: []
-    allowed_paths: []
+    remaining_open_milestones: 1
+    remaining_not_started_milestones: 1
+    missing_flagship_coverage: desktop_client
+    frontier_briefs:
+    - '2668415614 [flagship_product] Compile family-local screenshot and interaction
+      packs for these workflows without collapsing them into broad family prose. (status:
+      not_started; owners: executive-assistant; deps: none; exit: Compile family-local
+      screenshot and interaction packs for these workflows without collapsing them
+      into broad family prose.; Own and prove the surface slice(s): compile_family_local_screenshot_and_interaction_packs_fo:ea;
+      Keep implementation scoped to the allowed paths: scripts, feedback, docs; Refresh
+      flagship proof and close out the queue slice honestly when this package is landed
+      for `executive-assistant` (next90-m142-ea-compile-family-local-screenshot-and-interaction-packs-for-these-workflows).)'
   readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  readiness_generated_at: '2026-05-05T19:49:40Z'
+  readiness_generated_at: '2026-05-05T23:01:09Z'
   desktop_executable_exit_gate_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
-  desktop_executable_exit_gate_generated_at: '2026-05-05T03:53:56.486187Z'
-  runtime_handoff_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-3/ACTIVE_RUN_HANDOFF.generated.md
-  runtime_handoff_first_output_at: '2026-05-05T19:49:01Z'
+  desktop_executable_exit_gate_generated_at: '2026-05-05T20:58:08.759588Z'
+  runtime_handoff_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-9/ACTIVE_RUN_HANDOFF.generated.md
+  runtime_handoff_first_output_at: not yet
 required_landmarks:
 - File menu
 - Tools menu
@@ -141,6 +148,157 @@ workflow_maps:
   - menu:file_print_multiple
   - menu:hero_lab_importer
   fixture_manifest: /docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml
+route_specific_compare_packs:
+- family_id: sheet_export_print_viewer_and_exchange
+  summary: Keep print, export, and exchange parity grounded in route-local proof by pairing the exact menu routes with screenshot review and deterministic workspace-exchange receipts.
+  compare_artifacts:
+  - menu:open_for_printing
+  - menu:open_for_export
+  - menu:file_print_multiple
+  route_proofs:
+  - route_id: menu:open_for_printing
+    proof_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+    required_tokens:
+    - open_for_printing
+  - route_id: menu:open_for_export
+    proof_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+    required_tokens:
+    - open_for_export
+  - route_id: menu:file_print_multiple
+    proof_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json
+    required_tokens:
+    - print_multiple
+  artifact_proofs:
+    screenshot_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    required_screenshot_markers:
+    - print_export_exchange
+    - open_for_printing_menu_route
+    - open_for_export_menu_route
+    - print_multiple_menu_route
+    output_receipts:
+    - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md
+    required_output_tokens:
+    - WorkspaceExchangeDeterministicReceipt
+    - family:sheet_export_print_viewer_and_exchange
+- family_id: sr6_supplements_designers_and_house_rules
+  summary: Keep SR6 supplement and house-rule parity grounded in route-local proof by pairing the rule-environment studio route with successor-lane receipts and screenshot review markers.
+  compare_artifacts:
+  - workflow:sr6_supplements
+  - workflow:house_rules
+  route_proofs:
+  - route_id: workflow:sr6_supplements
+    proof_receipts:
+    - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md
+    required_tokens:
+    - Sr6SuccessorLaneDeterministicReceipt
+    - family:sr6_supplements_designers_and_house_rules
+    - supplement
+  - route_id: workflow:house_rules
+    proof_receipts:
+    - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md
+    required_tokens:
+    - Sr6SuccessorLaneDeterministicReceipt
+    - family:sr6_supplements_designers_and_house_rules
+    - house-rule
+  - route_id: surface:rule_environment_studio
+    proof_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M114_UI_RULE_STUDIO.generated.json
+    required_tokens:
+    - rule_environment_studio
+  artifact_proofs:
+    screenshot_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    required_screenshot_markers:
+    - sr6_rule_environment
+    - sr6_supplements
+    - house_rules
+family_local_proof_packs:
+- family_id: dense_builder_and_career_workflows
+  summary: Keep dense builder and career proof family-local by grouping the dense screenshot review, loaded-runner tab posture, and build/explain/publish click-through receipts around one concrete pack instead of broad workbench prose.
+  compare_artifacts:
+  - oracle:tabs
+  - oracle:workspace_actions
+  - workflow:build_explain_publish
+  screenshot_pack:
+    screenshots:
+    - 05-dense-section-light.png
+    - 06-dense-section-dark.png
+    - 07-loaded-runner-tabs-light.png
+    review_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json
+    screenshot_focus:
+    - legacy_dense_builder_rhythm
+    - runtime_backed_legacy_workbench
+    - loaded_runner_tabs
+  interaction_pack:
+    runtime_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+    required_tokens:
+    - tab-info
+    - tab-skills
+    - tab-qualities
+    - workflow:build_explain_publish
+- family_id: dice_initiative_and_table_utilities
+  summary: Keep dice and initiative proof family-local by pairing the menu-entry screenshots with the dice dialog, GM runboard, and deterministic initiative receipts instead of collapsing the family into generic utility prose.
+  compare_artifacts:
+  - menu:dice_roller
+  - workflow:initiative
+  screenshot_pack:
+    screenshots:
+    - 02-menu-open-light.png
+    - 04-loaded-runner-light.png
+    review_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    screenshot_focus:
+    - menu_dice_route_visibility
+    - loaded_runner_shell_context
+  interaction_pack:
+    runtime_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json
+    - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md
+    required_tokens:
+    - dialog.dice_roller
+    - dice_roller
+    - 'Initiative lane:'
+    - ResolveRunboardInitiativeSummary
+    - SessionActionBudgetDeterministicReceipt
+- family_id: identity_contacts_lifestyles_history
+  summary: Keep contacts, lifestyles, and history proof family-local by grouping the contacts and diary captures with the workflow-state receipts that close the lifestyle and notes continuity path, instead of relying on broad social-surface prose.
+  compare_artifacts:
+  - workflow:contacts
+  - workflow:lifestyles
+  - workflow:notes
+  screenshot_pack:
+    screenshots:
+    - 10-contacts-section-light.png
+    - 11-diary-dialog-light.png
+    review_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    screenshot_focus:
+    - legacy_contacts_workflow_rhythm
+    - diary_dialog_parity
+  interaction_pack:
+    runtime_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+    - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    required_tokens:
+    - tab-contacts.contacts
+    - tab-notes.metadata
+    - workflow:lifestyles
+    - WorkspaceWorkflowDeterministicReceipt
 families:
 - id: shell_workbench_orientation
   legacy_oracle_sources:
@@ -286,19 +444,16 @@ desktop_client_coverage:
     - master_index_dense_reference_flow
     - character_roster_multi_character_flow
 task_local_frontier_context:
-  assignment_kind: successor_wave_package
-  frontier_id: 1300044932
+  assignment_kind: flagship_product_frontier
+  frontier_id: 2668415614
   focus_profiles:
   - top_flagship_grade
   - whole_project_frontier
   focus_owners:
-  - chummer6-hub
-  - chummer6-hub-registry
-  - fleet
-  - chummer6-design
-  - chummer6-mobile
   - chummer6-core
-  - chummer6-ui-kit
+  - chummer6-ui
+  - chummer6-hub
+  - executive-assistant
   focus_texts:
   - top flagship grade
   - whole project frontier
@@ -310,11 +465,11 @@ task_local_frontier_context:
   - localization
   - restore confidence
   - fit and finish
-  - install
-  - update
-  - recovery
-  - claim
-  - release truth
+  - build lab
+  - advancement
+  - crew-fit
+  - explain
+  - rule-environment
   - whole-project frontier
   - no lowered standards
   - feedback loop
@@ -323,25 +478,25 @@ task_local_frontier_context:
   - journey smoothness
   - performance
   - proof shelf
+  - desktop client
   frontier_briefs:
-  - '1300044932 [flagship_product] Mobile and play-shell flagship finish (status:
-    not_started; owners: chummer6-mobile, chummer6-core, chummer6-ui-kit, chummer6-hub;
-    deps: none; exit: Deliver the dedicated player/GM/session shell described in
-    `projects/mobile.md`, including local-first play, replay/resume, reconnect confidence,
-    installable mobile posture, and cross-device continuity.; Keep mobile grounded
-    on package-only engine/play/UI-kit seams rather than cloning workbench or orchestration
-    logic.)'
+  - '2668415614 [flagship_product] Compile family-local screenshot and interaction
+    packs for these workflows without collapsing them into broad family prose. (status:
+    not_started; owners: executive-assistant; deps: none; exit: Compile family-local
+    screenshot and interaction packs for these workflows without collapsing them
+    into broad family prose.; Own and prove the surface slice(s): compile_family_local_screenshot_and_interaction_packs_fo:ea;
+    Keep implementation scoped to the allowed paths: scripts, feedback, docs; Refresh
+    flagship proof and close out the queue slice honestly when this package is landed
+    for `executive-assistant` (next90-m142-ea-compile-family-local-screenshot-and-interaction-packs-for-these-workflows).)'
   notes:
-  - Task-local telemetry is the current shard-4 flagship-closeout assignment context,
+  - Task-local telemetry is the current shard-9 flagship-closeout assignment context,
     not a release-readiness completion certificate.
   - The worker-run guard for this retry is implementation-only; historical operator
-    status snippets and supervisor helper outputs are not package evidence.
-  - The task-local telemetry does not carry per-lane release-readiness status, so
-    the live whole-product coverage block below stays sourced from the latest published
-    readiness receipt.
-  - The current published flagship readiness receipt can include missing or warning
-    lanes, so this pack preserves assignment context separately from live release
-    truth.
+    status snippets, supervisor helper outputs, and stale successor-wave context are
+    not package evidence.
+  - The live readiness receipt still leaves `desktop_client` at `warning`, so this
+    oracle pack must preserve that current coverage truth rather than replay an older
+    green desktop snapshot.
 whole_product_frontier_coverage:
   source_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
   package_relevant_coverage_keys:
@@ -349,24 +504,24 @@ whole_product_frontier_coverage:
   - desktop_client
   lanes:
   - coverage_key: fleet_and_operator_loop
-    package_relevance: The compare pack supports operator review when Fleet routes
-      veteran-parity drift or support fallout back to owner repos.
+    package_relevance: The parity-lab compare pack is only release-meaningful when
+      Fleet keeps the route-local proof gates, veteran packs, and readiness publication
+      bound to the same current whole-product frontier truth.
     live_readiness_status: ready
     live_readiness_summary: Fleet control-loop proof is current and steering a ready
       product surface set.
   - coverage_key: desktop_client
     package_relevance: The capture baselines anchor the promoted desktop tuple screenshots,
       first-minute tasks, and veteran-familiar shell landmarks.
-    live_readiness_status: ready
-    live_readiness_summary: Desktop install, release-channel, and flagship workbench
-      proof are current.
+    live_readiness_status: warning
+    live_readiness_summary: Desktop flagship proof is still incomplete.
 live_desktop_executable_gate_snapshot:
   source_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
-  generated_at: 2026-05-05 03:53:56.486187+00:00
-  status: pass
+  generated_at: 2026-05-05 20:58:08.759588+00:00
+  status: fail
   blocked_by_external_constraints_only: false
-  blocking_findings_count: 0
-  local_blocking_findings_count: 0
+  blocking_findings_count: 11
+  local_blocking_findings_count: 11
   external_blocking_findings_count: 0
   unresolved_external_host_proof_tuples: []
   local_blocker_families: []
@@ -396,17 +551,36 @@ visual_familiarity_screenshot_snapshot:
   - 18-import-dialog-light.png
   missing_screenshots: []
 exit_readiness:
-  ready:
-    local_executable_gate_findings: []
+  blocker:
+    local_executable_gate_findings:
+    - Desktop workflow execution gate is missing or not passing.
+    - 'Promoted release-channel artifact is missing from local desktop downloads shelf:
+      chummer-avalonia-linux-x64-installer.deb.'
+    - 'Promoted release-channel artifact size does not match local bytes for chummer-avalonia-win-x64-installer.exe.'
+    - 'Promoted release-channel artifact sha256 does not match local bytes for chummer-avalonia-win-x64-installer.exe.'
+    - Windows desktop exit gate installer bytes do not match the local promoted desktop
+      shelf artifact.
+    - 'Linux desktop exit gate receipt checks.release_channel_version does not match
+      release channel version for promoted head ''avalonia''.'
+    - 'Linux desktop exit gate receipt releaseVersion/version does not match release
+      channel version for promoted head ''avalonia''.'
+    - 'Linux installer startup smoke receipt version does not match release channel
+      version for promoted head ''avalonia''.'
+    - 'Linux installer startup smoke receipt carries conflicting version/releaseVersion
+      alias values for promoted head ''avalonia''.'
+    - 'Linux gate embedded release_channel_linux_artifact version/releaseVersion does
+      not match promoted release channel version.'
+    - 'Stale passing platform gate receipts exist for non-promoted desktop tuples:
+      macos:avalonia:osx-arm64.'
     unresolved_external_host_proof_tuples: []
-    desktop_client_status: ready
+    desktop_client_status: warning
   notes:
   - Veteran compare packs are now extracted and source-backed.
   - Live readiness and desktop executable-gate posture can move during the worker
     run; the pack records the latest observed state at sync time.
-  - The current published UI executable gate passes with zero local or external
-    blocking findings.
-  - The current published flagship readiness receipt is green across all whole-product
-    coverage lanes, including desktop_client.
+  - The current published UI executable gate still carries local blocking findings,
+    so this pack records the blocker branch instead of a false-ready shortcut.
+  - The current published flagship readiness receipt keeps `fleet_and_operator_loop`
+    ready while `desktop_client` remains warning.
   - The current task-local telemetry is successor-wave assignment context only; it
     does not override release-truth receipts.

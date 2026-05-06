@@ -272,15 +272,26 @@ ensure_chummer_playwright_image() {
 }
 
 operator_password() {
+  local password=""
+  if docker container inspect fleet-admin >/dev/null 2>&1; then
+    password="$(docker exec fleet-admin sh -lc 'printf "%s" "${FLEET_OPERATOR_PASSWORD:-}"' 2>/dev/null || true)"
+    if [ -n "${password}" ]; then
+      printf '%s' "${password}"
+      return 0
+    fi
+  fi
   if [ -n "${FLEET_OPERATOR_PASSWORD:-}" ]; then
     printf '%s' "${FLEET_OPERATOR_PASSWORD}"
     return 0
   fi
   if [ -f /docker/fleet/runtime.env ]; then
-    sed -n 's/^FLEET_OPERATOR_PASSWORD=//p' /docker/fleet/runtime.env | tail -n 1
-    return 0
+    password="$(sed -n 's/^FLEET_OPERATOR_PASSWORD=//p' /docker/fleet/runtime.env | tail -n 1)"
+    if [ -n "${password}" ]; then
+      printf '%s' "${password}"
+      return 0
+    fi
   fi
-  echo "FLEET_OPERATOR_PASSWORD is not set and /docker/fleet/runtime.env is missing" >&2
+  echo "FLEET_OPERATOR_PASSWORD is unavailable" >&2
   exit 1
 }
 
@@ -356,15 +367,15 @@ chmod 600 "$auth_cfg" || true
 exec curl -K "$auth_cfg" "$@"
 SH
 )"
-  if timeout 20 docker exec -i fleet-admin sh -lc "$internal_status_script" sh \
-    -fsS --connect-timeout 5 --max-time 15 \
+  if timeout 60 docker exec -i fleet-admin sh -lc "$internal_status_script" sh \
+    -fsS --connect-timeout 5 --max-time 45 \
     http://127.0.0.1:8092/api/admin/status-lite >"${temp_status}" 2>/dev/null; then
     cat "${temp_status}"
     rm -f "${temp_status}"
     return 0
   fi
   auth_config="$(build_operator_auth_config "${password}")"
-  if timeout 20 curl -fsS --connect-timeout 5 --max-time 15 -K "${auth_config}" \
+  if timeout 60 curl -fsS --connect-timeout 5 --max-time 45 -K "${auth_config}" \
     http://127.0.0.1:18090/api/admin/status-lite >"${temp_status}" 2>/dev/null; then
     cleanup_curl_auth_config "${auth_config}"
     cat "${temp_status}"
@@ -2440,7 +2451,11 @@ PY
     fleet_admin_python /docker/EA/scripts/browseract_architect.py check
     ;;
   ensure-ea-api)
-    docker compose -f /docker/EA/docker-compose.yml up -d ea-db ea-api ea-worker ea-scheduler
+    ea_compose_files=(-f /docker/EA/docker-compose.yml)
+    if find /docker/EA/vpn/fastestvpn -maxdepth 1 -type f -name '*.ovpn' | grep -q .; then
+      ea_compose_files+=(-f /docker/EA/docker-compose.fastestvpn.yml)
+    fi
+    docker compose "${ea_compose_files[@]}" up -d ea-db ea-api ea-worker ea-scheduler
     python3 - <<'PY'
 import json
 import time

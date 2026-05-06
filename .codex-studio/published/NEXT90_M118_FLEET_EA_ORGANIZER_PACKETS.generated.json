@@ -1,16 +1,16 @@
 {
   "agreement": {
     "closed_anywhere": true,
-    "design_queue_completion_action": "verify_closed_package_only",
-    "design_queue_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
-    "design_queue_status": "complete",
+    "design_queue_completion_action": "",
+    "design_queue_do_not_reopen_reason": "",
+    "design_queue_status": "",
     "expected_completion_action": "verify_closed_package_only",
     "expected_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
-    "fleet_queue_status": "complete",
-    "queue_completion_action": "verify_closed_package_only",
-    "queue_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
-    "queue_scope_matches_package": true,
-    "registry_scope_matches_package": true,
+    "fleet_queue_status": "",
+    "queue_completion_action": "",
+    "queue_do_not_reopen_reason": "",
+    "queue_scope_matches_package": false,
+    "registry_scope_matches_package": false,
     "registry_work_task_completion_action": "verify_closed_package_only",
     "registry_work_task_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
     "registry_work_task_status": "complete"
@@ -21,18 +21,20 @@
     ".codex-studio",
     "feedback"
   ],
-  "as_of": "2026-05-05",
+  "as_of": "2026-05-06",
   "contract_name": "fleet.next90_m118_organizer_operator_packets",
   "frontier_id": 4199699036,
-  "generated_at": "2026-05-05T14:56:38Z",
+  "generated_at": "2026-05-06T04:08:20Z",
   "milestone_id": 118,
   "next_actions": [
-    "Promote the M118 organizer operator packet as a current operator-loop input and keep the sibling proofs fresh."
+    "Repair Fleet/design queue or registry drift before trusting the M118 operator packet.",
+    "Fix the Hub organizer-ops proof lane before promoting organizer-health summaries.",
+    "Fix the Hub creator-publication proof lane before promoting publication-readiness summaries."
   ],
   "organizer_health": {
     "artifact_shelf_publication_surface": {
       "filter_receipt_present": true,
-      "package_status": "in_progress",
+      "package_status": "complete",
       "receipt_summary": "Hub now serves one governed artifact shelf lane for signed-in personal, campaign, creator, and public views, keeping recap lineage, publication state, trust posture, and public publication detail on the same inspectable surface instead of splitting them into unrelated routes.",
       "state": "pass",
       "summary": "Hub artifact shelf and audience-filter receipts are both present."
@@ -50,35 +52,44 @@
     },
     "hub_creator_publication": {
       "exists": true,
-      "exit_code": 0,
+      "exit_code": 1,
       "path": "/docker/chummercomplete/chummer.run-services/scripts/verify_next90_m116_hub_creator_publication.py",
-      "status": "pass",
-      "summary": "next90 m116 hub creator publication proof passed"
+      "status": "fail",
+      "summary": "Traceback (most recent call last):\n  File \"/docker/chummercomplete/chummer.run-services/scripts/verify_next90_m116_hub_creator_publication.py\", line 410, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/docker/chummercomplete/chummer.run-services/scripts/verify_next90_m116_hub_creator_publication.py\", line 391, in main\n    queue_row = verify_queue_authority(missing, QUEUE_STAGING_PATH)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/docker/chummercomplete/chummer.run-services/scripts/verify_next90_m116_hub_creator_publication.py\", line 227, in verify_queue_authority\n    item = load_queue_row(missing, path)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/docker/chummercomplete/chummer.run-services/scripts/verify_next90_m116_hub_creator_publication.py\", line 212, in load_queue_row\n    payload = load_yaml(path) or {}\n              ^^^^^^^^^^^^^^^\n  File \"/docker/chummercomplete/chummer.run-services/scripts/verify_next90_m116_hub_creator_publication.py\", line 199, in load_yaml\n    return yaml.safe_load(handle)\n           ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/__init__.py\", line 125, in safe_load\n    return load(stream, SafeLoader)\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/__init__.py\", line 81, in load\n    return loader.get_single_data()\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/constructor.py\", line 49, in get_single_data\n    node = self.get_single_node()\n           ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/composer.py\", line 36, in get_single_node\n    document = self.compose_document()\n               ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/composer.py\", line 55, in compose_document\n    node = self.compose_node(None, None)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/composer.py\", line 82, in compose_node\n    node = self.compose_sequence_node(anchor)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/composer.py\", line 110, in compose_sequence_node\n    while not self.check_event(SequenceEndEvent):\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/parser.py\", line 98, in check_event\n    self.current_event = self.state()\n                         ^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/parser.py\", line 392, in parse_block_sequence_entry\n    raise ParserError(\"while parsing a block collection\", self.marks[-1],\nyaml.parser.ParserError: while parsing a block collection\n  in \"/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml\", line 1, column 1\nexpected <block end>, but found '?'\n  in \"/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml\", line 19, column 1"
     },
     "hub_organizer_ops": {
       "exists": true,
-      "exit_code": 0,
+      "exit_code": 1,
       "path": "/docker/chummercomplete/chummer.run-services/scripts/verify_next90_m118_hub_organizer_ops.py",
-      "status": "pass",
-      "summary": "next90 m118 hub organizer ops proof passed"
+      "status": "fail",
+      "summary": "Traceback (most recent call last):\n  File \"/docker/chummercomplete/chummer.run-services/scripts/verify_next90_m118_hub_organizer_ops.py\", line 534, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/docker/chummercomplete/chummer.run-services/scripts/verify_next90_m118_hub_organizer_ops.py\", line 515, in main\n    queue_row = verify_queue_authority(missing, QUEUE_STAGING_PATH)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/docker/chummercomplete/chummer.run-services/scripts/verify_next90_m118_hub_organizer_ops.py\", line 298, in verify_queue_authority\n    payload = load_yaml(path) or {}\n              ^^^^^^^^^^^^^^^\n  File \"/docker/chummercomplete/chummer.run-services/scripts/verify_next90_m118_hub_organizer_ops.py\", line 278, in load_yaml\n    return yaml.safe_load(handle)\n           ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/__init__.py\", line 125, in safe_load\n    return load(stream, SafeLoader)\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/__init__.py\", line 81, in load\n    return loader.get_single_data()\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/constructor.py\", line 49, in get_single_data\n    node = self.get_single_node()\n           ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/composer.py\", line 36, in get_single_node\n    document = self.compose_document()\n               ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/composer.py\", line 55, in compose_document\n    node = self.compose_node(None, None)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/composer.py\", line 82, in compose_node\n    node = self.compose_sequence_node(anchor)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/composer.py\", line 110, in compose_sequence_node\n    while not self.check_event(SequenceEndEvent):\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/parser.py\", line 98, in check_event\n    self.current_event = self.state()\n                         ^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/yaml/parser.py\", line 392, in parse_block_sequence_entry\n    raise ParserError(\"while parsing a block collection\", self.marks[-1],\nyaml.parser.ParserError: while parsing a block collection\n  in \"/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml\", line 1, column 1\nexpected <block end>, but found '?'\n  in \"/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml\", line 19, column 1"
     },
     "queue_alignment": {
       "closed_anywhere": true,
-      "design_queue_completion_action": "verify_closed_package_only",
-      "design_queue_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
-      "design_queue_status": "complete",
+      "design_queue_completion_action": "",
+      "design_queue_do_not_reopen_reason": "",
+      "design_queue_status": "",
       "expected_completion_action": "verify_closed_package_only",
       "expected_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
-      "fleet_queue_status": "complete",
-      "issues": [],
-      "queue_completion_action": "verify_closed_package_only",
-      "queue_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
+      "fleet_queue_status": "",
+      "issues": [
+        "Fleet queue row is missing.",
+        "Design queue row is missing.",
+        "Fleet queue status drifted from completed package closure.",
+        "Design queue status drifted from completed package closure.",
+        "Fleet queue completion_action drifted from completed package closure.",
+        "Design queue completion_action drifted from completed package closure.",
+        "Fleet queue do_not_reopen_reason drifted from completed package closure.",
+        "Design queue do_not_reopen_reason drifted from completed package closure."
+      ],
+      "queue_completion_action": "",
+      "queue_do_not_reopen_reason": "",
       "registry_work_task_completion_action": "verify_closed_package_only",
       "registry_work_task_do_not_reopen_reason": "M118 Fleet organizer operator packets are complete; future shards must verify the organizer operator packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the organizer health and publication readiness packet slice.",
       "registry_work_task_status": "complete",
-      "state": "pass"
+      "state": "fail"
     },
-    "state": "pass"
+    "state": "blocked"
   },
   "owned_surfaces": [
     "organizer_health_packets",
@@ -87,9 +98,9 @@
   "package_id": "next90-m118-fleet-ea-organizer-packets",
   "publication_readiness": {
     "artifact_shelf_receipt_id": "artifact_shelf:v2",
-    "creator_publication_verifier_status": "pass",
-    "state": "watch",
-    "summary": "Launch expansion is still frozen at the weekly governor layer.",
+    "creator_publication_verifier_status": "fail",
+    "state": "blocked",
+    "summary": "Hub creator publication proof is failing.; Launch expansion is still frozen at the weekly governor layer.",
     "weekly_governor_action": "freeze_launch",
     "weekly_governor_public_state": "freeze_launch"
   },
@@ -107,17 +118,17 @@
       "state": "ready"
     },
     "hub_local_release_proof": {
-      "generated_at": "2026-05-05T12:55:39Z",
+      "generated_at": "2026-05-06T02:28:35Z",
       "path": "/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
       "status": "passed"
     },
     "support_packets": {
-      "generated_at": "2026-05-05T14:30:51Z",
+      "generated_at": "2026-05-06T04:01:25Z",
       "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-      "successor_package_verification_status": "pass"
+      "successor_package_verification_status": "fail"
     },
     "weekly_governor_packet": {
-      "generated_at": "2026-05-05T14:30:59Z",
+      "generated_at": "2026-05-06T04:01:46Z",
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
       "status": "blocked"
     }
@@ -143,12 +154,12 @@
       "packet_ids": []
     },
     "weekly_governor": {
-      "as_of": "2026-05-05",
+      "as_of": "2026-05-06",
       "contract_name": "fleet.weekly_governor_packet",
       "decision_action": "freeze_launch"
     }
   },
-  "status": "pass",
+  "status": "blocked",
   "status_reason": "Organizer-health, support-risk, and publication-readiness inputs are aligned.",
   "support_risk": {
     "counts": {

@@ -26,7 +26,7 @@ QUEUE_TITLE = "Fail closeout when these families remain green only by broad fami
 OWNED_SURFACES = ["fail_closeout_when_these_families_remain_green_only_by_b:fleet"]
 ALLOWED_PATHS = ["scripts", "tests", ".codex-studio", "feedback"]
 COMPLETION_ACTION = "verify_closed_package_only"
-LANDED_COMMIT = "unlanded"
+LANDED_COMMIT = "c851228a"
 DO_NOT_REOPEN_REASON = (
     "M143 fleet route-local output closeout gate is complete; future shards must verify the repo-local gate scripts, "
     "generated proof artifacts, and canonical queue/registry mirrors instead of reopening print or export or exchange "
@@ -160,6 +160,71 @@ TARGET_FAMILIES: Dict[str, Dict[str, Any]] = {
                 ],
             },
         ],
+    },
+}
+
+ROUTE_SPECIFIC_PACKS: Dict[str, Dict[str, Any]] = {
+    "sheet_export_print_viewer_and_exchange": {
+        "compare_artifacts": ["menu:open_for_printing", "menu:open_for_export", "menu:file_print_multiple"],
+        "route_proofs": {
+            "menu:open_for_printing": {
+                "proof_receipt_suffixes": ["SECTION_HOST_RULESET_PARITY.generated.json"],
+                "required_tokens": ["open_for_printing"],
+            },
+            "menu:open_for_export": {
+                "proof_receipt_suffixes": ["SECTION_HOST_RULESET_PARITY.generated.json"],
+                "required_tokens": ["open_for_export"],
+            },
+            "menu:file_print_multiple": {
+                "proof_receipt_suffixes": ["GENERATED_DIALOG_ELEMENT_PARITY.generated.json"],
+                "required_tokens": ["print_multiple"],
+            },
+        },
+        "artifact_proofs": {
+            "screenshot_receipt_suffixes": ["CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json"],
+            "required_screenshot_markers": [
+                "print_export_exchange",
+                "open_for_printing_menu_route",
+                "open_for_export_menu_route",
+                "print_multiple_menu_route",
+            ],
+            "output_receipt_suffixes": ["NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md"],
+            "required_output_tokens": [
+                "WorkspaceExchangeDeterministicReceipt",
+                "family:sheet_export_print_viewer_and_exchange",
+            ],
+        },
+    },
+    "sr6_supplements_designers_and_house_rules": {
+        "compare_artifacts": ["workflow:sr6_supplements", "workflow:house_rules"],
+        "route_proofs": {
+            "workflow:sr6_supplements": {
+                "proof_receipt_suffixes": ["NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md"],
+                "required_tokens": [
+                    "Sr6SuccessorLaneDeterministicReceipt",
+                    "family:sr6_supplements_designers_and_house_rules",
+                    "supplement",
+                ],
+            },
+            "workflow:house_rules": {
+                "proof_receipt_suffixes": ["NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md"],
+                "required_tokens": [
+                    "Sr6SuccessorLaneDeterministicReceipt",
+                    "family:sr6_supplements_designers_and_house_rules",
+                    "house-rule",
+                ],
+            },
+            "surface:rule_environment_studio": {
+                "proof_receipt_suffixes": ["NEXT90_M114_UI_RULE_STUDIO.generated.json"],
+                "required_tokens": ["rule_environment_studio"],
+            },
+        },
+        "artifact_proofs": {
+            "screenshot_receipt_suffixes": ["CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json"],
+            "required_screenshot_markers": ["sr6_rule_environment", "sr6_supplements", "house_rules"],
+            "output_receipt_suffixes": [],
+            "required_output_tokens": [],
+        },
     },
 }
 
@@ -392,6 +457,48 @@ def _workflow_pack_contract_monitor(workflow_pack: Dict[str, Any]) -> Dict[str, 
             continue
         if _normalize_list(row.get("compare_artifacts")) != spec["compare_artifacts"]:
             issues.append(f"Workflow pack compare_artifacts drifted for `{compact_id}`.")
+    route_rows = {
+        _normalize_text(row.get("family_id")): dict(row)
+        for row in (workflow_pack.get("route_specific_compare_packs") or [])
+        if isinstance(row, dict) and _normalize_text(row.get("family_id"))
+    }
+    for compact_id, spec in ROUTE_SPECIFIC_PACKS.items():
+        row = route_rows.get(compact_id) or {}
+        if not row:
+            issues.append(f"Workflow pack is missing route_specific_compare_packs entry `{compact_id}`.")
+            continue
+        if _normalize_list(row.get("compare_artifacts")) != spec["compare_artifacts"]:
+            issues.append(f"Workflow pack route_specific_compare_packs compare_artifacts drifted for `{compact_id}`.")
+        route_proofs = {
+            _normalize_text(route.get("route_id")): dict(route)
+            for route in (row.get("route_proofs") or [])
+            if isinstance(route, dict) and _normalize_text(route.get("route_id"))
+        }
+        for route_id, route_spec in spec["route_proofs"].items():
+            route_row = route_proofs.get(route_id) or {}
+            if not route_row:
+                issues.append(f"Workflow pack route_specific_compare_packs `{compact_id}` is missing route `{route_id}`.")
+                continue
+            proof_receipt_names = [Path(item).name for item in _normalize_list(route_row.get("proof_receipts"))]
+            if proof_receipt_names != route_spec["proof_receipt_suffixes"]:
+                issues.append(
+                    f"Workflow pack route_specific_compare_packs `{compact_id}` proof receipts drifted for route `{route_id}`."
+                )
+            if _normalize_list(route_row.get("required_tokens")) != route_spec["required_tokens"]:
+                issues.append(
+                    f"Workflow pack route_specific_compare_packs `{compact_id}` required_tokens drifted for route `{route_id}`."
+                )
+        artifact_proofs = dict(row.get("artifact_proofs") or {})
+        screenshot_names = [Path(item).name for item in _normalize_list(artifact_proofs.get("screenshot_receipts"))]
+        if screenshot_names != spec["artifact_proofs"]["screenshot_receipt_suffixes"]:
+            issues.append(f"Workflow pack route_specific_compare_packs `{compact_id}` screenshot receipts drifted.")
+        if _normalize_list(artifact_proofs.get("required_screenshot_markers")) != spec["artifact_proofs"]["required_screenshot_markers"]:
+            issues.append(f"Workflow pack route_specific_compare_packs `{compact_id}` screenshot markers drifted.")
+        output_names = [Path(item).name for item in _normalize_list(artifact_proofs.get("output_receipts"))]
+        if output_names != spec["artifact_proofs"]["output_receipt_suffixes"]:
+            issues.append(f"Workflow pack route_specific_compare_packs `{compact_id}` output receipts drifted.")
+        if _normalize_list(artifact_proofs.get("required_output_tokens")) != spec["artifact_proofs"]["required_output_tokens"]:
+            issues.append(f"Workflow pack route_specific_compare_packs `{compact_id}` output tokens drifted.")
     return {"state": "pass" if not issues else "fail", "issues": issues}
 
 
@@ -471,11 +578,12 @@ def _row_lookup(parity_audit: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
 
 def _target_rows_monitor(parity_audit: Dict[str, Any]) -> Dict[str, Any]:
     runtime_blockers: List[str] = []
+    warnings: List[str] = []
     row_reports: List[Dict[str, Any]] = []
     rows = _row_lookup(parity_audit)
     if not rows:
         runtime_blockers.append("Parity audit is missing or no longer publishes rows/elements.")
-        return {"state": "pass", "issues": [], "runtime_blockers": runtime_blockers, "rows": row_reports}
+        return {"state": "pass", "issues": [], "warnings": warnings, "runtime_blockers": runtime_blockers, "rows": row_reports}
     broad_evidence_suffixes = {
         "veteran_workflow_packs.yaml",
         "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
@@ -523,12 +631,15 @@ def _target_rows_monitor(parity_audit: Dict[str, Any]) -> Dict[str, Any]:
                 "removable_if_not_in_chummer5a": _normalize_text(row.get("removable_if_not_in_chummer5a")),
                 "reason": _normalize_text(row.get("reason")),
                 "evidence": evidence,
+                "source_reason": _normalize_text(row.get("reason")),
+                "source_evidence": evidence,
                 "issues": row_issues,
             }
         )
     return {
         "state": "pass",
         "issues": [],
+        "warnings": warnings,
         "runtime_blockers": runtime_blockers,
         "rows": row_reports,
     }
@@ -599,6 +710,8 @@ def build_payload(
     ):
         generated_value, _ = _parse_generated_at(path, payload)
         artifact_generated_at[key] = generated_value
+    core_receipts_generated_at, _ = _parse_generated_at(core_m143_receipts_doc_path, {})
+    artifact_generated_at["core_m143_receipts_doc"] = core_receipts_generated_at
 
     runtime_monitors = {
         "proof_corpus": _proof_corpus_monitor(texts, artifact_generated_at=artifact_generated_at, now=now),
@@ -674,6 +787,8 @@ def build_payload(
 def _render_markdown(payload: Dict[str, Any]) -> str:
     summary = dict(payload.get("monitor_summary") or {})
     package_closeout = dict(payload.get("package_closeout") or {})
+    target_rows = [dict(row) for row in (((payload.get("runtime_monitors") or {}).get("target_rows") or {}).get("rows") or [])]
+    proof_corpus = dict(((payload.get("runtime_monitors") or {}).get("proof_corpus") or {}))
     lines = [
         "# Next90 M143 Fleet Route-Local Output Closeout Gates",
         "",
@@ -696,6 +811,21 @@ def _render_markdown(payload: Dict[str, Any]) -> str:
             lines.append(f"- {item}")
     else:
         lines.append("- none")
+    lines.extend(["", "## Route Packs"])
+    family_summary = dict(proof_corpus.get("family_receipt_summary") or {})
+    for row in target_rows:
+        family_id = _normalize_text(row.get("id"))
+        family_runtime = dict(family_summary.get(family_id) or {})
+        lines.append(f"- `{family_id}`: {row.get('label', '')}")
+        lines.append(f"  compare_artifacts={', '.join(_normalize_list(row.get('compare_artifacts')))}")
+        lines.append(f"  evidence={', '.join(_normalize_list(row.get('evidence')))}")
+        lines.append(
+            f"  satisfied_route_receipts={', '.join(_normalize_list(family_runtime.get('satisfied_route_receipts'))) or 'none'}"
+        )
+        missing = _normalize_list(family_runtime.get("missing_route_receipts"))
+        lines.append(f"  missing_route_receipts={', '.join(missing) if missing else 'none'}")
+        row_issues = _normalize_list(row.get("issues"))
+        lines.append(f"  row_issues={'; '.join(row_issues) if row_issues else 'none'}")
     return "\n".join(lines) + "\n"
 
 

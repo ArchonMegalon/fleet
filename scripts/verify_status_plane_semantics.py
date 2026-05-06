@@ -229,6 +229,31 @@ def _fleet_boundary_proof_passed(published_dir: Path) -> bool:
     return isinstance(support_packets.get("summary") or {}, dict)
 
 
+def _fleet_package_manifest_ready(published_dir: Path) -> bool:
+    compile_manifest = _load_json_file(published_dir / "compile.manifest.json")
+    if not compile_manifest:
+        return False
+    stages = dict(compile_manifest.get("stages") or {})
+    required_stages = (
+        "design_compile",
+        "policy_compile",
+        "execution_compile",
+        "package_compile",
+        "capacity_compile",
+    )
+    if any(stages.get(stage) is not True for stage in required_stages):
+        return False
+    artifact_inventory = {str(item or "").strip() for item in (compile_manifest.get("artifacts") or [])}
+    required_artifacts = {
+        "STATUS_PLANE.generated.yaml",
+        "PROGRESS_REPORT.generated.json",
+        "PROGRESS_HISTORY.generated.json",
+        "SUPPORT_CASE_PACKETS.generated.json",
+        "JOURNEY_GATES.generated.json",
+    }
+    return required_artifacts.issubset(artifact_inventory)
+
+
 def _ui_independent_public_release_proof_passed(published_dir: Path) -> bool:
     def _proof_passed(payload: Dict[str, Any]) -> bool:
         return str(payload.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
@@ -300,7 +325,8 @@ def _infer_fallback_readiness_stage(
                 return "boundary_pure"
     elif project_id == "core":
         import_parity = _load_json_file(published_dir / "IMPORT_PARITY_CERTIFICATION.generated.json")
-        if _proof_passed(import_parity):
+        engine_proof_pack = _load_json_file(published_dir / "ENGINE_PROOF_PACK.generated.json")
+        if _proof_passed(import_parity) and _proof_passed(engine_proof_pack):
             return "boundary_pure"
     elif project_id == "media-factory":
         media_local_release_proof = _load_json_file(published_dir / "MEDIA_LOCAL_RELEASE_PROOF.generated.json")
@@ -326,6 +352,8 @@ def _infer_fallback_readiness_stage(
     elif project_id == "fleet":
         if _fleet_boundary_proof_passed(published_dir):
             return "boundary_pure"
+        if _fleet_package_manifest_ready(published_dir):
+            return "package_canonical"
     try:
         from admin import readiness as readiness_module
     except Exception:

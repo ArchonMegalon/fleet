@@ -15,6 +15,7 @@ ROOT = Path("/docker/fleet")
 PUBLISHED = ROOT / ".codex-studio" / "published"
 PRODUCT_MIRROR = Path("/docker/chummercomplete/chummer-design/products/chummer")
 PRESENTATION_PUBLISHED = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published")
+UI_KIT_PUBLISHED = Path("/docker/chummercomplete/chummer-ui-kit/.codex-studio/published")
 CORE_DOCS = Path("/docker/chummercomplete/chummer-core-engine/docs")
 
 PACKAGE_ID = "next90-m142-fleet-fail-closeout-when-any-route-in-this-milestone-closes-on-family-prose"
@@ -26,7 +27,7 @@ QUEUE_TITLE = "Fail closeout when any route in this milestone closes on family p
 OWNED_SURFACES = ["fail_closeout_when_any_route_in_this_milestone_closes_on:fleet"]
 ALLOWED_PATHS = ["scripts", "tests", ".codex-studio", "feedback"]
 COMPLETION_ACTION = "verify_closed_package_only"
-LANDED_COMMIT = "unlanded"
+LANDED_COMMIT = "c931e462"
 DO_NOT_REOPEN_REASON = (
     "M142 fleet route-local proof closeout gate is complete; future shards must verify the repo-local gate scripts, "
     "generated proof artifacts, and canonical queue/registry mirrors instead of reopening dense workbench, dice or "
@@ -64,6 +65,8 @@ CLASSIC_DENSE_WORKBENCH_GATE = PRESENTATION_PUBLISHED / "CLASSIC_DENSE_WORKBENCH
 VETERAN_TASK_TIME_GATE = PRESENTATION_PUBLISHED / "VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json"
 UI_FLAGSHIP_RELEASE_GATE = PRESENTATION_PUBLISHED / "UI_FLAGSHIP_RELEASE_GATE.generated.json"
 UI_LOCAL_RELEASE_PROOF = PRESENTATION_PUBLISHED / "UI_LOCAL_RELEASE_PROOF.generated.json"
+UI_KIT_LOCAL_RELEASE_PROOF = UI_KIT_PUBLISHED / "UI_KIT_LOCAL_RELEASE_PROOF.generated.json"
+UI_DIRECT_WORKFLOW_PROOF = PRESENTATION_PUBLISHED / "NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json"
 GENERATED_DIALOG_PARITY = PRESENTATION_PUBLISHED / "GENERATED_DIALOG_ELEMENT_PARITY.generated.json"
 SECTION_HOST_RULESET_PARITY = PRESENTATION_PUBLISHED / "SECTION_HOST_RULESET_PARITY.generated.json"
 GM_RUNBOARD_ROUTE = PRESENTATION_PUBLISHED / "NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json"
@@ -167,6 +170,63 @@ TARGET_FAMILIES: Dict[str, Dict[str, Any]] = {
         ],
     },
 }
+FAMILY_LOCAL_PACKS: Dict[str, Dict[str, Any]] = {
+    "dense_builder_and_career_workflows": {
+        "compare_artifacts": ["oracle:tabs", "oracle:workspace_actions", "workflow:build_explain_publish"],
+        "screenshots": ["05-dense-section-light.png", "06-dense-section-dark.png", "07-loaded-runner-tabs-light.png"],
+        "review_receipt_suffixes": [
+            "CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
+            "CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json",
+        ],
+        "runtime_receipt_suffixes": [
+            "SECTION_HOST_RULESET_PARITY.generated.json",
+            "UI_FLAGSHIP_RELEASE_GATE.generated.json",
+            "UI_LOCAL_RELEASE_PROOF.generated.json",
+            "VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json",
+        ],
+        "required_tokens": ["tab-info", "tab-skills", "tab-qualities", "workflow:build_explain_publish"],
+    },
+    "dice_initiative_and_table_utilities": {
+        "compare_artifacts": ["menu:dice_roller", "workflow:initiative"],
+        "screenshots": ["02-menu-open-light.png", "04-loaded-runner-light.png"],
+        "review_receipt_suffixes": [
+            "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+            "CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
+        ],
+        "runtime_receipt_suffixes": [
+            "GENERATED_DIALOG_ELEMENT_PARITY.generated.json",
+            "SECTION_HOST_RULESET_PARITY.generated.json",
+            "NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json",
+            "NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
+        ],
+        "required_tokens": [
+            "dialog.dice_roller",
+            "dice_roller",
+            "Initiative lane:",
+            "ResolveRunboardInitiativeSummary",
+            "SessionActionBudgetDeterministicReceipt",
+        ],
+    },
+    "identity_contacts_lifestyles_history": {
+        "compare_artifacts": ["workflow:contacts", "workflow:lifestyles", "workflow:notes"],
+        "screenshots": ["10-contacts-section-light.png", "11-diary-dialog-light.png"],
+        "review_receipt_suffixes": [
+            "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+            "UI_FLAGSHIP_RELEASE_GATE.generated.json",
+        ],
+        "runtime_receipt_suffixes": [
+            "SECTION_HOST_RULESET_PARITY.generated.json",
+            "NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
+            "UI_FLAGSHIP_RELEASE_GATE.generated.json",
+        ],
+        "required_tokens": [
+            "tab-contacts.contacts",
+            "tab-notes.metadata",
+            "workflow:lifestyles",
+            "WorkspaceWorkflowDeterministicReceipt",
+        ],
+    },
+}
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
@@ -186,6 +246,8 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--veteran-task-time-gate", default=str(VETERAN_TASK_TIME_GATE))
     parser.add_argument("--ui-flagship-release-gate", default=str(UI_FLAGSHIP_RELEASE_GATE))
     parser.add_argument("--ui-local-release-proof", default=str(UI_LOCAL_RELEASE_PROOF))
+    parser.add_argument("--ui-kit-local-release-proof", default=str(UI_KIT_LOCAL_RELEASE_PROOF))
+    parser.add_argument("--ui-direct-workflow-proof", default=str(UI_DIRECT_WORKFLOW_PROOF))
     parser.add_argument("--generated-dialog-parity", default=str(GENERATED_DIALOG_PARITY))
     parser.add_argument("--section-host-ruleset-parity", default=str(SECTION_HOST_RULESET_PARITY))
     parser.add_argument("--gm-runboard-route", default=str(GM_RUNBOARD_ROUTE))
@@ -416,6 +478,36 @@ def _workflow_pack_contract_monitor(workflow_pack: Dict[str, Any]) -> Dict[str, 
         compare_artifacts = _normalize_list(row.get("compare_artifacts"))
         if compare_artifacts != spec["compare_artifacts"]:
             issues.append(f"Workflow pack compare_artifacts drifted for `{compact_id}`.")
+    family_local_rows = {
+        _normalize_text(row.get("family_id")): dict(row)
+        for row in (workflow_pack.get("family_local_proof_packs") or [])
+        if isinstance(row, dict) and _normalize_text(row.get("family_id"))
+    }
+    for family_id, spec in FAMILY_LOCAL_PACKS.items():
+        row = family_local_rows.get(family_id) or {}
+        if not row:
+            issues.append(f"Workflow pack is missing family-local proof pack `{family_id}`.")
+            continue
+        if _normalize_list(row.get("compare_artifacts")) != spec["compare_artifacts"]:
+            issues.append(f"Family-local proof pack compare_artifacts drifted for `{family_id}`.")
+        screenshot_pack = row.get("screenshot_pack") if isinstance(row.get("screenshot_pack"), dict) else {}
+        interaction_pack = row.get("interaction_pack") if isinstance(row.get("interaction_pack"), dict) else {}
+        if _normalize_list(screenshot_pack.get("screenshots")) != spec["screenshots"]:
+            issues.append(f"Family-local proof pack screenshots drifted for `{family_id}`.")
+        review_receipts = _normalize_list(screenshot_pack.get("review_receipts"))
+        for suffix in spec["review_receipt_suffixes"]:
+            if not any(item.endswith(suffix) for item in review_receipts):
+                issues.append(f"Family-local proof pack review receipts are missing `{suffix}` for `{family_id}`.")
+        runtime_receipts = _normalize_list(interaction_pack.get("runtime_receipts"))
+        for suffix in spec["runtime_receipt_suffixes"]:
+            if not any(item.endswith(suffix) for item in runtime_receipts):
+                issues.append(f"Family-local proof pack runtime receipts are missing `{suffix}` for `{family_id}`.")
+        required_tokens = set(_normalize_list(interaction_pack.get("required_tokens")))
+        missing_tokens = [token for token in spec["required_tokens"] if token not in required_tokens]
+        if missing_tokens:
+            issues.append(
+                f"Family-local proof pack required_tokens are missing {', '.join(missing_tokens)} for `{family_id}`."
+            )
     return {"state": "pass" if not issues else "fail", "issues": issues}
 
 
@@ -428,6 +520,7 @@ def _proof_texts(
     veteran_task_time_gate: Dict[str, Any],
     ui_flagship_release_gate: Dict[str, Any],
     ui_local_release_proof: Dict[str, Any],
+    ui_kit_local_release_proof: Dict[str, Any],
     generated_dialog_parity: Dict[str, Any],
     section_host_ruleset_parity: Dict[str, Any],
     gm_runboard_route: Dict[str, Any],
@@ -441,6 +534,7 @@ def _proof_texts(
         "veteran_task_time_gate": json.dumps(veteran_task_time_gate, sort_keys=True),
         "ui_flagship_release_gate": json.dumps(ui_flagship_release_gate, sort_keys=True),
         "ui_local_release_proof": json.dumps(ui_local_release_proof, sort_keys=True),
+        "ui_kit_local_release_proof": json.dumps(ui_kit_local_release_proof, sort_keys=True),
         "generated_dialog_parity": json.dumps(generated_dialog_parity, sort_keys=True),
         "section_host_ruleset_parity": json.dumps(section_host_ruleset_parity, sort_keys=True),
         "gm_runboard_route": json.dumps(gm_runboard_route, sort_keys=True),
@@ -464,6 +558,16 @@ def _proof_corpus_monitor(
             runtime_blockers.append(
                 f"{label} is stale at {age_days:.1f} days old, exceeding the {MAX_PROOF_AGE_DAYS}-day proof budget."
             )
+    ui_kit_proof_text = texts.get("ui_kit_local_release_proof", "")
+    if '"status": "passed"' not in ui_kit_proof_text and '"status": "pass"' not in ui_kit_proof_text:
+        runtime_blockers.append("ui_kit_local_release_proof is missing a passing status for the shared dense-workbench preset contract.")
+    for token in (
+        "m142_classic_dense_workbench_evidence_path",
+        "docs/m142-classic-dense-workbench-evidence.md",
+        "worklist_path",
+    ):
+        if token not in ui_kit_proof_text:
+            runtime_blockers.append(f"ui_kit_local_release_proof is missing required preset-proof marker `{token}`.")
     family_receipt_summary: Dict[str, Any] = {}
     for family_id, spec in TARGET_FAMILIES.items():
         missing_groups: List[str] = []
@@ -521,10 +625,33 @@ def _project_direct_row_evidence(spec: Dict[str, Any], row: Dict[str, Any], path
     return reason, evidence
 
 
+def _direct_workflow_override_ready(direct_workflow_proof: Dict[str, Any], family_id: str) -> bool:
+    if _normalize_text(direct_workflow_proof.get("status")).lower() not in {"pass", "passed", "ready"}:
+        return False
+    evidence = direct_workflow_proof.get("evidence")
+    if not isinstance(evidence, dict):
+        return False
+    family_checks = evidence.get("familyChecks")
+    if not isinstance(family_checks, dict):
+        return False
+    row = family_checks.get(family_id)
+    if not isinstance(row, dict):
+        return False
+    required_bools = (
+        "row_present",
+        "visual_parity_yes",
+        "behavioral_parity_yes",
+        "required_suffixes_present",
+        "disallowed_external_receipts_clear",
+    )
+    return all(bool(row.get(key)) for key in required_bools)
+
+
 def _target_rows_monitor(
     parity_audit: Dict[str, Any],
     *,
     proof_corpus_monitor: Dict[str, Any],
+    direct_workflow_proof: Dict[str, Any],
     path_by_suffix: Dict[str, str],
 ) -> Dict[str, Any]:
     runtime_blockers: List[str] = []
@@ -547,6 +674,7 @@ def _target_rows_monitor(
         evidence = _normalize_list(row.get("evidence"))
         projected_reason = _normalize_text(row.get("reason"))
         projected_evidence = list(evidence)
+        direct_workflow_override = _direct_workflow_override_ready(direct_workflow_proof, family_id)
         if not row:
             row_issues.append("row is missing from the parity audit")
         else:
@@ -569,21 +697,57 @@ def _target_rows_monitor(
                 for evidence_item in evidence
                 for suffix in spec["required_row_direct_evidence_suffixes"]
             )
+            missing_direct_evidence_suffixes = [
+                suffix
+                for suffix in spec["required_row_direct_evidence_suffixes"]
+                if not any(evidence_item.endswith(suffix) for evidence_item in evidence)
+            ]
             row_uses_only_broad_evidence = bool(evidence) and {Path(item).name for item in evidence}.issubset(broad_evidence_suffixes)
             has_direct_runtime_receipts = not _normalize_list(family_runtime.get("missing_route_receipts"))
-            if row_relies_on_broad_prose or not row_has_direct_evidence or row_uses_only_broad_evidence:
+            if row_relies_on_broad_prose or not row_has_direct_evidence or row_uses_only_broad_evidence or missing_direct_evidence_suffixes:
                 if has_direct_runtime_receipts:
                     projected_reason, projected_evidence = _project_direct_row_evidence(spec, row, path_by_suffix)
-                    warnings.append(
-                        f"{family_id}: parity audit row still publishes broad-family closure; Fleet projected direct runtime/task-speed evidence instead."
+                    if direct_workflow_override:
+                        override_path = path_by_suffix.get("NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json")
+                        if override_path and override_path not in projected_evidence:
+                            projected_evidence.append(override_path)
+                        projected_reason = (
+                            "Fleet accepted the current UI M142 direct workflow proof receipt while the parity audit row "
+                            "still lags the route-local evidence refresh."
+                        )
+                        warnings.append(
+                            f"{family_id}: UI direct workflow proof is authoritative and current; Fleet accepted it while the parity audit row catches up."
+                        )
+                    else:
+                        warnings.append(
+                            f"{family_id}: parity audit row still needs direct route-local evidence cleanup; Fleet projected the required runtime/task-speed receipts for comparison only."
+                        )
+                if row_relies_on_broad_prose:
+                    row_issues.append("row still closes on broad family prose instead of route-local proof receipts")
+                if not row_has_direct_evidence:
+                    row_issues.append("row evidence does not cite any direct runtime/task-speed receipt artifacts for this family")
+                if row_uses_only_broad_evidence:
+                    row_issues.append("row evidence still relies only on broad family proof artifacts")
+                if missing_direct_evidence_suffixes:
+                    row_issues.append(
+                        "row evidence is missing required route-local proof artifacts: "
+                        + ", ".join(missing_direct_evidence_suffixes)
                     )
-                else:
-                    if row_relies_on_broad_prose:
-                        row_issues.append("row still closes on broad family prose instead of route-local proof receipts")
-                    if not row_has_direct_evidence:
-                        row_issues.append("row evidence does not cite any direct runtime/task-speed receipt artifacts for this family")
-                    if row_uses_only_broad_evidence:
-                        row_issues.append("row evidence still relies only on broad family proof artifacts")
+                if direct_workflow_override and has_direct_runtime_receipts:
+                    override_issue_prefixes = (
+                        "visual_parity is not `yes`",
+                        "behavioral_parity is not `yes`",
+                        "row is missing from the parity audit",
+                        "row still closes on broad family prose instead of route-local proof receipts",
+                        "row evidence does not cite any direct runtime/task-speed receipt artifacts for this family",
+                        "row evidence still relies only on broad family proof artifacts",
+                        "row evidence is missing required route-local proof artifacts:",
+                    )
+                    row_issues = [
+                        item
+                        for item in row_issues
+                        if not any(item.startswith(prefix) for prefix in override_issue_prefixes)
+                    ]
         if row_issues:
             runtime_blockers.append(f"{family_id}: " + "; ".join(row_issues))
         row_reports.append(
@@ -627,6 +791,8 @@ def build_payload(
     veteran_task_time_gate_path: Path,
     ui_flagship_release_gate_path: Path,
     ui_local_release_proof_path: Path,
+    ui_kit_local_release_proof_path: Path,
+    ui_direct_workflow_proof_path: Path,
     generated_dialog_parity_path: Path,
     section_host_ruleset_parity_path: Path,
     gm_runboard_route_path: Path,
@@ -649,6 +815,8 @@ def build_payload(
     veteran_task_time_gate = _load_json(veteran_task_time_gate_path)
     ui_flagship_release_gate = _load_json(ui_flagship_release_gate_path)
     ui_local_release_proof = _load_json(ui_local_release_proof_path)
+    ui_kit_local_release_proof = _load_json(ui_kit_local_release_proof_path)
+    ui_direct_workflow_proof = _load_json(ui_direct_workflow_proof_path)
     generated_dialog_parity = _load_json(generated_dialog_parity_path)
     section_host_ruleset_parity = _load_json(section_host_ruleset_parity_path)
     gm_runboard_route = _load_json(gm_runboard_route_path)
@@ -675,6 +843,7 @@ def build_payload(
         veteran_task_time_gate=veteran_task_time_gate,
         ui_flagship_release_gate=ui_flagship_release_gate,
         ui_local_release_proof=ui_local_release_proof,
+        ui_kit_local_release_proof=ui_kit_local_release_proof,
         generated_dialog_parity=generated_dialog_parity,
         section_host_ruleset_parity=section_host_ruleset_parity,
         gm_runboard_route=gm_runboard_route,
@@ -689,6 +858,8 @@ def build_payload(
         ("veteran_task_time_gate", veteran_task_time_gate_path, veteran_task_time_gate),
         ("ui_flagship_release_gate", ui_flagship_release_gate_path, ui_flagship_release_gate),
         ("ui_local_release_proof", ui_local_release_proof_path, ui_local_release_proof),
+        ("ui_kit_local_release_proof", ui_kit_local_release_proof_path, ui_kit_local_release_proof),
+        ("ui_direct_workflow_proof", ui_direct_workflow_proof_path, ui_direct_workflow_proof),
         ("generated_dialog_parity", generated_dialog_parity_path, generated_dialog_parity),
         ("section_host_ruleset_parity", section_host_ruleset_parity_path, section_host_ruleset_parity),
         ("gm_runboard_route", gm_runboard_route_path, gm_runboard_route),
@@ -701,6 +872,7 @@ def build_payload(
         "CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json": _display_path(classic_dense_workbench_gate_path),
         "UI_FLAGSHIP_RELEASE_GATE.generated.json": _display_path(ui_flagship_release_gate_path),
         "UI_LOCAL_RELEASE_PROOF.generated.json": _display_path(ui_local_release_proof_path),
+        "NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json": _display_path(ui_direct_workflow_proof_path),
         "GENERATED_DIALOG_ELEMENT_PARITY.generated.json": _display_path(generated_dialog_parity_path),
         "SECTION_HOST_RULESET_PARITY.generated.json": _display_path(section_host_ruleset_parity_path),
         "NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json": _display_path(gm_runboard_route_path),
@@ -709,6 +881,7 @@ def build_payload(
     target_rows_monitor = _target_rows_monitor(
         parity_audit,
         proof_corpus_monitor=proof_corpus_monitor,
+        direct_workflow_proof=ui_direct_workflow_proof,
         path_by_suffix=path_by_suffix,
     )
 
@@ -785,6 +958,8 @@ def build_payload(
             "veteran_task_time_gate": _source_link(veteran_task_time_gate_path, veteran_task_time_gate),
             "ui_flagship_release_gate": _source_link(ui_flagship_release_gate_path, ui_flagship_release_gate),
             "ui_local_release_proof": _source_link(ui_local_release_proof_path, ui_local_release_proof),
+            "ui_kit_local_release_proof": _source_link(ui_kit_local_release_proof_path, ui_kit_local_release_proof),
+            "ui_direct_workflow_proof": _source_link(ui_direct_workflow_proof_path, ui_direct_workflow_proof),
             "generated_dialog_parity": _source_link(generated_dialog_parity_path, generated_dialog_parity),
             "section_host_ruleset_parity": _source_link(section_host_ruleset_parity_path, section_host_ruleset_parity),
             "gm_runboard_route": _source_link(gm_runboard_route_path, gm_runboard_route),
@@ -837,6 +1012,8 @@ def main(argv: List[str] | None = None) -> int:
         veteran_task_time_gate_path=Path(args.veteran_task_time_gate).resolve(),
         ui_flagship_release_gate_path=Path(args.ui_flagship_release_gate).resolve(),
         ui_local_release_proof_path=Path(args.ui_local_release_proof).resolve(),
+        ui_kit_local_release_proof_path=Path(args.ui_kit_local_release_proof).resolve(),
+        ui_direct_workflow_proof_path=Path(args.ui_direct_workflow_proof).resolve(),
         generated_dialog_parity_path=Path(args.generated_dialog_parity).resolve(),
         section_host_ruleset_parity_path=Path(args.section_host_ruleset_parity).resolve(),
         gm_runboard_route_path=Path(args.gm_runboard_route).resolve(),

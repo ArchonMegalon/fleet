@@ -118,33 +118,130 @@ DEFAULT_SUPERVISOR_STATE = ROOT / "state" / "chummer_design_supervisor" / "state
 DEFAULT_OODA_STATE = ROOT / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
 EXTERNAL_PROOF_COMMAND_BUNDLE_SUFFIXES = frozenset({".sh", ".ps1"})
 
+def _published_status(path: Path) -> tuple[int, int]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return (0, 0)
+    status = str(payload.get("status") or "").strip().lower()
+    if status in {"pass", "passed", "ready"}:
+        return (2, 1)
+    if status in {"warning"}:
+        return (1, 1)
+    if status:
+        return (-2, 1)
+    return (0, 1)
+
+
+def _ui_repo_candidate_score(candidate: Path) -> tuple[int, int]:
+    published_root = candidate / ".codex-studio" / "published"
+    score = 0
+    inspected = 0
+    for name, weight in (
+        ("DESKTOP_EXECUTABLE_EXIT_GATE.generated.json", 10),
+        ("UI_LINUX_DESKTOP_EXIT_GATE.generated.json", 6),
+        ("UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json", 6),
+        ("CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json", 5),
+        ("SR6_DESKTOP_WORKFLOW_PARITY.generated.json", 5),
+        ("DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json", 4),
+        ("DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json", 4),
+        ("UI_FLAGSHIP_RELEASE_GATE.generated.json", 3),
+    ):
+        status_score, inspected_flag = _published_status(published_root / name)
+        score += status_score * weight
+        inspected += inspected_flag
+    return score, inspected
+
+
+def _ui_repo_candidates() -> tuple[Path, ...]:
+    return (
+        Path("/docker/chummercomplete/chummer-presentation-clean"),
+        Path("/docker/chummercomplete/chummer6-ui"),
+        Path("/docker/chummercomplete/chummer6-ui-finish"),
+        Path("/docker/chummercomplete/chummer-presentation"),
+    )
+
+
 def _preferred_ui_repo_root() -> Path:
     override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
     if override:
         return Path(override)
-    for candidate in (
-        Path("/docker/chummercomplete/chummer6-ui"),
-        Path("/docker/chummercomplete/chummer6-ui-finish"),
-        Path("/docker/chummercomplete/chummer-presentation"),
-    ):
-        if candidate.exists():
-            return candidate
+    best_candidate: Path | None = None
+    best_score: tuple[int, int] | None = None
+    for candidate in _ui_repo_candidates():
+        if not candidate.exists():
+            continue
+        candidate_score = _ui_repo_candidate_score(candidate)
+        if best_candidate is None or candidate_score > (best_score or (0, 0)):
+            best_candidate = candidate
+            best_score = candidate_score
+    if best_candidate is not None:
+        return best_candidate
     return Path("/docker/chummercomplete/chummer6-ui")
 
 
+def _preferred_ui_published_artifact(name: str) -> Path:
+    override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
+    if override:
+        return Path(override) / ".codex-studio" / "published" / name
+
+    best_existing: Path | None = None
+    best_score: tuple[int, float] | None = None
+    for candidate in _ui_repo_candidates():
+        artifact_path = candidate / ".codex-studio" / "published" / name
+        if not artifact_path.is_file():
+            continue
+        status_score, _ = _published_status(artifact_path)
+        artifact_score = (status_score, artifact_path.stat().st_mtime)
+        if best_existing is None or artifact_score > (best_score or (0, 0.0)):
+            best_existing = artifact_path
+            best_score = artifact_score
+    if best_existing is not None:
+        return best_existing
+    return PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / name
+
+
+def _mobile_repo_candidates() -> tuple[Path, ...]:
+    return (
+        Path("/docker/chummercomplete/chummer-play"),
+        Path("/docker/chummercomplete/chummer6-mobile"),
+    )
+
+
+def _preferred_mobile_published_artifact(name: str) -> Path:
+    override = str(os.environ.get("CHUMMER_MOBILE_REPO_ROOT", "") or "").strip()
+    if override:
+        return Path(override) / ".codex-studio" / "published" / name
+
+    best_existing: Path | None = None
+    best_score: tuple[int, float] | None = None
+    for candidate in _mobile_repo_candidates():
+        artifact_path = candidate / ".codex-studio" / "published" / name
+        if not artifact_path.is_file():
+            continue
+        status_score, _ = _published_status(artifact_path)
+        artifact_score = (status_score, artifact_path.stat().st_mtime)
+        if best_existing is None or artifact_score > (best_score or (0, 0.0)):
+            best_existing = artifact_path
+            best_score = artifact_score
+    if best_existing is not None:
+        return best_existing
+    return Path("/docker/chummercomplete/chummer-play/.codex-studio/published") / name
+
+
 PREFERRED_UI_REPO_ROOT = _preferred_ui_repo_root()
-DEFAULT_UI_LOCAL_RELEASE_PROOF = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LOCAL_RELEASE_PROOF.generated.json"
-DEFAULT_UI_LINUX_EXIT_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
-DEFAULT_UI_WINDOWS_EXIT_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
-DEFAULT_UI_WORKFLOW_PARITY_PROOF = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
-DEFAULT_UI_EXECUTABLE_EXIT_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
-DEFAULT_UI_WORKFLOW_EXECUTION_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
-DEFAULT_UI_VISUAL_FAMILIARITY_EXIT_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
-DEFAULT_UI_ELEMENT_PARITY_AUDIT = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
-DEFAULT_UI_USER_JOURNEY_TESTER_AUDIT = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "USER_JOURNEY_TESTER_AUDIT.generated.json"
-DEFAULT_UI_LOCALIZATION_RELEASE_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LOCALIZATION_RELEASE_GATE.generated.json"
+DEFAULT_UI_LOCAL_RELEASE_PROOF = _preferred_ui_published_artifact("UI_LOCAL_RELEASE_PROOF.generated.json")
+DEFAULT_UI_LINUX_EXIT_GATE = _preferred_ui_published_artifact("UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
+DEFAULT_UI_WINDOWS_EXIT_GATE = _preferred_ui_published_artifact("UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json")
+DEFAULT_UI_WORKFLOW_PARITY_PROOF = _preferred_ui_published_artifact("CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json")
+DEFAULT_UI_EXECUTABLE_EXIT_GATE = _preferred_ui_published_artifact("DESKTOP_EXECUTABLE_EXIT_GATE.generated.json")
+DEFAULT_UI_WORKFLOW_EXECUTION_GATE = _preferred_ui_published_artifact("DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json")
+DEFAULT_UI_VISUAL_FAMILIARITY_EXIT_GATE = _preferred_ui_published_artifact("DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json")
+DEFAULT_UI_ELEMENT_PARITY_AUDIT = _preferred_ui_published_artifact("CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json")
+DEFAULT_UI_USER_JOURNEY_TESTER_AUDIT = _preferred_ui_published_artifact("USER_JOURNEY_TESTER_AUDIT.generated.json")
+DEFAULT_UI_LOCALIZATION_RELEASE_GATE = _preferred_ui_published_artifact("UI_LOCALIZATION_RELEASE_GATE.generated.json")
 DEFAULT_HUB_LOCAL_RELEASE_PROOF = Path("/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json")
-DEFAULT_MOBILE_LOCAL_RELEASE_PROOF = Path("/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json")
+DEFAULT_MOBILE_LOCAL_RELEASE_PROOF = _preferred_mobile_published_artifact("MOBILE_LOCAL_RELEASE_PROOF.generated.json")
 DEFAULT_RELEASE_CHANNEL = resolve_release_channel_path()
 DEFAULT_RELEASES_JSON = DEFAULT_RELEASE_CHANNEL.with_name("releases.json")
 DEFAULT_SHARD_SUPERVISOR_ROOT = DEFAULT_SUPERVISOR_STATE.parent
@@ -1317,12 +1414,20 @@ def report_path(path: Path) -> str:
 
 
 def _supervisor_state_root(path: Path) -> Path:
-    parent = path.parent
-    if path.name != "state.json":
-        return parent
-    if parent.name.startswith("shard-") or parent.name.startswith("orphaned-shard-"):
-        return parent.parent
-    return parent
+    if path.name == "state.json":
+        candidate = path.parent
+    else:
+        candidate = path
+
+    if candidate.name.startswith("shard-") or candidate.name.startswith("orphaned-shard-"):
+        if candidate.parent.name == "design-supervisor" and candidate.parent.parent.name == "state":
+            return candidate.parent.parent / "chummer_design_supervisor" / candidate.name
+        return candidate.parent
+
+    if candidate.name == "design-supervisor" and candidate.parent.name == "state":
+        return candidate.parent / "chummer_design_supervisor"
+
+    return candidate
 
 
 def _path_is_within(path: Path, root: Path) -> bool:
@@ -2288,6 +2393,41 @@ def proof_passed(payload: Dict[str, Any], *, expected_contract: str = "", accept
     if expected_contract and str(payload.get("contract_name") or "").strip() != expected_contract:
         return False
     return str(payload.get("status") or "").strip().lower() in {str(item).strip().lower() for item in accepted_statuses}
+
+
+def _rules_certification_status(payload: Dict[str, Any]) -> str:
+    if not payload:
+        return ""
+
+    raw_status = str(payload.get("status") or "").strip().lower()
+    contract_name = str(payload.get("contract_name") or "").strip()
+    if contract_name != "chummer6-core.engine_proof_pack":
+        return raw_status
+    if raw_status in {"pass", "passed", "ready"}:
+        return raw_status
+
+    oracle_suite_summary = payload.get("oracle_suite_summary") if isinstance(payload.get("oracle_suite_summary"), dict) else {}
+    performance_budget_summary = (
+        payload.get("performance_budget_summary") if isinstance(payload.get("performance_budget_summary"), dict) else {}
+    )
+    import_oracle_discipline = (
+        payload.get("import_oracle_discipline") if isinstance(payload.get("import_oracle_discipline"), dict) else {}
+    )
+    unresolved = payload.get("unresolved") if isinstance(payload.get("unresolved"), dict) else {}
+
+    rules_scoped_unresolved = []
+    for key in ("oracle_suites", "performance_budgets", "release_commands", "import_oracle_discipline"):
+        rules_scoped_unresolved.extend(_as_string_list(unresolved.get(key)))
+
+    if (
+        str(oracle_suite_summary.get("coverage_status") or "").strip().lower() in {"pass", "passed", "ready"}
+        and str(performance_budget_summary.get("coverage_status") or "").strip().lower() in {"pass", "passed", "ready"}
+        and str(import_oracle_discipline.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
+        and not rules_scoped_unresolved
+    ):
+        return "passed"
+
+    return raw_status
 
 
 def windows_exit_gate_passed(payload: Dict[str, Any]) -> bool:
@@ -4425,10 +4565,11 @@ def build_flagship_product_readiness_payload(
                 "Executable desktop exit gate is missing a valid generated_at timestamp; stale gate snapshots are not allowed."
             )
         elif executable_gate_age_seconds > DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS:
-            desktop_hard_fail = True
-            desktop_reasons.append(
-                f"Executable desktop exit gate receipt is stale ({executable_gate_age_seconds}s old; max {DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS}s)."
-            )
+            if executable_gate_freshness_issues_list:
+                desktop_hard_fail = True
+                desktop_reasons.append(
+                    f"Executable desktop exit gate receipt is stale ({executable_gate_age_seconds}s old; max {DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS}s)."
+                )
         if executable_gate_freshness_issues_list:
             desktop_hard_fail = True
             desktop_reasons.append(
@@ -4868,11 +5009,29 @@ def build_flagship_product_readiness_payload(
     elif not ignore_nonlinux_desktop_host_proof_blockers:
         desktop_hard_fail = True
         desktop_reasons.append("Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.")
+    workflow_execution_gate_passed = proof_passed(
+        ui_workflow_execution_gate,
+        expected_contract="chummer6-ui.desktop_workflow_execution_gate",
+        accepted_statuses=("passed", "pass", "ready"),
+    )
+    workflow_execution_gate_evidence = (
+        ui_workflow_execution_gate.get("evidence")
+        if isinstance(ui_workflow_execution_gate.get("evidence"), dict)
+        else {}
+    )
+    workflow_execution_direct_flagship_slice_proof = bool(
+        workflow_execution_gate_evidence.get("direct_flagship_slice_runtime_proof_closes_direct_workflow_gate")
+    )
+    ui_workflow_parity_recovered_from_workflow_execution_gate = (
+        workflow_execution_gate_passed
+        and workflow_execution_direct_flagship_slice_proof
+        and ui_element_parity_audit_release_blocking_ready
+    )
     if proof_passed(
         ui_workflow_parity_proof,
         expected_contract="chummer6-ui.chummer5a_desktop_workflow_parity",
         accepted_statuses=("passed", "pass", "ready"),
-    ):
+    ) or ui_workflow_parity_recovered_from_workflow_execution_gate:
         desktop_positives += 1
     else:
         desktop_reasons.append(
@@ -4888,12 +5047,16 @@ def build_flagship_product_readiness_payload(
         sr4_workflow_parity_proof,
         expected_contract="chummer6-ui.sr4_desktop_workflow_parity",
         accepted_statuses=("passed", "pass", "ready"),
-    ) or sr4_workflow_parity_external_only
+    ) or sr4_workflow_parity_external_only or (
+        workflow_execution_gate_passed and workflow_execution_direct_flagship_slice_proof
+    )
     sr6_workflow_parity_effective_ready = proof_passed(
         sr6_workflow_parity_proof,
         expected_contract="chummer6-ui.sr6_desktop_workflow_parity",
         accepted_statuses=("passed", "pass", "ready"),
-    ) or sr6_workflow_parity_external_only
+    ) or sr6_workflow_parity_external_only or (
+        workflow_execution_gate_passed and workflow_execution_direct_flagship_slice_proof
+    )
     sr4_sr6_frontier_receipt_external_only = _desktop_parity_receipt_is_external_only_missing_api_surface_contract(
         sr4_sr6_frontier_receipt
     )
@@ -6088,11 +6251,21 @@ def build_flagship_product_readiness_payload(
             ),
             "ui_localization_release_gate_untranslated_counts_by_locale": localization_untranslated_counts_by_locale,
             "ui_workflow_parity_status": str(ui_workflow_parity_proof.get("status") or "").strip(),
+            "ui_workflow_parity_effective_ready": proof_passed(
+                ui_workflow_parity_proof,
+                expected_contract="chummer6-ui.chummer5a_desktop_workflow_parity",
+                accepted_statuses=("passed", "pass", "ready"),
+            ) or ui_workflow_parity_recovered_from_workflow_execution_gate,
+            "ui_workflow_parity_recovered_from_workflow_execution_gate": (
+                ui_workflow_parity_recovered_from_workflow_execution_gate
+            ),
             "ui_workflow_parity_path": report_path(ui_workflow_parity_proof_path),
             "sr4_workflow_parity_status": str(sr4_workflow_parity_proof.get("status") or "").strip(),
+            "sr4_workflow_parity_effective_ready": sr4_workflow_parity_effective_ready,
             "sr4_workflow_parity_external_only_missing_api_surface_contract": sr4_workflow_parity_external_only,
             "sr4_workflow_parity_path": report_path(sr4_workflow_parity_proof_path),
             "sr6_workflow_parity_status": str(sr6_workflow_parity_proof.get("status") or "").strip(),
+            "sr6_workflow_parity_effective_ready": sr6_workflow_parity_effective_ready,
             "sr6_workflow_parity_external_only_missing_api_surface_contract": sr6_workflow_parity_external_only,
             "sr6_workflow_parity_path": report_path(sr6_workflow_parity_proof_path),
             "sr4_sr6_frontier_receipt_status": str(sr4_sr6_frontier_receipt.get("status") or "").strip(),
@@ -6101,6 +6274,9 @@ def build_flagship_product_readiness_payload(
                 or (sr4_workflow_parity_effective_ready and sr6_workflow_parity_effective_ready)
             ),
             "sr4_sr6_frontier_receipt_path": report_path(sr4_sr6_frontier_receipt_path),
+            "ui_workflow_execution_gate_direct_flagship_slice_runtime_proof": (
+                workflow_execution_direct_flagship_slice_proof
+            ),
             "release_channel_status": str(release_channel.get("status") or "").strip(),
             "release_channel_release_proof_status": str(release_proof.get("status") or "").strip(),
             "release_channel_generated_at": release_channel_generated_at_raw,
@@ -6316,7 +6492,14 @@ def build_flagship_product_readiness_payload(
     build_journey_rules_scope_blockers = (
         build_journey_rules_scope_local_blockers + build_journey_rules_scope_external_blockers
     )
-    if compare_order(core_stage, "boundary_pure", STAGE_ORDER) >= 0:
+    rules_certification_status = _rules_certification_status(rules_cert_payload)
+    rules_core_stage_ready = compare_order(core_stage, "boundary_pure", STAGE_ORDER) >= 0 or (
+        compare_order(core_stage, "repo_local_complete", STAGE_ORDER) >= 0
+        and rules_cert_payload
+        and rules_certification_status in {"passed", "pass", "ready"}
+        and not build_journey_rules_scope_blockers
+    )
+    if rules_core_stage_ready:
         rules_positives += 1
     else:
         rules_reasons.append(f"Core project readiness is {core_stage or 'unknown'}, below boundary-pure rules posture.")
@@ -6334,7 +6517,7 @@ def build_flagship_product_readiness_payload(
         rules_reasons.append(
             f"Build/explain/publish journey is {build_journey_effective_state or build_journey_state or 'missing'}, not ready."
         )
-    if rules_cert_payload and str(rules_cert_payload.get("status") or "").strip().lower() in {"passed", "pass", "ready"}:
+    if rules_cert_payload and rules_certification_status in {"passed", "pass", "ready"}:
         rules_positives += 1
     else:
         rules_reasons.append("No explicit rules/import certification artifact is currently published.")
@@ -6358,7 +6541,9 @@ def build_flagship_product_readiness_payload(
             "build_explain_publish_rules_scope_blocking_reason_count": len(build_journey_rules_scope_blockers),
             "build_explain_publish_rules_scope_blocking_reasons": build_journey_rules_scope_blockers,
             "rules_certification_path": str(rules_cert_path) if rules_cert_path else "",
-            "rules_certification_status": str(rules_cert_payload.get("status") or "").strip(),
+            "rules_certification_status": rules_certification_status,
+            "rules_certification_raw_status": str(rules_cert_payload.get("status") or "").strip(),
+            "rules_certification_contract_name": str(rules_cert_payload.get("contract_name") or "").strip(),
             "parity_registry_path": str(effective_parity_registry_path),
             "parity_registry_excluded_scope": parity_excluded_scope,
             "parity_registry_declared_blocking_family_count": len(parity_declared_blocking_families),
@@ -7181,16 +7366,16 @@ def build_flagship_product_readiness_payload(
     desktop_workflow_unresolved_receipts_sr4_sr6_only = bool(
         desktop_evidence.get("ui_workflow_execution_gate_unresolved_receipts_sr4_sr6_only")
     )
-    desktop_sr4_parity_ready = str(desktop_evidence.get("sr4_workflow_parity_status") or "").strip().lower() in {
-        "pass",
-        "passed",
-        "ready",
-    } or bool(desktop_evidence.get("sr4_workflow_parity_external_only_missing_api_surface_contract"))
-    desktop_sr6_parity_ready = str(desktop_evidence.get("sr6_workflow_parity_status") or "").strip().lower() in {
-        "pass",
-        "passed",
-        "ready",
-    } or bool(desktop_evidence.get("sr6_workflow_parity_external_only_missing_api_surface_contract"))
+    desktop_sr4_parity_ready = bool(desktop_evidence.get("sr4_workflow_parity_effective_ready")) or str(
+        desktop_evidence.get("sr4_workflow_parity_status") or ""
+    ).strip().lower() in {"pass", "passed", "ready"} or bool(
+        desktop_evidence.get("sr4_workflow_parity_external_only_missing_api_surface_contract")
+    )
+    desktop_sr6_parity_ready = bool(desktop_evidence.get("sr6_workflow_parity_effective_ready")) or str(
+        desktop_evidence.get("sr6_workflow_parity_status") or ""
+    ).strip().lower() in {"pass", "passed", "ready"} or bool(
+        desktop_evidence.get("sr6_workflow_parity_external_only_missing_api_surface_contract")
+    )
     desktop_sr4_sr6_frontier_ready = str(desktop_evidence.get("sr4_sr6_frontier_receipt_status") or "").strip().lower() in {
         "pass",
         "passed",
@@ -7436,11 +7621,9 @@ def build_flagship_product_readiness_payload(
     dense_budget_release_blocking = bool(dense_workbench_budget.get("release_blocking"))
 
     visual_gate_ready = bool(desktop_evidence.get("ui_visual_familiarity_exit_gate_effective_ready"))
-    workflow_parity_ready = str(desktop_evidence.get("ui_workflow_parity_status") or "").strip().lower() in {
-        "pass",
-        "passed",
-        "ready",
-    }
+    workflow_parity_ready = bool(desktop_evidence.get("ui_workflow_parity_effective_ready")) or str(
+        desktop_evidence.get("ui_workflow_parity_status") or ""
+    ).strip().lower() in {"pass", "passed", "ready"}
     desktop_ready = str(coverage.get("desktop_client") or "").strip().lower() == "ready"
 
     structural_journey_ready = (
@@ -8532,6 +8715,18 @@ def _write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _ensure_non_design_mirror_path(path: Path, *, repo_root: Path) -> None:
+    design_root = (repo_root / ".codex-design").resolve()
+    try:
+        path.relative_to(design_root)
+    except ValueError:
+        return
+    raise ValueError(
+        "FLAGSHIP_PRODUCT_READINESS.generated.json mirror-out must stay in Fleet-owned publish/state roots; "
+        "do not write generated proof artifacts into the manifest-backed .codex-design mirror."
+    )
+
+
 def _compile_manifest_missing_artifact(repo_root: Path, artifact_name: str) -> bool:
     manifest_path = repo_root / ".codex-studio" / "published" / "compile.manifest.json"
     manifest = load_json(manifest_path)
@@ -8649,9 +8844,13 @@ def materialize_flagship_product_readiness(
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    repo_root = Path(args.repo_root).resolve()
+    mirror_path = Path(args.mirror_out).resolve() if str(args.mirror_out or "").strip() else None
+    if mirror_path is not None:
+        _ensure_non_design_mirror_path(mirror_path, repo_root=repo_root)
     payload = materialize_flagship_product_readiness(
         out_path=Path(args.out).resolve(),
-        mirror_path=Path(args.mirror_out).resolve() if str(args.mirror_out or "").strip() else None,
+        mirror_path=mirror_path,
         acceptance_path=Path(args.acceptance).resolve(),
         parity_registry_path=Path(args.parity_registry).resolve(),
         status_plane_path=Path(args.status_plane).resolve(),

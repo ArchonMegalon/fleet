@@ -21295,6 +21295,87 @@ def test_runtime_snapshot_args_for_state_root_includes_shared_context_paths() ->
     assert args.ui_linux_desktop_repo_root == str(module.DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT)
 
 
+def test_preferred_ui_repo_root_breaks_equal_scores_with_fresher_proof(tmp_path: Path, monkeypatch) -> None:
+    module = _load_module()
+    older = tmp_path / "older-ui"
+    newer = tmp_path / "newer-ui"
+    for index, root in enumerate((older, newer), start=1):
+        published = root / ".codex-studio" / "published"
+        published.mkdir(parents=True, exist_ok=True)
+        for name in (
+            "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+            "UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
+        ):
+            path = published / name
+            path.write_text(json.dumps({"status": "pass"}), encoding="utf-8")
+            os.utime(path, (index, index))
+
+    candidates = (older, newer)
+    monkeypatch.setattr(module, "Path", Path)
+    monkeypatch.setattr(module, "_ui_repo_candidate_score", lambda _candidate: (10, 2))
+
+    def fake_exists(self: Path) -> bool:
+        return self in candidates
+
+    monkeypatch.setattr(module.Path, "exists", fake_exists, raising=False)
+    monkeypatch.setattr(
+        module,
+        "_ui_repo_candidate_freshness",
+        lambda candidate: 1.0 if candidate == older else 2.0,
+    )
+
+    original_env = os.environ.get("CHUMMER_UI_REPO_ROOT")
+    monkeypatch.delenv("CHUMMER_UI_REPO_ROOT", raising=False)
+    try:
+        selected = module._preferred_ui_repo_root()
+    finally:
+        if original_env is not None:
+            monkeypatch.setenv("CHUMMER_UI_REPO_ROOT", original_env)
+
+    assert selected == newer
+
+
+def test_preferred_ui_repo_root_prefers_fresher_required_exit_gates_over_staler_higher_aggregate_score(
+    tmp_path: Path, monkeypatch
+) -> None:
+    module = _load_module()
+    stale = tmp_path / "stale-ui"
+    fresh = tmp_path / "fresh-ui"
+    for root, executable_mtime, linux_mtime in ((stale, 10, 10), (fresh, 20, 20)):
+        published = root / ".codex-studio" / "published"
+        published.mkdir(parents=True, exist_ok=True)
+        for name, mtime in (
+            ("DESKTOP_EXECUTABLE_EXIT_GATE.generated.json", executable_mtime),
+            ("UI_LINUX_DESKTOP_EXIT_GATE.generated.json", linux_mtime),
+        ):
+            path = published / name
+            path.write_text(json.dumps({"status": "pass"}), encoding="utf-8")
+            os.utime(path, (mtime, mtime))
+
+    candidates = (stale, fresh)
+    monkeypatch.setattr(module, "Path", Path)
+
+    def fake_exists(self: Path) -> bool:
+        return self in candidates
+
+    monkeypatch.setattr(module.Path, "exists", fake_exists, raising=False)
+    monkeypatch.setattr(
+        module,
+        "_ui_repo_candidate_sort_key",
+        lambda candidate: (99, 8, 10.0) if candidate == stale else (10, 2, 20.0),
+    )
+
+    original_env = os.environ.get("CHUMMER_UI_REPO_ROOT")
+    monkeypatch.delenv("CHUMMER_UI_REPO_ROOT", raising=False)
+    try:
+        selected = module._preferred_ui_repo_root()
+    finally:
+        if original_env is not None:
+            monkeypatch.setenv("CHUMMER_UI_REPO_ROOT", original_env)
+
+    assert selected == fresh
+
+
 def test_write_state_preserves_matching_active_run_from_existing_state() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -24575,6 +24656,95 @@ def test_refresh_flagship_product_readiness_artifact_disables_nonlinux_ignore_fo
 
         assert payload == {"status": "fail"}
         assert calls["ignore_nonlinux_desktop_host_proof_blockers"] is False
+
+
+def test_weekly_product_pulse_needs_refresh_when_green_readiness_outruns_pulse() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        readiness_path = root / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+        weekly_pulse_path = root / "WEEKLY_PRODUCT_PULSE.generated.json"
+        readiness_path.write_text(
+            json.dumps(
+                {
+                    "generated_at": "2026-05-06T16:18:55Z",
+                    "status": "pass",
+                }
+            ),
+            encoding="utf-8",
+        )
+        weekly_pulse_path.write_text(
+            json.dumps(
+                {
+                    "generated_at": "2026-05-06T16:16:55Z",
+                    "active_wave_status": "complete",
+                    "release_health": {"state": "needs_attention"},
+                    "journey_gate_health": {"state": "green"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        args = argparse.Namespace(
+            workspace_root=str(root),
+            weekly_pulse_path=str(weekly_pulse_path),
+        )
+
+        needs_refresh = module._weekly_product_pulse_needs_refresh(
+            args,
+            json.loads(readiness_path.read_text(encoding="utf-8")),
+        )
+
+        assert needs_refresh is True
+
+
+def test_refresh_flagship_product_readiness_artifact_refreshes_weekly_pulse_for_fresh_green_readiness(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Flagship work remains.\n", encoding="utf-8")
+        readiness_path = root / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+        weekly_pulse_path = root / "WEEKLY_PRODUCT_PULSE.generated.json"
+        readiness_path.write_text(
+            json.dumps(
+                {
+                    "generated_at": "2026-05-06T16:18:55Z",
+                    "status": "pass",
+                    "coverage_details": {"desktop_client": {"evidence": {"desktop_ignore_nonlinux_desktop_host_proof_blockers": False}}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        weekly_pulse_path.write_text(
+            json.dumps(
+                {
+                    "generated_at": "2026-05-06T16:16:55Z",
+                    "active_wave_status": "complete",
+                    "release_health": {"state": "needs_attention"},
+                    "journey_gate_health": {"state": "green"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.flagship_product_readiness_path = str(readiness_path)
+        args.weekly_pulse_path = str(weekly_pulse_path)
+        monkeypatch.setattr(module, "DEFAULT_WORKSPACE_ROOT", root)
+        refreshed: list[dict[str, object] | None] = []
+
+        def fake_refresh_weekly(_args, readiness_payload):
+            refreshed.append(dict(readiness_payload or {}))
+            return {"release_health": {"state": "green"}}
+
+        monkeypatch.setattr(module, "_refresh_weekly_product_pulse_artifact", fake_refresh_weekly)
+
+        payload = module._refresh_flagship_product_readiness_artifact(args)
+
+        assert payload is not None
+        assert payload["status"] == "pass"
+        assert refreshed == [payload]
 
 
 def test_full_product_frontier_defaults_to_not_started_without_external_only_signal(monkeypatch) -> None:
@@ -31237,3 +31407,44 @@ def test_main_active_shards_command_refreshes_manifest_json(monkeypatch, tmp_pat
     assert payload["configured_shard_count"] == 14
     assert payload["active_shards"][0]["name"] == "shard-14"
     assert payload["active_shards"][0]["worker_lane"] == "audit_shard"
+
+
+def test_canonicalize_design_supervisor_state_root_alias_paths() -> None:
+    module = _load_module()
+    workspace = Path("/tmp")
+    assert module._canonicalize_design_supervisor_state_root(workspace / "state" / "design-supervisor") == (
+        workspace / "state" / "chummer_design_supervisor"
+    )
+    assert module._canonicalize_design_supervisor_state_root(
+        workspace / "state" / "design-supervisor" / "shard-1"
+    ) == (workspace / "state" / "chummer_design_supervisor" / "shard-1")
+    assert module._canonicalize_design_supervisor_state_root(workspace / "state" / "chummer_design_supervisor") == (
+        workspace / "state" / "chummer_design_supervisor"
+    )
+
+
+def test_main_active_shards_command_uses_canonicalized_state_root_for_design_supervisor_alias(monkeypatch, tmp_path: Path) -> None:
+    module = _load_module()
+    args = _args(tmp_path)
+    args.command = "active-shards"
+    args.state_root = str(tmp_path / "state" / "design-supervisor")
+
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    expected_manifest_path = module._active_shard_manifest_path(aggregate_root)
+    observed_calls: dict[str, str] = {}
+
+    def fake_snapshot(state_root: Path) -> None:
+        observed_calls["state_root"] = str(state_root)
+        state_root.mkdir(parents=True, exist_ok=True)
+        expected_payload = {"configured_shard_count": 14, "active_shards": []}
+        module._write_json(state_root / "active_shards.json", expected_payload)
+
+    monkeypatch.setattr(module, "_write_active_shard_manifest_snapshot", fake_snapshot)
+    monkeypatch.setattr(module, "parse_args", lambda: args)
+
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        module.main()
+
+    assert observed_calls["state_root"] == str(aggregate_root)
+    assert stdout.getvalue().strip() == str(expected_manifest_path)

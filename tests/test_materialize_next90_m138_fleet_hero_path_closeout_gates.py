@@ -27,6 +27,17 @@ def _write_yaml(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
+def _write_split_queue_yaml(path: Path, item: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = (
+        yaml.safe_dump([item], sort_keys=False)
+        + "mode: append\n"
+        + "items:\n"
+        + yaml.safe_dump([item], sort_keys=False)
+    )
+    path.write_text(payload, encoding="utf-8")
+
+
 def _registry() -> dict:
     return {
         "program_wave": "next_90_day_product_advance",
@@ -495,6 +506,21 @@ class MaterializeNext90M138FleetHeroPathCloseoutGatesTest(unittest.TestCase):
         self.assertEqual(payload["status"], "pass")
         self.assertEqual(payload["monitor_summary"]["hero_path_closeout_status"], "pass")
         self.assertEqual(payload["monitor_summary"]["runtime_blocker_count"], 0)
+
+    def test_split_queue_yaml_fallback_preserves_queue_alignment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, projection_present=True, overclaim_public=False, flagship_ready=True)
+            queue_item = _queue_item()
+            _write_split_queue_yaml(fixture["fleet_queue"], queue_item)
+            _write_split_queue_yaml(fixture["design_queue"], queue_item)
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            payload = self._run_materializer(fixture, artifact, markdown)
+
+        self.assertEqual(payload["status"], "pass")
+        self.assertEqual(payload["canonical_monitors"]["queue_alignment"]["state"], "pass")
+        self.assertEqual(payload["package_closeout"]["state"], "pass")
 
 
 if __name__ == "__main__":

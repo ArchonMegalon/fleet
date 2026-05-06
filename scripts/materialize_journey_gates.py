@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import sys
 import time
@@ -30,6 +31,12 @@ DEFAULT_SUPPORT_PACKETS = ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_P
 REGISTRY_CANDIDATES = (
     ROOT / ".codex-design" / "product" / "GOLDEN_JOURNEY_RELEASE_GATES.yaml",
     Path("/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml"),
+)
+UI_REPO_CANDIDATES = (
+    Path("/docker/chummercomplete/chummer6-ui"),
+    Path("/docker/chummercomplete/chummer6-ui-finish"),
+    Path("/docker/chummercomplete/chummer-presentation-clean"),
+    Path("/docker/chummercomplete/chummer-presentation"),
 )
 
 STAGE_ORDER = {
@@ -69,8 +76,7 @@ REPO_ROOT_CANDIDATES = {
     ),
     "chummer6-hub-registry": (Path("/docker/chummercomplete/chummer-hub-registry"),),
     "chummer6-ui": (
-        Path("/docker/chummercomplete/chummer6-ui"),
-        Path("/docker/chummercomplete/chummer6-ui-finish"),
+        *UI_REPO_CANDIDATES,
     ),
     "chummer6-mobile": (Path("/docker/chummercomplete/chummer6-mobile"),),
     "chummer6-media-factory": (
@@ -98,6 +104,67 @@ RELEASE_CHANNEL_PLATFORM_COVERAGE_MARKERS = (
 REQUIRED_EXTERNAL_PROOF_TOKENS = ("promoted_installer_artifact", "startup_smoke_receipt")
 SUPPORTED_DESKTOP_PLATFORMS = ("linux", "macos", "windows")
 SUPPORTED_DESKTOP_HEADS = ("avalonia", "blazor-desktop")
+
+
+def _published_status(path: Path) -> tuple[int, int]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return (0, 0)
+    status = str(payload.get("status") or "").strip().lower()
+    if status in {"pass", "passed", "ready"}:
+        return (2, 1)
+    if status in {"warning"}:
+        return (1, 1)
+    if status:
+        return (-2, 1)
+    return (0, 1)
+
+
+def _ui_repo_candidate_score(candidate: Path) -> tuple[int, int]:
+    published_root = candidate / ".codex-studio" / "published"
+    score = 0
+    inspected = 0
+    for name, weight in (
+        ("DESKTOP_EXECUTABLE_EXIT_GATE.generated.json", 10),
+        ("UI_LINUX_DESKTOP_EXIT_GATE.generated.json", 6),
+        ("UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json", 6),
+        ("CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json", 5),
+        ("SR6_DESKTOP_WORKFLOW_PARITY.generated.json", 5),
+        ("DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json", 4),
+        ("DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json", 4),
+        ("UI_FLAGSHIP_RELEASE_GATE.generated.json", 3),
+    ):
+        status_score, inspected_flag = _published_status(published_root / name)
+        score += status_score * weight
+        inspected += inspected_flag
+    return score, inspected
+
+
+def _preferred_ui_repo_root() -> Path:
+    override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
+    if override:
+        return Path(override)
+    best_candidate: Path | None = None
+    best_score: tuple[int, int] | None = None
+    for candidate in UI_REPO_CANDIDATES:
+        if not candidate.exists():
+            continue
+        candidate_score = _ui_repo_candidate_score(candidate)
+        if best_candidate is None or candidate_score > (best_score or (0, 0)):
+            best_candidate = candidate
+            best_score = candidate_score
+    if best_candidate is not None:
+        return best_candidate
+    return Path("/docker/chummercomplete/chummer6-ui")
+
+
+PREFERRED_UI_REPO_ROOT = _preferred_ui_repo_root()
+UI_REPO_CANDIDATES = (
+    PREFERRED_UI_REPO_ROOT,
+    Path("/docker/chummercomplete/chummer6-ui"),
+    Path("/docker/chummercomplete/chummer6-ui-finish"),
+)
 
 
 def utc_now() -> dt.datetime:

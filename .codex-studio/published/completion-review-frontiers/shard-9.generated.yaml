@@ -1,7 +1,7 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-05T20:08:06Z'
-mode: flagship_product
+generated_at: '2026-05-06T19:54:06Z'
+mode: completion_review
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-9
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -33,7 +33,6 @@ focus:
   - chummer6-core
   - chummer6-ui
   - chummer6-hub
-  - fleet
   texts:
   - top flagship grade
   - whole project frontier
@@ -50,22 +49,17 @@ focus:
   - crew-fit
   - explain
   - rule-environment
-  - whole-project frontier
-  - no lowered standards
-  - feedback loop
-  - crash reporting
-  - support routing
-  - journey smoothness
-  - performance
-  - proof shelf
 completion_audit:
-  status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  status: pass
+  reason: 'current repo-local completion proof is green; using a supervisor evidence
+    receipt because the latest worker outcome is non-material to proof trust: dispatch
+    parked this shard until provider capacity recovers'
 receipt_audit:
-  status: fail
-  reason: latest worker receipt 20260505T163201Z-shard-9 was an internal retryable
-    worker recycle; waiting for a fresh structured completion receipt
-  latest_run_id: 20260505T163201Z-shard-9
+  status: pass
+  reason: 'current repo-local completion proof is green; using a supervisor evidence
+    receipt because the latest worker outcome is non-material to proof trust: dispatch
+    parked this shard until provider capacity recovers'
+  latest_run_id: 20260506T090719Z-shard-9
   latest_run_reason: dispatch parked this shard until provider capacity recovers
 journey_gate_audit:
   status: pass
@@ -77,39 +71,35 @@ linux_desktop_exit_gate_audit:
   reason: linux desktop binary build/start/test proof is ready on current repo-local
     evidence
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-  generated_at: '2026-05-05T03:54:10Z'
+  generated_at: '2026-05-06T00:11:38Z'
 weekly_pulse_audit:
-  status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  status: pass
+  reason: weekly product pulse is fresh and reports no remaining drift or blocker
+    pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-05T20:01:09Z'
+  generated_at: '2026-05-06T19:37:39Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
   open_item_count: 0
   open_project_count: 0
   open_items: []
-blocking_audits:
-- component: weekly_pulse
-  title: Weekly product pulse gaps
-  reason: weekly product pulse reports release health as needs_attention
-- component: trusted_completion_receipt
-  title: Trusted completion receipt
-  reason: latest worker receipt 20260505T163201Z-shard-9 was an internal retryable
-    worker recycle; waiting for a fresh structured completion receipt
+blocking_audits: []
 frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
-  status: flagship_delivery
-  eta_human: 7h-19h
+  status: tracked
+  eta_human: tracked
   eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
+  basis: aggregate_shard_parallel_scope
+  scope_kind: aggregate_shard_mixed_scope
+  scope_label: Aggregate multi-shard ETA
+  scope_warning: Aggregate shard status currently mixes multiple ETA scopes. Use the
+    ETA command for a fresh whole-fleet forecast instead of reading this as a single
+    parity horizon.
   blocking_reason: ''
-  summary: 'Milestone ''Fail closeout when any of the five route or family rows in
-    this milestone remain `no`, blank, stale, or unsupported by direct proof receipts.''
-    remains open under the flagship closeout frontier. Outstanding readiness coverage:
-    flagship readiness proof refresh.'
+  summary: 311989418610328667461971226565791619602819042903466476971671976899795992410224330239657888510529457713192469098570514910129962478
+    open milestones remain (311989418610328667461971226565791619602819042903466476971671976899795992410224330239657888510529457713192469098570514910129962478
+    in progress, 0 not started). Aggregate shard status is parallelized across 1 active
+    shards under Aggregate multi-shard ETA.

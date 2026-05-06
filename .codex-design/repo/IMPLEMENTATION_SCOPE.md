@@ -127,6 +127,12 @@ Preferred operational surfaces:
 
 * Fleet-owned state such as `design_mirror_status.json`
 * synthesized queue candidates that keep `source_items` metadata instead of one task per uncovered-scope bullet
+* generated Fleet proof artifacts under Fleet-owned publish or state roots such as `.codex-studio/published/` and `state/chummer_design_supervisor/artifacts/`
+
+Forbidden in the mirror bundle:
+
+* generated Fleet proof artifacts such as `FLAGSHIP_PRODUCT_READINESS.generated.json`
+* any write path that uses `.codex-design/` as a sink for repo-local proof refreshes instead of manifest-backed canon mirrors
 
 ## Premium burst rule
 

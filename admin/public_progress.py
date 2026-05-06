@@ -37,17 +37,83 @@ CHUMMER_HUB_ROOT = pathlib.Path("/docker/chummercomplete/chummer6-hub")
 CHUMMER_CORE_ROOT = pathlib.Path("/docker/chummercomplete/chummer6-core")
 
 
+def _published_status(path: pathlib.Path) -> tuple[int, int]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return (0, 0)
+    status = str(payload.get("status") or "").strip().lower()
+    if status in {"pass", "passed", "ready"}:
+        return (2, 1)
+    if status in {"warning"}:
+        return (1, 1)
+    if status:
+        return (-2, 1)
+    return (0, 1)
+
+
+def _ui_repo_candidate_score(candidate: pathlib.Path) -> tuple[int, int]:
+    published_root = candidate / ".codex-studio" / "published"
+    score = 0
+    inspected = 0
+    for name, weight in (
+        ("DESKTOP_EXECUTABLE_EXIT_GATE.generated.json", 10),
+        ("UI_LINUX_DESKTOP_EXIT_GATE.generated.json", 6),
+        ("UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json", 6),
+        ("CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json", 5),
+        ("SR6_DESKTOP_WORKFLOW_PARITY.generated.json", 5),
+        ("DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json", 4),
+        ("DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json", 4),
+        ("UI_FLAGSHIP_RELEASE_GATE.generated.json", 3),
+    ):
+        status_score, inspected_flag = _published_status(published_root / name)
+        score += status_score * weight
+        inspected += inspected_flag
+    return score, inspected
+
+
+def _ui_repo_candidates() -> tuple[pathlib.Path, ...]:
+    return (
+        pathlib.Path("/docker/chummercomplete/chummer-presentation-clean"),
+        pathlib.Path("/docker/chummercomplete/chummer6-ui"),
+        pathlib.Path("/docker/chummercomplete/chummer6-ui-finish"),
+        pathlib.Path("/docker/chummercomplete/chummer-presentation"),
+    )
+
+
+def _ui_repo_required_gate_sort_key(candidate: pathlib.Path) -> tuple[int, float, int, float]:
+    published_root = candidate / ".codex-studio" / "published"
+    executable_status, _ = _published_status(published_root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json")
+    linux_status, _ = _published_status(published_root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
+    executable_mtime = 0.0
+    linux_mtime = 0.0
+    try:
+        executable_mtime = (published_root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").stat().st_mtime
+    except OSError:
+        pass
+    try:
+        linux_mtime = (published_root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json").stat().st_mtime
+    except OSError:
+        pass
+    return executable_status, executable_mtime, linux_status, linux_mtime
+
+
 def _preferred_chummer_ui_root() -> pathlib.Path:
     override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
     if override:
         return pathlib.Path(override)
-    for candidate in (
-        pathlib.Path("/docker/chummercomplete/chummer6-ui"),
-        pathlib.Path("/docker/chummercomplete/chummer6-ui-finish"),
-        pathlib.Path("/docker/chummercomplete/chummer-presentation"),
-    ):
-        if candidate.exists():
-            return candidate
+    best_candidate: pathlib.Path | None = None
+    best_score: tuple[int, float, int, float, int, int] | None = None
+    for candidate in _ui_repo_candidates():
+        if not candidate.exists():
+            continue
+        aggregate_score, inspected = _ui_repo_candidate_score(candidate)
+        candidate_score = (*_ui_repo_required_gate_sort_key(candidate), aggregate_score, inspected)
+        if best_candidate is None or candidate_score > (best_score or (0, 0.0, 0, 0.0, 0, 0)):
+            best_candidate = candidate
+            best_score = candidate_score
+    if best_candidate is not None:
+        return best_candidate
     return pathlib.Path("/docker/chummercomplete/chummer6-ui")
 
 
@@ -263,7 +329,13 @@ def _infer_supervisor_eta_scope(eta: Dict[str, Any]) -> tuple[str, str, str]:
 
 
 def _design_supervisor_state_root(state_path: pathlib.Path) -> pathlib.Path:
-    return state_path.parent if state_path.name == "state.json" else state_path
+    candidate = state_path.parent if state_path.name == "state.json" else state_path
+    if candidate.name == "design-supervisor" and candidate.parent.name == "state":
+        return candidate.parent / "chummer_design_supervisor"
+    if candidate.name.startswith("shard-") or candidate.name.startswith("orphaned-shard-"):
+        if candidate.parent.name == "design-supervisor" and candidate.parent.parent.name == "state":
+            return candidate.parent.parent / "chummer_design_supervisor" / candidate.name
+    return candidate
 
 
 def _supervisor_state_has_runtime_signal(state: Dict[str, Any]) -> bool:

@@ -4,14 +4,14 @@
 - public_guide_gate_status: blocked
 - package_id: next90-m131-fleet-verify-public-guide-regeneration-visibility-source-fresh
 - frontier_id: 5694544514
-- generated_at: 2026-05-06T03:42:57Z
+- generated_at: 2026-05-06T04:08:40Z
 
 ## Runtime summary
 - guide_surface_gate_status: blocked
 - flagship_queue_status: fail
 - flagship_queue_task_count: 1
 - guide_repo_head_sha: cb45dcf64ccedc810b16b006bfe500f4253dcbf5
-- guide_repo_head_age_hours: 40.35
+- guide_repo_head_age_hours: 40.78
 - runtime_blocker_count: 4
 - warning_count: 2
 

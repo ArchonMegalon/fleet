@@ -200,6 +200,72 @@ class AdminForecastTests(unittest.TestCase):
             self.assertEqual(card["active_lease_count"], 1)
             self.assertEqual(card["active_lease_count_source"], "fleet_runtime_backfill")
 
+    def test_ea_onemin_manager_billing_aggregate_falls_back_to_cached_browseract_refresh(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime_root = Path(tmpdir)
+            cached_path = runtime_root / "onemin_aggregate_billing_full_refresh_latest.json"
+            cached_path.write_text(
+                json.dumps(
+                    {
+                        "sum_free_credits": 43_826_189,
+                        "sum_max_credits": 0,
+                        "remaining_percent_total": 42.67,
+                        "hours_until_next_topup": 0.0,
+                        "hours_remaining_at_current_pace_no_topup": 253.29,
+                        "days_remaining_including_next_topup_at_7d_avg": 10.55,
+                        "slot_count_with_billing_snapshot": 69,
+                        "slot_count_with_member_reconciliation": 41,
+                        "basis_summary": "actual_billing_usage_page x69",
+                        "basis_counts": {"actual_billing_usage_page": 10, "actual_provider_api": 59},
+                        "latest_member_reconciliation_at": 1767225600,
+                        "last_actual_balance_check_at": 1767312000,
+                        "recorded_at_utc": "2026-04-28T17:03:52Z",
+                        "payload_source": "browseract_refresh_summary",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            old_runtime_root = self.admin.ONEMIN_AGGREGATE_RUNTIME_ROOT
+            self.admin.ONEMIN_AGGREGATE_RUNTIME_ROOT = runtime_root
+            self.addCleanup(setattr, self.admin, "ONEMIN_AGGREGATE_RUNTIME_ROOT", old_runtime_root)
+            self.admin.ea_onemin_manager_status = lambda force=False, cache_only=False: {
+                "aggregate": {
+                    "sum_free_credits": 1000,
+                    "sum_max_credits": 2000,
+                    "active_lease_count": 0,
+                    "actual_billing_account_count": 0,
+                    "accounts": [],
+                },
+                "runway": {
+                    "current_burn_per_hour": 25,
+                    "hours_remaining_current_pace": 40,
+                },
+            }
+            self.admin.onemin_codexer_runtime_payload = lambda cache_only=False: {
+                "active_onemin_codexers": 0,
+                "active_onemin_projects": ["fleet"],
+                "active_onemin_accounts": ["acct-ea-core"],
+            }
+
+            aggregate = self.admin.ea_onemin_manager_billing_aggregate()
+            card = self.admin.provider_credit_card_payload()
+            credit_guard = self.admin._participant_credit_guard_status(
+                {"credit_guard": {"enabled": True, "provider": "onemin"}, "max_active_workers": 1},
+                sponsor_ready_lanes=0,
+                provider_credit=card,
+            )
+
+        self.assertEqual(aggregate["source"], "browseract_refresh_summary")
+        self.assertEqual(aggregate["slot_count_with_billing_snapshot"], 69)
+        self.assertEqual(aggregate["slot_count_with_member_reconciliation"], 41)
+        self.assertEqual(aggregate["latest_member_reconciliation_at"], "2026-01-01T00:00:00Z")
+        self.assertEqual(aggregate["last_actual_balance_check_at"], "2026-01-02T00:00:00Z")
+        self.assertEqual(card["basis_quality"], "mixed")
+        self.assertTrue(credit_guard["billing_known"])
+        self.assertTrue(credit_guard["next_worker_safe"])
+        self.assertEqual(credit_guard["reason"], "topup_due_now")
+
     def test_active_run_rows_excludes_orphaned_unlinked_runs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "fleet.db"
@@ -654,6 +720,62 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(item["design_owner"], "fleet-platform")
         self.assertEqual(item["allowed_paths"], [".codex-design"])
         self.assertEqual(item["owned_surfaces"], ["design_mirror:fleet"])
+
+    def test_audit_candidate_materialization_texts_ignore_resolved_published_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            self.admin.DB_PATH = db_path
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                """
+                CREATE TABLE audit_task_candidates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    scope_type TEXT NOT NULL,
+                    scope_id TEXT NOT NULL,
+                    finding_key TEXT NOT NULL,
+                    task_index INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    detail TEXT NOT NULL,
+                    task_meta_json TEXT NOT NULL DEFAULT '{}',
+                    status TEXT NOT NULL DEFAULT 'open',
+                    source TEXT NOT NULL DEFAULT 'fleet-auditor',
+                    first_seen_at TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL,
+                    resolved_at TEXT
+                )
+                """
+            )
+            conn.commit()
+            conn.close()
+            now = self.admin.iso(self.admin.utc_now())
+            with self.admin.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO audit_task_candidates(
+                        scope_type, scope_id, finding_key, task_index, title, detail, task_meta_json, status, source,
+                        first_seen_at, last_seen_at, resolved_at
+                    )
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "project",
+                        "fleet",
+                        "project.design_mirror_missing_or_stale",
+                        0,
+                        "Refresh local design mirror",
+                        "Sync the approved Chummer design bundle into `fleet` under `.codex-design/`.",
+                        "{}",
+                        "published",
+                        "fleet-auditor",
+                        now,
+                        now,
+                        now,
+                    ),
+                )
+
+            texts = self.admin.audit_candidate_materialization_texts("project", "fleet")
+
+            self.assertEqual(texts, [])
 
     def test_onemin_codexer_runtime_payload_falls_back_to_batch_model_when_profiles_are_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2334,6 +2456,62 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["signals"]["weekly_governor_packet_status"], "blocked")
         self.assertEqual(payload["signals"]["weekly_governor_launch_action"], "freeze_launch")
         self.assertEqual(payload["signals"]["weekly_governor_public_state"], "freeze_launch")
+
+    def test_publish_readiness_prefers_public_freeze_reason_when_launch_expand_claim_is_stale(self) -> None:
+        status = {
+            "runtime_healing": {"summary": {"alert_state": "healthy"}},
+        }
+        artifact_freshness = {
+            "status_plane": {"state": "fresh"},
+            "progress_report": {"state": "fresh"},
+            "journey_gates": {"state": "fresh"},
+            "release_channel": {"state": "fresh"},
+            "weekly_governor_packet": {"state": "fresh"},
+        }
+        support_surface = {"summary": {}, "freshness": {"state": "fresh"}}
+        journey_gates = {"summary": {"overall_state": "ready"}}
+        release_channel = {
+            "status": "published",
+            "rolloutState": "promoted_preview",
+            "supportabilityState": "supported",
+            "release_proof": {"status": "passed"},
+            "proof_freshness": {"state": "fresh"},
+        }
+        weekly_governor_packet = {
+            "status": "blocked",
+            "status_reason": "Fleet package is closed; measured rollout remains blocked.",
+            "decision_board": {
+                "current_launch_action": "launch_expand",
+                "current_launch_reason": "Launch expansion is approved for the next bounded window while canaries and support closure remain clear.",
+            },
+            "public_status_copy": {
+                "state": "freeze_launch",
+                "body": "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
+            },
+            "measured_rollout_loop": {
+                "rollback_watch": False,
+            },
+        }
+
+        payload = self.admin.publish_readiness_payload(
+            status,
+            artifact_freshness=artifact_freshness,
+            support_surface=support_surface,
+            journey_gates=journey_gates,
+            release_channel=release_channel,
+            weekly_governor_packet=weekly_governor_packet,
+            provider_routes=[],
+        )
+
+        self.assertEqual(payload["state"], "blocked")
+        self.assertIn(
+            "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
+            payload["blocking_reasons"],
+        )
+        self.assertNotIn(
+            "Launch expansion is approved for the next bounded window while canaries and support closure remain clear.",
+            payload["blocking_reasons"],
+        )
 
     def test_publish_readiness_blocks_when_weekly_governor_packet_enters_rollback_watch(self) -> None:
         status = {

@@ -89,9 +89,7 @@
     "queue_alignment": {
       "issues": [],
       "state": "pass",
-      "warnings": [
-        "Fleet queue mirror row is still missing for work task 138.9."
-      ]
+      "warnings": []
     },
     "ready_for_tonight_gates": {
       "issues": [],
@@ -190,15 +188,15 @@
   },
   "contract_name": "fleet.next90_m138_hero_path_closeout_gates",
   "frontier_id": 4764536356,
-  "generated_at": "2026-05-05T16:33:58Z",
+  "generated_at": "2026-05-06T04:44:51Z",
   "milestone_id": 138,
   "monitor_summary": {
     "bounded_faq_count": 2,
-    "hero_path_closeout_status": "warning",
+    "hero_path_closeout_status": "pass",
     "projection_runtime_blocker_count": 0,
     "runtime_blocker_count": 0,
     "runtime_blockers": [],
-    "warning_count": 1
+    "warning_count": 0
   },
   "owned_surfaces": [
     "fail_closeout_when_the_90_second_newcomer_path_ready_for:fleet"
@@ -206,23 +204,21 @@
   "package_closeout": {
     "blockers": [],
     "state": "pass",
-    "warnings": [
-      "Fleet queue mirror row is still missing for work task 138.9."
-    ]
+    "warnings": []
   },
   "package_id": "next90-m138-fleet-fail-closeout-when-the-90-second-newcomer-path-ready-for-tonight-verdi",
   "queue_title": "Fail closeout when the 90-second newcomer path, Ready for Tonight verdicts, adoption-confidence receipts, or Foundry-first handoff receipts are stale, missing, or contradicted by public posture.",
   "runtime_monitors": {
     "flagship_readiness_alignment": {
-      "flagship_ready_status": "ready",
-      "generated_at": "2026-05-05T16:33:23Z",
+      "flagship_ready_status": "missing",
+      "generated_at": "2026-05-06T04:42:47Z",
       "issues": [],
       "runtime_blockers": [],
       "state": "pass"
     },
     "hero_path_projections": {
-      "age_hours": 0.02,
-      "generated_at": "2026-05-05T16:32:41Z",
+      "age_hours": 0.6,
+      "generated_at": "2026-05-06T04:08:49Z",
       "issues": [],
       "projection_statuses": {
         "adoption_confidence": "pass",
@@ -245,24 +241,24 @@
   },
   "source_inputs": {
     "campaign_adoption_flow": {
-      "generated_at": "2026-05-03T19:07:21Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/CAMPAIGN_ADOPTION_START_FROM_TODAY_FLOW.md",
-      "sha256": "7c44667d1d0d3eccc774caab94fff80487fb904664ce96b2beaca088ae68cccf"
+      "sha256": "0a8a5fa1907f0f1de5f1cbb01277568773a67656d27d8187fdae2aeb0e151916"
     },
     "design_queue_staging": {
-      "generated_at": "2026-05-05T16:27:11Z",
+      "generated_at": "2026-05-06T04:44:49Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "d1080b139470e531cedee381c64a2fff06cc852a39bd421bc235e04a0b6789e2"
+      "sha256": "05fe2feeafae90da905daddb4ca72f757e22bea85ce8e9f8563a823e316308af"
     },
     "flagship_readiness": {
-      "generated_at": "2026-05-05T16:33:23Z",
+      "generated_at": "2026-05-06T04:42:47Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "d159d20d97115162348d5de41c0ab7bcda1c53399c9cc472b0f21fc262c89f44"
+      "sha256": "2490f91526fca02f115447ca24b82541e7a5b98e9abe8168701bb98a56d72bd0"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-05-05T16:27:11Z",
+      "generated_at": "2026-05-06T04:44:49Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "09a457d276b9a3dc26f91b428df1878ea148435526a733190cfa4846e2f3c096"
+      "sha256": "94c5042dc2adb91991decdfdabcd2c9a5d09352df51f9ce19917fb7ed7380c6a"
     },
     "foundry_first_handoff": {
       "generated_at": "2026-04-30T21:57:57Z",
@@ -270,12 +266,12 @@
       "sha256": "9640961e364d41667dc92a42a8ceecf0f36086158da05036e1811734c9bf833b"
     },
     "hero_path_projections": {
-      "generated_at": "2026-05-05T16:32:41Z",
+      "generated_at": "2026-05-06T04:08:49Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT90_M138_FLEET_HERO_PATH_PROJECTIONS.generated.json",
-      "sha256": "17e7cb399c9afb92bf987d07060ee32dbfc25f6a57f40559e13d3f41c938175e"
+      "sha256": "cb546b4a5c4f7390c29855e4a40fe9e66fba36562fba9d6155ff21cfb77774b8"
     },
     "next90_guide": {
-      "generated_at": "2026-05-04T02:57:07Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
       "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
     },
@@ -300,9 +296,9 @@
       "sha256": "cb90a2b1429a943a514d3627ae4ee208dcece66584caac1805aea152ff3ef9b8"
     },
     "public_guide_community_hub": {
-      "generated_at": "2026-05-05T16:00:32Z",
+      "generated_at": "2026-05-05T23:52:11Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/HORIZONS/community-hub.md",
-      "sha256": "edf3631e3cdbe5cfd639c3e7353274114ab17c6155859acca79fe8a4449c3240"
+      "sha256": "bb0b76c600c2bc6febdb0427221a6fe06e03900aa380262c696cf0169b73744b"
     },
     "public_landing_manifest": {
       "generated_at": "2026-05-04T09:39:41Z",
@@ -310,7 +306,7 @@
       "sha256": "104c46bc68365be611735b6c6a4fc16a983eb87d7df2821f86e60e43affe3ce6"
     },
     "public_onboarding_paths": {
-      "generated_at": "2026-05-05T10:55:10Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_ONBOARDING_PATHS_FOR_NO_DESKTOP_USERS.md",
       "sha256": "e0f64c43d22da1bd490f96e50fdaefbe24caf623895c5709fe02e9c78464d352"
     },
@@ -320,12 +316,12 @@
       "sha256": "7c611a6b772a04106f8826e3d3f4292478057a63ece9d2eee46316cebb7d0f69"
     },
     "ready_for_tonight_mode": {
-      "generated_at": "2026-05-03T19:07:19Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/READY_FOR_TONIGHT_MODE.md",
       "sha256": "bfb4b8b64bfa7ae6a65e1182dd26f91f21de865ea2ad38325966d5277152a84c"
     },
     "roadmap": {
-      "generated_at": "2026-05-03T18:50:24Z",
+      "generated_at": "2026-05-05T19:47:04Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/ROADMAP.md",
       "sha256": "0563a1a363406fed29d2fba61ca8b638c383b0bba1abb4747d9b21b918f27da0"
     },
@@ -345,9 +341,9 @@
       "sha256": "fa14b7cd799cf32abe812a4d037c9952dcd632e78967a65932b9ebad077e8e0a"
     },
     "successor_registry": {
-      "generated_at": "2026-05-05T16:27:11Z",
+      "generated_at": "2026-05-06T04:44:49Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "a4ee7b8faed11351903a71ab4fda5ed6f3edf94455e024398d8e1fb8b1fa760c"
+      "sha256": "57f005675cf6c790f22a77d0b033697d3d713a1eb6722be26886f9c87ed585e6"
     },
     "vtt_export_target_acceptance": {
       "generated_at": "2026-04-30T21:57:57Z",

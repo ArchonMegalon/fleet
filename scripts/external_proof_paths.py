@@ -53,6 +53,11 @@ HOST_CLASS_PLATFORM_ALIASES = {
     "macos": ("macos", "osx", "darwin"),
     "linux": ("linux",),
 }
+RELEASE_CHANNEL_REGISTRY_STALE_MAX_AGE_SECONDS = 24 * 3600
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _normalize_release_channel_status(value: object) -> str:
@@ -132,6 +137,14 @@ def _candidate_can_supersede_registry(candidate: Path) -> bool:
     return bool({"portal", "chummer.portal"} & ancestor_names)
 
 
+def _candidate_is_ui_docker_manifest(candidate: Path) -> bool:
+    normalized_candidate = str(candidate.resolve())
+    if normalized_candidate == str(RELEASE_CHANNEL_MANIFEST_PATH.resolve()):
+        return True
+    parts = [part.strip().lower() for part in candidate.parts if str(part).strip()]
+    return "docker" in parts and "downloads" in parts
+
+
 def resolve_release_channel_path(*, candidates: tuple[Path, ...] | None = None) -> Path:
     override = str(os.environ.get("CHUMMER_EXTERNAL_PROOF_RELEASE_CHANNEL", "") or "").strip()
     if override:
@@ -180,6 +193,7 @@ def resolve_release_channel_path(*, candidates: tuple[Path, ...] | None = None) 
             }
         )
 
+    now_ts = _utc_now().timestamp()
     stale_registry_paths: set[Path] = set()
     for info in candidate_infos:
         if int(info.get("authority_rank") or 0) < 1:
@@ -198,7 +212,7 @@ def resolve_release_channel_path(*, candidates: tuple[Path, ...] | None = None) 
             if candidate is info:
                 continue
             candidate_path = candidate["path"]
-            if not isinstance(candidate_path, Path) or not _candidate_can_supersede_registry(candidate_path):
+            if not isinstance(candidate_path, Path):
                 continue
             if str(candidate.get("channel_id") or "").strip().lower() != registry_channel_id:
                 continue
@@ -210,10 +224,25 @@ def resolve_release_channel_path(*, candidates: tuple[Path, ...] | None = None) 
                 int(candidate.get("status_rank") or 0),
                 int(candidate.get("artifactful") or 0),
             )
-            if candidate_quality <= registry_quality:
-                continue
-            stale_registry_paths.add(info["path"])
-            break
+            if _candidate_can_supersede_registry(candidate_path) and candidate_quality > registry_quality:
+                stale_registry_paths.add(info["path"])
+                break
+            registry_generated_at_ts = float(info.get("generated_at_ts") or float("-inf"))
+            candidate_generated_at_ts = float(candidate.get("generated_at_ts") or float("-inf"))
+            registry_is_stale = (
+                registry_generated_at_ts != float("-inf")
+                and now_ts - registry_generated_at_ts > RELEASE_CHANNEL_REGISTRY_STALE_MAX_AGE_SECONDS
+            )
+            candidate_path = candidate["path"]
+            if (
+                candidate_quality == registry_quality
+                and registry_is_stale
+                and candidate_generated_at_ts > registry_generated_at_ts
+                and isinstance(candidate_path, Path)
+                and _candidate_is_ui_docker_manifest(candidate_path)
+            ):
+                stale_registry_paths.add(info["path"])
+                break
 
     best_path: Path | None = None
     best_score: tuple[int, int, int, int, int, int, float, int] | None = None

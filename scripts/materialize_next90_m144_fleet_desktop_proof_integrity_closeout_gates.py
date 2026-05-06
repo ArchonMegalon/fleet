@@ -75,6 +75,18 @@ def _normalize_list(values: Any) -> List[str]:
     return [_normalize_text(value) for value in values if _normalize_text(value)]
 
 
+def _normalize_status_map(values: Any) -> Dict[str, str]:
+    if not isinstance(values, dict):
+        return {}
+    normalized: Dict[str, str] = {}
+    for key, value in values.items():
+        normalized_key = _normalize_text(key)
+        if not normalized_key:
+            continue
+        normalized[normalized_key] = _normalize_status(value)
+    return normalized
+
+
 def _load_yaml(path: Path) -> Dict[str, Any]:
     try:
         raw = path.read_text(encoding="utf-8")
@@ -235,12 +247,12 @@ def _normalize_status(value: Any) -> str:
     return _normalize_text(value).lower()
 
 
-def _normalize_token(value: Any) -> str:
-    return _normalize_text(value).lower()
-
-
 def _artifact_status_ok(value: Any) -> bool:
     return _normalize_status(value) in {"pass", "passed", "published", "ready"}
+
+
+def _platform_label(platform: str) -> str:
+    return {"linux": "Linux", "windows": "Windows", "macos": "macOS"}.get(platform, platform)
 
 
 def _startup_smoke_version_proves_release(
@@ -251,8 +263,8 @@ def _startup_smoke_version_proves_release(
 ) -> bool:
     version = _normalize_text(startup_smoke_version)
     release_version = _normalize_text(release_channel_version)
-    startup_digest = _normalize_token(startup_smoke_artifact_digest)
-    expected_digest = _normalize_token(expected_startup_smoke_digest)
+    startup_digest = _normalize_status(startup_smoke_artifact_digest)
+    expected_digest = _normalize_status(expected_startup_smoke_digest)
     if not release_version:
         return True
     if expected_digest and startup_digest == expected_digest:
@@ -263,6 +275,24 @@ def _startup_smoke_version_proves_release(
         return True
     placeholder_version = version.lower().startswith("smoke-")
     return placeholder_version and bool(expected_digest) and startup_digest == expected_digest
+
+
+def _promoted_tuple_keys_by_platform(release_channel: Dict[str, Any]) -> Dict[str, List[str]]:
+    coverage = dict(release_channel.get("desktopTupleCoverage") or {})
+    promoted = coverage.get("promotedInstallerTuples") or []
+    by_platform: Dict[str, List[str]] = {"linux": [], "windows": [], "macos": []}
+    for row in promoted:
+        if not isinstance(row, dict):
+            continue
+        platform = _normalize_status(row.get("platform"))
+        head = _normalize_text(row.get("head"))
+        rid = _normalize_text(row.get("rid"))
+        if platform not in by_platform or not head or not rid:
+            continue
+        by_platform[platform].append(f"{head}:{rid}")
+    for platform in by_platform:
+        by_platform[platform] = sorted(set(by_platform[platform]))
+    return by_platform
 
 
 def _flagship_monitor(flagship_readiness: Dict[str, Any]) -> Dict[str, Any]:
@@ -344,6 +374,8 @@ def _windows_gate_monitor(
         runtime_blockers.append("UI_WINDOWS_DESKTOP_EXIT_GATE no longer resolves a current promoted Windows installer.")
     if not bool(checks.get("startup_smoke_receipt_found")):
         runtime_blockers.append("UI_WINDOWS_DESKTOP_EXIT_GATE cannot find the Windows startup-smoke receipt.")
+    if bool(checks.get("startup_smoke_receipt_found")) and not startup_smoke_receipt:
+        runtime_blockers.append("Windows startup-smoke receipt path resolves to no readable receipt payload.")
     if _normalize_status(checks.get("startup_smoke_status")) != "pass":
         runtime_blockers.append("Windows startup-smoke receipt status is not `pass`.")
     expected_digest = _normalize_text(checks.get("expected_startup_smoke_artifact_digest"))
@@ -375,7 +407,7 @@ def _windows_gate_monitor(
         expected_digest,
     ):
         runtime_blockers.append(
-            f"Windows startup-smoke receipt version `{startup_version}` no longer matches live RELEASE_CHANNEL version `{release_channel_version}`."
+            f"Windows startup-smoke receipt version `{startup_version}` does not prove the live RELEASE_CHANNEL version `{release_channel_version}`."
         )
     if artifact_version and startup_version and not _startup_smoke_version_proves_release(
         startup_version,
@@ -384,7 +416,7 @@ def _windows_gate_monitor(
         expected_digest,
     ):
         runtime_blockers.append(
-            f"Windows startup-smoke receipt version `{startup_version}` does not match the promoted Windows artifact version `{artifact_version}`."
+            f"Windows startup-smoke receipt version `{startup_version}` does not prove the promoted Windows artifact version `{artifact_version}`."
         )
     ready_checkpoint = _normalize_text(checks.get("startup_smoke_ready_checkpoint") or startup_smoke_receipt.get("readyCheckpoint"))
     if not ready_checkpoint:
@@ -474,6 +506,97 @@ def _consistency_monitor(
         gate_version = _normalize_text(dict(windows_gate.get("checks") or {}).get("release_channel_version"))
         if live_version and gate_version and live_version != gate_version:
             runtime_blockers.append("Windows tuple proof is older than the live release-channel publish and is still carrying forward stale promoted-version truth.")
+    live_promoted_tuples = _promoted_tuple_keys_by_platform(release_channel)
+    live_statuses = {
+        "linux": _normalize_status_map(dict(executable_gate.get("evidence") or {}).get("linux_statuses")),
+        "windows": _normalize_status_map(dict(executable_gate.get("evidence") or {}).get("windows_statuses")),
+        "macos": _normalize_status_map(dict(executable_gate.get("evidence") or {}).get("macos_statuses")),
+    }
+    for platform in ("linux", "windows", "macos"):
+        platform_label = _platform_label(platform)
+        promoted_key = f"release_channel_{platform}_promoted_tuples"
+        recorded_promoted = sorted(_normalize_list(desktop_evidence.get(promoted_key)))
+        if live_promoted_tuples[platform] and not recorded_promoted:
+            runtime_blockers.append(
+                f"FLAGSHIP_PRODUCT_READINESS desktop_client evidence is missing {platform_label} promoted tuple inventory."
+            )
+        if recorded_promoted and recorded_promoted != live_promoted_tuples[platform]:
+            runtime_blockers.append(
+                f"FLAGSHIP_PRODUCT_READINESS desktop_client evidence carries stale {platform_label} promoted tuple inventory."
+            )
+        statuses_key = f"ui_executable_gate_{platform}_statuses"
+        recorded_statuses = _normalize_status_map(desktop_evidence.get(statuses_key))
+        if live_promoted_tuples[platform] and not recorded_statuses:
+            runtime_blockers.append(
+                f"FLAGSHIP_PRODUCT_READINESS desktop_client evidence is missing {platform_label} executable tuple statuses."
+            )
+        if recorded_statuses and recorded_statuses != live_statuses[platform]:
+            runtime_blockers.append(
+                f"FLAGSHIP_PRODUCT_READINESS desktop_client evidence carries stale {platform_label} executable tuple statuses."
+            )
+        missing_key = f"ui_executable_gate_{platform}_missing_or_failing_keys"
+        recorded_missing = sorted(_normalize_list(desktop_evidence.get(missing_key)))
+        live_missing = sorted(
+            tuple_key for tuple_key in live_promoted_tuples[platform] if live_statuses[platform].get(tuple_key) not in {"pass", "passed", "ready"}
+        )
+        if live_missing and not recorded_missing:
+            runtime_blockers.append(
+                f"FLAGSHIP_PRODUCT_READINESS desktop_client evidence is missing {platform_label} missing-or-failing tuple proof inventory."
+            )
+        if recorded_missing and recorded_missing != live_missing:
+            runtime_blockers.append(
+                f"FLAGSHIP_PRODUCT_READINESS desktop_client evidence carries stale {platform_label} missing-or-failing tuple proof inventory."
+            )
+        stale_key = f"ui_executable_gate_{platform}_stale_promoted_tuple_keys"
+        recorded_stale = sorted(_normalize_list(desktop_evidence.get(stale_key)))
+        live_stale = sorted(
+            tuple_key for tuple_key in live_promoted_tuples[platform] if "stale" in live_statuses[platform].get(tuple_key, "")
+        )
+        if live_stale and not recorded_stale:
+            runtime_blockers.append(
+                f"FLAGSHIP_PRODUCT_READINESS desktop_client evidence is missing {platform_label} stale-promoted tuple inventory."
+            )
+        if recorded_stale and recorded_stale != live_stale:
+            runtime_blockers.append(
+                f"FLAGSHIP_PRODUCT_READINESS desktop_client evidence carries stale {platform_label} stale-promoted tuple inventory."
+            )
+    return {"state": "pass", "issues": [], "runtime_blockers": runtime_blockers}
+
+
+def _promoted_tuple_matrix_monitor(
+    executable_gate: Dict[str, Any],
+    *,
+    flagship_monitor: Dict[str, Any],
+    release_channel: Dict[str, Any],
+) -> Dict[str, Any]:
+    runtime_blockers: List[str] = []
+    desktop_evidence = dict(flagship_monitor.get("desktop_evidence") or {})
+    live_promoted_tuples = _promoted_tuple_keys_by_platform(release_channel)
+    executable_evidence = dict(executable_gate.get("evidence") or {})
+    for platform in ("linux", "windows", "macos"):
+        platform_label = _platform_label(platform)
+        promoted_tuples = live_promoted_tuples[platform]
+        live_statuses = _normalize_status_map(executable_evidence.get(f"{platform}_statuses"))
+        recorded_statuses = _normalize_status_map(desktop_evidence.get(f"ui_executable_gate_{platform}_statuses"))
+        passing = {"pass", "passed", "ready"}
+        missing_or_failing = sorted(tuple_key for tuple_key in promoted_tuples if live_statuses.get(tuple_key) not in passing)
+        stale = sorted(tuple_key for tuple_key in promoted_tuples if "stale" in live_statuses.get(tuple_key, ""))
+        if promoted_tuples and missing_or_failing:
+            runtime_blockers.append(
+                f"DESKTOP_EXECUTABLE_EXIT_GATE is missing passing {platform_label} tuple proof for promoted tuple(s): "
+                + ", ".join(missing_or_failing)
+                + "."
+            )
+        if stale:
+            runtime_blockers.append(
+                f"DESKTOP_EXECUTABLE_EXIT_GATE still marks promoted {platform_label} tuple proof as stale for tuple(s): "
+                + ", ".join(stale)
+                + "."
+            )
+        if promoted_tuples and not recorded_statuses:
+            runtime_blockers.append(
+                f"FLAGSHIP_PRODUCT_READINESS desktop_client evidence is missing {platform_label} executable tuple statuses."
+            )
     return {"state": "pass", "issues": [], "runtime_blockers": runtime_blockers}
 
 
@@ -543,6 +666,11 @@ def build_payload(
         release_channel=release_channel,
         windows_artifact=dict(release_channel_monitor.get("windows_artifact") or {}),
     )
+    tuple_matrix_monitor = _promoted_tuple_matrix_monitor(
+        desktop_executable_exit_gate,
+        flagship_monitor=flagship_monitor,
+        release_channel=release_channel,
+    )
 
     runtime_monitors = {
         "flagship_desktop_readiness": flagship_monitor,
@@ -550,6 +678,7 @@ def build_payload(
         "windows_startup_smoke_truth": windows_monitor,
         "desktop_executable_gate": executable_monitor,
         "proof_consistency": consistency_monitor,
+        "promoted_tuple_matrix": tuple_matrix_monitor,
     }
 
     canonical_issues = [
@@ -572,10 +701,10 @@ def build_payload(
     ]
 
     desktop_proof_integrity_closeout_status = "blocked" if runtime_blockers else ("warning" if warnings else "pass")
-    package_status = "pass" if not canonical_issues else "fail"
+    package_status = "fail" if canonical_issues or runtime_blockers else ("warning" if warnings else "pass")
     package_closeout = {
-        "ready": package_status == "pass" and not runtime_blockers,
-        "status": desktop_proof_integrity_closeout_status if package_status == "pass" else "blocked",
+        "ready": package_status == "pass",
+        "status": desktop_proof_integrity_closeout_status if package_status != "fail" else "blocked",
         "reasons": canonical_issues + runtime_blockers,
         "warnings": warnings,
     }

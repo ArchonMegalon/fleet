@@ -166,12 +166,9 @@
   "frontier_id": 6924107419,
   "gate_summary": {
     "external_proof_unresolved_request_count": 0,
-    "fail_closed": false,
-    "flagship_status": "fail",
-    "gate_failures": [
-      "flagship_product_readiness: Flagship readiness status is fail.",
-      "flagship_product_readiness: Flagship readiness scoped_status is fail."
-    ],
+    "fail_closed": true,
+    "flagship_status": "pass",
+    "gate_failures": [],
     "hardening_initiative_statuses": {
       "RH-001": "proposed",
       "RH-002": "proposed",
@@ -205,9 +202,9 @@
         "updater_mode": "in_app_apply_helper"
       }
     },
-    "release_gate_status": "blocked"
+    "release_gate_status": "pass"
   },
-  "generated_at": "2026-05-05T21:29:39Z",
+  "generated_at": "2026-05-06T04:08:22Z",
   "milestone_id": 127,
   "owned_surfaces": [
     "promote_platform_acceptance_release_evidence:fleet"
@@ -222,9 +219,7 @@
       "Repo hardening initiative RH-002 is still proposed.",
       "Repo hardening initiative RH-003 is still proposed.",
       "Repo hardening initiative RH-005 is still proposed.",
-      "Repo hardening initiative RH-006 is still proposed.",
-      "flagship_product_readiness: Flagship readiness status is fail.",
-      "flagship_product_readiness: Flagship readiness scoped_status is fail."
+      "Repo hardening initiative RH-006 is still proposed."
     ]
   },
   "package_id": "next90-m127-fleet-promote-platform-acceptance-release-evidence-packs-repo",
@@ -233,9 +228,9 @@
   "runtime_monitors": {
     "external_proof_runbook": {
       "capture_deadline_utc": "2026-05-06T19:17:52Z",
-      "command_bundle_sha256": "aeb158c27e9135ba38313a6a988012c27982cf11ae18c6389bb9a2eef5575102",
+      "command_bundle_sha256": "6e4d89c896b996b55d387ac31ba32d991748d1a11a2be3e05194a5bac396d30a",
       "gate_failures": [],
-      "generated_at": "2026-05-05T21:00:44Z",
+      "generated_at": "2026-05-06T04:01:38Z",
       "has_zero_backlog_note": true,
       "issues": [],
       "release_gate_status": "pass",
@@ -246,21 +241,18 @@
     },
     "flagship_product_readiness": {
       "external_host_proof": {
-        "command_bundle_sha256": "aeb158c27e9135ba38313a6a988012c27982cf11ae18c6389bb9a2eef5575102",
-        "runbook_generated_at": "2026-05-05T21:00:44Z",
+        "command_bundle_sha256": "6e4d89c896b996b55d387ac31ba32d991748d1a11a2be3e05194a5bac396d30a",
+        "runbook_generated_at": "2026-05-06T04:01:38Z",
         "runbook_synced": true,
         "unresolved_request_count": 0
       },
       "external_host_proof_status": "pass",
-      "gate_failures": [
-        "Flagship readiness status is fail.",
-        "Flagship readiness scoped_status is fail."
-      ],
+      "gate_failures": [],
       "issues": [],
-      "release_gate_status": "blocked",
-      "scoped_status": "fail",
+      "release_gate_status": "pass",
+      "scoped_status": "pass",
       "state": "pass",
-      "status": "fail",
+      "status": "pass",
       "warnings": []
     }
   },
@@ -273,17 +265,17 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "a319c099991fab4319061e24d50bb483a5e7321b7d7d8eb7d38467b1b2ae0088"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "external_proof_runbook": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-      "sha256": "521cbdfb8ba83c4f74d43ad79b76f3045cd68b0a591edf67092cfb42d780a581"
+      "sha256": "2c8105bcff4b1c6ac0ae7eb63273ce4bce4970c77d2dae5d0f063eb371b0f0ce"
     },
     "flagship_product_readiness": {
-      "generated_at": "2026-05-05T21:13:04Z",
+      "generated_at": "2026-05-06T04:01:39Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "7808c450ea381122f96ef75f9cb1a2fb398260b90bc36511e13afe29e2fb3130"
+      "sha256": "6407de1f137d225d951be3f4c4164f8a46f1ba7422b597cff5b3adb46c2a5e48"
     },
     "next90_guide": {
       "generated_at": "",
@@ -303,7 +295,7 @@
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "aa07198c466feb4520db46387ed12af288a88b10010e71f2e0180981beb9b10c"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "repo_hardening_checklist": {
       "generated_at": "",
@@ -318,7 +310,7 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "c3a5a3122537081e9982ca44d41070629b7b63aa99ac342ef952344df0481c5f"
+      "sha256": "3614d3f739de335843fcf1e7c54a85c6892c310e03ac5e565fffd6de4e399010"
     }
   },
   "status": "pass",

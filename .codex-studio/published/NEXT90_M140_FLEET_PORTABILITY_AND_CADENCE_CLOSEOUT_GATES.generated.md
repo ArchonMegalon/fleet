@@ -3,7 +3,7 @@
 - status: pass
 - package_id: next90-m140-fleet-fail-closeout-when-runner-passport-proof-weekly-dispatch-cadence-creat
 - frontier_id: 4145512253
-- generated_at: 2026-05-05T21:12:47Z
+- generated_at: 2026-05-06T04:08:52Z
 
 ## Monitor summary
 - portability_and_cadence_closeout_status: warning

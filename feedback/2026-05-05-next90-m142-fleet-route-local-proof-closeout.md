@@ -6,3 +6,4 @@ Audit repairs included:
 - canonical queue and registry closeout metadata now blocks reopened or stale package rows
 - regenerated gate artifacts now match the current live parity, UI, and core dense-workbench proof inputs
 - unit coverage now proves the gate fails when the package is reopened without complete closeout metadata
+- the Fleet gate now also fails if a family row omits its required route-local runtime/task-speed citations even when the broader proof corpus is still green

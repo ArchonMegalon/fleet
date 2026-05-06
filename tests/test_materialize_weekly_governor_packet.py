@@ -2864,6 +2864,12 @@ def test_weekly_governor_packet_blocks_launch_expand_when_successor_dependencies
     assert payload["decision_board"]["current_launch_action"] == "launch_expand"
     assert payload["decision_board"]["launch_expand"]["state"] == "blocked"
     assert "successor dependencies" in payload["decision_board"]["launch_expand"]["reason"]
+    assert payload["decision_board"]["freeze_launch"]["reason"] == payload["public_status_copy"]["body"]
+    assert (
+        payload["public_status_copy"]["body"]
+        == "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green."
+    )
+    assert payload["public_status_copy"]["body"] != payload["decision_board"]["current_launch_reason"]
     launch_gates = {
         row["name"]: row for row in payload["decision_gate_ledger"]["launch_expand"]
     }

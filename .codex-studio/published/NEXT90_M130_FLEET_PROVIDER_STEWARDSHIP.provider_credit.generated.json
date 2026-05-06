@@ -1,11 +1,13 @@
 {
-  "active_lease_count": 2,
+  "active_lease_count": 3,
   "active_lease_count_source": "fleet_runtime_backfill",
   "active_onemin_accounts": [
-    "acct-ea-core"
+    "acct-ea-core",
+    "acct-ea-core-17"
   ],
   "active_onemin_projects": [
     "design",
+    "ea",
     "mobile"
   ],
   "basis_quality": "estimated",
@@ -13,7 +15,7 @@
   "days_remaining_including_next_topup_at_7d_avg": null,
   "depletes_before_next_topup": null,
   "free_credits": 0,
-  "generated_at": "2026-05-05T12:28:27Z",
+  "generated_at": "2026-05-06T10:38:54Z",
   "hours_remaining_at_current_pace_no_topup": null,
   "hours_remaining_including_next_topup_at_current_pace": null,
   "hours_until_next_topup": null,

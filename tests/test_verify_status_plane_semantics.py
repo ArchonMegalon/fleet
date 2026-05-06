@@ -276,6 +276,128 @@ def test_ui_independent_public_release_proof_bundle_accepts_aggregate_visual_pro
     assert stage == "publicly_promoted"
 
 
+def test_core_fallback_stage_requires_engine_proof_pack(monkeypatch, tmp_path: Path) -> None:
+    module = _load_module()
+    config_dir = tmp_path / "config" / "projects"
+    published_dir = tmp_path / "core" / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "core.yaml").write_text(
+        f"""
+id: core
+enabled: true
+lifecycle: live
+path: {tmp_path / "core"}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "IMPORT_PARITY_CERTIFICATION.generated.json").write_text(
+        json.dumps({"status": "passed"}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "PROJECT_CONFIG_DIR", config_dir)
+
+    rows = module._load_project_config_rows()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "core"
+    assert rows[0]["readiness"]["stage"] == "repo_local_complete"
+
+
+def test_core_fallback_stage_uses_import_parity_and_engine_proof(monkeypatch, tmp_path: Path) -> None:
+    module = _load_module()
+    config_dir = tmp_path / "config" / "projects"
+    published_dir = tmp_path / "core" / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "core.yaml").write_text(
+        f"""
+id: core
+enabled: true
+lifecycle: live
+path: {tmp_path / "core"}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "IMPORT_PARITY_CERTIFICATION.generated.json").write_text(
+        json.dumps({"status": "passed"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "ENGINE_PROOF_PACK.generated.json").write_text(
+        json.dumps({"status": "passed"}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "PROJECT_CONFIG_DIR", config_dir)
+
+    rows = module._load_project_config_rows()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "core"
+    assert rows[0]["readiness"]["stage"] == "boundary_pure"
+
+
+def test_fleet_fallback_stage_stays_package_without_dispatchable_truth(monkeypatch, tmp_path: Path) -> None:
+    module = _load_module()
+    config_dir = tmp_path / "config" / "projects"
+    project_root = tmp_path / "fleet"
+    published_dir = project_root / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "fleet.yaml").write_text(
+        f"""
+id: fleet
+enabled: true
+lifecycle: live
+path: {project_root}
+design_doc: {project_root / "README.md"}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (project_root / "README.md").write_text("# Fleet\n", encoding="utf-8")
+    (published_dir / "compile.manifest.json").write_text(
+        json.dumps(
+            {
+                "dispatchable_truth_ready": False,
+                "artifacts": [
+                    "STATUS_PLANE.generated.yaml",
+                    "PROGRESS_REPORT.generated.json",
+                    "PROGRESS_HISTORY.generated.json",
+                    "SUPPORT_CASE_PACKETS.generated.json",
+                    "JOURNEY_GATES.generated.json",
+                ],
+                "stages": {
+                    "design_compile": True,
+                    "policy_compile": True,
+                    "execution_compile": True,
+                    "package_compile": True,
+                    "capacity_compile": True,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "SUPPORT_CASE_PACKETS.generated.json").write_text(
+        json.dumps(
+            {
+                "contract_name": "fleet.support_case_packets",
+                "schema_version": 1,
+                "generated_at": "2026-04-04T18:30:00Z",
+                "summary": {},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "PROJECT_CONFIG_DIR", config_dir)
+
+    rows = module._load_project_config_rows()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "fleet"
+    assert rows[0]["readiness"]["stage"] == "package_canonical"
+
+
 class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
     def setUp(self) -> None:
         self.verify = _load_module()

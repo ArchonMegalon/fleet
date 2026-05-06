@@ -35,12 +35,14 @@
   },
   "contract_name": "fleet.next90_m136_sr4_sr6_readiness_closeout",
   "frontier_id": 7496747405,
-  "generated_at": "2026-05-05T21:22:00Z",
+  "generated_at": "2026-05-06T04:08:47Z",
   "milestone_id": 136,
   "monitor_summary": {
-    "closeout_status": "pass",
-    "runtime_blocker_count": 0,
-    "runtime_blockers": [],
+    "closeout_status": "blocked",
+    "runtime_blocker_count": 1,
+    "runtime_blockers": [
+      "sr6_projection: sr6_parity_ready ready-state drifted from its direct proof: expected_ready=false, actual_ready=true."
+    ],
     "sr4_ready": true,
     "sr6_ready": true,
     "warning_count": 0
@@ -51,7 +53,9 @@
   "package_closeout": {
     "blockers": [],
     "state": "pass",
-    "warnings": []
+    "warnings": [
+      "sr6_projection: sr6_parity_ready ready-state drifted from its direct proof: expected_ready=false, actual_ready=true."
+    ]
   },
   "package_id": "next90-m136-fleet-publish-explicit-sr4-and-sr6-readiness-plane-closeout-from-direct-proo",
   "queue_title": "Publish explicit SR4 and SR6 readiness-plane closeout from direct proofs instead of letting adjacent coverage inherit from broad desktop readiness.",
@@ -85,14 +89,14 @@
       "state": "pass"
     },
     "sr6_direct_proof": {
-      "actual_ready": true,
+      "actual_ready": false,
       "checks": {
         "sr6_frontier_receipt_status": true,
         "sr6_frontier_status": true,
         "sr6_workflow_failing_parity_receipts_external_only_clear": true,
         "sr6_workflow_missing_family_ids_clear": true,
         "sr6_workflow_non_ready_family_ids_clear": true,
-        "sr6_workflow_parity_status": true
+        "sr6_workflow_parity_status": false
       },
       "issues": [],
       "runtime_blockers": [],
@@ -100,9 +104,11 @@
     },
     "sr6_projection": {
       "actual_ready": true,
-      "expected_ready": true,
+      "expected_ready": false,
       "issues": [],
-      "runtime_blockers": [],
+      "runtime_blockers": [
+        "sr6_parity_ready ready-state drifted from its direct proof: expected_ready=false, actual_ready=true."
+      ],
       "state": "pass"
     }
   },
@@ -110,7 +116,7 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "adfe36be36db30d7c8852cbcf86aa78048f6e46d1ce52e78dfc87996bc7dacac"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "flagship_product_bar": {
       "generated_at": "",
@@ -118,9 +124,9 @@
       "sha256": "8d450f2175f2bd290975db12c0deddbf6e26a3415bec20e906f1ac38cd01c84e"
     },
     "flagship_product_readiness": {
-      "generated_at": "2026-05-05T21:13:04Z",
+      "generated_at": "2026-05-06T04:01:39Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "7808c450ea381122f96ef75f9cb1a2fb398260b90bc36511e13afe29e2fb3130"
+      "sha256": "6407de1f137d225d951be3f4c4164f8a46f1ba7422b597cff5b3adb46c2a5e48"
     },
     "flagship_readiness_planes": {
       "generated_at": "",
@@ -130,7 +136,7 @@
     "fleet_queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "6a246703f9a08edefcc05ecb631964bffc70afbfdd92a796450a7943d502a86e"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "next90_guide": {
       "generated_at": "",
@@ -143,19 +149,19 @@
       "sha256": "f2dbbe0b42066d20120fa0d2cee1f3089fe3c8c865fa2f0c97a133fc9aec56d1"
     },
     "sr4_workflow_parity": {
-      "generated_at": "2026-05-04T20:31:22.435123Z",
+      "generated_at": "2026-05-05T23:49:46.304224Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
-      "sha256": "37c24a98f19fda0a3eabaffa3b5e2676b8c7870f18e049c3acfff636d4432e02"
+      "sha256": "aae8fb5adc9d0384adc7e274eede5ceb771431b801ebd437cdfc126136d27b7c"
     },
     "sr6_workflow_parity": {
-      "generated_at": "2026-05-04T20:33:28.497249Z",
+      "generated_at": "2026-05-05T22:28:55.642684Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
-      "sha256": "d6a4dd01f2ad990e2a0f0e40ef5eeffa4c0de69840a450fb0115f4877a6db26a"
+      "sha256": "99258767ddb1c8104d8bceda105b72ebca40bcc333440c4332f8832675349789"
     },
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "01daaab883b7c57322f1628596a5e22b936d1ee678a875376b580f59903452fd"
+      "sha256": "3614d3f739de335843fcf1e7c54a85c6892c310e03ac5e565fffd6de4e399010"
     }
   },
   "status": "pass",
