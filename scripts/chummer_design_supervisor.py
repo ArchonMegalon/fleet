@@ -14594,9 +14594,10 @@ def _active_account_progress_counts(
     aggregate_root = _aggregate_state_root(state_root)
     manifest_path = aggregate_root / "active_shards.json"
     rows: List[Dict[str, Any]] = []
-    payload = _read_json_file(manifest_path)
-    if isinstance(payload, dict):
-        rows = [dict(item) for item in (payload.get("active_shards") or []) if isinstance(item, dict)]
+    if manifest_path.is_file():
+        payload = _read_json_file(manifest_path)
+        if isinstance(payload, dict):
+            rows = [dict(item) for item in (payload.get("active_shards") or []) if isinstance(item, dict)]
     if not rows:
         rows = [dict(item) for item in _statefile_shard_summaries(aggregate_root) if isinstance(item, dict)]
     waiting_states = {

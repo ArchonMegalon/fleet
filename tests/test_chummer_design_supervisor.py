@@ -11621,6 +11621,33 @@ def test_effective_account_max_parallel_runs_allows_review_light_scale_after_pro
     assert module._effective_account_max_parallel_runs(shard_root, account, exclude_shard_id="shard-6") == 3
 
 
+def test_effective_account_max_parallel_runs_missing_manifest_does_not_crash(tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-6"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    account = module.WorkerAccount(
+        alias="acct-ea-review-light",
+        owner_id="",
+        auth_kind="ea",
+        auth_json_file="",
+        api_key_env="",
+        api_key_file="",
+        allowed_models=["ea-review-light"],
+        health_state="ready",
+        spark_enabled=False,
+        bridge_priority=0,
+        forced_login_method="",
+        forced_chatgpt_workspace_id="",
+        openai_base_url="",
+        home_dir="",
+        lane="review_light",
+        max_parallel_runs=3,
+    )
+
+    assert module._effective_account_max_parallel_runs(shard_root, account, exclude_shard_id="shard-6") == 3
+
+
 def test_active_direct_lane_run_count_counts_core_selected_model_aliases(tmp_path: Path) -> None:
     module = _load_module()
     aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
