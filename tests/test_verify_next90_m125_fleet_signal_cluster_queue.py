@@ -7,7 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from test_materialize_next90_m125_fleet_signal_cluster_queue import _fixture_tree, _materialize
+try:
+    from tests.test_materialize_next90_m125_fleet_signal_cluster_queue import _fixture_tree, _materialize
+except ModuleNotFoundError:
+    from test_materialize_next90_m125_fleet_signal_cluster_queue import _fixture_tree, _materialize
 
 
 VERIFIER = Path("/docker/fleet/scripts/verify_next90_m125_fleet_signal_cluster_queue.py")

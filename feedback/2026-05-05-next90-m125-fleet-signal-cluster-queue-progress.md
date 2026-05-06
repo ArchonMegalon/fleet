@@ -13,6 +13,7 @@ Audit and improvement pass:
 
 - The first live cut overfit `support` keywords and pushed every weekly cluster toward support-closure routing, even when the cluster was really about public guide and trust copy. The routing heuristic now prioritizes public-guide/content/visibility language before generic support language, so visibility and publication clusters resolve to upstream docs/help queue slices instead of the wrong closure lane.
 - The live source-family coverage was also undercounting ClickRank because the detector ignored `cluster_id` evidence such as `long_pole_visibility`. The live derivation now folds cluster ids into source-family inference, which restored ClickRank coverage on the emitted queue candidates.
+- The live queue mirrors use the append-style generated overlay format, so the packet now accepts that shape directly and keeps canonical alignment green instead of false-failing on missing Fleet or design queue rows.
 
 Current proof posture from the live packet:
 

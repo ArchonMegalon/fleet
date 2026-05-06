@@ -6,12 +6,12 @@
     "feedback"
   ],
   "canonical_alignment": {
-    "design_queue_status": "not_started",
-    "fleet_queue_status": "not_started",
+    "design_queue_status": "complete",
+    "fleet_queue_status": "complete",
     "issues": [],
     "registry_status": "not_started",
     "state": "pass",
-    "work_task_status": ""
+    "work_task_status": "complete"
   },
   "canonical_monitors": {
     "clickrank_lane": {
@@ -66,7 +66,7 @@
   },
   "contract_name": "fleet.next90_m125_signal_cluster_queue_synthesis",
   "frontier_id": 5150581210,
-  "generated_at": "2026-05-05T12:40:19Z",
+  "generated_at": "2026-05-06T03:41:30Z",
   "milestone_id": 125,
   "owned_surfaces": [
     "add_signal_cluster_to_queue:fleet"
@@ -337,7 +337,7 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "7a3cdb54f98a4267c4739a0acb12e2e128cfd14187a651b20a7d4e5edd72c235"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "feedback_ooda_loop": {
       "generated_at": "",
@@ -362,27 +362,27 @@
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "bcb13136711f8ce9da4d504edeaff4ccfa3795869110b4003f41df86e63c5878"
+      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
     },
     "signal_source": {
-      "generated_at": "2026-05-05T12:40:19Z",
+      "generated_at": "2026-05-06T03:41:30Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT90_M125_FLEET_SIGNAL_CLUSTER_QUEUE.signal_source.generated.json",
-      "sha256": "e3eb0ada390a9d36ed14c926eab83cd212599f21419212955f5db1d8d2469796"
+      "sha256": "b6ca6336de7432c46c68416340d392b76ee5d6bdaad60df38b9b0207d5cc7e87"
     },
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "a406e365b832d83bc8387bdd72fb39665ec21a959e70d888ba1005a8fb1a0480"
+      "sha256": "e360e1a7a36249a35a10be5f9a97e7f37053041171905b494db3bac67dd49ab1"
     },
     "support_case_packets": {
-      "generated_at": "2026-05-05T12:30:01Z",
+      "generated_at": "2026-05-06T03:30:47Z",
       "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-      "sha256": "36dda328aceb928ff45440dcf74244f2f0d79db06d9f264f5c99fa9cfe14c6e5"
+      "sha256": "e709e38b8d18a256454d0a3eb89adcaec00d7ea7f026b5feaf1326889a666a28"
     },
     "weekly_product_pulse": {
-      "generated_at": "2026-05-05T12:30:17Z",
+      "generated_at": "2026-05-06T03:30:52Z",
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-      "sha256": "5dac6cbc3b1432c2a7dc51cca2437cd71e030b9af6af0dec33a572ed30248ff3"
+      "sha256": "eb966c581eb6fc59ebf343b68877891107f3ed23361082dedbbd0d5ff90efd48"
     }
   },
   "status": "pass",
