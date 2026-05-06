@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-06T20:03:56Z'
+generated_at: '2026-05-06T19:59:51Z'
 mode: completion_review
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-7
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -78,7 +78,7 @@ weekly_pulse_audit:
   reason: weekly product pulse is fresh and reports no remaining drift or blocker
     pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-06T20:03:32Z'
+  generated_at: '2026-05-06T19:37:39Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -96,13 +96,16 @@ frontier_ids: []
 frontier: []
 eta:
   status: tracked
-  eta_human: 10h-1.1d
+  eta_human: tracked
   eta_confidence: low
   basis: aggregate_shard_parallel_scope
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
+  scope_kind: aggregate_shard_mixed_scope
+  scope_label: Aggregate multi-shard ETA
+  scope_warning: Aggregate shard status currently mixes multiple ETA scopes. Use the
+    ETA command for a fresh whole-fleet forecast instead of reading this as a single
+    parity horizon.
   blocking_reason: ''
-  summary: 128 open milestones remain (128 in progress, 0 not started). Aggregate
-    shard status is parallelized across 3 active shards under Full Chummer5A parity
-    and flagship proof closeout.
+  summary: 578352084339196868128610116915081047295750838808960435534686838348367992064067752327924852998977179385529761279269053249089592159402677845453154512806784563144510577372901306092583889046
+    open milestones remain (578352084339196868128610116915081047295750838808960435534686838348367992064067752327924852998977179385529761279269053249089592159402677845453154512806784563144510577372901306092583889046
+    in progress, 0 not started). Aggregate shard status is parallelized across 1 active
+    shards under Aggregate multi-shard ETA.
