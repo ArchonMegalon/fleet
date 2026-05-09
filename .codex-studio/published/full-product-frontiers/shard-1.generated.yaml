@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-09T14:00:08Z'
+generated_at: '2026-05-09T14:01:51Z'
 mode: complete
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -52,7 +52,7 @@ full_product_audit:
   reason: flagship product readiness proof is current across desktop, rules, hub,
     mobile, horizons, and operator lanes
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-09T13:38:53Z'
+  generated_at: '2026-05-09T14:01:48Z'
   proof_status: pass
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -62,17 +62,24 @@ frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
-  status: ready
-  eta_human: ready now
-  eta_confidence: high
-  basis: completion_audit_pass
+  status: blocked
+  eta_human: blocked
+  eta_confidence: medium
+  basis: completion_audit_pass+external_blocker
   scope_kind: repo_local_completion_ready
   scope_label: Repo-local completion review
   scope_warning: Repo-local completion evidence is green. External release, flagship,
     or parity claims still depend on the broader readiness surfaces staying green.
-  blocking_reason: ''
-  summary: Whole-product completion audit is green on current repo-local evidence.
-  predicted_completion_at: '2026-05-09T14:00:07Z'
+  blocking_reason: 'provider-health preflight left no routable direct lanes: core:onemin:unknown;
+    core_rescue:onemin:unknown; survival:onemin:unknown; chatplayground:unknown; gemini_vortex:unknown;
+    lane:no routable survival backends: chatplayground:unknown; gemini_web:unknown;
+    gemini_vortex:unknown; onemin:unknown'
+  summary: 'Whole-product completion audit is green on current repo-local evidence.
+    Current external blocker: provider-health preflight left no routable direct lanes:
+    core:onemin:unknown; core_rescue:onemin:unknown; survival:onemin:unknown; chatplayground:unknown;
+    gemini_vortex:unknown; lane:no routable survival backends: chatplayground:unknown;
+    gemini_web:unknown; gemini_vortex:unknown; onemin:unknown'
+  predicted_completion_at: ''
   range_low_hours: 0.0
   range_high_hours: 0.0
   remaining_open_milestones: 0

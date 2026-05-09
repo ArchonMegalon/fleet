@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-05-09T13:48:12Z",
+  "generated_at": "2026-05-09T14:02:51Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "ready",
@@ -21,37 +21,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-05-09T13:48:12Z",
+      "at": "2026-05-09T14:02:51Z",
       "state": "fresh",
       "age_seconds": 0
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-05-09T13:48:09Z",
+      "at": "2026-05-09T14:02:46Z",
       "state": "fresh",
-      "age_seconds": 3
+      "age_seconds": 5
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-05-09T02:35:36Z",
       "state": "fresh",
-      "age_seconds": 40356
+      "age_seconds": 41235
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-05-09T02:35:36Z",
       "state": "fresh",
-      "age_seconds": 40356
+      "age_seconds": 41235
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-05-09T13:38:44Z",
+      "at": "2026-05-09T14:01:43Z",
       "state": "fresh",
-      "age_seconds": 568
+      "age_seconds": 68
     }
   },
   "journeys": [
@@ -311,7 +311,7 @@
       },
       "evidence": {
         "history_snapshot_count": 26,
-        "support_packets_generated_at": "2026-05-09T13:38:44Z",
+        "support_packets_generated_at": "2026-05-09T14:01:43Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -700,7 +700,7 @@
       },
       "evidence": {
         "history_snapshot_count": 26,
-        "support_packets_generated_at": "2026-05-09T13:38:44Z",
+        "support_packets_generated_at": "2026-05-09T14:01:43Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1144,7 +1144,7 @@
       },
       "evidence": {
         "history_snapshot_count": 26,
-        "support_packets_generated_at": "2026-05-09T13:38:44Z",
+        "support_packets_generated_at": "2026-05-09T14:01:43Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1257,7 +1257,7 @@
       },
       "evidence": {
         "history_snapshot_count": 26,
-        "support_packets_generated_at": "2026-05-09T13:38:44Z",
+        "support_packets_generated_at": "2026-05-09T14:01:43Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1472,7 +1472,7 @@
       },
       "evidence": {
         "history_snapshot_count": 26,
-        "support_packets_generated_at": "2026-05-09T13:38:44Z",
+        "support_packets_generated_at": "2026-05-09T14:01:43Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1638,7 +1638,7 @@
       },
       "evidence": {
         "history_snapshot_count": 26,
-        "support_packets_generated_at": "2026-05-09T13:38:44Z",
+        "support_packets_generated_at": "2026-05-09T14:01:43Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
