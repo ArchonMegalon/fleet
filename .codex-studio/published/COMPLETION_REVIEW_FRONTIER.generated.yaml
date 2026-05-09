@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-09T14:01:47Z'
+generated_at: '2026-05-09T14:03:15Z'
 mode: complete
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -66,6 +66,7 @@ focus:
   - explain
   - export
   - feedback
+  - fit and finish
   - flagship-readiness
   - genesis
   - gm
@@ -93,17 +94,20 @@ focus:
   - release-proof
   - replay
   - restore
+  - restore confidence
   - roster
   - rule-environment
   - settings
   - sourcebook
   - support
+  - top flagship grade
   - translator
   - travel
   - trust
   - update
   - user-journey-tester-audit
   - utility
+  - whole project frontier
   - workbench
   - xml
 completion_audit:
@@ -130,7 +134,7 @@ weekly_pulse_audit:
   reason: weekly product pulse is fresh and reports no remaining drift or blocker
     pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-09T14:01:46Z'
+  generated_at: '2026-05-09T14:02:52Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -142,20 +146,13 @@ frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
-  status: blocked
-  eta_human: blocked
-  eta_confidence: medium
-  basis: completion_audit_pass+external_blocker
+  status: ready
+  eta_human: ready now
+  eta_confidence: high
+  basis: completion_audit_pass
   scope_kind: repo_local_completion_ready
   scope_label: Repo-local completion review
   scope_warning: Repo-local completion evidence is green. External release, flagship,
     or parity claims still depend on the broader readiness surfaces staying green.
-  blocking_reason: 'provider-health preflight left no routable direct lanes: core:onemin:unknown;
-    core_rescue:onemin:unknown; survival:onemin:unknown; chatplayground:unknown; gemini_vortex:unknown;
-    lane:no routable survival backends: chatplayground:unknown; gemini_web:unknown;
-    gemini_vortex:unknown; onemin:unknown'
-  summary: 'Whole-product completion audit is green on current repo-local evidence.
-    Current external blocker: provider-health preflight left no routable direct lanes:
-    core:onemin:unknown; core_rescue:onemin:unknown; survival:onemin:unknown; chatplayground:unknown;
-    gemini_vortex:unknown; lane:no routable survival backends: chatplayground:unknown;
-    gemini_web:unknown; gemini_vortex:unknown; onemin:unknown'
+  blocking_reason: ''
+  summary: Whole-product completion audit is green on current repo-local evidence.

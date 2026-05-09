@@ -1,8 +1,8 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-09T14:02:50Z'
-mode: completion_review
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-5
+generated_at: '2026-05-09T14:03:53Z'
+mode: complete
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-5
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 projects_dir: /docker/fleet/config/projects
@@ -34,16 +34,6 @@ focus:
   - chummer6-ui
   - chummer6-design
   texts:
-  - top flagship grade
-  - whole project frontier
-  - feedback
-  - automatic bugfixing
-  - crash
-  - support
-  - accessibility
-  - localization
-  - restore confidence
-  - fit and finish
   - import
   - oracle
   - chummer5a
@@ -77,7 +67,7 @@ weekly_pulse_audit:
   reason: weekly product pulse is fresh and reports no remaining drift or blocker
     pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-09T14:02:49Z'
+  generated_at: '2026-05-09T14:02:52Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
