@@ -80,7 +80,6 @@ def test_release_channel_external_proof_requests_normalize_and_dedupe() -> None:
         "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
     ]
 
-
 def test_release_channel_external_proof_requests_strip_optional_startup_smoke_version_hint() -> None:
     payload = {
         "channelId": "docker",
@@ -793,6 +792,148 @@ groups: []
     assert payload["summary"]["overall_state"] == "blocked"
     assert payload["summary"]["blocked_count"] == 1
     assert "required project hub is missing" in " ".join(payload["journeys"][0]["blocking_reasons"])
+
+
+def test_materialize_journey_gates_accepts_ui_external_only_executable_gate_as_effective_public_stage(
+    tmp_path: Path,
+) -> None:
+    registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    progress_report = tmp_path / "PROGRESS_REPORT.generated.json"
+    progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    out_path = tmp_path / "JOURNEY_GATES.generated.json"
+    ui_repo = tmp_path / "ui-repo"
+    published_dir = ui_repo / ".codex-studio" / "published"
+    published_dir.mkdir(parents=True, exist_ok=True)
+    generated_at = fresh_timestamp()
+
+    registry.write_text(
+        """
+product: chummer
+surface: release_control
+version: 1
+journey_gates:
+  - id: install_claim_restore_continue
+    title: Install, claim, restore, continue
+    user_promise: A person can install, claim, restore, and continue.
+    canonical_journeys:
+      - journeys/install-and-update.md
+    owner_repos: [chummer6-ui]
+    scorecard_refs: {}
+    fleet_gate:
+      required_artifacts: [status_plane, progress_report, support_packets]
+      minimum_history_snapshots: 2
+      target_history_snapshots: 4
+      required_project_posture:
+        - project_id: ui
+          minimum_stage: pre_repo_local_complete
+          target_stage: publicly_promoted
+          minimum_deployment_posture: protected_preview
+          target_deployment_posture: public
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    status_plane.write_text(
+        f"""
+contract_name: fleet.status_plane
+schema_version: 1
+generated_at: '{generated_at}'
+projects:
+  - id: ui
+    readiness_stage: package_canonical
+    deployment_promotion_stage: promoted_preview
+    deployment_access_posture: public
+groups: []
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    progress_report.write_text(
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 4}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    progress_history.write_text(
+        json.dumps({"generated_at": generated_at, "snapshot_count": 4}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    support_packets.write_text(
+        json.dumps(
+            {
+                "generated_at": generated_at,
+                "summary": {"closure_waiting_on_release_truth": 0, "needs_human_response": 0},
+                "packets": [],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").write_text(
+        json.dumps(
+            {
+                "status": "fail",
+                "blockedByExternalConstraintsOnly": True,
+                "local_blocking_findings_count": 0,
+                "evidence": {"visual_familiarity_status": "pass"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "open_blocking_findings_count": 0}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json").write_text(
+        json.dumps({"summary": {"visual_no_count": 0, "behavioral_no_count": 0}}) + "\n",
+        encoding="utf-8",
+    )
+
+    previous_repo_roots = JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES["chummer6-ui"]
+    JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES["chummer6-ui"] = (ui_repo,)
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--registry",
+                str(registry),
+                "--status-plane",
+                str(status_plane),
+                "--progress-report",
+                str(progress_report),
+                "--progress-history",
+                str(progress_history),
+                "--support-packets",
+                str(support_packets),
+                "--out",
+                str(out_path),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES["chummer6-ui"] = previous_repo_roots
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["warning_count"] == 0
+    assert payload["journeys"][0]["state"] == "ready"
 
 
 def test_materialize_journey_gates_blocks_on_empty_status_plane_inventory(tmp_path: Path) -> None:

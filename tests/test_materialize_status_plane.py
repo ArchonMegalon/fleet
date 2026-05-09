@@ -57,6 +57,90 @@ def test_flagship_claim_status_reports_readiness_plane_gaps_when_coverage_is_gre
     assert claim["warning_keys"] == ["flagship_ready", "veteran_ready"]
 
 
+def test_ui_independent_public_release_proof_accepts_external_only_nonlinux_executable_gap(tmp_path: Path) -> None:
+    published_dir = tmp_path / "published"
+    published_dir.mkdir(parents=True)
+    (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
+        json.dumps({"status": "passed"}),
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").write_text(
+        json.dumps(
+            {
+                "status": "fail",
+                "blocked_by_external_constraints_only": True,
+                "local_blocking_findings_count": 0,
+                "external_blocking_findings": [
+                    "Windows startup smoke receipt is stale for promoted installer bytes (641769s old)."
+                ],
+                "evidence": {"visual_familiarity_status": "pass"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}),
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}),
+        encoding="utf-8",
+    )
+    (published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "open_blocking_findings_count": 0}),
+        encoding="utf-8",
+    )
+    (published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json").write_text(
+        json.dumps({"summary": {"visual_no_count": 0, "behavioral_no_count": 0}}),
+        encoding="utf-8",
+    )
+
+    assert materialize_status_plane_module._ui_independent_public_release_proof_passed(published_dir) is True
+
+
+def test_ui_independent_public_release_proof_accepts_wrapped_windows_external_gap(tmp_path: Path) -> None:
+    published_dir = tmp_path / "published"
+    published_dir.mkdir(parents=True)
+    (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
+        json.dumps({"status": "passed"}),
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").write_text(
+        json.dumps(
+            {
+                "status": "fail",
+                "blocked_by_external_constraints_only": True,
+                "local_blocking_findings_count": 0,
+                "external_blocking_findings": [
+                    "Windows desktop exit gate is missing or not passing.",
+                    "Windows gate reason: Windows startup smoke receipt is stale (642272s old).",
+                    "Windows startup smoke receipt is stale for promoted installer bytes (642340s old).",
+                ],
+                "evidence": {"visual_familiarity_status": "pass"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}),
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}),
+        encoding="utf-8",
+    )
+    (published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "open_blocking_findings_count": 0}),
+        encoding="utf-8",
+    )
+    (published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "summary": {"visual_no_count": 0, "behavioral_no_count": 0}}),
+        encoding="utf-8",
+    )
+
+    assert materialize_status_plane_module._ui_independent_public_release_proof_passed(published_dir) is True
+
+
 def test_materialize_status_plane_from_status_json(tmp_path: Path) -> None:
     status_json = tmp_path / "admin_status.json"
     out_path = tmp_path / "STATUS_PLANE.generated.yaml"
@@ -1285,6 +1369,128 @@ deployment:
     assert len(rows) == 1
     assert rows[0]["id"] == "ui"
     assert rows[0]["readiness"]["stage"] == "publicly_promoted"
+
+
+def test_ui_fallback_stage_accepts_external_only_desktop_executable_gate(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "projects"
+    published_dir = tmp_path / "ui" / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "ui.yaml").write_text(
+        f"""
+id: ui
+enabled: true
+lifecycle: live
+path: {tmp_path / "ui"}
+deployment:
+  status: public
+  promotion_stage: promoted_preview
+  access_posture: public
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
+        json.dumps({"status": "passed"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").write_text(
+        json.dumps(
+            {
+                "status": "fail",
+                "blockedByExternalConstraintsOnly": True,
+                "local_blocking_findings_count": 0,
+                "externalBlockingFindings": [
+                    "Windows startup smoke receipt is stale for promoted installer bytes (641769s old)."
+                ],
+                "evidence": {"visual_familiarity_status": "pass"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "open_blocking_findings_count": 0}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json").write_text(
+        json.dumps({"summary": {"visual_no_count": 0, "behavioral_no_count": 0}}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+
+    rows = materialize_status_plane_module._load_project_config_rows()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "ui"
+    assert rows[0]["readiness"]["stage"] == "publicly_promoted"
+
+
+def test_ui_fallback_stage_rejects_non_host_external_only_desktop_gate(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "projects"
+    published_dir = tmp_path / "ui" / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "ui.yaml").write_text(
+        f"""
+id: ui
+enabled: true
+lifecycle: live
+path: {tmp_path / "ui"}
+deployment:
+  status: public
+  promotion_stage: promoted_preview
+  access_posture: public
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
+        json.dumps({"status": "passed"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").write_text(
+        json.dumps(
+            {
+                "status": "fail",
+                "blockedByExternalConstraintsOnly": True,
+                "local_blocking_findings_count": 0,
+                "externalBlockingFindings": ["Registry digest drift remains unresolved."],
+                "evidence": {"visual_familiarity_status": "pass"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "open_blocking_findings_count": 0}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json").write_text(
+        json.dumps({"summary": {"visual_no_count": 0, "behavioral_no_count": 0}}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+
+    rows = materialize_status_plane_module._load_project_config_rows()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "ui"
+    assert rows[0]["readiness"]["stage"] == "repo_local_complete"
 
 
 def test_materialize_status_plane_overlays_stale_runtime_healing_escalation(tmp_path: Path) -> None:

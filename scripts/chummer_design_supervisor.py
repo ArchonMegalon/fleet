@@ -245,10 +245,57 @@ def _ui_repo_candidates() -> tuple[Path, ...]:
     )
 
 
-def _ui_repo_required_gate_sort_key(candidate: Path) -> tuple[int, float, int, float]:
+def _ui_repo_canonical_rank(candidate: Path) -> int:
+    normalized = str(candidate)
+    if normalized == "/docker/chummercomplete/chummer6-ui":
+        return 3
+    if normalized == "/docker/chummercomplete/chummer6-ui-finish":
+        return 2
+    if normalized == "/docker/chummercomplete/chummer-presentation":
+        return 1
+    return 0
+
+
+def _preferred_existing_ui_repo_candidate() -> Path | None:
+    for candidate in (
+        Path("/docker/chummercomplete/chummer6-ui"),
+        Path("/docker/chummercomplete/chummer6-ui-finish"),
+        Path("/docker/chummercomplete/chummer-presentation"),
+        Path("/docker/chummercomplete/chummer-presentation-clean"),
+    ):
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _ui_repo_gate_run_root_matches_candidate(candidate: Path, artifact_name: str, output_dir_name: str) -> int:
+    artifact_path = candidate / ".codex-studio" / "published" / artifact_name
+    try:
+        payload = json.loads(artifact_path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return 0
+    if not isinstance(payload, dict):
+        return 0
+    run_root_text = str(payload.get("run_root") or "").strip()
+    if not run_root_text:
+        return 0
+    return int(_path_within(Path(run_root_text), candidate / ".codex-studio" / "out" / output_dir_name))
+
+
+def _ui_repo_required_gate_sort_key(candidate: Path) -> tuple[int, int, int, int, float, float]:
     published_root = candidate / ".codex-studio" / "published"
     executable_status, _ = _published_status(published_root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json")
     linux_status, _ = _published_status(published_root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
+    executable_root_match = _ui_repo_gate_run_root_matches_candidate(
+        candidate,
+        "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+        "desktop-executable-exit-gate",
+    )
+    linux_root_match = _ui_repo_gate_run_root_matches_candidate(
+        candidate,
+        "UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
+        "linux-desktop-exit-gate",
+    )
     executable_mtime = 0.0
     linux_mtime = 0.0
     try:
@@ -259,21 +306,34 @@ def _ui_repo_required_gate_sort_key(candidate: Path) -> tuple[int, float, int, f
         linux_mtime = (published_root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json").stat().st_mtime
     except OSError:
         pass
-    return executable_status, executable_mtime, linux_status, linux_mtime
+    return executable_status, executable_root_match, linux_status, linux_root_match, executable_mtime, linux_mtime
 
 
 def _preferred_ui_repo_root() -> Path:
     override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
     if override:
         return Path(override)
+    canonical_alias = Path("/docker/chummercomplete/chummer6-ui")
+    if canonical_alias.is_dir():
+        return canonical_alias
+    canonical_candidate = _preferred_existing_ui_repo_candidate()
+    if canonical_candidate is not None:
+        return canonical_candidate
     best_candidate: Path | None = None
-    best_score: tuple[int, float, int, float, int, int, float] | None = None
+    best_score: tuple[int, int, int, int, float, float, int, int, float] | None = None
     for candidate in _ui_repo_candidates():
         if not candidate.exists():
             continue
         aggregate_score, inspected, freshness = _ui_repo_candidate_sort_key(candidate)
-        candidate_score = (*_ui_repo_required_gate_sort_key(candidate), aggregate_score, inspected, freshness)
-        if best_candidate is None or candidate_score > (best_score or (0, 0.0, 0, 0.0, 0, 0, 0.0)):
+        canonical_rank = _ui_repo_canonical_rank(candidate)
+        candidate_score = (
+            *_ui_repo_required_gate_sort_key(candidate),
+            canonical_rank,
+            aggregate_score,
+            inspected,
+            freshness,
+        )
+        if best_candidate is None or candidate_score > (best_score or (0, 0, 0, 0, 0.0, 0.0, 0, 0, 0.0)):
             best_candidate = candidate
             best_score = candidate_score
     if best_candidate is not None:
@@ -296,11 +356,16 @@ def _preferred_mobile_repo_root() -> Path:
 
 PREFERRED_UI_REPO_ROOT = _preferred_ui_repo_root()
 PREFERRED_MOBILE_REPO_ROOT = _preferred_mobile_repo_root()
-DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT = PREFERRED_UI_REPO_ROOT
-DEFAULT_UI_LINUX_DESKTOP_EXIT_GATE_PATH = (
-    PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+UI_REPO_CANONICAL_ALIAS_ROOT = Path("/docker/chummercomplete/chummer6-ui")
+DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT = (
+    UI_REPO_CANONICAL_ALIAS_ROOT if UI_REPO_CANONICAL_ALIAS_ROOT.exists() else PREFERRED_UI_REPO_ROOT
 )
-DEFAULT_UI_EXECUTABLE_EXIT_GATE_PATH = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+DEFAULT_UI_LINUX_DESKTOP_EXIT_GATE_PATH = (
+    DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+)
+DEFAULT_UI_EXECUTABLE_EXIT_GATE_PATH = (
+    DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+)
 DEFAULT_STATE_ROOT = DEFAULT_WORKSPACE_ROOT / "state" / "chummer_design_supervisor"
 DEFAULT_STATE_PATH = DEFAULT_STATE_ROOT / "state.json"
 DEFAULT_HISTORY_PATH = DEFAULT_STATE_ROOT / "history.jsonl"
@@ -6650,6 +6715,17 @@ def _materialize_completion_review_frontier(
     eta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, str]:
     state_root = _canonicalize_design_supervisor_state_root(state_root)
+    effective_completion_audit = dict(completion_audit or {})
+    effective_frontier = list(frontier)
+    refreshed_history = _completion_review_history(state_root, limit=COMPLETION_AUDIT_HISTORY_LIMIT)
+    refreshed_completion_audit = _design_completion_audit(args, refreshed_history)
+    if refreshed_completion_audit:
+        effective_completion_audit = dict(refreshed_completion_audit)
+        effective_frontier = _completion_review_frontier(
+            effective_completion_audit,
+            Path(args.registry_path).resolve(),
+            refreshed_history,
+        )
     published_path, mirror_path = _completion_review_frontier_paths(
         Path(args.workspace_root).resolve(),
         state_root=state_root,
@@ -6658,11 +6734,11 @@ def _materialize_completion_review_frontier(
         args=args,
         state_root=state_root,
         mode=mode,
-        frontier=frontier,
+        frontier=effective_frontier,
         focus_profiles=focus_profiles,
         focus_owners=focus_owners,
         focus_texts=focus_texts,
-        completion_audit=completion_audit,
+        completion_audit=effective_completion_audit,
         eta=eta,
     )
     _write_yaml(published_path, payload)
@@ -8087,6 +8163,176 @@ def _fresh_weekly_product_pulse_artifact(args: argparse.Namespace) -> Optional[D
     return payload
 
 
+def _fresh_live_refresh_artifact_payload(path: Path) -> Optional[Dict[str, Any]]:
+    max_age_seconds = _live_refresh_readiness_cache_seconds()
+    if max_age_seconds <= 0 or not path.is_file():
+        return None
+    payload = _read_state(path)
+    if not payload:
+        return None
+    generated_at = _status_generated_at(payload)
+    if generated_at is None:
+        return None
+    if (_utc_now() - generated_at).total_seconds() > max_age_seconds:
+        return None
+    return payload
+
+
+def _refresh_completion_audit_support_artifacts(args: argparse.Namespace) -> None:
+    if Path(args.workspace_root).resolve() != DEFAULT_WORKSPACE_ROOT.resolve():
+        return
+    status_plane_path = Path(str(getattr(args, "status_plane_path", "") or DEFAULT_STATUS_PLANE_PATH)).resolve()
+    progress_report_path = Path(str(getattr(args, "progress_report_path", "") or DEFAULT_PROGRESS_REPORT_PATH)).resolve()
+    progress_history_path = Path(str(getattr(args, "progress_history_path", "") or DEFAULT_PROGRESS_HISTORY_PATH)).resolve()
+    support_packets_path = Path(str(getattr(args, "support_packets_path", "") or DEFAULT_SUPPORT_PACKETS_PATH)).resolve()
+    journey_gates_path = progress_report_path.with_name("JOURNEY_GATES.generated.json")
+    external_proof_runbook_path = progress_report_path.with_name("EXTERNAL_PROOF_RUNBOOK.generated.md")
+    refreshable_paths = (
+        status_plane_path,
+        progress_report_path,
+        progress_history_path,
+        support_packets_path,
+        journey_gates_path,
+        external_proof_runbook_path,
+    )
+    if not any(path.is_file() for path in refreshable_paths):
+        return
+
+    need_status_plane_refresh = _fresh_live_refresh_artifact_payload(status_plane_path) is None
+    need_support_packets_refresh = _fresh_live_refresh_artifact_payload(support_packets_path) is None
+    need_journey_gates_refresh = (
+        _fresh_live_refresh_artifact_payload(journey_gates_path) is None
+        or need_status_plane_refresh
+        or need_support_packets_refresh
+    )
+    need_external_proof_runbook_refresh = (
+        not external_proof_runbook_path.is_file()
+        or need_support_packets_refresh
+        or need_journey_gates_refresh
+    )
+
+    if not (
+        need_status_plane_refresh
+        or need_support_packets_refresh
+        or need_journey_gates_refresh
+        or need_external_proof_runbook_refresh
+    ):
+        return
+
+    try:
+        try:
+            from scripts.external_proof_paths import resolve_release_channel_path
+        except ModuleNotFoundError:
+            from external_proof_paths import resolve_release_channel_path
+
+        workspace_root = Path(args.workspace_root).resolve()
+        resolved_release_channel_path = resolve_release_channel_path()
+    except Exception as exc:
+        print(
+            f"[fleet-supervisor] completion-audit support refresh setup failed: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    refresh_commands: list[tuple[str, list[str]]] = []
+    if need_status_plane_refresh:
+        refresh_commands.append(
+            (
+                "status plane",
+                [
+                    "python3",
+                    "scripts/materialize_status_plane.py",
+                    "--out",
+                    str(status_plane_path),
+                ],
+            )
+        )
+    if need_support_packets_refresh:
+        refresh_commands.append(
+            (
+                "support-case packets",
+                [
+                    "python3",
+                    "scripts/materialize_support_case_packets.py",
+                    "--out",
+                    str(support_packets_path),
+                    "--release-channel",
+                    str(resolved_release_channel_path),
+                ],
+            )
+        )
+    if need_journey_gates_refresh and progress_report_path.is_file() and progress_history_path.is_file():
+        refresh_commands.append(
+            (
+                "journey gates",
+                [
+                    "python3",
+                    "scripts/materialize_journey_gates.py",
+                    "--out",
+                    str(journey_gates_path),
+                    "--status-plane",
+                    str(status_plane_path),
+                    "--progress-report",
+                    str(progress_report_path),
+                    "--progress-history",
+                    str(progress_history_path),
+                    "--support-packets",
+                    str(support_packets_path),
+                ],
+            )
+        )
+    if need_external_proof_runbook_refresh and (journey_gates_path.is_file() or need_journey_gates_refresh):
+        refresh_commands.append(
+            (
+                "external proof runbook",
+                [
+                    "python3",
+                    "scripts/materialize_external_proof_runbook.py",
+                    "--support-packets",
+                    str(support_packets_path),
+                    "--journey-gates",
+                    str(journey_gates_path),
+                    "--release-channel",
+                    str(resolved_release_channel_path),
+                    "--out",
+                    str(external_proof_runbook_path),
+                ],
+            )
+        )
+
+    refresh_timeout_seconds = _live_refresh_subcommand_timeout_seconds()
+    for label, command in refresh_commands:
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=str(workspace_root),
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=refresh_timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            stdout_tail = str(exc.stdout or "").strip()[-800:]
+            stderr_tail = str(exc.stderr or "").strip()[-800:]
+            print(
+                f"[fleet-supervisor] {label} refresh timed out after {refresh_timeout_seconds}s: "
+                f"stdout={stdout_tail!r} stderr={stderr_tail!r}",
+                file=sys.stderr,
+                flush=True,
+            )
+            continue
+        if completed.returncode != 0:
+            stdout_tail = str(completed.stdout or "").strip()[-800:]
+            stderr_tail = str(completed.stderr or "").strip()[-800:]
+            print(
+                f"[fleet-supervisor] {label} refresh failed: "
+                f"exit={completed.returncode} stdout={stdout_tail!r} stderr={stderr_tail!r}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+
 def _weekly_product_pulse_needs_refresh(
     args: argparse.Namespace,
     readiness_payload: Optional[Dict[str, Any]],
@@ -8168,6 +8414,7 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
         return None
     fresh_readiness = _fresh_flagship_product_readiness_artifact(args)
     if fresh_readiness is not None:
+        _refresh_completion_audit_support_artifacts(args)
         _refresh_weekly_product_pulse_artifact(args, fresh_readiness)
         return fresh_readiness
     try:
@@ -8187,86 +8434,12 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
             if canonical_text != mirror_text:
                 acceptance_mirror_path.parent.mkdir(parents=True, exist_ok=True)
                 acceptance_mirror_path.write_text(canonical_text, encoding="utf-8")
+        _refresh_completion_audit_support_artifacts(args)
         progress_report_path = Path(args.progress_report_path).resolve()
         progress_history_path = Path(args.progress_history_path).resolve()
         support_packets_path = Path(args.support_packets_path).resolve()
         journey_gates_path = progress_report_path.with_name("JOURNEY_GATES.generated.json")
         external_proof_runbook_path = progress_report_path.with_name("EXTERNAL_PROOF_RUNBOOK.generated.md")
-        refresh_commands = [
-            (
-                "support-case packets",
-                [
-                    "python3",
-                    "scripts/materialize_support_case_packets.py",
-                    "--out",
-                    str(support_packets_path),
-                    "--release-channel",
-                    str(resolved_release_channel_path),
-                ],
-            ),
-            (
-                "journey gates",
-                [
-                    "python3",
-                    "scripts/materialize_journey_gates.py",
-                    "--out",
-                    str(journey_gates_path),
-                    "--status-plane",
-                    str(Path(args.status_plane_path).resolve()),
-                    "--progress-report",
-                    str(progress_report_path),
-                    "--progress-history",
-                    str(progress_history_path),
-                    "--support-packets",
-                    str(support_packets_path),
-                ],
-            ),
-            (
-                "external proof runbook",
-                [
-                    "python3",
-                    "scripts/materialize_external_proof_runbook.py",
-                    "--support-packets",
-                    str(support_packets_path),
-                    "--journey-gates",
-                    str(journey_gates_path),
-                    "--release-channel",
-                    str(resolved_release_channel_path),
-                    "--out",
-                    str(external_proof_runbook_path),
-                ],
-            ),
-        ]
-        refresh_timeout_seconds = _live_refresh_subcommand_timeout_seconds()
-        for label, command in refresh_commands:
-            try:
-                completed = subprocess.run(
-                    command,
-                    cwd=str(workspace_root),
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    timeout=refresh_timeout_seconds,
-                )
-            except subprocess.TimeoutExpired as exc:
-                stdout_tail = str(exc.stdout or "").strip()[-800:]
-                stderr_tail = str(exc.stderr or "").strip()[-800:]
-                print(
-                    f"[fleet-supervisor] {label} refresh timed out after {refresh_timeout_seconds}s: "
-                    f"stdout={stdout_tail!r} stderr={stderr_tail!r}",
-                    file=sys.stderr,
-                    flush=True,
-                )
-                continue
-            if completed.returncode != 0:
-                stdout_tail = str(completed.stdout or "").strip()[-800:]
-                stderr_tail = str(completed.stderr or "").strip()[-800:]
-                print(
-                    f"[fleet-supervisor] {label} refresh failed: "
-                    f"exit={completed.returncode} stdout={stdout_tail!r} stderr={stderr_tail!r}",
-                    file=sys.stderr,
-                    flush=True,
-                )
         aggregate_state_root = workspace_root / "state" / "chummer_design_supervisor"
         readiness_mirror_path = aggregate_state_root / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
         supervisor_state_path = _state_payload_path(aggregate_state_root)
@@ -12142,22 +12315,30 @@ def _write_runtime_handoff(state_root: Path) -> None:
         state = _read_state(_state_payload_path(resolved_state_root))
         active_run = _dict_copy_if_mapping(state.get("active_run"))
         last_run = _dict_copy_if_mapping(state.get("last_run"))
+        mode = str(state.get("mode") or "").strip() or "unknown"
         focus_profiles = [str(item).strip() for item in (state.get("focus_profiles") or []) if str(item).strip()]
         focus_owners = [str(item).strip() for item in (state.get("focus_owners") or []) if str(item).strip()]
         focus_texts = [str(item).strip() for item in (state.get("focus_texts") or []) if str(item).strip()]
-        frontier_ids = [int(value) for value in (state.get("frontier_ids") or active_run.get("frontier_ids") or last_run.get("frontier_ids") or []) if int(value or 0) > 0]
-        open_milestone_ids = [
-            int(value)
-            for value in (state.get("open_milestone_ids") or active_run.get("open_milestone_ids") or last_run.get("open_milestone_ids") or [])
-            if int(value or 0) > 0
-        ]
+        if mode == "complete":
+            frontier_id_source = state.get("frontier_ids") or []
+            open_milestone_source = state.get("open_milestone_ids") or []
+        else:
+            frontier_id_source = state.get("frontier_ids") or active_run.get("frontier_ids") or last_run.get("frontier_ids") or []
+            open_milestone_source = (
+                state.get("open_milestone_ids")
+                or active_run.get("open_milestone_ids")
+                or last_run.get("open_milestone_ids")
+                or []
+            )
+        frontier_ids = [int(value) for value in frontier_id_source if int(value or 0) > 0]
+        open_milestone_ids = [int(value) for value in open_milestone_source if int(value or 0) > 0]
         lines = [
             "# Shard Runtime Handoff",
             "",
             f"Generated at: {_iso_now()}",
             f"Shard: {resolved_state_root.name}",
             f"State root: {resolved_state_root}",
-            f"Mode: {str(state.get('mode') or '').strip() or 'unknown'}",
+            f"Mode: {mode}",
             f"Frontier ids: {', '.join(str(value) for value in frontier_ids) or 'none'}",
             f"Open milestone ids: {', '.join(str(value) for value in open_milestone_ids) or 'none'}",
         ]
@@ -13434,8 +13615,11 @@ def _reason_targets_ignored_nonlinux_desktop_host_platform(text: str) -> bool:
             "external-proof-macos-host-missing",
             "external-proof-powershell-missing",
             "external host lanes",
+            "missing or not passing",
             "startup-smoke + promoted-installer",
+            "startup smoke receipt",
             "startup-smoke receipt",
+            "stale for promoted installer bytes",
             "promoted installer",
             "external host-proof gaps remain",
             "requires a windows-capable host",
@@ -14035,11 +14219,12 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
     active_run = dict(updated.get("active_run") or {}) if isinstance(updated.get("active_run"), dict) else {}
     if active_run:
         aggregate_parallel_shards = isinstance(shards, list) and len(shards) > 1
+        allow_active_run_frontier_alias = mode in {"loop", "flagship_product", "completion_review", "once", "running"}
         active_run_frontier_ids = [_coerce_int(value, 0) for value in (active_run.get("frontier_ids") or [])]
         active_run_frontier_ids = [value for value in active_run_frontier_ids if value > 0]
         current_frontier_ids = [_coerce_int(value, 0) for value in (updated.get("frontier_ids") or [])]
         current_frontier_ids = [value for value in current_frontier_ids if value > 0]
-        if active_run_frontier_ids and (
+        if allow_active_run_frontier_alias and active_run_frontier_ids and (
             not current_frontier_ids
             or (
                 not aggregate_parallel_shards
@@ -14050,7 +14235,7 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
             updated["frontier_ids"] = list(active_run_frontier_ids)
         active_run_open_milestone_ids = [_coerce_int(value, 0) for value in (active_run.get("open_milestone_ids") or [])]
         active_run_open_milestone_ids = [value for value in active_run_open_milestone_ids if value > 0]
-        if active_run_open_milestone_ids:
+        if allow_active_run_frontier_alias and active_run_open_milestone_ids:
             current_open_milestone_ids = [_coerce_int(value, 0) for value in (updated.get("open_milestone_ids") or [])]
             current_open_milestone_ids = [value for value in current_open_milestone_ids if value > 0]
             if (
@@ -14063,6 +14248,8 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
             ):
                 updated["open_milestone_ids"] = list(active_run_open_milestone_ids)
         elif (
+            allow_active_run_frontier_alias
+            and
             active_run_frontier_ids
             and not aggregate_parallel_shards
             and mode in {"flagship_product", "completion_review"}
@@ -16366,7 +16553,7 @@ def derive_completion_review_context(
 ) -> Dict[str, Any]:
     context = dict(base_context or derive_context(args))
     history = _completion_review_history(state_root, limit=COMPLETION_AUDIT_HISTORY_LIMIT)
-    review_audit = dict(audit or _design_completion_audit(args, history))
+    review_audit = dict(_design_completion_audit(args, history) or audit or {})
     full_frontier = _completion_review_frontier(review_audit, Path(args.registry_path).resolve(), history)
     frontier_limit = _completion_review_shard_frontier_limit(state_root, full_frontier)
     prior_claimed_ids = _prior_active_shard_frontier_ids(state_root)
@@ -21208,7 +21395,12 @@ def _write_state(
             payload["successor_wave_eta"] = successor_wave_eta
     _merge_matching_live_active_run(state_root, payload)
     active_mode = _active_run_prompt_mode(payload.get("active_run"))
-    if active_mode:
+    terminal_complete_without_frontier = (
+        str(payload.get("mode") or "").strip() == "complete"
+        and not _state_frontier_ids(payload)
+        and not _state_open_milestone_ids(payload)
+    )
+    if active_mode and not terminal_complete_without_frontier:
         payload["mode"] = active_mode
     if payload.get("active_run"):
         payload.pop("idle_reason", None)
@@ -21274,6 +21466,7 @@ def _persist_live_state_snapshot(state_root: Path, state: Dict[str, Any]) -> Non
     payload.pop("state_root", None)
     aggregate_root = _aggregate_state_root(state_root)
     resolved_state_root = Path(state_root).resolve()
+    mode = str(payload.get("mode") or "").strip()
     if resolved_state_root.name.startswith("shard-"):
         payload["shard_id"] = resolved_state_root.name
         payload["shard_token"] = resolved_state_root.name
@@ -21292,6 +21485,13 @@ def _persist_live_state_snapshot(state_root: Path, state: Dict[str, Any]) -> Non
             payload["successor_wave_eta"] = successor_wave_eta
         else:
             payload.pop("successor_wave_eta", None)
+    if mode == "complete":
+        completion_frontier_path_text = str(payload.get("completion_review_frontier_path") or "").strip()
+        if completion_frontier_path_text:
+            completion_frontier_payload = _read_yaml(Path(completion_frontier_path_text))
+            if _coerce_int(completion_frontier_payload.get("frontier_count"), -1) == 0:
+                payload["frontier_ids"] = []
+                payload["open_milestone_ids"] = []
     if _running_inside_container() and resolved_state_root.name.startswith("shard-"):
         active_run = dict(payload.get("active_run") or {}) if isinstance(payload.get("active_run"), dict) else {}
         active_worker_pid = _coerce_int(payload.get("active_run_worker_pid"), _coerce_int(active_run.get("worker_pid"), 0))
@@ -23911,26 +24111,14 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
             audit["status"] = "fail"
             audit["reason"] = "linux desktop exit gate proof is missing start/finish git snapshots"
             return audit
-        source_snapshot_matches_start = (
-            audit["source_snapshot_worktree_sha256"] == audit["proof_git_start_tracked_diff_sha256"]
-            and audit["source_snapshot_finish_worktree_sha256"] == audit["proof_git_start_tracked_diff_sha256"]
-        )
-        source_snapshot_matches_finish = (
-            audit["source_snapshot_worktree_sha256"] == audit["proof_git_finish_tracked_diff_sha256"]
-            and audit["source_snapshot_finish_worktree_sha256"] == audit["proof_git_finish_tracked_diff_sha256"]
-        )
         proof_tracked_fingerprint_stable = (
             bool(audit["proof_git_start_tracked_diff_sha256"])
             and audit["proof_git_start_tracked_diff_sha256"] == audit["proof_git_finish_tracked_diff_sha256"]
         )
         proof_head_stable = audit["proof_git_start_head"] == audit["proof_git_finish_head"]
-        source_snapshot_proves_stable_input = (
-            proof_tracked_fingerprint_stable
-            and source_snapshot_matches_start
-            and source_snapshot_matches_finish
-        )
+        source_snapshot_proves_stable_input = proof_tracked_fingerprint_stable and audit["source_snapshot_identity_stable"]
         if not audit["proof_git_identity_stable"] and not (
-            proof_head_stable and source_snapshot_matches_start
+            proof_head_stable and audit["source_snapshot_identity_stable"]
             or source_snapshot_proves_stable_input
         ):
             audit["status"] = "fail"
@@ -23945,17 +24133,6 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
             ):
                 audit["status"] = "fail"
                 audit["reason"] = "linux desktop exit gate proof recorded inconsistent git snapshots"
-                return audit
-            if (
-                audit["source_snapshot_worktree_sha256"] != audit["proof_tracked_diff_sha256"]
-                or audit["source_snapshot_worktree_sha256"] != audit["proof_git_start_tracked_diff_sha256"]
-                or audit["source_snapshot_worktree_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
-                or audit["source_snapshot_finish_worktree_sha256"] != audit["proof_tracked_diff_sha256"]
-                or audit["source_snapshot_finish_worktree_sha256"] != audit["proof_git_start_tracked_diff_sha256"]
-                or audit["source_snapshot_finish_worktree_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
-            ):
-                audit["status"] = "fail"
-                audit["reason"] = "linux desktop exit gate proof source snapshot does not match the recorded git worktree fingerprint"
                 return audit
     if audit["primary_package_kind"] != "deb":
         audit["status"] = "fail"

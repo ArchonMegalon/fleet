@@ -5006,6 +5006,65 @@ def test_refresh_flagship_product_readiness_artifact_reuses_fresh_artifact(monke
         assert payload["status"] == "pass"
 
 
+def test_refresh_flagship_product_readiness_artifact_refreshes_stale_status_plane_even_with_fresh_readiness(
+    monkeypatch,
+) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        readiness_path = Path(args.flagship_product_readiness_path)
+        readiness_path.write_text(
+            json.dumps(
+                {
+                    "coverage_details": {
+                        "desktop_client": {
+                            "evidence": {
+                                "desktop_ignore_nonlinux_desktop_host_proof_blockers": False,
+                            }
+                        }
+                    },
+                    "generated_at": module._iso(module._utc_now()),
+                    "proof_status": "pass",
+                    "status": "pass",
+                }
+            ),
+            encoding="utf-8",
+        )
+        Path(args.status_plane_path).write_text(
+            yaml.safe_dump({"generated_at": "2026-05-06T00:00:00Z", "contract_name": "fleet.status_plane"}),
+            encoding="utf-8",
+        )
+        Path(args.progress_report_path).write_text(json.dumps({"generated_at": "2026-05-07T14:00:00Z"}), encoding="utf-8")
+        Path(args.progress_history_path).write_text(json.dumps({"generated_at": "2026-05-07T14:00:00Z"}), encoding="utf-8")
+        Path(args.support_packets_path).write_text(json.dumps({"generated_at": "2026-05-06T00:00:00Z"}), encoding="utf-8")
+        journey_gates_path = Path(args.progress_report_path).with_name("JOURNEY_GATES.generated.json")
+        journey_gates_path.write_text(json.dumps({"generated_at": "2026-05-06T00:00:00Z"}), encoding="utf-8")
+        monkeypatch.setattr(module, "DEFAULT_WORKSPACE_ROOT", root)
+        commands: list[list[str]] = []
+
+        def fail_materialize(**_kwargs):
+            raise AssertionError("fresh readiness should not be rematerialized")
+
+        def fake_run(command, **_kwargs):
+            commands.append(list(command))
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        monkeypatch.setattr(module, "materialize_flagship_product_readiness", fail_materialize)
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+        monkeypatch.setattr(module, "_refresh_weekly_product_pulse_artifact", lambda *_args, **_kwargs: None)
+
+        payload = module._refresh_flagship_product_readiness_artifact(args)
+
+        assert payload is not None
+        assert payload["status"] == "pass"
+        assert commands
+        assert commands[0][:2] == ["python3", "scripts/materialize_status_plane.py"]
+        assert any(command[:2] == ["python3", "scripts/materialize_journey_gates.py"] for command in commands)
+        assert any(command[:2] == ["python3", "scripts/materialize_support_case_packets.py"] for command in commands)
+        assert any(command[:2] == ["python3", "scripts/materialize_external_proof_runbook.py"] for command in commands)
+
+
 def test_derive_context_prefers_handoff_frontier_ids() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -13679,6 +13738,121 @@ def test_design_completion_audit_accepts_deferred_nonlinux_external_only_desktop
         assert audit["desktop_executable_exit_gate_audit"]["proof_status"] == "fail"
 
 
+def test_design_completion_audit_accepts_stale_windows_receipt_as_deferred_nonlinux_host_gap() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        payload_path = root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        payload.update(
+            {
+                "status": "fail",
+                "reason": "Desktop executable exit gate is not fully proven.",
+                "blockedByExternalConstraintsOnly": True,
+                "localBlockingFindings": [],
+                "localBlockingFindingsCount": 0,
+                "externalBlockingFindings": [
+                    "Windows startup smoke receipt is stale for promoted installer bytes (641769s old).",
+                ],
+                "externalBlockingFindingsCount": 1,
+                "blockingFindings": [
+                    "Windows startup smoke receipt is stale for promoted installer bytes (641769s old).",
+                ],
+                "blockingFindingsCount": 1,
+            }
+        )
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+        args = _args(root)
+
+        previous = os.environ.get("CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS")
+        os.environ["CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS"] = "1"
+        try:
+            audit = module._design_completion_audit(
+                args,
+                [
+                    {
+                        "run_id": "run-1",
+                        "worker_exit_code": 0,
+                        "accepted": True,
+                        "acceptance_reason": "",
+                        "shipped": "trusted receipt",
+                        "remains": "none",
+                        "blocker": "none",
+                    }
+                ],
+            )
+        finally:
+            if previous is None:
+                os.environ.pop("CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS", None)
+            else:
+                os.environ["CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS"] = previous
+
+        assert audit["status"] == "pass"
+        assert audit["desktop_executable_exit_gate_audit"]["status"] == "pass"
+        assert audit["desktop_executable_exit_gate_audit"]["proof_status"] == "fail"
+
+
+def test_design_completion_audit_accepts_external_only_windows_gate_payload_shape() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        payload_path = root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        payload.update(
+            {
+                "status": "fail",
+                "reason": "Desktop executable exit gate is not fully proven.",
+                "blockedByExternalConstraintsOnly": True,
+                "localBlockingFindings": [],
+                "localBlockingFindingsCount": 0,
+                "externalBlockingFindings": [
+                    "Windows desktop exit gate is missing or not passing.",
+                    "Windows gate reason: Windows startup smoke receipt is stale (642272s old).",
+                    "Windows startup smoke receipt is stale for promoted installer bytes (642340s old).",
+                ],
+                "externalBlockingFindingsCount": 3,
+                "blockingFindings": [
+                    "Windows desktop exit gate is missing or not passing.",
+                    "Windows gate reason: Windows startup smoke receipt is stale (642272s old).",
+                    "Windows startup smoke receipt is stale for promoted installer bytes (642340s old).",
+                ],
+                "blockingFindingsCount": 3,
+            }
+        )
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+        args = _args(root)
+
+        previous = os.environ.get("CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS")
+        os.environ["CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS"] = "1"
+        try:
+            audit = module._design_completion_audit(
+                args,
+                [
+                    {
+                        "run_id": "run-1",
+                        "worker_exit_code": 0,
+                        "accepted": True,
+                        "acceptance_reason": "",
+                        "shipped": "trusted receipt",
+                        "remains": "none",
+                        "blocker": "none",
+                    }
+                ],
+            )
+        finally:
+            if previous is None:
+                os.environ.pop("CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS", None)
+            else:
+                os.environ["CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS"] = previous
+
+        assert audit["status"] == "pass"
+        assert audit["desktop_executable_exit_gate_audit"]["status"] == "pass"
+        assert audit["desktop_executable_exit_gate_audit"]["proof_status"] == "fail"
+        assert audit["desktop_executable_exit_gate_audit"]["deferred_nonlinux_host_proof_only"] is True
+
+
 def test_design_completion_audit_accepts_lagging_weekly_pulse_journey_warning_when_live_proof_is_ready() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -15071,6 +15245,68 @@ def test_completion_review_frontier_decomposes_visual_familiarity_backlog() -> N
             "Repo backlog: ui: Cyberware and cyberlimb dialog familiarity",
             "Repo backlog: ui: SR4 and SR6 workflow orientation familiarity",
         ]
+
+
+def test_derive_completion_review_context_refreshes_stale_completion_audit_against_live_proof() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        history = [
+            {
+                "run_id": "run-good",
+                "worker_exit_code": 0,
+                "accepted": True,
+                "acceptance_reason": "",
+                "shipped": "trusted receipt",
+                "remains": "none",
+                "blocker": "none",
+            }
+        ]
+        (state_root / "history.jsonl").write_text(json.dumps(history[0]) + "\n", encoding="utf-8")
+        args = _args(root)
+        stale_audit = {
+            "status": "fail",
+            "reason": "Resolve the blocking golden-journey gaps before widening publish claims.",
+            "receipt_audit": {
+                "status": "pass",
+                "reason": "recent supervisor history ends with a trusted structured worker receipt",
+                "latest_run_id": "run-good",
+                "latest_run_reason": "",
+            },
+            "journey_gate_audit": {
+                "status": "fail",
+                "reason": "Resolve the blocking golden-journey gaps before widening publish claims.",
+                "blocked_journeys": [{"id": "desktop_release_truth", "title": "Desktop release truth"}],
+                "warning_journeys": [],
+            },
+            "weekly_pulse_audit": {
+                "status": "fail",
+                "reason": "weekly product pulse reports journey gate health as blocked",
+            },
+        }
+
+        context = module.derive_completion_review_context(
+            args,
+            state_root,
+            base_context=module.derive_context(args),
+            audit=stale_audit,
+        )
+
+        frontier_payload = yaml.safe_load(
+            Path(context["completion_review_frontier_path"]).read_text(encoding="utf-8")
+        )
+        assert context["completion_audit"]["status"] == "pass"
+        assert context["frontier_ids"] == []
+        assert frontier_payload["completion_audit"]["status"] == "pass"
+        assert frontier_payload["frontier_ids"] == []
+        assert frontier_payload["completion_audit"]["reason"].startswith("trusted completion receipt")
 
 
 def test_synthetic_completion_review_milestone_keeps_all_external_proof_requests() -> None:
@@ -18249,6 +18485,47 @@ def test_linux_desktop_exit_gate_audit_uses_top_level_current_git_fields_without
         assert audit["proof_tracked_diff_sha256"] == current_state["tracked_diff_sha256"]
 
 
+def test_linux_desktop_exit_gate_audit_accepts_real_source_snapshot_fingerprint_domain() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "codex@example.com"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Codex"], cwd=root, check=True, capture_output=True)
+        (root / "tracked.txt").write_text("one\n", encoding="utf-8")
+        subprocess.run(["git", "add", "tracked.txt"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=root, check=True, capture_output=True)
+
+        _write_completion_evidence(root)
+        proof_path = root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+        payload = json.loads(proof_path.read_text(encoding="utf-8"))
+        current_state = module._repo_git_state(
+            root,
+            exclude_paths=(
+                root / ".codex-studio" / "out" / "linux-desktop-exit-gate",
+                proof_path,
+            ),
+            include_markers=module.FLAGSHIP_UI_LINUX_GATE_INPUT_MARKERS,
+            include_untracked=False,
+        )
+        assert payload["source_snapshot"]["worktree_sha256"] != current_state["tracked_diff_sha256"]
+        payload["git"] = {
+            "repo_root": str(root),
+            "available": True,
+            "head": current_state["head"],
+            "tracked_diff_sha256": current_state["tracked_diff_sha256"],
+            "tracked_diff_line_count": current_state["tracked_diff_line_count"],
+            "start": dict(current_state),
+            "finish": dict(current_state),
+            "identity_stable": True,
+        }
+        proof_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "pass"
+
+
 def test_linux_desktop_exit_gate_audit_allows_head_move_when_source_snapshot_fingerprint_is_stable() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -21313,6 +21590,7 @@ def test_preferred_ui_repo_root_breaks_equal_scores_with_fresher_proof(tmp_path:
     candidates = (older, newer)
     monkeypatch.setattr(module, "Path", Path)
     monkeypatch.setattr(module, "_ui_repo_candidate_score", lambda _candidate: (10, 2))
+    monkeypatch.setattr(module, "_preferred_existing_ui_repo_candidate", lambda: None)
 
     def fake_exists(self: Path) -> bool:
         return self in candidates
@@ -21359,6 +21637,7 @@ def test_preferred_ui_repo_root_prefers_fresher_required_exit_gates_over_staler_
         return self in candidates
 
     monkeypatch.setattr(module.Path, "exists", fake_exists, raising=False)
+    monkeypatch.setattr(module, "_preferred_existing_ui_repo_candidate", lambda: None)
     monkeypatch.setattr(
         module,
         "_ui_repo_candidate_sort_key",
@@ -21374,6 +21653,90 @@ def test_preferred_ui_repo_root_prefers_fresher_required_exit_gates_over_staler_
             monkeypatch.setenv("CHUMMER_UI_REPO_ROOT", original_env)
 
     assert selected == fresh
+
+
+def test_preferred_ui_repo_root_prefers_canonical_alias_when_required_gate_scores_tie(
+    tmp_path: Path, monkeypatch
+) -> None:
+    module = _load_module()
+    canonical = tmp_path / "canonical-ui"
+    mirror = tmp_path / "mirror-ui"
+    for root, mtime in ((canonical, 10), (mirror, 20)):
+        published = root / ".codex-studio" / "published"
+        published.mkdir(parents=True, exist_ok=True)
+        for name in (
+            "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+            "UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
+        ):
+            path = published / name
+            path.write_text(json.dumps({"status": "pass"}), encoding="utf-8")
+            os.utime(path, (mtime, mtime))
+
+    monkeypatch.setattr(
+        module,
+        "_ui_repo_candidates",
+        lambda: (mirror, canonical),
+    )
+    monkeypatch.setattr(module, "_preferred_existing_ui_repo_candidate", lambda: None)
+    monkeypatch.setattr(module, "_ui_repo_candidate_sort_key", lambda _candidate: (10, 2, 10.0))
+    monkeypatch.setattr(module, "_ui_repo_canonical_rank", lambda candidate: 3 if candidate == canonical else 0)
+    monkeypatch.delenv("CHUMMER_UI_REPO_ROOT", raising=False)
+
+    assert module._preferred_ui_repo_root() == canonical
+
+
+def test_preferred_ui_repo_root_prefers_canonical_alias_over_clean_room_clone(tmp_path: Path, monkeypatch) -> None:
+    module = _load_module()
+    canonical = tmp_path / "canonical-ui"
+    clean_room = tmp_path / "clean-room-ui"
+    for root, status in ((canonical, "fail"), (clean_room, "pass")):
+        published = root / ".codex-studio" / "published"
+        published.mkdir(parents=True, exist_ok=True)
+        for name in (
+            "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+            "UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
+        ):
+            (published / name).write_text(json.dumps({"status": status}), encoding="utf-8")
+
+    monkeypatch.setattr(module, "Path", Path)
+    monkeypatch.setattr(
+        module,
+        "_preferred_existing_ui_repo_candidate",
+        lambda: canonical,
+    )
+    monkeypatch.setattr(module, "_ui_repo_candidates", lambda: (clean_room, canonical))
+    monkeypatch.delenv("CHUMMER_UI_REPO_ROOT", raising=False)
+
+    assert module._preferred_ui_repo_root() == canonical
+
+
+def test_preferred_ui_repo_root_rejects_required_gate_with_foreign_run_root(tmp_path: Path, monkeypatch) -> None:
+    module = _load_module()
+    canonical = tmp_path / "canonical-ui"
+    mirror = tmp_path / "mirror-ui"
+    canonical_out = canonical / ".codex-studio" / "out"
+
+    for root, run_root in (
+        (canonical, canonical_out / "linux-desktop-exit-gate" / "run.good"),
+        (mirror, canonical_out / "linux-desktop-exit-gate" / "run.good"),
+    ):
+        published = root / ".codex-studio" / "published"
+        published.mkdir(parents=True, exist_ok=True)
+        for name, output_dir in (
+            ("DESKTOP_EXECUTABLE_EXIT_GATE.generated.json", "desktop-executable-exit-gate"),
+            ("UI_LINUX_DESKTOP_EXIT_GATE.generated.json", "linux-desktop-exit-gate"),
+        ):
+            (run_root.parent.parent if name == "UI_LINUX_DESKTOP_EXIT_GATE.generated.json" else canonical_out / output_dir).mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+            gate_run_root = run_root if name == "UI_LINUX_DESKTOP_EXIT_GATE.generated.json" else canonical_out / output_dir / "run.good"
+            (published / name).write_text(json.dumps({"status": "pass", "run_root": str(gate_run_root)}), encoding="utf-8")
+
+    monkeypatch.setattr(module, "_ui_repo_candidates", lambda: (mirror, canonical))
+    monkeypatch.delenv("CHUMMER_UI_REPO_ROOT", raising=False)
+
+    assert module._preferred_ui_repo_root() == canonical
 
 
 def test_write_state_preserves_matching_active_run_from_existing_state() -> None:
@@ -24238,6 +24601,68 @@ def test_derive_flagship_product_context_does_not_resurrect_stale_runtime_handof
         assert frontier_payload["frontier_ids"] == []
 
 
+def test_persist_live_state_snapshot_does_not_resurrect_active_run_frontier_ids_in_complete_mode() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp) / "state" / "shard-2"
+        state_root.mkdir(parents=True, exist_ok=True)
+        prompt_path = state_root / "run-prompt.txt"
+        prompt_path.write_text("Run a false-complete recovery pass for the Chummer design supervisor.\n", encoding="utf-8")
+        completion_frontier_path = state_root / "completion-review-frontier.generated.yaml"
+        completion_frontier_path.write_text(
+            "contract_name: fleet.completion_review_frontier\nfrontier_count: 0\nfrontier_ids: []\n",
+            encoding="utf-8",
+        )
+
+        module._persist_live_state_snapshot(
+            state_root,
+            {
+                "mode": "complete",
+                "frontier_ids": [],
+                "open_milestone_ids": [],
+                "completion_review_frontier_path": str(completion_frontier_path),
+                "active_run": {
+                    "run_id": "run-stale-complete",
+                    "frontier_ids": [3449507998],
+                    "open_milestone_ids": [3449507998],
+                    "prompt_path": str(prompt_path),
+                },
+            },
+        )
+
+        persisted = module._read_state(state_root / "state.json")
+        assert persisted["mode"] == "complete"
+        assert persisted.get("frontier_ids") == []
+        assert persisted.get("open_milestone_ids") == []
+
+
+def test_write_runtime_handoff_does_not_resurrect_active_run_frontier_ids_in_complete_mode() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp) / "state" / "shard-2"
+        state_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            state_root / "state.json",
+            {
+                "mode": "complete",
+                "frontier_ids": [],
+                "open_milestone_ids": [],
+                "active_run": {
+                    "run_id": "run-stale-complete",
+                    "frontier_ids": [3449507998],
+                    "open_milestone_ids": [3449507998],
+                },
+            },
+        )
+
+        module._write_runtime_handoff(state_root)
+        handoff_text = (state_root / "ACTIVE_RUN_HANDOFF.generated.md").read_text(encoding="utf-8")
+
+        assert "Mode: complete" in handoff_text
+        assert "Frontier ids: none" in handoff_text
+        assert "Open milestone ids: none" in handoff_text
+
+
 def test_materialize_full_product_frontier_refreshes_stale_full_product_audit() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -26084,6 +26509,87 @@ def test_live_state_with_current_completion_audit_accepts_synthetic_receipt_when
         assert completion_frontier_payload["mode"] == "complete"
         assert completion_frontier_payload["completion_audit"]["status"] == "pass"
         assert completion_frontier_payload["frontier_count"] == 0
+
+
+def test_materialize_completion_review_frontier_recomputes_frontier_from_refreshed_live_audit() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 13,
+                            "title": "Desktop package proof",
+                            "wave": "W1",
+                            "status": "complete",
+                            "owners": ["chummer6-ui", "fleet"],
+                            "exit_criteria": ["Desktop package ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Everything is done.\n", encoding="utf-8")
+        (root / "projects").mkdir(parents=True, exist_ok=True)
+        (root / "projects" / "fleet.yaml").write_text("schema_version: 1\nproof_paths: {}\n", encoding="utf-8")
+        _write_completion_evidence(root)
+
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        timed_out_run = {
+            "run_id": "run-plain-timeout",
+            "worker_exit_code": 124,
+            "accepted": False,
+            "acceptance_reason": "worker exit 124",
+            "blocker": "worker exit 124",
+            "final_message": (
+                "What shipped: \n\n"
+                "What remains: \n\n"
+                "Exact blocker: worker exit 124\n"
+            ),
+            "primary_milestone_id": 13,
+            "frontier_ids": [13],
+            "open_milestone_ids": [13],
+            "shipped": "",
+            "remains": "",
+        }
+        (state_root / "history.jsonl").write_text(json.dumps(timed_out_run) + "\n", encoding="utf-8")
+
+        stale_frontier = [
+            module.Milestone(
+                id=module._synthetic_completion_review_id("journey:install_claim_restore_continue"),
+                title="Completion gate: Install, claim, restore, continue",
+                wave="completion_review",
+                status="review_required",
+                owners=["chummer6-ui", "fleet"],
+                exit_criteria=["stale blocker"],
+                dependencies=[],
+            )
+        ]
+
+        paths = module._materialize_completion_review_frontier(
+            args=_args(root),
+            state_root=state_root,
+            mode="completion_review",
+            frontier=stale_frontier,
+            focus_profiles=[],
+            focus_owners=[],
+            focus_texts=[],
+            completion_audit={"status": "fail", "reason": "stale journey blocker"},
+            eta=None,
+        )
+
+        payload = yaml.safe_load(Path(paths["published_path"]).read_text(encoding="utf-8"))
+        assert payload["completion_audit"]["status"] == "pass"
+        assert payload["receipt_audit"]["status"] == "pass"
+        assert payload["frontier_count"] == 0
+        assert payload["frontier"] == []
 
 
 def test_live_state_with_current_completion_audit_accepts_synthetic_receipt_for_helper_loop_timeout() -> None:

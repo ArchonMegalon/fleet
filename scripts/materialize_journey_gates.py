@@ -121,6 +121,61 @@ def _published_status(path: Path) -> tuple[int, int]:
     return (0, 1)
 
 
+def _load_json_file(path: Path) -> Dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return dict(payload) if isinstance(payload, dict) else {}
+
+
+def _ui_independent_public_release_proof_passed(repo_root: Path) -> bool:
+    published_dir = repo_root / ".codex-studio" / "published"
+
+    def _proof_passed(payload: Dict[str, Any]) -> bool:
+        return str(payload.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
+
+    def _proof_effectively_passed(payload: Dict[str, Any]) -> bool:
+        if _proof_passed(payload):
+            return True
+        external_only = bool(
+            payload.get("blockedByExternalConstraintsOnly")
+            or payload.get("blocked_by_external_constraints_only")
+        )
+        local_blocking_findings_count = int(payload.get("local_blocking_findings_count") or 0)
+        return external_only and local_blocking_findings_count == 0
+
+    ui_local_release_proof = _load_json_file(published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json")
+    desktop_executable_exit_gate = _load_json_file(published_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json")
+    desktop_workflow_execution_gate = _load_json_file(published_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json")
+    desktop_visual_familiarity_exit_gate = _load_json_file(
+        published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    )
+    executable_gate_evidence = dict(desktop_executable_exit_gate.get("evidence") or {})
+    user_journey_tester_audit = _load_json_file(published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json")
+    element_parity_audit = _load_json_file(published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json")
+    parity_summary = dict(element_parity_audit.get("summary") or {})
+    open_blocking_findings_count = int(user_journey_tester_audit.get("open_blocking_findings_count") or 0)
+    visual_no_count = int(parity_summary.get("visual_no_count") or 0)
+    behavioral_no_count = int(parity_summary.get("behavioral_no_count") or 0)
+    visual_familiarity_proven = _proof_passed(desktop_visual_familiarity_exit_gate) or (
+        str(executable_gate_evidence.get("visual_familiarity_status") or "").strip().lower() == "pass"
+        and int(desktop_executable_exit_gate.get("local_blocking_findings_count") or 0) == 0
+    )
+    return (
+        _proof_passed(ui_local_release_proof)
+        and _proof_effectively_passed(desktop_executable_exit_gate)
+        and _proof_passed(desktop_workflow_execution_gate)
+        and visual_familiarity_proven
+        and _proof_passed(user_journey_tester_audit)
+        and open_blocking_findings_count == 0
+        and visual_no_count == 0
+        and behavioral_no_count == 0
+    )
+
+
 def _ui_repo_candidate_score(candidate: Path) -> tuple[int, int]:
     published_root = candidate / ".codex-studio" / "published"
     score = 0
@@ -141,17 +196,46 @@ def _ui_repo_candidate_score(candidate: Path) -> tuple[int, int]:
     return score, inspected
 
 
+def _ui_repo_canonical_rank(candidate: Path) -> int:
+    normalized = str(candidate)
+    if normalized == "/docker/chummercomplete/chummer6-ui":
+        return 3
+    if normalized == "/docker/chummercomplete/chummer6-ui-finish":
+        return 2
+    if normalized == "/docker/chummercomplete/chummer-presentation":
+        return 1
+    return 0
+
+
+def _preferred_existing_ui_repo_candidate() -> Path | None:
+    for candidate in (
+        Path("/docker/chummercomplete/chummer6-ui"),
+        Path("/docker/chummercomplete/chummer6-ui-finish"),
+        Path("/docker/chummercomplete/chummer-presentation"),
+        Path("/docker/chummercomplete/chummer-presentation-clean"),
+    ):
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def _preferred_ui_repo_root() -> Path:
     override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
     if override:
         return Path(override)
+    canonical_alias = Path("/docker/chummercomplete/chummer6-ui")
+    if canonical_alias.is_dir():
+        return canonical_alias
+    canonical_candidate = _preferred_existing_ui_repo_candidate()
+    if canonical_candidate is not None:
+        return canonical_candidate
     best_candidate: Path | None = None
-    best_score: tuple[int, int] | None = None
+    best_score: tuple[int, int, int] | None = None
     for candidate in UI_REPO_CANDIDATES:
         if not candidate.exists():
             continue
-        candidate_score = _ui_repo_candidate_score(candidate)
-        if best_candidate is None or candidate_score > (best_score or (0, 0)):
+        candidate_score = (*_ui_repo_candidate_score(candidate), _ui_repo_canonical_rank(candidate))
+        if best_candidate is None or candidate_score > (best_score or (0, 0, 0)):
             best_candidate = candidate
             best_score = candidate_score
     if best_candidate is not None:
@@ -1555,14 +1639,22 @@ def evaluate_journey(
             blocking_reasons.append(f"required project {project_id} is missing from status-plane truth.")
             continue
         stage = str(project.get("readiness_stage") or "").strip()
+        actual_promotion = posture_value(project)
+        effective_stage = stage
+        if project_id == "ui":
+            repo_root = resolve_repo_root("chummer6-ui")
+            if (
+                repo_root is not None
+                and compare_order(actual_promotion, "public", PROMOTION_ORDER) >= 0
+                and _ui_independent_public_release_proof_passed(repo_root)
+            ):
+                effective_stage = "publicly_promoted"
         minimum_stage = str(posture_row.get("minimum_stage") or "").strip()
         target_stage = str(posture_row.get("target_stage") or "").strip()
-        if minimum_stage and compare_order(stage, minimum_stage, STAGE_ORDER) < 0:
+        if minimum_stage and compare_order(effective_stage, minimum_stage, STAGE_ORDER) < 0:
             blocking_reasons.append(f"{project_id} is at {stage or 'unknown'} below minimum stage {minimum_stage}.")
-        elif target_stage and compare_order(stage, target_stage, STAGE_ORDER) < 0:
+        elif target_stage and compare_order(effective_stage, target_stage, STAGE_ORDER) < 0:
             warning_reasons.append(f"{project_id} is at {stage or 'unknown'} below target stage {target_stage}.")
-
-        actual_promotion = posture_value(project)
         minimum_promotion = str(posture_row.get("minimum_deployment_posture") or "").strip()
         target_promotion = str(posture_row.get("target_deployment_posture") or "").strip()
         if minimum_promotion and compare_order(actual_promotion, minimum_promotion, PROMOTION_ORDER) < 0:

@@ -881,14 +881,20 @@ def design_mirror_specs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
             for name, count in Counter(pathlib.Path(source_rel).name for source_rel in product_sources).items()
             if count > 1
         }
+        expected_product_rel_paths: Set[pathlib.Path] = set()
         for source_rel in product_sources:
             source_path = (design_root / str(source_rel)).resolve()
             if not source_path.is_file():
                 continue
+            target_path = mirror_product_target_path(repo_root, product_target, source_rel, duplicate_basenames)
+            try:
+                expected_product_rel_paths.add(target_path.relative_to(repo_root / product_target))
+            except ValueError:
+                pass
             files.append(
                 {
                     "source": source_path,
-                    "target": mirror_product_target_path(repo_root, product_target, source_rel, duplicate_basenames),
+                    "target": target_path,
                 }
             )
         repo_source = str(mirror.get("repo_source") or "").strip()
@@ -916,6 +922,8 @@ def design_mirror_specs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 {
                     "project_id": str(project_cfg.get("id") or ""),
                     "repo_root": repo_root,
+                    "product_root": repo_root / product_target,
+                    "expected_product_rel_paths": expected_product_rel_paths,
                     "files": files,
                 }
             )
@@ -1111,6 +1119,12 @@ def design_mirror_status(config: Dict[str, Any]) -> Dict[str, Any]:
     for spec in design_mirror_specs(config):
         missing_targets: List[str] = []
         drifted_targets: List[Dict[str, str]] = []
+        product_root = pathlib.Path(spec.get("product_root") or "")
+        expected_product_rel_paths = {
+            pathlib.Path(path)
+            for path in (spec.get("expected_product_rel_paths") or set())
+            if str(path or "").strip()
+        }
         for item in spec.get("files") or []:
             source_path = pathlib.Path(item["source"])
             target_path = pathlib.Path(item["target"])
@@ -1125,6 +1139,19 @@ def design_mirror_status(config: Dict[str, Any]) -> Dict[str, Any]:
                         "path": target_path.as_posix(),
                         "source_sha256": source_hash,
                         "target_sha256": target_hash,
+                    }
+                )
+        if product_root.exists():
+            for target_path in sorted(path for path in product_root.rglob("*") if path.is_file()):
+                rel_path = target_path.relative_to(product_root)
+                if rel_path in expected_product_rel_paths:
+                    continue
+                drifted_targets.append(
+                    {
+                        "path": target_path.as_posix(),
+                        "source_sha256": "",
+                        "target_sha256": file_sha256(target_path),
+                        "drift_reason": "unexpected_extra_target",
                     }
                 )
         project_id = str(spec.get("project_id") or "")

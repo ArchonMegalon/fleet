@@ -81,6 +81,29 @@ def _ui_repo_candidates() -> tuple[pathlib.Path, ...]:
     )
 
 
+def _ui_repo_canonical_rank(candidate: pathlib.Path) -> int:
+    normalized = str(candidate)
+    if normalized == "/docker/chummercomplete/chummer6-ui":
+        return 3
+    if normalized == "/docker/chummercomplete/chummer6-ui-finish":
+        return 2
+    if normalized == "/docker/chummercomplete/chummer-presentation":
+        return 1
+    return 0
+
+
+def _preferred_existing_ui_repo_candidate() -> pathlib.Path | None:
+    for candidate in (
+        pathlib.Path("/docker/chummercomplete/chummer6-ui"),
+        pathlib.Path("/docker/chummercomplete/chummer6-ui-finish"),
+        pathlib.Path("/docker/chummercomplete/chummer-presentation"),
+        pathlib.Path("/docker/chummercomplete/chummer-presentation-clean"),
+    ):
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def _ui_repo_required_gate_sort_key(candidate: pathlib.Path) -> tuple[int, float, int, float]:
     published_root = candidate / ".codex-studio" / "published"
     executable_status, _ = _published_status(published_root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json")
@@ -102,14 +125,25 @@ def _preferred_chummer_ui_root() -> pathlib.Path:
     override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
     if override:
         return pathlib.Path(override)
+    canonical_alias = pathlib.Path("/docker/chummercomplete/chummer6-ui")
+    if canonical_alias.is_dir():
+        return canonical_alias
+    canonical_candidate = _preferred_existing_ui_repo_candidate()
+    if canonical_candidate is not None:
+        return canonical_candidate
     best_candidate: pathlib.Path | None = None
-    best_score: tuple[int, float, int, float, int, int] | None = None
+    best_score: tuple[int, float, int, float, int, int, int] | None = None
     for candidate in _ui_repo_candidates():
         if not candidate.exists():
             continue
         aggregate_score, inspected = _ui_repo_candidate_score(candidate)
-        candidate_score = (*_ui_repo_required_gate_sort_key(candidate), aggregate_score, inspected)
-        if best_candidate is None or candidate_score > (best_score or (0, 0.0, 0, 0.0, 0, 0)):
+        candidate_score = (
+            *_ui_repo_required_gate_sort_key(candidate),
+            _ui_repo_canonical_rank(candidate),
+            aggregate_score,
+            inspected,
+        )
+        if best_candidate is None or candidate_score > (best_score or (0, 0.0, 0, 0.0, 0, 0, 0)):
             best_candidate = candidate
             best_score = candidate_score
     if best_candidate is not None:

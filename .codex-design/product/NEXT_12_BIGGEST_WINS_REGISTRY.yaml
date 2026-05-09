@@ -8,7 +8,7 @@ status: complete
 waves:
   - id: W1
     name: Ship the flagship desktop
-    status: complete
+    status: in_progress
     milestone_ids:
       - 1
       - 2

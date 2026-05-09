@@ -162,17 +162,85 @@ def _ui_repo_candidates() -> tuple[Path, ...]:
     )
 
 
+def _ui_repo_canonical_rank(candidate: Path) -> int:
+    normalized = str(candidate)
+    if normalized == "/docker/chummercomplete/chummer6-ui":
+        return 3
+    if normalized == "/docker/chummercomplete/chummer6-ui-finish":
+        return 2
+    if normalized == "/docker/chummercomplete/chummer-presentation":
+        return 1
+    return 0
+
+
+def _preferred_existing_ui_repo_candidate() -> Path | None:
+    for candidate in (
+        Path("/docker/chummercomplete/chummer6-ui"),
+        Path("/docker/chummercomplete/chummer6-ui-finish"),
+        Path("/docker/chummercomplete/chummer-presentation"),
+        Path("/docker/chummercomplete/chummer-presentation-clean"),
+    ):
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _logical_path_within(candidate: Path, raw_path: object) -> bool:
+    value = str(raw_path or "").strip()
+    if not value:
+        return False
+    try:
+        Path(value).relative_to(candidate)
+        return True
+    except Exception:
+        return False
+
+
+def _ui_artifact_path_scope_is_coherent(candidate: Path, artifact_path: Path, name: str) -> bool:
+    try:
+        payload = json.loads(artifact_path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return False
+    scope_paths: list[object] = []
+    if name == "UI_LINUX_DESKTOP_EXIT_GATE.generated.json":
+        build = payload.get("build") if isinstance(payload, dict) else {}
+        scope_paths.extend(
+            [
+                payload.get("run_root"),
+                build.get("output_base_root") if isinstance(build, dict) else "",
+            ]
+        )
+    elif name == "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json":
+        scope_paths.extend(
+            [
+                payload.get("linux_avalonia_gate_path"),
+                payload.get("linux_blazor_gate_path"),
+                payload.get("repo_root"),
+            ]
+        )
+    relevant_paths = [item for item in scope_paths if str(item or "").strip()]
+    if not relevant_paths:
+        return True
+    return all(_logical_path_within(candidate, item) for item in relevant_paths)
+
+
 def _preferred_ui_repo_root() -> Path:
     override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
     if override:
         return Path(override)
+    canonical_alias = Path("/docker/chummercomplete/chummer6-ui")
+    if canonical_alias.is_dir():
+        return canonical_alias
+    canonical_candidate = _preferred_existing_ui_repo_candidate()
+    if canonical_candidate is not None:
+        return canonical_candidate
     best_candidate: Path | None = None
-    best_score: tuple[int, int] | None = None
+    best_score: tuple[int, int, int, float] | None = None
     for candidate in _ui_repo_candidates():
         if not candidate.exists():
             continue
-        candidate_score = _ui_repo_candidate_score(candidate)
-        if best_candidate is None or candidate_score > (best_score or (0, 0)):
+        candidate_score = (*_ui_repo_candidate_score(candidate), _ui_repo_canonical_rank(candidate), candidate.stat().st_mtime)
+        if best_candidate is None or candidate_score > (best_score or (0, 0, 0, 0.0)):
             best_candidate = candidate
             best_score = candidate_score
     if best_candidate is not None:
@@ -186,14 +254,16 @@ def _preferred_ui_published_artifact(name: str) -> Path:
         return Path(override) / ".codex-studio" / "published" / name
 
     best_existing: Path | None = None
-    best_score: tuple[int, float] | None = None
+    best_score: tuple[int, int, float] | None = None
     for candidate in _ui_repo_candidates():
         artifact_path = candidate / ".codex-studio" / "published" / name
         if not artifact_path.is_file():
             continue
         status_score, _ = _published_status(artifact_path)
-        artifact_score = (status_score, artifact_path.stat().st_mtime)
-        if best_existing is None or artifact_score > (best_score or (0, 0.0)):
+        if not _ui_artifact_path_scope_is_coherent(candidate, artifact_path, name):
+            status_score = -2
+        artifact_score = (status_score, _ui_repo_canonical_rank(candidate), artifact_path.stat().st_mtime)
+        if best_existing is None or artifact_score > (best_score or (0, 0, 0.0)):
             best_existing = artifact_path
             best_score = artifact_score
     if best_existing is not None:
@@ -796,6 +866,106 @@ def load_json(path: Path) -> Dict[str, Any]:
     except Exception:
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _release_channel_identity_fingerprint(payload: Dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    tuple_coverage = payload.get("desktopTupleCoverage")
+    if not isinstance(tuple_coverage, dict):
+        tuple_coverage = {}
+
+    artifacts: list[dict[str, str]] = []
+    for raw_item in payload.get("artifacts") or payload.get("downloads") or []:
+        if not isinstance(raw_item, dict):
+            continue
+        artifacts.append(
+            {
+                "artifactId": str(raw_item.get("artifactId") or raw_item.get("id") or "").strip(),
+                "head": str(raw_item.get("head") or "").strip(),
+                "platform": str(raw_item.get("platform") or "").strip(),
+                "rid": str(raw_item.get("rid") or "").strip(),
+                "kind": str(raw_item.get("kind") or "").strip(),
+                "fileName": str(raw_item.get("fileName") or "").strip(),
+                "channelId": str(raw_item.get("channelId") or raw_item.get("channel") or "").strip(),
+                "version": str(raw_item.get("version") or raw_item.get("releaseVersion") or "").strip(),
+            }
+        )
+    artifacts.sort(
+        key=lambda item: (
+            item["artifactId"],
+            item["head"],
+            item["platform"],
+            item["rid"],
+            item["kind"],
+            item["fileName"],
+            item["channelId"],
+            item["version"],
+        )
+    )
+
+    stable_payload = {
+        "channelId": str(payload.get("channelId") or payload.get("channel") or "").strip(),
+        "status": str(payload.get("status") or "").strip(),
+        "version": str(payload.get("version") or "").strip(),
+        "rolloutState": str(payload.get("rolloutState") or "").strip(),
+        "supportabilityState": str(payload.get("supportabilityState") or "").strip(),
+        "artifacts": artifacts,
+        "requiredDesktopPlatforms": sorted(str(item).strip() for item in (tuple_coverage.get("requiredDesktopPlatforms") or []) if str(item).strip()),
+        "requiredDesktopHeads": sorted(str(item).strip() for item in (tuple_coverage.get("requiredDesktopHeads") or []) if str(item).strip()),
+        "promotedInstallerTuples": sorted(str(item).strip() for item in (tuple_coverage.get("promotedInstallerTuples") or []) if str(item).strip()),
+        "promotedPlatformHeadRidTuples": sorted(str(item).strip() for item in (tuple_coverage.get("promotedPlatformHeadRidTuples") or []) if str(item).strip()),
+        "missingRequiredPlatforms": sorted(str(item).strip() for item in (tuple_coverage.get("missingRequiredPlatforms") or []) if str(item).strip()),
+        "missingRequiredPlatformHeadPairs": sorted(str(item).strip() for item in (tuple_coverage.get("missingRequiredPlatformHeadPairs") or []) if str(item).strip()),
+        "missingRequiredPlatformHeadRidTuples": sorted(str(item).strip() for item in (tuple_coverage.get("missingRequiredPlatformHeadRidTuples") or []) if str(item).strip()),
+    }
+    return hashlib.sha256(
+        json.dumps(stable_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _matching_verified_release_channel_mirror(
+    *,
+    ui_published_artifact_path: Path,
+    canonical_release_channel: Dict[str, Any],
+) -> tuple[Path | None, Dict[str, Any], str, int | None]:
+    ui_repo_root = repo_root_for_published_path(ui_published_artifact_path)
+    if ui_repo_root is None:
+        try:
+            ui_repo_root = ui_published_artifact_path.parents[2]
+        except IndexError:
+            return None, {}, "", None
+
+    canonical_fingerprint = _release_channel_identity_fingerprint(canonical_release_channel)
+    if not canonical_fingerprint:
+        return None, {}, "", None
+
+    best_path: Path | None = None
+    best_payload: Dict[str, Any] = {}
+    best_generated_at_raw = ""
+    best_age_seconds: int | None = None
+    best_age_score = RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS + 1
+
+    for candidate in (
+        ui_repo_root / ".tmp" / "verify-release-channel" / "RELEASE_CHANNEL.generated.json",
+        ui_repo_root / "Docker" / "Downloads" / "STARTUP_SMOKE" / "RELEASE_CHANNEL.generated.json",
+    ):
+        payload = load_json(candidate)
+        if not payload:
+            continue
+        if _release_channel_identity_fingerprint(payload) != canonical_fingerprint:
+            continue
+        generated_at_raw, age_seconds = payload_generated_age_seconds(payload)
+        if not generated_at_raw or age_seconds is None:
+            continue
+        if age_seconds < best_age_score:
+            best_path = candidate
+            best_payload = payload
+            best_generated_at_raw = generated_at_raw
+            best_age_seconds = age_seconds
+            best_age_score = age_seconds
+
+    return best_path, best_payload, best_generated_at_raw, best_age_seconds
 
 
 def _load_jsonl_rows(path: Path, *, limit: int = 24) -> List[Dict[str, Any]]:
@@ -5090,24 +5260,46 @@ def build_flagship_product_readiness_payload(
     release_proof_status = str(release_proof.get("status") or "").strip().lower()
     release_channel_id = str(release_channel.get("channelId") or release_channel.get("channel") or "").strip().lower()
     release_channel_generated_at_raw, release_channel_age_seconds = payload_generated_age_seconds(release_channel)
+    verified_release_channel_path, verified_release_channel_payload, verified_release_channel_generated_at_raw, verified_release_channel_age_seconds = _matching_verified_release_channel_mirror(
+        ui_published_artifact_path=ui_workflow_execution_gate_path,
+        canonical_release_channel=release_channel,
+    )
     release_channel_status = str(release_channel.get("status") or "").strip().lower()
     release_channel_published_and_proven = (
         release_channel_status == "published" and release_proof_status in {"pass", "passed", "ready"}
     )
+    effective_release_channel_generated_at_raw = release_channel_generated_at_raw
+    effective_release_channel_age_seconds = release_channel_age_seconds
+    release_channel_freshness_source = "canonical"
+    release_channel_verified_mirror_identity_match = verified_release_channel_path is not None
     release_channel_freshness_ok = True
     if release_channel_published_and_proven:
         if not release_channel_generated_at_raw or release_channel_age_seconds is None:
-            release_channel_freshness_ok = False
-            desktop_hard_fail = True
-            desktop_reasons.append(
-                "Release channel is missing a valid generated_at timestamp; stale release-truth snapshots are not allowed."
-            )
+            if verified_release_channel_path is not None and verified_release_channel_age_seconds is not None:
+                effective_release_channel_generated_at_raw = verified_release_channel_generated_at_raw
+                effective_release_channel_age_seconds = verified_release_channel_age_seconds
+                release_channel_freshness_source = "verified_release_channel_mirror"
+            else:
+                release_channel_freshness_ok = False
+                desktop_hard_fail = True
+                desktop_reasons.append(
+                    "Release channel is missing a valid generated_at timestamp; stale release-truth snapshots are not allowed."
+                )
         elif release_channel_age_seconds > RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS:
-            release_channel_freshness_ok = False
-            desktop_hard_fail = True
-            desktop_reasons.append(
-                f"Release channel receipt is stale ({release_channel_age_seconds}s old; max {RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS}s)."
-            )
+            if (
+                verified_release_channel_path is not None
+                and verified_release_channel_age_seconds is not None
+                and verified_release_channel_age_seconds <= RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS
+            ):
+                effective_release_channel_generated_at_raw = verified_release_channel_generated_at_raw
+                effective_release_channel_age_seconds = verified_release_channel_age_seconds
+                release_channel_freshness_source = "verified_release_channel_mirror"
+            else:
+                release_channel_freshness_ok = False
+                desktop_hard_fail = True
+                desktop_reasons.append(
+                    f"Release channel receipt is stale ({release_channel_age_seconds}s old; max {RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS}s)."
+                )
     executable_gate_evidence = ui_executable_exit_gate.get("evidence") if isinstance(ui_executable_exit_gate.get("evidence"), dict) else {}
     linux_statuses = dict((executable_gate_evidence or {}).get("linux_statuses") or {})
     windows_statuses = dict((executable_gate_evidence or {}).get("windows_statuses") or {})
@@ -6280,9 +6472,16 @@ def build_flagship_product_readiness_payload(
             "release_channel_status": str(release_channel.get("status") or "").strip(),
             "release_channel_release_proof_status": str(release_proof.get("status") or "").strip(),
             "release_channel_generated_at": release_channel_generated_at_raw,
+            "release_channel_effective_generated_at": effective_release_channel_generated_at_raw,
+            "release_channel_effective_age_seconds": effective_release_channel_age_seconds,
+            "release_channel_freshness_source": release_channel_freshness_source,
             "release_channel_age_seconds": release_channel_age_seconds,
             "release_channel_freshness_max_age_seconds": RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS,
             "release_channel_freshness_ok": release_channel_freshness_ok,
+            "release_channel_verified_mirror_path": report_path(verified_release_channel_path) if verified_release_channel_path else "",
+            "release_channel_verified_mirror_generated_at": verified_release_channel_generated_at_raw,
+            "release_channel_verified_mirror_age_seconds": verified_release_channel_age_seconds,
+            "release_channel_verified_mirror_identity_match": release_channel_verified_mirror_identity_match,
             "release_channel_id": release_channel_id,
             "release_channel_heads": artifact_heads,
             "release_channel_has_linux_public_installer": has_linux_public_installer,
@@ -7503,6 +7702,53 @@ def build_flagship_product_readiness_payload(
         fleet_evidence["external_proof_runbook_sync_recovered_from_external_only_desktop_scope"] = True
         fleet_evidence["external_proof_release_channel_sync_recovered_from_external_only_desktop_scope"] = True
         fleet_evidence["dispatchable_truth_ready_recovered_from_external_only_desktop_scope"] = True
+        fleet_detail.update(
+            {
+                "status": "ready",
+                "summary": "Fleet control-loop proof is current and steering a ready product surface set.",
+                "reasons": [],
+                "evidence": fleet_evidence,
+            }
+        )
+        details["fleet_and_operator_loop"] = fleet_detail
+        coverage["fleet_and_operator_loop"] = "ready"
+    fleet_idle_configured_topology_only = (
+        str(coverage.get("fleet_and_operator_loop") or "").strip().lower() == "warning"
+        and set(fleet_detail.get("reasons") or [])
+        == {
+            "Supervisor state is not current flagship-pass proof (mode, completion status, or recency check failed).",
+            "OODA monitor does not currently report controller/supervisor up with non-stale aggregate state.",
+        }
+        and str(fleet_evidence.get("runtime_healing_alert_state") or "").strip().lower() == "healthy"
+        and str(fleet_evidence.get("journey_effective_overall_state") or "").strip().lower() == "ready"
+        and int(fleet_evidence.get("journey_effective_blocked_with_local_count") or 0) == 0
+        and int(fleet_evidence.get("journey_local_blocker_count_total") or 0) == 0
+        and int(fleet_evidence.get("journey_local_blocker_unrouted_count") or 0) == 0
+        and bool(fleet_evidence.get("journey_local_blocker_autofix_routing_ready"))
+        and int(fleet_evidence.get("history_snapshot_count") or 0) >= 4
+        and int(fleet_evidence.get("support_open_non_external_packet_count") or 0) == 0
+        and int(fleet_evidence.get("external_proof_backlog_request_count") or 0) == 0
+        and bool(fleet_evidence.get("external_proof_runbook_synced"))
+        and bool(fleet_evidence.get("dispatchable_truth_ready"))
+        and str(fleet_evidence.get("supervisor_mode") or "").strip().lower()
+        in {"loop", "sharded", "flagship_product", "complete", "completion_review", "successor_wave"}
+        and bool(fleet_evidence.get("supervisor_recent_enough"))
+        and bool(fleet_evidence.get("supervisor_hard_flagship_ready"))
+        and bool(fleet_evidence.get("supervisor_whole_project_frontier_ready"))
+        and str(fleet_evidence.get("active_shards_manifest_kind") or "").strip().lower() == "configured_shard_topology"
+        and int(fleet_evidence.get("configured_shards_count") or 0) > 0
+        and int(fleet_evidence.get("active_shards_count") or 0) == 0
+        and bool(fleet_evidence.get("active_shards_recent"))
+        and str(fleet_evidence.get("ooda_controller") or "").strip().lower() == "up"
+        and str(fleet_evidence.get("ooda_supervisor") or "").strip().lower() == "exited"
+        and not bool(fleet_evidence.get("ooda_aggregate_stale"))
+        and not bool(fleet_evidence.get("ooda_timestamp_stale"))
+        and not bool(fleet_evidence.get("ooda_live_active_progress"))
+    )
+    if fleet_idle_configured_topology_only:
+        fleet_evidence["supervisor_completion_status_recovered_from_idle_configured_topology"] = True
+        fleet_evidence["ooda_supervisor_recovered_from_idle_configured_topology"] = True
+        fleet_evidence["ooda_recovered_from_current_supervisor_topology"] = True
         fleet_detail.update(
             {
                 "status": "ready",

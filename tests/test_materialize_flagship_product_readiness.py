@@ -105,7 +105,9 @@ def _write_synced_external_runbook(module, runbook_path: Path, commands_dir: Pat
     )
 
 
-def test_preferred_ui_repo_root_prefers_passing_desktop_proof_worktree(tmp_path: Path, monkeypatch) -> None:
+def test_preferred_ui_repo_root_prefers_canonical_alias_over_clean_room_proof_worktree(
+    tmp_path: Path, monkeypatch
+) -> None:
     module = _load_module()
     failing_root = tmp_path / "failing-ui"
     passing_root = tmp_path / "passing-ui"
@@ -146,7 +148,94 @@ def test_preferred_ui_repo_root_prefers_passing_desktop_proof_worktree(tmp_path:
         }.get(raw, Path(raw)),
     )
 
-    assert module._preferred_ui_repo_root() == passing_root
+    assert module._preferred_ui_repo_root() == failing_root
+
+
+def test_preferred_ui_repo_root_prefers_canonical_alias_when_scores_tie(tmp_path: Path, monkeypatch) -> None:
+    module = _load_module()
+    canonical_root = tmp_path / "canonical-ui"
+    mirror_root = tmp_path / "mirror-ui"
+    for root in (canonical_root, mirror_root):
+        published = root / ".codex-studio" / "published"
+        published.mkdir(parents=True, exist_ok=True)
+        for name in (
+            "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+            "UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
+        ):
+            _write_json(published / name, {"status": "pass"})
+
+    monkeypatch.delenv("CHUMMER_UI_REPO_ROOT", raising=False)
+    monkeypatch.setattr(
+        module,
+        "Path",
+        lambda raw: {
+            "/docker/chummercomplete/chummer-presentation-clean": mirror_root,
+            "/docker/chummercomplete/chummer6-ui": canonical_root,
+            "/docker/chummercomplete/chummer6-ui-finish": tmp_path / "missing-finish",
+            "/docker/chummercomplete/chummer-presentation": tmp_path / "legacy-physical",
+        }.get(raw, Path(raw)),
+    )
+
+    assert module._preferred_ui_repo_root() == canonical_root
+
+
+def test_preferred_ui_published_artifact_prefers_canonical_alias_when_status_ties(tmp_path: Path, monkeypatch) -> None:
+    module = _load_module()
+    canonical_root = tmp_path / "canonical-ui"
+    mirror_root = tmp_path / "mirror-ui"
+    canonical_artifact = canonical_root / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+    mirror_artifact = mirror_root / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+    _write_json(canonical_artifact, {"status": "pass"})
+    _write_json(mirror_artifact, {"status": "pass"})
+    os.utime(canonical_artifact, (1, 1))
+    os.utime(mirror_artifact, (2, 2))
+
+    monkeypatch.delenv("CHUMMER_UI_REPO_ROOT", raising=False)
+    monkeypatch.setattr(
+        module,
+        "Path",
+        lambda raw: {
+            "/docker/chummercomplete/chummer-presentation-clean": mirror_root,
+            "/docker/chummercomplete/chummer6-ui": canonical_root,
+            "/docker/chummercomplete/chummer6-ui-finish": tmp_path / "missing-finish",
+            "/docker/chummercomplete/chummer-presentation": tmp_path / "legacy-physical",
+        }.get(raw, Path(raw)),
+    )
+
+    assert module._preferred_ui_published_artifact("UI_LINUX_DESKTOP_EXIT_GATE.generated.json") == canonical_artifact
+
+
+def test_preferred_ui_published_artifact_rejects_copied_linux_gate_with_foreign_run_root(
+    tmp_path: Path, monkeypatch
+) -> None:
+    module = _load_module()
+    canonical_root = tmp_path / "canonical-ui"
+    mirror_root = tmp_path / "mirror-ui"
+    canonical_artifact = canonical_root / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+    mirror_artifact = mirror_root / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+    gate_payload = {
+        "status": "pass",
+        "run_root": str(canonical_root / ".codex-studio" / "out" / "linux-desktop-exit-gate" / "run.good"),
+        "build": {"output_base_root": str(canonical_root / ".codex-studio" / "out" / "linux-desktop-exit-gate")},
+    }
+    _write_json(canonical_artifact, gate_payload)
+    _write_json(mirror_artifact, gate_payload)
+    os.utime(canonical_artifact, (1, 1))
+    os.utime(mirror_artifact, (2, 2))
+
+    monkeypatch.delenv("CHUMMER_UI_REPO_ROOT", raising=False)
+    monkeypatch.setattr(
+        module,
+        "Path",
+        lambda raw: {
+            "/docker/chummercomplete/chummer-presentation-clean": mirror_root,
+            "/docker/chummercomplete/chummer6-ui": canonical_root,
+            "/docker/chummercomplete/chummer6-ui-finish": tmp_path / "missing-finish",
+            "/docker/chummercomplete/chummer-presentation": tmp_path / "legacy-physical",
+        }.get(raw, Path(raw)),
+    )
+
+    assert module._preferred_ui_published_artifact("UI_LINUX_DESKTOP_EXIT_GATE.generated.json") == canonical_artifact
 
 
 def _base_acceptance() -> dict:
@@ -232,6 +321,7 @@ def _materialize_flagship_readiness_with_parity_lab(
     compile_manifest_payload: dict | None = None,
     workpackages_payload: dict | None = None,
     local_autoheal_service_payloads: list[dict] | None = None,
+    supervisor_state_payload: dict | None = None,
 ) -> dict:
     out_path = tmp_path / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
@@ -298,9 +388,9 @@ def _materialize_flagship_readiness_with_parity_lab(
     _write_json(compile_manifest_path, compile_manifest_payload or {"dispatchable_truth_ready": True})
     if workpackages_payload is not None:
         _write_yaml(tmp_path / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml", workpackages_payload)
-    supervisor_state = _base_supervisor_state()
-    supervisor_state["updated_at"] = current_iso
-    supervisor_state["focus_profiles"] = ["top_flagship_grade", "whole_project_frontier"]
+    supervisor_state = dict(supervisor_state_payload or _base_supervisor_state())
+    supervisor_state.setdefault("updated_at", current_iso)
+    supervisor_state.setdefault("focus_profiles", ["top_flagship_grade", "whole_project_frontier"])
     _write_json(supervisor_state_path, supervisor_state)
     if active_shards_payload is not None:
         active_shards = dict(active_shards_payload)
@@ -10674,6 +10764,60 @@ def test_materialize_flagship_product_readiness_accepts_live_ooda_progress_when_
     assert evidence["ooda_timestamp_stale"] is True
     assert evidence["ooda_live_active_progress"] is True
     assert evidence["ooda_steady_complete_quiet"] is False
+
+
+def test_materialize_flagship_product_readiness_recovers_idle_configured_topology_when_ooda_supervisor_exited(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
+
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        active_shards_payload={
+            "generated_at": current_iso,
+            "manifest_kind": "configured_shard_topology",
+            "configured_shard_count": 20,
+            "configured_shards": [{"name": "shard-1"}, {"name": "shard-2"}],
+            "active_run_count": 0,
+            "active_shards": [],
+        },
+        supervisor_state_payload={
+            "updated_at": current_iso,
+            "mode": "sharded",
+            "focus_profiles": ["top_flagship_grade", "whole_project_frontier"],
+            "completion_audit": {"status": "fail"},
+        },
+        ooda_state_payload={
+            "controller": "up",
+            "supervisor": "exited",
+            "aggregate_stale": False,
+            "aggregate_timestamp_stale": False,
+        },
+        compile_manifest_payload={"dispatchable_truth_ready": True},
+        support_packets_payload=_base_support_packets_payload(
+            current_iso,
+            summary={
+                "open_packet_count": 0,
+                "unresolved_external_proof_request_count": 0,
+                "closure_waiting_on_release_truth": 0,
+                "update_required_misrouted_case_count": 0,
+                "non_external_needs_human_response": 0,
+                "non_external_packets_without_named_owner": 0,
+                "non_external_packets_without_lane": 0,
+            },
+        ),
+        synced_external_runbook=True,
+    )
+
+    assert payload["coverage"]["fleet_and_operator_loop"] == "ready"
+    assert "fleet_and_operator_loop" not in payload["warning_keys"]
+    evidence = payload["coverage_details"]["fleet_and_operator_loop"]["evidence"]
+    assert evidence["supervisor_completion_status_recovered_from_idle_configured_topology"] is True
+    assert evidence["ooda_supervisor_recovered_from_idle_configured_topology"] is True
+    assert evidence["ooda_recovered_from_current_supervisor_topology"] is True
+    assert evidence["ooda_supervisor"] == "exited"
 
 
 def test_materialize_flagship_product_readiness_fail_closes_stale_executable_gate_freshness_evidence(tmp_path: Path) -> None:

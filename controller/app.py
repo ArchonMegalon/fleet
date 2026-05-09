@@ -7739,12 +7739,6 @@ def sync_design_repo_mirrors(
         repo_root = pathlib.Path(str(project_cfg.get("path") or "")).resolve()
         if not repo_root.exists():
             continue
-        if skip_dirty_repos and (repo_root / ".git").exists():
-            try:
-                if git_has_changes(str(repo_root)):
-                    continue
-            except Exception:
-                continue
         copied: List[str] = []
         product_target = str(mirror.get("product_target") or mirror.get("target") or ".codex-design/product").strip()
         product_sources = mirror_product_sources(manifest, mirror)

@@ -87,21 +87,69 @@ def _normalize_status_map(values: Any) -> Dict[str, str]:
     return normalized
 
 
+def _extract_top_level_queue_items(raw: str) -> List[Dict[str, Any]]:
+    chunks: List[str] = []
+    current: List[str] = []
+    for line in raw.splitlines():
+        if line.startswith("- title:"):
+            if current:
+                chunks.append("\n".join(current))
+            current = [line]
+            continue
+        if current and line and not line.startswith(" "):
+            chunks.append("\n".join(current))
+            current = []
+            continue
+        if current:
+            current.append(line)
+    if current:
+        chunks.append("\n".join(current))
+
+    items: List[Dict[str, Any]] = []
+    for chunk in chunks:
+        try:
+            payload = yaml.safe_load(chunk)
+        except yaml.YAMLError:
+            continue
+        if isinstance(payload, list):
+            items.extend(row for row in payload if isinstance(row, dict))
+    return items
+
+
 def _load_yaml(path: Path) -> Dict[str, Any]:
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError:
         return {}
+
+    extracted_items = _extract_top_level_queue_items(raw)
+
     try:
         payload = yaml.safe_load(raw) or {}
     except yaml.YAMLError:
         marker = "\nitems:\n"
         if marker not in raw:
-            return {}
+            return {"items": extracted_items} if extracted_items else {}
         try:
             payload = yaml.safe_load("items:\n" + raw.split(marker, 1)[1]) or {}
         except yaml.YAMLError:
-            return {}
+            return {"items": extracted_items} if extracted_items else {}
+        if isinstance(payload, dict) and isinstance(payload.get("items"), list):
+            items = list(extracted_items)
+            items.extend(row for row in payload["items"] if isinstance(row, dict))
+            payload["items"] = items
+            return payload
+        if extracted_items:
+            return {"items": extracted_items}
+        return {}
+
+    if isinstance(payload, dict) and isinstance(payload.get("items"), list) and extracted_items:
+        items = list(extracted_items)
+        items.extend(row for row in payload["items"] if isinstance(row, dict))
+        payload["items"] = items
+        return payload
+    if isinstance(payload, list):
+        return {"items": extracted_items or payload}
     return payload if isinstance(payload, dict) else {}
 
 

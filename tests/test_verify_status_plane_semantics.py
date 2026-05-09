@@ -276,6 +276,55 @@ def test_ui_independent_public_release_proof_bundle_accepts_aggregate_visual_pro
     assert stage == "publicly_promoted"
 
 
+def test_ui_independent_public_release_proof_bundle_accepts_external_only_desktop_executable_gate(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    published_dir = tmp_path / "ui" / ".codex-studio" / "published"
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").write_text(
+        json.dumps(
+            {
+                "status": "fail",
+                "blockedByExternalConstraintsOnly": True,
+                "local_blocking_findings_count": 0,
+                "evidence": {"visual_familiarity_status": "pass"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "open_blocking_findings_count": 0}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json").write_text(
+        json.dumps({"summary": {"visual_no_count": 0, "behavioral_no_count": 0}}) + "\n",
+        encoding="utf-8",
+    )
+
+    stage = module._infer_fallback_readiness_stage(
+        "ui",
+        tmp_path / "ui",
+        lifecycle="live",
+        deployment={"status": "public", "promotion_stage": "promoted_preview", "access_posture": "public"},
+    )
+
+    assert stage == "publicly_promoted"
+
+
 def test_core_fallback_stage_requires_engine_proof_pack(monkeypatch, tmp_path: Path) -> None:
     module = _load_module()
     config_dir = tmp_path / "config" / "projects"

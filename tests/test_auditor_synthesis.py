@@ -134,14 +134,20 @@ class AuditorSynthesisTests(unittest.TestCase):
             target_ok = root / "target-ok.md"
             target_drift = root / "target-drift.md"
             missing_target = root / "missing.md"
+            product_root = root / ".codex-design" / "product"
+            unexpected_target = product_root / "stale.md"
             source_ok.write_text("same", encoding="utf-8")
             source_drift.write_text("expected", encoding="utf-8")
             target_ok.write_text("same", encoding="utf-8")
             target_drift.write_text("actual", encoding="utf-8")
+            product_root.mkdir(parents=True, exist_ok=True)
+            unexpected_target.write_text("stale", encoding="utf-8")
 
             self.auditor.design_mirror_specs = lambda _config: [
                 {
                     "project_id": "ui",
+                    "product_root": product_root,
+                    "expected_product_rel_paths": {Path("expected.md")},
                     "files": [
                         {"source": source_ok, "target": target_ok},
                         {"source": source_drift, "target": target_drift},
@@ -155,8 +161,9 @@ class AuditorSynthesisTests(unittest.TestCase):
 
             self.assertEqual(payload["stale_project_ids"], ["ui"])
             self.assertEqual(payload["missing_target_count"], 1)
-            self.assertEqual(payload["drifted_target_count"], 1)
+            self.assertEqual(payload["drifted_target_count"], 2)
             self.assertEqual(payload["projects"][0]["state"], "missing_and_drifted")
+            self.assertEqual(payload["projects"][0]["drifted_targets"][1]["drift_reason"], "unexpected_extra_target")
 
     def test_synthesize_design_mirror_hygiene_tasks_requires_repeated_observations(self) -> None:
         project_state = {

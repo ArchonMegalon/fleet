@@ -250,6 +250,93 @@ def _fixture_tree(
 
 
 class MaterializeNext90M144FleetDesktopProofIntegrityCloseoutGatesTest(unittest.TestCase):
+    def test_materializer_accepts_top_level_list_queue_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, stale_versions=False)
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            _write_text(fixture["design_queue"], yaml.safe_dump([_queue_item()], sort_keys=False))
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--output",
+                    str(artifact),
+                    "--markdown-output",
+                    str(markdown),
+                    "--successor-registry",
+                    str(fixture["registry"]),
+                    "--fleet-queue-staging",
+                    str(fixture["fleet_queue"]),
+                    "--design-queue-staging",
+                    str(fixture["design_queue"]),
+                    "--next90-guide",
+                    str(fixture["guide"]),
+                    "--flagship-readiness",
+                    str(fixture["flagship"]),
+                    "--ui-windows-exit-gate",
+                    str(fixture["windows_gate"]),
+                    "--desktop-executable-exit-gate",
+                    str(fixture["executable_gate"]),
+                    "--release-channel",
+                    str(fixture["release_channel"]),
+                    "--startup-smoke-receipt",
+                    str(fixture["startup_smoke"]),
+                ],
+                check=True,
+            )
+
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            self.assertEqual(payload["status"], "pass")
+            self.assertEqual(payload["canonical_monitors"]["queue_alignment"]["state"], "pass")
+
+    def test_materializer_accepts_mixed_prefix_list_and_items_queue_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path, stale_versions=False)
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            mixed_queue = (
+                yaml.safe_dump([_queue_item()], sort_keys=False)
+                + "mode: append\n"
+                + yaml.safe_dump({"items": [_queue_item()]}, sort_keys=False)
+            )
+            _write_text(fixture["design_queue"], mixed_queue)
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--output",
+                    str(artifact),
+                    "--markdown-output",
+                    str(markdown),
+                    "--successor-registry",
+                    str(fixture["registry"]),
+                    "--fleet-queue-staging",
+                    str(fixture["fleet_queue"]),
+                    "--design-queue-staging",
+                    str(fixture["design_queue"]),
+                    "--next90-guide",
+                    str(fixture["guide"]),
+                    "--flagship-readiness",
+                    str(fixture["flagship"]),
+                    "--ui-windows-exit-gate",
+                    str(fixture["windows_gate"]),
+                    "--desktop-executable-exit-gate",
+                    str(fixture["executable_gate"]),
+                    "--release-channel",
+                    str(fixture["release_channel"]),
+                    "--startup-smoke-receipt",
+                    str(fixture["startup_smoke"]),
+                ],
+                check=True,
+            )
+
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            self.assertEqual(payload["status"], "pass")
+            self.assertEqual(payload["canonical_monitors"]["queue_alignment"]["state"], "pass")
+
     def test_materializer_passes_when_desktop_readiness_matches_live_tuple_proof(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)

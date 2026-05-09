@@ -10,28 +10,38 @@
       "state": "pass"
     },
     "queue_alignment": {
-      "issues": [],
-      "state": "pass",
-      "warnings": []
+      "issues": [
+        "Design queue row is missing."
+      ],
+      "state": "fail",
+      "warnings": [
+        "Fleet queue mirror row is still missing for work task 144.4."
+      ]
     }
   },
   "contract_name": "fleet.next90_m144_desktop_proof_integrity_closeout_gates",
   "frontier_id": 4185937434,
-  "generated_at": "2026-05-06T04:48:09Z",
+  "generated_at": "2026-05-07T14:14:38Z",
   "milestone_id": 144,
   "monitor_summary": {
-    "canonical_issue_count": 0,
-    "desktop_proof_integrity_closeout_status": "pass",
+    "canonical_issue_count": 1,
+    "desktop_proof_integrity_closeout_status": "warning",
     "runtime_blocker_count": 0,
     "runtime_blockers": [],
-    "warning_count": 0,
-    "warnings": []
+    "warning_count": 1,
+    "warnings": [
+      "Fleet queue mirror row is still missing for work task 144.4."
+    ]
   },
   "package_closeout": {
-    "ready": true,
-    "reasons": [],
-    "status": "pass",
-    "warnings": []
+    "ready": false,
+    "reasons": [
+      "Design queue row is missing."
+    ],
+    "status": "blocked",
+    "warnings": [
+      "Fleet queue mirror row is still missing for work task 144.4."
+    ]
   },
   "package_id": "next90-m144-fleet-fail-closeout-when-desktop-client-readiness-is-green-without-matching",
   "queue_title": "Fail closeout when desktop-client readiness is green without matching executable-gate, startup-smoke, and release-channel tuple proof.",
@@ -41,11 +51,11 @@
         "canonical_required_desktop_heads": [
           "avalonia"
         ],
-        "desktop visual familiarity gate proof_age_seconds": 998,
-        "desktop visual familiarity gate proof_generated_at": "2026-05-06T00:00:28.536600Z",
+        "desktop visual familiarity gate proof_age_seconds": 88,
+        "desktop visual familiarity gate proof_generated_at": "2026-05-07T14:07:32.990214Z",
         "desktop visual familiarity gate proof_generated_at_alias_conflict": false,
-        "desktop workflow execution gate proof_age_seconds": 2811,
-        "desktop workflow execution gate proof_generated_at": "2026-05-05T23:30:15.478342Z",
+        "desktop workflow execution gate proof_age_seconds": 91,
+        "desktop workflow execution gate proof_generated_at": "2026-05-07T14:07:29.137519Z",
         "desktop workflow execution gate proof_generated_at_alias_conflict": false,
         "desktopTupleCoverage.missingRequiredHeads_normalized": [],
         "desktopTupleCoverage.missingRequiredHeads_whitespace_padded_indexes": [],
@@ -119,7 +129,7 @@
         "duplicate_desktop_install_artifact_tuple_tokens": [],
         "duplicate_desktop_install_artifact_tuples": {},
         "failureCount": 0,
-        "flagship UI release gate proof_age_seconds": 295919,
+        "flagship UI release gate proof_age_seconds": 432233,
         "flagship UI release gate proof_generated_at": "2026-05-02T14:05:07.728429Z",
         "flagship UI release gate proof_generated_at_alias_conflict": false,
         "flagship UI release gate proof_stale_pass_receipt_allowed": true,
@@ -196,6 +206,47 @@
         "hub_registry_release_channel_path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
         "hub_registry_root": "/docker/chummercomplete/chummer-hub-registry",
         "hub_registry_root_trusted_for_startup_smoke_proof": true,
+        "ignored_linux_startup_smoke_receipts_without_published_installer_tuple": [
+          {
+            "ignoredReason": "no_published_promoted_installer_tuple",
+            "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/startup-smoke/startup-smoke-blazor-desktop-linux-x64.receipt.json",
+            "status": "pass",
+            "tuple": "blazor-desktop:linux-x64:linux"
+          },
+          {
+            "ignoredReason": "no_published_promoted_installer_tuple",
+            "path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/startup-smoke/startup-smoke-blazor-desktop-linux-x64.receipt.json",
+            "status": "pass",
+            "tuple": "blazor-desktop:linux-x64:linux"
+          }
+        ],
+        "ignored_macos_startup_smoke_receipts_without_published_installer_tuple": [
+          {
+            "ignoredReason": "no_published_promoted_installer_tuple",
+            "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+            "status": "pass",
+            "tuple": "avalonia:osx-arm64:macos"
+          },
+          {
+            "ignoredReason": "no_published_promoted_installer_tuple",
+            "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
+            "status": "pass",
+            "tuple": "blazor-desktop:osx-arm64:macos"
+          },
+          {
+            "ignoredReason": "no_published_promoted_installer_tuple",
+            "path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+            "status": "pass",
+            "tuple": "avalonia:osx-arm64:macos"
+          },
+          {
+            "ignoredReason": "no_published_promoted_installer_tuple",
+            "path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
+            "status": "pass",
+            "tuple": "blazor-desktop:osx-arm64:macos"
+          }
+        ],
+        "ignored_windows_startup_smoke_receipts_without_published_installer_tuple": [],
         "install_experience": {
           "claim_flow_surface": "installer_or_in_app",
           "manual_browser_claim_code_required": false,
@@ -209,7 +260,7 @@
             "checks_release_channel_id": "preview",
             "checks_release_channel_version": "run-20260503-163502",
             "checks_startup_smoke_receipt_found": true,
-            "checks_startup_smoke_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.4CcVmU/startup-smoke-installer/startup-smoke-avalonia-linux-x64.receipt.json",
+            "checks_startup_smoke_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.fYTERp/startup-smoke-installer/startup-smoke-avalonia-linux-x64.receipt.json",
             "contract_name": "chummer6-ui.linux_desktop_exit_gate",
             "expected_artifact_arch": "x64",
             "expected_artifact_arch_alias_conflict": false,
@@ -225,15 +276,15 @@
             "gate_release_version_alias_conflict": false,
             "gate_release_version_primary": "run-20260503-163502",
             "host_supports_linux_startup_smoke": true,
-            "install_desktop_entry_capture_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.4CcVmU/startup-smoke-installer/installed-desktop-entry-avalonia-linux-x64.desktop",
-            "install_launch_capture_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.4CcVmU/startup-smoke-installer/installed-launch-avalonia-linux-x64.bin",
-            "install_verification_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.4CcVmU/startup-smoke-installer/install-verification-avalonia-linux-x64.json",
-            "install_wrapper_capture_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.4CcVmU/startup-smoke-installer/installed-wrapper-avalonia-linux-x64.sh",
-            "linux desktop exit gate proof for avalonia:linux-x64_age_seconds": 330,
-            "linux desktop exit gate proof for avalonia:linux-x64_generated_at": "2026-05-06T00:11:38Z",
+            "install_desktop_entry_capture_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.fYTERp/startup-smoke-installer/installed-desktop-entry-avalonia-linux-x64.desktop",
+            "install_launch_capture_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.fYTERp/startup-smoke-installer/installed-launch-avalonia-linux-x64.bin",
+            "install_verification_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.fYTERp/startup-smoke-installer/install-verification-avalonia-linux-x64.json",
+            "install_wrapper_capture_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.fYTERp/startup-smoke-installer/installed-wrapper-avalonia-linux-x64.sh",
+            "linux desktop exit gate proof for avalonia:linux-x64_age_seconds": 49969,
+            "linux desktop exit gate proof for avalonia:linux-x64_generated_at": "2026-05-07T00:16:12Z",
             "linux desktop exit gate proof for avalonia:linux-x64_generated_at_alias_conflict": false,
             "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
-            "primary_receipt_age_seconds": 334,
+            "primary_receipt_age_seconds": 49975,
             "primary_receipt_arch": "x64",
             "primary_receipt_arch_alias_conflict": false,
             "primary_receipt_artifact_digest": "sha256:84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643",
@@ -243,10 +294,10 @@
             "primary_receipt_head_id": "avalonia",
             "primary_receipt_host_class": "local-linux-x64",
             "primary_receipt_operating_system": "Debian GNU/Linux 12 (bookworm)",
-            "primary_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.4CcVmU/startup-smoke-installer/startup-smoke-avalonia-linux-x64.receipt.json",
+            "primary_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.fYTERp/startup-smoke-installer/startup-smoke-avalonia-linux-x64.receipt.json",
             "primary_receipt_platform": "linux",
             "primary_receipt_ready_checkpoint": "pre_ui_event_loop",
-            "primary_receipt_recorded_at": "2026-05-06T00:11:34.4033283+00:00",
+            "primary_receipt_recorded_at": "2026-05-07T00:16:06.4108625+00:00",
             "primary_receipt_rid": "linux-x64",
             "primary_receipt_source": "file",
             "primary_receipt_status": "pass",
@@ -275,8 +326,8 @@
               "downloadUrl": "/downloads/files/chummer-avalonia-linux-x64-installer.deb",
               "embeddedRuntimeBundleHeadId": null,
               "fileName": "chummer-avalonia-linux-x64-installer.deb",
-              "generatedAt": "2026-05-05T19:17:52Z",
-              "generated_at": "2026-05-05T19:17:52Z",
+              "generatedAt": "2026-05-06T19:36:59Z",
+              "generated_at": "2026-05-06T19:36:59Z",
               "head": "avalonia",
               "id": "avalonia-linux-x64-installer",
               "installAccessClass": "open_public",
@@ -294,7 +345,7 @@
             "release_channel_linux_artifact_arch_alias_conflict": false,
             "release_channel_linux_artifact_channel_id": "preview",
             "release_channel_linux_artifact_channel_id_alias_conflict": false,
-            "release_channel_linux_artifact_generated_at": "2026-05-05T19:17:52Z",
+            "release_channel_linux_artifact_generated_at": "2026-05-06T19:36:59Z",
             "release_channel_linux_artifact_generated_at_alias_conflict": false,
             "release_channel_linux_artifact_generated_at_valid": true,
             "release_channel_linux_artifact_version": "run-20260503-163502",
@@ -303,7 +354,7 @@
             "status": "passed",
             "trusted_path_scope": {
               "linux_installer_capture:avalonia:install_desktop_entry_capture_path": {
-                "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.4CcVmU/startup-smoke-installer/installed-desktop-entry-avalonia-linux-x64.desktop",
+                "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.fYTERp/startup-smoke-installer/installed-desktop-entry-avalonia-linux-x64.desktop",
                 "trusted_roots": [
                   "/docker/chummercomplete/chummer6-ui",
                   "/docker/chummercomplete/chummer-hub-registry"
@@ -311,7 +362,7 @@
                 "within_trusted_roots": true
               },
               "linux_installer_capture:avalonia:install_launch_capture_path": {
-                "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.4CcVmU/startup-smoke-installer/installed-launch-avalonia-linux-x64.bin",
+                "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.fYTERp/startup-smoke-installer/installed-launch-avalonia-linux-x64.bin",
                 "trusted_roots": [
                   "/docker/chummercomplete/chummer6-ui",
                   "/docker/chummercomplete/chummer-hub-registry"
@@ -319,7 +370,7 @@
                 "within_trusted_roots": true
               },
               "linux_installer_capture:avalonia:install_verification_path": {
-                "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.4CcVmU/startup-smoke-installer/install-verification-avalonia-linux-x64.json",
+                "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.fYTERp/startup-smoke-installer/install-verification-avalonia-linux-x64.json",
                 "trusted_roots": [
                   "/docker/chummercomplete/chummer6-ui",
                   "/docker/chummercomplete/chummer-hub-registry"
@@ -327,7 +378,7 @@
                 "within_trusted_roots": true
               },
               "linux_installer_capture:avalonia:install_wrapper_capture_path": {
-                "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.4CcVmU/startup-smoke-installer/installed-wrapper-avalonia-linux-x64.sh",
+                "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.fYTERp/startup-smoke-installer/installed-wrapper-avalonia-linux-x64.sh",
                 "trusted_roots": [
                   "/docker/chummercomplete/chummer6-ui",
                   "/docker/chummercomplete/chummer-hub-registry"
@@ -335,7 +386,7 @@
                 "within_trusted_roots": true
               },
               "linux_startup_smoke:avalonia": {
-                "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.4CcVmU/startup-smoke-installer/startup-smoke-avalonia-linux-x64.receipt.json",
+                "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate/run.fYTERp/startup-smoke-installer/startup-smoke-avalonia-linux-x64.receipt.json",
                 "trusted_roots": [
                   "/docker/chummercomplete/chummer6-ui",
                   "/docker/chummercomplete/chummer-hub-registry"
@@ -409,6 +460,18 @@
             "avalonia"
           ]
         },
+        "published_desktop_artifact_tuples": [
+          "avalonia:linux-x64:linux",
+          "avalonia:win-x64:windows"
+        ],
+        "published_installer_startup_smoke_tuples": [
+          "avalonia:linux-x64:linux",
+          "avalonia:win-x64:windows"
+        ],
+        "published_startup_smoke_roots": [
+          "/docker/chummercomplete/chummer6-ui/.codex-studio/published/startup-smoke",
+          "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/startup-smoke"
+        ],
         "quarantine_roots": [
           "/docker/chummercomplete/chummer6-ui/Docker/Downloads/quarantine",
           "/docker/chummercomplete/chummer6-ui/.codex-studio/quarantine"
@@ -484,7 +547,7 @@
         "release_channel.version_normalized": "run-20260503-163502",
         "release_channel.version_present": true,
         "release_channel.version_raw_type": "str",
-        "release_channel_age_seconds": 17954,
+        "release_channel_age_seconds": 66722,
         "release_channel_allowed_rollout_states": [
           "local_docker_preview",
           "coverage_incomplete",
@@ -550,7 +613,7 @@
         "release_channel_external_proof_request_tuple_inventory_mismatch": [],
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_max_future_skew_seconds": 300,
-        "release_channel_generated_at": "2026-05-05T19:17:52Z",
+        "release_channel_generated_at": "2026-05-06T19:36:59Z",
         "release_channel_generated_at_alias_conflict": false,
         "release_channel_missing_required_platform_head_pairs_from_required_rid_tuples": [],
         "release_channel_missing_required_platform_head_rid_tuples_derived": [],
@@ -718,9 +781,59 @@
           "windows"
         ],
         "stale_linux_gate_receipts_without_promoted_tuples": [],
+        "stale_linux_startup_smoke_receipts_against_published_artifacts": [
+          {
+            "artifactDigest": "sha256:84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643",
+            "artifactFileName": "chummer-avalonia-linux-x64-installer.deb",
+            "matchesPublishedArtifact": true,
+            "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json",
+            "publishedArtifactFileNames": [
+              "chummer-avalonia-linux-x64-installer.deb"
+            ],
+            "status": "pass",
+            "tuple": "avalonia:linux-x64:linux"
+          },
+          {
+            "artifactDigest": "sha256:84d5c3a7065666286c5e3a5feccbc2ee3c04117cf5afaa116c09e1e2d9e44643",
+            "artifactFileName": "chummer-avalonia-linux-x64-installer.deb",
+            "matchesPublishedArtifact": true,
+            "path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/startup-smoke/startup-smoke-avalonia-linux-x64.receipt.json",
+            "publishedArtifactFileNames": [
+              "chummer-avalonia-linux-x64-installer.deb"
+            ],
+            "status": "pass",
+            "tuple": "avalonia:linux-x64:linux"
+          }
+        ],
         "stale_macos_gate_receipts_without_promoted_tuples": [],
+        "stale_macos_startup_smoke_receipts_against_published_artifacts": [],
         "stale_passing_platform_gate_receipts_without_promoted_tuples": [],
+        "stale_passing_startup_smoke_receipts_against_published_artifacts": [],
         "stale_windows_gate_receipts_without_promoted_tuples": [],
+        "stale_windows_startup_smoke_receipts_against_published_artifacts": [
+          {
+            "artifactDigest": "sha256:bb9b31fcf3bf1386b6f968029f312ca30681f1a02b2c536b6a4d8cb8fe4109fe",
+            "artifactFileName": "chummer-avalonia-win-x64-installer.exe",
+            "matchesPublishedArtifact": true,
+            "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+            "publishedArtifactFileNames": [
+              "chummer-avalonia-win-x64-installer.exe"
+            ],
+            "status": "pass",
+            "tuple": "avalonia:win-x64:windows"
+          },
+          {
+            "artifactDigest": "sha256:bb9b31fcf3bf1386b6f968029f312ca30681f1a02b2c536b6a4d8cb8fe4109fe",
+            "artifactFileName": "chummer-avalonia-win-x64-installer.exe",
+            "matchesPublishedArtifact": true,
+            "path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+            "publishedArtifactFileNames": [
+              "chummer-avalonia-win-x64-installer.exe"
+            ],
+            "status": "pass",
+            "tuple": "avalonia:win-x64:windows"
+          }
+        ],
         "trusted_local_roots": [
           "/docker/chummercomplete/chummer6-ui",
           "/docker/chummercomplete/chummer-hub-registry"
@@ -844,29 +957,29 @@
         ],
         "visual_familiarity_screenshot_dir": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots",
         "visual_familiarity_screenshot_file_timestamps": {
-          "01-initial-shell-light.png": "2026-05-05T21:03:11.453820Z",
-          "02-menu-open-light.png": "2026-05-05T21:03:11.453820Z",
-          "03-settings-open-light.png": "2026-05-05T21:03:11.453820Z",
-          "04-loaded-runner-light.png": "2026-05-05T21:03:11.454820Z",
-          "05-dense-section-light.png": "2026-05-05T21:03:11.454820Z",
-          "06-dense-section-dark.png": "2026-05-05T21:03:11.454820Z",
-          "07-loaded-runner-tabs-light.png": "2026-05-05T21:03:11.454820Z",
-          "08-cyberware-dialog-light.png": "2026-05-05T21:03:11.454820Z",
-          "09-vehicles-section-light.png": "2026-05-05T21:03:11.454820Z",
-          "10-contacts-section-light.png": "2026-05-05T21:03:11.454820Z",
-          "11-diary-dialog-light.png": "2026-05-05T21:03:11.454820Z",
-          "12-magic-dialog-light.png": "2026-05-05T21:03:11.454820Z",
-          "13-matrix-dialog-light.png": "2026-05-05T21:03:11.454820Z",
-          "14-advancement-dialog-light.png": "2026-05-05T21:03:11.455820Z",
-          "15-creation-section-light.png": "2026-05-05T21:03:11.455820Z",
-          "16-master-index-dialog-light.png": "2026-05-05T21:03:11.455820Z",
-          "17-character-roster-dialog-light.png": "2026-05-05T21:03:11.455820Z",
-          "18-import-dialog-light.png": "2026-05-05T21:03:11.455820Z",
-          "38-translator-dialog-light.png": "2026-05-05T21:03:11.459820Z",
-          "39-xml-editor-dialog-light.png": "2026-05-05T21:03:11.460820Z",
-          "40-hero-lab-importer-dialog-light.png": "2026-05-05T21:03:11.460820Z"
+          "01-initial-shell-light.png": "2026-05-07T14:07:32.078795Z",
+          "02-menu-open-light.png": "2026-05-07T14:07:32.078795Z",
+          "03-settings-open-light.png": "2026-05-07T14:07:32.078795Z",
+          "04-loaded-runner-light.png": "2026-05-07T14:07:32.078795Z",
+          "05-dense-section-light.png": "2026-05-07T14:07:32.078795Z",
+          "06-dense-section-dark.png": "2026-05-07T14:07:32.078795Z",
+          "07-loaded-runner-tabs-light.png": "2026-05-07T14:07:32.078795Z",
+          "08-cyberware-dialog-light.png": "2026-05-07T14:07:32.078795Z",
+          "09-vehicles-section-light.png": "2026-05-07T14:07:32.078795Z",
+          "10-contacts-section-light.png": "2026-05-07T14:07:32.078795Z",
+          "11-diary-dialog-light.png": "2026-05-07T14:07:32.078795Z",
+          "12-magic-dialog-light.png": "2026-05-07T14:07:32.078795Z",
+          "13-matrix-dialog-light.png": "2026-05-07T14:07:32.078795Z",
+          "14-advancement-dialog-light.png": "2026-05-07T14:07:32.078795Z",
+          "15-creation-section-light.png": "2026-05-07T14:07:32.078795Z",
+          "16-master-index-dialog-light.png": "2026-05-07T14:07:32.078795Z",
+          "17-character-roster-dialog-light.png": "2026-05-07T14:07:32.078795Z",
+          "18-import-dialog-light.png": "2026-05-07T14:07:32.078795Z",
+          "38-translator-dialog-light.png": "2026-05-07T14:07:32.078795Z",
+          "39-xml-editor-dialog-light.png": "2026-05-07T14:07:32.078795Z",
+          "40-hero-lab-importer-dialog-light.png": "2026-05-07T14:07:32.078795Z"
         },
-        "visual_familiarity_screenshot_reference_generated_at": "2026-05-06T00:00:28.536600Z",
+        "visual_familiarity_screenshot_reference_generated_at": "2026-05-07T14:07:32.990214Z",
         "visual_familiarity_screenshots_newer_than_receipt": [],
         "visual_familiarity_screenshots_older_than_receipt": [],
         "visual_familiarity_stale_screenshots": [],
@@ -923,8 +1036,8 @@
               "downloadUrl": "/downloads/files/chummer-avalonia-win-x64-installer.exe",
               "embeddedRuntimeBundleHeadId": null,
               "fileName": "chummer-avalonia-win-x64-installer.exe",
-              "generatedAt": "2026-05-05T19:17:52Z",
-              "generated_at": "2026-05-05T19:17:52Z",
+              "generatedAt": "2026-05-06T19:36:59Z",
+              "generated_at": "2026-05-06T19:36:59Z",
               "head": "avalonia",
               "id": "avalonia-win-x64-installer",
               "installAccessClass": "account_required",
@@ -942,7 +1055,7 @@
             "release_channel_windows_artifact_arch_alias_conflict": false,
             "release_channel_windows_artifact_channel_id": "preview",
             "release_channel_windows_artifact_channel_id_alias_conflict": false,
-            "release_channel_windows_artifact_generated_at": "2026-05-05T19:17:52Z",
+            "release_channel_windows_artifact_generated_at": "2026-05-06T19:36:59Z",
             "release_channel_windows_artifact_generated_at_alias_conflict": false,
             "release_channel_windows_artifact_generated_at_valid": true,
             "release_channel_windows_artifact_version": "run-20260503-163502",
@@ -958,7 +1071,7 @@
             "startup_smoke_operating_system": "Microsoft Windows 10.0.19045",
             "startup_smoke_platform": "windows",
             "startup_smoke_ready_checkpoint": "pre_ui_event_loop",
-            "startup_smoke_receipt_age_seconds": 401590,
+            "startup_smoke_receipt_age_seconds": 537903,
             "startup_smoke_receipt_path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
             "startup_smoke_receipt_source": "file",
             "startup_smoke_recorded_at": "2026-05-01T08:43:57.7809932+00:00",
@@ -978,8 +1091,8 @@
                 "within_trusted_roots": true
               }
             },
-            "windows desktop exit gate proof_age_seconds": 1787,
-            "windows desktop exit gate proof_generated_at": "2026-05-05T23:47:20Z",
+            "windows desktop exit gate proof_age_seconds": 91,
+            "windows desktop exit gate proof_generated_at": "2026-05-07T14:07:30Z",
             "windows desktop exit gate proof_generated_at_alias_conflict": false,
             "windows_installer_path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe",
             "windows_installer_sha256": "bb9b31fcf3bf1386b6f968029f312ca30681f1a02b2c536b6a4d8cb8fe4109fe",
@@ -1027,18 +1140,7 @@
         "workflow_execution.release_channel_version_present": true,
         "workflow_execution.release_channel_version_raw_type": "str",
         "workflow_execution.version_present": false,
-        "workflow_execution_failing_receipts_external": [
-          "sr4:create-open-import-save-save-as-print-export:.codex-studio/published/workflow-family-parity/executed/sr4/create-open-import-save-save-as-print-export.generated.json=external_blocker:missing_api_surface_contract",
-          "sr4:metatype-priorities-karma-entry:.codex-studio/published/workflow-family-parity/executed/sr4/metatype-priorities-karma-entry.generated.json=external_blocker:missing_api_surface_contract",
-          "sr4:attributes-skills-skill-groups-specializations-knowledge-languages:.codex-studio/published/workflow-family-parity/executed/sr4/attributes-skills-skill-groups-specializations-knowledge-languages.generated.json=external_blocker:missing_api_surface_contract",
-          "sr4:qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources:.codex-studio/published/workflow-family-parity/executed/sr4/qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources.generated.json=external_blocker:missing_api_surface_contract",
-          "sr4:armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers:.codex-studio/published/workflow-family-parity/executed/sr4/armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers.generated.json=external_blocker:missing_api_surface_contract",
-          "sr4:cyberware-bioware-modular-hierarchies-nested-plugins:.codex-studio/published/workflow-family-parity/executed/sr4/cyberware-bioware-modular-hierarchies-nested-plugins.generated.json=external_blocker:missing_api_surface_contract",
-          "sr4:magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms:.codex-studio/published/workflow-family-parity/executed/sr4/magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms.generated.json=external_blocker:missing_api_surface_contract",
-          "sr4:improvements-explain-result-parity:.codex-studio/published/workflow-family-parity/executed/sr4/improvements-explain-result-parity.generated.json=external_blocker:missing_api_surface_contract",
-          "sr4:recovery-reload-migration-roundtrips:.codex-studio/published/workflow-family-parity/executed/sr4/recovery-reload-migration-roundtrips.generated.json=external_blocker:missing_api_surface_contract",
-          "sr4:dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare:.codex-studio/published/workflow-family-parity/executed/sr4/dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare.generated.json=external_blocker:missing_api_surface_contract"
-        ],
+        "workflow_execution_failing_receipts_external": [],
         "workflow_execution_failures_external_only": false,
         "workflow_execution_gate_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
         "workflow_execution_head_contract_marker_statuses": {
@@ -1094,14 +1196,14 @@
     "flagship_desktop_readiness": {
       "desktop_client_status": "ready",
       "desktop_evidence": {
-        "build_explain_publish": "ready",
+        "build_explain_publish": "blocked",
         "build_explain_publish_blocked_by_external_constraints_only": false,
         "build_explain_publish_effective": "ready",
         "build_explain_publish_external_blocking_reason_count": 0,
-        "build_explain_publish_local_blocking_reason_count": 0,
+        "build_explain_publish_local_blocking_reason_count": 1,
         "build_explain_publish_relevant_external_proof_request_count": 0,
         "desktop_ignore_nonlinux_desktop_host_proof_blockers": false,
-        "install_claim_restore_continue": "ready",
+        "install_claim_restore_continue": "blocked",
         "install_claim_restore_continue_blocked_by_external_constraints_only": false,
         "install_claim_restore_continue_effective": "ready",
         "install_claim_restore_continue_external_blocking_reason_count": 0,
@@ -1109,7 +1211,7 @@
         "install_claim_restore_continue_external_proof_request_hosts": [],
         "install_claim_restore_continue_external_proof_request_tuples": [],
         "install_claim_restore_continue_external_proof_requests": [],
-        "install_claim_restore_continue_local_blocking_reason_count": 0,
+        "install_claim_restore_continue_local_blocking_reason_count": 4,
         "install_claim_restore_continue_relevant_external_proof_request_count": 0,
         "parity_registry_declared_blocking_family_count": 0,
         "parity_registry_declared_blocking_family_ids": [],
@@ -1123,10 +1225,10 @@
         "parity_registry_unresolved_families": [],
         "parity_registry_unresolved_family_count": 0,
         "parity_registry_unresolved_family_ids": [],
-        "release_channel_age_seconds": 34177,
+        "release_channel_age_seconds": 66741,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
-        "release_channel_generated_at": "2026-05-05T19:17:52Z",
+        "release_channel_generated_at": "2026-05-06T19:36:59Z",
         "release_channel_has_linux_public_installer": true,
         "release_channel_has_macos_public_installer": false,
         "release_channel_has_windows_public_installer": true,
@@ -1189,16 +1291,16 @@
           "avalonia:win-x64"
         ],
         "sr4_sr6_frontier_receipt_external_only_missing_api_surface_contract": true,
-        "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer-presentation-clean/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
-        "sr4_sr6_frontier_receipt_status": "pass",
+        "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
+        "sr4_sr6_frontier_receipt_status": "fail",
         "sr4_workflow_parity_effective_ready": true,
         "sr4_workflow_parity_external_only_missing_api_surface_contract": false,
-        "sr4_workflow_parity_path": "/docker/chummercomplete/chummer-presentation-clean/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
-        "sr4_workflow_parity_status": "pass",
+        "sr4_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
+        "sr4_workflow_parity_status": "fail",
         "sr6_workflow_parity_effective_ready": true,
         "sr6_workflow_parity_external_only_missing_api_surface_contract": false,
-        "sr6_workflow_parity_path": "/docker/chummercomplete/chummer-presentation-clean/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
-        "sr6_workflow_parity_status": "pass",
+        "sr6_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
+        "sr6_workflow_parity_status": "fail",
         "ui_element_parity_audit_behavioral_no_count": 0,
         "ui_element_parity_audit_missing_required_ids": [],
         "ui_element_parity_audit_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
@@ -1229,16 +1331,16 @@
         "ui_executable_exit_gate_reason_count": 0,
         "ui_executable_exit_gate_reasons": [],
         "ui_executable_exit_gate_status": "pass",
-        "ui_executable_gate_age_seconds": 16220,
+        "ui_executable_gate_age_seconds": 18,
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_freshness_max_age_seconds": 86400,
         "ui_executable_gate_freshness_proof_age_seconds": {
-          "desktop visual familiarity gate proof_age_seconds": 998,
-          "desktop workflow execution gate proof_age_seconds": 2811,
-          "flagship UI release gate proof_age_seconds": 295919
+          "desktop visual familiarity gate proof_age_seconds": 88,
+          "desktop workflow execution gate proof_age_seconds": 91,
+          "flagship UI release gate proof_age_seconds": 432233
         },
-        "ui_executable_gate_generated_at": "2026-05-06T00:17:08.637885Z",
+        "ui_executable_gate_generated_at": "2026-05-07T14:09:01.750085Z",
         "ui_executable_gate_has_expanded_trusted_local_roots": true,
         "ui_executable_gate_hub_registry_release_channel_path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
         "ui_executable_gate_hub_registry_root": "/docker/chummercomplete/chummer-hub-registry",
@@ -1444,79 +1546,18 @@
         "ui_windows_exit_gate_sample_marker_present": true,
         "ui_windows_exit_gate_status": "passed",
         "ui_workflow_execution_gate_direct_flagship_slice_runtime_proof": true,
-        "ui_workflow_execution_gate_execution_failing_receipt_count": 20,
+        "ui_workflow_execution_gate_execution_failing_receipt_count": 0,
         "ui_workflow_execution_gate_execution_missing_receipt_count": 0,
         "ui_workflow_execution_gate_execution_weak_receipt_count": 0,
-        "ui_workflow_execution_gate_family_failing_receipt_count": 60,
+        "ui_workflow_execution_gate_family_failing_receipt_count": 0,
         "ui_workflow_execution_gate_family_missing_receipt_count": 0,
         "ui_workflow_execution_gate_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
         "ui_workflow_execution_gate_status": "pass",
-        "ui_workflow_execution_gate_unresolved_receipt_count": 60,
-        "ui_workflow_execution_gate_unresolved_receipts": [
-          "sr4:armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers:.codex-studio/published/workflow-family-parity/SR4_WORKFLOW_FAMILY_armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers.generated.json=fail",
-          "sr4:armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers:.codex-studio/published/workflow-family-parity/executed/sr4/armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers.generated.json=fail",
-          "sr4:armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers:.codex-studio/published/workflow-family-parity/sr4/armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers.generated.json=fail",
-          "sr4:attributes-skills-skill-groups-specializations-knowledge-languages:.codex-studio/published/workflow-family-parity/SR4_WORKFLOW_FAMILY_attributes-skills-skill-groups-specializations-knowledge-languages.generated.json=fail",
-          "sr4:attributes-skills-skill-groups-specializations-knowledge-languages:.codex-studio/published/workflow-family-parity/executed/sr4/attributes-skills-skill-groups-specializations-knowledge-languages.generated.json=fail",
-          "sr4:attributes-skills-skill-groups-specializations-knowledge-languages:.codex-studio/published/workflow-family-parity/sr4/attributes-skills-skill-groups-specializations-knowledge-languages.generated.json=fail",
-          "sr4:create-open-import-save-save-as-print-export:.codex-studio/published/workflow-family-parity/SR4_WORKFLOW_FAMILY_create-open-import-save-save-as-print-export.generated.json=fail",
-          "sr4:create-open-import-save-save-as-print-export:.codex-studio/published/workflow-family-parity/executed/sr4/create-open-import-save-save-as-print-export.generated.json=fail",
-          "sr4:create-open-import-save-save-as-print-export:.codex-studio/published/workflow-family-parity/sr4/create-open-import-save-save-as-print-export.generated.json=fail",
-          "sr4:cyberware-bioware-modular-hierarchies-nested-plugins:.codex-studio/published/workflow-family-parity/SR4_WORKFLOW_FAMILY_cyberware-bioware-modular-hierarchies-nested-plugins.generated.json=fail",
-          "sr4:cyberware-bioware-modular-hierarchies-nested-plugins:.codex-studio/published/workflow-family-parity/executed/sr4/cyberware-bioware-modular-hierarchies-nested-plugins.generated.json=fail",
-          "sr4:cyberware-bioware-modular-hierarchies-nested-plugins:.codex-studio/published/workflow-family-parity/sr4/cyberware-bioware-modular-hierarchies-nested-plugins.generated.json=fail",
-          "sr4:dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare:.codex-studio/published/workflow-family-parity/SR4_WORKFLOW_FAMILY_dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare.generated.json=fail",
-          "sr4:dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare:.codex-studio/published/workflow-family-parity/executed/sr4/dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare.generated.json=fail",
-          "sr4:dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare:.codex-studio/published/workflow-family-parity/sr4/dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare.generated.json=fail",
-          "sr4:improvements-explain-result-parity:.codex-studio/published/workflow-family-parity/SR4_WORKFLOW_FAMILY_improvements-explain-result-parity.generated.json=fail",
-          "sr4:improvements-explain-result-parity:.codex-studio/published/workflow-family-parity/executed/sr4/improvements-explain-result-parity.generated.json=fail",
-          "sr4:improvements-explain-result-parity:.codex-studio/published/workflow-family-parity/sr4/improvements-explain-result-parity.generated.json=fail",
-          "sr4:magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms:.codex-studio/published/workflow-family-parity/SR4_WORKFLOW_FAMILY_magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms.generated.json=fail",
-          "sr4:magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms:.codex-studio/published/workflow-family-parity/executed/sr4/magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms.generated.json=fail",
-          "sr4:magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms:.codex-studio/published/workflow-family-parity/sr4/magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms.generated.json=fail",
-          "sr4:metatype-priorities-karma-entry:.codex-studio/published/workflow-family-parity/SR4_WORKFLOW_FAMILY_metatype-priorities-karma-entry.generated.json=fail",
-          "sr4:metatype-priorities-karma-entry:.codex-studio/published/workflow-family-parity/executed/sr4/metatype-priorities-karma-entry.generated.json=fail",
-          "sr4:metatype-priorities-karma-entry:.codex-studio/published/workflow-family-parity/sr4/metatype-priorities-karma-entry.generated.json=fail",
-          "sr4:qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources:.codex-studio/published/workflow-family-parity/SR4_WORKFLOW_FAMILY_qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources.generated.json=fail",
-          "sr4:qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources:.codex-studio/published/workflow-family-parity/executed/sr4/qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources.generated.json=fail",
-          "sr4:qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources:.codex-studio/published/workflow-family-parity/sr4/qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources.generated.json=fail",
-          "sr4:recovery-reload-migration-roundtrips:.codex-studio/published/workflow-family-parity/SR4_WORKFLOW_FAMILY_recovery-reload-migration-roundtrips.generated.json=fail",
-          "sr4:recovery-reload-migration-roundtrips:.codex-studio/published/workflow-family-parity/executed/sr4/recovery-reload-migration-roundtrips.generated.json=fail",
-          "sr4:recovery-reload-migration-roundtrips:.codex-studio/published/workflow-family-parity/sr4/recovery-reload-migration-roundtrips.generated.json=fail",
-          "sr6:armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers:.codex-studio/published/workflow-family-parity/SR6_WORKFLOW_FAMILY_armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers.generated.json=fail",
-          "sr6:armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers:.codex-studio/published/workflow-family-parity/executed/sr6/armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers.generated.json=fail",
-          "sr6:armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers:.codex-studio/published/workflow-family-parity/sr6/armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers.generated.json=fail",
-          "sr6:attributes-skills-skill-groups-specializations-knowledge-languages:.codex-studio/published/workflow-family-parity/SR6_WORKFLOW_FAMILY_attributes-skills-skill-groups-specializations-knowledge-languages.generated.json=fail",
-          "sr6:attributes-skills-skill-groups-specializations-knowledge-languages:.codex-studio/published/workflow-family-parity/executed/sr6/attributes-skills-skill-groups-specializations-knowledge-languages.generated.json=fail",
-          "sr6:attributes-skills-skill-groups-specializations-knowledge-languages:.codex-studio/published/workflow-family-parity/sr6/attributes-skills-skill-groups-specializations-knowledge-languages.generated.json=fail",
-          "sr6:create-open-import-save-save-as-print-export:.codex-studio/published/workflow-family-parity/SR6_WORKFLOW_FAMILY_create-open-import-save-save-as-print-export.generated.json=fail",
-          "sr6:create-open-import-save-save-as-print-export:.codex-studio/published/workflow-family-parity/executed/sr6/create-open-import-save-save-as-print-export.generated.json=fail",
-          "sr6:create-open-import-save-save-as-print-export:.codex-studio/published/workflow-family-parity/sr6/create-open-import-save-save-as-print-export.generated.json=fail",
-          "sr6:cyberware-bioware-modular-hierarchies-nested-plugins:.codex-studio/published/workflow-family-parity/SR6_WORKFLOW_FAMILY_cyberware-bioware-modular-hierarchies-nested-plugins.generated.json=fail",
-          "sr6:cyberware-bioware-modular-hierarchies-nested-plugins:.codex-studio/published/workflow-family-parity/executed/sr6/cyberware-bioware-modular-hierarchies-nested-plugins.generated.json=fail",
-          "sr6:cyberware-bioware-modular-hierarchies-nested-plugins:.codex-studio/published/workflow-family-parity/sr6/cyberware-bioware-modular-hierarchies-nested-plugins.generated.json=fail",
-          "sr6:dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare:.codex-studio/published/workflow-family-parity/SR6_WORKFLOW_FAMILY_dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare.generated.json=fail",
-          "sr6:dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare:.codex-studio/published/workflow-family-parity/executed/sr6/dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare.generated.json=fail",
-          "sr6:dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare:.codex-studio/published/workflow-family-parity/sr6/dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare.generated.json=fail",
-          "sr6:improvements-explain-result-parity:.codex-studio/published/workflow-family-parity/SR6_WORKFLOW_FAMILY_improvements-explain-result-parity.generated.json=fail",
-          "sr6:improvements-explain-result-parity:.codex-studio/published/workflow-family-parity/executed/sr6/improvements-explain-result-parity.generated.json=fail",
-          "sr6:improvements-explain-result-parity:.codex-studio/published/workflow-family-parity/sr6/improvements-explain-result-parity.generated.json=fail",
-          "sr6:magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms:.codex-studio/published/workflow-family-parity/SR6_WORKFLOW_FAMILY_magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms.generated.json=fail",
-          "sr6:magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms:.codex-studio/published/workflow-family-parity/executed/sr6/magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms.generated.json=fail",
-          "sr6:magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms:.codex-studio/published/workflow-family-parity/sr6/magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms.generated.json=fail",
-          "sr6:metatype-priorities-karma-entry:.codex-studio/published/workflow-family-parity/SR6_WORKFLOW_FAMILY_metatype-priorities-karma-entry.generated.json=fail",
-          "sr6:metatype-priorities-karma-entry:.codex-studio/published/workflow-family-parity/executed/sr6/metatype-priorities-karma-entry.generated.json=fail",
-          "sr6:metatype-priorities-karma-entry:.codex-studio/published/workflow-family-parity/sr6/metatype-priorities-karma-entry.generated.json=fail",
-          "sr6:qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources:.codex-studio/published/workflow-family-parity/SR6_WORKFLOW_FAMILY_qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources.generated.json=fail",
-          "sr6:qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources:.codex-studio/published/workflow-family-parity/executed/sr6/qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources.generated.json=fail",
-          "sr6:qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources:.codex-studio/published/workflow-family-parity/sr6/qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources.generated.json=fail",
-          "sr6:recovery-reload-migration-roundtrips:.codex-studio/published/workflow-family-parity/SR6_WORKFLOW_FAMILY_recovery-reload-migration-roundtrips.generated.json=fail",
-          "sr6:recovery-reload-migration-roundtrips:.codex-studio/published/workflow-family-parity/executed/sr6/recovery-reload-migration-roundtrips.generated.json=fail",
-          "sr6:recovery-reload-migration-roundtrips:.codex-studio/published/workflow-family-parity/sr6/recovery-reload-migration-roundtrips.generated.json=fail"
-        ],
-        "ui_workflow_execution_gate_unresolved_receipts_sr4_sr6_only": true,
+        "ui_workflow_execution_gate_unresolved_receipt_count": 0,
+        "ui_workflow_execution_gate_unresolved_receipts": [],
+        "ui_workflow_execution_gate_unresolved_receipts_sr4_sr6_only": false,
         "ui_workflow_parity_effective_ready": true,
-        "ui_workflow_parity_path": "/docker/chummercomplete/chummer-presentation-clean/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
+        "ui_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
         "ui_workflow_parity_recovered_from_workflow_execution_gate": true,
         "ui_workflow_parity_status": "pass"
       },
@@ -1537,7 +1578,7 @@
     },
     "release_channel_tuple_truth": {
       "issues": [],
-      "release_channel_generated_at": "2026-05-05T19:17:52Z",
+      "release_channel_generated_at": "2026-05-06T19:36:59Z",
       "release_channel_version": "run-20260503-163502",
       "runtime_blockers": [],
       "state": "pass",
@@ -1550,8 +1591,8 @@
         "downloadUrl": "/downloads/files/chummer-avalonia-win-x64-installer.exe",
         "embeddedRuntimeBundleHeadId": null,
         "fileName": "chummer-avalonia-win-x64-installer.exe",
-        "generatedAt": "2026-05-05T19:17:52Z",
-        "generated_at": "2026-05-05T19:17:52Z",
+        "generatedAt": "2026-05-06T19:36:59Z",
+        "generated_at": "2026-05-06T19:36:59Z",
         "head": "avalonia",
         "id": "avalonia-win-x64-installer",
         "installAccessClass": "account_required",
@@ -1598,8 +1639,8 @@
           "downloadUrl": "/downloads/files/chummer-avalonia-win-x64-installer.exe",
           "embeddedRuntimeBundleHeadId": null,
           "fileName": "chummer-avalonia-win-x64-installer.exe",
-          "generatedAt": "2026-05-05T19:17:52Z",
-          "generated_at": "2026-05-05T19:17:52Z",
+          "generatedAt": "2026-05-06T19:36:59Z",
+          "generated_at": "2026-05-06T19:36:59Z",
           "head": "avalonia",
           "id": "avalonia-win-x64-installer",
           "installAccessClass": "account_required",
@@ -1615,11 +1656,11 @@
         },
         "sr4_workflow_parity_external_only": false,
         "sr4_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
-        "sr4_workflow_parity_status": "fail",
+        "sr4_workflow_parity_status": "pass",
         "sr6_workflow_parity_external_only": false,
         "sr6_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
-        "sr6_workflow_parity_status": "fail",
-        "startup_smoke_age_seconds": 399803,
+        "sr6_workflow_parity_status": "pass",
+        "startup_smoke_age_seconds": 537812,
         "startup_smoke_arch": "x64",
         "startup_smoke_artifact_digest": "sha256:bb9b31fcf3bf1386b6f968029f312ca30681f1a02b2c536b6a4d8cb8fe4109fe",
         "startup_smoke_artifact_path": "files/chummer-avalonia-win-x64-installer.exe",
@@ -1659,7 +1700,7 @@
         "ui_local_release_proof_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
         "ui_local_release_status": "passed",
         "ui_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
-        "ui_workflow_parity_status": "pass",
+        "ui_workflow_parity_status": "fail",
         "windows_installer_candidate_paths": [
           "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe"
         ],
@@ -1676,28 +1717,28 @@
   },
   "source_inputs": {
     "design_queue_staging": {
-      "generated_at": "2026-05-06T04:44:49Z",
+      "generated_at": "2026-05-07T14:02:08Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "05fe2feeafae90da905daddb4ca72f757e22bea85ce8e9f8563a823e316308af"
+      "sha256": "39e43d779a6d5e34e0c5f7bca07cd79c241bbd220d4537ede65c8e97d694de6f"
     },
     "desktop_executable_exit_gate": {
-      "generated_at": "2026-05-06T00:17:08.637885Z",
+      "generated_at": "2026-05-07T14:09:01.750085Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
-      "sha256": "ca0b1a64f8829cbdd01b6ff72d4e9b5334325f21eecbbb3807da22077151169d"
+      "sha256": "6d25066055c39c1e8e22d4a612f82de72942b34c83e1aabd5ab4de839d5142cc"
     },
     "flagship_readiness": {
-      "generated_at": "2026-05-06T04:47:31Z",
+      "generated_at": "2026-05-07T14:09:20Z",
       "generated_at_source": "payload",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "8c0b788abe5d9baa6337c5633d326a71a38accab4c686d4b7b1aae2d7818dac0"
+      "sha256": "2ce6dec28304b1225eda93343d45e24f6ef500a7f9f37411fa8e0fa583367b52"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-05-06T04:44:49Z",
+      "generated_at": "2026-05-07T14:02:08Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "94c5042dc2adb91991decdfdabcd2c9a5d09352df51f9ce19917fb7ed7380c6a"
+      "sha256": "54e2c81910f1f9a9a7ec6d6460bb228d907327087fd1527dbe2891352892cc74"
     },
     "next90_guide": {
       "generated_at": "2026-05-05T19:47:04Z",
@@ -1706,10 +1747,10 @@
       "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
     },
     "release_channel": {
-      "generated_at": "2026-05-05T19:17:52Z",
+      "generated_at": "2026-05-06T19:36:59Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
-      "sha256": "6899d169bab50f885bc4c1df9fea4027d31bca6a0357b7142e3fd5f194cfb02d"
+      "sha256": "682156d109ada172f612ea2ab304e900471f8af3e298f459dc876bb81a384b6f"
     },
     "startup_smoke_receipt": {
       "generated_at": "2026-05-05T20:59:47Z",
@@ -1718,19 +1759,19 @@
       "sha256": "a93c1801197886ae22ea192d0be5cf602a17efcd77881bac83fa16c5ef08b55f"
     },
     "successor_registry": {
-      "generated_at": "2026-05-06T04:44:49Z",
+      "generated_at": "2026-05-07T14:02:08Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "57f005675cf6c790f22a77d0b033697d3d713a1eb6722be26886f9c87ed585e6"
+      "sha256": "9c79185e3659c39ff55bff79c070bd5b4176441694fd382e4d8b6fffd2ff25d7"
     },
     "ui_windows_exit_gate": {
-      "generated_at": "2026-05-05T23:47:20Z",
+      "generated_at": "2026-05-07T14:07:30Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json",
-      "sha256": "912b469c122c44981eac900f05c71af3c8346ba700c43e62b76bca6989657498"
+      "sha256": "f85a5eb31247994ce325d433427bb26300eeb443c8579c19368b7e2158f23035"
     }
   },
-  "status": "pass",
+  "status": "fail",
   "wave": "W22P",
   "work_task_id": "144.4"
 }

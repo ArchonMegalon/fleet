@@ -3684,6 +3684,11 @@ if [ -z "${CODEXEA_STDIN_PROMPT}" ] && [ ! -t 0 ] && [ "$#" -gt 0 ] && [ "${1}" 
   CODEXEA_STDIN_PROMPT="$(head -c 1048576 || true)"
   prepend_exec_trace_stdin_prompt
 fi
+if [ -n "${CODEXEA_STDIN_PROMPT}" ]; then
+  CODEXEA_STDIN_PROMPT_CHARS="$(printf '%s' "${CODEXEA_STDIN_PROMPT}" | wc -c | tr -d ' ')"
+  CODEXEA_STDIN_PROMPT_SHA256="$(printf '%s' "${CODEXEA_STDIN_PROMPT}" | sha256sum | awk '{print $1}')"
+  emit_debug_trace "stdin prompt chars=${CODEXEA_STDIN_PROMPT_CHARS} sha256=${CODEXEA_STDIN_PROMPT_SHA256}"
+fi
 
 if [ "$#" -gt 0 ] && ! args_request_interactive_session "$@"; then
   OPERATOR_GUARD_PROMPT_TEXT="$(operator_guard_candidate_text "$@" || true)"

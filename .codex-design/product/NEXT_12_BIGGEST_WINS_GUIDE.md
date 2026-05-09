@@ -56,7 +56,7 @@ Exit: legacy and adjacent imports either land in first-class Chummer6 surfaces w
 
 ### 18. SR6 supplement, designer-tool, house-rule, and online-storage successor lane
 Owners: `chummer6-core`, `chummer6-ui`, `chummer6-hub`, `chummer6-design`
-Exit: serious SR6 expectations exposed by Genesis / CommLink6 such as supplement breadth, authored designers, house-rule posture, and storage continuity feel like a better modern client rather than a reduced rebuild.
+Exit: serious SR6 expectations exposed by Genesis / CommLink6 gain first-class Chummer6 equivalents or bounded preview receipts, and only then can the lane claim a better modern client rather than a reduced rebuild.
 
 ## Wave 3 - make campaign continuity indispensable
 

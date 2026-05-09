@@ -5,6 +5,7 @@ import importlib.util
 import json
 import sqlite3
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -28,6 +29,35 @@ def load_module():
 class PublicProgressReportTests(unittest.TestCase):
     def setUp(self) -> None:
         self.progress = load_module()
+
+    def test_preferred_chummer_ui_root_prefers_canonical_alias_when_scores_tie(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            canonical_root = tmp_path / "canonical-ui"
+            mirror_root = tmp_path / "mirror-ui"
+            for root in (canonical_root, mirror_root):
+                published = root / ".codex-studio" / "published"
+                published.mkdir(parents=True, exist_ok=True)
+                for name in (
+                    "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+                    "UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
+                ):
+                    (published / name).write_text(json.dumps({"status": "pass"}), encoding="utf-8")
+
+            with mock.patch.dict("os.environ", {}, clear=False):
+                with mock.patch.object(
+                    self.progress,
+                    "pathlib",
+                    types.SimpleNamespace(
+                        Path=lambda raw: {
+                            "/docker/chummercomplete/chummer-presentation-clean": mirror_root,
+                            "/docker/chummercomplete/chummer6-ui": canonical_root,
+                            "/docker/chummercomplete/chummer6-ui-finish": tmp_path / "missing-finish",
+                            "/docker/chummercomplete/chummer-presentation": tmp_path / "legacy-physical",
+                        }.get(raw, Path(raw))
+                    ),
+                ):
+                    self.assertEqual(self.progress._preferred_chummer_ui_root(), canonical_root)
 
     def _seed_repo_root(self, root: Path) -> None:
         (root / "config" / "projects").mkdir(parents=True, exist_ok=True)
