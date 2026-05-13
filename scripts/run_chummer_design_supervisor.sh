@@ -1279,14 +1279,20 @@ fi
 
 status=0
 if (( ${#pids[@]} > 0 )); then
+  remaining_children="${#pids[@]}"
   # Wait on the shell's live child table instead of a static PID list.
   # Some shard loops can exit before this point, and passing stale PIDs to
   # `wait -n` can raise "no such job" and tear down an otherwise healthy fleet.
-  if wait -n; then
-    status=0
-  else
+  # Keep draining clean zero-exit children so a fast-successful shard cannot
+  # tear down sibling launches before they have a chance to start.
+  while (( remaining_children > 0 )); do
+    if wait -n; then
+      ((remaining_children--))
+      continue
+    fi
     status=$?
-  fi
+    break
+  done
 fi
 cleanup
 exit "$status"
