@@ -525,6 +525,134 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertEqual(payload["repo_backlog"]["open_project_count"], 1)
         self.assertEqual(payload["repo_backlog"]["lead_task"], "Restore live queue truth")
 
+    def test_build_progress_report_payload_prefers_published_completion_frontier_backlog_for_fleet_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            (root / "fleet-repo").mkdir(parents=True, exist_ok=True)
+            (root / "fleet-repo" / "WORKLIST.md").write_text(
+                "\n".join(
+                    [
+                        "# Worklist Queue",
+                        "",
+                        "| ID | Status | Priority | Task | Owner | Notes |",
+                        "|---|---|---|---|---|---|",
+                        "| WL-300 | queued | P0 | Restore live queue truth | agent | note |",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "config" / "projects" / "fleet.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "id": "fleet",
+                        "path": str(root / "fleet-repo"),
+                        "review": {"repo": "fleet"},
+                        "lifecycle": "live",
+                        "queue": [],
+                        "queue_sources": [{"kind": "worklist", "path": "WORKLIST.md", "mode": "replace"}],
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            (root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (root / ".codex-studio" / "published" / "COMPLETION_REVIEW_FRONTIER.generated.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "repo_backlog_audit": {
+                            "status": "pass",
+                            "reason": "no active repo-local backlog remains outside the closed design registry",
+                            "open_item_count": 0,
+                            "open_project_count": 0,
+                            "open_items": [],
+                        }
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            (root / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json").write_text(
+                json.dumps({"status": "pass", "summary": "ready"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(self.progress, "FLEET_ROOT", root):
+                with mock.patch.object(
+                    self.progress,
+                    "DEFAULT_COMPLETION_FRONTIER_PATH",
+                    root / ".codex-studio" / "published" / "COMPLETION_REVIEW_FRONTIER.generated.yaml",
+                ):
+                    with mock.patch.object(
+                        self.progress,
+                        "DEFAULT_FLAGSHIP_PRODUCT_READINESS_PATH",
+                        root / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json",
+                    ):
+                        with mock.patch.object(self.progress, "_load_chummer_design_supervisor_state", return_value={}):
+                            with mock.patch.object(self.progress, "load_progress_history_payload", return_value={"snapshots": []}):
+                                payload = self.progress.build_progress_report_payload(
+                                    repo_root=root,
+                                    now=dt.datetime(2026, 3, 23, 10, 0, tzinfo=UTC),
+                                    commit_counter=lambda _repo: 0,
+                                )
+
+        self.assertEqual(payload["repo_backlog"]["open_item_count"], 0)
+        self.assertEqual(payload["repo_backlog"]["open_project_count"], 0)
+        self.assertEqual(payload["repo_backlog"]["lead_task"], "")
+        self.assertNotEqual(payload["active_slice"], "Restore live queue truth")
+
+    def test_build_progress_report_payload_clamps_false_complete_when_completion_frontier_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            (root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (root / ".codex-studio" / "published" / "COMPLETION_REVIEW_FRONTIER.generated.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "completion_audit": {
+                            "status": "fail",
+                            "reason": "weekly product pulse reports release health as needs_attention",
+                        },
+                        "repo_backlog_audit": {
+                            "status": "pass",
+                            "open_item_count": 0,
+                            "open_project_count": 0,
+                            "open_items": [],
+                        },
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            (root / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json").write_text(
+                json.dumps({"status": "pass", "summary": "ready"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(self.progress, "FLEET_ROOT", root):
+                with mock.patch.object(
+                    self.progress,
+                    "DEFAULT_COMPLETION_FRONTIER_PATH",
+                    root / ".codex-studio" / "published" / "COMPLETION_REVIEW_FRONTIER.generated.yaml",
+                ):
+                    with mock.patch.object(
+                        self.progress,
+                        "DEFAULT_FLAGSHIP_PRODUCT_READINESS_PATH",
+                        root / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json",
+                    ):
+                        with mock.patch.object(self.progress, "_load_chummer_design_supervisor_state", return_value={}):
+                            with mock.patch.object(self.progress, "load_progress_history_payload", return_value={"snapshots": []}):
+                                payload = self.progress.build_progress_report_payload(
+                                    repo_root=root,
+                                    now=dt.datetime(2026, 3, 23, 10, 0, tzinfo=UTC),
+                                    commit_counter=lambda _repo: 0,
+                                )
+
+        self.assertEqual(payload["overall_status"], "active")
+        self.assertEqual(payload["release_readiness"]["status"], "warning")
+        self.assertTrue(any(risk.get("key") == "completion_frontier" for risk in payload["top_risks"]))
+
     def test_repo_local_backlog_snapshot_ignores_terminal_config_queue_items(self) -> None:
         snapshot = self.progress._repo_local_backlog_snapshot(
             {

@@ -158,6 +158,7 @@ DEFAULT_PROGRAM_MILESTONES_PATH = FLEET_ROOT / "config" / "program_milestones.ya
 DEFAULT_PROJECTS_DIR = FLEET_ROOT / "config" / "projects"
 DEFAULT_PROGRESS_REPORT_PATH = FLEET_ROOT / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
 DEFAULT_PROGRESS_HISTORY_PATH = FLEET_ROOT / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
+DEFAULT_COMPLETION_FRONTIER_PATH = FLEET_ROOT / ".codex-studio" / "published" / "COMPLETION_REVIEW_FRONTIER.generated.yaml"
 DEFAULT_POSTER_PATH = (MOUNTED_ADMIN_DIR if MOUNTED_ADMIN_DIR.exists() else ADMIN_DIR) / "assets" / "progress_poster.svg"
 DEFAULT_DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", str(FLEET_ROOT / "state" / "fleet.db")))
 DEFAULT_DESIGN_SUPERVISOR_STATE_PATH = FLEET_ROOT / "state" / "chummer_design_supervisor" / "state.json"
@@ -179,6 +180,7 @@ DEFAULT_SR4_DESKTOP_WORKFLOW_PARITY_PATH = CHUMMER_UI_ROOT / ".codex-studio" / "
 DEFAULT_SR6_DESKTOP_WORKFLOW_PARITY_PATH = CHUMMER_UI_ROOT / ".codex-studio" / "published" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
 DEFAULT_DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE_PATH = CHUMMER_UI_ROOT / ".codex-studio" / "published" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
 DEFAULT_DESKTOP_EXECUTABLE_EXIT_GATE_PATH = CHUMMER_UI_ROOT / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+DEFAULT_FLAGSHIP_PRODUCT_READINESS_PATH = FLEET_ROOT / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 NEXT20_REGISTRY_PATH = CHUMMER_PRODUCT_CANON_DIR / "NEXT_20_BIG_WINS_REGISTRY.yaml"
 POST_AUDIT_NEXT20_REGISTRY_PATH = CHUMMER_PRODUCT_CANON_DIR / "POST_AUDIT_NEXT_20_BIG_WINS_REGISTRY.yaml"
 NEXT12_REGISTRY_PATH = CHUMMER_PRODUCT_CANON_DIR / "NEXT_12_BIGGEST_WINS_REGISTRY.yaml"
@@ -554,7 +556,10 @@ def _load_yaml(path: pathlib.Path) -> Dict[str, Any]:
 def _load_json(path: pathlib.Path) -> Dict[str, Any]:
     if not path.exists():
         return {}
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError:
+        return {}
     return payload if isinstance(payload, dict) else {}
 
 
@@ -579,6 +584,27 @@ def _join_sentences(*parts: Any) -> str:
 
 
 def _flagship_readiness_truth() -> Dict[str, Any]:
+    flagship_readiness = _load_json(DEFAULT_FLAGSHIP_PRODUCT_READINESS_PATH)
+    if _status_is_pass_like(flagship_readiness.get("status")):
+        return {
+            "status": "ready",
+            "summary": str(flagship_readiness.get("summary") or "Published flagship readiness proof is green.").strip(),
+            "feature_parity_proven": True,
+            "layout_familiarity_proven": True,
+            "desktop_executable_gate_status": "pass",
+            "desktop_executable_gate_summary": "Published flagship readiness proof is green.",
+            "windows_blocking_reason_count": 0,
+            "windows_blocking_reasons": [],
+            "proofs": {
+                "import_parity_status": "pass",
+                "chummer5a_workflow_parity_status": "pass",
+                "sr4_workflow_parity_status": "pass",
+                "sr6_workflow_parity_status": "pass",
+                "desktop_visual_familiarity_status": "pass",
+                "desktop_executable_gate_status": "pass",
+            },
+        }
+
     import_parity = _load_json(DEFAULT_IMPORT_PARITY_CERTIFICATION_PATH)
     chummer5a_workflow = _load_json(DEFAULT_CHUMMER5A_DESKTOP_WORKFLOW_PARITY_PATH)
     sr4_workflow = _load_json(DEFAULT_SR4_DESKTOP_WORKFLOW_PARITY_PATH)
@@ -755,6 +781,52 @@ def _repo_local_backlog_snapshot(project_cfgs: Dict[str, Dict[str, Any]]) -> Dic
         "lead_task": lead_task,
         "open_items": rows[:25],
     }
+
+
+def _published_completion_frontier_repo_backlog_snapshot(
+    path: pathlib.Path = DEFAULT_COMPLETION_FRONTIER_PATH,
+) -> Dict[str, Any] | None:
+    payload = _load_yaml(path)
+    if not payload:
+        return None
+    backlog = payload.get("repo_backlog_audit")
+    if not isinstance(backlog, dict):
+        return None
+
+    rows: List[Dict[str, str]] = []
+    for raw in backlog.get("open_items") or []:
+        if not isinstance(raw, dict):
+            continue
+        task = str(raw.get("task") or "").strip()
+        if not task:
+            continue
+        rows.append(
+            {
+                "project_id": str(raw.get("project_id") or "").strip(),
+                "repo_slug": str(raw.get("repo_slug") or "").strip(),
+                "task": task,
+            }
+        )
+
+    open_project_count = backlog.get("open_project_count")
+    if open_project_count is None:
+        open_project_count = len(
+            {str(row.get("project_id") or "").strip() for row in rows if str(row.get("project_id") or "").strip()}
+        )
+    lead_task = str(backlog.get("lead_task") or "").strip()
+    if not lead_task and rows:
+        lead_task = str(rows[0].get("task") or "").strip()
+    return {
+        "open_item_count": int(backlog.get("open_item_count") or len(rows)),
+        "open_project_count": int(open_project_count or 0),
+        "lead_task": lead_task,
+        "open_items": rows[:25],
+    }
+
+
+def _published_completion_frontier_payload(path: pathlib.Path = DEFAULT_COMPLETION_FRONTIER_PATH) -> Dict[str, Any]:
+    payload = _load_yaml(path)
+    return payload if isinstance(payload, dict) else {}
 
 
 def _open_milestone_items(project_meta: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1427,6 +1499,12 @@ def build_progress_report_payload(
     total_open_weight = 0
     mapped_open_milestones = 0
     repo_backlog = _repo_local_backlog_snapshot(project_cfgs)
+    completion_frontier: Dict[str, Any] = {}
+    if _same_path(repo_root, FLEET_ROOT):
+        completion_frontier = _published_completion_frontier_payload()
+        published_repo_backlog = _published_completion_frontier_repo_backlog_snapshot()
+        if published_repo_backlog is not None:
+            repo_backlog = published_repo_backlog
     repo_backlog_open_item_count = int(repo_backlog.get("open_item_count") or 0)
     repo_backlog_open_project_count = int(repo_backlog.get("open_project_count") or 0)
     repo_backlog_lead_task = str(repo_backlog.get("lead_task") or "").strip()
@@ -1682,8 +1760,29 @@ def build_progress_report_payload(
         existing_risk_keys = {str(row.get("key") or "").strip() for row in top_risks if isinstance(row, dict)}
         if flagship_risk["key"] not in existing_risk_keys and flagship_risk["summary"]:
             top_risks = [flagship_risk, *top_risks]
+    completion_audit = dict(completion_frontier.get("completion_audit") or {})
+    completion_audit_status = str(completion_audit.get("status") or "").strip().lower()
+    completion_audit_reason = str(completion_audit.get("reason") or "").strip()
+    if completion_audit_status == "fail":
+        summary = "Completion frontier closeout proof is still failing."
+        if completion_audit_reason:
+            summary = f"{summary} {completion_audit_reason}"
+        release_readiness = {
+            "status": "warning",
+            "summary": _join_sentences(summary, release_readiness.get("summary")),
+            "blocking_parts": list(release_readiness.get("blocking_parts") or []),
+        }
+        completion_risk = {
+            "key": "completion_frontier",
+            "summary": summary,
+        }
+        existing_risk_keys = {str(row.get("key") or "").strip() for row in top_risks if isinstance(row, dict)}
+        if completion_risk["key"] not in existing_risk_keys:
+            top_risks = [completion_risk, *top_risks]
     headline = str(((config.get("hero") or {}).get("headline")) or "").strip()
     overall_status = str(active_wave_status or release_readiness.get("status") or phase_label or "tracked").strip()
+    if completion_audit_status == "fail" and overall_status.lower() == "complete":
+        overall_status = "active"
 
     return {
         "contract_name": PUBLIC_PROGRESS_CONTRACT_NAME,
