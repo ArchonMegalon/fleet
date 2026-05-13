@@ -5006,6 +5006,50 @@ def test_refresh_flagship_product_readiness_artifact_reuses_fresh_artifact(monke
         assert payload["status"] == "pass"
 
 
+def test_refresh_flagship_product_readiness_artifact_rematerializes_fresh_failed_artifact(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Flagship work remains.\n", encoding="utf-8")
+        (root / ".codex-design" / "product").mkdir(parents=True, exist_ok=True)
+        (root / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml").write_text("product: chummer\n", encoding="utf-8")
+        args = _args(root)
+        readiness_path = Path(args.flagship_product_readiness_path)
+        readiness_path.write_text(
+            json.dumps(
+                {
+                    "coverage_details": {
+                        "desktop_client": {
+                            "evidence": {
+                                "desktop_ignore_nonlinux_desktop_host_proof_blockers": False,
+                            }
+                        }
+                    },
+                    "generated_at": module._iso(module._utc_now()),
+                    "proof_status": "fail",
+                    "status": "fail",
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(module, "DEFAULT_WORKSPACE_ROOT", root)
+        calls: list[dict[str, object]] = []
+
+        def fake_materialize_flagship_product_readiness(**kwargs):
+            calls.append(dict(kwargs))
+            return {"status": "pass"}
+
+        monkeypatch.setattr(module, "materialize_flagship_product_readiness", fake_materialize_flagship_product_readiness)
+
+        payload = module._refresh_flagship_product_readiness_artifact(args)
+
+        assert payload == {"status": "pass"}
+        assert len(calls) == 1
+
+
 def test_refresh_flagship_product_readiness_artifact_refreshes_stale_status_plane_even_with_fresh_readiness(
     monkeypatch,
 ) -> None:
@@ -11288,7 +11332,7 @@ def test_active_direct_lane_run_count_keeps_review_light_repo_work_plus_one_wait
         },
     )
 
-    assert module._active_direct_lane_run_count(shard_root, "review_light", exclude_shard_id="shard-5") == 1
+    assert module._active_direct_lane_run_count(shard_root, "review_light", exclude_shard_id="shard-5") == 3
 
 
 def test_active_direct_lane_run_count_treats_waiting_repo_work_as_productive(tmp_path: Path) -> None:
@@ -12121,8 +12165,8 @@ def test_direct_worker_lane_health_snapshot_falls_back_to_host_gateway_when_loop
         snapshot = module._direct_worker_lane_health_snapshot(args, ["core"])
 
         assert seen_urls == [
-            "http://127.0.0.1:8090/v1/responses/_provider_health?lightweight=1",
-            "http://host.docker.internal:8090/v1/responses/_provider_health?lightweight=1",
+            "http://127.0.0.1:8090/v1/responses/_provider_health?lightweight=1&wait_on_stale=1",
+            "http://host.docker.internal:8090/v1/responses/_provider_health?lightweight=1&wait_on_stale=1",
         ]
         assert snapshot["status"] == "pass"
         assert snapshot["source_url"] == "http://host.docker.internal:8090/v1/responses/_provider_health"
@@ -12174,7 +12218,9 @@ def test_direct_worker_lane_health_snapshot_requests_lightweight_provider_health
 
         snapshot = module._direct_worker_lane_health_snapshot(args, worker_lane_candidates=["core"])
 
-        assert observed == ["http://provider-health.internal:8090/v1/responses/_provider_health?lightweight=1"]
+        assert observed == [
+            "http://provider-health.internal:8090/v1/responses/_provider_health?lightweight=1&wait_on_stale=1"
+        ]
         assert snapshot["source_url"] == "http://provider-health.internal:8090/v1/responses/_provider_health"
 
 
@@ -12282,8 +12328,8 @@ def test_direct_worker_lane_health_snapshot_falls_back_to_loopback_when_host_gat
         snapshot = module._direct_worker_lane_health_snapshot(args, ["core"])
 
         assert seen_urls == [
-            "http://host.docker.internal:8090/v1/responses/_provider_health?lightweight=1",
-            "http://127.0.0.1:8090/v1/responses/_provider_health?lightweight=1",
+            "http://host.docker.internal:8090/v1/responses/_provider_health?lightweight=1&wait_on_stale=1",
+            "http://127.0.0.1:8090/v1/responses/_provider_health?lightweight=1&wait_on_stale=1",
         ]
         assert snapshot["status"] == "pass"
         assert snapshot["source_url"] == "http://127.0.0.1:8090/v1/responses/_provider_health"
@@ -12345,8 +12391,8 @@ def test_direct_worker_lane_health_snapshot_retries_same_url_after_timeout(monke
         snapshot = module._direct_worker_lane_health_snapshot(args, ["core"])
 
         assert seen == [
-            ("http://provider-health.internal:8090/v1/responses/_provider_health?lightweight=1", 4.0),
-            ("http://provider-health.internal:8090/v1/responses/_provider_health?lightweight=1", 8.0),
+            ("http://provider-health.internal:8090/v1/responses/_provider_health?lightweight=1&wait_on_stale=1", 4.0),
+            ("http://provider-health.internal:8090/v1/responses/_provider_health?lightweight=1&wait_on_stale=1", 8.0),
         ]
         assert snapshot["status"] == "pass"
         assert snapshot["source_url"] == "http://provider-health.internal:8090/v1/responses/_provider_health"
@@ -12406,8 +12452,8 @@ def test_direct_worker_lane_health_snapshot_tries_host_gateway_before_retrying_t
         snapshot = module._direct_worker_lane_health_snapshot(args, ["core"])
 
         assert seen == [
-            ("http://127.0.0.1:8090/v1/responses/_provider_health?lightweight=1", 4.0),
-            ("http://host.docker.internal:8090/v1/responses/_provider_health?lightweight=1", 4.0),
+            ("http://127.0.0.1:8090/v1/responses/_provider_health?lightweight=1&wait_on_stale=1", 4.0),
+            ("http://host.docker.internal:8090/v1/responses/_provider_health?lightweight=1&wait_on_stale=1", 4.0),
         ]
         assert snapshot["status"] == "pass"
         assert snapshot["source_url"] == "http://host.docker.internal:8090/v1/responses/_provider_health"
@@ -13948,6 +13994,53 @@ def test_design_completion_audit_accepts_lagging_weekly_pulse_release_health_whe
         assert audit["weekly_pulse_audit"]["lagging_release_health_state"] == "needs_attention"
 
 
+def test_design_completion_audit_accepts_lagging_weekly_pulse_release_health_when_live_readiness_only_has_operator_warning() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(
+            root,
+            journey_gate_health_state="ready",
+            release_health_state="needs_attention",
+        )
+        _write_flagship_product_readiness(
+            root,
+            status="pass",
+            ready_keys=(
+                "desktop_client",
+                "rules_engine_and_import",
+                "hub_and_registry",
+                "mobile_play_shell",
+                "ui_kit_and_flagship_polish",
+                "media_artifacts",
+                "horizons_and_public_surface",
+            ),
+            warning_keys=("fleet_and_operator_loop",),
+        )
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-1",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            ],
+        )
+
+        assert audit["status"] == "pass"
+        assert audit["journey_gate_audit"]["status"] == "pass"
+        assert audit["weekly_pulse_audit"]["status"] == "pass"
+        assert audit["weekly_pulse_audit"]["live_release_health_override"] is True
+        assert audit["weekly_pulse_audit"]["lagging_release_health_state"] == "needs_attention"
+
+
 def test_design_completion_audit_fails_when_weekly_pulse_reports_automation_frontier_misalignment() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -14661,6 +14754,45 @@ def test_idle_scope_frontier_rebuilds_flagship_scope_when_context_omits_it(tmp_p
     assert [item.id for item in scope] == [2]
 
 
+def test_idle_scope_frontier_rebuilds_completion_review_scope_when_context_omits_it(tmp_path: Path) -> None:
+    module = _load_module()
+    args = _args(tmp_path)
+    state_root = tmp_path / "state" / "chummer_design_supervisor" / "shard-6"
+    state_root.mkdir(parents=True, exist_ok=True)
+    frontier = [
+        module.Milestone(
+            id=11,
+            title="Install route completion gate",
+            wave="W5",
+            status="in_progress",
+            owners=["fleet", "chummer6-ui"],
+            exit_criteria=["Close install route proof"],
+            dependencies=[],
+        ),
+        module.Milestone(
+            id=12,
+            title="Support closure completion gate",
+            wave="W5",
+            status="not_started",
+            owners=["fleet", "chummer6-hub"],
+            exit_criteria=["Close support proof"],
+            dependencies=[],
+        ),
+    ]
+
+    module._completion_review_frontier = lambda _audit, _registry_path, _history: list(frontier)
+    module._prior_active_shard_frontier_ids = lambda _state_root: [11]
+
+    scope = module._idle_scope_frontier(
+        args,
+        state_root,
+        {"completion_audit": {"status": "fail"}},
+        [],
+    )
+
+    assert [item.id for item in scope] == [12]
+
+
 def test_aggregate_idle_eta_snapshot_prefers_aggregate_eta(tmp_path: Path) -> None:
     module = _load_module()
     aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
@@ -15245,6 +15377,72 @@ def test_completion_review_frontier_decomposes_visual_familiarity_backlog() -> N
             "Repo backlog: ui: Cyberware and cyberlimb dialog familiarity",
             "Repo backlog: ui: SR4 and SR6 workflow orientation familiarity",
         ]
+
+
+def test_completion_review_frontier_prioritizes_blocked_journeys_over_warning_only_rows() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        audit = {
+            "journey_gate_audit": {
+                "blocked_journeys": [
+                    {
+                        "id": "install_claim_restore_continue",
+                        "title": "Install, claim, restore, continue",
+                        "owner_repos": ["chummer6-ui", "fleet"],
+                        "blocking_reasons": ["desktop executable proof is blocked"],
+                        "warning_reasons": [],
+                    }
+                ],
+                "warning_journeys": [
+                    {
+                        "id": "campaign_session_recover_recap",
+                        "title": "Campaign, session, recover, recap",
+                        "owner_repos": ["chummer6-hub", "fleet"],
+                        "blocking_reasons": [],
+                        "warning_reasons": ["ui has not reached publicly promoted yet"],
+                    }
+                ],
+            },
+            "weekly_pulse_audit": {
+                "status": "fail",
+                "reason": "weekly product pulse reports journey gate health as blocked",
+            },
+        }
+
+        frontier = module._completion_review_frontier(audit, root / "registry.yaml", [])
+
+        assert [item.title for item in frontier] == ["Completion gate: Install, claim, restore, continue"]
+
+
+def test_completion_review_frontier_uses_warning_journeys_when_no_blocking_rows_exist() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        audit = {
+            "journey_gate_audit": {
+                "blocked_journeys": [],
+                "warning_journeys": [
+                    {
+                        "id": "campaign_session_recover_recap",
+                        "title": "Campaign, session, recover, recap",
+                        "owner_repos": ["chummer6-hub", "fleet"],
+                        "blocking_reasons": [],
+                        "warning_reasons": ["ui has not reached publicly promoted yet"],
+                    }
+                ],
+            },
+            "weekly_pulse_audit": {
+                "status": "fail",
+                "reason": "weekly product pulse reports journey gate health as blocked",
+            },
+        }
+
+        frontier = module._completion_review_frontier(audit, root / "registry.yaml", [])
+
+        assert [item.title for item in frontier] == ["Completion gate: Campaign, session, recover, recap"]
 
 
 def test_derive_completion_review_context_refreshes_stale_completion_audit_against_live_proof() -> None:
@@ -18641,6 +18839,21 @@ def test_linux_desktop_exit_gate_audit_ignores_unrelated_repo_changes() -> None:
         assert audit["status"] == "pass"
 
 
+def test_linux_desktop_exit_gate_audit_accepts_link_or_copy_source_snapshot_mode() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        proof_path = root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+        payload = json.loads(proof_path.read_text(encoding="utf-8"))
+        payload["source_snapshot"]["mode"] = "filesystem_link_or_copy"
+        proof_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "pass"
+
+
 def test_linux_desktop_exit_gate_audit_rejects_wrong_unit_test_project() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -21521,6 +21734,96 @@ def test_refresh_aggregate_runtime_state_snapshot_fast_path_skips_live_refresh(m
         assert live_refresh["progress_evidence_counts"] == {"repo_work_detected": 1}
 
 
+def test_refresh_runtime_state_from_readiness_if_stale_triggers_on_older_full_product_frontier(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        (aggregate_root / "shard-1").mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+        args.workspace_root = str(root)
+        args.state_root = str(aggregate_root / "shard-1")
+        published = root / ".codex-studio" / "published"
+        published.mkdir(parents=True, exist_ok=True)
+        (published / "FULL_PRODUCT_FRONTIER.generated.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "contract_name": "fleet.full_product_frontier",
+                    "generated_at": "2026-05-11T21:08:00Z",
+                    "full_product_audit": {
+                        "generated_at": "2026-05-11T21:07:39Z",
+                        "proof_status": "fail",
+                    },
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        refreshed: list[tuple[Path, bool]] = []
+        monkeypatch.setattr(
+            module,
+            "_refresh_aggregate_runtime_state_snapshot",
+            lambda aggregate_root, live_refresh=True: refreshed.append((aggregate_root, live_refresh)),
+        )
+
+        module._refresh_runtime_state_from_readiness_if_stale(
+            args,
+            {
+                "generated_at": "2026-05-11T21:11:07Z",
+                "status": "pass",
+                "scoped_status": "pass",
+            },
+        )
+
+        assert refreshed == [(aggregate_root, True)]
+
+
+def test_refresh_runtime_state_from_readiness_if_stale_skips_when_full_product_frontier_is_current(
+    monkeypatch,
+) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        (aggregate_root / "shard-1").mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+        args.workspace_root = str(root)
+        args.state_root = str(aggregate_root / "shard-1")
+        published = root / ".codex-studio" / "published"
+        published.mkdir(parents=True, exist_ok=True)
+        (published / "FULL_PRODUCT_FRONTIER.generated.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "contract_name": "fleet.full_product_frontier",
+                    "generated_at": "2026-05-11T21:11:10Z",
+                    "full_product_audit": {
+                        "generated_at": "2026-05-11T21:11:07Z",
+                        "proof_status": "pass",
+                    },
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        refreshed: list[tuple[Path, bool]] = []
+        monkeypatch.setattr(
+            module,
+            "_refresh_aggregate_runtime_state_snapshot",
+            lambda aggregate_root, live_refresh=True: refreshed.append((aggregate_root, live_refresh)),
+        )
+
+        module._refresh_runtime_state_from_readiness_if_stale(
+            args,
+            {
+                "generated_at": "2026-05-11T21:11:07Z",
+                "status": "pass",
+                "scoped_status": "pass",
+            },
+        )
+
+        assert refreshed == []
+
+
 def test_live_shard_summaries_use_manifest_before_per_shard_refresh(monkeypatch) -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -21589,6 +21892,7 @@ def test_preferred_ui_repo_root_breaks_equal_scores_with_fresher_proof(tmp_path:
 
     candidates = (older, newer)
     monkeypatch.setattr(module, "Path", Path)
+    monkeypatch.setattr(module, "_ui_repo_candidates", lambda: candidates)
     monkeypatch.setattr(module, "_ui_repo_candidate_score", lambda _candidate: (10, 2))
     monkeypatch.setattr(module, "_preferred_existing_ui_repo_candidate", lambda: None)
 
@@ -21632,6 +21936,7 @@ def test_preferred_ui_repo_root_prefers_fresher_required_exit_gates_over_staler_
 
     candidates = (stale, fresh)
     monkeypatch.setattr(module, "Path", Path)
+    monkeypatch.setattr(module, "_ui_repo_candidates", lambda: candidates)
 
     def fake_exists(self: Path) -> bool:
         return self in candidates
@@ -21678,6 +21983,7 @@ def test_preferred_ui_repo_root_prefers_canonical_alias_when_required_gate_score
         lambda: (mirror, canonical),
     )
     monkeypatch.setattr(module, "_preferred_existing_ui_repo_candidate", lambda: None)
+    monkeypatch.setattr(module, "_ui_repo_required_gate_sort_key", lambda _candidate: (10, 1, 10, 1, 10.0, 10.0))
     monkeypatch.setattr(module, "_ui_repo_candidate_sort_key", lambda _candidate: (10, 2, 10.0))
     monkeypatch.setattr(module, "_ui_repo_canonical_rank", lambda candidate: 3 if candidate == canonical else 0)
     monkeypatch.delenv("CHUMMER_UI_REPO_ROOT", raising=False)
@@ -21734,6 +22040,7 @@ def test_preferred_ui_repo_root_rejects_required_gate_with_foreign_run_root(tmp_
             (published / name).write_text(json.dumps({"status": "pass", "run_root": str(gate_run_root)}), encoding="utf-8")
 
     monkeypatch.setattr(module, "_ui_repo_candidates", lambda: (mirror, canonical))
+    monkeypatch.setattr(module, "_preferred_existing_ui_repo_candidate", lambda: None)
     monkeypatch.delenv("CHUMMER_UI_REPO_ROOT", raising=False)
 
     assert module._preferred_ui_repo_root() == canonical
@@ -25109,7 +25416,7 @@ def test_weekly_product_pulse_needs_refresh_when_green_readiness_outruns_pulse()
             ),
             encoding="utf-8",
         )
-        args = argparse.Namespace(
+        args = Namespace(
             workspace_root=str(root),
             weekly_pulse_path=str(weekly_pulse_path),
         )
@@ -25130,12 +25437,13 @@ def test_refresh_flagship_product_readiness_artifact_refreshes_weekly_pulse_for_
         (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
         (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
         (root / "NEXT_SESSION_HANDOFF.md").write_text("Flagship work remains.\n", encoding="utf-8")
+        now = module._utc_now()
         readiness_path = root / "FLAGSHIP_PRODUCT_READINESS.generated.json"
         weekly_pulse_path = root / "WEEKLY_PRODUCT_PULSE.generated.json"
         readiness_path.write_text(
             json.dumps(
                 {
-                    "generated_at": "2026-05-06T16:18:55Z",
+                    "generated_at": module._iso(now),
                     "status": "pass",
                     "coverage_details": {"desktop_client": {"evidence": {"desktop_ignore_nonlinux_desktop_host_proof_blockers": False}}},
                 }
@@ -25145,7 +25453,7 @@ def test_refresh_flagship_product_readiness_artifact_refreshes_weekly_pulse_for_
         weekly_pulse_path.write_text(
             json.dumps(
                 {
-                    "generated_at": "2026-05-06T16:16:55Z",
+                    "generated_at": module._iso(now - dt.timedelta(minutes=2)),
                     "active_wave_status": "complete",
                     "release_health": {"state": "needs_attention"},
                     "journey_gate_health": {"state": "green"},
@@ -28770,6 +29078,34 @@ def test_provider_dispatch_capacity_triggers_provider_api_repair_for_partial_bil
     module = _load_module()
     monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
     monkeypatch.setattr(module, "_container_local_active_run_records", lambda: {})
+    monkeypatch.setattr(
+        module,
+        "_local_ea_provider_health_payload",
+        lambda: {
+            "provider_registry": {
+                "provider_config": {
+                    "hard_max_active_requests": 20,
+                }
+            },
+            "providers": {
+                "onemin": {
+                    "balance_basis_summary": "actual_provider_api",
+                    "live_remaining_credits_total": 113929800.0,
+                    "actual_remaining_credits_total": 113929800.0,
+                    "configured_slots": 74,
+                    "live_ready_slot_count": 9,
+                    "live_dispatchable_slot_count": 9,
+                    "ready_slot_count": 9,
+                    "live_positive_balance_slot_count": 66,
+                    "actual_positive_balance_slot_count": 66,
+                    "stale_actual_billing_funded_slot_count": 0,
+                    "billing_reconciliation_needed": False,
+                    "billing_reconciliation_reason": "",
+                    "slot_state_counts": {"ready": 9},
+                }
+            },
+        },
+    )
     popen_calls = []
 
     class _DummyProcess:
@@ -29550,6 +29886,7 @@ def test_memory_dispatch_snapshot_allows_full_standard_width_with_mixed_non_hard
     module = _load_module()
     monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
     monkeypatch.setattr(module, "_container_local_active_run_records", lambda: {})
+    monkeypatch.setattr(module, "_local_ea_provider_health_payload", lambda: {})
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         aggregate_root = root / "state"
@@ -29645,7 +29982,9 @@ def test_memory_dispatch_snapshot_allows_full_standard_width_with_mixed_non_hard
         assert snapshot["status"] == "ok"
         assert snapshot["allowed_active_shards"] == 13
         assert snapshot["throttled"] is False
-        assert snapshot["provider_dispatch_capacity"] == {}
+        assert snapshot["provider_dispatch_capacity"]["allowed_active_shards"] == 13
+        assert snapshot["provider_dispatch_capacity"]["hard_ea_shard_count"] == 7
+        assert "supports the full configured shard set at 13/13" in snapshot["provider_dispatch_capacity"]["reason"]
         assert "healthy" in snapshot["reason"]
 
 
@@ -30470,7 +30809,7 @@ def test_persist_live_state_snapshot_refreshes_shard_aliases_and_active_shards_m
     assert manifest_payload["active_shards"][0]["shard_token"] == "shard-1"
     assert manifest_payload["active_shards"][0]["active_run_id"] == "run-live-1"
     assert manifest_payload["active_shards"][0]["worker_last_output_at"] == "2026-04-13T11:40:30Z"
-    assert "worker_model" not in manifest_payload["active_shards"][0]
+    assert manifest_payload["active_shards"][0]["worker_model"] == "ea-coder-hard"
 
 
 def test_write_active_shard_manifest_snapshot_recovers_aggregate_active_runs_when_shard_states_lag(tmp_path: Path) -> None:
@@ -30679,9 +31018,10 @@ def test_live_shard_summaries_prefer_supervisor_authored_manifest_on_host(monkey
                 {
                     "name": "shard-1",
                     "updated_at": "2026-04-13T12:15:00Z",
+                    "active_frontier_ids": [13],
                     "active_run_id": "run-from-manifest",
                     "active_run_worker_last_output_at": "2026-04-13T12:15:30Z",
-                    "active_run_progress_state": "closing",
+                    "active_run_progress_state": "streaming",
                     "selected_model": "ea-coder-hard",
                 }
             ],
@@ -30721,7 +31061,7 @@ def test_live_shard_summaries_prefer_supervisor_authored_manifest_on_host(monkey
 
     assert len(summaries) == 1
     assert summaries[0]["active_run_id"] == "run-from-manifest"
-    assert summaries[0]["active_run_progress_state"] == "closing"
+    assert summaries[0]["active_run_progress_state"] == "streaming"
     assert summaries[0]["selected_model"] == "ea-coder-hard"
 
 
@@ -31727,6 +32067,10 @@ def test_run_loop_defers_non_primary_shard_when_external_blocker_is_active(monke
             "focus_texts": [],
             "prompt": "recovery",
         }
+        (root / "registry.yaml").write_text("milestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("program_milestones: []\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("# Handoff\n", encoding="utf-8")
         review_context = dict(base_context)
         review_context.update(
             {

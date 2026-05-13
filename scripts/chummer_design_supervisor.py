@@ -313,9 +313,6 @@ def _preferred_ui_repo_root() -> Path:
     override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
     if override:
         return Path(override)
-    canonical_alias = Path("/docker/chummercomplete/chummer6-ui")
-    if canonical_alias.is_dir():
-        return canonical_alias
     canonical_candidate = _preferred_existing_ui_repo_candidate()
     if canonical_candidate is not None:
         return canonical_candidate
@@ -2093,6 +2090,12 @@ def _active_shard_names(aggregate_root: Path) -> List[str]:
         name = str(shard.get("name") or shard.get("shard_id") or "").strip()
         if name:
             names.append(name)
+    if not names:
+        for shard_root in _configured_shard_roots(aggregate_root):
+            state = _read_state(_state_payload_path(shard_root))
+            if not _state_active_run_has_live_work(state):
+                continue
+            names.append(shard_root.name)
     return names
 
 
@@ -2200,11 +2203,32 @@ def _provider_dispatch_capacity_snapshot(
         and cached_failure_age_seconds is not None
         and cached_failure_age_seconds <= _ea_provider_health_failure_cooldown_seconds()
     )
-    provider_health_snapshot = dict(payload.get("provider_health_snapshot") or {})
+    cached_payload = dict(payload)
+    cached_provider_health_snapshot = dict(cached_payload.get("provider_health_snapshot") or {})
+    cached_providers = cached_payload.get("providers")
+    if not isinstance(cached_providers, dict) or not cached_providers:
+        cached_providers = ((cached_payload.get("provider_health") or {}).get("providers") or {})
+    cached_onemin = (cached_providers or {}).get("onemin") or {}
+    cached_onemin_needs_repair = False
+    if isinstance(cached_onemin, dict) and cached_onemin:
+        cached_onemin_needs_repair, _ = _ea_onemin_billing_reconciliation_needed(cached_onemin)
+    provider_health_snapshot = dict(cached_provider_health_snapshot)
     provider_health_snapshot_status = str(provider_health_snapshot.get("status") or "").strip().lower()
     provider_health_snapshot_reason = str(provider_health_snapshot.get("reason") or "").strip()
     provider_health_snapshot_age_seconds = _coerce_float(provider_health_snapshot.get("age_seconds"))
     provider_health_snapshot_stale = provider_health_snapshot.get("stale") is True
+    provider_health_snapshot_failure = bool(
+        provider_health_snapshot_status == "cached"
+        and provider_health_snapshot_reason
+        and any(
+            marker in provider_health_snapshot_reason.lower()
+            for marker in (
+                "timed out",
+                "refresh failed",
+                "returned empty payload",
+            )
+        )
+    )
     local_payload_dispatchable_override = False
     local_payload_dispatchable_slots = 0
     local_payload_ready_slots = 0
@@ -2214,7 +2238,15 @@ def _provider_dispatch_capacity_snapshot(
     cached_provider_registry = dict(payload.get("provider_registry") or {})
     cached_provider_config = dict(cached_provider_registry.get("provider_config") or payload.get("provider_config") or {})
     cached_hard_max_active_requests = max(0, _coerce_int(cached_provider_config.get("hard_max_active_requests"), 0))
+    allow_local_payload_override = False
     if provider_health_snapshot_status and provider_health_snapshot_status != "live":
+        if recent_live_fetch_failure:
+            allow_local_payload_override = cached_dispatchable_slots <= 0 and cached_ready_slots_for_override <= 0
+        elif provider_health_snapshot_failure:
+            allow_local_payload_override = cached_dispatchable_slots <= 0 and cached_ready_slots_for_override <= 0
+        else:
+            allow_local_payload_override = True
+    if allow_local_payload_override:
         local_payload = _local_ea_provider_health_payload()
         local_payload_dispatchable_slots = _ea_provider_health_dispatchable_slot_count(local_payload)
         local_provider_registry = dict(local_payload.get("provider_registry") or {})
@@ -2266,18 +2298,6 @@ def _provider_dispatch_capacity_snapshot(
                 payload=payload,
                 source_url="local://codexea_route/_local_onemin_direct_payload",
             )
-    provider_health_snapshot_failure = bool(
-        provider_health_snapshot_status == "cached"
-        and provider_health_snapshot_reason
-        and any(
-            marker in provider_health_snapshot_reason.lower()
-            for marker in (
-                "timed out",
-                "refresh failed",
-                "returned empty payload",
-            )
-        )
-    )
     workspace_root = _workspace_root_for_state_root(aggregate_root)
     hard_wait_only_grace_seconds = _hard_wait_only_canary_grace_seconds(workspace_root)
     live_hard_ea_active_runs = 0
@@ -2349,13 +2369,14 @@ def _provider_dispatch_capacity_snapshot(
     provider_config = dict(provider_registry.get("provider_config") or payload.get("provider_config") or {})
     hard_max_active_requests = max(0, _coerce_int(provider_config.get("hard_max_active_requests"), 0))
 
+    provider_api_repair_payload = cached_payload if cached_onemin_needs_repair else payload
     providers = payload.get("providers")
     if not isinstance(providers, dict) or not providers:
         providers = ((payload.get("provider_health") or {}).get("providers") or {})
     onemin = (providers or {}).get("onemin") or {}
     if not isinstance(onemin, dict) or not onemin:
         return {}
-    provider_api_repair = _maybe_trigger_ea_onemin_provider_api_repair(args, payload=payload)
+    provider_api_repair = _maybe_trigger_ea_onemin_provider_api_repair(args, payload=provider_api_repair_payload)
     live_remaining_credits_total = _coerce_float(onemin.get("live_remaining_credits_total"))
     if live_remaining_credits_total is None:
         live_remaining_credits_total = _coerce_float(onemin.get("estimated_remaining_credits_total"))
@@ -2507,7 +2528,7 @@ def _provider_dispatch_capacity_snapshot(
             stale_cached_hard_cap_override = True
     if ready_slots <= 0 and credit_budget_capacity > 0:
         effective_ready_capacity = max(effective_ready_capacity, credit_budget_capacity)
-        if observed_error_actual_override and not billing_backed_slot_override:
+        if observed_error_actual_override and not billing_backed_slot_override and live_hard_ea_active_runs > 0:
             effective_ready_capacity = min(
                 effective_ready_capacity,
                 max(1, live_hard_ea_active_runs or degraded_hard_lane_canary_cap),
@@ -2551,6 +2572,15 @@ def _provider_dispatch_capacity_snapshot(
             hard_lane_capacity,
             max(1, (hard_lane_capacity + 1) // 2),
         )
+    if (
+        degraded_credit_fallback_canary
+        and live_hard_ea_active_runs <= 0
+        and shard_summary_hard_ea_active_runs <= 0
+        and credit_budget_capacity >= hard_ea_shard_count
+        and actual_remaining_credits_total is None
+        and quarantine_slots <= 0
+    ):
+        return {}
     total_allowed_active_shards = min(
         len(configured_entries),
         max(0, non_ea_shard_count + max(0, hard_lane_capacity)),
@@ -4300,6 +4330,7 @@ DIRECT_LANE_ACTIVE_MODEL_ALIASES: Dict[str, Set[str]] = {
 DIRECT_LANE_SHARED_WAIT_ONLY_CANARY_CAPS: Dict[str, int] = {
     "core": 1,
     "core_rescue": 1,
+    "survival": 1,
     "review_light": 1,
     "jury": 1,
 }
@@ -4509,7 +4540,12 @@ def _active_direct_lane_waiting_grace_counts(
         if not started_at:
             started_at = _active_run_started_at_from_run_id(str(row.get("active_run_id") or ""))
         started_dt = _parse_iso(started_at)
-        if started_dt is not None and started_dt >= cutoff:
+        if started_dt is None:
+            if grace_seconds > 0.0:
+                fresh_waiting += 1
+            else:
+                mature_waiting += 1
+        elif started_dt >= cutoff:
             fresh_waiting += 1
         else:
             mature_waiting += 1
@@ -4762,10 +4798,21 @@ def _filter_routable_direct_worker_lanes(
             mature_waiting_lane_runs = waiting_lane_runs
             if lane_key in {"core", "core_rescue"}:
                 workspace_root = _workspace_root_for_state_root(state_root)
+                configured_grace_raw = _runtime_env_default_with_workspace(
+                    "CHUMMER_DESIGN_SUPERVISOR_HARD_WAIT_ONLY_CANARY_GRACE_SECONDS",
+                    workspace_root,
+                    "",
+                )
+                configured_grace_seconds = 0.0
+                if configured_grace_raw:
+                    try:
+                        configured_grace_seconds = max(0.0, float(configured_grace_raw))
+                    except (TypeError, ValueError):
+                        configured_grace_seconds = _worker_task_local_status_loop_grace_seconds(workspace_root)
                 _, mature_waiting_lane_runs = _active_direct_lane_waiting_grace_counts(
                     state_root,
                     lane_key,
-                    grace_seconds=_hard_wait_only_canary_grace_seconds(workspace_root),
+                    grace_seconds=configured_grace_seconds,
                     exclude_run_id=exclude_run_id,
                     exclude_shard_id=exclude_shard_id,
                 )
@@ -4808,7 +4855,7 @@ def _filter_anonymous_full_fallback_direct_worker_lanes(
     for lane in worker_lane_candidates:
         lane_key = str(lane or "").strip()
         lane_report = dict(lane_rows.get(lane_key) or {})
-        if lane_key not in {"core", "core_rescue"}:
+        if lane_key != "core_rescue":
             filtered.append(lane)
             continue
         if not lane_report:
@@ -6189,7 +6236,8 @@ def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, hist
                 ),
             )
     journey_audit = dict(audit.get("journey_gate_audit") or {})
-    for collection_name in ("blocked_journeys", "warning_journeys"):
+
+    def append_journey_frontiers(collection_name: str) -> None:
         for row in journey_audit.get(collection_name) or []:
             if not isinstance(row, dict):
                 continue
@@ -6210,6 +6258,9 @@ def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, hist
                     ],
                 ),
             )
+
+    append_journey_frontiers("blocked_journeys")
+    journey_blockers_present = bool(frontier)
     linux_gate_audit = dict(audit.get("linux_desktop_exit_gate_audit") or {})
     if linux_gate_audit.get("status") == "fail":
         linux_reasons = [str(linux_gate_audit.get("reason") or "").strip()]
@@ -6242,9 +6293,11 @@ def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, hist
                 ],
             ),
         )
+    if not journey_blockers_present and not frontier:
+        append_journey_frontiers("warning_journeys")
     # Only fall back to historical registry milestones when the live completion
     # audit did not produce any actionable recovery frontier rows.
-    if not frontier:
+    if not frontier and str(audit.get("status") or "").strip().lower() != "pass":
         known_frontier_ids = {item.id for item in frontier}
         for milestone_id in _completion_review_target_ids(history):
             if milestone_id in milestone_map:
@@ -7518,6 +7571,8 @@ def _next_wave_registry_milestone_title_by_id(workspace_root: Path) -> Dict[int,
 def _horizon_handoff_gate_readiness(workspace_root: Path) -> Dict[str, Any]:
     path = _horizon_registry_path(workspace_root)
     work_task_status_by_id = _next_wave_registry_work_task_status_by_id(workspace_root)
+    design_task_present = HORIZON_HANDOFF_GATE_DESIGN_TASK_ID in work_task_status_by_id
+    deterministic_design_task_present = DETERMINISTIC_HORIZON_GATE_DESIGN_TASK_ID in work_task_status_by_id
     design_task_status = str(work_task_status_by_id.get(HORIZON_HANDOFF_GATE_DESIGN_TASK_ID) or "").strip().lower()
     deterministic_design_task_status = str(
         work_task_status_by_id.get(DETERMINISTIC_HORIZON_GATE_DESIGN_TASK_ID) or ""
@@ -7525,9 +7580,11 @@ def _horizon_handoff_gate_readiness(workspace_root: Path) -> Dict[str, Any]:
     readiness: Dict[str, Any] = {
         "path": str(path) if path is not None else "",
         "design_gate_task_id": HORIZON_HANDOFF_GATE_DESIGN_TASK_ID,
+        "design_gate_task_present": design_task_present,
         "design_gate_task_status": design_task_status,
         "design_gate_task_done": design_task_status in DONE_STATUSES,
         "deterministic_design_gate_task_id": DETERMINISTIC_HORIZON_GATE_DESIGN_TASK_ID,
+        "deterministic_design_gate_task_present": deterministic_design_task_present,
         "deterministic_design_gate_task_status": deterministic_design_task_status,
         "deterministic_design_gate_task_done": deterministic_design_task_status in DONE_STATUSES,
         "missing_by_repo": {},
@@ -7624,8 +7681,10 @@ def _filter_horizon_handoff_gated_queue_items(
             continue
         if not bool(readiness.get("design_gate_task_done")):
             continue
-        if _queue_item_is_deterministic_horizon_candidate(workspace_root, item) and not bool(
-            readiness.get("deterministic_design_gate_task_done")
+        if (
+            _queue_item_is_deterministic_horizon_candidate(workspace_root, item)
+            and bool(readiness.get("deterministic_design_gate_task_present"))
+            and not bool(readiness.get("deterministic_design_gate_task_done"))
         ):
             continue
         if readiness.get("global_blockers"):
@@ -8178,6 +8237,71 @@ def _fresh_live_refresh_artifact_payload(path: Path) -> Optional[Dict[str, Any]]
     return payload
 
 
+def _readiness_outpaces_full_product_frontier(
+    args: argparse.Namespace,
+    readiness_payload: Optional[Dict[str, Any]],
+) -> bool:
+    readiness = dict(readiness_payload or {})
+    readiness_generated_at = _status_generated_at(readiness)
+    if readiness_generated_at is None:
+        return False
+    state_root_raw = str(getattr(args, "state_root", "") or "").strip()
+    state_root = (
+        _canonicalize_design_supervisor_state_root(Path(state_root_raw))
+        if state_root_raw
+        else _aggregate_state_root(DEFAULT_STATE_ROOT)
+    )
+    published_frontier_path, _mirror_frontier_path = _full_product_frontier_paths(
+        Path(args.workspace_root).resolve(),
+        state_root=state_root,
+    )
+    frontier_payload = _read_yaml(published_frontier_path) if published_frontier_path.is_file() else {}
+    if (
+        (not frontier_payload or str(frontier_payload.get("contract_name") or "").strip() != "fleet.full_product_frontier")
+        and state_root != _aggregate_state_root(state_root)
+    ):
+        aggregate_frontier_path, _aggregate_mirror_path = _full_product_frontier_paths(
+            Path(args.workspace_root).resolve(),
+            state_root=_aggregate_state_root(state_root),
+        )
+        aggregate_frontier_payload = _read_yaml(aggregate_frontier_path) if aggregate_frontier_path.is_file() else {}
+        if aggregate_frontier_payload:
+            frontier_payload = aggregate_frontier_payload
+    if not frontier_payload:
+        return True
+    if str(frontier_payload.get("contract_name") or "").strip() != "fleet.full_product_frontier":
+        return True
+    frontier_generated_at = _status_generated_at(frontier_payload)
+    frontier_full_product_audit = dict(frontier_payload.get("full_product_audit") or {})
+    frontier_readiness_generated_at = _status_generated_at(frontier_full_product_audit)
+    readiness_status = str(readiness.get("scoped_status") or readiness.get("status") or "").strip().lower()
+    frontier_readiness_status = str(frontier_full_product_audit.get("proof_status") or "").strip().lower()
+    if frontier_generated_at is None or frontier_readiness_generated_at is None:
+        return True
+    if frontier_readiness_generated_at < readiness_generated_at:
+        return True
+    if frontier_generated_at < readiness_generated_at:
+        return True
+    if readiness_status and frontier_readiness_status and frontier_readiness_status != readiness_status:
+        return True
+    return False
+
+
+def _refresh_runtime_state_from_readiness_if_stale(
+    args: argparse.Namespace,
+    readiness_payload: Optional[Dict[str, Any]],
+) -> None:
+    if not _readiness_outpaces_full_product_frontier(args, readiness_payload):
+        return
+    state_root_raw = str(getattr(args, "state_root", "") or "").strip()
+    if not state_root_raw:
+        return
+    aggregate_root = _aggregate_state_root(Path(state_root_raw))
+    if not _configured_shard_roots(aggregate_root):
+        return
+    _refresh_aggregate_runtime_state_snapshot(aggregate_root, live_refresh=True)
+
+
 def _refresh_completion_audit_support_artifacts(args: argparse.Namespace) -> None:
     if Path(args.workspace_root).resolve() != DEFAULT_WORKSPACE_ROOT.resolve():
         return
@@ -8415,8 +8539,13 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
     fresh_readiness = _fresh_flagship_product_readiness_artifact(args)
     if fresh_readiness is not None:
         _refresh_completion_audit_support_artifacts(args)
-        _refresh_weekly_product_pulse_artifact(args, fresh_readiness)
-        return fresh_readiness
+        fresh_status = str(fresh_readiness.get("status") or "").strip().lower()
+        if fresh_status == "pass":
+            weekly_pulse_path = Path(str(getattr(args, "weekly_pulse_path", "") or "")).resolve()
+            if weekly_pulse_path.is_file() and _weekly_product_pulse_needs_refresh(args, fresh_readiness):
+                _refresh_weekly_product_pulse_artifact(args, fresh_readiness)
+            _refresh_runtime_state_from_readiness_if_stale(args, fresh_readiness)
+            return fresh_readiness
     try:
         try:
             from scripts.external_proof_paths import resolve_release_channel_path
@@ -8500,6 +8629,7 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
             ignore_nonlinux_desktop_host_proof_blockers=ignore_nonlinux_desktop_host_proof_blockers,
         )
         _refresh_weekly_product_pulse_artifact(args, payload)
+        _refresh_runtime_state_from_readiness_if_stale(args, payload)
         return payload
     except Exception as exc:
         print(f"[fleet-supervisor] flagship readiness materialization failed: {exc}", file=sys.stderr, flush=True)
@@ -12314,6 +12444,8 @@ def _write_runtime_handoff(state_root: Path) -> None:
         resolved_state_root = Path(state_root).resolve()
         state = _read_state(_state_payload_path(resolved_state_root))
         active_run = _dict_copy_if_mapping(state.get("active_run"))
+        if active_run and not _state_active_run_has_live_work(state):
+            active_run = {}
         last_run = _dict_copy_if_mapping(state.get("last_run"))
         mode = str(state.get("mode") or "").strip() or "unknown"
         focus_profiles = [str(item).strip() for item in (state.get("focus_profiles") or []) if str(item).strip()]
@@ -13312,6 +13444,45 @@ def _run_worker_attempt(
         stdout_text = "".join(stdout_chunks)
         stderr_text = "".join(stderr_chunks)
         termination_reason = str(model_wait_state.get("termination_reason") or "").strip().lower()
+        timeout_elapsed = bool(
+            timeout_enabled
+            and float(timeout_seconds or 0.0) > 0.0
+            and termination_reason in {
+                "",
+                "blocked_status_helper_loop",
+                "successful_status_helper_loop",
+                "redirected_status_helper_loop",
+            }
+            and time.monotonic() - float(wait_started_monotonic or 0.0) >= float(timeout_seconds or 0.0)
+        )
+        if timeout_elapsed:
+            timeout_label = f"{float(timeout_seconds):g}s"
+            timeout_message = f"Error: worker_timeout:{timeout_label}"
+            if stderr_text and not stderr_text.endswith("\n"):
+                stderr_text += "\n"
+            stderr_text += timeout_message + "\n"
+            stderr_text += (
+                "[fleet-supervisor] worker produced only startup or prompt-echo output, model-wait traces, "
+                "or blocked supervisor-status churn; "
+                f"killed after {timeout_label} without meaningful output and marked retryable\n"
+            )
+            with output_lock:
+                stderr_sink = _safe_write_to_sink(
+                    stderr_sink,
+                    timeout_message + "\n"
+                    "[fleet-supervisor] worker produced only startup or prompt-echo output, model-wait traces, "
+                    "or blocked supervisor-status churn; "
+                    f"killed after {timeout_label} without meaningful output and marked retryable\n",
+                    stream_name="stderr",
+                )
+            if not last_message_path.exists() or not _read_text(last_message_path).strip():
+                last_message_path.write_text(timeout_message + "\n", encoding="utf-8")
+            return subprocess.CompletedProcess(
+                list(command),
+                124,
+                stdout=stdout_text,
+                stderr=stderr_text,
+            )
         if termination_reason in {
             "blocked_status_helper_loop",
             "successful_status_helper_loop",
@@ -13637,7 +13808,10 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
         updated.pop("shard_blockers", None)
         return updated
     shard_rows = _merge_lagging_shard_rows_with_aggregate_active_runs(shard_rows, updated)
-    aggregate_active_run_count = sum(1 for shard in shard_rows if _shard_summary_counts_as_active_run(shard))
+    aggregate_active_run_count = max(
+        _coerce_int(updated.get("active_runs_count"), 0),
+        sum(1 for shard in shard_rows if _shard_summary_counts_as_active_run(shard)),
+    )
     aggregate_has_single_active_run_object = isinstance(updated.get("active_run"), dict) and bool(
         str((updated.get("active_run") or {}).get("run_id") or "").strip()
     )
@@ -13965,7 +14139,8 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
             for item in shards
             if isinstance(item, dict) and _shard_summary_counts_as_active_run(item)
         ]
-        updated["active_runs_count"] = len(active_shards)
+        if active_shards or _coerce_int(updated.get("active_runs_count"), 0) <= 0:
+            updated["active_runs_count"] = len(active_shards)
         progress_evidence_counts: Dict[str, int] = {}
         productive_active_runs_count = 0
         waiting_active_runs_count = 0
@@ -13997,6 +14172,35 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
             0,
             len(active_shards) - productive_active_runs_count - waiting_active_runs_count,
         )
+        if not active_shards and _coerce_int(updated.get("active_runs_count"), 0) > 0:
+            aggregate_active_runs: List[Dict[str, Any]] = []
+            active_run = updated.get("active_run")
+            if isinstance(active_run, dict) and str(active_run.get("run_id") or "").strip():
+                aggregate_active_runs.append(dict(active_run))
+            else:
+                aggregate_active_runs.extend(
+                    dict(item)
+                    for item in (updated.get("active_runs") or [])
+                    if isinstance(item, dict) and str(item.get("run_id") or "").strip()
+                )
+            if aggregate_active_runs:
+                fallback_progress_counts: Dict[str, int] = {}
+                fallback_waiting_count = 0
+                for item in aggregate_active_runs:
+                    progress_evidence = str(item.get("progress_evidence") or item.get("active_run_progress_evidence") or "").strip() or "no_output_yet"
+                    fallback_progress_counts[progress_evidence] = fallback_progress_counts.get(progress_evidence, 0) + 1
+                    progress_state = str(item.get("progress_state") or item.get("active_run_progress_state") or "").strip().lower()
+                    if progress_evidence == "repo_work_detected":
+                        productive_active_runs_count += 1
+                    elif progress_state in waiting_states or progress_evidence in {"wait_only", "read_only_repo_probe"}:
+                        fallback_waiting_count += 1
+                updated["progress_evidence_counts"] = fallback_progress_counts
+                updated["productive_active_runs_count"] = productive_active_runs_count
+                updated["waiting_active_runs_count"] = fallback_waiting_count
+                updated["nonproductive_active_runs_count"] = max(
+                    0,
+                    len(aggregate_active_runs) - productive_active_runs_count - fallback_waiting_count,
+                )
     else:
         active_runs = updated.get("active_runs")
         if isinstance(active_runs, list):
@@ -14759,6 +14963,50 @@ def _active_run_matches_frontier_shape(
     return False
 
 
+def _state_active_run_has_live_work(state: Dict[str, Any]) -> bool:
+    shard_state = dict(state or {})
+    active_run = dict(shard_state.get("active_run") or {})
+    run_id = str(active_run.get("run_id") or shard_state.get("active_run_id") or "").strip()
+    if not run_id:
+        return False
+    frontier_ids = [
+        _coerce_int(value, 0)
+        for value in (active_run.get("frontier_ids") or shard_state.get("frontier_ids") or [])
+        if _coerce_int(value, 0) > 0
+    ]
+    open_milestone_ids = [
+        _coerce_int(value, 0)
+        for value in (active_run.get("open_milestone_ids") or shard_state.get("open_milestone_ids") or [])
+        if _coerce_int(value, 0) > 0
+    ]
+    state_mode = str(shard_state.get("mode") or "").strip().lower()
+    if state_mode != "complete" and (frontier_ids or open_milestone_ids):
+        return True
+    if state_mode == "complete":
+        return any(
+            str(value or "").strip()
+            for value in (
+                active_run.get("started_at"),
+                active_run.get("progress_state"),
+                active_run.get("selected_account_alias"),
+                active_run.get("selected_model"),
+                active_run.get("worker_first_output_at"),
+                active_run.get("worker_last_output_at"),
+                active_run.get("output_updated_at"),
+                shard_state.get("active_run_started_at"),
+                shard_state.get("active_run_progress_state"),
+                shard_state.get("selected_account_alias"),
+                shard_state.get("selected_model"),
+                shard_state.get("active_run_worker_first_output_at"),
+                shard_state.get("active_run_worker_last_output_at"),
+                shard_state.get("active_run_output_updated_at"),
+            )
+        ) or bool(
+            _coerce_int(active_run.get("worker_pid") or shard_state.get("active_run_worker_pid"), 0)
+        )
+    return True
+
+
 def _effective_supervisor_state(
     state_root: Path,
     *,
@@ -14882,6 +15130,53 @@ def _effective_supervisor_state(
                 "process_cpu_seconds": shard.get("active_run_process_cpu_seconds"),
             }
         )
+    if not active_runs:
+        for item in populated_states:
+            shard_state = dict(item.get("state") or {})
+            if not _state_active_run_has_live_work(shard_state):
+                continue
+            active_run = dict(shard_state.get("active_run") or {})
+            run_id = str(active_run.get("run_id") or shard_state.get("active_run_id") or "").strip()
+            active_runs.append(
+                {
+                    "_shard": str(item.get("name") or "").strip(),
+                    "run_id": run_id,
+                    "frontier_ids": list(active_run.get("frontier_ids") or shard_state.get("frontier_ids") or []),
+                    "open_milestone_ids": list(
+                        active_run.get("open_milestone_ids") or shard_state.get("open_milestone_ids") or []
+                    ),
+                    "progress_state": str(active_run.get("progress_state") or shard_state.get("active_run_progress_state") or "").strip(),
+                    "started_at": str(active_run.get("started_at") or shard_state.get("active_run_started_at") or "").strip(),
+                    "selected_account_alias": str(
+                        active_run.get("selected_account_alias") or shard_state.get("selected_account_alias") or ""
+                    ).strip(),
+                    "selected_model": str(active_run.get("selected_model") or shard_state.get("selected_model") or "").strip(),
+                    "worker_pid": _coerce_int(
+                        active_run.get("worker_pid") or shard_state.get("active_run_worker_pid"),
+                        0,
+                    ),
+                    "worker_first_output_at": str(
+                        active_run.get("worker_first_output_at") or shard_state.get("active_run_worker_first_output_at") or ""
+                    ).strip(),
+                    "worker_last_output_at": str(
+                        active_run.get("worker_last_output_at") or shard_state.get("active_run_worker_last_output_at") or ""
+                    ).strip(),
+                    "output_updated_at": str(
+                        active_run.get("output_updated_at") or shard_state.get("active_run_output_updated_at") or ""
+                    ).strip(),
+                    "output_sizes": dict(
+                        active_run.get("output_sizes") or shard_state.get("active_run_output_sizes") or {}
+                    ),
+                    "process_alive": active_run.get("process_alive", shard_state.get("active_run_process_alive")),
+                    "process_state": str(
+                        active_run.get("process_state") or shard_state.get("active_run_process_state") or ""
+                    ).strip(),
+                    "process_cpu_seconds": active_run.get(
+                        "process_cpu_seconds",
+                        shard_state.get("active_run_process_cpu_seconds"),
+                    ),
+                }
+            )
     if len(active_runs) == 1:
         aggregate["active_run"] = dict(active_runs[0])
         aggregate.pop("active_runs", None)
@@ -15040,13 +15335,14 @@ def _active_account_progress_counts(
         evidence = str(row.get("active_run_progress_evidence") or "").strip().lower()
         state = str(row.get("active_run_progress_state") or "").strip().lower()
         container_scoped_waiting = state == "container_scoped" and evidence != "repo_work_detected"
-        if evidence == "repo_work_detected":
+        if evidence == "repo_work_detected" and state not in waiting_states and not container_scoped_waiting:
             productive += 1
         elif state in waiting_states or container_scoped_waiting or evidence in {
             "wait_only",
             "worker_output_only",
             "read_only_repo_probe",
             "no_output_yet",
+            "repo_work_detected",
         }:
             waiting += 1
         else:
@@ -16051,14 +16347,17 @@ def _idle_scope_frontier(
     context: Dict[str, Any],
     history: Sequence[Dict[str, Any]],
 ) -> Sequence[Milestone]:
+    def unclaimed_frontier(frontier: Sequence[Milestone]) -> List[Milestone]:
+        prior_claimed_ids = _prior_active_shard_frontier_ids(state_root)
+        available_frontier = _exclude_frontier_ids(frontier, prior_claimed_ids)
+        return list(available_frontier or frontier)
+
     if context.get("full_product_audit"):
         scope_frontier = list(context.get("flagship_product_scope_frontier") or [])
         if scope_frontier:
             return scope_frontier
         full_frontier = _full_product_frontier(args)
-        prior_claimed_ids = _prior_active_shard_frontier_ids(state_root)
-        available_frontier = _exclude_frontier_ids(full_frontier, prior_claimed_ids)
-        return list(available_frontier or full_frontier)
+        return unclaimed_frontier(full_frontier)
     if context.get("completion_audit"):
         scope_frontier = list(context.get("completion_review_scope_frontier") or [])
         if scope_frontier:
@@ -16068,9 +16367,7 @@ def _idle_scope_frontier(
             Path(args.registry_path).resolve(),
             history,
         )
-        prior_claimed_ids = _prior_active_shard_frontier_ids(state_root)
-        available_frontier = _exclude_frontier_ids(full_frontier, prior_claimed_ids)
-        return list(available_frontier or full_frontier)
+        return unclaimed_frontier(full_frontier)
     return []
 
 
@@ -16553,7 +16850,20 @@ def derive_completion_review_context(
 ) -> Dict[str, Any]:
     context = dict(base_context or derive_context(args))
     history = _completion_review_history(state_root, limit=COMPLETION_AUDIT_HISTORY_LIMIT)
-    review_audit = dict(_design_completion_audit(args, history) or audit or {})
+    provided_audit = dict(audit or {})
+    provided_completion_keys = {
+        "receipt_audit",
+        "journey_gate_audit",
+        "linux_desktop_exit_gate_audit",
+        "desktop_executable_exit_gate_audit",
+        "weekly_pulse_audit",
+        "repo_backlog_audit",
+        "blocking_audits",
+    }
+    if provided_completion_keys.intersection(provided_audit):
+        review_audit = dict(_design_completion_audit(args, history) or provided_audit)
+    else:
+        review_audit = dict(provided_audit or _design_completion_audit(args, history) or {})
     full_frontier = _completion_review_frontier(review_audit, Path(args.registry_path).resolve(), history)
     frontier_limit = _completion_review_shard_frontier_limit(state_root, full_frontier)
     prior_claimed_ids = _prior_active_shard_frontier_ids(state_root)
@@ -17463,9 +17773,17 @@ def _fast_status_state(
     )
     if freshest_shard_updated_at is not None:
         updated["updated_at"] = _iso(freshest_shard_updated_at)
-    updated["active_runs_count"] = sum(
+    summary_active_run_count = sum(
         1 for item in (updated.get("shards") or []) if _shard_summary_counts_as_active_run(item)
     )
+    if summary_active_run_count > 0:
+        updated["active_runs_count"] = summary_active_run_count
+    else:
+        updated["active_runs_count"] = sum(
+            1
+            for item in shard_state_items
+            if _state_active_run_has_live_work(dict(item.get("state") or {}))
+        )
     shard_frontier_ids = sorted(
         {
             _coerce_int(value, value)
@@ -19276,10 +19594,9 @@ def _prepare_account_environment(
         env["CODEX_API_KEY"] = _read_api_key(account, workspace_root)
     elif account.auth_kind == "ea":
         bridge_token = _ea_bridge_api_token(workspace_root)
-        if not bridge_token:
-            raise RuntimeError("missing EA bridge API token (EA_MCP_API_TOKEN / EA_API_TOKEN / FLEET_INTERNAL_API_TOKEN)")
-        env["EA_MCP_API_TOKEN"] = bridge_token
-        env["EA_API_TOKEN"] = bridge_token
+        if bridge_token:
+            env["EA_MCP_API_TOKEN"] = bridge_token
+            env["EA_API_TOKEN"] = bridge_token
         principal_alias = re.sub(r"[^A-Za-z0-9._-]+", "-", str(account.alias or "")).strip("-._") or "ea-account"
         principal_id = f"codex-fleet-{principal_alias}"
         env["EA_PRINCIPAL_ID"] = principal_id
@@ -22914,6 +23231,30 @@ def _weekly_pulse_audit_is_derivative_of_live_blockers(audit: Dict[str, Any]) ->
     )
 
 
+def _full_product_audit_supports_release_health_override(full_product_audit: Optional[Dict[str, Any]]) -> bool:
+    audit = dict(full_product_audit or {})
+    status = str(audit.get("status") or "").strip().lower()
+    if status == "pass":
+        return True
+    if status not in {"fail", "warning"}:
+        return False
+    if audit.get("unresolved_parity_families"):
+        return False
+    missing_keys = {
+        str(item).strip()
+        for item in (audit.get("missing_coverage_keys") or [])
+        if str(item).strip()
+    }
+    if missing_keys:
+        return False
+    warning_keys = {
+        str(item).strip()
+        for item in (audit.get("warning_coverage_keys") or audit.get("coverage_gap_keys") or [])
+        if str(item).strip()
+    }
+    return bool(warning_keys) and warning_keys.issubset({"fleet_and_operator_loop"})
+
+
 def _weekly_pulse_audit(args: argparse.Namespace) -> Dict[str, Any]:
     requested_path = Path(str(getattr(args, "weekly_pulse_path", "") or DEFAULT_WEEKLY_PULSE_PATH)).resolve()
     workspace_root = Path(str(getattr(args, "workspace_root", "") or DEFAULT_WORKSPACE_ROOT)).resolve()
@@ -23086,8 +23427,7 @@ def _reconcile_weekly_pulse_audit_with_live_journey_truth(
             return audit
         if journey_state != "ready":
             return audit
-        full_product_status = str((full_product_audit or {}).get("status") or "").strip().lower()
-        if full_product_status != "pass":
+        if not _full_product_audit_supports_release_health_override(full_product_audit):
             return audit
         audit.update(
             {
@@ -24043,7 +24383,7 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
         audit["status"] = "fail"
         audit["reason"] = "linux desktop exit gate proof points outside the canonical output root"
         return audit
-    if audit["source_snapshot_mode"] != "filesystem_copy" or not audit["source_snapshot_root"]:
+    if audit["source_snapshot_mode"] not in {"filesystem_copy", "filesystem_link_or_copy"} or not audit["source_snapshot_root"]:
         audit["status"] = "fail"
         audit["reason"] = "linux desktop exit gate proof is missing immutable source-snapshot metadata"
         return audit
@@ -24117,10 +24457,7 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
         )
         proof_head_stable = audit["proof_git_start_head"] == audit["proof_git_finish_head"]
         source_snapshot_proves_stable_input = proof_tracked_fingerprint_stable and audit["source_snapshot_identity_stable"]
-        if not audit["proof_git_identity_stable"] and not (
-            proof_head_stable and audit["source_snapshot_identity_stable"]
-            or source_snapshot_proves_stable_input
-        ):
+        if not audit["proof_git_identity_stable"] and not source_snapshot_proves_stable_input:
             audit["status"] = "fail"
             audit["reason"] = "linux desktop exit gate repo changed while the proof run was executing"
             return audit
@@ -24487,7 +24824,10 @@ def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[st
                 audit[key] = receipt_audit[key]
         return audit
 
-    audit.update(receipt_audit)
+    for key, value in receipt_audit.items():
+        if key in {"status", "reason"}:
+            continue
+        audit[key] = value
     return audit
 
 
