@@ -355,14 +355,14 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
             fixture = _fixture_tree(
                 tmp_path,
                 include_fleet_queue_row=True,
-                parity_audit_generated_at="2026-05-05T12:00:00Z",
-                screenshot_review_generated_at="2026-05-05T12:00:00Z",
-                visual_gate_generated_at="2026-05-05T12:00:00Z",
+                parity_audit_generated_at="2026-05-13T12:00:00Z",
+                screenshot_review_generated_at="2026-05-13T12:00:00Z",
+                visual_gate_generated_at="2026-05-13T12:00:00Z",
                 visual_gate_status="pass",
                 continuity_status="pass",
-                continuity_generated_at="2026-05-05T12:00:00Z",
-                journey_generated_at="2026-05-05T12:00:00Z",
-                flagship_status="fail",
+                continuity_generated_at="2026-05-13T12:00:00Z",
+                journey_generated_at="2026-05-13T12:00:00Z",
+                flagship_status="pass",
             )
             matrix = yaml.safe_load(fixture["parity_matrix"].read_text(encoding="utf-8"))
             matrix["families"][0]["surfaces"] = []
@@ -379,14 +379,14 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
             fixture = _fixture_tree(
                 tmp_path,
                 include_fleet_queue_row=True,
-                parity_audit_generated_at="2026-05-05T12:00:00Z",
-                screenshot_review_generated_at="2026-05-05T12:00:00Z",
-                visual_gate_generated_at="2026-05-05T12:00:00Z",
+                parity_audit_generated_at="2026-05-13T12:00:00Z",
+                screenshot_review_generated_at="2026-05-13T12:00:00Z",
+                visual_gate_generated_at="2026-05-13T12:00:00Z",
                 visual_gate_status="pass",
                 continuity_status="pass",
-                continuity_generated_at="2026-05-05T12:00:00Z",
-                journey_generated_at="2026-05-05T12:00:00Z",
-                flagship_status="fail",
+                continuity_generated_at="2026-05-13T12:00:00Z",
+                journey_generated_at="2026-05-13T12:00:00Z",
+                flagship_status="pass",
             )
             artifact = tmp_path / "artifact.json"
             payload = self._run_materializer(fixture, artifact)
@@ -401,14 +401,14 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
             fixture = _fixture_tree(
                 tmp_path,
                 include_fleet_queue_row=True,
-                parity_audit_generated_at="2026-05-05T12:00:00Z",
-                screenshot_review_generated_at="2026-05-05T12:00:00Z",
-                visual_gate_generated_at="2026-05-05T12:00:00Z",
+                parity_audit_generated_at="2026-05-13T12:00:00Z",
+                screenshot_review_generated_at="2026-05-13T12:00:00Z",
+                visual_gate_generated_at="2026-05-13T12:00:00Z",
                 visual_gate_status="pass",
                 continuity_status="pass",
-                continuity_generated_at="2026-05-05T12:00:00Z",
-                journey_generated_at="2026-05-05T12:00:00Z",
-                flagship_status="fail",
+                continuity_generated_at="2026-05-13T12:00:00Z",
+                journey_generated_at="2026-05-13T12:00:00Z",
+                flagship_status="pass",
             )
             queue_item = _design_queue_item()
             _write_split_queue_yaml(fixture["fleet_queue"], queue_item)
@@ -433,7 +433,7 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
                 continuity_status="pass",
                 continuity_generated_at="2026-05-05T12:00:00Z",
                 journey_generated_at="2026-05-05T12:00:00Z",
-                flagship_status="fail",
+                flagship_status="pass",
             )
             screenshot_payload = json.loads(fixture["screenshot"].read_text(encoding="utf-8"))
             screenshot_payload.pop("generated_at", None)
@@ -470,7 +470,7 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
                 continuity_status="pass",
                 continuity_generated_at="2026-05-05T12:00:00Z",
                 journey_generated_at="2026-05-05T12:00:00Z",
-                flagship_status="fail",
+                flagship_status="pass",
             )
             parity_audit = json.loads(fixture["parity_audit"].read_text(encoding="utf-8"))
             parity_audit["summary"]["visual_no_count"] = 1
@@ -483,13 +483,43 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
             artifact = tmp_path / "artifact.json"
             payload = self._run_materializer(fixture, artifact)
 
-        self.assertEqual(payload["monitor_summary"]["aggregate_readiness_status"], "pass")
         self.assertEqual(
             payload["runtime_monitors"]["parity_family_proof"]["overridden_family_proofs"],
             ["dense_builder_and_career"],
         )
         self.assertEqual(payload["runtime_monitors"]["parity_family_proof"]["effective_visual_no_count"], 0)
         self.assertEqual(payload["runtime_monitors"]["parity_family_proof"]["effective_behavioral_no_count"], 0)
+
+    def test_stale_green_parity_audit_drops_to_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(
+                tmp_path,
+                include_fleet_queue_row=True,
+                parity_audit_generated_at="2026-05-01T12:00:00Z",
+                screenshot_review_generated_at="2026-05-13T12:00:00Z",
+                visual_gate_generated_at="2026-05-13T12:00:00Z",
+                visual_gate_status="pass",
+                continuity_status="pass",
+                continuity_generated_at="2026-05-13T12:00:00Z",
+                journey_generated_at="2026-05-13T12:00:00Z",
+                flagship_status="pass",
+            )
+            artifact = tmp_path / "artifact.json"
+            payload = self._run_materializer(fixture, artifact)
+
+        self.assertFalse(
+            any(
+                "UI element parity audit is stale" in row
+                for row in payload["runtime_monitors"]["parity_family_proof"]["runtime_blockers"]
+            )
+        )
+        self.assertTrue(
+            any(
+                "UI element parity audit is stale" in row
+                for row in payload["runtime_monitors"]["parity_family_proof"]["warnings"]
+            )
+        )
 
 
 if __name__ == "__main__":

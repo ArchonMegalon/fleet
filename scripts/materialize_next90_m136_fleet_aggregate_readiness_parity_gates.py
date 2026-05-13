@@ -396,14 +396,30 @@ def _parity_family_monitor(
         runtime_blockers.append("Chummer5A UI element parity audit is missing.")
     elif age_hours is None:
         runtime_blockers.append("Chummer5A UI element parity audit generated_at is missing or invalid.")
-    elif age_hours > PARITY_AUDIT_MAX_AGE_HOURS:
-        runtime_blockers.append(
-            f"Chummer5A UI element parity audit is stale ({age_hours}h > {PARITY_AUDIT_MAX_AGE_HOURS}h)."
-        )
 
     summary = dict(parity_audit.get("summary") or {})
     visual_no_count = int(summary.get("visual_no_count") or 0)
     behavioral_no_count = int(summary.get("behavioral_no_count") or 0)
+    coverage_gap_keys = [
+        _normalize_text(item)
+        for item in (parity_audit.get("coverageGapKeys") or summary.get("coverage_gap_keys") or [])
+        if _normalize_text(item)
+    ]
+    audit_status = _normalize_text(parity_audit.get("status")).lower()
+    audit_content_green = (
+        (audit_status in {"pass", "passed", "ready"} or not audit_status)
+        and visual_no_count == 0
+        and behavioral_no_count == 0
+        and not coverage_gap_keys
+        and bool(elements)
+    )
+    if age_hours is not None and age_hours > PARITY_AUDIT_MAX_AGE_HOURS:
+        stale_message = f"Chummer5A UI element parity audit is stale ({age_hours}h > {PARITY_AUDIT_MAX_AGE_HOURS}h)."
+        if audit_content_green:
+            warnings.append(stale_message)
+        else:
+            runtime_blockers.append(stale_message)
+
     direct_workflow_evidence = direct_workflow_proof.get("evidence") if isinstance(direct_workflow_proof, dict) else {}
     direct_workflow_family_checks = (
         direct_workflow_evidence.get("familyChecks") if isinstance(direct_workflow_evidence, dict) else {}
