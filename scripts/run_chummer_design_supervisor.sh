@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd /docker/fleet
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+workspace_root="$(cd "${script_dir}/.." && pwd)"
+cd "$workspace_root"
 
 if [[ -n "${CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS:-}" ]]; then
   : "${CODEXEA_STREAM_IDLE_TIMEOUT_MS:=${CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS}}"
@@ -32,7 +34,7 @@ fi
 export CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_FALLBACK_LANES
 
 common_args=()
-project_config_path="${CHUMMER_DESIGN_SUPERVISOR_PROJECT_CONFIG:-/docker/fleet/config/projects/fleet.yaml}"
+project_config_path="${CHUMMER_DESIGN_SUPERVISOR_PROJECT_CONFIG:-${workspace_root}/config/projects/fleet.yaml}"
 shard_owner_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS:-}"
 shard_focus_profile_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_PROFILE_GROUPS:-}"
 shard_focus_text_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_TEXT_GROUPS:-}"
@@ -687,7 +689,7 @@ published_shard_frontier_ids() {
   if [[ -z "$shard_index" ]]; then
     return 0
   fi
-  local path="/docker/fleet/.codex-studio/published/full-product-frontiers/shard-${shard_index}.generated.yaml"
+  local path="${workspace_root}/.codex-studio/published/full-product-frontiers/shard-${shard_index}.generated.yaml"
   if [[ ! -f "$path" ]]; then
     return 0
   fi

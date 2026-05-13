@@ -167,7 +167,13 @@ def _state_signal_times(path: Path) -> list[datetime]:
     return signals
 
 
-def _fresh_state_ok(state_root: Path, max_age_seconds: int) -> tuple[bool, str]:
+def _fresh_state_ok(
+    state_root: Path,
+    max_age_seconds: int,
+    *,
+    startup_grace_seconds: int = 0,
+    loop_startup_age_seconds: float | None = None,
+) -> tuple[bool, str]:
     state_paths = _discover_state_paths(state_root)
     if not state_paths:
         return False, "state_missing"
@@ -191,6 +197,15 @@ def _fresh_state_ok(state_root: Path, max_age_seconds: int) -> tuple[bool, str]:
     if freshest_age_seconds is None:
         return False, f"state_invalid={invalid_states}/{len(state_paths)}"
     if fresh_states <= 0:
+        if (
+            loop_startup_age_seconds is not None
+            and startup_grace_seconds > 0
+            and loop_startup_age_seconds <= startup_grace_seconds
+        ):
+            return True, (
+                f"state_starting freshest={int(freshest_age_seconds)}s "
+                f"loop_age={int(loop_startup_age_seconds)}s"
+            )
         return False, f"state_stale freshest={int(freshest_age_seconds)}s"
     return True, f"state_fresh={fresh_states}/{len(state_paths)} freshest={int(freshest_age_seconds)}s"
 
@@ -300,7 +315,37 @@ def _watchdog_state_ok(
     )
 
 
-def _loop_process_running() -> tuple[bool, str]:
+def _loop_process_oldest_age_seconds(pids: list[str]) -> float | None:
+    oldest_age_seconds: float | None = None
+    for pid in pids:
+        clean_pid = str(pid or "").strip()
+        if not clean_pid:
+            continue
+        try:
+            completed = subprocess.run(
+                ["ps", "-o", "etimes=", "-p", clean_pid],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=4,
+            )
+        except Exception:
+            continue
+        if completed.returncode != 0:
+            continue
+        raw_value = str(completed.stdout or "").strip()
+        if not raw_value:
+            continue
+        try:
+            age_seconds = float(raw_value)
+        except ValueError:
+            continue
+        if oldest_age_seconds is None or age_seconds > oldest_age_seconds:
+            oldest_age_seconds = age_seconds
+    return oldest_age_seconds
+
+
+def _loop_process_running() -> tuple[bool, str, float | None]:
     try:
         completed = subprocess.run(
             ["pgrep", "-f", LOOP_PATTERN],
@@ -310,15 +355,16 @@ def _loop_process_running() -> tuple[bool, str]:
             timeout=8,
         )
     except Exception as exc:  # pragma: no cover
-        return False, f"pgrep_error={exc}"
+        return False, f"pgrep_error={exc}", None
 
     pids = [line.strip() for line in str(completed.stdout or "").splitlines() if line.strip()]
     if completed.returncode != 0 or not pids:
         return _container_loop_process_running()
-    return True, f"loop_pids={','.join(pids[:4])}"
+    oldest_age_seconds = _loop_process_oldest_age_seconds(pids)
+    return True, f"loop_pids={','.join(pids[:4])}", oldest_age_seconds
 
 
-def _container_loop_process_running() -> tuple[bool, str]:
+def _container_loop_process_running() -> tuple[bool, str, float | None]:
     try:
         completed = subprocess.run(
             ["docker", "compose", "exec", "-T", SUPERVISOR_SERVICE, "pgrep", "-f", LOOP_PATTERN],
@@ -329,18 +375,19 @@ def _container_loop_process_running() -> tuple[bool, str]:
             timeout=12,
         )
     except FileNotFoundError:
-        return False, "loop_process_missing"
+        return False, "loop_process_missing", None
     except subprocess.TimeoutExpired:
-        return False, "loop_process_missing container_probe_timeout"
+        return False, "loop_process_missing container_probe_timeout", None
     except Exception as exc:  # pragma: no cover
-        return False, f"loop_process_missing container_probe_error={exc}"
+        return False, f"loop_process_missing container_probe_error={exc}", None
 
     pids = [line.strip() for line in str(completed.stdout or "").splitlines() if line.strip()]
     if completed.returncode != 0 or not pids:
         stderr = str(completed.stderr or "").strip().splitlines()
         suffix = f" container_probe_stderr={stderr[-1][:180]}" if stderr else ""
-        return False, f"loop_process_missing{suffix}"
-    return True, f"loop_container_pids={','.join(pids[:4])}"
+        return False, f"loop_process_missing{suffix}", None
+    oldest_age_seconds = _loop_process_oldest_age_seconds(pids)
+    return True, f"loop_container_pids={','.join(pids[:4])}", oldest_age_seconds
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -374,8 +421,13 @@ def main(argv: list[str] | None = None) -> int:
             watchdog_max_silent_seconds,
         )
 
-    loop_ok, loop_reason = _loop_process_running()
-    state_ok, state_reason = _fresh_state_ok(state_root, max_age_seconds)
+    loop_ok, loop_reason, loop_startup_age_seconds = _loop_process_running()
+    state_ok, state_reason = _fresh_state_ok(
+        state_root,
+        max_age_seconds,
+        startup_grace_seconds=watchdog_startup_grace_seconds,
+        loop_startup_age_seconds=loop_startup_age_seconds,
+    )
     watchdog_ok, watchdog_reason = _watchdog_state_ok(
         state_root,
         watchdog_shard,
