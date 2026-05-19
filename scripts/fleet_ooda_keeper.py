@@ -366,6 +366,16 @@ def persist_planned_launch(app: Any, planned: Any) -> bool:
     runtime_key = package_id or project_id
     if not project_id or app.runtime_task_row(runtime_key):
         return False
+    decision = dict(getattr(planned, "decision", {}) or {})
+    lane_capacity = dict(decision.get("lane_capacity") or {})
+    capacity_summary = dict(lane_capacity.get("capacity_summary") or {})
+    lane_capacity_state = str(
+        lane_capacity.get("state")
+        or capacity_summary.get("state")
+        or ""
+    ).strip().lower()
+    if lane_capacity_state in {"missing", "disabled"}:
+        return False
     payload = app.coding_runtime_task_payload(planned)
     app.upsert_runtime_task(
         project_id,

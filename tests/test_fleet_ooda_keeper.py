@@ -325,3 +325,38 @@ def test_release_stale_zero_finding_local_reviews_does_not_require_scheduler_fla
 
     assert [item["package_id"] for item in released] == ["media-factory-0008"]
     assert app.updated_packages[0]["status"] == "complete"
+
+
+def test_persist_planned_launch_rejects_missing_lane_capacity_state() -> None:
+    class FakePersistApp:
+        def runtime_task_row(self, _runtime_key: str):
+            return None
+
+        def coding_runtime_task_payload(self, _planned):
+            raise AssertionError("payload generation should not run for missing lane capacity")
+
+        def upsert_runtime_task(self, *args, **kwargs):
+            raise AssertionError("runtime task should not be persisted for missing lane capacity")
+
+        def activate_work_package_scope_claims(self, _package_id: str) -> None:
+            raise AssertionError("scope claims should not activate for missing lane capacity")
+
+        def update_work_package_runtime(self, *args, **kwargs) -> None:
+            raise AssertionError("package runtime should not update for missing lane capacity")
+
+        def save_runtime_task_cache_snapshot(self) -> None:
+            raise AssertionError("snapshot should not save for missing lane capacity")
+
+        def utc_now(self) -> str:
+            return "2026-05-19T13:37:59Z"
+
+    class Candidate:
+        package_id = "design"
+
+    class Planned:
+        project_id = "design"
+        package_id = "design"
+        candidate = Candidate()
+        decision = {"lane_capacity": {"capacity_summary": {"state": "missing"}}}
+
+    assert keeper.persist_planned_launch(FakePersistApp(), Planned()) is False
