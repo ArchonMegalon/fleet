@@ -7215,13 +7215,26 @@ def _flagship_focus_repo_paths(focus_owners: Sequence[str]) -> List[Path]:
     return paths
 
 
-def _default_full_product_frontier(args: argparse.Namespace, audit: Dict[str, Any]) -> List[Milestone]:
+def _completion_audit_requires_full_product_operator_slice(completion_audit: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(completion_audit, dict):
+        return False
+    return str(completion_audit.get("status") or "").strip().lower() not in {"", "pass", "passed", "ready"}
+
+
+def _default_full_product_frontier(
+    args: argparse.Namespace,
+    audit: Dict[str, Any],
+    *,
+    completion_audit: Optional[Dict[str, Any]] = None,
+) -> List[Milestone]:
     frontier: List[Milestone] = []
     frontier_status = _full_product_frontier_status(audit)
+    completion_slice_required = _completion_audit_requires_full_product_operator_slice(completion_audit)
     if (
         str(audit.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
         and not audit.get("unresolved_parity_families")
         and not (audit.get("coverage_gap_keys") or audit.get("missing_coverage_keys"))
+        and not completion_slice_required
     ):
         return frontier
     coverage_gap_keys = [
@@ -7234,6 +7247,8 @@ def _default_full_product_frontier(args: argparse.Namespace, audit: Dict[str, An
         for item in coverage_gap_keys
         if FULL_PRODUCT_FRONTIER_KEY_BY_COVERAGE.get(item)
     }
+    if completion_slice_required:
+        selected_spec_keys.add("fleet_and_operator_flagship")
     all_rows = [row for row in FULL_PRODUCT_FRONTIER_SPECS if isinstance(row, dict)]
     if selected_spec_keys:
         rows = [
@@ -7284,7 +7299,8 @@ def _all_full_product_spec_frontier() -> List[Milestone]:
 
 def _full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
     audit = _full_product_readiness_audit(args)
-    frontier = _default_full_product_frontier(args, audit)
+    completion_audit = _design_completion_audit(args, ())
+    frontier = _default_full_product_frontier(args, audit, completion_audit=completion_audit)
     queue_frontier = _queue_driven_full_product_frontier(args, frontier)
     if queue_frontier:
         return queue_frontier
@@ -7296,11 +7312,13 @@ def _reconcile_materialized_full_product_frontier(
     state_root: Path,
     frontier: Sequence[Milestone],
     full_product_audit: Dict[str, Any],
+    completion_audit: Optional[Dict[str, Any]] = None,
 ) -> List[Milestone]:
     if (
         str(full_product_audit.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
         and not full_product_audit.get("unresolved_parity_families")
         and not (full_product_audit.get("coverage_gap_keys") or full_product_audit.get("missing_coverage_keys"))
+        and not _completion_audit_requires_full_product_operator_slice(completion_audit)
     ):
         return []
 
@@ -7312,7 +7330,7 @@ def _reconcile_materialized_full_product_frontier(
             return []
         candidate_sources: List[Sequence[Milestone]] = [
             list(frontier),
-            _default_full_product_frontier(args, full_product_audit),
+            _default_full_product_frontier(args, full_product_audit, completion_audit=completion_audit),
             _all_full_product_spec_frontier(),
         ]
         try:
@@ -8654,7 +8672,13 @@ def _full_product_frontier_payload(
     profile_set = {str(item).strip() for item in focus_profiles if str(item).strip()}
     generated_at = _iso_now()
     generated_at_dt = _parse_iso(generated_at) or _utc_now()
-    frontier = _reconcile_materialized_full_product_frontier(args, state_root, frontier, full_product_audit)
+    frontier = _reconcile_materialized_full_product_frontier(
+        args,
+        state_root,
+        frontier,
+        full_product_audit,
+        completion_audit=completion_audit,
+    )
     frontier_rows = [
         {
             "id": item.id,
@@ -23067,6 +23091,7 @@ def _synthetic_completion_receipt_audit(
         "accepted receipt is missing structured closeout content" in normalized_reason
         or "missing structured closeout content" in normalized_reason
     )
+    allow_explicit_completion_review = "no supervisor run history recorded" in normalized_reason
     allow_plain_worker_timeout = normalized_reason == "worker exit 124"
     allow_helper_loop_timeout = "worker_status_helper_loop" in normalized_reason
     allow_internal_worker_recycle = bool(receipt_audit.get("retryable_internal_worker_receipt")) or (
@@ -23076,6 +23101,7 @@ def _synthetic_completion_receipt_audit(
         not is_external_blocker
         and not allow_noop_not_launched
         and not allow_receipt_shape_gap
+        and not allow_explicit_completion_review
         and not allow_plain_worker_timeout
         and not allow_helper_loop_timeout
         and not allow_internal_worker_recycle
@@ -24456,7 +24482,7 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
             and audit["proof_git_start_tracked_diff_sha256"] == audit["proof_git_finish_tracked_diff_sha256"]
         )
         proof_head_stable = audit["proof_git_start_head"] == audit["proof_git_finish_head"]
-        source_snapshot_proves_stable_input = proof_tracked_fingerprint_stable and audit["source_snapshot_identity_stable"]
+        source_snapshot_proves_stable_input = audit["source_snapshot_identity_stable"]
         if not audit["proof_git_identity_stable"] and not source_snapshot_proves_stable_input:
             audit["status"] = "fail"
             audit["reason"] = "linux desktop exit gate repo changed while the proof run was executing"

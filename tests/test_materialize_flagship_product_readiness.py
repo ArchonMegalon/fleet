@@ -553,6 +553,248 @@ def test_materialize_flagship_product_readiness_recovers_windows_gate_from_aggre
     assert evidence["ui_windows_exit_gate_effective_ready"] is True
 
 
+def test_materialize_flagship_product_readiness_fails_closed_when_only_external_desktop_tuple_backlog_remains(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
+    journey_gates = _base_journey_gates()
+    journey_gates["summary"] = {
+        "overall_state": "blocked",
+        "blocked_count": 3,
+        "blocked_external_only_count": 3,
+        "blocked_with_local_count": 0,
+    }
+    journey_gates["journeys"] = [
+        {
+            "id": "install_claim_restore_continue",
+            "state": "blocked",
+            "blocked_by_external_constraints_only": True,
+            "external_proof_requests": [
+                {
+                    "tuple_id": "avalonia:linux-x64:linux",
+                    "required_host": "linux",
+                    "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                },
+                {
+                    "tuple_id": "avalonia:win-x64:windows",
+                    "required_host": "windows",
+                    "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                },
+            ],
+            "external_blocking_reasons": [
+                "Requires native Linux host proof capture.",
+                "Requires native Windows host proof capture.",
+            ],
+            "local_blocking_reasons": [],
+        },
+        {"id": "build_explain_publish", "state": "ready"},
+        {"id": "campaign_session_recover_recap", "state": "ready"},
+        {
+            "id": "report_cluster_release_notify",
+            "state": "blocked",
+            "blocked_by_external_constraints_only": True,
+            "external_proof_requests": [
+                {
+                    "tuple_id": "avalonia:linux-x64:linux",
+                    "required_host": "linux",
+                    "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                },
+                {
+                    "tuple_id": "avalonia:win-x64:windows",
+                    "required_host": "windows",
+                    "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                },
+            ],
+            "external_blocking_reasons": [
+                "Requires native Linux host proof capture.",
+                "Requires native Windows host proof capture.",
+            ],
+            "local_blocking_reasons": [],
+        },
+        {
+            "id": "organize_community_and_close_loop",
+            "state": "blocked",
+            "blocked_by_external_constraints_only": True,
+            "external_proof_requests": [
+                {
+                    "tuple_id": "avalonia:linux-x64:linux",
+                    "required_host": "linux",
+                    "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                },
+                {
+                    "tuple_id": "avalonia:win-x64:windows",
+                    "required_host": "windows",
+                    "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                },
+            ],
+            "external_blocking_reasons": [
+                "Requires native Linux host proof capture.",
+                "Requires native Windows host proof capture.",
+            ],
+            "local_blocking_reasons": [],
+        },
+    ]
+    release_channel = _release_channel_payload(
+        heads=("avalonia",),
+        platforms=("macos",),
+        journeys_passed=(
+            "install_claim_restore_continue",
+            "build_explain_publish",
+            "campaign_session_recover_recap",
+            "report_cluster_release_notify",
+            "organize_community_and_close_loop",
+        ),
+        generated_at=current_iso,
+    )
+    release_channel["rolloutState"] = "coverage_incomplete"
+    release_channel["supportabilityState"] = "review_required"
+    release_channel["desktopTupleCoverage"] = {
+        "requiredDesktopPlatforms": ["linux", "windows", "macos"],
+        "requiredDesktopHeads": ["avalonia"],
+        "promotedPlatformHeads": {"linux": ["avalonia"], "windows": ["avalonia"], "macos": ["avalonia"]},
+        "missingRequiredPlatforms": [],
+        "missingRequiredHeads": [],
+        "missingRequiredPlatformHeadPairs": [],
+        "missingRequiredPlatformHeadRidTuples": ["avalonia:linux-x64:linux", "avalonia:win-x64:windows"],
+        "externalProofRequests": [
+            {
+                "tupleId": "avalonia:linux-x64:linux",
+                "requiredHost": "linux",
+                "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+            },
+            {
+                "tupleId": "avalonia:win-x64:windows",
+                "requiredHost": "windows",
+                "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+            },
+        ],
+    }
+    release_channel["artifacts"] = [
+        {
+            "head": "avalonia",
+            "platform": platform,
+            "rid": rid,
+            "kind": "installer",
+            "channelId": "docker",
+        }
+        for platform, rid in (
+            ("linux", "linux-x64"),
+            ("windows", "win-x64"),
+            ("macos", "osx-arm64"),
+        )
+    ]
+    support_packets = _base_support_packets_payload(
+        current_iso,
+        summary={
+            "open_packet_count": 2,
+            "unresolved_external_proof_request_count": 2,
+            "unresolved_external_proof_request_hosts": ["linux", "windows"],
+            "unresolved_external_proof_request_tuples": [
+                "avalonia:linux-x64:linux",
+                "avalonia:win-x64:windows",
+            ],
+            "closure_waiting_on_release_truth": 0,
+            "update_required_misrouted_case_count": 0,
+            "non_external_needs_human_response": 0,
+            "non_external_packets_without_named_owner": 0,
+            "non_external_packets_without_lane": 0,
+        },
+    )
+
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        journey_gates_payload=journey_gates,
+        support_packets_payload=support_packets,
+        synced_external_runbook=True,
+        release_channel_platforms=("macos",),
+        release_channel_journeys_passed=(
+            "install_claim_restore_continue",
+            "build_explain_publish",
+            "campaign_session_recover_recap",
+            "report_cluster_release_notify",
+            "organize_community_and_close_loop",
+        ),
+    )
+
+    registry_path = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    _write_json(registry_path, release_channel)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(tmp_path),
+            "--out",
+            str(tmp_path / "FLAGSHIP_PRODUCT_READINESS.generated.json"),
+            "--acceptance",
+            str(tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"),
+            "--status-plane",
+            str(tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"),
+            "--progress-report",
+            str(tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"),
+            "--progress-history",
+            str(tmp_path / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"),
+            "--journey-gates",
+            str(tmp_path / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"),
+            "--support-packets",
+            str(tmp_path / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"),
+            "--supervisor-state",
+            str(tmp_path / "state" / "chummer_design_supervisor" / "state.json"),
+            "--ooda-state",
+            str(tmp_path / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"),
+            "--ui-local-release-proof",
+            str(tmp_path / "ui" / "UI_LOCAL_RELEASE_PROOF.generated.json"),
+            "--ui-linux-exit-gate",
+            str(tmp_path / "ui" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"),
+            "--ui-windows-exit-gate",
+            str(tmp_path / "ui" / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"),
+            "--ui-workflow-parity-proof",
+            str(tmp_path / "ui" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"),
+            "--ui-executable-exit-gate",
+            str(tmp_path / "ui" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"),
+            "--ui-workflow-execution-gate",
+            str(tmp_path / "ui" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"),
+            "--ui-visual-familiarity-exit-gate",
+            str(tmp_path / "ui" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"),
+            "--ui-element-parity-audit",
+            str(tmp_path / "ui" / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"),
+            "--ui-user-journey-tester-audit",
+            str(tmp_path / "ui" / "USER_JOURNEY_TESTER_AUDIT.generated.json"),
+            "--sr4-workflow-parity-proof",
+            str(tmp_path / "ui" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"),
+            "--sr6-workflow-parity-proof",
+            str(tmp_path / "ui" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"),
+            "--sr4-sr6-frontier-receipt",
+            str(tmp_path / "ui" / "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"),
+            "--hub-local-release-proof",
+            str(tmp_path / "hub" / "HUB_LOCAL_RELEASE_PROOF.generated.json"),
+            "--mobile-local-release-proof",
+            str(tmp_path / "mobile" / "MOBILE_LOCAL_RELEASE_PROOF.generated.json"),
+            "--release-channel",
+            str(registry_path),
+            "--releases-json",
+            str(tmp_path / "registry" / "releases.json"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads((tmp_path / "FLAGSHIP_PRODUCT_READINESS.generated.json").read_text(encoding="utf-8"))
+
+    assert payload["status"] == "fail"
+    assert payload["completion_audit"]["status"] == "fail"
+    assert payload["completion_audit"]["external_only"] is True
+    assert payload["coverage"]["desktop_client"] == "warning"
+    assert "desktop_client" in payload["warning_keys"]
+    detail = payload["coverage_details"]["desktop_client"]
+    assert detail["summary"] == "Desktop flagship proof is waiting on external host-proof capture."
+    assert detail["evidence"]["external_host_proof_backlog_only"] is True
+    assert detail["evidence"]["external_host_proof_backlog_request_count"] == 2
+
+
 def test_materialize_flagship_product_readiness_recovers_visual_gate_from_fresh_executable_proof_when_only_stale_capture_drift_remains(
     tmp_path: Path,
 ) -> None:
@@ -729,6 +971,119 @@ def test_materialize_flagship_product_readiness_recovers_visual_gate_from_fresh_
     assert evidence["ui_visual_familiarity_exit_gate_effective_ready"] is True
     assert evidence["ui_visual_familiarity_exit_gate_recovered_from_executable_gate"] is True
     assert payload["readiness_planes"]["veteran_ready"]["evidence"]["visual_gate_ready"] is True
+
+
+def test_materialize_flagship_product_readiness_recovers_unreadable_desktop_side_receipts_from_aggregate_executable_proof(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        ui_workflow_parity_payload={
+            "contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity",
+            "status": "fail",
+            "reasons": ["Workflow parity gate tests exited non-zero: 1"],
+            "sourceArtifactReview": {"status": "pass"},
+            "releaseChannelReview": {"status": "pass"},
+            "workflowFamilyReview": {"status": "pass"},
+            "testReferenceReview": {"status": "pass"},
+            "checklistCoverageReview": {"status": "pass"},
+            "recursiveWorkflowGateReview": {
+                "status": "fail",
+                "reasons": ["Workflow parity gate tests exited non-zero: 1"],
+                "workflowGateExit": 1,
+            },
+            "evidence": {
+                "missingFamilyIds": [],
+                "nonReadyFamilyIds": [],
+                "tabsMissingInCatalog": 0,
+                "workspaceActionsMissingInCatalog": 0,
+                "missingTestRefs": {},
+            },
+        },
+    )
+
+    ui_dir = tmp_path / "ui"
+    os.chmod(ui_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json", 0)
+    os.chmod(ui_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json", 0)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(tmp_path),
+            "--out",
+            str(tmp_path / "rerun-flagship-readiness.generated.json"),
+            "--acceptance",
+            str(tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"),
+            "--status-plane",
+            str(tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"),
+            "--progress-report",
+            str(tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"),
+            "--progress-history",
+            str(tmp_path / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"),
+            "--journey-gates",
+            str(tmp_path / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"),
+            "--support-packets",
+            str(tmp_path / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"),
+            "--supervisor-state",
+            str(tmp_path / "state" / "chummer_design_supervisor" / "state.json"),
+            "--ooda-state",
+            str(tmp_path / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"),
+            "--ui-local-release-proof",
+            str(ui_dir / "UI_LOCAL_RELEASE_PROOF.generated.json"),
+            "--ui-linux-exit-gate",
+            str(ui_dir / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"),
+            "--ui-windows-exit-gate",
+            str(ui_dir / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"),
+            "--ui-workflow-parity-proof",
+            str(ui_dir / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"),
+            "--ui-executable-exit-gate",
+            str(ui_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"),
+            "--ui-workflow-execution-gate",
+            str(ui_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"),
+            "--ui-visual-familiarity-exit-gate",
+            str(ui_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"),
+            "--ui-element-parity-audit",
+            str(ui_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"),
+            "--ui-user-journey-tester-audit",
+            str(ui_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json"),
+            "--sr4-workflow-parity-proof",
+            str(ui_dir / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"),
+            "--sr6-workflow-parity-proof",
+            str(ui_dir / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"),
+            "--sr4-sr6-frontier-receipt",
+            str(ui_dir / "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"),
+            "--hub-local-release-proof",
+            str(tmp_path / "hub" / "HUB_LOCAL_RELEASE_PROOF.generated.json"),
+            "--mobile-local-release-proof",
+            str(tmp_path / "mobile" / "MOBILE_LOCAL_RELEASE_PROOF.generated.json"),
+            "--release-channel",
+            str(tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"),
+            "--releases-json",
+            str(tmp_path / "registry" / "releases.json"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    os.chmod(ui_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json", 0o644)
+    os.chmod(ui_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json", 0o644)
+
+    assert result.returncode == 0, result.stderr
+    rerun_payload = json.loads((tmp_path / "rerun-flagship-readiness.generated.json").read_text(encoding="utf-8"))
+    assert rerun_payload["coverage"]["desktop_client"] == "ready"
+    evidence = rerun_payload["coverage_details"]["desktop_client"]["evidence"]
+    assert evidence["ui_visual_familiarity_exit_gate_status"] == ""
+    assert evidence["ui_visual_familiarity_exit_gate_effective_ready"] is True
+    assert evidence["ui_visual_familiarity_exit_gate_recovered_from_executable_gate"] is True
+    assert evidence["ui_workflow_execution_gate_status"] == ""
+    assert evidence["ui_workflow_execution_gate_recovered_from_executable_gate"] is True
+    assert evidence["ui_workflow_parity_effective_ready"] is True
+    assert rerun_payload["coverage_details"]["desktop_client"]["reasons"] == []
 
 
 def test_desktop_parity_receipt_external_only_missing_api_surface_contract_accepts_reason_only_payload() -> None:
@@ -1165,8 +1520,11 @@ def _desktop_executable_exit_gate_pass_payload(
     enabled_platforms = [platform for platform in platforms if platform in rid_by_platform]
     evidence = {
         "heads_requiring_flagship_proof": enabled_heads,
+        "visual_familiarity_status": "pass",
         "visual_familiarity_required_desktop_heads": enabled_heads,
         "workflow_execution_required_desktop_heads": enabled_heads,
+        "workflow_execution_status": "pass",
+        "workflow_execution_failures_external_only": True,
         "visual_familiarity_head_proofs": {head: "pass" for head in enabled_heads},
         "workflow_execution_head_proofs": {head: "pass" for head in enabled_heads},
     }
@@ -3902,7 +4260,7 @@ def test_materialize_flagship_product_readiness_prefers_support_execution_plan_a
                 "recommended_action": (
                     "Only external host-proof gaps remain: windows: transfer "
                     "/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz, "
-                    "set CHUMMER_UI_REPO_ROOT and either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the signed-in proof "
+                    "set CHUMMER_UI_REPO_ROOT if the UI repo is not checked out at the standard Chummer UI paths on that host, and set either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the signed-in proof "
                     "cookies, run bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh, "
                     "bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh, "
                     "bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.sh, "
@@ -10817,6 +11175,253 @@ def test_materialize_flagship_product_readiness_recovers_idle_configured_topolog
     assert evidence["supervisor_completion_status_recovered_from_idle_configured_topology"] is True
     assert evidence["ooda_supervisor_recovered_from_idle_configured_topology"] is True
     assert evidence["ooda_recovered_from_current_supervisor_topology"] is True
+    assert evidence["ooda_supervisor"] == "exited"
+
+
+def test_materialize_flagship_product_readiness_recovers_idle_configured_topology_when_only_ooda_reason_remains(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
+
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        active_shards_payload={
+            "generated_at": current_iso,
+            "manifest_kind": "configured_shard_topology",
+            "configured_shard_count": 20,
+            "configured_shards": [{"name": "shard-1"}, {"name": "shard-2"}],
+            "active_run_count": 0,
+            "active_shards": [],
+        },
+        supervisor_state_payload={
+            "updated_at": current_iso,
+            "mode": "sharded",
+            "focus_profiles": ["top_flagship_grade", "whole_project_frontier"],
+            "completion_audit": {"status": "pass"},
+        },
+        ooda_state_payload={
+            "controller": "up",
+            "supervisor": "exited",
+            "aggregate_stale": False,
+            "aggregate_timestamp_stale": False,
+        },
+        compile_manifest_payload={"dispatchable_truth_ready": True},
+        support_packets_payload=_base_support_packets_payload(
+            current_iso,
+            summary={
+                "open_packet_count": 0,
+                "unresolved_external_proof_request_count": 0,
+                "closure_waiting_on_release_truth": 0,
+                "update_required_misrouted_case_count": 0,
+                "non_external_needs_human_response": 0,
+                "non_external_packets_without_named_owner": 0,
+                "non_external_packets_without_lane": 0,
+            },
+        ),
+        synced_external_runbook=True,
+    )
+
+    assert payload["coverage"]["fleet_and_operator_loop"] == "ready"
+    evidence = payload["coverage_details"]["fleet_and_operator_loop"]["evidence"]
+    assert evidence["ooda_supervisor_recovered_from_idle_configured_topology"] is True
+    assert evidence["ooda_recovered_from_current_supervisor_topology"] is True
+    assert "supervisor_completion_status_recovered_from_idle_configured_topology" not in evidence
+    assert evidence["supervisor_completion_status"] == "pass"
+
+
+def test_materialize_flagship_product_readiness_recovers_idle_configured_topology_with_routed_local_blockers(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
+    journey_gates = _base_journey_gates()
+    for row in journey_gates["journeys"]:
+        if row["id"] == "campaign_session_recover_recap":
+            row.update(
+                {
+                    "state": "blocked",
+                    "owner_repos": ["chummer6-ui"],
+                    "local_blocking_reasons": [
+                        "repo proof chummer6-ui:scripts/audit-ui-parity.sh is missing required marker 'character_roster'."
+                    ],
+                }
+            )
+            break
+    journey_gates["summary"].update(
+        {
+            "overall_state": "blocked",
+            "blocked_count": 1,
+            "blocked_external_only_count": 0,
+            "blocked_with_local_count": 1,
+        }
+    )
+
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        journey_gates_payload=journey_gates,
+        active_shards_payload={
+            "generated_at": current_iso,
+            "manifest_kind": "configured_shard_topology",
+            "configured_shard_count": 20,
+            "configured_shards": [{"name": "shard-1"}, {"name": "shard-2"}],
+            "active_run_count": 0,
+            "active_shards": [],
+        },
+        supervisor_state_payload={
+            "updated_at": current_iso,
+            "mode": "sharded",
+            "focus_profiles": ["top_flagship_grade", "whole_project_frontier"],
+            "completion_audit": {"status": "fail"},
+        },
+        ooda_state_payload={
+            "controller": "up",
+            "supervisor": "exited",
+            "aggregate_stale": False,
+            "aggregate_timestamp_stale": False,
+        },
+        compile_manifest_payload={"dispatchable_truth_ready": True},
+        support_packets_payload=_base_support_packets_payload(
+            current_iso,
+            summary={
+                "open_packet_count": 0,
+                "unresolved_external_proof_request_count": 0,
+                "closure_waiting_on_release_truth": 0,
+                "update_required_misrouted_case_count": 0,
+                "non_external_needs_human_response": 0,
+                "non_external_packets_without_named_owner": 0,
+                "non_external_packets_without_lane": 0,
+            },
+        ),
+        synced_external_runbook=True,
+    )
+
+    assert payload["coverage"]["fleet_and_operator_loop"] == "ready"
+    evidence = payload["coverage_details"]["fleet_and_operator_loop"]["evidence"]
+    assert evidence["journey_overall_state"] == "blocked"
+    assert evidence["journey_effective_overall_state"] == "ready"
+    assert evidence["journey_local_blocker_count_total"] == 1
+    assert evidence["journey_local_blocker_unrouted_count"] == 0
+    assert evidence["journey_local_blocker_autofix_routing_ready"] is True
+    assert evidence["ooda_supervisor_recovered_from_idle_configured_topology"] is True
+    assert evidence["ooda_recovered_from_current_supervisor_topology"] is True
+
+
+def test_materialize_flagship_product_readiness_recovers_stale_runtime_incident_from_current_configured_topology(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    stale_iso = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=3)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    current_iso = _now_iso()
+
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        active_shards_payload={
+            "generated_at": current_iso,
+            "manifest_kind": "configured_shard_topology",
+            "configured_shard_count": 20,
+            "configured_shards": [{"name": "shard-1"}, {"name": "shard-2"}],
+            "active_run_count": 0,
+            "active_shards": [],
+        },
+        supervisor_state_payload={
+            "updated_at": current_iso,
+            "mode": "sharded",
+            "focus_profiles": ["top_flagship_grade", "whole_project_frontier"],
+            "completion_audit": {"status": "fail"},
+        },
+        ooda_state_payload={
+            "controller": "up",
+            "supervisor": "up",
+            "aggregate_stale": False,
+            "aggregate_timestamp_stale": False,
+        },
+        status_plane_payload={
+            **_base_status_plane(),
+            "runtime_healing": {
+                "summary": {
+                    "alert_state": "action_needed",
+                    "last_event_at": stale_iso,
+                }
+            },
+        },
+        compile_manifest_payload={"dispatchable_truth_ready": True},
+        support_packets_payload=_base_support_packets_payload(
+            current_iso,
+            summary={
+                "open_packet_count": 0,
+                "unresolved_external_proof_request_count": 0,
+                "closure_waiting_on_release_truth": 0,
+                "update_required_misrouted_case_count": 0,
+                "non_external_needs_human_response": 0,
+                "non_external_packets_without_named_owner": 0,
+                "non_external_packets_without_lane": 0,
+            },
+        ),
+        synced_external_runbook=True,
+    )
+
+    assert payload["coverage"]["fleet_and_operator_loop"] == "ready"
+    evidence = payload["coverage_details"]["fleet_and_operator_loop"]["evidence"]
+    assert evidence["runtime_healing_override_stale_incident"] is True
+    assert evidence["supervisor_completion_status_recovered_from_current_readiness"] is True
+
+
+def test_materialize_flagship_product_readiness_recovers_active_shard_topology_when_ooda_supervisor_exited(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
+
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        active_shards_payload={
+            "generated_at": current_iso,
+            "manifest_kind": "configured_shard_topology",
+            "configured_shard_count": 20,
+            "configured_shards": [{"name": "shard-1"}, {"name": "shard-2"}],
+            "active_run_count": 10,
+            "active_shards": [{"name": "shard-1", "active_run_id": "run-1"}],
+        },
+        supervisor_state_payload={
+            "updated_at": current_iso,
+            "mode": "sharded",
+            "focus_profiles": ["top_flagship_grade", "whole_project_frontier"],
+            "completion_audit": {"status": "fail"},
+        },
+        ooda_state_payload={
+            "controller": "up",
+            "supervisor": "exited",
+            "aggregate_stale": False,
+            "aggregate_timestamp_stale": False,
+        },
+        compile_manifest_payload={"dispatchable_truth_ready": True},
+        support_packets_payload=_base_support_packets_payload(
+            current_iso,
+            summary={
+                "open_packet_count": 0,
+                "unresolved_external_proof_request_count": 0,
+                "closure_waiting_on_release_truth": 0,
+                "update_required_misrouted_case_count": 0,
+                "non_external_needs_human_response": 0,
+                "non_external_packets_without_named_owner": 0,
+                "non_external_packets_without_lane": 0,
+            },
+        ),
+        synced_external_runbook=True,
+    )
+
+    assert payload["coverage"]["fleet_and_operator_loop"] == "ready"
+    assert "fleet_and_operator_loop" not in payload["warning_keys"]
+    evidence = payload["coverage_details"]["fleet_and_operator_loop"]["evidence"]
+    assert evidence["supervisor_completion_status_recovered_from_active_shard_topology"] is True
+    assert evidence["ooda_supervisor_recovered_from_active_shard_topology"] is True
+    assert evidence["ooda_recovered_from_current_supervisor_topology"] is True
+    assert evidence["active_shards_count"] == 10
     assert evidence["ooda_supervisor"] == "exited"
 
 
