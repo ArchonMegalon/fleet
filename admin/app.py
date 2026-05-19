@@ -162,6 +162,7 @@ CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib
 GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
 AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
 CONTROLLER_URL = os.environ.get("FLEET_CONTROLLER_URL", "http://fleet-controller:8090")
+RUNTIME_HEALING_MAX_AGE_HOURS = 6
 STUDIO_URL = os.environ.get("FLEET_STUDIO_URL", "http://fleet-studio:8091")
 AUDIT_REQUEST_PENDING_SECONDS = int(os.environ.get("FLEET_AUDIT_REQUEST_PENDING_SECONDS", "300"))
 DOCKER_ROOT = pathlib.Path("/docker")
@@ -12831,6 +12832,7 @@ def _coerce_bool(value: Any) -> bool:
 
 
 def runtime_healing_payload() -> Dict[str, Any]:
+    cutoff = utc_now() - dt.timedelta(hours=RUNTIME_HEALING_MAX_AGE_HOURS)
     service_rows: List[Dict[str, Any]] = []
     if REBUILDER_AUTOHEAL_STATE_DIR.is_dir():
         for path in sorted(REBUILDER_AUTOHEAL_STATE_DIR.glob("*.status.json")):
@@ -12869,6 +12871,11 @@ def runtime_healing_payload() -> Dict[str, Any]:
             else:
                 row["posture"] = "good"
             service_rows.append(row)
+    service_rows = [
+        row
+        for row in service_rows
+        if (parsed := parse_iso(row.get("generated_at"))) is None or parsed >= cutoff
+    ]
     service_rows.sort(key=lambda item: str(item.get("service") or ""))
 
     recent_events = _load_jsonl_rows(RUNTIME_HEALING_EVENTS_PATH, limit=24)
@@ -12880,6 +12887,11 @@ def runtime_healing_payload() -> Dict[str, Any]:
         event["at"] = str(event.get("at") or "").strip()
         event["consecutive_failures"] = _coerce_int(event.get("consecutive_failures"), 0)
         event["cooldown_remaining_seconds"] = max(0, _coerce_int(event.get("cooldown_remaining_seconds"), 0))
+    recent_events = [
+        event
+        for event in recent_events
+        if (parsed := parse_iso(event.get("at"))) is None or parsed >= cutoff
+    ]
 
     now = utc_now()
     recent_restart_count = 0
