@@ -530,6 +530,10 @@ def verify(args: argparse.Namespace) -> List[str]:
         "Fleet package is closed; measured rollout remains blocked by current "
         "source, dependency, or sibling gates."
     )
+    expected_healthy_hold_status_reason = (
+        "Fleet package is closed and the weekly governor packet is healthy; "
+        "launch expansion remains intentionally frozen by the current measured rollout gates."
+    )
     expected_closeout_blocked_status_reason = (
         "Fleet package closeout is blocked; inspect package_verification issues "
         "before treating this slice as closed."
@@ -603,12 +607,23 @@ def verify(args: argparse.Namespace) -> List[str]:
             "source-blocked packet does not keep freeze_launch active",
         )
     elif measured_loop_blocked:
-        _require(packet.get("status") == "blocked", issues, "packet status is not blocked despite measured rollout gates remaining open")
-        _require(
-            str(packet.get("status_reason") or "") == expected_blocked_status_reason,
-            issues,
-            "blocked packet status_reason no longer distinguishes closed package proof from rollout blockage",
-        )
+        if packet.get("status") == "pass":
+            _require(
+                str(packet.get("status_reason") or "") == expected_healthy_hold_status_reason,
+                issues,
+                "healthy-hold packet status_reason no longer distinguishes closed package proof from intentional rollout freeze",
+            )
+        else:
+            _require(
+                packet.get("status") == "blocked",
+                issues,
+                "packet status is neither pass nor blocked while measured rollout gates remain open",
+            )
+            _require(
+                str(packet.get("status_reason") or "") == expected_blocked_status_reason,
+                issues,
+                "blocked packet status_reason no longer distinguishes closed package proof from rollout blockage",
+            )
     elif not package_complete:
         _require(packet.get("status") == "blocked", issues, "packet status is not blocked despite package closeout failure")
         _require(
@@ -617,7 +632,7 @@ def verify(args: argparse.Namespace) -> List[str]:
             "package-closeout blocked packet status_reason no longer distinguishes blocked closeout from blocked rollout",
         )
     else:
-        _require(packet.get("status") == "ready", issues, "packet status is not ready")
+        _require(packet.get("status") == "pass", issues, "packet status is not pass")
         _require(
             str(packet.get("status_reason") or "") == expected_ready_status_reason,
             issues,

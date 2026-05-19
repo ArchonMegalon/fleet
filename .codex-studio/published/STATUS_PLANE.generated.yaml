@@ -1,7 +1,7 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-05-09T14:02:46Z'
-source_public_status_generated_at: '2026-05-09T14:02:45Z'
+generated_at: '2026-05-19T12:04:50Z'
+source_public_status_generated_at: '2026-05-19T12:04:49Z'
 mission_snapshot: {}
 queue_forecast: {}
 capacity_forecast: {}
@@ -45,230 +45,10 @@ publish_readiness: {}
 runtime_healing:
   enabled: true
   event_log_present: true
-  services:
-  - service: fleet-auditor
-    current_state: healthy
-    observed_status: healthy
-    consecutive_failures: 0
-    cooldown_active: false
-    cooldown_remaining_seconds: 0
-    last_result: recovered
-    last_detail: service recovered after bounded restart
-    last_restart_at: '2026-05-01T09:22:23Z'
-    generated_at: '2026-05-01T09:59:22Z'
-    escalation_threshold: 3
-    restart_window_count: 0
-    total_restarts: 35
-  - service: fleet-controller
-    current_state: healthy
-    observed_status: healthy
-    consecutive_failures: 0
-    cooldown_active: false
-    cooldown_remaining_seconds: 0
-    last_result: recovered
-    last_detail: service recovered after bounded restart
-    last_restart_at: '2026-04-30T15:16:45Z'
-    generated_at: '2026-05-01T09:59:22Z'
-    escalation_threshold: 3
-    restart_window_count: 0
-    total_restarts: 1133
-  - service: fleet-dashboard
-    current_state: healthy
-    observed_status: healthy
-    consecutive_failures: 0
-    cooldown_active: false
-    cooldown_remaining_seconds: 0
-    last_result: ''
-    last_detail: ''
-    last_restart_at: ''
-    generated_at: '2026-05-01T09:59:22Z'
-    escalation_threshold: 3
-    restart_window_count: 0
-    total_restarts: 0
-  - service: fleet-design-supervisor
-    current_state: healthy
-    observed_status: healthy
-    consecutive_failures: 0
-    cooldown_active: false
-    cooldown_remaining_seconds: 0
-    last_result: recovered
-    last_detail: service recovered after bounded restart
-    last_restart_at: '2026-05-01T09:22:34Z'
-    generated_at: '2026-05-01T09:59:22Z'
-    escalation_threshold: 3
-    restart_window_count: 0
-    total_restarts: 86
-  recent_events:
-  - at: '2026-05-01T09:22:44Z'
-    service: fleet-design-supervisor
-    event: restart_recovered
-    status: healthy
-    detail: service recovered after bounded restart
-    consecutive_failures: 0
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T09:22:34Z'
-    service: fleet-design-supervisor
-    event: restart_started
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 2
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T09:22:34Z'
-    service: fleet-design-supervisor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 2
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T09:22:34Z'
-    service: fleet-auditor
-    event: restart_recovered
-    status: healthy
-    detail: service recovered after bounded restart
-    consecutive_failures: 0
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T09:22:23Z'
-    service: fleet-auditor
-    event: restart_started
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 2
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T09:22:23Z'
-    service: fleet-auditor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 2
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T09:21:53Z'
-    service: fleet-design-supervisor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 1
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T09:21:52Z'
-    service: fleet-auditor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 1
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T08:29:55Z'
-    service: fleet-auditor
-    event: restart_recovered
-    status: healthy
-    detail: service recovered after bounded restart
-    consecutive_failures: 0
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T08:29:44Z'
-    service: fleet-auditor
-    event: restart_started
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 2
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T08:29:44Z'
-    service: fleet-auditor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 2
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T08:29:13Z'
-    service: fleet-auditor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 1
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T05:51:02Z'
-    service: fleet-auditor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 1
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T05:48:29Z'
-    service: fleet-auditor
-    event: restart_recovered
-    status: healthy
-    detail: service recovered after bounded restart
-    consecutive_failures: 0
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T05:48:18Z'
-    service: fleet-auditor
-    event: restart_started
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 2
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T05:48:18Z'
-    service: fleet-auditor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 2
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T05:47:47Z'
-    service: fleet-auditor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 1
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T05:38:06Z'
-    service: fleet-auditor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 1
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T05:18:37Z'
-    service: fleet-auditor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 1
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T04:12:25Z'
-    service: fleet-auditor
-    event: restart_recovered
-    status: healthy
-    detail: service recovered after bounded restart
-    consecutive_failures: 0
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T04:12:14Z'
-    service: fleet-auditor
-    event: restart_started
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 2
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T04:12:14Z'
-    service: fleet-auditor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 2
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T04:11:43Z'
-    service: fleet-auditor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 1
-    cooldown_remaining_seconds: 0
-  - at: '2026-05-01T03:15:06Z'
-    service: fleet-auditor
-    event: observed_unhealthy
-    status: unhealthy
-    detail: ''
-    consecutive_failures: 1
-    cooldown_remaining_seconds: 0
+  services: []
+  recent_events: []
   summary:
-    service_count: 4
+    service_count: 0
     degraded_service_count: 0
     cooldown_active_count: 0
     escalated_service_count: 0
@@ -277,25 +57,26 @@ runtime_healing:
     alert_reason: No runtime healing drift is currently recorded.
     recommended_action: Keep the bounded auto-heal loop enabled and review the weekly
       healer history.
-    last_event_at: '2026-05-01T09:22:44Z'
-    last_event_service: fleet-design-supervisor
-    last_event_kind: restart_recovered
-    last_event_detail: service recovered after bounded restart
-    last_recovered_service: fleet-design-supervisor
-    last_recovered_at: '2026-05-01T09:22:44Z'
+    last_event_at: ''
+    last_event_service: ''
+    last_event_kind: ''
+    last_event_detail: ''
+    last_recovered_service: ''
+    last_recovered_at: ''
 external_proof_autoingest:
   enabled: true
-  current_state: cooldown
+  current_state: waiting_for_bundle
   commands_dir: /docker/fleet/.codex-studio/published/external-proof-commands
-  observed_bundle_count: 3
+  observed_bundle_count: 0
   last_attempt_at: '2026-05-01T09:58:19Z'
   last_success_at: ''
-  last_result: cooldown
-  last_detail: cooldown_active
+  last_result: waiting_for_bundle
+  last_detail: waiting for a returned host proof bundle
   summary:
     alert_state: tracking
-    alert_reason: cooldown_active
-    recommended_action: Wait for the retry window or inspect the last failure detail.
+    alert_reason: Waiting for a returned host proof bundle.
+    recommended_action: Return the Windows host proof bundle to the published external-proof
+      commands directory.
 projects:
 - id: core
   lifecycle: live
