@@ -27,7 +27,7 @@ FLEET_RUNTIME_DEFAULTS = {
 }
 EA_RUNTIME_DEFAULTS = {
     "EA_RESPONSES_HARD_MAX_ACTIVE_REQUESTS": "20",
-    "EA_SURVIVAL_ROUTE_ORDER": "chatplayground,gemini_web,gemini_vortex,onemin",
+    "EA_SURVIVAL_ROUTE_ORDER": "onemin,gemini_vortex,gemini_web,chatplayground",
     "EA_SURVIVAL_MAX_ACTIVE_REQUESTS": "1",
     "EA_SURVIVAL_QUEUE_TIMEOUT_SECONDS": "900",
     "EA_PROVIDER_HEALTH_REGISTRY_TIMEOUT_SECONDS": "10",
@@ -106,6 +106,33 @@ def load_env(path: Path) -> dict[str, str]:
     if not path.exists():
         return {}
     return parse_env_text(path.read_text(encoding="utf-8", errors="ignore"))
+
+
+def _truthy_env(value: Any) -> bool:
+    return str(value or "").strip().lower() not in {"", "0", "false", "no", "off"}
+
+
+def openai_escape_enabled(runtime_env: dict[str, str]) -> bool:
+    if _truthy_env(runtime_env.get("CHUMMER_DESIGN_SUPERVISOR_DISABLE_OPENAI_ESCAPE")):
+        return False
+    alias_text = str(runtime_env.get("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES") or "").strip()
+    owner_text = str(runtime_env.get("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_OWNER_IDS") or "").strip()
+    return bool(alias_text or owner_text)
+
+
+def should_degrade_to_openai_escape(provider_assessment: dict[str, Any], runtime_env: dict[str, str]) -> bool:
+    if provider_assessment.get("status") != "fail":
+        return False
+    if not openai_escape_enabled(runtime_env):
+        return False
+    problem_codes = {
+        str(item.get("code") or "").strip()
+        for item in (provider_assessment.get("problems") or [])
+        if isinstance(item, dict)
+    }
+    return bool(problem_codes) and problem_codes.issubset(
+        {"survival_lane_not_ready", "survival_not_backed_by_ready_browseract"}
+    )
 
 
 def rewrite_env_defaults(text: str, defaults: dict[str, str]) -> tuple[str, list[str]]:
@@ -482,6 +509,11 @@ def main(argv: list[str] | None = None) -> int:
         "warnings": [],
     }
     report["provider_health_assessment"] = provider_assessment
+    degrade_to_openai = should_degrade_to_openai_escape(provider_assessment, runtime_env)
+    report["openai_escape_fallback"] = {
+        "enabled": openai_escape_enabled(runtime_env),
+        "degraded_mode": degrade_to_openai,
+    }
 
     ea_recreate_attempted = False
     if ea_env_result["changed"] or provider_assessment["status"] == "fail":
@@ -506,6 +538,11 @@ def main(argv: list[str] | None = None) -> int:
             key: value for key, value in provider_fetch.items() if key != "payload"
         }
         report["provider_health_assessment_after_ea_recreate"] = provider_assessment
+        degrade_to_openai = should_degrade_to_openai_escape(provider_assessment, runtime_env)
+        report["openai_escape_fallback"] = {
+            "enabled": openai_escape_enabled(runtime_env),
+            "degraded_mode": degrade_to_openai,
+        }
 
     if fleet_env_result["changed"] or ea_recreate_attempted:
         action = run_command(
@@ -545,10 +582,12 @@ def main(argv: list[str] | None = None) -> int:
 
     active_runs = coerce_int(status_payload.get("active_runs_count"), 0)
     allowed_active = coerce_int(status_payload.get("allowed_active_shards"), 0)
-    effective_target = min(int(args.target_active), allowed_active or int(args.target_active))
+    requested_target_active = 1 if degrade_to_openai else int(args.target_active)
+    minimum_active = 1 if degrade_to_openai else int(args.minimum_active)
+    effective_target = min(requested_target_active, allowed_active or requested_target_active)
     if active_runs < effective_target:
         action = run_command(
-            [sys.executable, "scripts/fleet_ooda_keeper.py", "--once", "--target-active", str(args.target_active)],
+            [sys.executable, "scripts/fleet_ooda_keeper.py", "--once", "--target-active", str(requested_target_active)],
             cwd=workspace_root,
             timeout=120,
             dry_run=dry_run,
@@ -570,16 +609,20 @@ def main(argv: list[str] | None = None) -> int:
             worker_lane_health = dict(status_payload.get("worker_lane_health") or {})
             active_runs = coerce_int(status_payload.get("active_runs_count"), active_runs)
             allowed_active = coerce_int(status_payload.get("allowed_active_shards"), allowed_active)
-            effective_target = min(int(args.target_active), allowed_active or int(args.target_active))
-            if active_runs >= min(int(args.minimum_active), effective_target):
+            effective_target = min(requested_target_active, allowed_active or requested_target_active)
+            if active_runs >= min(minimum_active, effective_target):
                 break
         report["fleet_status_fetch_after_keeper"] = post_keeper_status_attempts
 
-    if provider_assessment.get("status") == "fail":
+    if provider_assessment.get("status") == "fail" and not degrade_to_openai:
         report["status"] = "blocked"
         report["requires_codex_patch"] = True
         report["blockers"].append(
             "provider-health invariant failed after deterministic guard; scheduled Codex must patch /docker/EA before trusting fleet status"
+        )
+    elif degrade_to_openai:
+        report["warnings"].append(
+            "codexea survival is unroutable; guard degraded to single-shard openai escape mode"
         )
 
     if status_payload:
@@ -588,15 +631,18 @@ def main(argv: list[str] | None = None) -> int:
             "active_runs_count": active_runs,
             "allowed_active_shards": allowed_active,
             "worker_lane_routable_lanes": worker_routable,
+            "requested_target_active": requested_target_active,
+            "minimum_active": minimum_active,
+            "degraded_to_openai_escape": degrade_to_openai,
             "eta_status": status_payload.get("eta_status") or (status_payload.get("eta") or {}).get("status"),
         }
-        if not worker_routable:
+        if not worker_routable and not degrade_to_openai:
             report["status"] = "blocked"
             report["blockers"].append("fleet worker_lane_health has no routable lanes")
-        if active_runs < min(int(args.minimum_active), effective_target):
+        if active_runs < min(minimum_active, effective_target):
             report["status"] = "blocked"
             report["blockers"].append(
-                f"active shard count {active_runs} is below minimum {min(int(args.minimum_active), effective_target)}"
+                f"active shard count {active_runs} is below minimum {min(minimum_active, effective_target)}"
             )
 
     print(json.dumps(report, indent=2, sort_keys=True))

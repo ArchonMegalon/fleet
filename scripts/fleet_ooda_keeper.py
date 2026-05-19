@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import sqlite3
 import sys
 import time
 import urllib.error
@@ -31,6 +32,7 @@ DEFAULT_DURATION_SECONDS = 12 * 7 * 24 * 60 * 60
 DEFAULT_FAILURE_LOOKBACK_MINUTES = 90
 DEFAULT_REPEAT_FAILURE_THRESHOLD = 3
 DEFAULT_STALE_LOCAL_REVIEW_MINUTES = 10
+DEFAULT_STALE_RUNTIME_HOURS = 6
 
 ACTIVE_RUN_STATUSES = {"starting", "running", "verifying", "healing", "local_review"}
 ACTIVE_RUNTIME_TASK_STATES = {"scheduled", "running"}
@@ -67,6 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--failure-lookback-minutes", type=int, default=DEFAULT_FAILURE_LOOKBACK_MINUTES)
     parser.add_argument("--repeat-failure-threshold", type=int, default=DEFAULT_REPEAT_FAILURE_THRESHOLD)
     parser.add_argument("--stale-local-review-minutes", type=int, default=DEFAULT_STALE_LOCAL_REVIEW_MINUTES)
+    parser.add_argument("--stale-runtime-hours", type=int, default=DEFAULT_STALE_RUNTIME_HOURS)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--forever", action="store_true")
     return parser.parse_args()
@@ -96,6 +99,113 @@ def parse_iso(value: Any) -> Optional[dt.datetime]:
         return dt.datetime.fromisoformat(text)
     except ValueError:
         return None
+
+
+def fleet_db_path(workspace_root: Path) -> Path:
+    return workspace_root / "state" / "fleet.db"
+
+
+def _path_has_recent_activity(path_text: str, *, cutoff: dt.datetime) -> bool:
+    clean = str(path_text or "").strip()
+    if not clean:
+        return False
+    path = Path(clean)
+    if not path.exists():
+        return False
+    try:
+        mtime = dt.datetime.fromtimestamp(path.stat().st_mtime, tz=dt.timezone.utc)
+    except OSError:
+        return False
+    return mtime >= cutoff
+
+
+def prune_stale_runtime_commitments(workspace_root: Path, *, stale_hours: int) -> int:
+    db_path = fleet_db_path(workspace_root)
+    if not db_path.exists():
+        return 0
+    now = utc_now()
+    cutoff = now - dt.timedelta(hours=max(1, int(stale_hours)))
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT rt.project_id,
+                   COALESCE(rt.package_id, '') AS package_id,
+                   rt.task_state,
+                   rt.scheduled_at,
+                   rt.started_at,
+                   rt.updated_at,
+                   p.status AS project_status,
+                   p.active_run_id,
+                   r.id AS run_id,
+                   r.status AS run_status,
+                   r.started_at AS run_started_at,
+                   r.finished_at AS run_finished_at,
+                   r.log_path,
+                   r.final_message_path
+            FROM runtime_tasks rt
+            LEFT JOIN projects p ON p.id = rt.project_id
+            LEFT JOIN runs r ON r.id = p.active_run_id
+            WHERE rt.task_state IN ('scheduled', 'running')
+            ORDER BY rt.project_id, rt.package_id
+            """
+        ).fetchall()
+        cleared = 0
+        for row in rows:
+            project_id = str(row["project_id"] or "").strip()
+            package_id = str(row["package_id"] or "").strip()
+            if not project_id:
+                continue
+            anchors = [
+                parse_iso(row["updated_at"]),
+                parse_iso(row["started_at"]),
+                parse_iso(row["scheduled_at"]),
+                parse_iso(row["run_started_at"]),
+            ]
+            anchor = next((item for item in anchors if item is not None), None)
+            if anchor is None or anchor >= cutoff:
+                continue
+            if parse_iso(row["run_finished_at"]) is not None:
+                continue
+            if _path_has_recent_activity(str(row["log_path"] or ""), cutoff=cutoff):
+                continue
+            if _path_has_recent_activity(str(row["final_message_path"] or ""), cutoff=cutoff):
+                continue
+            reason = (
+                f"keeper pruned stale runtime commitment after {int((now - anchor).total_seconds())}s "
+                "with no run log or final-message activity"
+            )
+            if row["run_id"]:
+                conn.execute(
+                    """
+                    UPDATE runs
+                    SET status='failed',
+                        finished_at=COALESCE(finished_at, ?),
+                        error_class=COALESCE(error_class, 'orphaned_runtime'),
+                        error_message=COALESCE(error_message, ?)
+                    WHERE id=?
+                    """,
+                    (iso(now), reason, int(row["run_id"])),
+                )
+            conn.execute(
+                "DELETE FROM runtime_tasks WHERE project_id=? AND COALESCE(package_id,'')=?",
+                (project_id, package_id),
+            )
+            if row["active_run_id"]:
+                conn.execute(
+                    """
+                    UPDATE projects
+                    SET active_run_id=NULL,
+                        last_error=COALESCE(last_error, ?),
+                        updated_at=?
+                    WHERE id=?
+                    """,
+                    (reason, iso(now), project_id),
+                )
+            cleared += 1
+        if cleared:
+            conn.commit()
+        return cleared
 
 
 def read_json(path: Path) -> Dict[str, Any]:
@@ -768,9 +878,15 @@ def release_stale_zero_finding_local_reviews(
 
 
 def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, Any]:
+    workspace_root = Path(str(args.workspace_root or DEFAULT_WORKSPACE_ROOT)).resolve()
     config = app.normalize_config()
     app.sync_config_to_db(config)
     app.sync_work_packages_to_db(config)
+    pruned_stale_commitment_count = prune_stale_runtime_commitments(
+        workspace_root,
+        stale_hours=int(args.stale_runtime_hours),
+    )
+    healed_stale_runtime_count = int(app.reconcile_stale_worker_sessions(config) or 0)
     app.reconcile_stuck_work_package_runtime_links()
     app.save_runtime_task_cache_snapshot()
     app.request_due_group_audits(config)
@@ -814,7 +930,7 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
         last_action_kind = "launch"
     elif nudged_ready_projects:
         last_action_kind = "nudge_ready"
-    elif healed_local_reviews or released_review_holds:
+    elif pruned_stale_commitment_count or healed_stale_runtime_count or healed_local_reviews or released_review_holds:
         last_action_kind = "cleanup"
     elif guide_pause:
         last_action_kind = "guide_pause"
@@ -822,6 +938,8 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
         "kind": last_action_kind,
         "launch_count": len(launched),
         "ready_nudge_count": len(nudged_ready_projects),
+        "pruned_stale_commitment_count": pruned_stale_commitment_count,
+        "healed_stale_runtime_count": healed_stale_runtime_count,
         "healed_local_review_count": healed_local_reviews,
         "released_review_hold_count": len(released_review_holds),
         "guide_pause": bool(guide_pause),
@@ -836,6 +954,8 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
         "ready_backlog_after": ready_after,
         "launched": launched,
         "nudged_ready_projects": nudged_ready_projects,
+        "pruned_stale_commitment_count": pruned_stale_commitment_count,
+        "healed_stale_runtime_count": healed_stale_runtime_count,
         "healed_local_review_count": healed_local_reviews,
         "released_review_holds": released_review_holds,
         "guide_pause": guide_pause or {},
@@ -860,12 +980,16 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
                 "pause_guide": bool(guide_pause),
                 "launch_count": len(launched),
                 "ready_nudge_count": len(nudged_ready_projects),
+                "pruned_stale_commitment_count": pruned_stale_commitment_count,
+                "healed_stale_runtime_count": healed_stale_runtime_count,
                 "healed_local_review_count": healed_local_reviews,
                 "released_review_hold_count": len(released_review_holds),
             },
             "act": {
                 "launched": launched,
                 "nudged_ready_projects": nudged_ready_projects,
+                "pruned_stale_commitment_count": pruned_stale_commitment_count,
+                "healed_stale_runtime_count": healed_stale_runtime_count,
                 "healed_local_review_count": healed_local_reviews,
                 "released_review_holds": released_review_holds,
                 "guide_pause": guide_pause or {},
@@ -881,6 +1005,8 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
             "ready_backlog_after": ready_after,
             "launch_count": len(launched),
             "ready_nudge_count": len(nudged_ready_projects),
+            "pruned_stale_commitment_count": pruned_stale_commitment_count,
+            "healed_stale_runtime_count": healed_stale_runtime_count,
             "healed_local_review_count": healed_local_reviews,
             "released_review_hold_count": len(released_review_holds),
             "guide_pause": bool(guide_pause),
@@ -908,6 +1034,8 @@ def main() -> int:
                     "ready_backlog_after": payload["ready_backlog_after"],
                     "launch_count": len(payload["launched"]),
                     "ready_nudge_count": len(payload["nudged_ready_projects"]),
+                    "pruned_stale_commitment_count": payload["pruned_stale_commitment_count"],
+                    "healed_stale_runtime_count": payload["healed_stale_runtime_count"],
                     "healed_local_review_count": payload["healed_local_review_count"],
                     "released_review_hold_count": len(payload["released_review_holds"]),
                     "repeat_failure_keys": sorted(payload["repeated_failures"].keys()),

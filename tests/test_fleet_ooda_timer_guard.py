@@ -221,6 +221,94 @@ def test_main_clears_provider_cache_without_recreating_supervisor(monkeypatch, t
     assert commands == []
 
 
+def test_main_degrades_to_single_openai_escape_shard_when_survival_is_unroutable(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    statuses = [
+        {
+            "ok": True,
+            "payload": {
+                "active_runs_count": 0,
+                "allowed_active_shards": 9,
+                "worker_lane_health": {"routable_lanes": []},
+            },
+        },
+        {
+            "ok": True,
+            "payload": {
+                "active_runs_count": 1,
+                "allowed_active_shards": 9,
+                "worker_lane_health": {"routable_lanes": []},
+            },
+        },
+    ]
+
+    monkeypatch.setattr(
+        guard,
+        "ensure_env_defaults",
+        lambda path, defaults, *, dry_run: {"path": str(path), "changed": False, "changed_keys": []},
+    )
+    monkeypatch.setattr(
+        guard,
+        "load_env",
+        lambda _path: {
+            **dict(guard.FLEET_RUNTIME_DEFAULTS),
+            "CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES": "acct-core-a",
+            "CHUMMER_DESIGN_SUPERVISOR_DISABLE_OPENAI_ESCAPE": "0",
+        },
+    )
+    monkeypatch.setattr(guard, "fetch_provider_health_with_retries", lambda *_args, **_kwargs: {"ok": True, "payload": {}})
+    monkeypatch.setattr(
+        guard,
+        "assess_provider_health_payload",
+        lambda _payload: {
+            "status": "fail",
+            "problems": [
+                {"code": "survival_lane_not_ready"},
+                {"code": "survival_not_backed_by_ready_browseract"},
+            ],
+            "warnings": [],
+            "provider_count": 4,
+            "lane_count": 9,
+        },
+    )
+    monkeypatch.setattr(guard, "load_status", lambda *_args, **_kwargs: statuses.pop(0))
+    monkeypatch.setattr(guard.time, "sleep", lambda _seconds: None)
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        guard,
+        "run_command",
+        lambda argv, **_kwargs: commands.append(list(argv)) or {"argv": argv, "returncode": 0},
+    )
+
+    rc = guard.main(
+        [
+            "--once",
+            "--workspace-root",
+            str(tmp_path / "fleet"),
+            "--ea-root",
+            str(tmp_path / "ea"),
+            "--target-active",
+            "13",
+            "--minimum-active",
+            "8",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["status"] == "pass"
+    assert payload["requires_codex_patch"] is False
+    assert payload["openai_escape_fallback"]["degraded_mode"] is True
+    assert payload["fleet_summary"]["requested_target_active"] == 1
+    assert payload["fleet_summary"]["minimum_active"] == 1
+    assert payload["fleet_summary"]["active_runs_count"] == 1
+    keeper_commands = [cmd for cmd in commands if "fleet_ooda_keeper.py" in " ".join(cmd)]
+    assert keeper_commands
+    assert keeper_commands[0][-1] == "1"
+
+
 def test_provider_health_assessment_rejects_ready_provider_with_zero_ready_slots() -> None:
     result = guard.assess_provider_health_payload(
         {

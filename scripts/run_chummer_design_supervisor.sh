@@ -255,6 +255,92 @@ shard_start_stagger_seconds="${CHUMMER_DESIGN_SUPERVISOR_SHARD_START_STAGGER_SEC
 frontier_derive_timeout_seconds="${CHUMMER_DESIGN_SUPERVISOR_FRONTIER_DERIVE_TIMEOUT_SECONDS:-15}"
 frontier_derive_mode="$(printf '%s' "${CHUMMER_DESIGN_SUPERVISOR_FRONTIER_DERIVE_MODE:-auto}" | tr '[:upper:]' '[:lower:]')"
 
+openai_escape_single_shard_enabled() {
+  python3 - <<'PY'
+import json
+import os
+import urllib.request
+
+disable = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_DISABLE_OPENAI_ESCAPE", "0") or "0").strip().lower()
+if disable in {"1", "true", "yes", "on"}:
+    raise SystemExit(1)
+aliases = [
+    item.strip()
+    for item in str(
+        os.environ.get("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", "")
+        or os.environ.get("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES", "")
+        or ""
+    ).replace(";", ",").split(",")
+    if item.strip()
+]
+models = [
+    item.strip()
+    for item in str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_MODELS", "") or "").replace(";", ",").split(",")
+    if item.strip()
+]
+if not aliases or not models:
+    raise SystemExit(1)
+try:
+    with urllib.request.urlopen("http://127.0.0.1:8090/v1/responses/_provider_health?lightweight=1", timeout=5) as response:
+        payload = json.load(response)
+except Exception:
+    raise SystemExit(0)
+rows = payload.get("lanes") or payload.get("profiles") or payload.get("rows") or []
+survival = None
+for row in rows:
+    if not isinstance(row, dict):
+        continue
+    lane = str(row.get("lane") or row.get("profile") or row.get("name") or "").strip().lower()
+    if lane == "survival":
+        survival = row
+        break
+if not isinstance(survival, dict):
+    raise SystemExit(0)
+state = str(survival.get("state") or "").strip().lower()
+ready_slots = int(survival.get("ready_slots") or 0)
+providers = [item for item in (survival.get("providers") or []) if isinstance(item, dict)]
+browser_ready = any(
+    str(item.get("provider_key") or item.get("backend") or "").strip().lower() in {"browseract", "chatplayground"}
+    and int(item.get("ready_slots") or 0) > 0
+    and str(item.get("state") or "").strip().lower() == "ready"
+    for item in providers
+)
+if state != "ready" or ready_slots <= 0 or not browser_ready:
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+apply_openai_escape_single_shard_defaults() {
+  local escape_aliases="${CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES:-}"
+  local escape_models="${CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_MODELS:-}"
+  local first_model=""
+  first_model="$(printf '%s' "$escape_models" | tr ';' ',' | awk -F',' '{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1); print $1}')"
+  if [[ -z "${first_model//[[:space:]]/}" ]]; then
+    first_model="gpt-5.4"
+  fi
+  if [[ -z "${escape_aliases//[[:space:]]/}" ]]; then
+    escape_aliases="acct-chatgpt-archon"
+  fi
+  parallel_shards_raw=1
+  parallel_shards=1
+  dynamic_account_routing_mode="pinned"
+  pinned_account_aliases_mode="1"
+  export CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN="codex"
+  export CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE=""
+  export CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL="$first_model"
+  export CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES="$escape_aliases"
+  export CHUMMER_DESIGN_SUPERVISOR_FALLBACK_LANES=""
+  shard_worker_bins=("codex")
+  shard_worker_lanes=("")
+  shard_worker_models=("$first_model")
+  shard_account_groups=("$escape_aliases")
+  shard_owner_groups=("fleet")
+  shard_focus_profile_groups=("top_flagship_grade")
+  shard_focus_text_groups=("openai escape flagship recovery")
+  printf 'run_chummer_design_supervisor: codexea survival unroutable; collapsing to one pinned OpenAI escape shard (%s / %s).\n' "$escape_aliases" "$first_model" >&2
+}
+
 case "$(printf '%s' "${CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS:-0}" | tr '[:upper:]' '[:lower:]')" in
   1|true|yes|on)
     common_args+=(--ignore-nonlinux-desktop-host-proof-blockers)
@@ -268,6 +354,9 @@ parallel_shards=$(( parallel_shards_raw < 1 ? 1 : parallel_shards_raw ))
 if (( parallel_shards > 1 )) && [[ -z "$state_root_base" ]]; then
   printf 'run_chummer_design_supervisor: parallel shards requires CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT; collapsing to 1.\n' >&2
   parallel_shards=1
+fi
+if openai_escape_single_shard_enabled; then
+  apply_openai_escape_single_shard_defaults
 fi
 if [[ ! "$shard_start_stagger_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
   shard_start_stagger_seconds=3
