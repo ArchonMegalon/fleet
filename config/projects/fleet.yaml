@@ -825,6 +825,29 @@ queue:
   - ERG6-P0-012
   - ERG6-P0-013
   shipped: Implemented on 2026-05-19 from the referenced v6 audit ZIP and strict prompt; the remaining Fleet closure work was to mark the package done in source config and refresh the published queue/workpackage overlays so they stop advertising solved work as live queue truth.
+- package_id: fleet-postgold-residual-audit-closure
+  title: "Close the remaining post-gold residual audit receipts: refresh the running public feedback leak proof, fix Black Ledger preseeded-world public proof drift, rerun gold janitor, and scrub stale Fleet admin/frontier receipts that still advertise old preview or failed state."
+  status: done
+  package_kind: implementation
+  design_owner: fleet-top-flagship
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  verification_bundle:
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/PUBLIC_OPERATOR_LEAK_SCAN.generated.json
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/PUBLIC_PROVIDER_LEAK_SCAN.generated.json
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/BLACK_LEDGER_PRESEEDED_WORLD_E2E.generated.json
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/RUN_GOLD_JANITOR.generated.json
+  - /docker/fleet/.codex-studio/published/NEXT90_M130_FLEET_PROVIDER_STEWARDSHIP.admin_status.generated.json
+  handoff_note: /docker/fleet/feedback/2026-05-19-postgold-residual-audit-closure.md
+  residual_blocker_ids:
+  - POSTGOLD-001
+  - POSTGOLD-002
+  - POSTGOLD-003
+  - POSTGOLD-004
+  shipped: Closed on 2026-05-19 after refreshing the public feedback truth gates, rerunning the Black Ledger preseeded-world E2E receipt, and regenerating the gold janitor pass receipt from the current local host.
 queue_sources:
 - kind: worklist
   path: WORKLIST.md
