@@ -2678,12 +2678,40 @@ class AdminForecastTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            with mock.patch.object(self.admin, "EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH", state_dir / "status.json"):
+            with mock.patch.object(self.admin, "EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH", state_dir / "status.json"), mock.patch.object(
+                self.admin,
+                "EXTERNAL_PROOF_RUNBOOK_PATH",
+                Path(tmpdir) / "missing-runbook.md",
+            ):
                 payload = self.admin.external_proof_autoingest_payload()
 
         self.assertEqual(payload["current_state"], "waiting_for_bundle")
         self.assertEqual(payload["summary"]["alert_state"], "tracking")
         self.assertIn("Return the Windows host proof bundle", payload["summary"]["recommended_action"])
+
+    def test_external_proof_autoingest_payload_surfaces_no_pending_requests_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_dir = Path(tmpdir) / "external-proof-autoingest"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "status.json").write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-05-19T14:05:00Z",
+                        "current_state": "no_pending_requests",
+                        "commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
+                        "observed_bundle_count": 0,
+                        "last_result": "no_pending_requests",
+                        "last_detail": "no external host proof bundle is currently required",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(self.admin, "EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH", state_dir / "status.json"):
+                payload = self.admin.external_proof_autoingest_payload()
+
+        self.assertEqual(payload["current_state"], "no_pending_requests")
+        self.assertEqual(payload["summary"]["alert_state"], "healthy")
+        self.assertIn("No action required", payload["summary"]["recommended_action"])
 
     def test_canonical_public_status_payload_includes_runtime_healing(self) -> None:
         with mock.patch.object(

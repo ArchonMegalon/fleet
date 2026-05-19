@@ -28,6 +28,7 @@ autoheal_escalate_after_restarts="${FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS:-3}"
 autoheal_escalate_window_seconds="${FLEET_AUTOHEAL_ESCALATE_WINDOW_SECONDS:-1800}"
 external_proof_autoingest_enabled="$(printf '%s' "${FLEET_EXTERNAL_PROOF_AUTOINGEST_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')"
 external_proof_commands_dir="${FLEET_EXTERNAL_PROOF_COMMANDS_DIR:-$workspace_root/.codex-studio/published/external-proof-commands}"
+external_proof_runbook_path="${FLEET_EXTERNAL_PROOF_RUNBOOK_PATH:-$workspace_root/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md}"
 external_proof_autoingest_cooldown_seconds="${FLEET_EXTERNAL_PROOF_AUTOINGEST_COOLDOWN_SECONDS:-120}"
 
 mkdir -p "$state_dir"
@@ -407,6 +408,22 @@ external_proof_bundle_fingerprint() {
   printf '%b' "$rows" | LC_ALL=C sort | sha256sum | awk '{print $1}'
 }
 
+external_proof_unresolved_request_count() {
+  if [ ! -f "$external_proof_runbook_path" ]; then
+    printf '%s\n' "-1"
+    return 0
+  fi
+  raw="$(grep -E '^- unresolved_request_count: ' "$external_proof_runbook_path" | head -n 1 | sed 's/^- unresolved_request_count: //')"
+  case "$raw" in
+    ''|*[!0-9-]*)
+      printf '%s\n' "-1"
+      ;;
+    *)
+      printf '%s\n' "$raw"
+      ;;
+  esac
+}
+
 write_external_proof_status() {
   current_state="$1"
   detail="$2"
@@ -666,6 +683,13 @@ monitor_external_proof_autoingest() {
     write_text_file "$external_proof_autoingest_last_result_file" "waiting_for_commands_dir"
     write_text_file "$external_proof_autoingest_last_detail_file" "external proof commands directory is missing"
     write_external_proof_status "waiting_for_commands_dir" "external proof commands directory is missing" "" 0
+    return 0
+  fi
+  unresolved_request_count="$(external_proof_unresolved_request_count)"
+  if [ "$unresolved_request_count" = "0" ]; then
+    write_text_file "$external_proof_autoingest_last_result_file" "no_pending_requests"
+    write_text_file "$external_proof_autoingest_last_detail_file" "no external host proof bundle is currently required"
+    write_external_proof_status "no_pending_requests" "no external host proof bundle is currently required" "" 0
     return 0
   fi
   if [ "$bundle_count" -le 0 ] || [ -z "$bundle_fingerprint" ]; then
