@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from scripts.materialize_fleet_queue_overlay import resolve_project_queue
+from scripts.materialize_fleet_queue_overlay import apply_queue_source, resolve_project_queue
 
 
 QUEUE_PATH = Path("/docker/fleet/.codex-studio/published/QUEUE.generated.yaml")
@@ -20,7 +20,7 @@ def _queue_fingerprint(items: list[object]) -> str:
 
 def test_published_fleet_queue_overlay_contains_no_stale_solved_tasks() -> None:
     project_cfg = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
-    _, queue = resolve_project_queue(CONFIG_PATH.parent.parent, CONFIG_PATH.parent)
+    _, queue = resolve_project_queue(Path(project_cfg["path"]), CONFIG_PATH.parent)
     payload = yaml.safe_load(QUEUE_PATH.read_text(encoding="utf-8")) or {}
     items = list(payload.get("items") or [])
 
@@ -63,7 +63,7 @@ def test_apply_queue_source_loads_next90_queue_staging_for_matching_repo(tmp_pat
         "review": {"repo": "chummer6-ui"},
     }
 
-    queue = _apply_queue_source(
+    queue = apply_queue_source(
         project_cfg,
         [],
         {"kind": "next90_queue_staging", "path": str(staging_path), "mode": "append"},
