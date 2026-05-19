@@ -25,6 +25,7 @@ UTC = dt.timezone.utc
 REBUILDER_STATE_DIR = Path(os.environ.get("FLEET_REBUILDER_STATE_DIR", str(ROOT / "state" / "rebuilder")))
 REBUILDER_AUTOHEAL_STATE_DIR = REBUILDER_STATE_DIR / "autoheal"
 RUNTIME_HEALING_EVENTS_PATH = REBUILDER_AUTOHEAL_STATE_DIR / "events.jsonl"
+RUNTIME_HEALING_MAX_AGE_HOURS = 6
 REBUILDER_EXTERNAL_PROOF_AUTOINGEST_STATE_DIR = REBUILDER_STATE_DIR / "external-proof-autoingest"
 EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH = REBUILDER_EXTERNAL_PROOF_AUTOINGEST_STATE_DIR / "status.json"
 STAGE_ORDER = (
@@ -618,6 +619,8 @@ def _runtime_healing_from_autoheal_state() -> Dict[str, Any]:
     if not REBUILDER_AUTOHEAL_STATE_DIR.is_dir():
         return {}
 
+    now = dt.datetime.now(UTC)
+    cutoff = now - dt.timedelta(hours=RUNTIME_HEALING_MAX_AGE_HOURS)
     service_rows: List[Dict[str, Any]] = []
     for path in sorted(REBUILDER_AUTOHEAL_STATE_DIR.glob("*.status.json")):
         payload = _load_json_mapping(path)
@@ -644,6 +647,11 @@ def _runtime_healing_from_autoheal_state() -> Dict[str, Any]:
                 "total_restarts": max(0, int(payload.get("total_restarts") or 0)),
             }
         )
+    service_rows = [
+        row
+        for row in service_rows
+        if (parsed := _parse_iso(row.get("generated_at"))) is None or parsed >= cutoff
+    ]
 
     recent_events = _load_jsonl_rows(RUNTIME_HEALING_EVENTS_PATH, limit=24)
     for event in recent_events:
@@ -654,6 +662,11 @@ def _runtime_healing_from_autoheal_state() -> Dict[str, Any]:
         event["at"] = str(event.get("at") or "").strip()
         event["consecutive_failures"] = int(event.get("consecutive_failures") or 0)
         event["cooldown_remaining_seconds"] = max(0, int(event.get("cooldown_remaining_seconds") or 0))
+    recent_events = [
+        event
+        for event in recent_events
+        if (parsed := _parse_iso(event.get("at"))) is None or parsed >= cutoff
+    ]
 
     escalated_services = [
         row
