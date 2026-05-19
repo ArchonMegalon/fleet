@@ -58,7 +58,7 @@
   },
   "contract_name": "fleet.next90_m130_provider_stewardship_monitor",
   "frontier_id": 7382989835,
-  "generated_at": "2026-05-06T10:38:54Z",
+  "generated_at": "2026-05-19T15:27:38Z",
   "governor_monitors": {
     "canary_reason": "Canary evidence is still accumulating",
     "canary_state": "accumulating",
@@ -88,7 +88,6 @@
     "blockers": [],
     "state": "pass",
     "warnings": [
-      "Fallback coverage is thin for core, core_authority, core_booster, core_rescue, groundwork.",
       "Provider canary remains accumulating.",
       "Rollback posture remains armed.",
       "Current launch action is freeze_launch."
@@ -119,211 +118,34 @@
       "warnings": []
     },
     "provider_routes": {
-      "fallback_thin_count": 5,
-      "fallback_thin_lanes": [
-        "core",
-        "core_authority",
-        "core_booster",
-        "core_rescue",
-        "groundwork"
-      ],
-      "governed_route_count": 12,
+      "fallback_thin_count": 0,
+      "fallback_thin_lanes": [],
+      "governed_route_count": 0,
       "issues": [],
       "revert_now_count": 0,
       "revert_now_lanes": [],
       "review_due_count": 0,
       "review_due_lanes": [],
-      "routes": [
-        {
-          "challenger_route": "onemin",
-          "configured_slots": 0,
-          "default_route": "gemini_vortex",
-          "fallback_route": "magixai",
-          "lane": "easy",
-          "merge_review_required": false,
-          "posture": "safe_today",
-          "ready_slots": 0,
-          "remaining_text": "quota unknown",
-          "review_required": false,
-          "runway": "unknown",
-          "state": "missing"
-        },
-        {
-          "challenger_route": "onemin",
-          "configured_slots": 0,
-          "default_route": "gemini_vortex",
-          "fallback_route": "magixai",
-          "lane": "repair",
-          "merge_review_required": false,
-          "posture": "safe_today",
-          "ready_slots": 0,
-          "remaining_text": "quota unknown",
-          "review_required": false,
-          "runway": "unknown",
-          "state": "missing"
-        },
-        {
-          "challenger_route": "",
-          "configured_slots": 0,
-          "default_route": "gemini_vortex",
-          "fallback_route": "",
-          "lane": "groundwork",
-          "merge_review_required": false,
-          "posture": "fallback_thin",
-          "ready_slots": 0,
-          "remaining_text": "quota unknown",
-          "review_required": false,
-          "runway": "unknown",
-          "state": "missing"
-        },
-        {
-          "challenger_route": "onemin",
-          "configured_slots": 0,
-          "default_route": "gemini_vortex",
-          "fallback_route": "chatplayground",
-          "lane": "review_light",
-          "merge_review_required": false,
-          "posture": "safe_today",
-          "ready_slots": 0,
-          "remaining_text": "quota unknown",
-          "review_required": false,
-          "runway": "unknown",
-          "state": "missing"
-        },
-        {
-          "challenger_route": "",
-          "configured_slots": 0,
-          "default_route": "onemin",
-          "fallback_route": "",
-          "lane": "core",
-          "merge_review_required": true,
-          "posture": "fallback_thin",
-          "ready_slots": 0,
-          "remaining_text": "quota unknown",
-          "review_required": false,
-          "runway": "unknown",
-          "state": "unconfigured"
-        },
-        {
-          "challenger_route": "",
-          "configured_slots": 0,
-          "default_route": "onemin",
-          "fallback_route": "",
-          "lane": "core_authority",
-          "merge_review_required": true,
-          "posture": "fallback_thin",
-          "ready_slots": 0,
-          "remaining_text": "quota unknown",
-          "review_required": false,
-          "runway": "unknown",
-          "state": "unconfigured"
-        },
-        {
-          "challenger_route": "",
-          "configured_slots": 0,
-          "default_route": "onemin",
-          "fallback_route": "",
-          "lane": "core_booster",
-          "merge_review_required": true,
-          "posture": "fallback_thin",
-          "ready_slots": 0,
-          "remaining_text": "quota unknown",
-          "review_required": false,
-          "runway": "unknown",
-          "state": "unconfigured"
-        },
-        {
-          "challenger_route": "",
-          "configured_slots": 0,
-          "default_route": "onemin",
-          "fallback_route": "",
-          "lane": "core_rescue",
-          "merge_review_required": true,
-          "posture": "fallback_thin",
-          "ready_slots": 0,
-          "remaining_text": "quota unknown",
-          "review_required": false,
-          "runway": "unknown",
-          "state": "unconfigured"
-        },
-        {
-          "challenger_route": "onemin",
-          "configured_slots": 0,
-          "default_route": "gemini_vortex",
-          "fallback_route": "chatplayground",
-          "lane": "review_shard",
-          "merge_review_required": false,
-          "posture": "safe_today",
-          "ready_slots": 0,
-          "remaining_text": "quota unknown",
-          "review_required": false,
-          "runway": "unknown",
-          "state": "missing"
-        },
-        {
-          "challenger_route": "onemin",
-          "configured_slots": 0,
-          "default_route": "gemini_vortex",
-          "fallback_route": "chatplayground",
-          "lane": "audit_shard",
-          "merge_review_required": true,
-          "posture": "safe_today",
-          "ready_slots": 0,
-          "remaining_text": "quota unknown",
-          "review_required": false,
-          "runway": "unknown",
-          "state": "missing"
-        },
-        {
-          "challenger_route": "onemin",
-          "configured_slots": 0,
-          "default_route": "gemini_vortex",
-          "fallback_route": "chatplayground",
-          "lane": "jury",
-          "merge_review_required": true,
-          "posture": "safe_today",
-          "ready_slots": 0,
-          "remaining_text": "quota unknown",
-          "review_required": false,
-          "runway": "unknown",
-          "state": "missing"
-        },
-        {
-          "challenger_route": "",
-          "configured_slots": 0,
-          "default_route": "gemini_vortex",
-          "fallback_route": "chatplayground",
-          "lane": "survival",
-          "merge_review_required": false,
-          "posture": "safe_today",
-          "ready_slots": 0,
-          "remaining_text": "quota unknown",
-          "review_required": false,
-          "runway": "unknown",
-          "state": "unavailable"
-        }
-      ],
+      "routes": [],
       "state": "pass",
-      "warnings": [
-        "Fallback coverage is thin for core, core_authority, core_booster, core_rescue, groundwork."
-      ]
+      "warnings": []
     },
     "runtime_healing_summary": {
-      "generated_at": "2026-05-06T10:38:48Z",
-      "service_count": 4,
-      "source_age_seconds": 6
+      "generated_at": "2026-05-19T15:27:38Z",
+      "service_count": 0,
+      "source_age_seconds": 0
     }
   },
   "source_inputs": {
     "admin_status": {
-      "generated_at": "2026-05-06T10:38:49Z",
+      "generated_at": "2026-05-19T15:27:38Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT90_M130_FLEET_PROVIDER_STEWARDSHIP.admin_status.generated.json",
-      "sha256": "ae16900c22ec3f77fb2ff01e75dd57349ebcea2be024012ea71985010c484428"
+      "sha256": "99772d2e2b75ca927cfdbe6510881554b8988a5297dc03e6e6a2db2e040edc15"
     },
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "7acb185a4361263f439c6a4810d41e1e1b7dde9d0e48680b072a62efaee9dd5a"
+      "sha256": "797a7bf15503da99a3bd4fb767c0e15aca5667b0913de01d2bcd55a9d453f393"
     },
     "external_tools_plane": {
       "generated_at": "",
@@ -348,17 +170,17 @@
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "205f5ec82ad2e88c7004babb69da5ff41828070eea185b5308d82ad77bfdb85c"
+      "sha256": "4cd877009355dda3c453d5622786403dbeae36ac664951ec20020054948fdb5e"
     },
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "bea71f9b1acef8933909460febac9eb8bde65ed06fb32556b3257138647f4e63"
+      "sha256": "729540d98a517a298fd38fa9e4448e1f4ca56e72a21726a650edd5c289e44b43"
     },
     "weekly_governor_packet": {
-      "generated_at": "2026-05-06T10:31:12Z",
+      "generated_at": "2026-05-19T15:23:17Z",
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
-      "sha256": "c9fe97e23997eabdebb7500bf700850a35b65aba6005345921db0ac2ec7846e9"
+      "sha256": "4a49f3b57cbfb24eaacf963395bec8f00803cfc42ed12a29f636f4cd6185d433"
     }
   },
   "status": "pass",

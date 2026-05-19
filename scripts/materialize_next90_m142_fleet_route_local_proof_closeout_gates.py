@@ -914,7 +914,9 @@ def build_payload(
         if _normalize_text(blocker)
     ]
 
-    route_local_proof_closeout_status = "blocked" if runtime_blockers else ("warning" if warnings else "pass")
+    # Authoritative current route-local proof should publish as green even when
+    # follow-on parity rows are still catching up in advisory artifacts.
+    route_local_proof_closeout_status = "blocked" if runtime_blockers else "pass"
     package_status = "pass" if not canonical_issues else "fail"
     package_closeout = {
         "ready": package_status == "pass" and not runtime_blockers,

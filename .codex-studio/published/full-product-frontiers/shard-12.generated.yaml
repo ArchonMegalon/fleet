@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-08T20:44:00Z'
+generated_at: '2026-05-19T15:25:22Z'
 mode: flagship_product
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-12
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-12
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -35,28 +35,7 @@ focus:
   texts:
   - top flagship grade
   - whole project frontier
-  - feedback
-  - automatic bugfixing
-  - crash
-  - support
-  - accessibility
-  - localization
-  - restore confidence
-  - fit and finish
-  - flagship-readiness
-  - desktop-client
   - release-proof
-  - materializer
-  - user-journey-tester-audit
-  - whole-project frontier
-  - no lowered standards
-  - feedback loop
-  - crash reporting
-  - support routing
-  - journey smoothness
-  - performance
-  - proof shelf
-  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -64,41 +43,20 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: fail
-  reason: desktop executable exit gate proof did not pass
+  status: pass
+  reason: trusted completion receipt plus whole-product release proof and Linux desktop
+    exit gate are ready
 full_product_audit:
-  status: fail
-  reason: 'flagship product readiness proof is not green: fail'
+  status: pass
+  reason: flagship product readiness proof is current across desktop, rules, hub,
+    mobile, horizons, and operator lanes
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-08T20:33:35Z'
-  proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  generated_at: '2026-05-19T15:22:21Z'
+  proof_status: pass
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 0
 frontier_ids: []
 frontier: []
-eta:
-  status: tracked
-  eta_human: tracked
-  eta_confidence: low
-  basis: aggregate_shard_parallel_scope
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: 'provider-health preflight left no routable direct lanes: core:onemin:unknown;
-    core_rescue:onemin:unknown; survival:onemin:unknown; chatplayground:unknown; gemini_vortex:unknown;
-    lane:no routable survival backends: chatplayground:unknown; gemini_web:unknown;
-    gemini_vortex:unknown; onemin:unknown'
-  summary: 1 open milestones remain (1 in progress, 0 not started). Aggregate shard
-    status is parallelized across 1 active shards under Full Chummer5A parity and
-    flagship proof closeout.
-  predicted_completion_at: ''
-  range_low_hours: 10.86
-  range_high_hours: 26.65
-  remaining_open_milestones: 1
-  remaining_in_progress_milestones: 1
-  remaining_not_started_milestones: 0
-  remaining_effort_units: 2.05
