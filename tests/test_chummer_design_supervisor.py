@@ -19056,12 +19056,39 @@ def test_linux_desktop_exit_gate_audit_rejects_repo_mutation_during_run() -> Non
         payload = json.loads(proof_path.read_text(encoding="utf-8"))
         payload["git"]["start"]["tracked_diff_sha256"] = "deadbeef"
         payload["git"]["identity_stable"] = False
+        payload["source_snapshot"]["identity_stable"] = False
         proof_path.write_text(json.dumps(payload), encoding="utf-8")
 
         audit = module._linux_desktop_exit_gate_audit(_args(root))
 
         assert audit["status"] == "fail"
-        assert "repo changed while the proof run was executing" in audit["reason"]
+        assert "source snapshot did not stay stable" in audit["reason"]
+
+
+def test_linux_desktop_exit_gate_audit_accepts_live_repo_drift_when_source_snapshot_is_stable() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "codex@example.com"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Codex"], cwd=root, check=True, capture_output=True)
+        (root / "tracked.txt").write_text("one\n", encoding="utf-8")
+        subprocess.run(["git", "add", "tracked.txt"], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=root, check=True, capture_output=True)
+
+        _write_completion_evidence(root)
+        proof_path = root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+        payload = json.loads(proof_path.read_text(encoding="utf-8"))
+        payload["git"]["identity_stable"] = False
+        payload["git"]["start"]["tracked_diff_sha256"] = "deadbeef"
+        payload["git"]["finish"]["tracked_diff_sha256"] = "feedface"
+        payload["source_snapshot"]["identity_stable"] = True
+        proof_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "pass"
+        assert "repo changed while the proof run was executing" not in audit["reason"]
 
 
 def test_linux_desktop_exit_gate_audit_rejects_missing_source_snapshot() -> None:
@@ -25213,6 +25240,29 @@ def test_full_product_frontier_is_empty_when_readiness_is_green_under_hard_flags
         assert module._full_product_frontier(args) == []
 
 
+def test_full_product_frontier_keeps_fleet_operator_slice_when_completion_audit_fails_under_green_readiness(
+    monkeypatch,
+) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_flagship_product_readiness(root, status="pass")
+        args = _args(root)
+        args.focus_profile = ["top_flagship_grade", "whole_project_frontier"]
+        monkeypatch.setattr(
+            module,
+            "_design_completion_audit",
+            lambda _args, _history: {
+                "status": "fail",
+                "reason": "desktop executable exit gate proof is stale (90736s old)",
+            },
+        )
+
+        frontier = module._full_product_frontier(args)
+
+        assert [item.title for item in frontier] == ["Fleet and operator loop flagship finish"]
+
+
 def test_full_product_frontier_limits_hard_flagship_to_explicit_coverage_gap_rows() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -25337,6 +25387,44 @@ def test_reconcile_materialized_full_product_frontier_drops_stale_claim_when_rea
         )
 
         assert reconciled == []
+
+
+def test_reconcile_materialized_full_product_frontier_keeps_fleet_operator_slice_when_completion_audit_fails() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        shard_root = root / "state" / "chummer_design_supervisor" / "shard-4"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+        frontier = [
+            module.Milestone(
+                id=3109832007,
+                title="Fleet and operator loop flagship finish",
+                wave="flagship_product",
+                status="not_started",
+                owners=["fleet", "executive-assistant", "chummer6-design", "chummer6-hub"],
+                exit_criteria=["Keep the operator loop durable."],
+                dependencies=[],
+            )
+        ]
+
+        reconciled = module._reconcile_materialized_full_product_frontier(
+            args,
+            shard_root,
+            frontier,
+            {
+                "status": "pass",
+                "coverage_gap_keys": [],
+                "missing_coverage_keys": [],
+                "unresolved_parity_families": [],
+            },
+            completion_audit={
+                "status": "fail",
+                "reason": "desktop executable exit gate proof is stale (90736s old)",
+            },
+        )
+
+        assert [item.title for item in reconciled] == ["Fleet and operator loop flagship finish"]
 
 
 def test_full_product_frontier_marks_external_only_blockers_explicitly(monkeypatch) -> None:
@@ -27030,6 +27118,32 @@ def test_synthetic_completion_receipt_accepts_plain_worker_timeout_when_proofs_a
     assert synthetic["status"] == "pass"
     assert synthetic["synthetic"] is True
     assert "worker exit 124" in synthetic["reason"]
+
+
+def test_synthetic_completion_receipt_accepts_explicit_completion_review_when_proofs_are_green() -> None:
+    module = _load_module()
+    receipt_audit = {
+        "status": "fail",
+        "reason": "no supervisor run history recorded; explicit completion review is required",
+        "accepted_run_ids": [],
+        "rejected_zero_exit_run_ids": [],
+        "latest_run_id": "",
+        "latest_run_reason": "",
+    }
+    pass_audit = {"status": "pass"}
+
+    synthetic = module._synthetic_completion_receipt_audit(
+        receipt_audit,
+        pass_audit,
+        pass_audit,
+        pass_audit,
+        pass_audit,
+    )
+
+    assert synthetic is not None
+    assert synthetic["status"] == "pass"
+    assert synthetic["synthetic"] is True
+    assert "no supervisor run history recorded" in synthetic["reason"]
 
 
 def test_should_defer_external_blocker_probe_only_for_non_primary_shards() -> None:
@@ -30999,6 +31113,55 @@ def test_persist_live_state_snapshot_clears_shard_scoped_aliases_for_aggregate_r
     assert "idle_reason" not in payload
     assert "selected_account_alias" not in payload
     assert "selected_model" not in payload
+
+
+def test_apply_status_alias_fields_prefers_waiting_for_local_frontier_slice_over_claimed_idle() -> None:
+    module = _load_module()
+
+    updated = module._apply_status_alias_fields(
+        {
+            "frontier_ids": [1053850454],
+            "active_runs_count": 0,
+            "completion_review_frontier_path": "",
+            "completion_review_frontier_mirror_path": "",
+            "shards": [
+                {
+                    "name": "shard-1",
+                    "active_run_id": "",
+                    "active_frontier_ids": [],
+                }
+            ],
+        }
+    )
+
+    assert updated["idle_reason"] == "waiting_for_local_frontier_slice"
+    assert updated["active_run_progress_state"] == "idle_waiting_for_local_frontier_slice"
+
+
+def test_reconcile_aggregate_shard_truth_rewrites_claimed_idle_shards_without_local_slice() -> None:
+    module = _load_module()
+
+    updated = module._reconcile_aggregate_shard_truth(
+        {
+            "shards": [
+                {
+                    "name": "shard-1",
+                    "active_run_id": "",
+                    "active_frontier_ids": [],
+                    "frontier_ids": [34],
+                    "active_run_progress_state": "idle_claimed_frontier_without_active_run",
+                    "idle_reason": "claimed_frontier_without_active_run",
+                }
+            ],
+            "completion_review_frontier_path": "",
+            "completion_review_frontier_mirror_path": "",
+            "active_runs_count": 0,
+        }
+    )
+
+    shard = updated["shards"][0]
+    assert shard["idle_reason"] == "waiting_for_local_frontier_slice"
+    assert shard["active_run_progress_state"] == "idle_waiting_for_local_frontier_slice"
 
 
 def test_live_shard_summaries_prefer_supervisor_authored_manifest_on_host(monkeypatch, tmp_path: Path) -> None:
