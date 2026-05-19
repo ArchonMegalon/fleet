@@ -794,6 +794,37 @@ queue:
   - fleet-postclient-project-config-extraction
   - fleet-postclient-operating-profiles
   shipped: Restart-safe runtime policy now lives in supervisor_contract.runtime_policy, the launcher hydrates those defaults, and tests validate cold-start defaults.
+- package_id: fleet-chummer-every-repo-reaudit-v6-closure
+  title: Implement the newest Tibor every-repo reaudit package from `/home/tibor/chummer_every_repo_reaudit_v6_20260518.zip`, using `CODEX_PROMPT_STRICT-6` as the strict closure rule and closing the remaining global-release blockers across hub, registry, UI, core, design, EA, and mobile.
+  status: done
+  package_kind: implementation
+  design_owner: fleet-top-flagship
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  audit_zip: /home/tibor/chummer_every_repo_reaudit_v6_20260518.zip
+  strict_prompt: /home/tibor/CODEX_PROMPT_STRICT-6.md
+  handoff_note: /docker/fleet/feedback/2026-05-19-every-repo-reaudit-v6-queue.md
+  verification_bundle:
+  - /home/tibor/chummer_every_repo_reaudit_v6_20260518.zip
+  - /home/tibor/CODEX_PROMPT_STRICT-6.md
+  p0_blocker_ids:
+  - ERG6-P0-001
+  - ERG6-P0-002
+  - ERG6-P0-003
+  - ERG6-P0-004
+  - ERG6-P0-005
+  - ERG6-P0-006
+  - ERG6-P0-007
+  - ERG6-P0-008
+  - ERG6-P0-009
+  - ERG6-P0-010
+  - ERG6-P0-011
+  - ERG6-P0-012
+  - ERG6-P0-013
+  shipped: Implemented on 2026-05-19 from the referenced v6 audit ZIP and strict prompt; the remaining Fleet closure work was to mark the package done in source config and refresh the published queue/workpackage overlays so they stop advertising solved work as live queue truth.
 queue_sources:
 - kind: worklist
   path: WORKLIST.md
