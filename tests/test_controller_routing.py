@@ -8475,6 +8475,7 @@ class ControllerRoutingTests(unittest.TestCase):
             "hub_group_id": "grp_1",
             "boost_campaign_id": "boost_1",
             "sponsor_session_id": "sps_1",
+            "participant_codex_code": "archon-shadow",
             "consented_at": "2026-03-19T09:45:00Z",
             "auth_completed_at": "2026-03-19T09:50:00Z",
             "public_contribution_visibility": "private",
@@ -8492,16 +8493,70 @@ class ControllerRoutingTests(unittest.TestCase):
             slice_id="slice-1",
             accepted_on_round="1",
             verified=True,
+            participant_input_tokens=120,
+            participant_cached_input_tokens=30,
+            participant_output_tokens=80,
+            participant_total_tokens=230,
             consumption_trace={"estimated_cost_usd": 1.25, "participant_run_count": 1, "managed_run_count": 2},
         )
 
         self.assertEqual(receipt["authorization_tier_at_receipt"], "business")
         self.assertEqual(receipt["tier_source"], "fleet_detected")
+        self.assertEqual(receipt["participant_codex_code"], "archon-shadow")
+        self.assertEqual(receipt["participant_total_tokens"], 230)
         self.assertEqual(receipt["consent_trace"]["consented_at_utc"], "2026-03-19T09:45:00Z")
         self.assertEqual(receipt["consent_trace"]["public_contribution_visibility"], "private")
         self.assertEqual(receipt["sponsor_billing_attribution"]["boost_campaign_id"], "boost_1")
         self.assertEqual(receipt["sponsor_billing_attribution"]["sponsor_session_id"], "sps_1")
         self.assertEqual(receipt["consumption_trace"]["estimated_cost_usd"], 1.25)
+
+    def test_create_participant_lane_record_preserves_participant_codex_code(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.QUEUE_RECOVERY_DIR = root / "queue-recovery"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[]', 0, 0, 'dispatch_pending', '', NULL, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    ("fleet", str(repo_root), now),
+                )
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "participant_burst": {"enabled": True, "allow_chatgpt_accounts": True, "max_active_workers": 4},
+                    }
+                ],
+                "core_backends": {"chatgpt_participant": {"auth_class": "chatgpt_auth_json", "runtime_model": "gpt-5.4"}},
+                "accounts": {},
+            }
+            self.controller.sync_config_to_db(config)
+            lane = self.controller.create_participant_lane_record(
+                config,
+                {
+                    "project_id": "fleet",
+                    "subject_id": "subject-1",
+                    "subject_label": "Pilot One",
+                    "participant_codex_code": "pilot-one-codex",
+                },
+            )
+            self.assertEqual(lane["participant_codex_code"], "pilot-one-codex")
+            self.assertEqual(lane["telemetry"]["participant_codex_code"], "pilot-one-codex")
 
     def test_sync_config_to_db_materializes_generated_work_packages_and_scope_claims(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

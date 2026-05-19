@@ -1320,6 +1320,7 @@ def init_db() -> None:
                 hub_group_id TEXT,
                 boost_campaign_id TEXT,
                 sponsor_session_id TEXT,
+                participant_codex_code TEXT,
                 public_contribution_visibility TEXT NOT NULL DEFAULT 'private',
                 lane_role TEXT NOT NULL DEFAULT 'coding',
                 owner_category TEXT NOT NULL DEFAULT 'participant',
@@ -1584,6 +1585,7 @@ def migrate_db(conn: sqlite3.Connection) -> None:
             hub_group_id TEXT,
             boost_campaign_id TEXT,
             sponsor_session_id TEXT,
+            participant_codex_code TEXT,
             public_contribution_visibility TEXT NOT NULL DEFAULT 'private',
             lane_role TEXT NOT NULL DEFAULT 'coding',
             owner_category TEXT NOT NULL DEFAULT 'participant',
@@ -1638,6 +1640,8 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE participant_lanes ADD COLUMN boost_campaign_id TEXT")
     if participant_cols and "sponsor_session_id" not in participant_cols:
         conn.execute("ALTER TABLE participant_lanes ADD COLUMN sponsor_session_id TEXT")
+    if participant_cols and "participant_codex_code" not in participant_cols:
+        conn.execute("ALTER TABLE participant_lanes ADD COLUMN participant_codex_code TEXT")
     if participant_cols and "public_contribution_visibility" not in participant_cols:
         conn.execute("ALTER TABLE participant_lanes ADD COLUMN public_contribution_visibility TEXT NOT NULL DEFAULT 'private'")
     if participant_cols and "lane_role" not in participant_cols:
@@ -4054,6 +4058,7 @@ def participant_lane_account_config(lane_row: Dict[str, Any], core_backends: Dic
         "participant_hub_user_id": str(lane_row.get("hub_user_id") or "").strip(),
         "participant_hub_group_id": str(lane_row.get("hub_group_id") or "").strip(),
         "participant_sponsor_session_id": str(lane_row.get("sponsor_session_id") or "").strip(),
+        "participant_codex_code": str(lane_row.get("participant_codex_code") or "").strip(),
         "participant_lane_role": lane_role,
         "participant_burst_lane": True,
         "codex_home": lane_home,
@@ -4079,6 +4084,7 @@ def hydrate_participant_lane_row(row: Dict[str, Any], *, refresh: bool = False) 
     item["device_auth"] = status_payload
     telemetry = dict(item.get("telemetry") or {})
     item["lane_role"] = normalize_participant_lane_role(item.get("lane_role") or telemetry.get("lane_role"))
+    item["participant_codex_code"] = str(item.get("participant_codex_code") or telemetry.get("participant_codex_code") or "").strip()
     item["authorization_tier"] = normalize_participant_authorization_tier(telemetry.get("authorization_tier"))
     item["tier_source"] = normalize_participant_tier_source(telemetry.get("tier_source"))
     item["events"] = participant_lane_event_rows(str(item.get("lane_id") or "").strip(), limit=40)
@@ -4373,6 +4379,10 @@ def build_participant_contribution_receipt(
     diff_size: int = 0,
     issue_fingerprints: Optional[Sequence[str]] = None,
     consumption_trace: Optional[Dict[str, Any]] = None,
+    participant_input_tokens: int = 0,
+    participant_cached_input_tokens: int = 0,
+    participant_output_tokens: int = 0,
+    participant_total_tokens: int = 0,
 ) -> Dict[str, Any]:
     clean_event = str(event_kind or "").strip() or "lane_event"
     lane_id = str(lane_row.get("lane_id") or "").strip()
@@ -4418,6 +4428,7 @@ def build_participant_contribution_receipt(
         "user_id": str(lane_row.get("hub_user_id") or "").strip() or None,
         "group_id": str(lane_row.get("hub_group_id") or "").strip() or None,
         "sponsor_session_id": str(lane_row.get("sponsor_session_id") or "").strip() or None,
+        "participant_codex_code": str(lane_row.get("participant_codex_code") or telemetry.get("participant_codex_code") or "").strip() or None,
         "auth_class": "chatgpt_auth_json",
         "lane_type": "participant_burst",
         "lane_role": lane_role,
@@ -4442,6 +4453,10 @@ def build_participant_contribution_receipt(
         "diff_size": max(0, int(diff_size or 0)),
         "issue_fingerprints": [str(item or "").strip() for item in (issue_fingerprints or []) if str(item or "").strip()],
         "credit_burn_estimate": 0,
+        "participant_input_tokens": max(0, int(participant_input_tokens or 0)),
+        "participant_cached_input_tokens": max(0, int(participant_cached_input_tokens or 0)),
+        "participant_output_tokens": max(0, int(participant_output_tokens or 0)),
+        "participant_total_tokens": max(0, int(participant_total_tokens or 0)),
         "authorization_tier_at_receipt": authorization_tier,
         "tier_source": tier_source or None,
         "consumption_trace": dict(consumption_trace or {}),
@@ -4550,10 +4565,12 @@ def emit_participant_slice_landed_receipts(
         sum(float(dict(item or {}).get("estimated_cost_usd") or 0.0) for item in allowance_burn_by_lane.values() if isinstance(item, dict)),
         6,
     )
+    run_rows = slice_run_rows(project_id, str(telemetry_payload.get("slice_id") or "").strip())
     for alias in aliases:
         lane_row = participant_lane_row_for_alias(alias, refresh=True)
         if lane_row is None:
             continue
+        alias_run_rows = [row for row in run_rows if str(row.get("account_alias") or "").strip() == alias]
         payload = build_participant_contribution_receipt(
             lane_row,
             event_kind="slice_landed",
@@ -4574,6 +4591,15 @@ def emit_participant_slice_landed_receipts(
             files_touched=int(telemetry_payload.get("files_touched") or 0),
             diff_size=max(0, int(telemetry_payload.get("diff_added") or 0)) + max(0, int(telemetry_payload.get("diff_removed") or 0)),
             issue_fingerprints=issue_fingerprints,
+            participant_input_tokens=sum(max(0, int(row.get("input_tokens") or 0)) for row in alias_run_rows),
+            participant_cached_input_tokens=sum(max(0, int(row.get("cached_input_tokens") or 0)) for row in alias_run_rows),
+            participant_output_tokens=sum(max(0, int(row.get("output_tokens") or 0)) for row in alias_run_rows),
+            participant_total_tokens=sum(
+                max(0, int(row.get("input_tokens") or 0))
+                + max(0, int(row.get("cached_input_tokens") or 0))
+                + max(0, int(row.get("output_tokens") or 0))
+                for row in alias_run_rows
+            ),
             consumption_trace={
                 "estimated_cost_usd": estimated_cost_usd,
                 "allowance_burn_by_lane": allowance_burn_by_lane,
@@ -4625,11 +4651,11 @@ def emit_participant_slice_reviewed_receipts(
         lane_row = participant_lane_row_for_alias(alias, refresh=True)
         if lane_row is None:
             continue
+        alias_run_rows = [row for row in run_rows if str(row.get("account_alias") or "").strip() == alias]
         estimated_cost_usd = round(
             sum(
                 float(row.get("estimated_cost_usd") or 0.0)
-                for row in run_rows
-                if str(row.get("account_alias") or "").strip() == alias
+                for row in alias_run_rows
             ),
             6,
         )
@@ -4646,6 +4672,15 @@ def emit_participant_slice_reviewed_receipts(
             paid_lane_used=True,
             review_ms=max(0, int(review_duration_ms or 0)),
             issue_fingerprints=[str(item or "").strip() for item in issue_fingerprints if str(item or "").strip()],
+            participant_input_tokens=sum(max(0, int(row.get("input_tokens") or 0)) for row in alias_run_rows),
+            participant_cached_input_tokens=sum(max(0, int(row.get("cached_input_tokens") or 0)) for row in alias_run_rows),
+            participant_output_tokens=sum(max(0, int(row.get("output_tokens") or 0)) for row in alias_run_rows),
+            participant_total_tokens=sum(
+                max(0, int(row.get("input_tokens") or 0))
+                + max(0, int(row.get("cached_input_tokens") or 0))
+                + max(0, int(row.get("output_tokens") or 0))
+                for row in alias_run_rows
+            ),
             consumption_trace={
                 "estimated_cost_usd": estimated_cost_usd,
                 "participant_run_count": 1,
@@ -11127,7 +11162,8 @@ def slice_run_rows(project_id: str, slice_name: str) -> List[Dict[str, Any]]:
     with db() as conn:
         rows = conn.execute(
             """
-            SELECT account_alias, job_kind, status, started_at, finished_at, spider_tier, model
+            SELECT account_alias, job_kind, status, started_at, finished_at, spider_tier, model,
+                   input_tokens, cached_input_tokens, output_tokens, estimated_cost_usd
             FROM runs
             WHERE project_id=? AND slice_name=?
             ORDER BY id
@@ -24584,6 +24620,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
     hub_group_id = str(payload.get("hub_group_id") or "").strip()
     boost_campaign_id = str(payload.get("boost_campaign_id") or "").strip()
     sponsor_session_id = str(payload.get("sponsor_session_id") or "").strip()
+    participant_codex_code = str(payload.get("participant_codex_code") or "").strip()
     public_contribution_visibility = str(payload.get("public_contribution_visibility") or "private").strip().lower() or "private"
     tier_source = normalize_participant_tier_source(payload.get("tier_source") or ("user_declared" if authorization_tier != "unknown" else "unknown"))
     backend_key = str(payload.get("backend") or participant_lane_backend_key(lane_role, policy)).strip() or participant_lane_backend_key(lane_role, policy)
@@ -24612,6 +24649,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 hub_group_id,
                 boost_campaign_id,
                 sponsor_session_id,
+                participant_codex_code,
                 public_contribution_visibility,
                 lane_role,
                 owner_category,
@@ -24626,7 +24664,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 created_at,
                 updated_at
             )
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 lane_id,
@@ -24638,6 +24676,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 hub_group_id or None,
                 boost_campaign_id or None,
                 sponsor_session_id or None,
+                participant_codex_code or None,
                 public_contribution_visibility,
                 lane_role,
                 PARTICIPANT_OWNER_CATEGORY,
@@ -24654,6 +24693,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                         "lane_role": lane_role,
                         "authorization_tier": authorization_tier,
                         "tier_source": tier_source,
+                        "participant_codex_code": participant_codex_code,
                     },
                     sort_keys=True,
                 ),
@@ -24673,6 +24713,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
             "hub_group_id": hub_group_id,
             "boost_campaign_id": boost_campaign_id,
             "sponsor_session_id": sponsor_session_id,
+            "participant_codex_code": participant_codex_code,
             "public_contribution_visibility": public_contribution_visibility,
             "lane_role": lane_role,
             "authorization_tier": authorization_tier,
