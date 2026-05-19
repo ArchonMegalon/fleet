@@ -8200,6 +8200,17 @@ def _live_refresh_subcommand_timeout_seconds() -> int:
     )
 
 
+def _live_refresh_timeout_seconds_for_label(label: str) -> int:
+    base_timeout_seconds = _live_refresh_subcommand_timeout_seconds()
+    normalized_label = str(label or "").strip().lower()
+    if normalized_label == "journey gates":
+        # Journey-gate rematerialization is consistently a little slower than the
+        # generic 25s live-refresh budget on healthy hosts, so give it a small
+        # dedicated buffer instead of logging a false timeout at startup.
+        return max(base_timeout_seconds, 40)
+    return base_timeout_seconds
+
+
 def _fresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
     max_age_seconds = _live_refresh_readiness_cache_seconds()
     if max_age_seconds <= 0:
@@ -8443,8 +8454,8 @@ def _refresh_completion_audit_support_artifacts(args: argparse.Namespace) -> Non
             )
         )
 
-    refresh_timeout_seconds = _live_refresh_subcommand_timeout_seconds()
     for label, command in refresh_commands:
+        refresh_timeout_seconds = _live_refresh_timeout_seconds_for_label(label)
         try:
             completed = subprocess.run(
                 command,

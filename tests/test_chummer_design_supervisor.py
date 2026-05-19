@@ -32461,3 +32461,11 @@ def test_main_active_shards_command_uses_canonicalized_state_root_for_design_sup
 
     assert observed_calls["state_root"] == str(aggregate_root)
     assert stdout.getvalue().strip() == str(expected_manifest_path)
+
+
+def test_live_refresh_timeout_seconds_for_journey_gates_has_buffer(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_LIVE_REFRESH_SUBCOMMAND_TIMEOUT_SECONDS", "25")
+
+    assert module._live_refresh_timeout_seconds_for_label("status plane") == 25
+    assert module._live_refresh_timeout_seconds_for_label("journey gates") == 40
