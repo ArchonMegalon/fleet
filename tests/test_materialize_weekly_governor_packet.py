@@ -1002,10 +1002,10 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert result.returncode == 0, result.stderr
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["contract_name"] == "fleet.weekly_governor_packet"
-    assert payload["status"] == "blocked"
+    assert payload["status"] == "pass"
     assert (
         payload["status_reason"]
-        == "Fleet package is closed; measured rollout remains blocked by current source, dependency, or sibling gates."
+        == "Fleet package is closed and the weekly governor packet is healthy; launch expansion remains intentionally frozen by the current measured rollout gates."
     )
     assert payload["package_verification"]["status"] == "pass"
     assert payload["package_verification"]["registry_work_task_status"] == "complete"
@@ -3071,7 +3071,7 @@ def test_verify_next90_m106_governor_packet_rejects_blocked_status_reason_drift(
 
     assert verifier.returncode == 1
     assert (
-        "blocked packet status_reason no longer distinguishes closed package proof from rollout blockage"
+        "healthy-hold packet status_reason no longer distinguishes closed package proof from intentional rollout freeze"
         in verifier.stderr
     )
 

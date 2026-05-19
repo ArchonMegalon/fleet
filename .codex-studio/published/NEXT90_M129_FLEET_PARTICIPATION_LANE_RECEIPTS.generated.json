@@ -6,14 +6,11 @@
     "feedback"
   ],
   "canonical_alignment": {
-    "design_queue_status": "",
-    "fleet_queue_status": "",
-    "issues": [
-      "Fleet queue row is missing.",
-      "Design queue row is missing."
-    ],
+    "design_queue_status": "complete",
+    "fleet_queue_status": "complete",
+    "issues": [],
     "registry_status": "not_started",
-    "state": "fail",
+    "state": "pass",
     "work_task_status": "complete"
   },
   "canonical_monitors": {
@@ -84,7 +81,7 @@
   },
   "contract_name": "fleet.next90_m129_participation_lane_receipts",
   "frontier_id": 7997916353,
-  "generated_at": "2026-05-06T04:08:25Z",
+  "generated_at": "2026-05-19T12:13:28Z",
   "milestone_id": 129,
   "monitor_summary": {
     "controller_forbidden_leak_count": 0,
@@ -93,16 +90,10 @@
     "expected_work_task_count": 6,
     "missing_status_plane_project_count": 0,
     "participation_status": "blocked",
-    "queued_work_task_count": 0,
+    "queued_work_task_count": 6,
     "receipt_artifact_match_count": 2,
-    "runtime_blocker_count": 7,
+    "runtime_blocker_count": 1,
     "runtime_blockers": [
-      "queue_coverage_monitor: work task 129.1: design queue row missing, fleet queue row missing",
-      "queue_coverage_monitor: work task 129.2: design queue row missing, fleet queue row missing",
-      "queue_coverage_monitor: work task 129.3: design queue row missing, fleet queue row missing",
-      "queue_coverage_monitor: work task 129.4: design queue row missing, fleet queue row missing",
-      "queue_coverage_monitor: work task 129.5: design queue row missing, fleet queue row missing",
-      "queue_coverage_monitor: work task 129.6: design queue row missing, fleet queue row missing",
       "controller_runtime_monitor: participant contribution receipts no longer prove signed sponsor-session execution metadata: sponsor_session_id"
     ],
     "warning_count": 0
@@ -111,18 +102,9 @@
     "keep_participant_lane_auth_lane:fleet"
   ],
   "package_closeout": {
-    "blockers": [
-      "canonical_alignment: Fleet queue row is missing.",
-      "canonical_alignment: Design queue row is missing."
-    ],
-    "state": "blocked",
+    "blockers": [],
+    "state": "pass",
     "warnings": [
-      "queue_coverage_monitor: work task 129.1: design queue row missing, fleet queue row missing",
-      "queue_coverage_monitor: work task 129.2: design queue row missing, fleet queue row missing",
-      "queue_coverage_monitor: work task 129.3: design queue row missing, fleet queue row missing",
-      "queue_coverage_monitor: work task 129.4: design queue row missing, fleet queue row missing",
-      "queue_coverage_monitor: work task 129.5: design queue row missing, fleet queue row missing",
-      "queue_coverage_monitor: work task 129.6: design queue row missing, fleet queue row missing",
       "controller_runtime_monitor: participant contribution receipts no longer prove signed sponsor-session execution metadata: sponsor_session_id"
     ]
   },
@@ -183,80 +165,55 @@
       "design_canon_task_status": "complete",
       "expected_work_task_count": 6,
       "issues": [],
-      "queued_work_task_count": 0,
-      "runtime_blockers": [
-        "work task 129.1: design queue row missing, fleet queue row missing",
-        "work task 129.2: design queue row missing, fleet queue row missing",
-        "work task 129.3: design queue row missing, fleet queue row missing",
-        "work task 129.4: design queue row missing, fleet queue row missing",
-        "work task 129.5: design queue row missing, fleet queue row missing",
-        "work task 129.6: design queue row missing, fleet queue row missing"
-      ],
+      "queued_work_task_count": 6,
+      "runtime_blockers": [],
       "state": "pass",
       "warnings": [],
       "work_tasks": [
         {
           "owner": "chummer6-hub",
-          "queued_ready": false,
-          "reasons": [
-            "design queue row missing",
-            "fleet queue row missing"
-          ],
+          "queued_ready": true,
+          "reasons": [],
           "registry_status": "unknown",
           "title": "Build reusable account, profile, group, membership, join-code, boost-code, reward-journal, and entitlement-journal flows.",
           "work_task_id": "129.1"
         },
         {
           "owner": "chummer6-hub-registry",
-          "queued_ready": false,
-          "reasons": [
-            "design queue row missing",
-            "fleet queue row missing"
-          ],
+          "queued_ready": true,
+          "reasons": [],
           "registry_status": "unknown",
           "title": "Publish entitlement-backed desktop channel, install guidance, participation receipt, and reward-publication refs.",
           "work_task_id": "129.2"
         },
         {
           "owner": "chummer6-ui",
-          "queued_ready": false,
-          "reasons": [
-            "design queue row missing",
-            "fleet queue row missing"
-          ],
+          "queued_ready": true,
+          "reasons": [],
           "registry_status": "unknown",
           "title": "Surface account, claim, entitlement, channel, participation, and recovery posture inside desktop without browser-only ritual.",
           "work_task_id": "129.3"
         },
         {
           "owner": "fleet",
-          "queued_ready": false,
-          "reasons": [
-            "design queue row missing",
-            "fleet queue row missing"
-          ],
+          "queued_ready": true,
+          "reasons": [],
           "registry_status": "complete",
           "title": "Keep participant-lane auth lane-local while emitting signed contribution receipts and sponsor-session execution metadata.",
           "work_task_id": "129.4"
         },
         {
           "owner": "executive-assistant",
-          "queued_ready": false,
-          "reasons": [
-            "design queue row missing",
-            "fleet queue row missing"
-          ],
+          "queued_ready": true,
+          "reasons": [],
           "registry_status": "unknown",
           "title": "Compile contribution, participation, entitlement, channel, and reward followthrough packets from Hub/Fleet receipts only.",
           "work_task_id": "129.5"
         },
         {
           "owner": "chummer6-design",
-          "queued_ready": false,
-          "reasons": [
-            "design queue row missing",
-            "fleet queue row missing"
-          ],
+          "queued_ready": true,
+          "reasons": [],
           "registry_status": "complete",
           "title": "Close public-auth, identity/channel-linking, participation, account-aware front-door, and community-ledger canon coverage.",
           "work_task_id": "129.6"
@@ -275,7 +232,7 @@
       "warnings": []
     },
     "status_plane": {
-      "age_hours": 15.33,
+      "age_hours": 0.14,
       "expected_owner_project_ids": [
         "design",
         "ea",
@@ -284,7 +241,7 @@
         "hub-registry",
         "ui"
       ],
-      "generated_at": "2026-05-05T12:48:51Z",
+      "generated_at": "2026-05-19T12:04:50Z",
       "issues": [],
       "missing_owner_project_ids": [],
       "runtime_blockers": [],
@@ -302,12 +259,12 @@
     "controller_app": {
       "generated_at": "",
       "path": "/docker/fleet/controller/app.py",
-      "sha256": "501b71ef0b882252ab9466b958f5cdf2467e74d6869a1a6768a91ddf958c8d5e"
+      "sha256": "c8eae1c0b0f24a3231d84c5dc0d8e7203bb9656c6012f5264e0e3b14d700e07f"
     },
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
+      "sha256": "797a7bf15503da99a3bd4fb767c0e15aca5667b0913de01d2bcd55a9d453f393"
     },
     "fleet_agent_template": {
       "generated_at": "",
@@ -347,7 +304,7 @@
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
+      "sha256": "4cd877009355dda3c453d5622786403dbeae36ac664951ec20020054948fdb5e"
     },
     "registry_published_root": {
       "generated_at": "",
@@ -355,14 +312,14 @@
       "sha256": ""
     },
     "status_plane": {
-      "generated_at": "2026-05-05T12:48:51Z",
+      "generated_at": "2026-05-19T12:04:50Z",
       "path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
-      "sha256": "ec9475a99a66df178ced6ad409e44b4505df8753faddddf587340d795a078927"
+      "sha256": "4fd3198175d95bdc767afab867eb4e6fd619e8d3a9e82e348729c69e6f08a23c"
     },
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "3614d3f739de335843fcf1e7c54a85c6892c310e03ac5e565fffd6de4e399010"
+      "sha256": "729540d98a517a298fd38fa9e4448e1f4ca56e72a21726a650edd5c289e44b43"
     },
     "workflow": {
       "generated_at": "",
@@ -370,7 +327,7 @@
       "sha256": "dcd21c977712ce443ee53a9d46a8ccc960b3a6c77bfa11e49276eb9ac7253d2a"
     }
   },
-  "status": "blocked",
+  "status": "pass",
   "wave": "W19",
   "work_task_id": "129.4"
 }

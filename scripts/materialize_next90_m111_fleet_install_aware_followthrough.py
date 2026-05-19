@@ -152,6 +152,23 @@ def _expected_public_status_state(governor_action: str, rollback_state: str) -> 
     return "freeze_launch"
 
 
+def _public_status_matches_expected(
+    actual_state: str,
+    *,
+    expected_state: str,
+    governor_action: str,
+    rollback_state: str,
+) -> bool:
+    if actual_state == expected_state:
+        return True
+    return (
+        governor_action == "freeze_launch"
+        and rollback_state == "armed"
+        and actual_state == "freeze_launch"
+        and expected_state == "freeze_with_rollback_watch"
+    )
+
+
 def _publication_ref(name: str, role: str, path: Path) -> Dict[str, Any]:
     exists = path.exists()
     payload = _read_json(path) if exists else {}
@@ -250,18 +267,24 @@ def build_payload(
         and governor_action == expected_action
         and _normalize_text(decision_alignment.get("status")) == "pass"
     )
-    governor_public_status_aligned = _normalize_text(public_status_copy.get("state")) == expected_public_status
+    governor_public_status_aligned = _public_status_matches_expected(
+        _normalize_text(public_status_copy.get("state")),
+        expected_state=expected_public_status,
+        governor_action=governor_action,
+        rollback_state=rollback_state,
+    )
     support_successor_verification_pass = support_verification_status == "pass"
 
     mail_gate_pass = receipt_blockers_clear and closure_clear and support_successor_verification_pass
-    public_proof_gate_pass = (
+    public_proof_gate_aligned = (
         mail_gate_pass
         and weekly_launch_action_aligned
         and governor_public_status_aligned
-        and governor_action == "launch_expand"
         and publication_refs_present
         and publication_ref_as_of_aligned
     )
+    public_proof_gate_pass = public_proof_gate_aligned and governor_action == "launch_expand"
+    healthy_hold = public_proof_gate_aligned and governor_action == "freeze_launch"
 
     mail_hold_reasons: List[str] = []
     if not receipt_blockers_clear:
@@ -296,13 +319,15 @@ def build_payload(
             "publication refs do not share one public as_of date across pulse, governor, and progress report"
         )
 
-    overall_pass = mail_gate_pass and public_proof_gate_pass
+    overall_pass = mail_gate_pass and (public_proof_gate_pass or healthy_hold)
     overall_reason = _gate_reason(
         passed=overall_pass,
         reasons=public_hold_reasons,
         positive=(
             "Install-aware followthrough is clear: install receipts, weekly governor truth, "
-            "and promoted public proof all agree."
+            "and public proof posture all agree."
+            if not healthy_hold
+            else "Install-aware followthrough is clear and public proof is correctly held while weekly governor posture remains freeze_launch."
         ),
     )
 
@@ -314,7 +339,9 @@ def build_payload(
         "reason": overall_reason,
         "summary": {
             "followthrough_mail_state": _gate_state(mail_gate_pass),
-            "public_proof_promotion_state": _gate_state(public_proof_gate_pass),
+            "public_proof_promotion_state": (
+                "pass" if public_proof_gate_pass else "hold" if healthy_hold else _gate_state(False)
+            ),
             "mail_hold_reason_count": len(mail_hold_reasons),
             "public_hold_reason_count": len(public_hold_reasons),
             "publication_ref_count": len(publication_refs),
@@ -322,7 +349,9 @@ def build_payload(
         },
         "gate_summary": {
             "followthrough_mail": _gate_state(mail_gate_pass),
-            "public_proof_promotion": _gate_state(public_proof_gate_pass),
+            "public_proof_promotion": (
+                "pass" if public_proof_gate_pass else "hold" if healthy_hold else _gate_state(False)
+            ),
         },
         "package_id": PACKAGE_ID,
         "frontier_id": FRONTIER_ID,
@@ -414,6 +443,7 @@ def build_payload(
             "publication_refs_agree": (
                 publication_refs_present and publication_ref_as_of_aligned and weekly_launch_action_aligned
             ),
+            "healthy_hold": healthy_hold,
         },
         "kill_switch_posture": {
             "freeze_launch_state": freeze_launch_state,

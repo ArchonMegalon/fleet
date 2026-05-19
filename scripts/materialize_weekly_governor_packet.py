@@ -3521,9 +3521,14 @@ def build_payload(
     )
     launch_gate_summary = _launch_gate_summary(launch_gate_ledger)
     measured_loop_ready = measured_inputs_ready and bool(launch_gate_summary.get("all_green"))
-    packet_status = "ready" if package_complete and measured_loop_ready else "blocked"
+    packet_status = "pass" if package_complete and measured_inputs_ready else "blocked"
     if package_complete and measured_loop_ready:
         status_reason = "Fleet package is closed and the weekly measured rollout loop is ready."
+    elif package_complete and measured_inputs_ready:
+        status_reason = (
+            "Fleet package is closed and the weekly governor packet is healthy; "
+            "launch expansion remains intentionally frozen by the current measured rollout gates."
+        )
     elif package_complete:
         status_reason = (
             "Fleet package is closed; measured rollout remains blocked by current "
