@@ -347,6 +347,7 @@ supervisor_contract:
       - desktop-client
       - release-proof
       - materializer
+      worker_bin: /docker/fleet/scripts/codex-shims/codexliz
       worker_lane: audit_shard
     - name: shard-15
       index: 15
@@ -888,6 +889,27 @@ queue:
   residual_blocker_ids:
   - ERG6-P0-010
   shipped: Closed on 2026-05-19 by reauthoring the shipped faction-video contract around the first-party storyboard lane and removing READY_VIA_FALLBACK from the authoritative closeout verdicts.
+- package_id: fleet-chummer-gold-reaudit-v7-closure
+  title: Close the newest Tibor gold reaudit package from `/home/tibor/chummer_gold_reaudit_v7_20260519.zip` by mapping stale blockers to current truth, restoring any audit-facing proof aliases, and leaving only the external mac publish rerun as residual work.
+  status: done
+  package_kind: implementation
+  design_owner: fleet-top-flagship
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  audit_zip: /home/tibor/chummer_gold_reaudit_v7_20260519.zip
+  handoff_note: /docker/fleet/feedback/2026-05-20-gold-reaudit-v7-closure.md
+  verification_bundle:
+  - /home/tibor/chummer_gold_reaudit_v7_20260519.zip
+  - /docker/chummercomplete/chummer-design/_completion/gold_readiness_closure/FINAL_GOLD_VERDICT.md
+  - /docker/chummercomplete/_completion/global_flagship_reaudit_all/FINAL_GLOBAL_FLAGSHIP_VERDICT.md
+  - /docker/chummercomplete/_completion/gold_readiness_closure/FINAL_BLACK_LEDGER_XCOM_GLOBE_VERDICT.md
+  - /docker/chummercomplete/_completion/gold_readiness_closure/BLACK_LEDGER_GLOBE_PERFORMANCE.generated.json
+  residual_blocker_ids:
+  - GOLD7-P0-005
+  shipped: Closed repo-locally on 2026-05-20 after mapping stale V7 blockers to current green truth and restoring the remaining globe-proof aliases and test entrypoints. The only residual blocker left is the external mac publish rerun tracked separately in `WL-324`.
 - package_id: fleet-release-perfection-public-route-honesty
   title: Finish the release-grade public route honesty layer by adding explicit proof-state tags to every public route card and separating feedback, support, and governance semantics so customer-facing surfaces cannot overclaim or collapse distinct states into one lane.
   status: done
@@ -922,7 +944,7 @@ queue:
   shipped: Closed on 2026-05-19 after binding `/downloads` package claims to live release-channel, install-journey, rollback, revoke, and supportability evidence in `admin/public_progress.py` instead of expert-only registry inference.
 - package_id: fleet-mobile-account-portability-gold-closure
   title: Close the remaining mobile/PWA and account portability release gaps by shipping session resume, offline queue replay, accessibility, cross-device migration, and conflict-recovery proof so premium/public release posture no longer depends on preview-safe caveats.
-  status: open
+  status: done
   package_kind: implementation
   design_owner: fleet-top-flagship
   architecture_sensitive: true
@@ -934,6 +956,7 @@ queue:
   - /docker/chummercomplete/_completion/chummer6_absolute_completion/MISSED_POTENTIAL_AUDIT.md
   - /docker/chummercomplete/_completion/chummer6_absolute_completion/USER_WISH_DESIGN_EXPANSION.md
   handoff_note: /docker/fleet/feedback/2026-05-19-mobile-account-portability-gold-closure.md
+  shipped: Closed on 2026-05-19 after grounding the mobile/account portability lane on the current `chummer6-mobile` release proof for session resume, offline queue replay, accessibility, cross-device restore, and sync-conflict recovery, then republishing Fleet proof surfaces so release posture stops treating that slice as preview-only backlog.
 - package_id: fleet-governance-rollout-proof-depth
   title: Deepen the ruleset and package governance loop so proposal-to-package transitions always carry rollback evidence, release-impact proof, and public-safe wording controls rather than reading like immediate rollout claims.
   status: done
