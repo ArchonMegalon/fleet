@@ -444,6 +444,11 @@ _QUARTERMASTER_STATUS_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 _QUARTERMASTER_PLAN_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 _QUARTERMASTER_TICK_CACHE: Dict[str, Any] = {"last_tick_at": 0.0, "event_signature": ""}
 _QUARTERMASTER_RECONCILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "plan_generated_at": "", "payload": {}}
+_FALLBACK_STATUS_LITE_ETA_STATE: Dict[str, Any] = {
+    "signature": "",
+    "remaining_seconds": 0,
+    "observed_at": None,
+}
 _RUNTIME_INTERRUPT_OVERRIDES: Dict[str, Dict[str, Any]] = {}
 RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
 RUNTIME_CACHE_KEY_EA_CODEX_STATUS = "ea_codex_status"
@@ -1320,6 +1325,7 @@ def init_db() -> None:
                 hub_group_id TEXT,
                 boost_campaign_id TEXT,
                 sponsor_session_id TEXT,
+                participant_codex_code TEXT,
                 public_contribution_visibility TEXT NOT NULL DEFAULT 'private',
                 lane_role TEXT NOT NULL DEFAULT 'coding',
                 owner_category TEXT NOT NULL DEFAULT 'participant',
@@ -1584,6 +1590,7 @@ def migrate_db(conn: sqlite3.Connection) -> None:
             hub_group_id TEXT,
             boost_campaign_id TEXT,
             sponsor_session_id TEXT,
+            participant_codex_code TEXT,
             public_contribution_visibility TEXT NOT NULL DEFAULT 'private',
             lane_role TEXT NOT NULL DEFAULT 'coding',
             owner_category TEXT NOT NULL DEFAULT 'participant',
@@ -1638,6 +1645,8 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE participant_lanes ADD COLUMN boost_campaign_id TEXT")
     if participant_cols and "sponsor_session_id" not in participant_cols:
         conn.execute("ALTER TABLE participant_lanes ADD COLUMN sponsor_session_id TEXT")
+    if participant_cols and "participant_codex_code" not in participant_cols:
+        conn.execute("ALTER TABLE participant_lanes ADD COLUMN participant_codex_code TEXT")
     if participant_cols and "public_contribution_visibility" not in participant_cols:
         conn.execute("ALTER TABLE participant_lanes ADD COLUMN public_contribution_visibility TEXT NOT NULL DEFAULT 'private'")
     if participant_cols and "lane_role" not in participant_cols:
@@ -2091,7 +2100,10 @@ def runtime_task_rows() -> Dict[str, Dict[str, Any]]:
         item = dict(row)
         payload = json_field(item.get("payload_json"), {})
         item["payload"] = payload if isinstance(payload, dict) else {}
-        items[str(row["package_id"])] = item
+        runtime_key = str(row["package_id"] or row["project_id"] or "").strip()
+        if not runtime_key:
+            continue
+        items[runtime_key] = item
     return items
 
 
@@ -2570,6 +2582,7 @@ def apply_generated_work_package_policy(
     policy["package_kind"] = clean_package_kind
     if clean_horizon_family:
         policy["horizon_family"] = clean_horizon_family
+    owned_surfaces = [str(item).strip() for item in policy.get("owned_surfaces") or [] if str(item).strip()]
     effective_denied_paths = [
         normalize_scope_path(item)
         for item in denied_paths
@@ -2590,13 +2603,37 @@ def apply_generated_work_package_policy(
             for path in immutable_generated_paths
             if normalize_scope_path(path) != normalize_scope_path(package_compile_target)
         ]
-    if immutable_generated_paths:
+    proof_only_generated_scope = bool(allowed_paths) and bool(owned_surfaces) and all(
+        normalize_scope_path(path).startswith((".codex-studio", "feedback"))
+        for path in allowed_paths
+    )
+    compiler_backed_generated_artifacts = bool(immutable_generated_paths) and any(
+        normalize_scope_path(path).startswith(("scripts/materialize_", "scripts/refresh_", "scripts/verify_"))
+        for path in allowed_paths
+    )
+    if immutable_generated_paths and not compiler_backed_generated_artifacts and not proof_only_generated_scope:
         policy["dispatchability_state"] = "blocked"
         policy["dispatchability_reason"] = (
             "generated published artifacts must be rebuilt from source compilers, not edited directly: "
             + ", ".join(sorted(immutable_generated_paths))
         )
-    if clean_package_kind != PACKAGE_COMPILE_PACKAGE_KIND:
+    if proof_only_generated_scope:
+        effective_denied_paths = [
+            pattern
+            for pattern in effective_denied_paths
+            if not package_scope_matches(pattern, IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS)
+        ]
+    elif compiler_backed_generated_artifacts:
+        effective_denied_paths = [
+            pattern
+            for pattern in effective_denied_paths
+            if not any(
+                package_scope_matches(path, [pattern])
+                and normalize_scope_path(path).startswith(".codex-studio/published/")
+                for path in allowed_paths
+            )
+        ]
+    elif clean_package_kind != PACKAGE_COMPILE_PACKAGE_KIND:
         add_default_denied_patterns(IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS)
 
     authority_only_paths = [path for path in allowed_paths if package_scope_matches(path, AUTHORITY_ONLY_PACKAGE_SCOPE_PATTERNS)]
@@ -2688,13 +2725,14 @@ def compiled_scope_claims_for_package(package: Dict[str, Any]) -> List[Dict[str,
     horizon_surface = horizon_lock_surface_value(package.get("package_kind"), package.get("horizon_family"))
     if allowed_paths:
         for path in allowed_paths:
+            namespaced_path = f"{project_id}/{path}" if project_id else path
             claims.append(
                 {
                     "package_id": package_id,
                     "project_id": project_id,
                     "claim_type": "path",
-                    "claim_value": path,
-                    "scope_key": f"path:{path}",
+                    "claim_value": namespaced_path,
+                    "scope_key": f"path:{namespaced_path}",
                 }
             )
     if owned_surfaces:
@@ -2977,6 +3015,12 @@ def sync_work_packages_to_db(config: Dict[str, Any]) -> None:
                 ).fetchone()
                 runtime_state = str((existing["runtime_state"] if existing else "idle") or "idle").strip().lower() or "idle"
                 existing_status = str((existing["status"] if existing else "") or "").strip().lower()
+                latest_run_id = int((existing["latest_run_id"] if existing else 0) or 0) or None
+                latest_run = (
+                    conn.execute("SELECT status, error_message FROM runs WHERE id=?", (latest_run_id,)).fetchone()
+                    if latest_run_id
+                    else None
+                )
                 completed_at = str((existing["completed_at"] if existing else "") or "").strip()
                 declared_status = str(package.get("declared_status") or "").strip().lower()
                 dispatchability = str(((package.get("task_meta") or {}).get("dispatchability_state")) or "dispatchable").strip().lower()
@@ -2991,7 +3035,15 @@ def sync_work_packages_to_db(config: Dict[str, Any]) -> None:
                 elif dispatchability != "dispatchable":
                     status = "blocked"
                 elif existing_status in {"failed", WAITING_CAPACITY_STATUS, "awaiting_account"}:
-                    status = existing_status
+                    latest_run_status = str((latest_run["status"] if latest_run else "") or "").strip().lower()
+                    latest_run_error = str((latest_run["error_message"] if latest_run else "") or "").strip()
+                    if existing_status == "failed" and (
+                        latest_run_status in {"rejected", "rate_limited"}
+                        or parse_backend_unavailable_message(latest_run_error) is not None
+                    ):
+                        status = "ready"
+                    else:
+                        status = existing_status
                 else:
                     status = "ready"
                 conn.execute(
@@ -3173,7 +3225,7 @@ def sync_work_packages_to_db(config: Dict[str, Any]) -> None:
         dependencies = [str(item).strip() for item in json_field(row.get("dependencies_json"), []) if str(item).strip()]
         task_meta = json_field(row.get("task_meta_json"), {})
         dependencies_ready = all(status_by_package.get(dep) in TERMINAL_WORK_PACKAGE_STATUSES for dep in dependencies)
-        next_status = "ready" if dependencies_ready and current_status != "blocked" else "waiting_dependency"
+        next_status = "ready" if dependencies_ready else "waiting_dependency"
         if str((task_meta or {}).get("dispatchability_state") or "dispatchable").strip().lower() != "dispatchable":
             next_status = "blocked"
         if next_status != current_status:
@@ -3231,19 +3283,102 @@ def sync_project_progress_from_packages(project_id: str) -> None:
     rows = work_package_rows(project_id=clean)
     if not rows:
         return
-    contiguous_complete = 0
     ordered = sorted(rows, key=lambda row: (int(row.get("queue_index") or 0), int(row.get("priority") or 0), str(row.get("package_id") or "")))
+    queue_index_groups: dict[int, list[dict[str, Any]]] = {}
     for row in ordered:
         if normalize_package_kind(row.get("package_kind")) == PACKAGE_COMPILE_PACKAGE_KIND:
             continue
-        if str(row.get("status") or "").strip().lower() in TERMINAL_WORK_PACKAGE_STATUSES:
-            contiguous_complete += 1
+        queue_index = int(row.get("queue_index") or 0)
+        queue_index_groups.setdefault(queue_index, []).append(row)
+    contiguous_complete = 0
+    if queue_index_groups:
+        for queue_index in sorted(queue_index_groups):
+            group = queue_index_groups[queue_index]
+            if all(str(item.get("status") or "").strip().lower() in TERMINAL_WORK_PACKAGE_STATUSES for item in group):
+                contiguous_complete = queue_index + 1
+                continue
+            contiguous_complete = queue_index
+            break
+    with db() as conn:
+        project_row = conn.execute("SELECT * FROM projects WHERE id=?", (clean,)).fetchone()
+        runtime_task_rows = conn.execute(
+            """
+            SELECT COALESCE(package_id, '') AS package_id, task_state, run_id, COALESCE(task_kind, '') AS task_kind
+            FROM runtime_tasks
+            WHERE project_id=?
+              AND task_state IN ('starting', 'scheduled', 'running', 'verifying', 'awaiting_review')
+            """,
+            (clean,),
+        ).fetchall()
+        active_run_rows = conn.execute(
+            """
+            SELECT id, COALESCE(package_id, '') AS package_id, status, COALESCE(job_kind, '') AS job_kind
+            FROM runs
+            WHERE project_id=?
+              AND status IN ('starting', 'running', 'verifying', 'awaiting_review', 'local_review')
+            """,
+            (clean,),
+        ).fetchall()
+    if not project_row:
+        return
+    package_runtime_overrides: dict[str, str] = {}
+    runtime_state_priority = {
+        "awaiting_review": 4,
+        "verifying": 3,
+        "running": 2,
+        "scheduled": 1,
+        "starting": 1,
+    }
+    for item in runtime_task_rows:
+        package_id = str(item["package_id"] or "").strip()
+        task_state = str(item["task_state"] or "").strip().lower()
+        if not package_id or task_state not in runtime_state_priority:
             continue
-        break
+        current = package_runtime_overrides.get(package_id, "")
+        if runtime_state_priority.get(task_state, 0) >= runtime_state_priority.get(current, 0):
+            package_runtime_overrides[package_id] = task_state
+    for item in active_run_rows:
+        package_id = str(item["package_id"] or "").strip()
+        run_state = str(item["status"] or "").strip().lower()
+        if not package_id or run_state not in runtime_state_priority:
+            continue
+        current = package_runtime_overrides.get(package_id, "")
+        if runtime_state_priority.get(run_state, 0) >= runtime_state_priority.get(current, 0):
+            package_runtime_overrides[package_id] = run_state
+    active_runtime_packages = {
+        str(item["package_id"] or "").strip()
+        for item in runtime_task_rows
+        if str(item["package_id"] or "").strip()
+    }
+    active_project_runtime_rows = [
+        item
+        for item in runtime_task_rows
+        if str(item["task_kind"] or "").strip().lower() == "local_review"
+        or not str(item["package_id"] or "").strip()
+    ]
+    active_project_run_rows = [
+        item
+        for item in active_run_rows
+        if str(item["job_kind"] or "").strip().lower() == "local_review"
+        or not str(item["package_id"] or "").strip()
+    ]
+    active_run_ids = {
+        int(item["id"] or 0)
+        for item in active_run_rows
+        if int(item["id"] or 0)
+    }
+    active_project_run_id = next(
+        (int(item["id"] or 0) for item in active_project_run_rows if int(item["id"] or 0)),
+        0,
+    ) or None
     active_rows = [
         row
         for row in ordered
-        if str(row.get("runtime_state") or "").strip().lower() in ACTIVE_WORK_PACKAGE_RUNTIME_STATES
+        if (
+            str(row.get("runtime_state") or "").strip().lower() in ACTIVE_WORK_PACKAGE_RUNTIME_STATES
+            or str(row.get("package_id") or "").strip() in active_runtime_packages
+            or int(row.get("latest_run_id") or 0) in active_run_ids
+        )
     ]
     dispatchable_ready_rows = [
         row
@@ -3283,10 +3418,15 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         or {}
     )
     rep_status = str(rep.get("status") or "").strip().lower()
-    rep_runtime = str(rep.get("runtime_state") or "").strip().lower()
+    rep_runtime = package_runtime_overrides.get(
+        str(rep.get("package_id") or "").strip(),
+        str(rep.get("runtime_state") or "").strip().lower(),
+    )
     if rep_runtime == "verifying":
         runtime_status = "verifying"
     elif rep_runtime in {"scheduled", "running"}:
+        runtime_status = "running"
+    elif active_project_runtime_rows or active_project_run_rows:
         runtime_status = "running"
     elif dispatchable_ready_rows:
         runtime_status = READY_STATUS
@@ -3302,24 +3442,37 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         runtime_status = "blocked"
     else:
         runtime_status = "complete"
-    active_run_id = int(rep.get("latest_run_id") or 0) or None if rep_runtime in ACTIVE_WORK_PACKAGE_RUNTIME_STATES else None
+    active_run_id = (
+        int(rep.get("latest_run_id") or 0) or None
+        if rep_runtime in ACTIVE_WORK_PACKAGE_RUNTIME_STATES
+        else active_project_run_id
+    )
     current_slice_name = str(rep.get("slice_name") or "").strip() or None
-    with db() as conn:
-        row = conn.execute("SELECT * FROM projects WHERE id=?", (clean,)).fetchone()
-    if not row:
-        return
+    clear_stale_failure_state = (
+        rep_runtime in ACTIVE_WORK_PACKAGE_RUNTIME_STATES
+        or bool(active_project_runtime_rows)
+        or bool(active_project_run_rows)
+        or (
+            runtime_status == READY_STATUS
+            and bool(dispatchable_ready_rows)
+            and not blocked_rows
+            and not review_rows
+            and not waiting_dependency_rows
+            and not awaiting_account_rows
+        )
+    )
     update_project_status(
         clean,
         status=runtime_status,
         current_slice=current_slice_name,
         active_run_id=active_run_id,
-        cooldown_until=parse_iso(row["cooldown_until"]),
-        last_run_at=parse_iso(row["last_run_at"]),
-        last_error=row["last_error"],
-        consecutive_failures=int(row["consecutive_failures"] or 0),
-        spider_tier=row["spider_tier"],
-        spider_model=row["spider_model"],
-        spider_reason=row["spider_reason"],
+        cooldown_until=parse_iso(project_row["cooldown_until"]),
+        last_run_at=parse_iso(project_row["last_run_at"]),
+        last_error=None if clear_stale_failure_state else project_row["last_error"],
+        consecutive_failures=0 if clear_stale_failure_state else int(project_row["consecutive_failures"] or 0),
+        spider_tier=project_row["spider_tier"],
+        spider_model=project_row["spider_model"],
+        spider_reason=project_row["spider_reason"],
     )
     with db() as conn:
         conn.execute(
@@ -3443,7 +3596,7 @@ def terminal_work_package_resolution(
     if clean_run_status in {"failed", "review_failed", "blocked"}:
         return ("failed", "idle")
     if clean_run_status in {"rejected", "rate_limited"}:
-        return ("awaiting_account", "idle")
+        return (READY_STATUS, "idle")
     if clean_run_status in {"abandoned", "paused"}:
         return (WAITING_CAPACITY_STATUS, "idle")
     if clean_current_status in {"failed", "blocked", "awaiting_account"}:
@@ -4054,6 +4207,7 @@ def participant_lane_account_config(lane_row: Dict[str, Any], core_backends: Dic
         "participant_hub_user_id": str(lane_row.get("hub_user_id") or "").strip(),
         "participant_hub_group_id": str(lane_row.get("hub_group_id") or "").strip(),
         "participant_sponsor_session_id": str(lane_row.get("sponsor_session_id") or "").strip(),
+        "participant_codex_code": str(lane_row.get("participant_codex_code") or "").strip(),
         "participant_lane_role": lane_role,
         "participant_burst_lane": True,
         "codex_home": lane_home,
@@ -4079,6 +4233,7 @@ def hydrate_participant_lane_row(row: Dict[str, Any], *, refresh: bool = False) 
     item["device_auth"] = status_payload
     telemetry = dict(item.get("telemetry") or {})
     item["lane_role"] = normalize_participant_lane_role(item.get("lane_role") or telemetry.get("lane_role"))
+    item["participant_codex_code"] = str(item.get("participant_codex_code") or telemetry.get("participant_codex_code") or "").strip()
     item["authorization_tier"] = normalize_participant_authorization_tier(telemetry.get("authorization_tier"))
     item["tier_source"] = normalize_participant_tier_source(telemetry.get("tier_source"))
     item["events"] = participant_lane_event_rows(str(item.get("lane_id") or "").strip(), limit=40)
@@ -4373,6 +4528,10 @@ def build_participant_contribution_receipt(
     diff_size: int = 0,
     issue_fingerprints: Optional[Sequence[str]] = None,
     consumption_trace: Optional[Dict[str, Any]] = None,
+    participant_input_tokens: int = 0,
+    participant_cached_input_tokens: int = 0,
+    participant_output_tokens: int = 0,
+    participant_total_tokens: int = 0,
 ) -> Dict[str, Any]:
     clean_event = str(event_kind or "").strip() or "lane_event"
     lane_id = str(lane_row.get("lane_id") or "").strip()
@@ -4418,6 +4577,7 @@ def build_participant_contribution_receipt(
         "user_id": str(lane_row.get("hub_user_id") or "").strip() or None,
         "group_id": str(lane_row.get("hub_group_id") or "").strip() or None,
         "sponsor_session_id": str(lane_row.get("sponsor_session_id") or "").strip() or None,
+        "participant_codex_code": str(lane_row.get("participant_codex_code") or telemetry.get("participant_codex_code") or "").strip() or None,
         "auth_class": "chatgpt_auth_json",
         "lane_type": "participant_burst",
         "lane_role": lane_role,
@@ -4442,6 +4602,10 @@ def build_participant_contribution_receipt(
         "diff_size": max(0, int(diff_size or 0)),
         "issue_fingerprints": [str(item or "").strip() for item in (issue_fingerprints or []) if str(item or "").strip()],
         "credit_burn_estimate": 0,
+        "participant_input_tokens": max(0, int(participant_input_tokens or 0)),
+        "participant_cached_input_tokens": max(0, int(participant_cached_input_tokens or 0)),
+        "participant_output_tokens": max(0, int(participant_output_tokens or 0)),
+        "participant_total_tokens": max(0, int(participant_total_tokens or 0)),
         "authorization_tier_at_receipt": authorization_tier,
         "tier_source": tier_source or None,
         "consumption_trace": dict(consumption_trace or {}),
@@ -4550,10 +4714,12 @@ def emit_participant_slice_landed_receipts(
         sum(float(dict(item or {}).get("estimated_cost_usd") or 0.0) for item in allowance_burn_by_lane.values() if isinstance(item, dict)),
         6,
     )
+    run_rows = slice_run_rows(project_id, str(telemetry_payload.get("slice_id") or "").strip())
     for alias in aliases:
         lane_row = participant_lane_row_for_alias(alias, refresh=True)
         if lane_row is None:
             continue
+        alias_run_rows = [row for row in run_rows if str(row.get("account_alias") or "").strip() == alias]
         payload = build_participant_contribution_receipt(
             lane_row,
             event_kind="slice_landed",
@@ -4574,6 +4740,15 @@ def emit_participant_slice_landed_receipts(
             files_touched=int(telemetry_payload.get("files_touched") or 0),
             diff_size=max(0, int(telemetry_payload.get("diff_added") or 0)) + max(0, int(telemetry_payload.get("diff_removed") or 0)),
             issue_fingerprints=issue_fingerprints,
+            participant_input_tokens=sum(max(0, int(row.get("input_tokens") or 0)) for row in alias_run_rows),
+            participant_cached_input_tokens=sum(max(0, int(row.get("cached_input_tokens") or 0)) for row in alias_run_rows),
+            participant_output_tokens=sum(max(0, int(row.get("output_tokens") or 0)) for row in alias_run_rows),
+            participant_total_tokens=sum(
+                max(0, int(row.get("input_tokens") or 0))
+                + max(0, int(row.get("cached_input_tokens") or 0))
+                + max(0, int(row.get("output_tokens") or 0))
+                for row in alias_run_rows
+            ),
             consumption_trace={
                 "estimated_cost_usd": estimated_cost_usd,
                 "allowance_burn_by_lane": allowance_burn_by_lane,
@@ -4625,11 +4800,11 @@ def emit_participant_slice_reviewed_receipts(
         lane_row = participant_lane_row_for_alias(alias, refresh=True)
         if lane_row is None:
             continue
+        alias_run_rows = [row for row in run_rows if str(row.get("account_alias") or "").strip() == alias]
         estimated_cost_usd = round(
             sum(
                 float(row.get("estimated_cost_usd") or 0.0)
-                for row in run_rows
-                if str(row.get("account_alias") or "").strip() == alias
+                for row in alias_run_rows
             ),
             6,
         )
@@ -4646,6 +4821,15 @@ def emit_participant_slice_reviewed_receipts(
             paid_lane_used=True,
             review_ms=max(0, int(review_duration_ms or 0)),
             issue_fingerprints=[str(item or "").strip() for item in issue_fingerprints if str(item or "").strip()],
+            participant_input_tokens=sum(max(0, int(row.get("input_tokens") or 0)) for row in alias_run_rows),
+            participant_cached_input_tokens=sum(max(0, int(row.get("cached_input_tokens") or 0)) for row in alias_run_rows),
+            participant_output_tokens=sum(max(0, int(row.get("output_tokens") or 0)) for row in alias_run_rows),
+            participant_total_tokens=sum(
+                max(0, int(row.get("input_tokens") or 0))
+                + max(0, int(row.get("cached_input_tokens") or 0))
+                + max(0, int(row.get("output_tokens") or 0))
+                for row in alias_run_rows
+            ),
             consumption_trace={
                 "estimated_cost_usd": estimated_cost_usd,
                 "participant_run_count": 1,
@@ -10839,6 +11023,10 @@ def safe_git_branch_name(text: str) -> str:
     return branch or "fleet/project"
 
 
+def fallback_git_branch_name(text: str) -> str:
+    return safe_git_branch_name(str(text or "").replace("/", "--"))
+
+
 def ensure_package_worktree(
     project_cfg: Dict[str, Any],
     package_row: Optional[Dict[str, Any]],
@@ -10878,7 +11066,13 @@ def ensure_package_worktree(
     branch_name = safe_git_branch_name(str(package_row.get("branch_name") or f"fleet/{project_cfg.get('id')}/{package_row.get('package_id')}"))
     checkout = run_capture(["git", "checkout", "-B", branch_name], cwd=str(worktree_root), timeout_seconds=60)
     if checkout.returncode != 0:
-        raise RuntimeError(checkout.stderr.strip() or checkout.stdout.strip() or "git checkout package branch failed")
+        stderr = str(checkout.stderr or "").strip()
+        if "cannot lock ref" in stderr and "refs/heads/" in stderr:
+            fallback_branch = fallback_git_branch_name(branch_name)
+            if fallback_branch and fallback_branch != branch_name:
+                checkout = run_capture(["git", "checkout", "-B", fallback_branch], cwd=str(worktree_root), timeout_seconds=60)
+        if checkout.returncode != 0:
+            raise RuntimeError(checkout.stderr.strip() or checkout.stdout.strip() or "git checkout package branch failed")
     return worktree_root
 
 
@@ -11127,7 +11321,8 @@ def slice_run_rows(project_id: str, slice_name: str) -> List[Dict[str, Any]]:
     with db() as conn:
         rows = conn.execute(
             """
-            SELECT account_alias, job_kind, status, started_at, finished_at, spider_tier, model
+            SELECT account_alias, job_kind, status, started_at, finished_at, spider_tier, model,
+                   input_tokens, cached_input_tokens, output_tokens, estimated_cost_usd
             FROM runs
             WHERE project_id=? AND slice_name=?
             ORDER BY id
@@ -13218,6 +13413,15 @@ def rehydrate_runtime_tasks(config: Dict[str, Any]) -> int:
             if task_state not in ACTIVE_RUNTIME_TASK_STATES:
                 clear_runtime_task(runtime_key)
                 continue
+            persisted_run_id = int(row.get("run_id") or 0) or None
+            if task_state == "scheduled" and persisted_run_id is None:
+                package_id = str(row.get("package_id") or "").strip()
+                package_row = work_package_row(package_id) if package_id and package_id != project_id else None
+                package_runtime_state = str((package_row or {}).get("runtime_state") or "").strip().lower()
+                package_latest_run_id = int((package_row or {}).get("latest_run_id") or 0) or None
+                if runtime_status in ACTIVE_RUN_STATUSES or package_runtime_state in ACTIVE_WORK_PACKAGE_RUNTIME_STATES or package_latest_run_id:
+                    clear_runtime_task(runtime_key)
+                    continue
             if runtime_key == project_id and (project_row["active_run_id"] or runtime_status in ACTIVE_RUN_STATUSES):
                 continue
             try:
@@ -15414,6 +15618,21 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
                 spider_model=row["spider_model"],
                 spider_reason=row["spider_reason"],
             )
+        else:
+            runtime_status = READY_STATUS
+            update_project_status(
+                project_id,
+                status=runtime_status,
+                current_slice=normalize_slice_text(queue[queue_index]),
+                active_run_id=None,
+                cooldown_until=None,
+                last_run_at=parse_iso(row["last_run_at"]),
+                last_error=None,
+                consecutive_failures=0,
+                spider_tier=row["spider_tier"],
+                spider_model=row["spider_model"],
+                spider_reason=row["spider_reason"],
+            )
     if runtime_status == "review_failed" and is_retryable_push_rejection(str(row["last_error"] or "")):
         cooldown_until = parse_iso(row["cooldown_until"])
         if cooldown_until is None or cooldown_until <= utc_now():
@@ -15506,13 +15725,23 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
 
 
 def project_uses_package_scheduler(config: Dict[str, Any], project_id: str) -> bool:
+    packages = work_package_rows(project_id=project_id)
+    if not packages:
+        return False
     groups = project_group_defs(config, project_id)
     if groups:
         group = groups[0]
         group_mode = str(group.get("mode") or "singleton").strip().lower()
         if group_mode not in {"singleton", "independent"}:
-            return False
-    return bool(work_package_rows(project_id=project_id))
+            explicitly_scoped_packages = [
+                package
+                for package in packages
+                if dict(package.get("task_meta") or {}).get("allowed_paths")
+                or dict(package.get("task_meta") or {}).get("owned_surfaces")
+            ]
+            if not explicitly_scoped_packages:
+                return False
+    return True
 
 
 def prepare_work_package_dispatch_candidates(
@@ -17856,6 +18085,13 @@ def promote_task_class(task_class: str) -> str:
     return task_class
 
 
+def promote_task_class_without_contract(task_class: str) -> str:
+    promoted = promote_task_class(task_class)
+    if task_class == "multi_file_impl" and promoted == "cross_repo_contract":
+        return task_class
+    return promoted
+
+
 def route_class_evidence(window_runs: int = 120) -> Dict[str, Dict[str, Any]]:
     if not table_exists("runs"):
         return {}
@@ -17969,19 +18205,19 @@ def classify_tier(
         reason_parts.append("default route class from prompt size and coding scope")
 
     if len(feedback_files) >= 2 and tier in {"inspect", "draft", "micro_edit"}:
-        tier = promote_task_class(tier)
+        tier = promote_task_class_without_contract(tier)
         reason_parts.append("multiple injected feedback notes widen the coordination scope")
 
     if prompt_chars > 12000 and tier in {"inspect", "draft", "micro_edit"}:
-        tier = promote_task_class(tier)
+        tier = promote_task_class_without_contract(tier)
         reason_parts.append("prompt estimate widens the route class")
     if prompt_chars > 24000 and tier != "cross_repo_contract":
-        tier = promote_task_class(tier)
+        tier = promote_task_class_without_contract(tier)
         reason_parts.append("large prompt estimate escalates the route class")
 
     escalate_after = int(spider.get("escalate_to_complex_after_failures", 1))
     if failures >= escalate_after:
-        tier = promote_task_class(tier)
+        tier = promote_task_class_without_contract(tier)
         reason_parts.append(f"previous failure count {failures} promotes the route class")
 
     if classification_mode.startswith("evidence"):
@@ -17999,7 +18235,7 @@ def classify_tier(
                     int(promoted_evidence.get("run_count") or 0) < min_sample
                     or float(promoted_evidence.get("failure_rate") or 0.0) <= float(tier_evidence.get("failure_rate") or 0.0)
                 ):
-                    tier = promoted_tier
+                    tier = promote_task_class_without_contract(tier)
                     reason_parts.append("recent failure evidence promotes to a broader route class")
 
     difficulty = str(task_meta.get("difficulty") or "auto")
@@ -18017,7 +18253,7 @@ def classify_tier(
         tier = "multi_file_impl"
         reason_parts.append("high risk forces core-grade implementation routing")
     if branch_policy == "protected_branch" or acceptance_level == "merge_ready":
-        reason_parts.append("protected-branch or merge-ready policy requires core authority")
+        reason_parts.append("protected-branch or merge-ready policy requires authority at signoff and landing")
 
     tier_prefs = spider.get("tier_preferences", {}).get(tier, {})
     models = list(tier_prefs.get("models") or [])
@@ -18027,9 +18263,12 @@ def classify_tier(
     predicted_files = predict_changed_files(tier)
     requires_contract_authority = (
         tier == "cross_repo_contract"
+        or package_kind in AUTHORITY_PACKAGE_KINDS
+    )
+    requires_signoff_authority = (
+        requires_contract_authority
         or branch_policy == "protected_branch"
         or acceptance_level == "merge_ready"
-        or package_kind in AUTHORITY_PACKAGE_KINDS
     )
     premium_required = bool(task_meta.get("premium_required"))
     premium_beneficial = bool(task_meta.get("premium_beneficial"))
@@ -18049,6 +18288,7 @@ def classify_tier(
     if bool(task_meta.get("protected_runtime")):
         allowed_lanes = ["core"]
         requires_contract_authority = True
+        requires_signoff_authority = True
     if gemini_backend_unavailable and allow_paid_fast_lane and "repair" in lanes and "repair" not in allowed_lanes and not requires_contract_authority:
         allowed_lanes = [*allowed_lanes, "repair"]
         reason_parts.append("gemini backend unavailable; temporarily unlocking repair fallback")
@@ -18063,6 +18303,7 @@ def classify_tier(
             if requested_core_rescue and allow_core_rescue and allow_credit_burn and "core" in allowed_lanes:
                 allowed_lanes = ["core"]
                 requires_contract_authority = True
+                requires_signoff_authority = True
                 reason_parts.append("jury explicitly requested core rescue")
             elif requested_core_rescue:
                 allowed_lanes = [lane for lane in allowed_lanes if lane != "core"]
@@ -18258,6 +18499,20 @@ def classify_tier(
     )
     expected_allowance_burn = lane_allowance_burn_snapshot(preferred_lane, lanes, lane_capacity)
     signoff_requirements = [str(item).strip() for item in task_meta.get("signoff_requirements") or [] if str(item).strip()]
+    authority_signoff_lane = str((lanes.get("core_authority") or {}).get("id") or "core_authority")
+    default_core_lane = str((lanes.get("core") or {}).get("id") or "core")
+    explicit_reviewer_lane = isinstance(slice_item, dict) and "required_reviewer_lane" in slice_item
+    explicit_final_lane = isinstance(slice_item, dict) and "final_reviewer_lane" in slice_item
+    explicit_landing_lane = isinstance(slice_item, dict) and "landing_lane" in slice_item
+    reviewer_lane_value = str(task_meta.get("required_reviewer_lane") or "")
+    final_lane_value = str(task_meta.get("final_reviewer_lane") or "")
+    landing_lane_value = str(task_meta.get("landing_lane") or "")
+    if requires_signoff_authority and not explicit_reviewer_lane and reviewer_lane_value == default_core_lane:
+        reviewer_lane_value = authority_signoff_lane
+    if requires_signoff_authority and not explicit_final_lane and final_lane_value in {"", default_core_lane}:
+        final_lane_value = authority_signoff_lane
+    if requires_signoff_authority and not explicit_landing_lane and landing_lane_value in {"", default_core_lane}:
+        landing_lane_value = authority_signoff_lane
     reason_parts.append(f"predicted changed files: {predicted_files}")
     reason_parts.append("spark eligible" if spark_eligible else "spark not eligible")
     reason_parts.append(f"allowed lanes: {', '.join(allowed_lanes)}")
@@ -18307,9 +18562,9 @@ def classify_tier(
         "escalation_reason": escalation_reason,
         "expected_allowance_burn": expected_allowance_burn,
         "allowed_lanes": allowed_lanes,
-        "required_reviewer_lane": str(task_meta.get("required_reviewer_lane") or lanes["core"]["id"]),
-        "final_reviewer_lane": str(task_meta.get("final_reviewer_lane") or ""),
-        "landing_lane": str(task_meta.get("landing_lane") or ""),
+        "required_reviewer_lane": reviewer_lane_value or default_core_lane,
+        "final_reviewer_lane": final_lane_value,
+        "landing_lane": landing_lane_value,
         "task_meta": task_meta,
         "runtime_model": str((lanes.get(preferred_lane) or {}).get("runtime_model") or ""),
         "spark_eligible": spark_eligible,
@@ -18982,6 +19237,9 @@ def is_transient_review_failure(error_text: str) -> bool:
             "send a request to your admin",
             "worker session went stale",
             "stale_heartbeat",
+            "missing_final_message",
+            "nonetype' object has no attribute 'get'",
+            "github review is enabled but no github token is available in fleet",
         ]
     )
 
@@ -20920,6 +21178,14 @@ def parse_backend_unavailable_message(text: str) -> Optional[str]:
     return None
 
 
+def classify_transient_verify_failure(raw_log: str, final_text: str) -> Optional[str]:
+    for text in (str(raw_log or ""), str(final_text or "")):
+        message = parse_backend_unavailable_message(text)
+        if message:
+            return message
+    return None
+
+
 def parse_auth_failure_message(text: str) -> Optional[str]:
     lower = str(text or "").lower()
     markers = [
@@ -21035,6 +21301,12 @@ def prune_finished_tasks() -> None:
 
 def reconcile_runtime_tasks(active_project_ids: set[str]) -> None:
     prune_finished_tasks()
+    for runtime_key, row in list(runtime_task_rows().items()):
+        if live_runtime_task_handle(runtime_key) is not None:
+            continue
+        if persisted_runtime_task_active(runtime_key, row):
+            continue
+        clear_runtime_task(runtime_key)
     for project_id, task in list(state.tasks.items()):
         if task_done(task):
             state.tasks.pop(project_id, None)
@@ -21335,6 +21607,7 @@ async def execute_project_slice(
         rc = rc_result.exit_code
         finished_at = utc_now()
         raw_log = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
+        final_text = final_message_path.read_text(encoding="utf-8", errors="replace") if final_message_path.exists() else ""
         input_tokens, cached_input_tokens, output_tokens = parse_jsonl_usage(log_path)
         est_cost = estimate_cost_usd_for_model(
             config.get("spider", {}).get("price_table", {}) or DEFAULT_PRICE_TABLE,
@@ -21447,6 +21720,33 @@ async def execute_project_slice(
                     try:
                         token = github_token()
                         if not token:
+                            review_owner = str(review.get("owner") or "").strip()
+                            review_repo = str(review.get("repo") or "").strip()
+                            review_base_branch = str(review.get("base_branch") or "main").strip() or "main"
+                            if not review_owner or not review_repo:
+                                _, origin_owner, origin_repo = repo_origin(project_cfg)
+                                review_owner = review_owner or str(origin_owner or "").strip()
+                                review_repo = review_repo or str(origin_repo or "").strip()
+                            branch_info = {
+                                "branch": safe_git_branch_name(str(package.get("branch_name") or "")) if package_id else review_branch_name(project_cfg),
+                                "head_sha": git_head_sha(str(execution_root)),
+                                "changed": False,
+                            }
+                            repo_meta = {
+                                "owner": review_owner,
+                                "repo": review_repo,
+                                "base_branch": review_base_branch,
+                            }
+                            if review_owner and review_repo:
+                                persist_pending_review_request(
+                                    project_cfg,
+                                    repo_meta=repo_meta,
+                                    branch_name=str(branch_info["branch"]),
+                                    head_sha=str(branch_info["head_sha"]),
+                                    slice_name=slice_name,
+                                    package_id=package_id or None,
+                                    requested_at=finished_at,
+                                )
                             raise RuntimeError("GitHub review is enabled but no GitHub token is available in fleet")
                         repo_meta = project_github_repo(project_cfg, token)
                         branch_info = commit_and_push_review_branch(
@@ -21538,9 +21838,10 @@ async def execute_project_slice(
                             account_run_succeeded = True
                     except Exception as review_exc:
                         review_message = str(review_exc)
+                        transient_review_failure = is_transient_review_failure(review_message)
                         backoff_seconds = int(get_policy(config, "rate_limit_backoff_base", 60))
-                        retry_at = utc_now() + dt.timedelta(seconds=backoff_seconds if is_transient_review_failure(review_message) else max(backoff_seconds, 120))
-                        if is_transient_review_failure(review_message) and repo_meta and branch_info and bool(branch_info.get("changed")):
+                        retry_at = utc_now() + dt.timedelta(seconds=backoff_seconds if transient_review_failure else max(backoff_seconds, 120))
+                        if transient_review_failure and repo_meta and branch_info and bool(branch_info.get("changed")):
                             persist_pending_review_request(
                                 project_cfg,
                                 repo_meta=repo_meta,
@@ -21550,6 +21851,22 @@ async def execute_project_slice(
                                 package_id=package_id or None,
                                 requested_at=finished_at,
                             )
+                        if transient_review_failure and "no github token is available in fleet" in review_message.lower():
+                            pr_row = pull_request_row_by_package(package_id) if package_id else pull_request_row(project_id)
+                            if pr_row and complete_stalled_review_fallback(config, project_id, pr_row):
+                                with db() as conn:
+                                    conn.execute(
+                                        """
+                                        UPDATE runs
+                                        SET status='complete', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
+                                        WHERE id=?
+                                        """,
+                                        (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
+                                    )
+                                if package_id:
+                                    update_work_package_runtime(package_id, status="complete", runtime_state="idle", latest_run_id=run_id, completed_at=finished_at)
+                                account_run_succeeded = True
+                                return
                         with db() as conn:
                             conn.execute(
                                 """
@@ -21686,7 +22003,41 @@ async def execute_project_slice(
             else:
                 verify_timed_out = 'verify_result' in locals() and bool(verify_result.timed_out)
                 verify_idle_timed_out = verify_timed_out and bool(verify_result.idle_timed_out)
-                if verify_idle_timed_out:
+                transient_verify_failure = classify_transient_verify_failure(raw_log, final_text)
+                if transient_verify_failure is not None:
+                    with db() as conn:
+                        conn.execute(
+                            """
+                            UPDATE runs
+                            SET status='rejected', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='provider_unavailable', error_message=?
+                            WHERE id=?
+                            """,
+                            (
+                                rc,
+                                verify_rc,
+                                iso(finished_at),
+                                input_tokens,
+                                cached_input_tokens,
+                                output_tokens,
+                                est_cost,
+                                transient_verify_failure,
+                                run_id,
+                            ),
+                        )
+                    update_project_status(
+                        project_id,
+                        status=READY_STATUS,
+                        current_slice=slice_name,
+                        active_run_id=None,
+                        cooldown_until=finished_at + dt.timedelta(seconds=5),
+                        last_run_at=finished_at,
+                        last_error=transient_verify_failure,
+                        consecutive_failures=0,
+                        spider_tier=decision["tier"],
+                        spider_model=selected_model,
+                        spider_reason=decision_reason,
+                    )
+                elif verify_idle_timed_out:
                     msg = f"verify stalled without log output for {verify_result.idle_timeout_seconds}s"
                     error_class = "verify_stalled"
                 elif verify_timed_out:
@@ -21695,33 +22046,33 @@ async def execute_project_slice(
                 else:
                     msg = f"verify failed with exit {verify_rc}"
                     error_class = "verify"
-                with db() as conn:
-                    conn.execute(
-                        """
-                        UPDATE runs
-                        SET status='failed', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class=?, error_message=?
-                        WHERE id=?
-                        """,
-                        (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, error_class, msg, run_id),
+                    with db() as conn:
+                        conn.execute(
+                            """
+                            UPDATE runs
+                            SET status='failed', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class=?, error_message=?
+                            WHERE id=?
+                            """,
+                            (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, error_class, msg, run_id),
+                        )
+                        row = conn.execute("SELECT consecutive_failures FROM projects WHERE id=?", (project_id,)).fetchone()
+                        failures = int((row["consecutive_failures"] if row else 0) + 1)
+                    max_failures = int(get_policy(config, "max_consecutive_failures", 3))
+                    status = "blocked" if failures >= max_failures else READY_STATUS
+                    cooldown = utc_now() + dt.timedelta(seconds=restart_cooldown_seconds)
+                    update_project_status(
+                        project_id,
+                        status=status,
+                        current_slice=slice_name,
+                        active_run_id=None,
+                        cooldown_until=cooldown,
+                        last_run_at=finished_at,
+                        last_error=msg,
+                        consecutive_failures=failures,
+                        spider_tier=decision["tier"],
+                        spider_model=selected_model,
+                        spider_reason=decision_reason,
                     )
-                    row = conn.execute("SELECT consecutive_failures FROM projects WHERE id=?", (project_id,)).fetchone()
-                    failures = int((row["consecutive_failures"] if row else 0) + 1)
-                max_failures = int(get_policy(config, "max_consecutive_failures", 3))
-                status = "blocked" if failures >= max_failures else READY_STATUS
-                cooldown = utc_now() + dt.timedelta(seconds=restart_cooldown_seconds)
-                update_project_status(
-                    project_id,
-                    status=status,
-                    current_slice=slice_name,
-                    active_run_id=None,
-                    cooldown_until=cooldown,
-                    last_run_at=finished_at,
-                    last_error=msg,
-                    consecutive_failures=failures,
-                    spider_tier=decision["tier"],
-                    spider_model=selected_model,
-                    spider_reason=decision_reason,
-                )
         else:
             failures = int(project_row["consecutive_failures"] or 0) + 1
             if rc_result.timed_out:
@@ -22092,7 +22443,7 @@ async def execute_project_slice(
                 if run_status in {"awaiting_review", "review_requested", "awaiting_pr"}
                 else "failed"
                 if run_status in {"failed", "review_failed", "blocked"}
-                else "awaiting_account"
+                else READY_STATUS
                 if run_status in {"rejected", "rate_limited"}
                 else WAITING_CAPACITY_STATUS
                 if run_status in {"abandoned", "paused"}
@@ -24409,6 +24760,176 @@ def compact_status_payload() -> Dict[str, Any]:
     }
 
 
+def admin_status_lite_fallback_payload() -> Dict[str, Any]:
+    compact = compact_status_payload()
+    generated_at = str(compact.get("generated_at") or iso(utc_now()))
+    projects = list(compact.get("projects") or [])
+    active_workers = sum(
+        1
+        for project in projects
+        if str(project.get("runtime_status") or project.get("status") or "").strip().lower() in {"running", "starting", "verifying"}
+    )
+    readiness_summary = {
+        "counts": {
+            "active": active_workers,
+            "dispatch_pending": sum(
+                1 for project in projects if str(project.get("status") or "").strip().lower() == READY_STATUS
+            ),
+            "blocked": sum(
+                1 for project in projects if str(project.get("status") or "").strip().lower() in {"blocked", "review_failed"}
+            ),
+        },
+        "warning_count": 0,
+        "final_claim_ready": 0,
+    }
+    dispatch_pending = int(readiness_summary["counts"]["dispatch_pending"] or 0)
+    headline_eta = _fallback_status_lite_eta(
+        active_workers=active_workers,
+        dispatch_pending=dispatch_pending,
+        observed_at=parse_iso(generated_at),
+    )
+    queue_forecast = {
+        "now": {
+            "title": "Fallback queue forecast",
+            "remaining_human": headline_eta,
+            "project_id": "",
+        }
+    } if headline_eta else {}
+    public_status = {
+        "generated_at": generated_at,
+        "mission_snapshot": {"active_workers": active_workers, "headline_eta": headline_eta},
+        "queue_forecast": queue_forecast,
+        "capacity_forecast": {},
+        "blocker_forecast": {},
+        "deployment_posture": {},
+        "readiness_summary": readiness_summary,
+    }
+    return {
+        "generated_at": generated_at,
+        "headline_eta": headline_eta,
+        "public_status": public_status,
+        "cockpit": {
+            "worker_breakdown": {"active_workers": active_workers},
+            "queue_forecast": queue_forecast,
+            "mission_snapshot": {"headline_eta": headline_eta} if headline_eta else {},
+            "capacity_forecast": {},
+            "blocker_forecast": {},
+        },
+        "mission_board": {},
+        "queue_forecast": queue_forecast,
+        "capacity_forecast": {},
+        "blocker_forecast": {},
+        "projects": projects,
+        "groups": list(compact.get("groups") or []),
+    }
+
+
+def fallback_status_lite_eta(*, active_workers: int, dispatch_pending: int) -> str:
+    return _fallback_status_lite_eta(
+        active_workers=active_workers,
+        dispatch_pending=dispatch_pending,
+    )
+
+
+def _fallback_status_lite_eta_seconds(
+    *,
+    active_workers: int,
+    dispatch_pending: int,
+    observed_at: Optional[dt.datetime] = None,
+) -> int:
+    active_workers = max(0, int(active_workers or 0))
+    dispatch_pending = max(0, int(dispatch_pending or 0))
+    total_slices = active_workers + dispatch_pending
+    if total_slices <= 0:
+        _FALLBACK_STATUS_LITE_ETA_STATE.update(
+            {"signature": "", "remaining_seconds": 0, "observed_at": None}
+        )
+        return 0
+    active_minutes = active_workers * 35
+    queued_minutes = dispatch_pending * 20
+    baseline_seconds = max(
+        10 * 60,
+        int(math.ceil((active_minutes + queued_minutes) * 60 / max(active_workers, 1))),
+    )
+    current_at = observed_at or utc_now()
+    signature = f"{active_workers}:{dispatch_pending}"
+    cached_signature = str(_FALLBACK_STATUS_LITE_ETA_STATE.get("signature") or "")
+    cached_remaining = int(_FALLBACK_STATUS_LITE_ETA_STATE.get("remaining_seconds") or 0)
+    cached_observed_at = _FALLBACK_STATUS_LITE_ETA_STATE.get("observed_at")
+    if signature == cached_signature and isinstance(cached_observed_at, dt.datetime):
+        elapsed_seconds = max(0, int((current_at - cached_observed_at).total_seconds()))
+        remaining_seconds = max(10 * 60, min(baseline_seconds, cached_remaining - elapsed_seconds))
+    else:
+        remaining_seconds = baseline_seconds
+    _FALLBACK_STATUS_LITE_ETA_STATE.update(
+        {
+            "signature": signature,
+            "remaining_seconds": remaining_seconds,
+            "observed_at": current_at,
+        }
+    )
+    return remaining_seconds
+
+
+def _fallback_status_lite_eta(
+    *,
+    active_workers: int,
+    dispatch_pending: int,
+    observed_at: Optional[dt.datetime] = None,
+) -> str:
+    remaining_seconds = _fallback_status_lite_eta_seconds(
+        active_workers=active_workers,
+        dispatch_pending=dispatch_pending,
+        observed_at=observed_at,
+    )
+    if remaining_seconds <= 0:
+        return ""
+    return format_fallback_compact_duration(remaining_seconds)
+
+
+def format_compact_duration(seconds: int) -> str:
+    seconds = max(0, int(seconds or 0))
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    parts: List[str] = []
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes or hours:
+        parts.append(f"{minutes}m")
+    if not parts:
+        parts.append(f"{secs}s")
+    return " ".join(parts)
+
+
+def format_fallback_compact_duration(seconds: int) -> str:
+    seconds = max(0, int(seconds or 0))
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    parts: List[str] = []
+    if hours:
+        parts.append(f"{hours}h")
+        parts.append(f"{minutes}m")
+    elif minutes:
+        parts.append(f"{minutes}m")
+        parts.append(f"{secs}s")
+    else:
+        parts.append(f"{secs}s")
+    return " ".join(parts[:2])
+
+
+def load_admin_status_lite_compat() -> Dict[str, Any]:
+    target_url = f"{ADMIN_URL.rstrip('/')}/api/admin/status-lite"
+    try:
+        request = urllib.request.Request(target_url, method="GET")
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        pass
+    return admin_status_lite_fallback_payload()
+
+
 @app.get("/api/status")
 def api_status() -> Dict[str, Any]:
     return compact_status_payload()
@@ -24417,6 +24938,11 @@ def api_status() -> Dict[str, Any]:
 @app.get("/api/status/full")
 def api_status_full() -> Dict[str, Any]:
     return full_status_payload()
+
+
+@app.get("/api/admin/status-lite")
+def api_admin_status_lite_compat() -> Dict[str, Any]:
+    return load_admin_status_lite_compat()
 
 
 @app.get("/api/internal/participant-lanes")
@@ -24584,6 +25110,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
     hub_group_id = str(payload.get("hub_group_id") or "").strip()
     boost_campaign_id = str(payload.get("boost_campaign_id") or "").strip()
     sponsor_session_id = str(payload.get("sponsor_session_id") or "").strip()
+    participant_codex_code = str(payload.get("participant_codex_code") or "").strip()
     public_contribution_visibility = str(payload.get("public_contribution_visibility") or "private").strip().lower() or "private"
     tier_source = normalize_participant_tier_source(payload.get("tier_source") or ("user_declared" if authorization_tier != "unknown" else "unknown"))
     backend_key = str(payload.get("backend") or participant_lane_backend_key(lane_role, policy)).strip() or participant_lane_backend_key(lane_role, policy)
@@ -24612,6 +25139,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 hub_group_id,
                 boost_campaign_id,
                 sponsor_session_id,
+                participant_codex_code,
                 public_contribution_visibility,
                 lane_role,
                 owner_category,
@@ -24626,7 +25154,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 created_at,
                 updated_at
             )
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 lane_id,
@@ -24638,6 +25166,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                 hub_group_id or None,
                 boost_campaign_id or None,
                 sponsor_session_id or None,
+                participant_codex_code or None,
                 public_contribution_visibility,
                 lane_role,
                 PARTICIPANT_OWNER_CATEGORY,
@@ -24654,6 +25183,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
                         "lane_role": lane_role,
                         "authorization_tier": authorization_tier,
                         "tier_source": tier_source,
+                        "participant_codex_code": participant_codex_code,
                     },
                     sort_keys=True,
                 ),
@@ -24673,6 +25203,7 @@ def create_participant_lane_record(config: Dict[str, Any], payload: Dict[str, An
             "hub_group_id": hub_group_id,
             "boost_campaign_id": boost_campaign_id,
             "sponsor_session_id": sponsor_session_id,
+            "participant_codex_code": participant_codex_code,
             "public_contribution_visibility": public_contribution_visibility,
             "lane_role": lane_role,
             "authorization_tier": authorization_tier,
@@ -25020,6 +25551,19 @@ def api_retry_project(project_id: str) -> Dict[str, Any]:
         row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
     if not row:
         raise HTTPException(404, f"unknown project: {project_id}")
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE work_packages
+               SET status='ready',
+                   runtime_state='idle',
+                   updated_at=?
+             WHERE project_id=?
+               AND status IN ('blocked', 'failed', 'review_failed', 'rate_limited', 'rejected')
+               AND runtime_state='idle'
+            """,
+            (iso(now), project_id),
+        )
     update_project_status(
         project_id,
         status=READY_STATUS,

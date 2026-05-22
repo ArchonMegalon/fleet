@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -13,6 +14,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+import yaml
 
 CONTAINER_CONTROLLER_DIR = Path("/app")
 HOST_WORKSPACE_ROOT = Path("/docker/fleet")
@@ -35,7 +37,15 @@ DEFAULT_STALE_LOCAL_REVIEW_MINUTES = 10
 DEFAULT_STALE_RUNTIME_HOURS = 6
 
 ACTIVE_RUN_STATUSES = {"starting", "running", "verifying", "healing", "local_review"}
-ACTIVE_RUNTIME_TASK_STATES = {"scheduled", "running"}
+ACTIVE_RUNTIME_TASK_STATES = {"starting", "scheduled", "running", "verifying", "awaiting_review"}
+TRANSIENT_AUTO_RETRY_MARKERS = (
+    "worker session went stale",
+    "without heartbeat or log activity",
+    "backend unavailable:",
+    "upstream_unavailable:",
+    "missing_final_message",
+    "nonetype' object has no attribute 'get'",
+)
 THROTTLED_PROJECT_STATUSES = {
     "review_requested",
     "awaiting_pr",
@@ -45,6 +55,16 @@ THROTTLED_PROJECT_STATUSES = {
     "waiting_dependency",
 }
 CAPACITY_ERROR_MARKERS = {"capacity", "account", "budget", "runway", "pool", "cooldown", "rate limit"}
+ABSOLUTE_ROOT_RE = re.compile(r'^(?P<indent>\s*)ROOT = Path\("(?P<root>/docker/[^"]+)"\)\s*$', re.MULTILINE)
+RELEASE_BUILD_DRIFT_RE = re.compile(
+    r'CHUMMER_CORE_ENGINE_TEST_FILTER=(?P<filter>parity-m14[23]) dotnet run --project Chummer\.CoreEngine\.Tests/Chummer\.CoreEngine\.Tests\.csproj -m:1 -p:UseSharedCompilation=false'
+)
+DESIGN_QUEUE_MIRROR_PATH = Path("/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml")
+BROAD_SCOPE_PATH_MARKERS = {"src", "tests", "scripts", "docs", "products"}
+
+
+def _sql_string_set(values: Sequence[str]) -> str:
+    return ", ".join("'" + str(value).replace("'", "''") + "'" for value in values)
 
 
 def default_controller_url(*, running_in_controller_container: Optional[bool] = None) -> str:
@@ -131,6 +151,7 @@ def prune_stale_runtime_commitments(workspace_root: Path, *, stale_hours: int) -
             """
             SELECT rt.project_id,
                    COALESCE(rt.package_id, '') AS package_id,
+                   rt.run_id AS runtime_run_id,
                    rt.task_state,
                    rt.scheduled_at,
                    rt.started_at,
@@ -145,7 +166,7 @@ def prune_stale_runtime_commitments(workspace_root: Path, *, stale_hours: int) -
                    r.final_message_path
             FROM runtime_tasks rt
             LEFT JOIN projects p ON p.id = rt.project_id
-            LEFT JOIN runs r ON r.id = p.active_run_id
+            LEFT JOIN runs r ON r.id = COALESCE(rt.run_id, p.active_run_id)
             WHERE rt.task_state IN ('scheduled', 'running')
             ORDER BY rt.project_id, rt.package_id
             """
@@ -156,6 +177,32 @@ def prune_stale_runtime_commitments(workspace_root: Path, *, stale_hours: int) -
             package_id = str(row["package_id"] or "").strip()
             if not project_id:
                 continue
+            runtime_run_id = int(row["runtime_run_id"] or 0)
+            active_run_id = int(row["active_run_id"] or 0)
+            run_finished_at = parse_iso(row["run_finished_at"])
+            run_status = str(row["run_status"] or "").strip().lower()
+            if runtime_run_id and (run_finished_at is not None or (run_status and run_status not in ACTIVE_RUN_STATUSES)):
+                reason = (
+                    f"keeper cleared terminal runtime commitment for run {runtime_run_id} "
+                    f"status={run_status or 'unknown'}"
+                )
+                conn.execute(
+                    "DELETE FROM runtime_tasks WHERE project_id=? AND COALESCE(package_id,'')=?",
+                    (project_id, package_id),
+                )
+                if active_run_id == runtime_run_id:
+                    conn.execute(
+                        """
+                        UPDATE projects
+                        SET active_run_id=NULL,
+                            last_error=COALESCE(NULLIF(last_error, ''), ?),
+                            updated_at=?
+                        WHERE id=?
+                        """,
+                        (reason, iso(now), project_id),
+                    )
+                cleared += 1
+                continue
             anchors = [
                 parse_iso(row["updated_at"]),
                 parse_iso(row["started_at"]),
@@ -164,8 +211,6 @@ def prune_stale_runtime_commitments(workspace_root: Path, *, stale_hours: int) -
             ]
             anchor = next((item for item in anchors if item is not None), None)
             if anchor is None or anchor >= cutoff:
-                continue
-            if parse_iso(row["run_finished_at"]) is not None:
                 continue
             if _path_has_recent_activity(str(row["log_path"] or ""), cutoff=cutoff):
                 continue
@@ -211,10 +256,276 @@ def prune_stale_runtime_commitments(workspace_root: Path, *, stale_hours: int) -
 def read_json(path: Path) -> Dict[str, Any]:
     if not path.exists():
         return {}
+
+
+def _load_queue_staging_document(path: Path) -> Tuple[Any, List[Dict[str, Any]]]:
+    if not path.exists():
+        return None, []
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or []
+    except Exception:
+        return None, []
+    if isinstance(payload, list):
+        return payload, [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        packages = payload.get("items")
+        if packages is None:
+            packages = payload.get("packages") or []
+        if isinstance(packages, list):
+            return payload, [item for item in packages if isinstance(item, dict)]
+    return payload, []
+
+
+def _load_queue_staging(path: Path) -> List[Dict[str, Any]]:
+    return _load_queue_staging_document(path)[1]
+
+
+def _write_queue_staging(path: Path, packages: List[Dict[str, Any]], *, original_document: Any = None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document = packages
+    if isinstance(original_document, dict):
+        document = dict(original_document)
+        if isinstance(document.get("items"), list):
+            document["items"] = packages
+        elif isinstance(document.get("packages"), list):
+            document["packages"] = packages
+        else:
+            document = packages
+    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+
+
+def autoheal_queue_scope_drift(
+    app: Any,
+    *,
+    workspace_root: Path,
+    controller_url: str,
+    fleet_queue_path: Optional[Path] = None,
+    design_queue_path: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    fleet_queue = fleet_queue_path or (workspace_root / ".codex-studio" / "published" / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml")
+    design_queue = design_queue_path or DESIGN_QUEUE_MIRROR_PATH
+    fleet_document, fleet_packages = _load_queue_staging_document(fleet_queue)
+    _, design_packages = _load_queue_staging_document(design_queue)
+    if not fleet_packages or not design_packages:
+        return []
+
+    design_by_package = {
+        str(item.get("package_id") or "").strip(): item
+        for item in design_packages
+        if str(item.get("package_id") or "").strip()
+    }
+    changed: List[Dict[str, Any]] = []
+    for item in fleet_packages:
+        package_id = str(item.get("package_id") or "").strip()
+        if not package_id:
+            continue
+        mirror = design_by_package.get(package_id)
+        if mirror is None:
+            continue
+        if str(item.get("repo") or "").strip() != str(mirror.get("repo") or "").strip():
+            continue
+        live_allowed = [str(path).strip() for path in list(item.get("allowed_paths") or []) if str(path).strip()]
+        mirror_allowed = [str(path).strip() for path in list(mirror.get("allowed_paths") or []) if str(path).strip()]
+        if not live_allowed or not mirror_allowed:
+            continue
+        if set(mirror_allowed) == set(live_allowed):
+            continue
+        stale_broad_paths = [path for path in live_allowed if path not in mirror_allowed and path in BROAD_SCOPE_PATH_MARKERS]
+        if not stale_broad_paths and not set(mirror_allowed).issubset(set(live_allowed)):
+            continue
+        if len(mirror_allowed) > len(live_allowed) and not stale_broad_paths:
+            continue
+        item["allowed_paths"] = mirror_allowed
+        changed.append(
+            {
+                "package_id": package_id,
+                "project_id": str(item.get("repo") or "").strip(),
+                "old_allowed_paths": live_allowed,
+                "new_allowed_paths": mirror_allowed,
+                "stale_broad_paths": stale_broad_paths,
+            }
+        )
+    if not changed:
+        return []
+
+    _write_queue_staging(fleet_queue, fleet_packages, original_document=fleet_document)
+    with app.db() as conn:
+        for action in changed:
+            package_id = str(action["package_id"])
+            allowed = list(action["new_allowed_paths"])
+            row = conn.execute(
+                "SELECT project_id, task_meta_json FROM work_packages WHERE package_id=?",
+                (package_id,),
+            ).fetchone()
+            if row is None:
+                continue
+            project_id = str(row["project_id"] or "").strip()
+            task_meta = json.loads(str(row["task_meta_json"] or "{}") or "{}")
+            task_meta["allowed_paths"] = allowed
+            conn.execute(
+                "UPDATE work_packages SET allowed_paths_json=?, task_meta_json=? WHERE package_id=?",
+                (json.dumps(allowed), json.dumps(task_meta, sort_keys=True), package_id),
+            )
+            active_rows = conn.execute(
+                """
+                SELECT claim_value
+                FROM scope_claims
+                WHERE package_id=?
+                  AND claim_type='path'
+                  AND claim_state='active'
+                """,
+                (package_id,),
+            ).fetchall()
+            active_values = {str(item["claim_value"] or "").strip() for item in active_rows}
+            stale_values = [value for value in active_values if value not in allowed]
+            if stale_values:
+                conn.executemany(
+                    """
+                    UPDATE scope_claims
+                    SET claim_state='released',
+                        released_at=?
+                    WHERE package_id=?
+                      AND claim_type='path'
+                      AND claim_value=?
+                      AND claim_state='active'
+                    """,
+                    [(iso_now(), package_id, value) for value in stale_values],
+                )
+            for value in allowed:
+                scope_key = f"path:{value}"
+                existing = conn.execute(
+                    """
+                    SELECT 1
+                    FROM scope_claims
+                    WHERE package_id=?
+                      AND claim_type='path'
+                      AND claim_value=?
+                    """,
+                    (package_id, value),
+                ).fetchone()
+                if existing:
+                    conn.execute(
+                        """
+                        UPDATE scope_claims
+                        SET project_id=?,
+                            scope_key=?,
+                            claim_state='active',
+                            activated_at=COALESCE(activated_at, ?),
+                            released_at=NULL
+                        WHERE package_id=?
+                          AND claim_type='path'
+                          AND claim_value=?
+                        """,
+                        (project_id, scope_key, iso_now(), package_id, value),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO scope_claims(package_id, project_id, claim_type, claim_value, scope_key, claim_state, created_at, activated_at, released_at)
+                        VALUES(?, ?, 'path', ?, ?, 'active', ?, ?, NULL)
+                        """,
+                        (package_id, project_id, value, scope_key, iso_now(), iso_now()),
+                    )
+    actions: List[Dict[str, Any]] = []
+    seen_projects: set[str] = set()
+    for action in changed:
+        row = None
+        with app.db() as conn:
+            row = conn.execute(
+                "SELECT id AS project_id, status, active_run_id FROM projects WHERE id=(SELECT project_id FROM work_packages WHERE package_id=?)",
+                (action["package_id"],),
+            ).fetchone()
+        project_id = str((row["project_id"] if row else "") or "").strip()
+        if not project_id or project_id in seen_projects:
+            continue
+        seen_projects.add(project_id)
+        project_status = str((row["status"] if row else "") or "").strip().lower()
+        active_run_id = int((row["active_run_id"] if row else 0) or 0)
+        retry_result: Dict[str, Any] = {"ok": True, "skipped": True}
+        if project_status not in ACTIVE_RUN_STATUSES and not active_run_id:
+            try:
+                retry_result = http_post_json(f"{controller_url.rstrip('/')}/api/projects/{project_id}/retry", {})
+            except urllib.error.URLError as exc:
+                retry_result = {"ok": False, "error": str(exc)}
+        actions.append(
+            {
+                "trigger": "queue_scope_drift",
+                "package_id": action["package_id"],
+                "project_id": project_id,
+                "old_allowed_paths": action["old_allowed_paths"],
+                "new_allowed_paths": action["new_allowed_paths"],
+                "stale_broad_paths": action["stale_broad_paths"],
+                "retry_result": retry_result,
+            }
+        )
+    return actions
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def normalize_worktree_root_literals(worktree_root: Path) -> List[str]:
+    changed: List[str] = []
+    if not worktree_root.exists():
+        return changed
+    repo_literal = str(worktree_root)
+    targets = [
+        worktree_root / "scripts" / "materialize_status_plane.py",
+        worktree_root / "scripts" / "verify_status_plane_semantics.py",
+    ]
+    for path in targets:
+        if not path.is_file():
+            continue
+        try:
+            original = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+
+        def replace_root(match: re.Match[str]) -> str:
+            root = str(match.group("root") or "")
+            if root == repo_literal:
+                return match.group(0)
+            return f'{match.group("indent")}ROOT = Path(__file__).resolve().parents[1]'
+
+        updated = ABSOLUTE_ROOT_RE.sub(replace_root, original)
+        if updated == original:
+            continue
+        path.write_text(updated, encoding="utf-8")
+        changed.append(str(path.relative_to(worktree_root)))
+    return changed
+
+
+def normalize_release_receipt_command_strings(repo_root: Path) -> List[str]:
+    changed: List[str] = []
+    targets = [
+        repo_root / "scripts" / "verify-next90-m142-dense-workbench-receipts.py",
+        repo_root / "scripts" / "verify-next90-m143-export-print-supplement-rule-environment-receipts.py",
+        repo_root / "tests" / "test_next90_m142_dense_workbench_receipts.py",
+        repo_root / "tests" / "test_next90_m143_export_print_supplement_rule_environment_receipts.py",
+        repo_root / "docs" / "NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
+        repo_root / "docs" / "NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md",
+    ]
+    for path in targets:
+        if not path.is_file():
+            continue
+        try:
+            original = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        updated = RELEASE_BUILD_DRIFT_RE.sub(
+            lambda m: (
+                f'CHUMMER_CORE_ENGINE_TEST_FILTER={m.group("filter")} '
+                'dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj '
+                '-c Release -m:1 -p:UseSharedCompilation=false'
+            ),
+            original,
+        )
+        if updated == original:
+            continue
+        path.write_text(updated, encoding="utf-8")
+        changed.append(str(path.relative_to(repo_root)))
+    return changed
 
 
 def write_json(path: Path, payload: Dict[str, Any]) -> None:
@@ -273,6 +584,12 @@ def normalize_error_signature(error_class: str, error_message: str) -> str:
         return "verify:journey_gates_contract_drift"
     if clean_class == "verify" and "forbidden guide directories still present" in clean_message:
         return "verify:forbidden_guide_directories"
+    if clean_class == "verify" and "status_plane.generated.yaml drifted from live readiness/deployment semantics" in clean_message:
+        return "verify:status_plane_drift"
+    if clean_class == "verify" and "dense workbench receipts" in clean_message:
+        return "verify:dense_workbench_receipt_drift"
+    if clean_class == "verify" and "export print supplement rule environment receipts" in clean_message:
+        return "verify:export_print_receipt_drift"
     if clean_class == "orphaned_runtime":
         if "controller lost coding supervision" in clean_message:
             return "orphaned_runtime:lost_supervision"
@@ -289,11 +606,121 @@ def normalize_error_signature(error_class: str, error_message: str) -> str:
     return clean_class
 
 
+def _run_is_upstream_capacity_failure(row: sqlite3.Row) -> bool:
+    error_class = str(row["error_class"] or "").strip().lower()
+    error_message = str(row["error_message"] or "").strip().lower()
+    if "upstream_unavailable:" in error_message:
+        return True
+    if error_class not in {"verify", "review", "failed", ""} and error_class != "unknown":
+        return False
+    final_message_path = str(row["final_message_path"] or "").strip()
+    if not final_message_path:
+        return False
+    path = Path(final_message_path)
+    if not path.exists():
+        return False
+    try:
+        final_text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    clean_text = final_text.lower()
+    transient_markers = (
+        "exact blocker: upstream_unavailable:",
+        "error: upstream_unavailable:",
+        "exact blocker: missing_final_message",
+        "error: missing_final_message",
+    )
+    return any(marker in clean_text for marker in transient_markers)
+
+
+def autoheal_worktree_and_receipt_drift(app: Any, *, controller_url: str) -> List[Dict[str, Any]]:
+    with app.db() as conn:
+        rows = conn.execute(
+            """
+            SELECT runs.id AS run_id,
+                   runs.project_id,
+                   COALESCE(runs.package_id, '') AS package_id,
+                   COALESCE(runs.error_class, '') AS error_class,
+                   COALESCE(runs.error_message, '') AS error_message,
+                   COALESCE(runs.log_path, '') AS log_path,
+                   COALESCE(wp.worktree_root, '') AS worktree_root,
+                   COALESCE(projects.path, '') AS project_path,
+                   COALESCE(projects.status, '') AS project_status,
+                   projects.active_run_id
+            FROM runs
+            LEFT JOIN work_packages wp
+              ON wp.package_id = runs.package_id
+             AND wp.project_id = runs.project_id
+            LEFT JOIN projects
+              ON projects.id = runs.project_id
+            WHERE runs.status='failed'
+            ORDER BY runs.finished_at DESC, runs.id DESC
+            LIMIT 40
+            """
+        ).fetchall()
+    actions: List[Dict[str, Any]] = []
+    seen_projects: set[str] = set()
+    for row in rows:
+        project_id = str(row["project_id"] or "").strip()
+        if not project_id or project_id in seen_projects:
+            continue
+        seen_projects.add(project_id)
+        project_status = str(row["project_status"] or "").strip().lower()
+        if project_status in ACTIVE_RUN_STATUSES or row["active_run_id"]:
+            continue
+        signature = normalize_error_signature(str(row["error_class"] or ""), str(row["error_message"] or ""))
+        log_text = ""
+        log_path = Path(str(row["log_path"] or "").strip())
+        if log_path.exists():
+            try:
+                log_text = log_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                log_text = ""
+        trigger = ""
+        changed_paths: List[str] = []
+        worktree_root = Path(str(row["worktree_root"] or "").strip()) if str(row["worktree_root"] or "").strip() else None
+        project_root = Path(str(row["project_path"] or "").strip()) if str(row["project_path"] or "").strip() else None
+        if ("status-plane verification failed" in log_text or signature == "verify:status_plane_drift") and worktree_root is not None:
+            changed_paths = normalize_worktree_root_literals(worktree_root)
+            trigger = "status_plane_root_leakage"
+        elif ("test_next90_m142_dense_workbench_receipts" in log_text or signature == "verify:dense_workbench_receipt_drift") and project_root is not None:
+            changed_paths = normalize_release_receipt_command_strings(project_root)
+            trigger = "dense_workbench_release_command_drift"
+        elif ("test_next90_m143_export_print_supplement_rule_environment_receipts" in log_text or signature == "verify:export_print_receipt_drift") and project_root is not None:
+            changed_paths = normalize_release_receipt_command_strings(project_root)
+            trigger = "export_print_release_command_drift"
+        if not changed_paths:
+            continue
+        try:
+            retry_result = http_post_json(f"{controller_url.rstrip('/')}/api/projects/{project_id}/retry", {})
+        except urllib.error.URLError as exc:
+            retry_result = {"ok": False, "error": str(exc)}
+        actions.append(
+            {
+                "project_id": project_id,
+                "package_id": str(row["package_id"] or ""),
+                "run_id": int(row["run_id"] or 0),
+                "trigger": trigger,
+                "changed_paths": changed_paths,
+                "retry_result": retry_result,
+            }
+        )
+    return actions
+
+
 def repeated_failure_map(app: Any, *, lookback_minutes: int, threshold: int) -> Dict[str, Dict[str, Any]]:
     cutoff = utc_now() - dt.timedelta(minutes=max(1, lookback_minutes))
     blocked: Dict[str, Dict[str, Any]] = {}
     active_keys = active_commitment_keys(app)
+    runtime_state_sql = _sql_string_set(sorted(ACTIVE_RUNTIME_TASK_STATES))
     with app.db() as conn:
+        active_runtime_rows = conn.execute(
+            f"""
+            SELECT project_id, COALESCE(package_id, '') AS package_id
+            FROM runtime_tasks
+            WHERE task_state IN ({runtime_state_sql})
+            """
+        ).fetchall()
         rows = conn.execute(
             """
             SELECT runs.project_id,
@@ -301,8 +728,11 @@ def repeated_failure_map(app: Any, *, lookback_minutes: int, threshold: int) -> 
                    COALESCE(runs.error_class, '') AS error_class,
                    COALESCE(runs.error_message, '') AS error_message,
                    runs.finished_at,
+                   COALESCE(runs.final_message_path, '') AS final_message_path,
                    COALESCE(wp.status, '') AS package_status,
-                   COALESCE(projects.status, '') AS project_status
+                   COALESCE(projects.status, '') AS project_status,
+                   COALESCE(projects.last_error, '') AS project_last_error,
+                   COALESCE(projects.consecutive_failures, 0) AS project_consecutive_failures
             FROM runs
             LEFT JOIN work_packages wp
               ON wp.package_id = runs.package_id
@@ -316,6 +746,16 @@ def repeated_failure_map(app: Any, *, lookback_minutes: int, threshold: int) -> 
             """,
             (iso(cutoff),),
         ).fetchall()
+    active_runtime_projects = {
+        str(row["project_id"] or "").strip()
+        for row in active_runtime_rows
+        if str(row["project_id"] or "").strip()
+    }
+    active_runtime_packages = {
+        str(row["package_id"] or "").strip()
+        for row in active_runtime_rows
+        if str(row["package_id"] or "").strip()
+    }
     grouped: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = {}
     for row in rows:
         project_id = str(row["project_id"] or "").strip()
@@ -324,12 +764,28 @@ def repeated_failure_map(app: Any, *, lookback_minutes: int, threshold: int) -> 
         package_id = str(row["package_id"] or "").strip()
         package_status = str(row["package_status"] or "").strip().lower()
         project_status = str(row["project_status"] or "").strip().lower()
+        project_last_error = str(row["project_last_error"] or "").strip()
+        project_consecutive_failures = int(row["project_consecutive_failures"] or 0)
         runtime_key = package_id or project_id
         if runtime_key in active_keys:
+            continue
+        if package_id:
+            if package_id in active_runtime_packages or project_id in active_runtime_projects:
+                continue
+        elif project_id in active_runtime_projects:
             continue
         if package_id and package_status in {"complete", "completed_signed_off", "scaffold_complete", "archived"}:
             continue
         if not package_id and project_status in {"complete", "completed_signed_off", "scaffold_complete"}:
+            continue
+        if (
+            not package_id
+            and not project_last_error
+            and project_consecutive_failures <= 0
+            and project_status not in {"failed", "review_failed", "rejected", "rate_limited"}
+        ):
+            continue
+        if _run_is_upstream_capacity_failure(row):
             continue
         signature = normalize_error_signature(str(row["error_class"] or ""), str(row["error_message"] or ""))
         key = (project_id, package_id, signature)
@@ -402,20 +858,22 @@ def candidate_runtime_key(candidate: Any) -> str:
 
 def active_commitment_keys(app: Any) -> set[str]:
     keys: set[str] = set()
+    runtime_state_sql = _sql_string_set(sorted(ACTIVE_RUNTIME_TASK_STATES))
+    run_status_sql = _sql_string_set(sorted(ACTIVE_RUN_STATUSES))
     with app.db() as conn:
         runtime_rows = conn.execute(
-            """
+            f"""
             SELECT package_id, project_id
             FROM runtime_tasks
-            WHERE task_state IN ('scheduled', 'running')
+            WHERE task_state IN ({runtime_state_sql})
             ORDER BY project_id, package_id
             """
         ).fetchall()
         run_rows = conn.execute(
-            """
+            f"""
             SELECT COALESCE(package_id, project_id) AS runtime_key
             FROM runs
-            WHERE status IN ('starting', 'running', 'verifying', 'healing', 'local_review')
+            WHERE status IN ({run_status_sql})
               AND finished_at IS NULL
             """
         ).fetchall()
@@ -587,6 +1045,64 @@ def ready_project_ids(app: Any, repeated_failures: Dict[str, Dict[str, Any]]) ->
     return projects
 
 
+def auto_retry_transient_dispatch_pending_projects(
+    app: Any,
+    *,
+    controller_url: str,
+    repeated_failures: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    active_keys = active_commitment_keys(app)
+    now = utc_now()
+    with app.db() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, status, cooldown_until, last_error, current_slice
+            FROM projects
+            ORDER BY id
+            """
+        ).fetchall()
+    actions: List[Dict[str, Any]] = []
+    for row in rows:
+        project_id = str(row["id"] or "").strip()
+        if not project_id or project_id in active_keys:
+            continue
+        if project_id in repeated_failures:
+            signature = str((repeated_failures.get(project_id) or {}).get("signature") or "").lower()
+            if signature and not any(marker in signature for marker in TRANSIENT_AUTO_RETRY_MARKERS):
+                continue
+        status = str(row["status"] or "").strip().lower()
+        if status not in {"dispatch_pending", "awaiting_account"}:
+            continue
+        error_text = str(row["last_error"] or "").strip()
+        lowered = error_text.lower()
+        if not error_text or not any(marker in lowered for marker in TRANSIENT_AUTO_RETRY_MARKERS):
+            continue
+        cooldown_until = parse_iso(row["cooldown_until"])
+        if cooldown_until and cooldown_until > now:
+            continue
+        try:
+            result = http_post_json(f"{controller_url.rstrip('/')}/api/projects/{project_id}/retry", {})
+        except urllib.error.URLError as exc:
+            actions.append(
+                {
+                    "project_id": project_id,
+                    "action": "retry_failed",
+                    "reason": str(exc),
+                    "last_error": error_text,
+                }
+            )
+            continue
+        actions.append(
+            {
+                "project_id": project_id,
+                "action": "retry_transient_dispatch_pending",
+                "last_error": error_text,
+                "result": result,
+            }
+        )
+    return actions
+
+
 def nudge_ready_projects(
     app: Any,
     *,
@@ -628,6 +1144,8 @@ def anticipate_blockers(
     *,
     ready_backlog_after: int,
 ) -> List[Dict[str, Any]]:
+    runtime_state_sql = _sql_string_set(sorted(ACTIVE_RUNTIME_TASK_STATES))
+    active_keys = active_commitment_keys(app)
     with app.db() as conn:
         project_rows = conn.execute(
             "SELECT id, status, cooldown_until, last_error, current_slice FROM projects ORDER BY id"
@@ -640,7 +1158,24 @@ def anticipate_blockers(
             ORDER BY project_id, package_id
             """
         ).fetchall()
+        running_runtime_rows = conn.execute(
+            f"""
+            SELECT project_id, package_id, task_state, run_id
+            FROM runtime_tasks
+            WHERE task_state IN ({runtime_state_sql})
+            """
+        ).fetchall()
     blockers: List[Dict[str, Any]] = []
+    running_packages = {
+        str(row["package_id"] or "").strip()
+        for row in running_runtime_rows
+        if str(row["package_id"] or "").strip()
+    }
+    running_projects = {
+        str(row["project_id"] or "").strip()
+        for row in running_runtime_rows
+        if str(row["project_id"] or "").strip()
+    }
     if int(ready_backlog_after) <= 0:
         blockers.append(
             {
@@ -693,13 +1228,16 @@ def anticipate_blockers(
         package_id = str(row["package_id"] or "").strip()
         if str(row["status"] or "").strip().lower() != "failed" or not package_id:
             continue
+        project_id = str(row["project_id"] or "").strip()
+        if package_id in running_packages or project_id in running_projects:
+            continue
         downstream = int(dependents_by_package.get(package_id) or 0)
         if downstream <= 0:
             continue
         blockers.append(
             {
                 "kind": "head_of_line_failure",
-                "project_id": str(row["project_id"] or "").strip(),
+                "project_id": project_id,
                 "package_id": package_id,
                 "downstream_waiting_packages": downstream,
                 "latest_run_id": int(row["latest_run_id"] or 0) or None,
@@ -707,11 +1245,20 @@ def anticipate_blockers(
             }
         )
     for item in repeated_failures.values():
+        package_id = str(item.get("package_id") or "").strip()
+        project_id = str(item.get("project_id") or "").strip()
+        runtime_key = package_id or project_id
+        if runtime_key in active_keys:
+            continue
+        if package_id and (package_id in running_packages or project_id in running_projects):
+            continue
+        if not package_id and project_id in running_projects:
+            continue
         blockers.append(
             {
                 "kind": "repeat_failure",
-                "project_id": str(item.get("project_id") or ""),
-                "package_id": str(item.get("package_id") or ""),
+                "project_id": project_id,
+                "package_id": package_id,
                 "signature": str(item.get("signature") or ""),
                 "count": int(item.get("count") or 0),
                 "recommended_action": "repair the recurring verifier or queue truth before retries consume the lane again",
@@ -765,6 +1312,133 @@ def pause_guide_if_feedback_backlog_is_empty(
         "action": "paused_redundant_feedback_run",
         "result": result,
     }
+
+
+def _is_synthetic_closeout_finding(row: sqlite3.Row) -> bool:
+    external_id = str(row["external_id"] or "").strip().lower()
+    body = str(row["body"] or "").strip().lower()
+    if external_id != "local-review-closeout":
+        return False
+    synthetic_markers = (
+        "missing_final_message",
+        "upstream_unavailable:",
+        "expected fix: completed local unblock task",
+    )
+    return any(marker in body for marker in synthetic_markers)
+
+
+def release_stale_synthetic_review_holds(
+    app: Any,
+    *,
+    stale_minutes: int,
+) -> List[Dict[str, Any]]:
+    cutoff = utc_now() - dt.timedelta(minutes=max(1, int(stale_minutes)))
+    released: List[Dict[str, Any]] = []
+    with app.db() as conn:
+        projects = conn.execute(
+            """
+            SELECT id, status, current_slice, last_run_at, last_error, consecutive_failures,
+                   spider_tier, spider_model, spider_reason, updated_at
+            FROM projects
+            WHERE EXISTS (
+                SELECT 1
+                FROM pull_requests pr
+                WHERE pr.project_id = projects.id
+                  AND pr.review_status IN ('local_review', 'review_fix_required')
+            )
+            ORDER BY id
+            """
+        ).fetchall()
+    for project_row in projects:
+        project_id = str(project_row["id"] or "").strip()
+        if not project_id:
+            continue
+        with app.db() as conn:
+            pr_rows = conn.execute(
+                """
+                SELECT id, package_id, pr_number, review_status, review_requested_at, review_completed_at,
+                       local_review_last_at, updated_at, review_findings_count, review_blocking_findings_count
+                FROM pull_requests
+                WHERE project_id=?
+                ORDER BY id
+                """,
+                (project_id,),
+            ).fetchall()
+        if not pr_rows:
+            continue
+        review_statuses = {str(pr_row["review_status"] or "").strip().lower() for pr_row in pr_rows}
+        project_hold_status = "review_fix_required" if "review_fix_required" in review_statuses else "local_review"
+        if project_hold_status not in {"local_review", "review_fix_required"}:
+            continue
+        aged_at = max(
+            (
+                parse_iso(pr_row["review_completed_at"])
+                or parse_iso(pr_row["local_review_last_at"])
+                or parse_iso(pr_row["review_requested_at"])
+                or parse_iso(pr_row["updated_at"])
+                for pr_row in pr_rows
+            ),
+            default=None,
+        )
+        if aged_at is None or aged_at > cutoff:
+            continue
+        with app.db() as conn:
+            finding_rows = conn.execute(
+                """
+                SELECT project_id, pr_number, external_id, body, blocking, updated_at, created_at
+                FROM review_findings
+                WHERE project_id=?
+                ORDER BY pr_number, id
+                """,
+                (project_id,),
+            ).fetchall()
+        if project_hold_status == "local_review":
+            has_findings = any(int(pr_row["review_findings_count"] or 0) > 0 or int(pr_row["review_blocking_findings_count"] or 0) > 0 for pr_row in pr_rows)
+            if has_findings or finding_rows:
+                continue
+        elif project_hold_status == "review_fix_required":
+            if not finding_rows or any(not _is_synthetic_closeout_finding(row) for row in finding_rows):
+                continue
+        else:
+            continue
+        now_text = iso(utc_now())
+        with app.db() as conn:
+            if finding_rows:
+                conn.execute("DELETE FROM review_findings WHERE project_id=?", (project_id,))
+            conn.execute(
+                """
+                UPDATE pull_requests
+                SET review_status='clean',
+                    review_completed_at=COALESCE(review_completed_at, ?),
+                    local_review_last_at=COALESCE(local_review_last_at, ?),
+                    review_findings_count=0,
+                    review_blocking_findings_count=0,
+                    next_retry_at=NULL,
+                    updated_at=?
+                WHERE project_id=?
+                """,
+                (now_text, now_text, now_text, project_id),
+            )
+            conn.execute(
+                """
+                UPDATE projects
+                SET status='ready',
+                    active_run_id=NULL,
+                    updated_at=?
+                WHERE id=?
+                """,
+                (now_text, project_id),
+            )
+        released.append(
+            {
+                "project_id": project_id,
+                "project_status": project_hold_status,
+                "pr_count": len(pr_rows),
+                "finding_count": len(finding_rows),
+                "released_at": now_text,
+            }
+        )
+    return released
 
 
 def release_stale_zero_finding_local_reviews(
@@ -887,11 +1561,84 @@ def release_stale_zero_finding_local_reviews(
     return released
 
 
+def release_orphaned_active_scope_claims(app: Any) -> List[Dict[str, Any]]:
+    now_text = iso(utc_now())
+    released: List[Dict[str, Any]] = []
+    runtime_state_sql = _sql_string_set(sorted(ACTIVE_RUNTIME_TASK_STATES))
+    run_status_sql = _sql_string_set(sorted(ACTIVE_RUN_STATUSES))
+    with app.db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT sc.id,
+                   sc.package_id,
+                   sc.project_id,
+                   sc.claim_type,
+                   sc.claim_value,
+                   wp.status AS package_status,
+                   wp.runtime_state AS package_runtime_state,
+                   rt.task_state AS runtime_task_state,
+                   r.status AS run_status
+            FROM scope_claims sc
+            LEFT JOIN work_packages wp
+              ON wp.package_id = sc.package_id
+             AND wp.project_id = sc.project_id
+            LEFT JOIN runtime_tasks rt
+              ON rt.package_id = sc.package_id
+             AND rt.task_state IN ({runtime_state_sql})
+            LEFT JOIN runs r
+              ON r.package_id = sc.package_id
+             AND r.status IN ({run_status_sql})
+             AND r.finished_at IS NULL
+            WHERE sc.claim_state = 'active'
+            ORDER BY sc.project_id, sc.package_id, sc.id
+            """
+        ).fetchall()
+        orphan_ids: List[int] = []
+        for row in rows:
+            if str(row["runtime_task_state"] or "").strip().lower() in ACTIVE_RUNTIME_TASK_STATES:
+                continue
+            if str(row["run_status"] or "").strip().lower() in ACTIVE_RUN_STATUSES:
+                continue
+            package_status = str(row["package_status"] or "").strip().lower()
+            package_runtime_state = str(row["package_runtime_state"] or "").strip().lower()
+            if package_status not in {"archived", "complete", "completed_signed_off", "scaffold_complete"} and package_runtime_state not in {"", "idle"}:
+                continue
+            claim_id = int(row["id"])
+            orphan_ids.append(claim_id)
+            released.append(
+                {
+                    "scope_claim_id": claim_id,
+                    "package_id": str(row["package_id"] or ""),
+                    "project_id": str(row["project_id"] or ""),
+                    "claim_type": str(row["claim_type"] or ""),
+                    "claim_value": str(row["claim_value"] or ""),
+                    "released_at": now_text,
+                }
+            )
+        if orphan_ids:
+            conn.executemany(
+                """
+                UPDATE scope_claims
+                SET claim_state='released',
+                    released_at=?
+                WHERE id=?
+                """,
+                [(now_text, claim_id) for claim_id in orphan_ids],
+            )
+    return released
+
+
 def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, Any]:
     workspace_root = Path(str(args.workspace_root or DEFAULT_WORKSPACE_ROOT)).resolve()
     config = app.normalize_config()
     app.sync_config_to_db(config)
     app.sync_work_packages_to_db(config)
+    autohealed_drift_actions = autoheal_queue_scope_drift(
+        app,
+        workspace_root=workspace_root,
+        controller_url=str(args.controller_url),
+    )
+    released_orphan_scope_claims = release_orphaned_active_scope_claims(app)
     pruned_stale_commitment_count = prune_stale_runtime_commitments(
         workspace_root,
         stale_hours=int(args.stale_runtime_hours),
@@ -906,6 +1653,23 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
         app,
         config,
         stale_minutes=int(args.stale_local_review_minutes),
+    )
+    released_review_holds.extend(
+        release_stale_synthetic_review_holds(
+            app,
+            stale_minutes=int(args.stale_local_review_minutes),
+        )
+    )
+    transient_retries = auto_retry_transient_dispatch_pending_projects(
+        app,
+        controller_url=str(args.controller_url),
+        repeated_failures=repeated_failures,
+    )
+    autohealed_drift_actions.extend(
+        autoheal_worktree_and_receipt_drift(
+            app,
+            controller_url=str(args.controller_url),
+        )
     )
     repeated_failures = repeated_failure_map(
         app,
@@ -940,7 +1704,11 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
         last_action_kind = "launch"
     elif nudged_ready_projects:
         last_action_kind = "nudge_ready"
-    elif pruned_stale_commitment_count or healed_stale_runtime_count or healed_local_reviews or released_review_holds:
+    elif autohealed_drift_actions:
+        last_action_kind = "autoheal_drift"
+    elif transient_retries:
+        last_action_kind = "transient_retry"
+    elif pruned_stale_commitment_count or healed_stale_runtime_count or healed_local_reviews or released_review_holds or released_orphan_scope_claims:
         last_action_kind = "cleanup"
     elif guide_pause:
         last_action_kind = "guide_pause"
@@ -952,6 +1720,9 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
         "healed_stale_runtime_count": healed_stale_runtime_count,
         "healed_local_review_count": healed_local_reviews,
         "released_review_hold_count": len(released_review_holds),
+        "released_orphan_scope_claim_count": len(released_orphan_scope_claims),
+        "transient_retry_count": len(transient_retries),
+        "autohealed_drift_action_count": len(autohealed_drift_actions),
         "guide_pause": bool(guide_pause),
     }
     payload = {
@@ -968,6 +1739,9 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
         "healed_stale_runtime_count": healed_stale_runtime_count,
         "healed_local_review_count": healed_local_reviews,
         "released_review_holds": released_review_holds,
+        "released_orphan_scope_claims": released_orphan_scope_claims,
+        "transient_retries": transient_retries,
+        "autohealed_drift_actions": autohealed_drift_actions,
         "guide_pause": guide_pause or {},
         "repeated_failures": repeated_failures,
         "repeated_failure_counts": repeated_failure_counts,
@@ -994,6 +1768,7 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
                 "healed_stale_runtime_count": healed_stale_runtime_count,
                 "healed_local_review_count": healed_local_reviews,
                 "released_review_hold_count": len(released_review_holds),
+                "released_orphan_scope_claim_count": len(released_orphan_scope_claims),
             },
             "act": {
                 "launched": launched,
@@ -1002,6 +1777,7 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
                 "healed_stale_runtime_count": healed_stale_runtime_count,
                 "healed_local_review_count": healed_local_reviews,
                 "released_review_holds": released_review_holds,
+                "released_orphan_scope_claims": released_orphan_scope_claims,
                 "guide_pause": guide_pause or {},
             },
         },
@@ -1019,6 +1795,7 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
             "healed_stale_runtime_count": healed_stale_runtime_count,
             "healed_local_review_count": healed_local_reviews,
             "released_review_hold_count": len(released_review_holds),
+            "released_orphan_scope_claim_count": len(released_orphan_scope_claims),
             "guide_pause": bool(guide_pause),
             "repeat_failure_keys": sorted(repeated_failures.keys()),
             "repeat_failure_projects": sorted({str(item.get("project_id") or "") for item in repeated_failures.values() if str(item.get("project_id") or "")}),
@@ -1048,6 +1825,7 @@ def main() -> int:
                     "healed_stale_runtime_count": payload["healed_stale_runtime_count"],
                     "healed_local_review_count": payload["healed_local_review_count"],
                     "released_review_hold_count": len(payload["released_review_holds"]),
+                    "released_orphan_scope_claim_count": len(payload["released_orphan_scope_claims"]),
                     "repeat_failure_keys": sorted(payload["repeated_failures"].keys()),
                     "repeat_failure_projects": sorted({str(item.get("project_id") or "") for item in payload["repeated_failures"].values() if str(item.get("project_id") or "")}),
                 },

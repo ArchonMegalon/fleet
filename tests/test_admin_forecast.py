@@ -1867,6 +1867,97 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["blocker_forecast"]["now"], "none")
         self.assertEqual(payload["public_status"]["contract_name"], "fleet.public_status")
 
+    def test_status_surface_payload_promotes_headline_eta_from_queue_forecast(self) -> None:
+        status = {
+            "generated_at": "2026-03-18T12:00:00Z",
+            "cockpit": {},
+            "public_status": {
+                "mission_snapshot": {"headline": "Working now"},
+                "queue_forecast": {"now": {"remaining_human": "44m 35s"}},
+            },
+        }
+
+        payload = self.admin.status_surface_payload(status)
+
+        self.assertEqual(payload["headline_eta"], "44m 35s")
+        self.assertEqual(payload["mission_snapshot"]["headline_eta"], "44m 35s")
+        self.assertEqual(payload["public_status"]["mission_snapshot"]["headline_eta"], "44m 35s")
+
+    def test_status_surface_payload_derives_headline_eta_when_queue_forecast_is_empty(self) -> None:
+        self.admin._FALLBACK_STATUS_SURFACE_ETA_STATE.update(
+            {"signature": "", "remaining_seconds": 0, "observed_at": None}
+        )
+        status = {
+            "generated_at": "2026-03-18T12:00:00Z",
+            "cockpit": {},
+            "public_status": {
+                "mission_snapshot": {"headline": "Working now", "active_workers": 7},
+                "queue_forecast": {},
+            },
+            "projects": [
+                {"id": "core", "status": "running", "runtime_status": "running", "current_slice": "core slice"},
+                {"id": "design", "status": "running", "runtime_status": "running", "current_slice": "design slice"},
+                {"id": "guide", "status": self.admin.READY_STATUS, "runtime_status": self.admin.READY_STATUS, "current_slice": "guide slice"},
+            ],
+        }
+
+        payload = self.admin.status_surface_payload(status)
+
+        self.assertEqual(payload["headline_eta"], "37m 52s")
+        self.assertEqual(payload["queue_forecast"]["now"]["remaining_human"], "37m 52s")
+        self.assertEqual(payload["public_status"]["mission_snapshot"]["headline_eta"], "37m 52s")
+
+    def test_fallback_status_surface_eta_decays_across_snapshots_with_same_shape(self) -> None:
+        self.admin._FALLBACK_STATUS_SURFACE_ETA_STATE.update(
+            {"signature": "", "remaining_seconds": 0, "observed_at": None}
+        )
+        start = self.admin.parse_iso("2026-03-18T12:00:00Z")
+        later = self.admin.parse_iso("2026-03-18T12:00:46Z")
+        self.assertIsNotNone(start)
+        self.assertIsNotNone(later)
+
+        first = self.admin._fallback_status_surface_eta(
+            active_workers=7,
+            dispatch_pending=1,
+            observed_at=start,
+        )
+        second = self.admin._fallback_status_surface_eta(
+            active_workers=7,
+            dispatch_pending=1,
+            observed_at=later,
+        )
+
+        self.assertEqual(first, "37m 52s")
+        self.assertEqual(second, "37m 6s")
+
+    def test_host_mounted_runtime_paths_are_preferred_when_env_is_unset(self) -> None:
+        mounted_state_root = Path("/docker/fleet/state")
+        mounted_db_path = mounted_state_root / "fleet.db"
+        real_exists = Path.exists
+
+        def fake_exists(path: Path) -> bool:
+            if path in {mounted_state_root, mounted_db_path}:
+                return True
+            return real_exists(path)
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "FLEET_DB_PATH": "",
+                "FLEET_STATE_ROOT": "",
+                "FLEET_CODEX_HOME_ROOT": "",
+                "FLEET_GROUP_ROOT": "",
+            },
+            clear=False,
+        ):
+            with mock.patch.object(Path, "exists", autospec=True, side_effect=fake_exists):
+                admin = load_admin_module()
+
+        self.assertEqual(admin.DB_PATH, mounted_db_path)
+        self.assertEqual(admin.STATE_ROOT, mounted_state_root)
+        self.assertEqual(admin.CODEX_HOME_ROOT, mounted_state_root / "codex-homes")
+        self.assertEqual(admin.GROUP_ROOT, mounted_state_root / "groups")
+
     def test_public_dashboard_status_payload_is_minimal_and_usable(self) -> None:
         self.admin.compile_manifest_surface_payload = lambda: {
             "published_at": "2026-03-18T12:15:00Z",
