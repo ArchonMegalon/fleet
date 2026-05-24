@@ -9095,4 +9095,953 @@ items:
   - flagship_rest_soak_receipts:fleet
   - flagship_projection_stability:fleet
   - flagship_repeat_release_confidence:fleet
+- title: Canonize the Table Pulse heat reaction system so ownership, receipts, privacy,
+    GM authority, and Black Ledger boundaries are explicit before implementation work
+    fans out.
+  task: Land the Table Pulse design canon from the Tibor audit bundle and bound the
+    product claims to GM-governed, consented, public-safe live-session escalation.
+  package_id: next90-m148-design-table-pulse-canon
+  work_task_id: '148.1'
+  frontier_id: 1481014801
+  milestone_id: 148
+  status: not_started
+  wave: W31
+  repo: chummer6-design
+  allowed_paths:
+  - products
+  - scripts
+  - feedback
+  owned_surfaces:
+  - table_pulse_heat_canon:design
+  - table_pulse_claim_boundaries:design
+  - table_pulse_receipt_governance:design
+- title: Implement live-session heat state, domain thresholds, and session pulse settings
+    so governed threshold receipts exist before any external reaction flow fires.
+  task: Add session heat domain models, threshold evaluation, pulse settings, and
+    heat-threshold receipts on the hub surface.
+  package_id: next90-m148-hub-session-heat-thresholds
+  work_task_id: '148.2'
+  frontier_id: 1482014802
+  milestone_id: 148
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Run.Contracts
+  - Chummer.Tests
+  - scripts
+  owned_surfaces:
+  - table_pulse_heat_domains:hub
+  - table_pulse_threshold_receipts:hub
+  - session_pulse_settings:hub
+- title: Add push subscription, notification settings, and service-worker notification
+    contracts so Table Pulse can deliver governed public-safe alerts through the PWA rail.
+  task: Implement hub-side push subscription APIs, notification settings APIs, and
+    service-worker push/click/close delivery contracts.
+  package_id: next90-m148-hub-pwa-heat-notification-contracts
+  work_task_id: '148.3'
+  frontier_id: 1483014803
+  milestone_id: 148
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - table_pulse_push_subscriptions:hub
+  - table_pulse_notification_settings:hub
+  - table_pulse_service_worker_delivery:hub
+- title: Build the mobile and signed-in notification surfaces for Table Pulse packets
+    so recipients can inspect, react, and return to the correct GM-governed lane.
+  task: Land mobile/PWA notification inbox, packet detail, reaction surfaces, and
+    click-route handling for Table Pulse heat packets.
+  package_id: next90-m148-mobile-pwa-heat-reaction-surface
+  work_task_id: '148.4'
+  frontier_id: 1484014804
+  milestone_id: 148
+  status: not_started
+  wave: W31
+  repo: chummer6-mobile
+  allowed_paths:
+  - src
+  - tests
+  - docs
+  - scripts
+  owned_surfaces:
+  - table_pulse_notification_inbox:mobile
+  - table_pulse_packet_reaction_flow:mobile
+  - table_pulse_click_return_routes:mobile
+- title: Teach Executive Assistant to synthesize bounded Table Pulse recipient decisions
+    as receipts instead of ungoverned external escalation.
+  task: Implement EA recipient suggestion and packet synthesis for session heat events
+    with GM policy, audience, and threshold controls preserved in receipts.
+  package_id: next90-m148-ea-table-pulse-recipient-decision
+  work_task_id: '148.5'
+  frontier_id: 1485014805
+  milestone_id: 148
+  status: not_started
+  wave: W31
+  repo: executive-assistant
+  allowed_paths:
+  - scripts
+  - feedback
+  - docs
+  owned_surfaces:
+  - table_pulse_recipient_decision:executive_assistant
+  - table_pulse_decision_receipts:executive_assistant
+  - gm_policy_bounded_recipient_synthesis:executive_assistant
+- title: Implement reaction options and GM adjudication so no outside response can
+    apply to a live session without explicit table authority.
+  task: Add reaction option capture, GM adjudication packeting, and adjudication receipts
+    for Table Pulse response packets on the hub surface.
+  package_id: next90-m148-hub-gm-heat-reaction-adjudication
+  work_task_id: '148.6'
+  frontier_id: 1486014806
+  milestone_id: 148
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Run.Contracts
+  - Chummer.Tests
+  - scripts
+  owned_surfaces:
+  - table_pulse_reaction_options:hub
+  - gm_adjudication_packets:hub
+  - table_authority_receipts:hub
+- title: Fail-close Table Pulse on privacy, consent, quiet-hours, moderation, and
+    rate-limit gates before any external heat notification can leave the session boundary.
+  task: Add fleet-owned verification and gate materialization for Table Pulse privacy,
+    consent, quiet-hours, moderation, and rate-limit posture.
+  package_id: next90-m148-fleet-table-pulse-privacy-and-rate-limit-gates
+  work_task_id: '148.7'
+  frontier_id: 1487014807
+  milestone_id: 148
+  status: not_started
+  wave: W31
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - feedback
+  - .codex-studio/published
+  owned_surfaces:
+  - table_pulse_privacy_gates:fleet
+  - table_pulse_rate_limit_truth:fleet
+  - table_pulse_consent_and_moderation:fleet
+- title: Project Table Pulse into Black Ledger only through public-safe receipts so
+    world pressure becomes operational without leaking private table truth.
+  task: Land hub-side public-safe heat projection, faction-safe consequence summaries,
+    and receipt-bounded Black Ledger integration for Table Pulse.
+  package_id: next90-m148-hub-black-ledger-heat-projection
+  work_task_id: '148.8'
+  frontier_id: 1488014808
+  milestone_id: 148
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - table_pulse_public_safe_projection:hub
+  - table_pulse_black_ledger_consequences:hub
+  - table_pulse_faction_notification_bounds:hub
+- title: Materialize the final Table Pulse flagship verdict only when all canon, delivery,
+    privacy, GM-authority, and Black Ledger proof gates pass.
+  task: Build the fleet-side final Table Pulse verdict, proof receipts, and fail-closed
+    readiness summary for the Tibor audit bundle.
+  package_id: next90-m148-fleet-table-pulse-final-verdict
+  work_task_id: '148.9'
+  frontier_id: 1489014809
+  milestone_id: 148
+  status: not_started
+  wave: W31
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - feedback
+  - .codex-studio/published
+  - /docker/chummercomplete/chummer-design/products/chummer/TABLE_PULSE_HEAT_REACTION_AUDIT_20260523.md
+  owned_surfaces:
+  - table_pulse_final_verdict:fleet
+  - table_pulse_acceptance_receipts:fleet
+  - table_pulse_flagship_readiness:fleet
+- title: Canonize the living-world engagement layer so inbox, orders, rumors, passports,
+    downtime, delivery, and support loops are bounded before implementation fans out.
+  task: Land the broader living-world engagement canon from the newer Tibor bundle and
+    keep its product claims subordinate to GM control, privacy, consent, and receipt ownership.
+  package_id: next90-m149-design-living-world-engagement-canon
+  work_task_id: '149.1'
+  frontier_id: 1491014901
+  milestone_id: 149
+  status: not_started
+  wave: W31
+  repo: chummer6-design
+  allowed_paths:
+  - products
+  - scripts
+  - feedback
+  owned_surfaces:
+  - living_world_engagement_canon:design
+  - living_world_claim_boundaries:design
+  - living_world_receipt_governance:design
+- title: Build the signed-in notification inbox and notification settings surfaces so
+    living-world packets stay reviewable, mutable, and user-governed.
+  task: Implement notification inbox, packet detail, mute/settings, and history posture
+    for the living-world engagement layer.
+  package_id: next90-m149-hub-notification-inbox-and-settings
+  work_task_id: '149.2'
+  frontier_id: 1492014902
+  milestone_id: 149
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - living_world_notification_inbox:hub
+  - living_world_notification_settings:hub
+  - living_world_packet_history:hub
+- title: Implement faction standing orders so players can contribute to bounded faction
+    tasks between sessions with receipts and public-safe posture.
+  task: Add faction order read/contribute loops, receipts, and policy bounds for the
+    living-world engagement layer.
+  package_id: next90-m149-hub-faction-standing-orders
+  work_task_id: '149.3'
+  frontier_id: 1493014903
+  milestone_id: 149
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - faction_standing_orders:hub
+  - faction_order_contribution_receipts:hub
+  - faction_task_participation_bounds:hub
+- title: Implement the rumor market as a public-safe, confidence-labeled intel lane
+    rather than an unbounded truth stream.
+  task: Add rumor read/react flows, confidence labeling, expiry, and public-safe redaction
+    for the living-world engagement layer.
+  package_id: next90-m149-hub-rumor-market
+  work_task_id: '149.4'
+  frontier_id: 1494014904
+  milestone_id: 149
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - rumor_market:hub
+  - rumor_confidence_and_expiry:hub
+  - rumor_public_safe_projection:hub
+- title: Implement runner passport so living history and marks become identity surfaces
+    without drifting into shame rankings or unsafe exposure.
+  task: Add runner passport views, reputation markers, privacy defaults, and receipt-bounded
+    progression posture.
+  package_id: next90-m149-hub-runner-passport
+  work_task_id: '149.5'
+  frontier_id: 1495014905
+  milestone_id: 149
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - runner_passport:hub
+  - runner_history_and_marks:hub
+  - runner_privacy_defaults:hub
+- title: Implement downtime micro-actions as bounded prompts and receipts so between-session
+    engagement increases agency without auto-mutating table rules.
+  task: Add downtime action submission, GM prompt generation, and receipt-backed consequence
+    staging for the living-world layer.
+  package_id: next90-m149-hub-downtime-micro-actions
+  work_task_id: '149.6'
+  frontier_id: 1496014906
+  milestone_id: 149
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - downtime_micro_actions:hub
+  - downtime_prompt_generation:hub
+  - downtime_receipts:hub
+- title: Land living-world delivery receipts across PWA, in-app, and email rails so
+    notification delivery is inspectable and bounded across hub and mobile surfaces.
+  task: Implement the shared delivery receipt and click-route surface for living-world
+    notifications across hub, mobile, and fleet proof lanes.
+  package_id: next90-m149-hub-mobile-living-world-delivery-receipts
+  work_task_id: '149.7'
+  frontier_id: 1497014907
+  milestone_id: 149
+  status: not_started
+  wave: W31
+  repo: chummer6-mobile
+  allowed_paths:
+  - src
+  - tests
+  - docs
+  - scripts
+  owned_surfaces:
+  - living_world_delivery_receipts:mobile
+  - living_world_click_routes:mobile
+  - living_world_multichannel_delivery:mobile
+- title: Bound BeHuman and Answerly into the living-world loop as safe engagement rails
+    instead of uncontrolled authority planes.
+  task: Add the public/product boundaries, support explanations, and event-engagement rules
+    for BeHuman and Answerly inside the living-world program.
+  package_id: next90-m149-hub-behuman-answerly-engagement-bounds
+  work_task_id: '149.8'
+  frontier_id: 1498014908
+  milestone_id: 149
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - living_world_behuman_bounds:hub
+  - living_world_answerly_bounds:hub
+  - living_world_support_and_event_explanations:hub
+- title: Materialize the final living-world engagement verdict only when consent, inbox,
+    orders, rumors, passport, downtime, delivery, and safety gates all pass.
+  task: Build the fleet-side final verdict and proof receipts for the newer Tibor living-world
+    engagement bundle.
+  package_id: next90-m149-fleet-living-world-final-verdict
+  work_task_id: '149.9'
+  frontier_id: 1499014909
+  milestone_id: 149
+  status: not_started
+  wave: W31
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - feedback
+  - .codex-studio/published
+  - /docker/chummercomplete/chummer-design/products/chummer/LIVING_WORLD_ENGAGEMENT_AUDIT_20260523.md
+  owned_surfaces:
+  - living_world_final_verdict:fleet
+  - living_world_acceptance_receipts:fleet
+  - living_world_flagship_readiness:fleet
+- title: Canonize Table Pulse opt-out, mute, and remote-reaction defaults so the new
+    addendum behavior lands as a bounded delta on top of the base heat-reaction system.
+  task: Land the design canon for GM opt-out, player notification preferences, suppression
+    posture, and remote reaction mini-game boundaries from the newer Tibor addenda.
+  package_id: next90-m150-design-table-pulse-optout-canon
+  work_task_id: '150.1'
+  frontier_id: 1501015001
+  milestone_id: 150
+  status: not_started
+  wave: W31
+  repo: chummer6-design
+  allowed_paths:
+  - products
+  - scripts
+  - feedback
+  owned_surfaces:
+  - table_pulse_optout_canon:design
+  - table_pulse_remote_reaction_bounds:design
+  - table_pulse_suppression_policy:design
+- title: Implement campaign and session pulse opt-out policies so GM-level external-reaction
+    defaults and overrides are explicit and receipted.
+  task: Add GM campaign/session pulse policy surfaces, defaults, and policy receipts for
+    Table Pulse opt-out behavior.
+  package_id: next90-m150-hub-table-pulse-optout-policies
+  work_task_id: '150.2'
+  frontier_id: 1502015002
+  milestone_id: 150
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - table_pulse_gm_optout_policy:hub
+  - table_pulse_campaign_session_defaults:hub
+  - table_pulse_policy_receipts:hub
+- title: Implement player notification preferences, mutes, and opt-out receipts so
+    Table Pulse delivery respects user choice before any push, in-app, or email send.
+  task: Add player notification preference surfaces, mute rules, suppression receipts,
+    and preference-backed delivery filtering for Table Pulse.
+  package_id: next90-m150-hub-player-notification-preferences
+  work_task_id: '150.3'
+  frontier_id: 1503015003
+  milestone_id: 150
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - table_pulse_notification_preferences:hub
+  - table_pulse_player_mutes:hub
+  - table_pulse_suppression_receipts:hub
+- title: Implement remote reaction mini-games across hub and mobile so outside investigation
+    and interference stay bounded, receipted, and GM-adjudicated.
+  task: Add remote reaction mini-game models, routes, click flows, and cross-surface
+    UX for investigate, alert, obfuscate, intercept, aid, and observe.
+  package_id: next90-m150-hub-mobile-remote-reaction-minigames
+  work_task_id: '150.4'
+  frontier_id: 1504015004
+  milestone_id: 150
+  status: not_started
+  wave: W31
+  repo: chummer6-mobile
+  allowed_paths:
+  - src
+  - tests
+  - docs
+  - scripts
+  owned_surfaces:
+  - table_pulse_remote_reaction_minigames:mobile
+  - table_pulse_remote_reaction_click_flow:mobile
+  - table_pulse_remote_reaction_routes:mobile
+- title: Implement GM remote-party notice and adjudication so remote reaction mini-games
+    produce packets, not auto-applied table effects.
+  task: Add GM remote-party notice packets, adjudication routes, and receipt-backed
+    accept/modify/delay/reject handling for remote reactions.
+  package_id: next90-m150-hub-gm-remote-reaction-adjudication
+  work_task_id: '150.5'
+  frontier_id: 1505015005
+  milestone_id: 150
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Run.Contracts
+  - Chummer.Tests
+  - scripts
+  owned_surfaces:
+  - table_pulse_remote_gm_adjudication:hub
+  - table_pulse_remote_notice_packets:hub
+  - table_pulse_remote_action_receipts:hub
+- title: Fail-close Table Pulse opt-out and remote-reaction delivery on privacy, consent,
+    quiet-hours, anti-spam, and suppression proof.
+  task: Add fleet-side proof and readiness gates for suppression receipts, privacy filtering,
+    consent, rate limits, and blocked-delivery evidence on the new addendum behavior.
+  package_id: next90-m150-fleet-table-pulse-suppression-and-privacy-proof
+  work_task_id: '150.6'
+  frontier_id: 1506015006
+  milestone_id: 150
+  status: not_started
+  wave: W31
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - feedback
+  - .codex-studio/published
+  owned_surfaces:
+  - table_pulse_optout_privacy_proof:fleet
+  - table_pulse_suppression_receipt_proof:fleet
+  - table_pulse_remote_reaction_safety:fleet
+- title: Materialize the final Table Pulse opt-out and remote-reaction verdict only when
+    policy, preference, mini-game, adjudication, and suppression gates all pass.
+  task: Build the fleet-side final verdict and proof receipts for the two newer Tibor
+    Table Pulse opt-out and remote-reaction addenda.
+  package_id: next90-m150-fleet-table-pulse-optout-final-verdict
+  work_task_id: '150.7'
+  frontier_id: 1507015007
+  milestone_id: 150
+  status: not_started
+  wave: W31
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - feedback
+  - .codex-studio/published
+  - /docker/chummercomplete/chummer-design/products/chummer/TABLE_PULSE_OPTOUT_REMOTE_REACTION_AUDIT_20260523.md
+  owned_surfaces:
+  - table_pulse_optout_final_verdict:fleet
+  - table_pulse_optout_acceptance_receipts:fleet
+  - table_pulse_optout_readiness:fleet
+- title: Canonize the advanced Table Pulse living-world V2 layer so Pulse Director,
+    GM cockpit, heat clocks, AI stewards, after-action projection, and BeHuman bounds
+    stay coherent across the already-queued heat and living-world slices.
+  task: Land the V2 convergence canon from the newest Tibor bundle and bind it to the
+    existing Table Pulse and living-world programs without duplicating lower-level work.
+  package_id: next90-m151-design-table-pulse-living-world-v2-canon
+  work_task_id: '151.1'
+  frontier_id: 1511015101
+  milestone_id: 151
+  status: not_started
+  wave: W31
+  repo: chummer6-design
+  allowed_paths:
+  - products
+  - scripts
+  - feedback
+  owned_surfaces:
+  - table_pulse_living_world_v2_canon:design
+  - pulse_director_claims:design
+  - gm_cockpit_and_after_action_bounds:design
+- title: Build Pulse Director modes and the GM cockpit so Table Pulse becomes a governed
+    living-world control surface instead of only a notification pipeline.
+  task: Add Pulse Director mode controls, GM cockpit posture, and operator-facing table
+    control rails on the hub surface.
+  package_id: next90-m151-hub-pulse-director-and-gm-cockpit
+  work_task_id: '151.2'
+  frontier_id: 1512015102
+  milestone_id: 151
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - pulse_director_modes:hub
+  - gm_cockpit_table_pulse:hub
+  - table_pulse_control_surface:hub
+- title: Implement heat clocks and pressure economy so heat becomes a playable governed
+    pressure model rather than a flat threshold number.
+  task: Add heat clocks, pressure tokens, and receipt-backed pressure-state projection
+    on the hub surface.
+  package_id: next90-m151-hub-heat-clocks-and-pressure-economy
+  work_task_id: '151.3'
+  frontier_id: 1513015103
+  milestone_id: 151
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - table_pulse_heat_clocks:hub
+  - table_pulse_pressure_economy:hub
+  - table_pulse_pressure_receipts:hub
+- title: Add AI steward suggestions as a bounded fallback so factions can suggest responses
+    when humans do not react, without creating autonomous table authority.
+  task: Implement AI steward suggestion generation and GM-bounded fallback posture across
+    Executive Assistant and the hub surface.
+  package_id: next90-m151-ea-hub-ai-steward-suggestions
+  work_task_id: '151.4'
+  frontier_id: 1514015104
+  milestone_id: 151
+  status: not_started
+  wave: W31
+  repo: executive-assistant
+  allowed_paths:
+  - scripts
+  - feedback
+  - docs
+  owned_surfaces:
+  - table_pulse_ai_steward_suggestions:executive_assistant
+  - table_pulse_fallback_suggestion_receipts:executive_assistant
+  - gm_bounded_ai_response_posture:executive_assistant
+- title: Implement Black Ledger after-action projection so approved Table Pulse outcomes
+    become public-safe living-world memory after the session closes.
+  task: Add after-action projection receipts, Black Ledger consequence mapping, and public-safe
+    post-session posture for the V2 Table Pulse layer.
+  package_id: next90-m151-hub-black-ledger-after-action-projection
+  work_task_id: '151.5'
+  frontier_id: 1515015105
+  milestone_id: 151
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - table_pulse_after_action_projection:hub
+  - table_pulse_black_ledger_memory:hub
+  - table_pulse_public_safe_after_action:hub
+- title: Bound BeHuman live-room integration so Table Pulse events can use live rooms
+    without leaking private heat or session truth.
+  task: Add BeHuman live-room integration boundaries, event posture, and receipt-backed
+    safe-room rules for Table Pulse V2.
+  package_id: next90-m151-hub-behuman-live-room-bounds
+  work_task_id: '151.6'
+  frontier_id: 1516015106
+  milestone_id: 151
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - table_pulse_behuman_live_room_bounds:hub
+  - table_pulse_live_room_receipts:hub
+  - table_pulse_private_data_exclusion:hub
+- title: Materialize the final Table Pulse living-world V2 verdict only when Pulse Director,
+    heat clocks, AI stewards, after-action projection, and BeHuman bounds all pass.
+  task: Build the fleet-side final verdict and proof receipts for the newest Tibor V2
+    convergence bundle.
+  package_id: next90-m151-fleet-table-pulse-living-world-v2-verdict
+  work_task_id: '151.7'
+  frontier_id: 1517015107
+  milestone_id: 151
+  status: not_started
+  wave: W31
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - feedback
+  - .codex-studio/published
+  - /docker/chummercomplete/chummer-design/products/chummer/TABLE_PULSE_LIVING_WORLD_V2_AUDIT_20260523.md
+  owned_surfaces:
+  - table_pulse_living_world_v2_verdict:fleet
+  - table_pulse_living_world_v2_receipts:fleet
+  - table_pulse_living_world_v2_readiness:fleet
+- title: Canonize the Living World Big Redesign V3 surface so Signal Deck, Passport,
+    GM Cockpit, Role Paths, Opposition Clocks, and Newsroom framing stay coherent across
+    the existing living-world and Table Pulse programs.
+  task: Land the V3 surface-redesign canon from the newest Tibor bundle and bind it to
+    the already-queued living-world implementation layers without duplicating them.
+  package_id: next90-m152-design-living-world-surface-redesign-canon
+  work_task_id: '152.1'
+  frontier_id: 1521015201
+  milestone_id: 152
+  status: not_started
+  wave: W31
+  repo: chummer6-design
+  allowed_paths:
+  - products
+  - scripts
+  - feedback
+  owned_surfaces:
+  - living_world_surface_redesign_canon:design
+  - signal_deck_claims:design
+  - newsroom_and_role_path_claims:design
+- title: Build the Signal Deck and Passport surface so players get a coherent living-world
+    lane instead of scattered notification and history fragments.
+  task: Add the player-facing Signal Deck and runner-passport surface across hub and mobile.
+  package_id: next90-m152-hub-mobile-signal-deck-and-passport-surface
+  work_task_id: '152.2'
+  frontier_id: 1522015202
+  milestone_id: 152
+  status: not_started
+  wave: W31
+  repo: chummer6-mobile
+  allowed_paths:
+  - src
+  - tests
+  - docs
+  - scripts
+  owned_surfaces:
+  - signal_deck_surface:mobile
+  - runner_passport_surface:mobile
+  - living_world_player_home:mobile
+- title: Implement faction role paths and opposition clocks so faction contribution and
+    rival pressure become governed visible structures instead of diffuse text.
+  task: Add role-path framing, opposition clocks, and rival-team pressure surfaces on the hub side.
+  package_id: next90-m152-hub-faction-role-paths-and-opposition-clocks
+  work_task_id: '152.3'
+  frontier_id: 1523015203
+  milestone_id: 152
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - faction_role_paths:hub
+  - opposition_clocks:hub
+  - rival_pressure_receipts:hub
+- title: Strengthen rumor market and intel economy as a designed living-world lane,
+    not just a generic rumor list.
+  task: Add explicit intel-economy framing and rumor-lane cohesion across hub and Executive Assistant surfaces.
+  package_id: next90-m152-hub-ea-rumor-intel-economy
+  work_task_id: '152.4'
+  frontier_id: 1524015204
+  milestone_id: 152
+  status: not_started
+  wave: W31
+  repo: executive-assistant
+  allowed_paths:
+  - scripts
+  - feedback
+  - docs
+  owned_surfaces:
+  - rumor_intel_economy:executive_assistant
+  - living_world_signal_digest:executive_assistant
+  - rumor_confidence_explainer:executive_assistant
+- title: Build the Living Newsroom and Media Factory framing so receipt-derived world
+    signals become a coherent media lane without media becoming truth.
+  task: Add the living-newsroom product framing, derived media posture, and receipt-backed
+    newsroom contracts across hub and media-factory boundaries.
+  package_id: next90-m152-hub-media-factory-living-newsroom
+  work_task_id: '152.5'
+  frontier_id: 1525015205
+  milestone_id: 152
+  status: not_started
+  wave: W31
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - Chummer.Tests
+  - scripts
+  - feedback
+  owned_surfaces:
+  - living_newsroom:hub
+  - media_factory_receipt_derivation:hub
+  - media_not_truth_guardrails:hub
+- title: Bound BeHuman and Answerly as adapter-only layers in the redesigned living-world
+    surface so external tools never take ownership of Chummer truth.
+  task: Add the adapter-boundary, event-layer, and support-explanation framing for BeHuman
+    and Answerly in the V3 redesign.
+  package_id: next90-m152-hub-fleet-behuman-answerly-adapter-bounds
+  work_task_id: '152.6'
+  frontier_id: 1526015206
+  milestone_id: 152
+  status: not_started
+  wave: W31
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - feedback
+  - .codex-studio/published
+  owned_surfaces:
+  - living_world_adapter_bounds:fleet
+  - behuman_answerly_not_truth:fleet
+  - external_tool_adapter_proof:fleet
+- title: Materialize the final Living World Big Redesign V3 verdict only when Signal Deck,
+    Passport, GM Cockpit, Role Paths, Opposition Clocks, Newsroom, and adapter bounds all pass.
+  task: Build the fleet-side final verdict and proof receipts for the newest Tibor V3 redesign bundle.
+  package_id: next90-m152-fleet-living-world-big-redesign-v3-verdict
+  work_task_id: '152.7'
+  frontier_id: 1527015207
+  milestone_id: 152
+  status: not_started
+  wave: W31
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - feedback
+  - .codex-studio/published
+  - /docker/chummercomplete/chummer-design/products/chummer/LIVING_WORLD_BIG_REDESIGN_V3_AUDIT_20260523.md
+  owned_surfaces:
+  - living_world_big_redesign_v3_verdict:fleet
+  - living_world_big_redesign_v3_receipts:fleet
+  - living_world_big_redesign_v3_readiness:fleet
+- title: Canonize the docs-gold closeout bar from the newest EA generator reaudit so remaining Chummer6 public-guide deltas
+    are explicit, bounded, and fleet-executable instead of lingering as audit prose.
+  task: Canonize the docs-gold closeout bar from the newest EA generator reaudit so remaining Chummer6 public-guide deltas
+    are explicit, bounded, and fleet-executable instead of lingering as audit prose.
+  package_id: next90-m153-design-docs-gold-closeout-canon
+  work_task_id: '153.1'
+  frontier_id: 1531015301
+  milestone_id: 153
+  status: not_started
+  wave: W31
+  repo: chummer6-design
+  allowed_paths:
+  - products/chummer/CHUMMER6_DOCS_EA_GENERATOR_REAUDIT_V2_INTEGRATION_20260524.md
+  - products/chummer/PUBLIC_GUIDE_NEW_SECTION_VERDICT.yaml
+  - products/chummer/HORIZON_REGISTRY.yaml
+  - products/chummer/horizons
+  - scripts/ai
+  owned_surfaces:
+  - docs_gold_acceptance_canon:design
+  - new_section_verdict_canon:design
+- title: Generate README, STATUS, DOWNLOAD, FAQ, and adjacent public-guide pages from one release-truth packet so the
+    Chummer6 docs stop drifting between manually phrased surfaces.
+  task: Generate README, STATUS, DOWNLOAD, FAQ, and adjacent public-guide pages from one release-truth packet so the Chummer6
+    docs stop drifting between manually phrased surfaces.
+  package_id: next90-m153-guide-release-truth-unification
+  work_task_id: '153.2'
+  frontier_id: 1532015302
+  milestone_id: 153
+  status: not_started
+  wave: W31
+  repo: Chummer6
+  allowed_paths:
+  - .
+  - scripts
+  owned_surfaces:
+  - generated_release_truth_packet:guide
+  - public_docs_release_truth_alignment:guide
+- title: Surface Runner Passport honestly in the generated Chummer6 guide or emit an explicit omission receipt that stays
+    visible and machine-checked from the same verdict system.
+  task: Surface Runner Passport honestly in the generated Chummer6 guide or emit an explicit omission receipt that stays
+    visible and machine-checked from the same verdict system.
+  package_id: next90-m153-guide-runner-passport-surface-closeout
+  work_task_id: '153.3'
+  frontier_id: 1533015303
+  milestone_id: 153
+  status: not_started
+  wave: W31
+  repo: Chummer6
+  allowed_paths:
+  - .
+  - scripts
+  owned_surfaces:
+  - runner_passport_public_visibility:guide
+  - verdict_backed_omission_receipts:guide
+- title: Upgrade the EA docs generator from blacklist-heavy copy defense to positive semantic section contracts for verdict
+    classes like public_route_live, support_assistant_page, private_operator_surface, and design_canon_only.
+  task: Upgrade the EA docs generator from blacklist-heavy copy defense to positive semantic section contracts for verdict
+    classes like public_route_live, support_assistant_page, private_operator_surface, and design_canon_only.
+  package_id: next90-m153-ea-docs-generator-positive-contracts
+  work_task_id: '153.4'
+  frontier_id: 1534015304
+  milestone_id: 153
+  status: not_started
+  wave: W31
+  repo: executive-assistant
+  allowed_paths:
+  - scripts
+  - skills
+  - docs
+  owned_surfaces:
+  - positive_docs_generation_contracts:ea
+  - verdict_class_semantic_schemas:ea
+- title: Fail-close the final Chummer6 docs generation verdict so docs gold is only published when release truth, verdict
+    representation, and shipped-claim posture all agree.
+  task: Fail-close the final Chummer6 docs generation verdict so docs gold is only published when release truth, verdict
+    representation, and shipped-claim posture all agree.
+  package_id: next90-m153-fleet-docs-gold-closeout-gates
+  work_task_id: '153.5'
+  frontier_id: 1535015305
+  milestone_id: 153
+  status: not_started
+  wave: W31
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - .codex-studio/published
+  - /docker/chummercomplete/chummer-design/products/chummer/CHUMMER6_DOCS_EA_GENERATOR_REAUDIT_V2_INTEGRATION_20260524.md
+  owned_surfaces:
+  - docs_gold_verdict_gate:fleet
+  - public_guide_release_truth_gates:fleet
+- title: Fail-close PWA notification assets and actions so push, click, and close stay first-party, route-bounded, and flagship-safe.
+  task: Fail-close PWA notification assets and actions so push, click, and close stay first-party, route-bounded, and flagship-safe.
+  package_id: next90-m154-hub-pwa-notification-asset-and-action-bounds
+  work_task_id: '154.1'
+  frontier_id: 1541015401
+  milestone_id: 154
+  status: not_started
+  wave: W32
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api/wwwroot/service-worker.js
+  - scripts
+  - tests
+  owned_surfaces:
+  - pwa_notification_asset_bounds:hub
+  - pwa_notification_action_routes:hub
+- title: Add real browser/runtime flagship proof for the PWA command rail instead of relying on source-text assertions alone.
+  task: Add real browser/runtime flagship proof for the PWA command rail instead of relying on source-text assertions alone.
+  package_id: next90-m154-hub-pwa-runtime-browser-proof
+  work_task_id: '154.2'
+  frontier_id: 1542015402
+  milestone_id: 154
+  status: not_started
+  wave: W32
+  repo: chummer6-hub
+  allowed_paths:
+  - tests
+  - scripts
+  - .codex-studio/published
+  owned_surfaces:
+  - pwa_runtime_browser_proof:hub
+  - flagship_pwa_acceptance:hub
+- title: Make the public-guide sync fail on stale destination files and keep mirrored docs trees exact instead of append-only.
+  task: Make the public-guide sync fail on stale destination files and keep mirrored docs trees exact instead of append-only.
+  package_id: next90-m154-guide-public-guide-sync-prune-contract
+  work_task_id: '154.3'
+  frontier_id: 1543015403
+  milestone_id: 154
+  status: not_started
+  wave: W32
+  repo: Chummer6
+  allowed_paths:
+  - scripts
+  - HORIZONS
+  - assets
+  owned_surfaces:
+  - public_guide_sync_prune_contract:guide
+  - stale_docs_rejection:guide
+- title: Collapse duplicated horizon route-stage copy into one proof-backed source so flagship docs cannot drift between canon and copy-pack layers.
+  task: Collapse duplicated horizon route-stage copy into one proof-backed source so flagship docs cannot drift between canon and copy-pack layers.
+  package_id: next90-m154-design-horizon-route-stage-single-source
+  work_task_id: '154.4'
+  frontier_id: 1544015404
+  milestone_id: 154
+  status: not_started
+  wave: W32
+  repo: chummer6-design
+  allowed_paths:
+  - products/chummer/HORIZON_PUBLIC_COPY_PACK.md
+  - products/chummer/HORIZON_REGISTRY.yaml
+  - products/chummer/horizons
+  - scripts/ai
+  owned_surfaces:
+  - horizon_route_stage_single_source:design
+  - flagship_horizon_copy_coherence:design
+- title: Add a fleet-owned flagship gold gate that rejects release claims when PWA runtime proof, docs sync exactness, and route-stage truth disagree.
+  task: Add a fleet-owned flagship gold gate that rejects release claims when PWA runtime proof, docs sync exactness, and route-stage truth disagree.
+  package_id: next90-m154-fleet-flagship-gold-coherence-gates
+  work_task_id: '154.5'
+  frontier_id: 1545015405
+  milestone_id: 154
+  status: not_started
+  wave: W32
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - .codex-studio/published
+  - /docker/chummercomplete/_completion/gold_readiness_closure
+  owned_surfaces:
+  - flagship_gold_coherence_gate:fleet
+  - pwa_docs_route_truth_gate:fleet
 source_queue_fingerprint: e350c3be89d2f3ff2b04c700b0b4f43b554b9ad9
