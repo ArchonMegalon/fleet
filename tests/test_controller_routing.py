@@ -8068,6 +8068,43 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(status, self.controller.LOCAL_REVIEW_PENDING_STATUS)
 
+    def test_ensure_transient_local_review_request_creates_retryable_local_review_row(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', 'feedback', '', '[]', 0, 0, 'dispatch_pending', ?, NULL, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    ("fleet", str(repo_root), "Review fleet", now),
+                )
+
+            project_cfg = {"id": "fleet", "path": str(repo_root), "review": {"mode": "local", "trigger": "local"}}
+            pr_row = self.controller.ensure_transient_local_review_request(
+                project_cfg,
+                slice_name="Review fleet",
+                package_id="fleet-package",
+                requested_at=self.controller.utc_now(),
+                review_focus="review focus",
+            )
+
+            self.assertEqual(str(pr_row.get("package_id") or ""), "fleet-package")
+            self.assertEqual(str(pr_row.get("review_mode") or ""), "local")
+            self.assertEqual(str(pr_row.get("review_status") or ""), self.controller.LOCAL_REVIEW_PENDING_STATUS)
+
     def test_select_local_review_model_falls_back_to_chatgpt_supported_model(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

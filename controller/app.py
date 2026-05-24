@@ -10686,6 +10686,35 @@ def review_hold_status_for_project(
     return "review_requested" if int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
 
 
+def ensure_transient_local_review_request(
+    project_cfg: Dict[str, Any],
+    *,
+    slice_name: str,
+    package_id: Optional[str] = None,
+    requested_at: Optional[dt.datetime] = None,
+    review_focus: Optional[str] = None,
+) -> Dict[str, Any]:
+    project_id = str(project_cfg.get("id") or "").strip()
+    if not project_id:
+        return {}
+    existing = pull_request_row_by_package(package_id) if package_id else pull_request_row(project_id)
+    if existing:
+        return existing
+    focus = str(review_focus or review_focus_text(project_cfg, slice_name)).strip()
+    return upsert_local_review_request(
+        project_cfg,
+        slice_name=slice_name,
+        package_id=package_id or None,
+        requested_at=requested_at,
+        review_focus=focus,
+        workflow_state={
+            "workflow_kind": "default",
+            "review_round": 1,
+            "max_review_rounds": 0,
+        },
+    )
+
+
 def upsert_local_review_request(
     project_cfg: Dict[str, Any],
     *,
@@ -21838,9 +21867,16 @@ async def execute_project_slice(
                             account_run_succeeded = True
                     except Exception as review_exc:
                         review_message = str(review_exc)
+                        backend_unavailable_message = parse_backend_unavailable_message(review_message)
+                        if backend_unavailable_message:
+                            review_message = backend_unavailable_message
                         transient_review_failure = is_transient_review_failure(review_message)
                         backoff_seconds = int(get_policy(config, "rate_limit_backoff_base", 60))
                         retry_at = utc_now() + dt.timedelta(seconds=backoff_seconds if transient_review_failure else max(backoff_seconds, 120))
+                        run_status = "review_failed"
+                        project_status = "review_failed"
+                        package_status = "failed"
+                        package_runtime_state = "idle"
                         if transient_review_failure and repo_meta and branch_info and bool(branch_info.get("changed")):
                             persist_pending_review_request(
                                 project_cfg,
@@ -21867,18 +21903,34 @@ async def execute_project_slice(
                                     update_work_package_runtime(package_id, status="complete", runtime_state="idle", latest_run_id=run_id, completed_at=finished_at)
                                 account_run_succeeded = True
                                 return
+                        if transient_review_failure and str(review_mode or "").strip().lower() == "local":
+                            transient_pr = ensure_transient_local_review_request(
+                                project_cfg,
+                                slice_name=slice_name,
+                                package_id=package_id or None,
+                                requested_at=finished_at,
+                                review_focus=locals().get("review_focus"),
+                            )
+                            project_status = review_hold_status_for_project(
+                                project_id,
+                                project_cfg=project_cfg,
+                                pr_row=transient_pr or None,
+                            )
+                            run_status = "awaiting_review"
+                            package_status = "awaiting_review"
+                            package_runtime_state = "awaiting_review"
                         with db() as conn:
                             conn.execute(
                                 """
                                 UPDATE runs
-                                SET status='review_failed', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='review', error_message=?
+                                SET status=?, exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='review', error_message=?
                                 WHERE id=?
                                 """,
-                                (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, review_message, run_id),
+                                (run_status, rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, review_message, run_id),
                             )
                         update_project_status(
                             project_id,
-                            status="review_failed",
+                            status=project_status,
                             current_slice=slice_name,
                             active_run_id=None,
                             cooldown_until=retry_at,
@@ -21890,7 +21942,12 @@ async def execute_project_slice(
                             spider_reason=decision_reason,
                         )
                         if package_id:
-                            update_work_package_runtime(package_id, status="failed", runtime_state="idle", latest_run_id=run_id)
+                            update_work_package_runtime(
+                                package_id,
+                                status=package_status,
+                                runtime_state=package_runtime_state,
+                                latest_run_id=run_id,
+                            )
                 elif review_required and review_mode == "local":
                     task_meta = dict(decision.get("task_meta") or {})
                     reviewer_lane = reviewer_lane_for_dispatch(task_meta, execution_lane=str(decision.get("lane") or ""))
