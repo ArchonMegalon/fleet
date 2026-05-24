@@ -116,6 +116,92 @@ def _default_config_root() -> pathlib.Path:
     return candidates[0]
 
 
+def _mounted_state_root() -> pathlib.Path:
+    return FLEET_MOUNT_ROOT / "state"
+
+
+def _default_db_path() -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_DB_PATH", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_db_path = _mounted_state_root() / "fleet.db"
+    if mounted_db_path.exists():
+        return mounted_db_path
+    return pathlib.Path("/var/lib/codex-fleet/fleet.db")
+
+
+def _default_state_root(db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_STATE_ROOT", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if db_path == mounted_state_root / "fleet.db":
+        return mounted_state_root
+    if db_path.name == "fleet.db" and db_path.parent.name == "state":
+        return db_path.parent
+    return db_path.parent / "state"
+
+
+def _default_log_dir(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_LOG_DIR", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "logs"
+    return pathlib.Path("/var/lib/codex-fleet/logs")
+
+
+def _default_worktree_root(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_WORKTREE_ROOT", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "worktrees"
+    return db_path.parent / "worktrees"
+
+
+def _default_queue_recovery_dir(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_QUEUE_RECOVERY_DIR", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "queue-recovery"
+    return db_path.parent / "queue-recovery"
+
+
+def _default_controller_heartbeat_path(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_CONTROLLER_HEARTBEAT_PATH", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "controller-heartbeat.json"
+    return db_path.parent / "controller-heartbeat.json"
+
+
+def _default_codex_home_root(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_CODEX_HOME_ROOT", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "codex-homes"
+    return pathlib.Path("/var/lib/codex-fleet/codex-homes")
+
+
+def _default_group_root(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_GROUP_ROOT", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "groups"
+    return db_path.parent / "groups"
+
+
 def resolve_participant_device_auth_helper() -> pathlib.Path:
     configured = str(os.environ.get("FLEET_PARTICIPANT_DEVICE_AUTH_HELPER", "") or "").strip()
     candidates: List[pathlib.Path] = []
@@ -201,13 +287,12 @@ DESIGN_MIRROR_REPO_FILES = [
 DESIGN_MIRROR_NOTE_START = "<!-- fleet-design-mirror:start -->"
 DESIGN_MIRROR_NOTE_END = "<!-- fleet-design-mirror:end -->"
 
-DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
-LOG_DIR = pathlib.Path(os.environ.get("FLEET_LOG_DIR", "/var/lib/codex-fleet/logs"))
-QUEUE_RECOVERY_DIR = pathlib.Path(os.environ.get("FLEET_QUEUE_RECOVERY_DIR", str(DB_PATH.parent / "queue-recovery")))
-WORKTREE_ROOT = pathlib.Path(os.environ.get("FLEET_WORKTREE_ROOT", str(DB_PATH.parent / "worktrees")))
-CONTROLLER_HEARTBEAT_PATH = pathlib.Path(
-    os.environ.get("FLEET_CONTROLLER_HEARTBEAT_PATH", str(DB_PATH.parent / "controller-heartbeat.json"))
-)
+DB_PATH = _default_db_path()
+STATE_ROOT = _default_state_root(DB_PATH)
+LOG_DIR = _default_log_dir(STATE_ROOT, DB_PATH)
+QUEUE_RECOVERY_DIR = _default_queue_recovery_dir(STATE_ROOT, DB_PATH)
+WORKTREE_ROOT = _default_worktree_root(STATE_ROOT, DB_PATH)
+CONTROLLER_HEARTBEAT_PATH = _default_controller_heartbeat_path(STATE_ROOT, DB_PATH)
 CONFIG_ROOT = _default_config_root()
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", str(CONFIG_ROOT / "fleet.yaml")))
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", str(CONFIG_ROOT / "accounts.yaml")))
@@ -217,8 +302,8 @@ ROUTING_PATH = CONFIG_PATH.with_name("routing.yaml")
 GROUPS_PATH = CONFIG_PATH.with_name("groups.yaml")
 PROJECTS_DIR = CONFIG_PATH.parent / "projects"
 PROJECT_INDEX_PATH = PROJECTS_DIR / "_index.yaml"
-CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
-GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
+CODEX_HOME_ROOT = _default_codex_home_root(STATE_ROOT, DB_PATH)
+GROUP_ROOT = _default_group_root(STATE_ROOT, DB_PATH)
 _MAIL_OUTBOX_ROOT_ENV = str(os.environ.get("FLEET_MAIL_OUTBOX_ROOT", "") or "").strip()
 _MAIL_STATE_PATH_ENV = str(os.environ.get("FLEET_MAIL_STATE_PATH", "") or "").strip()
 MAIL_OUTBOX_ROOT: Optional[pathlib.Path] = pathlib.Path(_MAIL_OUTBOX_ROOT_ENV) if _MAIL_OUTBOX_ROOT_ENV else None
@@ -444,6 +529,11 @@ _QUARTERMASTER_STATUS_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 _QUARTERMASTER_PLAN_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "payload": {}}
 _QUARTERMASTER_TICK_CACHE: Dict[str, Any] = {"last_tick_at": 0.0, "event_signature": ""}
 _QUARTERMASTER_RECONCILE_CACHE: Dict[str, Any] = {"fetched_at": 0.0, "plan_generated_at": "", "payload": {}}
+_FALLBACK_STATUS_LITE_ETA_STATE: Dict[str, Any] = {
+    "signature": "",
+    "remaining_seconds": 0,
+    "observed_at": None,
+}
 _RUNTIME_INTERRUPT_OVERRIDES: Dict[str, Dict[str, Any]] = {}
 RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
 RUNTIME_CACHE_KEY_EA_CODEX_STATUS = "ea_codex_status"
@@ -2095,7 +2185,10 @@ def runtime_task_rows() -> Dict[str, Dict[str, Any]]:
         item = dict(row)
         payload = json_field(item.get("payload_json"), {})
         item["payload"] = payload if isinstance(payload, dict) else {}
-        items[str(row["package_id"])] = item
+        runtime_key = str(row["package_id"] or row["project_id"] or "").strip()
+        if not runtime_key:
+            continue
+        items[runtime_key] = item
     return items
 
 
@@ -2574,6 +2667,7 @@ def apply_generated_work_package_policy(
     policy["package_kind"] = clean_package_kind
     if clean_horizon_family:
         policy["horizon_family"] = clean_horizon_family
+    owned_surfaces = [str(item).strip() for item in policy.get("owned_surfaces") or [] if str(item).strip()]
     effective_denied_paths = [
         normalize_scope_path(item)
         for item in denied_paths
@@ -2587,6 +2681,7 @@ def apply_generated_work_package_policy(
                 effective_denied_paths.append(clean_pattern)
 
     package_compile_target = f".codex-studio/published/{WORKPACKAGES_FILENAME}"
+    clean_allowed_paths = [normalize_scope_path(path) for path in allowed_paths if normalize_scope_path(path)]
     immutable_generated_paths = [path for path in allowed_paths if package_scope_matches(path, IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS)]
     if clean_package_kind == PACKAGE_COMPILE_PACKAGE_KIND:
         immutable_generated_paths = [
@@ -2594,13 +2689,49 @@ def apply_generated_work_package_policy(
             for path in immutable_generated_paths
             if normalize_scope_path(path) != normalize_scope_path(package_compile_target)
         ]
-    if immutable_generated_paths:
-        policy["dispatchability_state"] = "blocked"
-        policy["dispatchability_reason"] = (
-            "generated published artifacts must be rebuilt from source compilers, not edited directly: "
-            + ", ".join(sorted(immutable_generated_paths))
-        )
-    if clean_package_kind != PACKAGE_COMPILE_PACKAGE_KIND:
+    source_owned_paths = [
+        path
+        for path in clean_allowed_paths
+        if path not in immutable_generated_paths
+    ]
+    proof_only_generated_scope = bool(allowed_paths) and bool(owned_surfaces) and all(
+        normalize_scope_path(path).startswith((".codex-studio", "feedback"))
+        for path in allowed_paths
+    )
+    compiler_backed_generated_artifacts = bool(immutable_generated_paths) and any(
+        normalize_scope_path(path).startswith(("scripts/materialize_", "scripts/refresh_", "scripts/verify_"))
+        for path in allowed_paths
+    )
+    if immutable_generated_paths and not compiler_backed_generated_artifacts and not proof_only_generated_scope:
+        if source_owned_paths:
+            policy["dispatchability_state"] = "dispatchable"
+            policy.pop("dispatchability_reason", None)
+            policy["generated_output_paths"] = sorted(immutable_generated_paths)
+            policy["effective_allowed_paths"] = sorted(source_owned_paths)
+            policy["generated_output_handling"] = "source_compiler_refresh_required"
+        else:
+            policy["dispatchability_state"] = "blocked"
+            policy["dispatchability_reason"] = (
+                "generated published artifacts must be rebuilt from source compilers, not edited directly: "
+                + ", ".join(sorted(immutable_generated_paths))
+            )
+    if proof_only_generated_scope:
+        effective_denied_paths = [
+            pattern
+            for pattern in effective_denied_paths
+            if not package_scope_matches(pattern, IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS)
+        ]
+    elif compiler_backed_generated_artifacts:
+        effective_denied_paths = [
+            pattern
+            for pattern in effective_denied_paths
+            if not any(
+                package_scope_matches(path, [pattern])
+                and normalize_scope_path(path).startswith(".codex-studio/published/")
+                for path in allowed_paths
+            )
+        ]
+    elif clean_package_kind != PACKAGE_COMPILE_PACKAGE_KIND:
         add_default_denied_patterns(IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS)
 
     authority_only_paths = [path for path in allowed_paths if package_scope_matches(path, AUTHORITY_ONLY_PACKAGE_SCOPE_PATTERNS)]
@@ -2692,13 +2823,14 @@ def compiled_scope_claims_for_package(package: Dict[str, Any]) -> List[Dict[str,
     horizon_surface = horizon_lock_surface_value(package.get("package_kind"), package.get("horizon_family"))
     if allowed_paths:
         for path in allowed_paths:
+            namespaced_path = f"{project_id}/{path}" if project_id else path
             claims.append(
                 {
                     "package_id": package_id,
                     "project_id": project_id,
                     "claim_type": "path",
-                    "claim_value": path,
-                    "scope_key": f"path:{path}",
+                    "claim_value": namespaced_path,
+                    "scope_key": f"path:{namespaced_path}",
                 }
             )
     if owned_surfaces:
@@ -2904,6 +3036,11 @@ def compile_project_work_packages(project_cfg: Dict[str, Any], *, lanes: Optiona
             package_kind=package_kind,
             horizon_family=horizon_family,
         )
+        allowed_paths = [
+            normalize_scope_path(item)
+            for item in (task_meta.get("effective_allowed_paths") or allowed_paths)
+            if normalize_scope_path(item)
+        ]
         denied_paths = [
             normalize_scope_path(item)
             for item in (task_meta.get("denied_paths") or denied_paths)
@@ -2981,6 +3118,12 @@ def sync_work_packages_to_db(config: Dict[str, Any]) -> None:
                 ).fetchone()
                 runtime_state = str((existing["runtime_state"] if existing else "idle") or "idle").strip().lower() or "idle"
                 existing_status = str((existing["status"] if existing else "") or "").strip().lower()
+                latest_run_id = int((existing["latest_run_id"] if existing else 0) or 0) or None
+                latest_run = (
+                    conn.execute("SELECT status, error_message FROM runs WHERE id=?", (latest_run_id,)).fetchone()
+                    if latest_run_id
+                    else None
+                )
                 completed_at = str((existing["completed_at"] if existing else "") or "").strip()
                 declared_status = str(package.get("declared_status") or "").strip().lower()
                 dispatchability = str(((package.get("task_meta") or {}).get("dispatchability_state")) or "dispatchable").strip().lower()
@@ -2995,7 +3138,15 @@ def sync_work_packages_to_db(config: Dict[str, Any]) -> None:
                 elif dispatchability != "dispatchable":
                     status = "blocked"
                 elif existing_status in {"failed", WAITING_CAPACITY_STATUS, "awaiting_account"}:
-                    status = existing_status
+                    latest_run_status = str((latest_run["status"] if latest_run else "") or "").strip().lower()
+                    latest_run_error = str((latest_run["error_message"] if latest_run else "") or "").strip()
+                    if existing_status == "failed" and (
+                        latest_run_status in {"rejected", "rate_limited"}
+                        or parse_backend_unavailable_message(latest_run_error) is not None
+                    ):
+                        status = "ready"
+                    else:
+                        status = existing_status
                 else:
                     status = "ready"
                 conn.execute(
@@ -3177,7 +3328,7 @@ def sync_work_packages_to_db(config: Dict[str, Any]) -> None:
         dependencies = [str(item).strip() for item in json_field(row.get("dependencies_json"), []) if str(item).strip()]
         task_meta = json_field(row.get("task_meta_json"), {})
         dependencies_ready = all(status_by_package.get(dep) in TERMINAL_WORK_PACKAGE_STATUSES for dep in dependencies)
-        next_status = "ready" if dependencies_ready and current_status != "blocked" else "waiting_dependency"
+        next_status = "ready" if dependencies_ready else "waiting_dependency"
         if str((task_meta or {}).get("dispatchability_state") or "dispatchable").strip().lower() != "dispatchable":
             next_status = "blocked"
         if next_status != current_status:
@@ -3235,19 +3386,152 @@ def sync_project_progress_from_packages(project_id: str) -> None:
     rows = work_package_rows(project_id=clean)
     if not rows:
         return
-    contiguous_complete = 0
     ordered = sorted(rows, key=lambda row: (int(row.get("queue_index") or 0), int(row.get("priority") or 0), str(row.get("package_id") or "")))
+    queue_index_groups: dict[int, list[dict[str, Any]]] = {}
     for row in ordered:
         if normalize_package_kind(row.get("package_kind")) == PACKAGE_COMPILE_PACKAGE_KIND:
             continue
-        if str(row.get("status") or "").strip().lower() in TERMINAL_WORK_PACKAGE_STATUSES:
-            contiguous_complete += 1
+        queue_index = int(row.get("queue_index") or 0)
+        queue_index_groups.setdefault(queue_index, []).append(row)
+    contiguous_complete = 0
+    if queue_index_groups:
+        for queue_index in sorted(queue_index_groups):
+            group = queue_index_groups[queue_index]
+            if all(str(item.get("status") or "").strip().lower() in TERMINAL_WORK_PACKAGE_STATUSES for item in group):
+                contiguous_complete = queue_index + 1
+                continue
+            contiguous_complete = queue_index
+            break
+    with db() as conn:
+        project_row = conn.execute("SELECT * FROM projects WHERE id=?", (clean,)).fetchone()
+        runtime_task_rows = conn.execute(
+            """
+            SELECT COALESCE(package_id, '') AS package_id,
+                   task_state,
+                   run_id,
+                   scheduled_at,
+                   updated_at,
+                   COALESCE(task_kind, '') AS task_kind
+            FROM runtime_tasks
+            WHERE project_id=?
+              AND task_state IN ('starting', 'scheduled', 'running', 'verifying', 'awaiting_review')
+            """,
+            (clean,),
+        ).fetchall()
+        active_run_rows = conn.execute(
+            """
+            SELECT id, COALESCE(package_id, '') AS package_id, status, COALESCE(job_kind, '') AS job_kind, finished_at
+            FROM runs
+            WHERE project_id=?
+              AND status IN ('starting', 'running', 'verifying', 'local_review')
+            """,
+            (clean,),
+        ).fetchall()
+    if not project_row:
+        return
+    latest_run_ids = {
+        int(row.get("latest_run_id") or 0)
+        for row in ordered
+        if int(row.get("latest_run_id") or 0)
+    }
+    latest_runs_by_id: Dict[int, sqlite3.Row] = {}
+    if latest_run_ids:
+        placeholders = ",".join("?" for _ in latest_run_ids)
+        with db() as conn:
+            for latest_run in conn.execute(
+                f"SELECT id, status, finished_at FROM runs WHERE id IN ({placeholders})",
+                tuple(sorted(latest_run_ids)),
+            ).fetchall():
+                latest_runs_by_id[int(latest_run["id"])] = latest_run
+    live_package_commitment_by_id: dict[str, bool] = {}
+    active_latest_run_ids: set[int] = set()
+    for row in ordered:
+        package_id = str(row.get("package_id") or "").strip()
+        if not package_id:
             continue
-        break
+        runtime_row = runtime_task_row(package_id)
+        latest_run_id = int(row.get("latest_run_id") or 0) or None
+        is_live = False
+        if runtime_row and persisted_runtime_task_active(package_id, runtime_row):
+            is_live = True
+        elif latest_run_id:
+            latest_run = latest_runs_by_id.get(latest_run_id)
+            is_live = bool(
+                latest_run
+                and str(latest_run["status"] or "").strip().lower() in ACTIVE_RUN_STATUSES
+                and parse_iso(latest_run["finished_at"]) is None
+            )
+        live_package_commitment_by_id[package_id] = is_live
+        if is_live and latest_run_id:
+            active_latest_run_ids.add(latest_run_id)
+    live_runtime_package_ids = {
+        str(item["package_id"] or "").strip()
+        for item in runtime_task_rows
+        if str(item["package_id"] or "").strip()
+        and persisted_runtime_task_active(str(item["package_id"] or "").strip(), dict(item))
+    }
+    package_runtime_overrides: dict[str, str] = {}
+    runtime_state_priority = {
+        "awaiting_review": 4,
+        "verifying": 3,
+        "running": 2,
+        "scheduled": 1,
+        "starting": 1,
+    }
+    for item in runtime_task_rows:
+        package_id = str(item["package_id"] or "").strip()
+        task_state = str(item["task_state"] or "").strip().lower()
+        if not package_id or task_state not in runtime_state_priority:
+            continue
+        if not persisted_runtime_task_active(package_id, dict(item)):
+            continue
+        current = package_runtime_overrides.get(package_id, "")
+        if runtime_state_priority.get(task_state, 0) >= runtime_state_priority.get(current, 0):
+            package_runtime_overrides[package_id] = task_state
+    for item in active_run_rows:
+        package_id = str(item["package_id"] or "").strip()
+        run_state = str(item["status"] or "").strip().lower()
+        if not package_id or run_state not in runtime_state_priority:
+            continue
+        current = package_runtime_overrides.get(package_id, "")
+        if runtime_state_priority.get(run_state, 0) >= runtime_state_priority.get(current, 0):
+            package_runtime_overrides[package_id] = run_state
+    active_runtime_packages = set(live_runtime_package_ids)
+    active_project_runtime_rows = [
+        item
+        for item in runtime_task_rows
+        if (
+            str(item["task_kind"] or "").strip().lower() == "local_review"
+            or not str(item["package_id"] or "").strip()
+        )
+        and persisted_runtime_task_active(clean, dict(item))
+    ]
+    active_project_run_rows = [
+        item
+        for item in active_run_rows
+        if (
+            str(item["job_kind"] or "").strip().lower() == "local_review"
+            or not str(item["package_id"] or "").strip()
+        )
+        and parse_iso(item.get("finished_at")) is None
+    ]
+    active_run_ids = {
+        int(item["id"] or 0)
+        for item in active_run_rows
+        if int(item["id"] or 0)
+    }
+    active_project_run_id = next(
+        (int(item["id"] or 0) for item in active_project_run_rows if int(item["id"] or 0)),
+        0,
+    ) or None
     active_rows = [
         row
         for row in ordered
-        if str(row.get("runtime_state") or "").strip().lower() in ACTIVE_WORK_PACKAGE_RUNTIME_STATES
+        if (
+            live_package_commitment_by_id.get(str(row.get("package_id") or "").strip(), False)
+            or str(row.get("package_id") or "").strip() in active_runtime_packages
+            or int(row.get("latest_run_id") or 0) in active_run_ids
+        )
     ]
     dispatchable_ready_rows = [
         row
@@ -3287,10 +3571,19 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         or {}
     )
     rep_status = str(rep.get("status") or "").strip().lower()
-    rep_runtime = str(rep.get("runtime_state") or "").strip().lower()
+    rep_runtime = package_runtime_overrides.get(
+        str(rep.get("package_id") or "").strip(),
+        (
+            str(rep.get("runtime_state") or "").strip().lower()
+            if live_package_commitment_by_id.get(str(rep.get("package_id") or "").strip(), False)
+            else "idle"
+        ),
+    )
     if rep_runtime == "verifying":
         runtime_status = "verifying"
     elif rep_runtime in {"scheduled", "running"}:
+        runtime_status = "running"
+    elif active_project_runtime_rows or active_project_run_rows:
         runtime_status = "running"
     elif dispatchable_ready_rows:
         runtime_status = READY_STATUS
@@ -3306,24 +3599,39 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         runtime_status = "blocked"
     else:
         runtime_status = "complete"
-    active_run_id = int(rep.get("latest_run_id") or 0) or None if rep_runtime in ACTIVE_WORK_PACKAGE_RUNTIME_STATES else None
+    active_run_id = (
+        int(rep.get("latest_run_id") or 0) or None
+        if rep_runtime in ACTIVE_WORK_PACKAGE_RUNTIME_STATES
+        and int(rep.get("latest_run_id") or 0) in active_latest_run_ids
+        else active_project_run_id
+    )
     current_slice_name = str(rep.get("slice_name") or "").strip() or None
-    with db() as conn:
-        row = conn.execute("SELECT * FROM projects WHERE id=?", (clean,)).fetchone()
-    if not row:
-        return
+    clear_stale_failure_state = (
+        rep_runtime in ACTIVE_WORK_PACKAGE_RUNTIME_STATES
+        or bool(active_project_runtime_rows)
+        or bool(active_project_run_rows)
+        or (
+            runtime_status == READY_STATUS
+            and bool(dispatchable_ready_rows)
+            and not blocked_rows
+            and not review_rows
+            and not waiting_dependency_rows
+            and not awaiting_account_rows
+        )
+    )
     update_project_status(
         clean,
         status=runtime_status,
         current_slice=current_slice_name,
         active_run_id=active_run_id,
-        cooldown_until=parse_iso(row["cooldown_until"]),
-        last_run_at=parse_iso(row["last_run_at"]),
-        last_error=row["last_error"],
-        consecutive_failures=int(row["consecutive_failures"] or 0),
-        spider_tier=row["spider_tier"],
-        spider_model=row["spider_model"],
-        spider_reason=row["spider_reason"],
+        cooldown_until=parse_iso(project_row["cooldown_until"]),
+        last_run_at=parse_iso(project_row["last_run_at"]),
+        last_error=None if clear_stale_failure_state else project_row["last_error"],
+        consecutive_failures=0 if clear_stale_failure_state else int(project_row["consecutive_failures"] or 0),
+        spider_tier=project_row["spider_tier"],
+        spider_model=project_row["spider_model"],
+        spider_reason=project_row["spider_reason"],
+        skip_live_runtime_guard=True,
     )
     with db() as conn:
         conn.execute(
@@ -3447,7 +3755,7 @@ def terminal_work_package_resolution(
     if clean_run_status in {"failed", "review_failed", "blocked"}:
         return ("failed", "idle")
     if clean_run_status in {"rejected", "rate_limited"}:
-        return ("awaiting_account", "idle")
+        return (READY_STATUS, "idle")
     if clean_run_status in {"abandoned", "paused"}:
         return (WAITING_CAPACITY_STATUS, "idle")
     if clean_current_status in {"failed", "blocked", "awaiting_account"}:
@@ -4910,6 +5218,8 @@ def active_coding_runtime_keys(project_rows: Sequence[sqlite3.Row]) -> Set[str]:
             continue
         if run_status not in ACTIVE_RUN_STATUSES:
             continue
+        if not project_has_live_runtime_commitment(project_id, int(row["active_run_id"] or 0) or None):
+            continue
         runtime_key = str((run["package_id"] if run and "package_id" in run.keys() else "") or "").strip() or project_id
         if runtime_key not in runtime_task_rows():
             active.add(runtime_key)
@@ -5878,6 +6188,53 @@ def _quartermaster_status_fallback_payload() -> Tuple[Dict[str, Any], Optional[d
     return {}, None
 
 
+def _quartermaster_emergency_status_payload(
+    persisted_payload: Optional[Dict[str, Any]] = None,
+    *,
+    error: str = "",
+) -> Dict[str, Any]:
+    source_payload = persisted_payload if isinstance(persisted_payload, dict) else {}
+    source_plan = _quartermaster_plan_from_status_payload(source_payload)
+    lane_targets = {
+        str(key): int(max(0, float(value)))
+        for key, value in dict((source_plan or {}).get("lane_targets") or {}).items()
+        if str(key).strip() and isinstance(value, (int, float, str))
+    }
+    tick_policy = quartermaster_tick_policy()
+    generated_at = iso(utc_now())
+    plan = {
+        "generated_at": generated_at,
+        "mode": "observe_only",
+        "lane_targets": lane_targets,
+        "controller_tick": {
+            "driver": str(tick_policy.get("driver") or ""),
+            "baseline_tick_seconds": int(tick_policy.get("baseline_tick_seconds") or 0),
+            "event_tick_min_seconds": int(tick_policy.get("event_tick_min_seconds") or 0),
+            "plan_ttl_seconds": int(tick_policy.get("plan_ttl_seconds") or 0),
+            "max_scale_up_per_tick": int(tick_policy.get("max_scale_up_per_tick") or 0),
+            "max_scale_down_per_tick": int(tick_policy.get("max_scale_down_per_tick") or 0),
+            "min_worker_dwell_seconds": int(tick_policy.get("min_worker_dwell_seconds") or 0),
+            "idle_drain_seconds": int(tick_policy.get("idle_drain_seconds") or 0),
+            "triggers": list(tick_policy.get("triggers") or []),
+        },
+        "notes": [
+            "Quartermaster upstream status is unavailable or stale.",
+            "Controller is using an observe-only emergency fallback so scheduler-local guards continue while capacity enforcement is temporarily fail-open.",
+        ],
+    }
+    message = str(error or "").strip() or "quartermaster status unavailable or stale"
+    return {
+        "generated_at": generated_at,
+        "source_generated_at": str((source_plan or {}).get("generated_at") or source_payload.get("generated_at") or ""),
+        "source": "controller_emergency_fallback",
+        "degraded": True,
+        "cache_state": "stale",
+        "tick_reason": "",
+        "error": message,
+        "plan": plan,
+    }
+
+
 def quartermaster_status_payload(force: bool = False) -> Dict[str, Any]:
     now = time.time()
     cached = _QUARTERMASTER_STATUS_CACHE.get("payload")
@@ -5894,13 +6251,28 @@ def quartermaster_status_payload(force: bool = False) -> Dict[str, Any]:
     status_base_url = str(FLEET_QUARTERMASTER_BASE_URL).strip()
     if not status_base_url:
         if persisted_payload:
+            persisted_plan = _quartermaster_plan_from_status_payload(persisted_payload)
+            if not quartermaster_plan_is_fresh(persisted_plan):
+                emergency = _quartermaster_emergency_status_payload(
+                    persisted_payload,
+                    error="quartermaster status endpoint is not configured and persisted capacity state is stale",
+                )
+                _QUARTERMASTER_STATUS_CACHE["fetched_at"] = now
+                _QUARTERMASTER_STATUS_CACHE["payload"] = emergency
+                return emergency
             cache_now = now
             if persisted_fetched_at is not None:
                 cache_now = max(0.0, persisted_fetched_at.timestamp())
             _QUARTERMASTER_STATUS_CACHE["fetched_at"] = cache_now
             _QUARTERMASTER_STATUS_CACHE["payload"] = persisted_payload
             return dict(persisted_payload)
-        return {}
+        emergency = _quartermaster_emergency_status_payload(
+            {},
+            error="quartermaster status endpoint is not configured",
+        )
+        _QUARTERMASTER_STATUS_CACHE["fetched_at"] = now
+        _QUARTERMASTER_STATUS_CACHE["payload"] = emergency
+        return emergency
 
     request = urllib.request.Request(
         f"{status_base_url}/api/status",
@@ -5910,17 +6282,35 @@ def quartermaster_status_payload(force: bool = False) -> Dict[str, Any]:
     try:
         with urllib.request.urlopen(request, timeout=3) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except Exception:
+    except Exception as exc:
         if persisted_payload:
+            persisted_plan = _quartermaster_plan_from_status_payload(persisted_payload)
+            if not quartermaster_plan_is_fresh(persisted_plan):
+                emergency = _quartermaster_emergency_status_payload(
+                    persisted_payload,
+                    error=f"quartermaster status fetch failed: {exc.__class__.__name__}",
+                )
+                _QUARTERMASTER_STATUS_CACHE["fetched_at"] = now
+                _QUARTERMASTER_STATUS_CACHE["payload"] = emergency
+                return emergency
             cache_now = now
             if persisted_fetched_at is not None:
                 cache_now = max(0.0, persisted_fetched_at.timestamp())
             _QUARTERMASTER_STATUS_CACHE["fetched_at"] = cache_now
             _QUARTERMASTER_STATUS_CACHE["payload"] = persisted_payload
             return dict(persisted_payload)
-        payload = {}
+        payload = _quartermaster_emergency_status_payload(
+            {},
+            error=f"quartermaster status fetch failed: {exc.__class__.__name__}",
+        )
 
     payload = payload if isinstance(payload, dict) else {}
+    plan = _quartermaster_plan_from_status_payload(payload)
+    if payload and plan and not quartermaster_plan_is_fresh(plan):
+        payload = _quartermaster_emergency_status_payload(
+            payload,
+            error="quartermaster plan is stale",
+        )
     _QUARTERMASTER_STATUS_CACHE["fetched_at"] = now
     _QUARTERMASTER_STATUS_CACHE["payload"] = payload
     if payload:
@@ -9362,10 +9752,10 @@ def reconcile_finished_run_links() -> int:
     reconciled = 0
     for row in rows:
         run_status = str(row["run_status"] or "").strip().lower()
-        if run_status in {"starting", "running", "verifying"}:
-            continue
         project_id = str(row["id"] or "").strip()
         if not project_id:
+            continue
+        if project_has_live_runtime_commitment(project_id, int(row["active_run_id"] or 0) or None):
             continue
         clear_runtime_task(project_id)
         status = str(row["status"] or "").strip() or READY_STATUS
@@ -10537,6 +10927,35 @@ def review_hold_status_for_project(
     return "review_requested" if int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
 
 
+def ensure_transient_local_review_request(
+    project_cfg: Dict[str, Any],
+    *,
+    slice_name: str,
+    package_id: Optional[str] = None,
+    requested_at: Optional[dt.datetime] = None,
+    review_focus: Optional[str] = None,
+) -> Dict[str, Any]:
+    project_id = str(project_cfg.get("id") or "").strip()
+    if not project_id:
+        return {}
+    existing = pull_request_row_by_package(package_id) if package_id else pull_request_row(project_id)
+    if existing:
+        return existing
+    focus = str(review_focus or review_focus_text(project_cfg, slice_name)).strip()
+    return upsert_local_review_request(
+        project_cfg,
+        slice_name=slice_name,
+        package_id=package_id or None,
+        requested_at=requested_at,
+        review_focus=focus,
+        workflow_state={
+            "workflow_kind": "default",
+            "review_round": 1,
+            "max_review_rounds": 0,
+        },
+    )
+
+
 def upsert_local_review_request(
     project_cfg: Dict[str, Any],
     *,
@@ -10874,6 +11293,10 @@ def safe_git_branch_name(text: str) -> str:
     return branch or "fleet/project"
 
 
+def fallback_git_branch_name(text: str) -> str:
+    return safe_git_branch_name(str(text or "").replace("/", "--"))
+
+
 def ensure_package_worktree(
     project_cfg: Dict[str, Any],
     package_row: Optional[Dict[str, Any]],
@@ -10913,7 +11336,13 @@ def ensure_package_worktree(
     branch_name = safe_git_branch_name(str(package_row.get("branch_name") or f"fleet/{project_cfg.get('id')}/{package_row.get('package_id')}"))
     checkout = run_capture(["git", "checkout", "-B", branch_name], cwd=str(worktree_root), timeout_seconds=60)
     if checkout.returncode != 0:
-        raise RuntimeError(checkout.stderr.strip() or checkout.stdout.strip() or "git checkout package branch failed")
+        stderr = str(checkout.stderr or "").strip()
+        if "cannot lock ref" in stderr and "refs/heads/" in stderr:
+            fallback_branch = fallback_git_branch_name(branch_name)
+            if fallback_branch and fallback_branch != branch_name:
+                checkout = run_capture(["git", "checkout", "-B", fallback_branch], cwd=str(worktree_root), timeout_seconds=60)
+        if checkout.returncode != 0:
+            raise RuntimeError(checkout.stderr.strip() or checkout.stdout.strip() or "git checkout package branch failed")
     return worktree_root
 
 
@@ -13254,6 +13683,15 @@ def rehydrate_runtime_tasks(config: Dict[str, Any]) -> int:
             if task_state not in ACTIVE_RUNTIME_TASK_STATES:
                 clear_runtime_task(runtime_key)
                 continue
+            persisted_run_id = int(row.get("run_id") or 0) or None
+            if task_state == "scheduled" and persisted_run_id is None:
+                package_id = str(row.get("package_id") or "").strip()
+                package_row = work_package_row(package_id) if package_id and package_id != project_id else None
+                package_runtime_state = str((package_row or {}).get("runtime_state") or "").strip().lower()
+                package_latest_run_id = int((package_row or {}).get("latest_run_id") or 0) or None
+                if runtime_status in ACTIVE_RUN_STATUSES or package_runtime_state in ACTIVE_WORK_PACKAGE_RUNTIME_STATES or package_latest_run_id:
+                    clear_runtime_task(runtime_key)
+                    continue
             if runtime_key == project_id and (project_row["active_run_id"] or runtime_status in ACTIVE_RUN_STATUSES):
                 continue
             try:
@@ -14084,12 +14522,22 @@ def effective_project_status(
             return review_runtime_status
         if status in REVIEW_VISIBLE_STATUSES:
             return status
-        if status in {"starting", "running", "verifying"} and active_run_id:
+        if (
+            status in {"starting", "running", "verifying"}
+            and active_run_id
+            and project_has_live_runtime_commitment(str(project_id or ""), int(active_run_id or 0) or None)
+        ):
             return status
         if status == SOURCE_BACKLOG_OPEN_STATUS or source_backlog_open:
             return SOURCE_BACKLOG_OPEN_STATUS
         return "complete"
     if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
+        return READY_STATUS
+    if (
+        status in {"starting", "running", "verifying"}
+        and project_id
+        and not project_has_live_runtime_commitment(str(project_id or ""), int(active_run_id or 0) or None)
+    ):
         return READY_STATUS
     return status
 
@@ -15178,7 +15626,7 @@ def maintain_active_worker_floor(
 
 
 def codex_active_project_ids(project_rows: Sequence[sqlite3.Row]) -> set[str]:
-    active_statuses = {"starting", "running"}
+    active_statuses = {"starting", "running", "verifying"}
     run_ids = [int(row["active_run_id"]) for row in project_rows if row["active_run_id"]]
     runs_by_id: Dict[int, sqlite3.Row] = {}
     if run_ids:
@@ -15198,9 +15646,37 @@ def codex_active_project_ids(project_rows: Sequence[sqlite3.Row]) -> set[str]:
         run = runs_by_id.get(int(row["active_run_id"] or 0)) if row["active_run_id"] else None
         run_status = str((run["status"] if run else row["status"]) or "").strip().lower()
         run_kind = str((run["job_kind"] if run else "coding") or "coding").strip().lower() or "coding"
+        if not project_has_live_runtime_commitment(project_id, int(row["active_run_id"] or 0) or None):
+            continue
         if run_status in active_statuses and run_kind in {"coding", "healing", "local_review"}:
             active.add(project_id)
     return active
+
+
+def project_has_live_runtime_commitment(project_id: str, active_run_id: Optional[int]) -> bool:
+    clean = str(project_id or "").strip()
+    run_id = int(active_run_id or 0) or None
+    if not clean:
+        return False
+    task_rows = runtime_task_rows_for_project(clean)
+    if task_rows:
+        for task_row in task_rows:
+            package_id = str(task_row.get("package_id") or "").strip()
+            runtime_key = package_id or clean
+            if persisted_runtime_task_active(runtime_key, task_row):
+                return True
+    if not run_id:
+        return False
+    with db() as conn:
+        row = conn.execute(
+            "SELECT status, finished_at FROM runs WHERE id=?",
+            (run_id,),
+        ).fetchone()
+    if not row:
+        return False
+    run_status = str(row["status"] or "").strip().lower()
+    run_finished_at = parse_iso(row["finished_at"])
+    return run_status in ACTIVE_RUN_STATUSES and run_finished_at is None
 
 
 def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, Any], row: sqlite3.Row, now: dt.datetime) -> "DispatchCandidate":
@@ -15450,6 +15926,21 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
                 spider_model=row["spider_model"],
                 spider_reason=row["spider_reason"],
             )
+        else:
+            runtime_status = READY_STATUS
+            update_project_status(
+                project_id,
+                status=runtime_status,
+                current_slice=normalize_slice_text(queue[queue_index]),
+                active_run_id=None,
+                cooldown_until=None,
+                last_run_at=parse_iso(row["last_run_at"]),
+                last_error=None,
+                consecutive_failures=0,
+                spider_tier=row["spider_tier"],
+                spider_model=row["spider_model"],
+                spider_reason=row["spider_reason"],
+            )
     if runtime_status == "review_failed" and is_retryable_push_rejection(str(row["last_error"] or "")):
         cooldown_until = parse_iso(row["cooldown_until"])
         if cooldown_until is None or cooldown_until <= utc_now():
@@ -15542,13 +16033,23 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
 
 
 def project_uses_package_scheduler(config: Dict[str, Any], project_id: str) -> bool:
+    packages = work_package_rows(project_id=project_id)
+    if not packages:
+        return False
     groups = project_group_defs(config, project_id)
     if groups:
         group = groups[0]
         group_mode = str(group.get("mode") or "singleton").strip().lower()
         if group_mode not in {"singleton", "independent"}:
-            return False
-    return bool(work_package_rows(project_id=project_id))
+            explicitly_scoped_packages = [
+                package
+                for package in packages
+                if dict(package.get("task_meta") or {}).get("allowed_paths")
+                or dict(package.get("task_meta") or {}).get("owned_surfaces")
+            ]
+            if not explicitly_scoped_packages:
+                return False
+    return True
 
 
 def prepare_work_package_dispatch_candidates(
@@ -17892,6 +18393,13 @@ def promote_task_class(task_class: str) -> str:
     return task_class
 
 
+def promote_task_class_without_contract(task_class: str) -> str:
+    promoted = promote_task_class(task_class)
+    if task_class == "multi_file_impl" and promoted == "cross_repo_contract":
+        return task_class
+    return promoted
+
+
 def route_class_evidence(window_runs: int = 120) -> Dict[str, Dict[str, Any]]:
     if not table_exists("runs"):
         return {}
@@ -18005,19 +18513,19 @@ def classify_tier(
         reason_parts.append("default route class from prompt size and coding scope")
 
     if len(feedback_files) >= 2 and tier in {"inspect", "draft", "micro_edit"}:
-        tier = promote_task_class(tier)
+        tier = promote_task_class_without_contract(tier)
         reason_parts.append("multiple injected feedback notes widen the coordination scope")
 
     if prompt_chars > 12000 and tier in {"inspect", "draft", "micro_edit"}:
-        tier = promote_task_class(tier)
+        tier = promote_task_class_without_contract(tier)
         reason_parts.append("prompt estimate widens the route class")
     if prompt_chars > 24000 and tier != "cross_repo_contract":
-        tier = promote_task_class(tier)
+        tier = promote_task_class_without_contract(tier)
         reason_parts.append("large prompt estimate escalates the route class")
 
     escalate_after = int(spider.get("escalate_to_complex_after_failures", 1))
     if failures >= escalate_after:
-        tier = promote_task_class(tier)
+        tier = promote_task_class_without_contract(tier)
         reason_parts.append(f"previous failure count {failures} promotes the route class")
 
     if classification_mode.startswith("evidence"):
@@ -18035,7 +18543,7 @@ def classify_tier(
                     int(promoted_evidence.get("run_count") or 0) < min_sample
                     or float(promoted_evidence.get("failure_rate") or 0.0) <= float(tier_evidence.get("failure_rate") or 0.0)
                 ):
-                    tier = promoted_tier
+                    tier = promote_task_class_without_contract(tier)
                     reason_parts.append("recent failure evidence promotes to a broader route class")
 
     difficulty = str(task_meta.get("difficulty") or "auto")
@@ -18053,7 +18561,7 @@ def classify_tier(
         tier = "multi_file_impl"
         reason_parts.append("high risk forces core-grade implementation routing")
     if branch_policy == "protected_branch" or acceptance_level == "merge_ready":
-        reason_parts.append("protected-branch or merge-ready policy requires core authority")
+        reason_parts.append("protected-branch or merge-ready policy requires authority at signoff and landing")
 
     tier_prefs = spider.get("tier_preferences", {}).get(tier, {})
     models = list(tier_prefs.get("models") or [])
@@ -18063,9 +18571,12 @@ def classify_tier(
     predicted_files = predict_changed_files(tier)
     requires_contract_authority = (
         tier == "cross_repo_contract"
+        or package_kind in AUTHORITY_PACKAGE_KINDS
+    )
+    requires_signoff_authority = (
+        requires_contract_authority
         or branch_policy == "protected_branch"
         or acceptance_level == "merge_ready"
-        or package_kind in AUTHORITY_PACKAGE_KINDS
     )
     premium_required = bool(task_meta.get("premium_required"))
     premium_beneficial = bool(task_meta.get("premium_beneficial"))
@@ -18085,6 +18596,7 @@ def classify_tier(
     if bool(task_meta.get("protected_runtime")):
         allowed_lanes = ["core"]
         requires_contract_authority = True
+        requires_signoff_authority = True
     if gemini_backend_unavailable and allow_paid_fast_lane and "repair" in lanes and "repair" not in allowed_lanes and not requires_contract_authority:
         allowed_lanes = [*allowed_lanes, "repair"]
         reason_parts.append("gemini backend unavailable; temporarily unlocking repair fallback")
@@ -18099,6 +18611,7 @@ def classify_tier(
             if requested_core_rescue and allow_core_rescue and allow_credit_burn and "core" in allowed_lanes:
                 allowed_lanes = ["core"]
                 requires_contract_authority = True
+                requires_signoff_authority = True
                 reason_parts.append("jury explicitly requested core rescue")
             elif requested_core_rescue:
                 allowed_lanes = [lane for lane in allowed_lanes if lane != "core"]
@@ -18294,6 +18807,20 @@ def classify_tier(
     )
     expected_allowance_burn = lane_allowance_burn_snapshot(preferred_lane, lanes, lane_capacity)
     signoff_requirements = [str(item).strip() for item in task_meta.get("signoff_requirements") or [] if str(item).strip()]
+    authority_signoff_lane = str((lanes.get("core_authority") or {}).get("id") or "core_authority")
+    default_core_lane = str((lanes.get("core") or {}).get("id") or "core")
+    explicit_reviewer_lane = isinstance(slice_item, dict) and "required_reviewer_lane" in slice_item
+    explicit_final_lane = isinstance(slice_item, dict) and "final_reviewer_lane" in slice_item
+    explicit_landing_lane = isinstance(slice_item, dict) and "landing_lane" in slice_item
+    reviewer_lane_value = str(task_meta.get("required_reviewer_lane") or "")
+    final_lane_value = str(task_meta.get("final_reviewer_lane") or "")
+    landing_lane_value = str(task_meta.get("landing_lane") or "")
+    if requires_signoff_authority and not explicit_reviewer_lane and reviewer_lane_value == default_core_lane:
+        reviewer_lane_value = authority_signoff_lane
+    if requires_signoff_authority and not explicit_final_lane and final_lane_value in {"", default_core_lane}:
+        final_lane_value = authority_signoff_lane
+    if requires_signoff_authority and not explicit_landing_lane and landing_lane_value in {"", default_core_lane}:
+        landing_lane_value = authority_signoff_lane
     reason_parts.append(f"predicted changed files: {predicted_files}")
     reason_parts.append("spark eligible" if spark_eligible else "spark not eligible")
     reason_parts.append(f"allowed lanes: {', '.join(allowed_lanes)}")
@@ -18343,9 +18870,9 @@ def classify_tier(
         "escalation_reason": escalation_reason,
         "expected_allowance_burn": expected_allowance_burn,
         "allowed_lanes": allowed_lanes,
-        "required_reviewer_lane": str(task_meta.get("required_reviewer_lane") or lanes["core"]["id"]),
-        "final_reviewer_lane": str(task_meta.get("final_reviewer_lane") or ""),
-        "landing_lane": str(task_meta.get("landing_lane") or ""),
+        "required_reviewer_lane": reviewer_lane_value or default_core_lane,
+        "final_reviewer_lane": final_lane_value,
+        "landing_lane": landing_lane_value,
         "task_meta": task_meta,
         "runtime_model": str((lanes.get(preferred_lane) or {}).get("runtime_model") or ""),
         "spark_eligible": spark_eligible,
@@ -18753,14 +19280,24 @@ def update_project_status(
     spider_tier: Optional[str] = None,
     spider_model: Optional[str] = None,
     spider_reason: Optional[str] = None,
+    skip_live_runtime_guard: bool = False,
 ) -> None:
     previous_status = ""
     with db() as conn:
-        row = conn.execute("SELECT status, consecutive_failures FROM projects WHERE id=?", (project_id,)).fetchone()
+        row = conn.execute("SELECT status, consecutive_failures, active_run_id FROM projects WHERE id=?", (project_id,)).fetchone()
         previous_status = str((row["status"] if row else "") or "").strip()
         failures = row["consecutive_failures"] if row else 0
         if consecutive_failures is not None:
             failures = consecutive_failures
+        current_active_run_id = int(row["active_run_id"] or 0) or None if row else None
+        requested_status = str(status or "").strip().lower()
+        if (
+            not skip_live_runtime_guard
+            and requested_status not in ACTIVE_RUN_STATUSES
+            and project_has_live_runtime_commitment(project_id, current_active_run_id)
+        ):
+            sync_project_progress_from_packages(project_id)
+            return
         conn.execute(
             """
             UPDATE projects
@@ -19018,6 +19555,9 @@ def is_transient_review_failure(error_text: str) -> bool:
             "send a request to your admin",
             "worker session went stale",
             "stale_heartbeat",
+            "missing_final_message",
+            "nonetype' object has no attribute 'get'",
+            "github review is enabled but no github token is available in fleet",
         ]
     )
 
@@ -20956,6 +21496,14 @@ def parse_backend_unavailable_message(text: str) -> Optional[str]:
     return None
 
 
+def classify_transient_verify_failure(raw_log: str, final_text: str) -> Optional[str]:
+    for text in (str(raw_log or ""), str(final_text or "")):
+        message = parse_backend_unavailable_message(text)
+        if message:
+            return message
+    return None
+
+
 def parse_auth_failure_message(text: str) -> Optional[str]:
     lower = str(text or "").lower()
     markers = [
@@ -21071,6 +21619,12 @@ def prune_finished_tasks() -> None:
 
 def reconcile_runtime_tasks(active_project_ids: set[str]) -> None:
     prune_finished_tasks()
+    for runtime_key, row in list(runtime_task_rows().items()):
+        if live_runtime_task_handle(runtime_key) is not None:
+            continue
+        if persisted_runtime_task_active(runtime_key, row):
+            continue
+        clear_runtime_task(runtime_key)
     for project_id, task in list(state.tasks.items()):
         if task_done(task):
             state.tasks.pop(project_id, None)
@@ -21371,6 +21925,7 @@ async def execute_project_slice(
         rc = rc_result.exit_code
         finished_at = utc_now()
         raw_log = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
+        final_text = final_message_path.read_text(encoding="utf-8", errors="replace") if final_message_path.exists() else ""
         input_tokens, cached_input_tokens, output_tokens = parse_jsonl_usage(log_path)
         est_cost = estimate_cost_usd_for_model(
             config.get("spider", {}).get("price_table", {}) or DEFAULT_PRICE_TABLE,
@@ -21483,6 +22038,33 @@ async def execute_project_slice(
                     try:
                         token = github_token()
                         if not token:
+                            review_owner = str(review.get("owner") or "").strip()
+                            review_repo = str(review.get("repo") or "").strip()
+                            review_base_branch = str(review.get("base_branch") or "main").strip() or "main"
+                            if not review_owner or not review_repo:
+                                _, origin_owner, origin_repo = repo_origin(project_cfg)
+                                review_owner = review_owner or str(origin_owner or "").strip()
+                                review_repo = review_repo or str(origin_repo or "").strip()
+                            branch_info = {
+                                "branch": safe_git_branch_name(str(package.get("branch_name") or "")) if package_id else review_branch_name(project_cfg),
+                                "head_sha": git_head_sha(str(execution_root)),
+                                "changed": False,
+                            }
+                            repo_meta = {
+                                "owner": review_owner,
+                                "repo": review_repo,
+                                "base_branch": review_base_branch,
+                            }
+                            if review_owner and review_repo:
+                                persist_pending_review_request(
+                                    project_cfg,
+                                    repo_meta=repo_meta,
+                                    branch_name=str(branch_info["branch"]),
+                                    head_sha=str(branch_info["head_sha"]),
+                                    slice_name=slice_name,
+                                    package_id=package_id or None,
+                                    requested_at=finished_at,
+                                )
                             raise RuntimeError("GitHub review is enabled but no GitHub token is available in fleet")
                         repo_meta = project_github_repo(project_cfg, token)
                         branch_info = commit_and_push_review_branch(
@@ -21574,9 +22156,17 @@ async def execute_project_slice(
                             account_run_succeeded = True
                     except Exception as review_exc:
                         review_message = str(review_exc)
+                        backend_unavailable_message = parse_backend_unavailable_message(review_message)
+                        if backend_unavailable_message:
+                            review_message = backend_unavailable_message
+                        transient_review_failure = is_transient_review_failure(review_message)
                         backoff_seconds = int(get_policy(config, "rate_limit_backoff_base", 60))
-                        retry_at = utc_now() + dt.timedelta(seconds=backoff_seconds if is_transient_review_failure(review_message) else max(backoff_seconds, 120))
-                        if is_transient_review_failure(review_message) and repo_meta and branch_info and bool(branch_info.get("changed")):
+                        retry_at = utc_now() + dt.timedelta(seconds=backoff_seconds if transient_review_failure else max(backoff_seconds, 120))
+                        run_status = "review_failed"
+                        project_status = "review_failed"
+                        package_status = "failed"
+                        package_runtime_state = "idle"
+                        if transient_review_failure and repo_meta and branch_info and bool(branch_info.get("changed")):
                             persist_pending_review_request(
                                 project_cfg,
                                 repo_meta=repo_meta,
@@ -21586,18 +22176,50 @@ async def execute_project_slice(
                                 package_id=package_id or None,
                                 requested_at=finished_at,
                             )
+                        if transient_review_failure and "no github token is available in fleet" in review_message.lower():
+                            pr_row = pull_request_row_by_package(package_id) if package_id else pull_request_row(project_id)
+                            if pr_row and complete_stalled_review_fallback(config, project_id, pr_row):
+                                with db() as conn:
+                                    conn.execute(
+                                        """
+                                        UPDATE runs
+                                        SET status='complete', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?
+                                        WHERE id=?
+                                        """,
+                                        (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, run_id),
+                                    )
+                                if package_id:
+                                    update_work_package_runtime(package_id, status="complete", runtime_state="idle", latest_run_id=run_id, completed_at=finished_at)
+                                account_run_succeeded = True
+                                return
+                        if transient_review_failure and str(review_mode or "").strip().lower() == "local":
+                            transient_pr = ensure_transient_local_review_request(
+                                project_cfg,
+                                slice_name=slice_name,
+                                package_id=package_id or None,
+                                requested_at=finished_at,
+                                review_focus=locals().get("review_focus"),
+                            )
+                            project_status = review_hold_status_for_project(
+                                project_id,
+                                project_cfg=project_cfg,
+                                pr_row=transient_pr or None,
+                            )
+                            run_status = "awaiting_review"
+                            package_status = "awaiting_review"
+                            package_runtime_state = "awaiting_review"
                         with db() as conn:
                             conn.execute(
                                 """
                                 UPDATE runs
-                                SET status='review_failed', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='review', error_message=?
+                                SET status=?, exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='review', error_message=?
                                 WHERE id=?
                                 """,
-                                (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, review_message, run_id),
+                                (run_status, rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, review_message, run_id),
                             )
                         update_project_status(
                             project_id,
-                            status="review_failed",
+                            status=project_status,
                             current_slice=slice_name,
                             active_run_id=None,
                             cooldown_until=retry_at,
@@ -21609,7 +22231,12 @@ async def execute_project_slice(
                             spider_reason=decision_reason,
                         )
                         if package_id:
-                            update_work_package_runtime(package_id, status="failed", runtime_state="idle", latest_run_id=run_id)
+                            update_work_package_runtime(
+                                package_id,
+                                status=package_status,
+                                runtime_state=package_runtime_state,
+                                latest_run_id=run_id,
+                            )
                 elif review_required and review_mode == "local":
                     task_meta = dict(decision.get("task_meta") or {})
                     reviewer_lane = reviewer_lane_for_dispatch(task_meta, execution_lane=str(decision.get("lane") or ""))
@@ -21722,7 +22349,41 @@ async def execute_project_slice(
             else:
                 verify_timed_out = 'verify_result' in locals() and bool(verify_result.timed_out)
                 verify_idle_timed_out = verify_timed_out and bool(verify_result.idle_timed_out)
-                if verify_idle_timed_out:
+                transient_verify_failure = classify_transient_verify_failure(raw_log, final_text)
+                if transient_verify_failure is not None:
+                    with db() as conn:
+                        conn.execute(
+                            """
+                            UPDATE runs
+                            SET status='rejected', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class='provider_unavailable', error_message=?
+                            WHERE id=?
+                            """,
+                            (
+                                rc,
+                                verify_rc,
+                                iso(finished_at),
+                                input_tokens,
+                                cached_input_tokens,
+                                output_tokens,
+                                est_cost,
+                                transient_verify_failure,
+                                run_id,
+                            ),
+                        )
+                    update_project_status(
+                        project_id,
+                        status=READY_STATUS,
+                        current_slice=slice_name,
+                        active_run_id=None,
+                        cooldown_until=finished_at + dt.timedelta(seconds=5),
+                        last_run_at=finished_at,
+                        last_error=transient_verify_failure,
+                        consecutive_failures=0,
+                        spider_tier=decision["tier"],
+                        spider_model=selected_model,
+                        spider_reason=decision_reason,
+                    )
+                elif verify_idle_timed_out:
                     msg = f"verify stalled without log output for {verify_result.idle_timeout_seconds}s"
                     error_class = "verify_stalled"
                 elif verify_timed_out:
@@ -21731,33 +22392,33 @@ async def execute_project_slice(
                 else:
                     msg = f"verify failed with exit {verify_rc}"
                     error_class = "verify"
-                with db() as conn:
-                    conn.execute(
-                        """
-                        UPDATE runs
-                        SET status='failed', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class=?, error_message=?
-                        WHERE id=?
-                        """,
-                        (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, error_class, msg, run_id),
+                    with db() as conn:
+                        conn.execute(
+                            """
+                            UPDATE runs
+                            SET status='failed', exit_code=?, verify_exit_code=?, finished_at=?, input_tokens=?, cached_input_tokens=?, output_tokens=?, estimated_cost_usd=?, error_class=?, error_message=?
+                            WHERE id=?
+                            """,
+                            (rc, verify_rc, iso(finished_at), input_tokens, cached_input_tokens, output_tokens, est_cost, error_class, msg, run_id),
+                        )
+                        row = conn.execute("SELECT consecutive_failures FROM projects WHERE id=?", (project_id,)).fetchone()
+                        failures = int((row["consecutive_failures"] if row else 0) + 1)
+                    max_failures = int(get_policy(config, "max_consecutive_failures", 3))
+                    status = "blocked" if failures >= max_failures else READY_STATUS
+                    cooldown = utc_now() + dt.timedelta(seconds=restart_cooldown_seconds)
+                    update_project_status(
+                        project_id,
+                        status=status,
+                        current_slice=slice_name,
+                        active_run_id=None,
+                        cooldown_until=cooldown,
+                        last_run_at=finished_at,
+                        last_error=msg,
+                        consecutive_failures=failures,
+                        spider_tier=decision["tier"],
+                        spider_model=selected_model,
+                        spider_reason=decision_reason,
                     )
-                    row = conn.execute("SELECT consecutive_failures FROM projects WHERE id=?", (project_id,)).fetchone()
-                    failures = int((row["consecutive_failures"] if row else 0) + 1)
-                max_failures = int(get_policy(config, "max_consecutive_failures", 3))
-                status = "blocked" if failures >= max_failures else READY_STATUS
-                cooldown = utc_now() + dt.timedelta(seconds=restart_cooldown_seconds)
-                update_project_status(
-                    project_id,
-                    status=status,
-                    current_slice=slice_name,
-                    active_run_id=None,
-                    cooldown_until=cooldown,
-                    last_run_at=finished_at,
-                    last_error=msg,
-                    consecutive_failures=failures,
-                    spider_tier=decision["tier"],
-                    spider_model=selected_model,
-                    spider_reason=decision_reason,
-                )
         else:
             failures = int(project_row["consecutive_failures"] or 0) + 1
             if rc_result.timed_out:
@@ -22128,7 +22789,7 @@ async def execute_project_slice(
                 if run_status in {"awaiting_review", "review_requested", "awaiting_pr"}
                 else "failed"
                 if run_status in {"failed", "review_failed", "blocked"}
-                else "awaiting_account"
+                else READY_STATUS
                 if run_status in {"rejected", "rate_limited"}
                 else WAITING_CAPACITY_STATUS
                 if run_status in {"abandoned", "paused"}
@@ -23183,7 +23844,10 @@ async def scheduler_loop() -> None:
                 str(row["id"] or "").strip()
                 for row in projects
                 if str(row["id"] or "").strip()
-                and (bool(row["active_run_id"]) or str(row["status"] or "").strip() in ACTIVE_RUN_STATUSES)
+                and project_has_live_runtime_commitment(
+                    str(row["id"] or "").strip(),
+                    int(row["active_run_id"] or 0) or None,
+                )
             }
             active_codex_projects = codex_active_project_ids(projects)
             reconcile_runtime_tasks(active_project_ids)
@@ -23900,7 +24564,11 @@ def full_status_payload() -> Dict[str, Any]:
             pr_row = normalized_pull_request_row(project_cfg, pr_rows.get(project["id"]))
             lifecycle_state = normalize_lifecycle_state(project_cfg.get("lifecycle"), "dispatchable")
             project_groups = project_group_defs(config, project["id"])
-            active_run = active_run_row(project.get("active_run_id"))
+            live_commitment = project_has_live_runtime_commitment(
+                str(project["id"] or "").strip(),
+                int(project.get("active_run_id") or 0) or None,
+            )
+            active_run = active_run_row(project.get("active_run_id")) if live_commitment else None
             active_run_account_alias = str(active_run.get("account_alias") or "").strip()
             active_run_backend, active_run_identity = run_backend_and_identity(
                 active_run_account_alias,
@@ -24340,7 +25008,11 @@ def compact_status_payload() -> Dict[str, Any]:
         queue = json.loads(row.get("queue_json") or "[]")
         queue_index = int(row.get("queue_index") or 0)
         project_cfg = get_project_cfg(config, project_id)
-        active_run = active_run_row(row.get("active_run_id"))
+        live_commitment = project_has_live_runtime_commitment(
+            project_id,
+            int(row.get("active_run_id") or 0) or None,
+        )
+        active_run = active_run_row(row.get("active_run_id")) if live_commitment else None
         active_alias = str((active_run or {}).get("account_alias") or "").strip()
         active_model = str((active_run or {}).get("model") or "").strip()
         active_backend, active_identity = run_backend_and_identity(active_alias, accounts_cfg)
@@ -24445,6 +25117,176 @@ def compact_status_payload() -> Dict[str, Any]:
     }
 
 
+def admin_status_lite_fallback_payload() -> Dict[str, Any]:
+    compact = compact_status_payload()
+    generated_at = str(compact.get("generated_at") or iso(utc_now()))
+    projects = list(compact.get("projects") or [])
+    active_workers = sum(
+        1
+        for project in projects
+        if str(project.get("runtime_status") or project.get("status") or "").strip().lower() in {"running", "starting", "verifying"}
+    )
+    readiness_summary = {
+        "counts": {
+            "active": active_workers,
+            "dispatch_pending": sum(
+                1 for project in projects if str(project.get("status") or "").strip().lower() == READY_STATUS
+            ),
+            "blocked": sum(
+                1 for project in projects if str(project.get("status") or "").strip().lower() in {"blocked", "review_failed"}
+            ),
+        },
+        "warning_count": 0,
+        "final_claim_ready": 0,
+    }
+    dispatch_pending = int(readiness_summary["counts"]["dispatch_pending"] or 0)
+    headline_eta = _fallback_status_lite_eta(
+        active_workers=active_workers,
+        dispatch_pending=dispatch_pending,
+        observed_at=parse_iso(generated_at),
+    )
+    queue_forecast = {
+        "now": {
+            "title": "Fallback queue forecast",
+            "remaining_human": headline_eta,
+            "project_id": "",
+        }
+    } if headline_eta else {}
+    public_status = {
+        "generated_at": generated_at,
+        "mission_snapshot": {"active_workers": active_workers, "headline_eta": headline_eta},
+        "queue_forecast": queue_forecast,
+        "capacity_forecast": {},
+        "blocker_forecast": {},
+        "deployment_posture": {},
+        "readiness_summary": readiness_summary,
+    }
+    return {
+        "generated_at": generated_at,
+        "headline_eta": headline_eta,
+        "public_status": public_status,
+        "cockpit": {
+            "worker_breakdown": {"active_workers": active_workers},
+            "queue_forecast": queue_forecast,
+            "mission_snapshot": {"headline_eta": headline_eta} if headline_eta else {},
+            "capacity_forecast": {},
+            "blocker_forecast": {},
+        },
+        "mission_board": {},
+        "queue_forecast": queue_forecast,
+        "capacity_forecast": {},
+        "blocker_forecast": {},
+        "projects": projects,
+        "groups": list(compact.get("groups") or []),
+    }
+
+
+def fallback_status_lite_eta(*, active_workers: int, dispatch_pending: int) -> str:
+    return _fallback_status_lite_eta(
+        active_workers=active_workers,
+        dispatch_pending=dispatch_pending,
+    )
+
+
+def _fallback_status_lite_eta_seconds(
+    *,
+    active_workers: int,
+    dispatch_pending: int,
+    observed_at: Optional[dt.datetime] = None,
+) -> int:
+    active_workers = max(0, int(active_workers or 0))
+    dispatch_pending = max(0, int(dispatch_pending or 0))
+    total_slices = active_workers + dispatch_pending
+    if total_slices <= 0:
+        _FALLBACK_STATUS_LITE_ETA_STATE.update(
+            {"signature": "", "remaining_seconds": 0, "observed_at": None}
+        )
+        return 0
+    active_minutes = active_workers * 35
+    queued_minutes = dispatch_pending * 20
+    baseline_seconds = max(
+        10 * 60,
+        int(math.ceil((active_minutes + queued_minutes) * 60 / max(active_workers, 1))),
+    )
+    current_at = observed_at or utc_now()
+    signature = f"{active_workers}:{dispatch_pending}"
+    cached_signature = str(_FALLBACK_STATUS_LITE_ETA_STATE.get("signature") or "")
+    cached_remaining = int(_FALLBACK_STATUS_LITE_ETA_STATE.get("remaining_seconds") or 0)
+    cached_observed_at = _FALLBACK_STATUS_LITE_ETA_STATE.get("observed_at")
+    if signature == cached_signature and isinstance(cached_observed_at, dt.datetime):
+        elapsed_seconds = max(0, int((current_at - cached_observed_at).total_seconds()))
+        remaining_seconds = max(10 * 60, min(baseline_seconds, cached_remaining - elapsed_seconds))
+    else:
+        remaining_seconds = baseline_seconds
+    _FALLBACK_STATUS_LITE_ETA_STATE.update(
+        {
+            "signature": signature,
+            "remaining_seconds": remaining_seconds,
+            "observed_at": current_at,
+        }
+    )
+    return remaining_seconds
+
+
+def _fallback_status_lite_eta(
+    *,
+    active_workers: int,
+    dispatch_pending: int,
+    observed_at: Optional[dt.datetime] = None,
+) -> str:
+    remaining_seconds = _fallback_status_lite_eta_seconds(
+        active_workers=active_workers,
+        dispatch_pending=dispatch_pending,
+        observed_at=observed_at,
+    )
+    if remaining_seconds <= 0:
+        return ""
+    return format_fallback_compact_duration(remaining_seconds)
+
+
+def format_compact_duration(seconds: int) -> str:
+    seconds = max(0, int(seconds or 0))
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    parts: List[str] = []
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes or hours:
+        parts.append(f"{minutes}m")
+    if not parts:
+        parts.append(f"{secs}s")
+    return " ".join(parts)
+
+
+def format_fallback_compact_duration(seconds: int) -> str:
+    seconds = max(0, int(seconds or 0))
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    parts: List[str] = []
+    if hours:
+        parts.append(f"{hours}h")
+        parts.append(f"{minutes}m")
+    elif minutes:
+        parts.append(f"{minutes}m")
+        parts.append(f"{secs}s")
+    else:
+        parts.append(f"{secs}s")
+    return " ".join(parts[:2])
+
+
+def load_admin_status_lite_compat() -> Dict[str, Any]:
+    target_url = f"{ADMIN_URL.rstrip('/')}/api/admin/status-lite"
+    try:
+        request = urllib.request.Request(target_url, method="GET")
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        pass
+    return admin_status_lite_fallback_payload()
+
+
 @app.get("/api/status")
 def api_status() -> Dict[str, Any]:
     return compact_status_payload()
@@ -24453,6 +25295,11 @@ def api_status() -> Dict[str, Any]:
 @app.get("/api/status/full")
 def api_status_full() -> Dict[str, Any]:
     return full_status_payload()
+
+
+@app.get("/api/admin/status-lite")
+def api_admin_status_lite_compat() -> Dict[str, Any]:
+    return load_admin_status_lite_compat()
 
 
 @app.get("/api/internal/participant-lanes")
@@ -25061,6 +25908,19 @@ def api_retry_project(project_id: str) -> Dict[str, Any]:
         row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
     if not row:
         raise HTTPException(404, f"unknown project: {project_id}")
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE work_packages
+               SET status='ready',
+                   runtime_state='idle',
+                   updated_at=?
+             WHERE project_id=?
+               AND status IN ('blocked', 'failed', 'review_failed', 'rate_limited', 'rejected')
+               AND runtime_state='idle'
+            """,
+            (iso(now), project_id),
+        )
     update_project_status(
         project_id,
         status=READY_STATUS,
@@ -25108,6 +25968,7 @@ def api_run_project_now(project_id: str) -> Dict[str, Any]:
         if not planned:
             continue
         if launch_planned_project_task(config, planned):
+            sync_project_progress_from_packages(project_id)
             return {
                 "ok": True,
                 "project_id": project_id,
