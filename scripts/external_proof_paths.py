@@ -116,6 +116,58 @@ def _release_channel_has_tuple_coverage(payload: object) -> bool:
     return isinstance(coverage, dict)
 
 
+def _release_channel_missing_platform_head_pairs(payload: object) -> set[str]:
+    if not isinstance(payload, dict):
+        return set()
+    coverage = payload.get("desktopTupleCoverage")
+    if not isinstance(coverage, dict):
+        return set()
+    rows = coverage.get("missingRequiredPlatformHeadPairs")
+    if not isinstance(rows, list):
+        return set()
+    pairs: set[str] = set()
+    for row in rows:
+        raw = str(row or "").strip().lower()
+        if raw and ":" in raw:
+            pairs.add(raw)
+    return pairs
+
+
+def _release_channel_installer_platform_head_pairs(payload: object) -> set[str]:
+    if not isinstance(payload, dict):
+        return set()
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        return set()
+    pairs: set[str] = set()
+    for row in artifacts:
+        if not isinstance(row, dict):
+            continue
+        kind = str(row.get("kind") or "").strip().lower()
+        if kind != "installer":
+            continue
+        head = str(row.get("head") or "").strip().lower()
+        platform = str(row.get("platform") or "").strip().lower()
+        if head and platform:
+            pairs.add(f"{head}:{platform}")
+    return pairs
+
+
+def _candidate_materially_closes_registry_gap(registry_payload: object, candidate_payload: object) -> bool:
+    registry_missing_pairs = _release_channel_missing_platform_head_pairs(registry_payload)
+    if not registry_missing_pairs:
+        return False
+    candidate_missing_pairs = _release_channel_missing_platform_head_pairs(candidate_payload)
+    candidate_pairs = _release_channel_installer_platform_head_pairs(candidate_payload)
+    registry_pairs = _release_channel_installer_platform_head_pairs(registry_payload)
+    newly_closed_pairs = registry_missing_pairs & candidate_pairs
+    if not newly_closed_pairs:
+        return False
+    if registry_missing_pairs & candidate_missing_pairs:
+        return False
+    return not newly_closed_pairs.issubset(registry_pairs)
+
+
 def _release_channel_authority_rank(candidate: Path, payload: object) -> int:
     if not _release_channel_has_tuple_coverage(payload):
         return 0
@@ -224,9 +276,6 @@ def resolve_release_channel_path(*, candidates: tuple[Path, ...] | None = None) 
                 int(candidate.get("status_rank") or 0),
                 int(candidate.get("artifactful") or 0),
             )
-            if _candidate_can_supersede_registry(candidate_path) and candidate_quality > registry_quality:
-                stale_registry_paths.add(info["path"])
-                break
             registry_generated_at_ts = float(info.get("generated_at_ts") or float("-inf"))
             candidate_generated_at_ts = float(candidate.get("generated_at_ts") or float("-inf"))
             registry_is_stale = (
@@ -240,6 +289,14 @@ def resolve_release_channel_path(*, candidates: tuple[Path, ...] | None = None) 
                 and candidate_generated_at_ts > registry_generated_at_ts
                 and isinstance(candidate_path, Path)
                 and _candidate_is_ui_docker_manifest(candidate_path)
+            ):
+                stale_registry_paths.add(info["path"])
+                break
+            if (
+                candidate_generated_at_ts > registry_generated_at_ts
+                and isinstance(candidate_path, Path)
+                and _candidate_can_supersede_registry(candidate_path)
+                and _candidate_materially_closes_registry_gap(info.get("payload"), candidate.get("payload"))
             ):
                 stale_registry_paths.add(info["path"])
                 break

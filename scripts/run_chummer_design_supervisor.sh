@@ -44,6 +44,48 @@ project_contract_shard_worker_model_groups_raw=""
 project_contract_configured_shard_count_raw=""
 project_contract_primary_probe_shard=""
 
+runtime_env_file_first_value() {
+  local name="${1:-}"
+  local default="${2:-}"
+  local candidate=""
+  local line=""
+  local key=""
+  local value=""
+  local resolved=""
+  for candidate in \
+    "${workspace_root}/runtime.env" \
+    "${workspace_root}/runtime.ea.env" \
+    "${workspace_root}/.env" \
+    "/docker/.env" \
+    "/docker/EA/.env" \
+    "/docker/chummer5a/.env" \
+    "/docker/chummer5a/.env.providers"; do
+    [[ -f "$candidate" ]] || continue
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line="${line#"${line%%[![:space:]]*}"}"
+      line="${line%"${line##*[![:space:]]}"}"
+      [[ -n "$line" ]] || continue
+      [[ "$line" == \#* ]] && continue
+      [[ "$line" == export\ * ]] && line="${line#export }"
+      [[ "$line" == *=* ]] || continue
+      key="${line%%=*}"
+      value="${line#*=}"
+      key="${key#"${key%%[![:space:]]*}"}"
+      key="${key%"${key##*[![:space:]]}"}"
+      [[ "$key" == "$name" ]] || continue
+      resolved="${value#"${value%%[![:space:]]*}"}"
+      resolved="${resolved%"${resolved##*[![:space:]]}"}"
+      resolved="${resolved%\"}"
+      resolved="${resolved#\"}"
+      resolved="${resolved%\'}"
+      resolved="${resolved#\'}"
+      printf '%s\n' "$resolved"
+      return 0
+    done < "$candidate"
+  done
+  printf '%s\n' "${!name:-$default}"
+}
+
 load_project_runtime_contract_defaults() {
   local config_path="${1:-}"
   if [[ -z "$config_path" || ! -f "$config_path" ]]; then
@@ -238,7 +280,7 @@ if [[ -n "$project_contract_defaults" ]]; then
 fi
 
 state_root_base="${CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT:-}"
-parallel_shards_raw="${CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS:-1}"
+parallel_shards_raw="$(runtime_env_file_first_value CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS "${CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS:-1}")"
 background_mode="$(printf '%s' "${CHUMMER_DESIGN_SUPERVISOR_BACKGROUND_MODE:-0}" | tr '[:upper:]' '[:lower:]')"
 shard_owner_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS:-${shard_owner_groups_raw:-}}"
 shard_focus_profile_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_PROFILE_GROUPS:-${shard_focus_profile_groups_raw:-}}"
@@ -255,27 +297,68 @@ shard_start_stagger_seconds="${CHUMMER_DESIGN_SUPERVISOR_SHARD_START_STAGGER_SEC
 frontier_derive_timeout_seconds="${CHUMMER_DESIGN_SUPERVISOR_FRONTIER_DERIVE_TIMEOUT_SECONDS:-15}"
 frontier_derive_mode="$(printf '%s' "${CHUMMER_DESIGN_SUPERVISOR_FRONTIER_DERIVE_MODE:-auto}" | tr '[:upper:]' '[:lower:]')"
 
+single_shard_state_subdir_enabled() {
+  case "$(printf '%s' "${CHUMMER_DESIGN_SUPERVISOR_SINGLE_SHARD_STATE_SUBDIR:-0}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 openai_escape_single_shard_enabled() {
   python3 - <<'PY'
 import json
 import os
 import urllib.request
+from pathlib import Path
 
-disable = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_DISABLE_OPENAI_ESCAPE", "0") or "0").strip().lower()
+RUNTIME_ENV_CANDIDATES = (
+    Path("/docker/fleet/runtime.env"),
+    Path("/docker/fleet/runtime.ea.env"),
+    Path("/docker/fleet/.env"),
+    Path("/docker/.env"),
+    Path("/docker/EA/.env"),
+    Path("/docker/chummer5a/.env"),
+    Path("/docker/chummer5a/.env.providers"),
+)
+
+def runtime_env_file_first(name: str, default: str = "") -> str:
+    for candidate in RUNTIME_ENV_CANDIDATES:
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        try:
+            lines = candidate.read_text(encoding="utf-8-sig", errors="ignore").splitlines()
+        except OSError:
+            continue
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[7:].strip()
+            key, value = line.split("=", 1)
+            if key.strip() != name:
+                continue
+            resolved = value.strip().strip("'").strip('"')
+            return resolved
+    return str(os.environ.get(name, default) or "").strip()
+
+disable = runtime_env_file_first("CHUMMER_DESIGN_SUPERVISOR_DISABLE_OPENAI_ESCAPE", "0").strip().lower()
 if disable in {"1", "true", "yes", "on"}:
     raise SystemExit(1)
 aliases = [
     item.strip()
     for item in str(
-        os.environ.get("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", "")
-        or os.environ.get("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES", "")
+        runtime_env_file_first("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", "")
+        or runtime_env_file_first("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES", "")
         or ""
     ).replace(";", ",").split(",")
     if item.strip()
 ]
 models = [
     item.strip()
-    for item in str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_MODELS", "") or "").replace(";", ",").split(",")
+    for item in str(runtime_env_file_first("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_MODELS", "") or "").replace(";", ",").split(",")
     if item.strip()
 ]
 if not aliases or not models:
@@ -312,33 +395,43 @@ PY
 }
 
 apply_openai_escape_single_shard_defaults() {
-  local escape_aliases="${CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES:-}"
   local escape_models="${CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_MODELS:-}"
+  local codexliz_bin="/docker/fleet/scripts/codex-shims/codexliz"
+  local escape_worker_bin="codex"
+  local escape_worker_lane=""
   local first_model=""
   first_model="$(printf '%s' "$escape_models" | tr ';' ',' | awk -F',' '{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1); print $1}')"
   if [[ -z "${first_model//[[:space:]]/}" ]]; then
     first_model="gpt-5.4"
   fi
-  if [[ -z "${escape_aliases//[[:space:]]/}" ]]; then
-    escape_aliases="acct-chatgpt-archon"
+  if [[ -x "$codexliz_bin" ]]; then
+    escape_worker_bin="$codexliz_bin"
+    escape_worker_lane="core"
+    first_model="${CODEXLIZ_MODEL:-qwen3.5:122b}"
   fi
   parallel_shards_raw=1
   parallel_shards=1
-  dynamic_account_routing_mode="pinned"
-  pinned_account_aliases_mode="1"
-  export CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN="codex"
-  export CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE=""
+  dynamic_account_routing_mode="auto"
+  pinned_account_aliases_mode="0"
+  export CHUMMER_DESIGN_SUPERVISOR_SINGLE_SHARD_STATE_SUBDIR=1
+  export CHUMMER_DESIGN_SUPERVISOR_DISABLE_OPENAI_ESCAPE=1
+  export CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN="$escape_worker_bin"
+  export CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE="$escape_worker_lane"
   export CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL="$first_model"
-  export CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES="$escape_aliases"
+  export CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES=""
   export CHUMMER_DESIGN_SUPERVISOR_FALLBACK_LANES=""
-  shard_worker_bins=("codex")
-  shard_worker_lanes=("")
+  shard_worker_bins=("$escape_worker_bin")
+  shard_worker_lanes=("$escape_worker_lane")
   shard_worker_models=("$first_model")
-  shard_account_groups=("$escape_aliases")
+  shard_account_groups=("")
   shard_owner_groups=("fleet")
   shard_focus_profile_groups=("top_flagship_grade")
-  shard_focus_text_groups=("openai escape flagship recovery")
-  printf 'run_chummer_design_supervisor: codexea survival unroutable; collapsing to one pinned OpenAI escape shard (%s / %s).\n' "$escape_aliases" "$first_model" >&2
+  shard_focus_text_groups=("provider-local codexliz flagship recovery")
+  if [[ "$escape_worker_bin" == "$codexliz_bin" ]]; then
+    printf 'run_chummer_design_supervisor: codexea survival unroutable; collapsing to one provider-local codexliz recovery shard (%s / %s).\n' "$escape_worker_lane" "$first_model" >&2
+  else
+    printf 'run_chummer_design_supervisor: codexea survival unroutable; collapsing to one provider-local recovery shard (%s).\n' "$first_model" >&2
+  fi
 }
 
 case "$(printf '%s' "${CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS:-0}" | tr '[:upper:]' '[:lower:]')" in
@@ -591,7 +684,7 @@ resolve_active_shard_indexes() {
   if (( configured <= 0 )); then
     configured="$parallel_shards"
   fi
-  if (( parallel_shards < configured )); then
+  if (( parallel_shards < configured )) && ! is_truthy_value "${CHUMMER_DESIGN_SUPERVISOR_PREFER_FULL_EA_LANES:-0}"; then
     primary_index="$(primary_probe_shard_index)"
     append_unique_shard_index "$2" "$primary_index" "$configured"
     for ((idx = 1; idx <= configured; idx++)); do
@@ -911,7 +1004,7 @@ build_loop_args() {
   dest=("${common_args[@]}")
   if [[ -n "$state_root_base" ]]; then
     shard_state_root="$state_root_base"
-    if (( parallel_shards > 1 )); then
+    if (( parallel_shards > 1 )) || single_shard_state_subdir_enabled; then
       shard_state_root="${state_root_base}/shard-${shard_index}"
       mkdir -p "$shard_state_root"
     fi
@@ -952,7 +1045,7 @@ detached_log_path() {
   local shard_index="$1"
   if [[ -n "$state_root_base" ]]; then
     local shard_state_root="$state_root_base"
-    if (( parallel_shards > 1 )); then
+    if (( parallel_shards > 1 )) || single_shard_state_subdir_enabled; then
       shard_state_root="${state_root_base}/shard-${shard_index}"
     fi
     mkdir -p "$shard_state_root"
@@ -1176,7 +1269,7 @@ reset_shard_runtime_state() {
     return 0
   fi
   local shard_state_root="$state_root_base"
-  if (( parallel_shards > 1 )); then
+  if (( parallel_shards > 1 )) || single_shard_state_subdir_enabled; then
     shard_state_root="${state_root_base}/shard-${shard_index}"
   fi
   rm -f \

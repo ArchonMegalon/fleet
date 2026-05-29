@@ -201,6 +201,49 @@ def _write_external_proof_bundle(
     )
     post_capture.chmod(0o755)
     for host in ("linux", "macos", "windows"):
+        prepare_script = commands_dir / f"prepare-{host}-proof-command-pack.sh"
+        prepare_script.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            'ARCHIVE_PATH="${1:-bundle.tgz}"\n'
+            'SHA_PATH="${2:-bundle.tgz.sha256}"\n'
+            'OUTPUT_DIR="${3:-.}"\n'
+            'test -s "$ARCHIVE_PATH"\n'
+            'test -s "$SHA_PATH"\n'
+            "python3 -c 'import os, pathlib, shutil, tarfile\n"
+            "archive=pathlib.Path(os.environ[\"ARCHIVE_PATH\"])\n"
+            "output_dir=pathlib.Path(os.environ[\"OUTPUT_DIR\"])\n"
+            "output_dir.mkdir(parents=True, exist_ok=True)\n"
+            "output_dir_resolved=output_dir.resolve()\n"
+            "bad=[]\n"
+            "copied=[]\n"
+            "with tarfile.open(archive, \"r:gz\") as payload:\n"
+            "    for member in payload.getmembers():\n"
+            "        pure=pathlib.PurePosixPath(member.name)\n"
+            "        parts=tuple(part for part in pure.parts if part not in (\"\", \".\"))\n"
+            "        if member.isdir():\n"
+            "            continue\n"
+            "        if member.name.startswith(\"/\") or \"..\" in parts or not member.isfile():\n"
+            "            bad.append(member.name)\n"
+            "            continue\n"
+            "        destination=output_dir.joinpath(*parts)\n"
+            "        destination_parent=destination.parent.resolve()\n"
+            "        if output_dir_resolved != destination_parent and output_dir_resolved not in destination_parent.parents:\n"
+            "            bad.append(member.name)\n"
+            "            continue\n"
+            "        source=payload.extractfile(member)\n"
+            "        if source is None:\n"
+            "            bad.append(member.name)\n"
+            "            continue\n"
+            "        destination.parent.mkdir(parents=True, exist_ok=True)\n"
+            "        with source, destination.open(\"wb\") as handle:\n"
+            "            shutil.copyfileobj(source, handle)\n"
+            "        copied.append(\"/\".join(parts))\n"
+            "assert not bad, \"external-proof-command-pack-member-unsafe:\" + \",\".join(sorted(set(bad)))\n"
+            "assert copied, \"external-proof-command-pack-empty:\" + str(archive)'\n",
+            encoding="utf-8",
+        )
+        prepare_script.chmod(0o755)
         for prefix in ("preflight", "capture", "validate", "bundle"):
             script = commands_dir / f"{prefix}-{host}-proof.sh"
             script.write_text(
@@ -214,6 +257,13 @@ def _write_external_proof_bundle(
             encoding="utf-8",
         )
         host_lane.chmod(0o755)
+    prepare_windows_ps1 = commands_dir / "prepare-windows-proof-command-pack.ps1"
+    prepare_windows_ps1.write_text(
+        "$ErrorActionPreference = 'Stop'\n"
+        "Set-StrictMode -Version Latest\n"
+        "bash -lc 'ARCHIVE_PATH=\"${1:-bundle.tgz}\" && SHA_PATH=\"${2:-bundle.tgz.sha256}\" && OUTPUT_DIR=\"${3:-.}\" && export ARCHIVE_PATH SHA_PATH OUTPUT_DIR && test -s \"$ARCHIVE_PATH\" && test -s \"$SHA_PATH\" && python3 -c '\\''import os, pathlib, shutil, tarfile\narchive=pathlib.Path(os.environ[\"ARCHIVE_PATH\"])\noutput_dir=pathlib.Path(os.environ[\"OUTPUT_DIR\"])\noutput_dir.mkdir(parents=True, exist_ok=True)\noutput_dir_resolved=output_dir.resolve()\nbad=[]\ncopied=[]\nwith tarfile.open(archive, \"r:gz\") as payload:\n    for member in payload.getmembers():\n        pure=pathlib.PurePosixPath(member.name)\n        parts=tuple(part for part in pure.parts if part not in (\"\", \".\"))\n        if member.isdir():\n            continue\n        if member.name.startswith(\"/\") or \"..\" in parts or not member.isfile():\n            bad.append(member.name)\n            continue\n        destination=output_dir.joinpath(*parts)\n        destination_parent=destination.parent.resolve()\n        if output_dir_resolved != destination_parent and output_dir_resolved not in destination_parent.parents:\n            bad.append(member.name)\n            continue\n        source=payload.extractfile(member)\n        if source is None:\n            bad.append(member.name)\n            continue\n        destination.parent.mkdir(parents=True, exist_ok=True)\n        with source, destination.open(\"wb\") as handle:\n            shutil.copyfileobj(source, handle)\n        copied.append(\"/\".join(parts))\nassert not bad, \"external-proof-command-pack-member-unsafe:\" + \",\".join(sorted(set(bad)))\nassert copied, \"external-proof-command-pack-empty:\" + str(archive)'\\''' \n",
+        encoding="utf-8",
+    )
     finalize = commands_dir / "finalize-external-host-proof.sh"
     finalize.write_text(
         "\n".join(
@@ -254,6 +304,7 @@ def _write_external_proof_bundle(
                 "- `./capture-linux-proof.sh`",
                 "- `./validate-linux-proof.sh`",
                 "- `./bundle-linux-proof.sh`",
+                "- `./prepare-linux-proof-command-pack.sh`",
                 "",
                 "### Resume Host Lane: macos",
                 "",
@@ -261,6 +312,7 @@ def _write_external_proof_bundle(
                 "- `./capture-macos-proof.sh`",
                 "- `./validate-macos-proof.sh`",
                 "- `./bundle-macos-proof.sh`",
+                "- `./prepare-macos-proof-command-pack.sh`",
                 "",
                 "### Resume Host Lane: windows",
                 "",
@@ -268,6 +320,8 @@ def _write_external_proof_bundle(
                 "- `./capture-windows-proof.sh`",
                 "- `./validate-windows-proof.sh`",
                 "- `./bundle-windows-proof.sh`",
+                "- `./prepare-windows-proof-command-pack.sh`",
+                "- `./prepare-windows-proof-command-pack.ps1`",
                 "",
                 "## After Host Proof Capture",
                 "",

@@ -479,6 +479,8 @@ def _load_next90_queue_staging_queue(project_cfg: Dict[str, Any], source_cfg: Di
 
 
 def _apply_queue_source(project_cfg: Dict[str, Any], queue: List[Any], source_cfg: Dict[str, Any]) -> List[Any]:
+    if source_cfg.get("publish_queue_truth") is False:
+        return list(queue)
     queue = [item for item in queue if _queue_entry_active(item)]
     fallback_only_if_empty = bool(source_cfg.get("fallback_only_if_empty"))
     if fallback_only_if_empty and queue:

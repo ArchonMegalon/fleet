@@ -25,6 +25,35 @@ APP_PORT = int(os.environ.get("APP_PORT", "8094"))
 APP_TITLE = "Codex Fleet Quartermaster"
 
 
+def _default_state_root() -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_STATE_ROOT", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    candidates = [
+        FLEET_MOUNT_ROOT / "state",
+        QUARTERMASTER_DIR.parent / "state",
+        pathlib.Path("/var/lib/codex-fleet/state"),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+def _default_admin_url() -> str:
+    configured = str(os.environ.get("FLEET_ADMIN_URL", "") or "").strip()
+    if configured:
+        return configured.rstrip("/")
+    candidates = [
+        "http://127.0.0.1:18092",
+        "http://fleet-admin:8092",
+    ]
+    for candidate in candidates:
+        if candidate.startswith("http://127.0.0.1"):
+            return candidate
+    return candidates[0]
+
+
 def _default_config_root() -> pathlib.Path:
     configured = str(os.environ.get("FLEET_CONFIG_ROOT", "") or "").strip()
     candidates: List[pathlib.Path] = []
@@ -45,8 +74,8 @@ def _default_config_root() -> pathlib.Path:
 
 CONFIG_ROOT = _default_config_root()
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", str(CONFIG_ROOT / "fleet.yaml")))
-STATE_ROOT = pathlib.Path(os.environ.get("FLEET_STATE_ROOT", "/var/lib/codex-fleet/state"))
-ADMIN_URL = str(os.environ.get("FLEET_ADMIN_URL", "http://fleet-admin:8092") or "http://fleet-admin:8092").rstrip("/")
+STATE_ROOT = _default_state_root()
+ADMIN_URL = _default_admin_url()
 OPERATOR_PASSWORD = str(os.environ.get("FLEET_OPERATOR_PASSWORD", "") or "").strip()
 ADMIN_STATUS_TIMEOUT_SECONDS = max(10, int(os.environ.get("FLEET_ADMIN_STATUS_TIMEOUT_SECONDS", "60") or "60"))
 PLAN_CACHE_PATH = STATE_ROOT / "quartermaster" / "latest_capacity_plan.json"

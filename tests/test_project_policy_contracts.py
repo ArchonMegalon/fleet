@@ -146,7 +146,8 @@ def test_launcher_cold_restart_policy_is_reproducible_from_project_contract() ->
     assert lines["worker_lane"] == "core"
     assert lines["worker_model"] == "ea-coder-hard-batch"
     assert lines["fallback_lanes"] == "core_rescue"
-    assert "codexliz" not in lines["resolved_shard_worker_bins"]
+    resolved_bins = lines["resolved_shard_worker_bins"].split(";")
+    assert resolved_bins.count("/docker/fleet/scripts/codex-shims/codexliz") == 1
     assert "fleet,chummer6-design,chummer6-ui" in lines["shard_owner_groups"]
     assert lines["selected_shard_indexes"] == "1,2,3,4,5,6,7,8,9,10,11,12,13,14"
 
@@ -161,7 +162,7 @@ def test_active_shards_manifest_includes_audit_shard() -> None:
         Path("/docker/fleet/state/chummer_design_supervisor/active_shards.json").read_text(encoding="utf-8")
     )
     active_shards = manifest.get("active_shards") or []
-    assert manifest.get("configured_shard_count") in (None, 14))
+    assert manifest.get("configured_shard_count") in (None, 20)
     assert len(active_shards) >= 1
 
     shard_names = [str(shard.get("name")) for shard in active_shards if shard.get("name")]
@@ -170,6 +171,7 @@ def test_active_shards_manifest_includes_audit_shard() -> None:
     matched = [shard for shard in active_shards if shard.get("name") == "shard-14"]
     assert len(matched) == 1
     assert matched[0].get("worker_lane") == "audit_shard"
+    assert matched[0].get("worker_bin") == "/docker/fleet/scripts/codex-shims/codexliz"
 
 
 def test_launcher_reduced_parallel_width_selects_ea_shards_in_order() -> None:
@@ -192,13 +194,15 @@ def test_launcher_reduced_parallel_width_selects_ea_shards_in_order() -> None:
     lines = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
 
     assert lines["parallel_shards"] == "2"
-    assert lines["selected_shard_indexes"] == "1,2"
+    assert lines["selected_shard_indexes"] == "1,14"
     resolved_bins = lines["resolved_shard_worker_bins"].split(";")
     resolved_lanes = lines["resolved_shard_worker_lanes"].split(";")
     resolved_models = lines["resolved_shard_worker_models"].split(";")
-    assert all(value != "/docker/fleet/scripts/codex-shims/codexliz" for value in resolved_bins)
+    assert len(resolved_bins) >= 14
+    assert resolved_bins[13] == "/docker/fleet/scripts/codex-shims/codexliz"
     assert resolved_lanes[0] == "groundwork"
     assert resolved_lanes[1] == "repair"
+    assert resolved_lanes[13] == "audit_shard"
     assert resolved_models[0] == "ea-groundwork-gemini"
     assert resolved_models[1] == "ea-coder-fast"
 

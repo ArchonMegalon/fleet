@@ -1,6 +1,6 @@
 # Next Session Handoff
 
-Last updated: 2026-04-26, Europe/Vienna.
+Last updated: 2026-05-17, Europe/Vienna.
 
 ## Operator Instructions
 
@@ -12,37 +12,25 @@ Last updated: 2026-04-26, Europe/Vienna.
 
 ## Current Objective
 
-The design and Fleet have been hardened so Chummer6 flagship readiness now requires a separate user-journey tester audit. The missing UI-side artifact is intentionally a hard gate:
+The old UI-side tester-audit blocker is closed. The current blockers have shifted:
 
-`/docker/chummercomplete/chummer6-ui/.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json`
+- `/docker/chummercomplete/chummer6-ui/.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json` exists and reports `status: pass`.
+- Fleet flagship readiness still warns on `fleet_and_operator_loop`.
+- The live reason is runtime healing, not missing desktop proof:
+  - `fleet-auditor` is in `escalation_required`
+  - runtime-healing summary is `alert_state: action_needed`
+- The routed local journey blocker is now stale mobile proof for `install_claim_restore_continue`, not desktop UI.
 
-That audit must be created by a separate tester shard or equivalent independent tester process that runs the promoted Linux desktop binary like a real user, does not use internal APIs, captures visible evidence, and reports blocking findings instead of fixing them.
-
-Operator watcher note (high-priority): the dedicated tester shard is now explicit as `shard-14` in fleet topology. Treat this shard as non-optional in health checks.
-Verify in the operator/runtime surface:
-
-- `/docker/fleet/state/chummer_design_supervisor/active_shards.json` contains `shard-14` with `worker_lane=audit_shard`.
-- `/docker/fleet/config/projects/fleet.yaml` remains aligned with `shard_count: 14` and `parallel_shards: 14`.
+Operator watcher note (high-priority): the dedicated tester shard is still explicit as `shard-14` in fleet topology. Treat this shard as non-optional in health checks whenever Fleet is running.
 
 ## Local Commits Not Yet Pushed
 
-Design repo:
+These older push notes are stale.
 
-- Repo: `/docker/chummercomplete/chummer-design`
-- Branch: `fleet/design`
-- Commit: `5fe3b29 Require desktop user journey tester audit`
-- Last checked status: clean.
-- Suggested push if continuing the prior publish request:
-  `git push origin HEAD:main`
+- `/docker/fleet`: `git rev-list --left-right --count origin/main...HEAD` currently reports `4 3`
+- `/docker/chummercomplete/chummer-design`: `git rev-list --left-right --count origin/main...HEAD` currently reports `47 67`
 
-Fleet repo:
-
-- Repo: `/docker/fleet`
-- Branch: `main`
-- Commit: `67e9ecd0 Gate readiness on user journey tester audit`
-- Status: `main` is ahead of `origin/main` by 1 commit, with pre-existing generated dirty files still present.
-- Suggested push if continuing the prior publish request:
-  `git push origin main`
+Do not assume the earlier single-commit push instructions are still valid. Re-evaluate branch and landing intent before pushing anything.
 
 ## Design Changes Made
 
@@ -118,14 +106,19 @@ python3 scripts/materialize_flagship_product_readiness.py \
   --ui-user-journey-tester-audit /docker/chummercomplete/chummer6-ui/.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json
 ```
 
-Observed:
+Observed then:
 
 - Overall readiness: `fail; ready=7, warning=0, missing=1`
 - `desktop_client`: `missing`
 - Missing all five required tester workflows.
 - Missing discipline evidence: `linux_binary_under_test`, `used_internal_apis_false`, `fix_shard_separate_true`.
 
-This is expected until the UI repo produces a valid `USER_JOURNEY_TESTER_AUDIT.generated.json`.
+That observation is no longer current. As of 2026-05-17:
+
+- `/docker/chummercomplete/chummer6-ui/.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json` exists
+- the artifact reports `status: pass`
+- all five required workflows are present and passing
+- Fleet readiness now fails on `fleet_and_operator_loop`, not the tester audit
 
 ## Mirror Publication State
 
@@ -160,38 +153,32 @@ Some sibling repos have unrelated dirty generated/source work. If committing mir
 
 Treat these as active work from the current or parallel UI effort. Do not clean them without explicit instruction.
 
-## UI Bugs Still Needing Work
+## Current Gaps
 
-The user reported two concrete user-facing failures:
+Current audited gaps, in priority order:
 
-- Master Index search text field loses focus on every keyboard letter.
-- `File > New Character` writes/logs that something initialized, but no visible workspace appears.
-
-These should be fixed in `/docker/chummercomplete/chummer6-ui`, then verified through visible desktop workflow evidence. The new tester audit should catch both:
-
-- `master_index_search_focus_stability`
-- `file_new_character_visible_workspace`
+1. Fleet operator/runtime healing
+   - `fleet-auditor` is escalated and keeps `fleet_and_operator_loop` at warning.
+   - See `.codex-studio/published/STATUS_PLANE.generated.yaml`.
+2. Mobile journey proof freshness
+   - `install_claim_restore_continue` is locally blocked by stale `/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json`.
+3. Tester-audit evidence quality
+   - The user-journey tester artifact passes structurally, but the stored `.png` files are tiny placeholder-like payloads rather than credible screenshot evidence.
+4. Operator handoff truth
+   - This file had drifted badly enough to send work toward already-closed UI blockers.
 
 ## Next Concrete Steps
 
-1. If the user wants persistence first, push the local commits:
-   - `/docker/chummercomplete/chummer-design`: `git push origin HEAD:main`
-   - `/docker/fleet`: `git push origin main`
-2. Before normalizing queue intake, confirm live shard health in operator view includes:
-   - active shard-14 presence and lane (`audit_shard`).
-   - shard health age under policy max (`health_max_age_seconds`) and non-stale health in `/api/cockpit/operator-surface`.
-2. Commit/push mirror-only `.codex-design/product` updates in sibling repos as needed, while avoiding unrelated dirty files.
-3. In `chummer6-ui`, fix the Master Index focus loss and invisible New Character workspace.
-4. Build/run the Linux desktop binary and create `USER_JOURNEY_TESTER_AUDIT.generated.json` with:
-   - `status: pass`
-   - `evidence.linux_binary_under_test: true`
-   - `evidence.used_internal_apis: false`
-   - `evidence.fix_shard_separate: true`
-   - `evidence.open_blocking_findings_count: 0`
-   - all five required workflow IDs
-   - at least two screenshot paths per workflow
-5. Re-run Fleet readiness with the audit path and verify `desktop_client` no longer fails because of the tester audit.
-6. Only after green evidence, continue broader flagship parity and Karma Forge/LTD feedback-loop work.
+1. Repair Fleet runtime health first.
+   - Inspect why `fleet-auditor` is stuck in `escalation_required`.
+   - Clear the runtime-healing `action_needed` state so `fleet_and_operator_loop` can return to ready.
+2. Refresh the stale mobile proof.
+   - Regenerate `/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json`.
+   - Re-run Fleet readiness and confirm `install_claim_restore_continue` no longer contributes a local blocker.
+3. Tighten tester-audit evidence quality.
+   - Treat the current placeholder-like PNG payloads as insufficient for adversarial screenshot proof.
+   - Replace them with actual captured screenshots or strengthen the validator to reject non-image placeholder files.
+4. Re-run the focused Fleet readiness probe and confirm the only remaining warnings, if any, are current and intentional.
 
 ## Useful Commands
 
@@ -211,12 +198,12 @@ python3 -m py_compile scripts/materialize_flagship_product_readiness.py scripts/
 pytest -q tests/test_materialize_flagship_product_readiness.py -k "user_journey_tester_audit or recovers_windows_gate_from_aggregate_executable_proof"
 ```
 
-Probe the tester audit gate without changing published artifacts:
+Probe the current Fleet readiness state without changing published artifacts:
 
 ```bash
 cd /docker/fleet
 python3 scripts/materialize_flagship_product_readiness.py \
-  --out /tmp/FLAGSHIP_PRODUCT_READINESS.user-journey-probe.json \
+  --out /tmp/FLAGSHIP_PRODUCT_READINESS.audit.json \
   --mirror-out "" \
   --ui-user-journey-tester-audit /docker/chummercomplete/chummer6-ui/.codex-studio/published/USER_JOURNEY_TESTER_AUDIT.generated.json
 ```

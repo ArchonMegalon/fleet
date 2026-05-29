@@ -227,6 +227,14 @@ def _runbook_contains_resume_lane(markdown: str, *, host: str) -> bool:
     )
 
 
+def _runbook_contains_prepare_command_pack(markdown: str, *, host: str) -> bool:
+    host_token = _normalized_token(host).lower()
+    return (
+        f"prepare-{host_token}-proof-command-pack.sh" in markdown
+        or f"prepare-{host_token}-proof-command-pack.ps1" in markdown
+    )
+
+
 def _command_bundle_fingerprint(commands_dir: Path) -> dict[str, Any]:
     files: list[dict[str, Any]] = []
     aggregate = hashlib.sha256()
@@ -2070,6 +2078,11 @@ def main() -> int:
                         "external proof runbook is missing zero-backlog resume lane commands for host: "
                         + host
                     )
+                if not _runbook_contains_prepare_command_pack(runbook_body, host=host):
+                    failures.append(
+                        "external proof runbook is missing zero-backlog command-pack prepare reference for host: "
+                        + host
+                    )
             if "## After Host Proof Capture" not in runbook_body:
                 failures.append("external proof runbook is missing zero-backlog finalize section")
             if "finalize-external-host-proof.sh" not in runbook_body:
@@ -2198,36 +2211,42 @@ def main() -> int:
                             )
                 for host in required_hosts:
                     host_token = _normalize_host_token(host)
+                    prepare_pack_script = external_proof_commands_dir / f"prepare-{host_token}-proof-command-pack.sh"
                     preflight_script = external_proof_commands_dir / f"preflight-{host_token}-proof.sh"
                     capture_script = external_proof_commands_dir / f"capture-{host_token}-proof.sh"
                     validation_script = external_proof_commands_dir / f"validate-{host_token}-proof.sh"
                     bundle_script = external_proof_commands_dir / f"bundle-{host_token}-proof.sh"
                     ingest_script = external_proof_commands_dir / f"ingest-{host_token}-proof-bundle.sh"
                     host_lane_script = external_proof_commands_dir / f"run-{host_token}-proof-lane.sh"
+                    prepare_pack_script_payload = ""
                     preflight_script_payload = ""
                     capture_script_payload = ""
                     validation_script_payload = ""
                     bundle_script_payload = ""
                     ingest_script_payload = ""
                     host_lane_script_payload = ""
+                    prepare_pack_script_loaded = False
                     preflight_script_loaded = False
                     capture_script_loaded = False
                     validation_script_loaded = False
                     bundle_script_loaded = False
                     ingest_script_loaded = False
                     host_lane_script_loaded = False
+                    prepare_pack_wrapper_script = external_proof_commands_dir / f"prepare-{host_token}-proof-command-pack.ps1"
                     preflight_wrapper_script = external_proof_commands_dir / f"preflight-{host_token}-proof.ps1"
                     capture_wrapper_script = external_proof_commands_dir / f"capture-{host_token}-proof.ps1"
                     validation_wrapper_script = external_proof_commands_dir / f"validate-{host_token}-proof.ps1"
                     bundle_wrapper_script = external_proof_commands_dir / f"bundle-{host_token}-proof.ps1"
                     ingest_wrapper_script = external_proof_commands_dir / f"ingest-{host_token}-proof-bundle.ps1"
                     host_lane_wrapper_script = external_proof_commands_dir / f"run-{host_token}-proof-lane.ps1"
+                    prepare_pack_wrapper_payload = ""
                     preflight_wrapper_payload = ""
                     capture_wrapper_payload = ""
                     validation_wrapper_payload = ""
                     bundle_wrapper_payload = ""
                     ingest_wrapper_payload = ""
                     host_lane_wrapper_payload = ""
+                    prepare_pack_wrapper_loaded = False
                     preflight_wrapper_loaded = False
                     capture_wrapper_loaded = False
                     validation_wrapper_loaded = False
@@ -2246,6 +2265,7 @@ def main() -> int:
                                     f"for host {host}: {token}"
                                 )
                     for script_path in (
+                        prepare_pack_script,
                         preflight_script,
                         capture_script,
                         validation_script,
@@ -2277,6 +2297,30 @@ def main() -> int:
                             failures.append(
                                 "external proof preflight script is unreadable: "
                                 + f"{preflight_script}: {exc}"
+                            )
+                    if prepare_pack_script.is_file():
+                        try:
+                            prepare_pack_script_payload = prepare_pack_script.read_text(encoding="utf-8")
+                            prepare_pack_script_loaded = True
+                            _require_bash_failfast(
+                                payload=prepare_pack_script_payload,
+                                script_label=f"prepare command-pack script ({host})",
+                                failures=failures,
+                            )
+                            for token in (
+                                'test -s "$ARCHIVE_PATH"',
+                                'test -s "$SHA_PATH"',
+                                'tar -xzf "$ARCHIVE_PATH" -C "$OUTPUT_DIR"',
+                            ):
+                                if token not in prepare_pack_script_payload:
+                                    failures.append(
+                                        "external proof prepare command-pack script is missing required token "
+                                        f"for host {host}: {token}"
+                                    )
+                        except OSError as exc:
+                            failures.append(
+                                "external proof prepare command-pack script is unreadable: "
+                                + f"{prepare_pack_script}: {exc}"
                             )
                     if capture_script.is_file():
                         try:
@@ -2349,6 +2393,20 @@ def main() -> int:
                                 + f"{host_lane_script}: {exc}"
                             )
                     if host == "windows":
+                        if not prepare_pack_wrapper_script.is_file():
+                            failures.append(
+                                "external proof commands directory is missing required host script: "
+                                + str(prepare_pack_wrapper_script)
+                            )
+                        if prepare_pack_wrapper_script.is_file():
+                            try:
+                                prepare_pack_wrapper_payload = prepare_pack_wrapper_script.read_text(encoding="utf-8")
+                                prepare_pack_wrapper_loaded = True
+                            except OSError as exc:
+                                failures.append(
+                                    "external proof windows prepare wrapper is unreadable: "
+                                    + f"{prepare_pack_wrapper_script}: {exc}"
+                                )
                         if preflight_wrapper_script.is_file():
                             try:
                                 preflight_wrapper_payload = preflight_wrapper_script.read_text(encoding="utf-8")
@@ -2404,6 +2462,12 @@ def main() -> int:
                                     + f"{host_lane_wrapper_script}: {exc}"
                                 )
                     if host == "windows":
+                        if prepare_pack_wrapper_loaded:
+                            _require_windows_wrapper_failfast(
+                                payload=prepare_pack_wrapper_payload,
+                                wrapper_label="windows prepare wrapper",
+                                failures=failures,
+                            )
                         if preflight_wrapper_loaded:
                             _require_windows_wrapper_failfast(
                                 payload=preflight_wrapper_payload,
@@ -3083,6 +3147,19 @@ def main() -> int:
                                     failures.append(
                                         "external proof windows preflight wrapper is missing wrapped preflight command: "
                                         + wrapped_preflight_command
+                                    )
+                        if host == "windows" and prepare_pack_script_loaded:
+                            for command in _script_commands(prepare_pack_script_payload):
+                                wrapped_prepare_command = _powershell_wrap(command)
+                                if (
+                                    not prepare_pack_wrapper_loaded
+                                    or not _windows_wrapper_contains_command(
+                                        prepare_pack_wrapper_payload, command
+                                    )
+                                ):
+                                    failures.append(
+                                        "external proof windows prepare wrapper is missing wrapped prepare command: "
+                                        + wrapped_prepare_command
                                     )
                         if host == "windows" and host_lane_script_loaded:
                             for command in _script_commands(host_lane_script_payload):

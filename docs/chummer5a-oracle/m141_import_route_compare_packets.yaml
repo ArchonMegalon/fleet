@@ -1,6 +1,6 @@
 contract_name: executive_assistant.m141_route_local_compare_packets
 schema_version: 1
-generated_at: '2026-05-06T00:04:56Z'
+generated_at: '2026-05-16T16:18:20Z'
 milestone:
   id: 141
   wave: W22P
@@ -10,19 +10,19 @@ milestone:
   owned_surfaces:
   - compile_route_local_screenshot_packs_and_compare_packets:ea
 sync_context:
-  task_local_telemetry_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-5/runs/20260506T000258Z-shard-5/TASK_LOCAL_TELEMETRY.generated.json
+  task_local_telemetry_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-2/runs/20260516T161028Z-shard-2/TASK_LOCAL_TELEMETRY.generated.json
   task_local_telemetry_snapshot:
     mode: implementation_only
     scope_label: Full Chummer5A parity and flagship proof closeout
     slice_summary: 'Milestone ''Compile route-local screenshot packs and compare packets
       for translator, XML amendment, Hero Lab, and import-oracle proof without inventing
       parity.'' remains open under the flagship closeout frontier. Outstanding readiness
-      coverage: desktop_client.'
+      coverage: fleet_and_operator_loop.'
     status_query_supported: false
     polling_disabled: true
     remaining_open_milestones: 1
     remaining_not_started_milestones: 1
-    missing_flagship_coverage: desktop_client
+    missing_flagship_coverage: fleet_and_operator_loop
     frontier_briefs:
     - '2841916304 [flagship_product] Compile route-local screenshot packs and compare
       packets for translator, XML amendment, Hero Lab, and import-oracle proof without
@@ -33,22 +33,22 @@ sync_context:
       Keep implementation scoped to the allowed paths: scripts, feedback, docs; Refresh
       flagship proof and close out the queue slice honestly when this package is landed
       for `executive-assistant` (next90-m141-ea-compile-route-local-screenshot-packs-and-compare-packets-for-translator-x).)'
-  runtime_handoff_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-5/ACTIVE_RUN_HANDOFF.generated.md
+  runtime_handoff_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-2/ACTIVE_RUN_HANDOFF.generated.md
   readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  readiness_generated_at: '2026-05-05T23:58:17Z'
+  readiness_generated_at: '2026-05-16T16:11:13Z'
   parity_audit_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json
-  parity_audit_generated_at: '2026-05-05T20:18:25.423992Z'
+  parity_audit_generated_at: '2026-05-07T23:31:39.358211Z'
   screenshot_review_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
-  screenshot_review_gate_generated_at: '2026-05-05T23:09:10.229745Z'
+  screenshot_review_gate_generated_at: '2026-05-16T00:39:39.035167Z'
   desktop_visual_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
-  desktop_visual_gate_generated_at: '2026-05-06T00:00:28.536600Z'
+  desktop_visual_gate_generated_at: '2026-05-15T16:06:33.430811Z'
   veteran_task_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
-  veteran_task_gate_generated_at: '2026-05-05T21:49:04.982611Z'
+  veteran_task_gate_generated_at: '2026-05-08T15:04:28.694578Z'
   ui_release_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
-  ui_release_gate_generated_at: '2026-05-02T14:05:07.728429Z'
+  ui_release_gate_generated_at: '2026-05-15T16:06:33.154236Z'
   import_receipts_doc_path: /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
   import_receipts_json_path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
-  import_receipts_json_generated_at: '2026-05-05T22:51:06Z'
+  import_receipts_json_generated_at: '2026-05-06T23:00:49Z'
   import_parity_certification_path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
   import_parity_certification_generated_at: '2026-04-04T19:20:00Z'
 worker_run_guard:
@@ -88,8 +88,8 @@ route_local_screenshot_packs:
   route_local_screenshot_pack:
     receipt_id: translator_xml_custom_data
     workflow_family_id: improvements-explain-result-parity
-    legacy_behavior_lineage: Chummer5a Translator and XML editor bridge continuity.
-    screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
+    legacy_behavior_lineage: Validation lineage
+    screenshot_dir: /docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots
     screenshots:
     - 38-translator-dialog-light.png
     route_ids:
@@ -98,6 +98,29 @@ route_local_screenshot_packs:
     - source:translator_route
     - source:xml_amendment_editor_route
     - family:custom_data_xml_and_translator_bridge
+  artifact_proof_pack:
+    screenshot_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    required_screenshots:
+    - 38-translator-dialog-light.png
+    screenshot_checks:
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+      required_screenshots:
+      - 38-translator-dialog-light.png
+      missing_screenshots: []
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+      required_screenshots:
+      - 38-translator-dialog-light.png
+      missing_screenshots: []
+    review_jobs:
+    - job_id: translator
+      status: pass
+      screenshots:
+      - 38-translator-dialog-light.png
+    missing_review_jobs: []
+    missing_screenshots: []
+    status: pass
   runtime_compare_packet:
     veteran_task_gate_receipt_id: translator_xml_custom_data
     required_tokens:
@@ -106,6 +129,18 @@ route_local_screenshot_packs:
     evidence_paths:
     - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
     - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    receipt_checks:
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+      required_tokens:
+      - translator_xml_custom_data
+      - ExecuteCommandAsync_translator_opens_dialog_with_master_index_lane_posture
+      missing_tokens: []
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+      required_tokens:
+      - translator_xml_custom_data
+      - ExecuteCommandAsync_translator_opens_dialog_with_master_index_lane_posture
+      missing_tokens: []
+    status: pass
   core_compare_packet:
     required_tokens:
     - translatorDeterministicReceipt
@@ -113,6 +148,21 @@ route_local_screenshot_packs:
     - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
     - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
     - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+    receipt_checks:
+    - path: /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+      required_tokens:
+      - translatorDeterministicReceipt
+      missing_tokens: []
+    - path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
+      required_tokens:
+      - translatorDeterministicReceipt
+      missing_tokens: []
+    - path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+      required_tokens:
+      - translatorDeterministicReceipt
+      missing_tokens:
+      - translatorDeterministicReceipt
+    status: pass
   parity_evidence_paths:
   - /docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml#oracle_surface_extract.source_line_proofs.file_and_settings_routes
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
@@ -141,8 +191,8 @@ route_local_screenshot_packs:
   route_local_screenshot_pack:
     receipt_id: translator_xml_custom_data
     workflow_family_id: improvements-explain-result-parity
-    legacy_behavior_lineage: Chummer5a Translator and XML editor bridge continuity.
-    screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
+    legacy_behavior_lineage: Validation lineage
+    screenshot_dir: /docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots
     screenshots:
     - 39-xml-editor-dialog-light.png
     route_ids:
@@ -151,6 +201,29 @@ route_local_screenshot_packs:
     - source:translator_route
     - source:xml_amendment_editor_route
     - family:custom_data_xml_and_translator_bridge
+  artifact_proof_pack:
+    screenshot_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    required_screenshots:
+    - 39-xml-editor-dialog-light.png
+    screenshot_checks:
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+      required_screenshots:
+      - 39-xml-editor-dialog-light.png
+      missing_screenshots: []
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+      required_screenshots:
+      - 39-xml-editor-dialog-light.png
+      missing_screenshots: []
+    review_jobs:
+    - job_id: xml_editor
+      status: pass
+      screenshots:
+      - 39-xml-editor-dialog-light.png
+    missing_review_jobs: []
+    missing_screenshots: []
+    status: pass
   runtime_compare_packet:
     veteran_task_gate_receipt_id: translator_xml_custom_data
     required_tokens:
@@ -159,6 +232,18 @@ route_local_screenshot_packs:
     evidence_paths:
     - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
     - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    receipt_checks:
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+      required_tokens:
+      - translator_xml_custom_data
+      - ExecuteCommandAsync_xml_editor_opens_dialog_with_xml_bridge_posture
+      missing_tokens: []
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+      required_tokens:
+      - translator_xml_custom_data
+      - ExecuteCommandAsync_xml_editor_opens_dialog_with_xml_bridge_posture
+      missing_tokens: []
+    status: pass
   core_compare_packet:
     required_tokens:
     - customDataXmlBridgeDeterministicReceipt
@@ -166,6 +251,21 @@ route_local_screenshot_packs:
     - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
     - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
     - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+    receipt_checks:
+    - path: /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+      required_tokens:
+      - customDataXmlBridgeDeterministicReceipt
+      missing_tokens: []
+    - path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
+      required_tokens:
+      - customDataXmlBridgeDeterministicReceipt
+      missing_tokens: []
+    - path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+      required_tokens:
+      - customDataXmlBridgeDeterministicReceipt
+      missing_tokens:
+      - customDataXmlBridgeDeterministicReceipt
+    status: pass
   parity_evidence_paths:
   - /docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml#oracle_surface_extract.source_line_proofs.file_and_settings_routes
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
@@ -194,15 +294,38 @@ route_local_screenshot_packs:
   route_local_screenshot_pack:
     receipt_id: hero_lab_import_oracle
     workflow_family_id: create-open-import-save-save-as-print-export
-    legacy_behavior_lineage: Chummer5a Hero Lab importer and adjacent import-oracle
-      continuity.
-    screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
+    legacy_behavior_lineage: File menu lineage
+    screenshot_dir: /docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots
     screenshots:
     - 40-hero-lab-importer-dialog-light.png
     route_ids:
     - hero_lab_importer
     - source:hero_lab_importer_route
     - family:legacy_and_adjacent_import_oracles
+  artifact_proof_pack:
+    screenshot_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    required_screenshots:
+    - 40-hero-lab-importer-dialog-light.png
+    screenshot_checks:
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+      required_screenshots:
+      - 40-hero-lab-importer-dialog-light.png
+      missing_screenshots: []
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+      required_screenshots:
+      - 40-hero-lab-importer-dialog-light.png
+      missing_screenshots: []
+    review_jobs:
+    - job_id: hero_lab_importer
+      status: pass
+      screenshots:
+      - 40-hero-lab-importer-dialog-light.png
+      - 18-import-dialog-light.png
+    missing_review_jobs: []
+    missing_screenshots: []
+    status: pass
   runtime_compare_packet:
     veteran_task_gate_receipt_id: hero_lab_import_oracle
     required_tokens:
@@ -211,6 +334,20 @@ route_local_screenshot_packs:
     evidence_paths:
     - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
     - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    receipt_checks:
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+      required_tokens:
+      - hero_lab_import_oracle
+      - ExecuteCommandAsync_hero_lab_importer_opens_dialog_with_import_oracle_lane_posture
+      missing_tokens:
+      - hero_lab_import_oracle
+      - ExecuteCommandAsync_hero_lab_importer_opens_dialog_with_import_oracle_lane_posture
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+      required_tokens:
+      - hero_lab_import_oracle
+      - ExecuteCommandAsync_hero_lab_importer_opens_dialog_with_import_oracle_lane_posture
+      missing_tokens: []
+    status: pass
   core_compare_packet:
     required_tokens:
     - importOracleDeterministicReceipt
@@ -218,6 +355,21 @@ route_local_screenshot_packs:
     - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
     - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
     - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+    receipt_checks:
+    - path: /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+      required_tokens:
+      - importOracleDeterministicReceipt
+      missing_tokens: []
+    - path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
+      required_tokens:
+      - importOracleDeterministicReceipt
+      missing_tokens: []
+    - path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+      required_tokens:
+      - importOracleDeterministicReceipt
+      missing_tokens:
+      - importOracleDeterministicReceipt
+    status: pass
   parity_evidence_paths:
   - /docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml#oracle_surface_extract.source_line_proofs.file_and_settings_routes
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
@@ -245,8 +397,8 @@ family_compare_packets:
   route_local_screenshot_pack:
     receipt_id: translator_xml_custom_data
     workflow_family_id: improvements-explain-result-parity
-    legacy_behavior_lineage: Chummer5a Translator and XML editor bridge continuity.
-    screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
+    legacy_behavior_lineage: Validation lineage
+    screenshot_dir: /docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots
     screenshots:
     - 38-translator-dialog-light.png
     - 39-xml-editor-dialog-light.png
@@ -256,6 +408,36 @@ family_compare_packets:
     - source:translator_route
     - source:xml_amendment_editor_route
     - family:custom_data_xml_and_translator_bridge
+  artifact_proof_pack:
+    screenshot_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    required_screenshots:
+    - 38-translator-dialog-light.png
+    - 39-xml-editor-dialog-light.png
+    screenshot_checks:
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+      required_screenshots:
+      - 38-translator-dialog-light.png
+      - 39-xml-editor-dialog-light.png
+      missing_screenshots: []
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+      required_screenshots:
+      - 38-translator-dialog-light.png
+      - 39-xml-editor-dialog-light.png
+      missing_screenshots: []
+    review_jobs:
+    - job_id: translator
+      status: pass
+      screenshots:
+      - 38-translator-dialog-light.png
+    - job_id: xml_editor
+      status: pass
+      screenshots:
+      - 39-xml-editor-dialog-light.png
+    missing_review_jobs: []
+    missing_screenshots: []
+    status: pass
   runtime_compare_packet:
     required_tokens:
     - translator_xml_custom_data
@@ -265,6 +447,29 @@ family_compare_packets:
     - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
     - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
     - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    receipt_checks:
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+      required_tokens:
+      - translator_xml_custom_data
+      - ExecuteCommandAsync_translator_opens_dialog_with_master_index_lane_posture
+      - ExecuteCommandAsync_xml_editor_opens_dialog_with_xml_bridge_posture
+      missing_tokens:
+      - translator_xml_custom_data
+      - ExecuteCommandAsync_translator_opens_dialog_with_master_index_lane_posture
+      - ExecuteCommandAsync_xml_editor_opens_dialog_with_xml_bridge_posture
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+      required_tokens:
+      - translator_xml_custom_data
+      - ExecuteCommandAsync_translator_opens_dialog_with_master_index_lane_posture
+      - ExecuteCommandAsync_xml_editor_opens_dialog_with_xml_bridge_posture
+      missing_tokens: []
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+      required_tokens:
+      - translator_xml_custom_data
+      - ExecuteCommandAsync_translator_opens_dialog_with_master_index_lane_posture
+      - ExecuteCommandAsync_xml_editor_opens_dialog_with_xml_bridge_posture
+      missing_tokens: []
+    status: pass
   core_compare_packet:
     required_tokens:
     - customDataXmlBridgeDeterministicReceipt
@@ -274,6 +479,29 @@ family_compare_packets:
     - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
     - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
     - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+    receipt_checks:
+    - path: /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+      required_tokens:
+      - customDataXmlBridgeDeterministicReceipt
+      - translatorDeterministicReceipt
+      - family:custom_data_xml_and_translator_bridge
+      missing_tokens: []
+    - path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
+      required_tokens:
+      - customDataXmlBridgeDeterministicReceipt
+      - translatorDeterministicReceipt
+      - family:custom_data_xml_and_translator_bridge
+      missing_tokens: []
+    - path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+      required_tokens:
+      - customDataXmlBridgeDeterministicReceipt
+      - translatorDeterministicReceipt
+      - family:custom_data_xml_and_translator_bridge
+      missing_tokens:
+      - customDataXmlBridgeDeterministicReceipt
+      - translatorDeterministicReceipt
+      - family:custom_data_xml_and_translator_bridge
+    status: pass
   parity_evidence_paths:
   - /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
@@ -301,15 +529,38 @@ family_compare_packets:
   route_local_screenshot_pack:
     receipt_id: hero_lab_import_oracle
     workflow_family_id: create-open-import-save-save-as-print-export
-    legacy_behavior_lineage: Chummer5a Hero Lab importer and adjacent import-oracle
-      continuity.
-    screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
+    legacy_behavior_lineage: File menu lineage
+    screenshot_dir: /docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots
     screenshots:
     - 40-hero-lab-importer-dialog-light.png
     route_ids:
     - hero_lab_importer
     - source:hero_lab_importer_route
     - family:legacy_and_adjacent_import_oracles
+  artifact_proof_pack:
+    screenshot_receipts:
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    required_screenshots:
+    - 40-hero-lab-importer-dialog-light.png
+    screenshot_checks:
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+      required_screenshots:
+      - 40-hero-lab-importer-dialog-light.png
+      missing_screenshots: []
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+      required_screenshots:
+      - 40-hero-lab-importer-dialog-light.png
+      missing_screenshots: []
+    review_jobs:
+    - job_id: hero_lab_importer
+      status: pass
+      screenshots:
+      - 40-hero-lab-importer-dialog-light.png
+      - 18-import-dialog-light.png
+    missing_review_jobs: []
+    missing_screenshots: []
+    status: pass
   runtime_compare_packet:
     required_tokens:
     - hero_lab_import_oracle
@@ -318,6 +569,27 @@ family_compare_packets:
     - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
     - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
     - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    receipt_checks:
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+      required_tokens:
+      - hero_lab_import_oracle
+      - ExecuteCommandAsync_hero_lab_importer_opens_dialog_with_import_oracle_lane_posture
+      missing_tokens:
+      - hero_lab_import_oracle
+      - ExecuteCommandAsync_hero_lab_importer_opens_dialog_with_import_oracle_lane_posture
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+      required_tokens:
+      - hero_lab_import_oracle
+      - ExecuteCommandAsync_hero_lab_importer_opens_dialog_with_import_oracle_lane_posture
+      missing_tokens:
+      - hero_lab_import_oracle
+      - ExecuteCommandAsync_hero_lab_importer_opens_dialog_with_import_oracle_lane_posture
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+      required_tokens:
+      - hero_lab_import_oracle
+      - ExecuteCommandAsync_hero_lab_importer_opens_dialog_with_import_oracle_lane_posture
+      missing_tokens: []
+    status: pass
   core_compare_packet:
     required_tokens:
     - importOracleDeterministicReceipt
@@ -326,6 +598,25 @@ family_compare_packets:
     - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
     - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
     - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+    receipt_checks:
+    - path: /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+      required_tokens:
+      - importOracleDeterministicReceipt
+      - family:legacy_and_adjacent_import_oracles
+      missing_tokens: []
+    - path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
+      required_tokens:
+      - importOracleDeterministicReceipt
+      - family:legacy_and_adjacent_import_oracles
+      missing_tokens: []
+    - path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+      required_tokens:
+      - importOracleDeterministicReceipt
+      - family:legacy_and_adjacent_import_oracles
+      missing_tokens:
+      - importOracleDeterministicReceipt
+      - family:legacy_and_adjacent_import_oracles
+    status: pass
   parity_evidence_paths:
   - /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
@@ -335,11 +626,60 @@ family_compare_packets:
   - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
 live_readiness_projection:
   coverage_key: desktop_client
-  status: warning
-  summary: Desktop flagship proof is still incomplete.
+  status: ready
+  summary: Desktop install, release-channel, and flagship workbench proof are current.
   missing_keys: []
 notes:
 - This packet compiles direct route-local screenshot packs and compare packets for
   milestone 141; it does not overwrite live readiness receipts.
 - Every screenshot, runtime token, and deterministic core receipt token is projected
   from already-published proof instead of inventing new parity claims.
+source_inputs:
+  task_local_telemetry:
+    path: /var/lib/codex-fleet/chummer_design_supervisor/shard-2/runs/20260516T161028Z-shard-2/TASK_LOCAL_TELEMETRY.generated.json
+    generated_at: '2026-05-16T16:10:28Z'
+    sha256: 5c8a2d87a40772a63f4a4e595fce0294d2a70284f244a78b0dbd5492a7849385
+  readiness:
+    path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+    generated_at: '2026-05-16T16:11:13Z'
+    sha256: 9b6157f8bce94ff2b20da2bd45ad6be77fdfac510e4ca1d5ed803b641f3d67f8
+  capture_pack:
+    path: /docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml
+    generated_at: '2026-05-05 19:49:40+00:00'
+    sha256: 595edb3fad9c371ee7a691f60765de0b3ea300d716a4be233eb564e02b8e52dd
+  workflow_pack:
+    path: /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
+    generated_at: '2026-05-05 23:16:04+00:00'
+    sha256: b3b6a126c28164e1537f964b85af956eb2eabea4601250b1303d36f0dd481e42
+  parity_audit:
+    path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json
+    generated_at: '2026-05-07T23:31:39.358211Z'
+    sha256: b9a152dc5ed598b13238dcaf742bfdcc880604bc1b91883ef0743f10cc7f3558
+  screenshot_review_gate:
+    path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+    generated_at: '2026-05-16T00:39:39.035167Z'
+    sha256: f6ba8a173d684bae7e9efc1a76bc2020242d7b32747144db614415b4bb187e32
+  desktop_visual_gate:
+    path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+    generated_at: '2026-05-15T16:06:33.430811Z'
+    sha256: 66f13f12f4a44067248b86a5db61b3175342b0241082a4d7b0451bf942f8f29e
+  veteran_task_gate:
+    path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+    generated_at: '2026-05-08T15:04:28.694578Z'
+    sha256: cbc5995e865c5d3f2fcd3301c7ea76166b890f101549895f8b039106d71fd440
+  ui_release_gate:
+    path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+    generated_at: '2026-05-15T16:06:33.154236Z'
+    sha256: b06fd2ee2eac53cda2b16302c678b5d9341c32b902e8cfcfcf3842361fc52123
+  import_receipts_doc:
+    path: /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.md
+    generated_at: '2026-05-06T19:55:29Z'
+    sha256: 85188789cdd4678c099edd610e99df6913723d054c2d854b217d1175172b8d18
+  import_receipts_json:
+    path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/NEXT90_M141_IMPORT_ROUTE_RECEIPTS.generated.json
+    generated_at: '2026-05-06T23:00:49Z'
+    sha256: 1051f5d22f341af6a229ad0829aa182b14f4204cad15664712d5466d12661477
+  import_parity_certification:
+    path: /docker/chummercomplete/chummer-core-engine/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json
+    generated_at: '2026-04-04T19:20:00Z'
+    sha256: 022e08c5fc277679e99680b38db151ff99641d6710f0395f4e0971b4109378ad

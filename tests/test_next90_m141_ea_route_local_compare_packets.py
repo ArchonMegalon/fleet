@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
+
+from scripts import materialize_next90_m141_ea_route_local_compare_packets as _MODULE
 
 
 MATERIALIZE_SCRIPT = Path("/docker/fleet/scripts/materialize_next90_m141_ea_route_local_compare_packets.py")
@@ -281,11 +285,282 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
     }
 
 
+def _fixture_tree_current_receipt_layout(tmp_path: Path) -> dict[str, Path]:
+    fixture = _fixture_tree(tmp_path)
+    _write_json(
+        fixture["screenshot_review_gate"],
+        {
+            "generatedAt": "2026-05-12T21:57:34Z",
+            "screenshotDirectory": "/tmp/current-ui-screenshots",
+            "reviewJobs": {
+                "translator": {"screenshots": ["38-translator-dialog-light.png"], "status": "pass"},
+                "xml_editor": {"screenshots": ["39-xml-editor-dialog-light.png"], "status": "pass"},
+                "hero_lab_importer": {
+                    "screenshots": ["40-hero-lab-importer-dialog-light.png", "18-import-dialog-light.png"],
+                    "status": "pass",
+                },
+            },
+            "routeLocalReceipts": {
+                "dense_workbench_and_initiative": {
+                    "routeIds": ["menu:dice_roller_or_workflow:initiative_screenshot"],
+                    "screenshots": ["05-dense-section-light.png", "07-loaded-runner-tabs-light.png"],
+                    "status": "pass",
+                }
+            },
+            "evidence": {
+                "screenshotDirectory": "/tmp/current-ui-screenshots",
+                "routeLocalReceipts": {
+                    "dense_workbench_and_initiative": {
+                        "routeIds": ["menu:dice_roller_or_workflow:initiative_screenshot"],
+                        "screenshots": ["05-dense-section-light.png", "07-loaded-runner-tabs-light.png"],
+                        "status": "pass",
+                    }
+                },
+            },
+        },
+    )
+    _write_json(
+        fixture["ui_release_gate"],
+        {
+            "generatedAt": "2026-05-13T18:53:43Z",
+            "interactionProof": {
+                "translator_xml_custom_data": "pass",
+                "hero_lab_import_oracle": "pass",
+            },
+            "directImportRouteProof": {
+                "reviewJobs": ["translator_xml_custom_data", "hero_lab_import_oracle"],
+                "screenshots": [
+                    "38-translator-dialog-light.png",
+                    "39-xml-editor-dialog-light.png",
+                    "40-hero-lab-importer-dialog-light.png",
+                ],
+                "characterOverviewPresenterTests": [
+                    "ExecuteCommandAsync_translator_opens_dialog_with_master_index_lane_posture",
+                    "ExecuteCommandAsync_xml_editor_opens_dialog_with_xml_bridge_posture",
+                    "ExecuteCommandAsync_hero_lab_importer_opens_dialog_with_import_oracle_lane_posture",
+                ],
+            },
+            "visualReviewEvidence": {
+                "expectedScreenshots": [
+                    "38-translator-dialog-light.png",
+                    "39-xml-editor-dialog-light.png",
+                    "40-hero-lab-importer-dialog-light.png",
+                ]
+            },
+            "workflowEquivalenceProof": {
+                "workflowScreenshotCoverage": [
+                    {
+                        "workflowFamilyId": "create-open-import-save-save-as-print-export",
+                        "legacyBehaviorLineage": "File menu lineage",
+                        "screenshotFiles": ["04-loaded-runner-light.png", "18-import-dialog-light.png"],
+                    },
+                    {
+                        "workflowFamilyId": "improvements-explain-result-parity",
+                        "legacyBehaviorLineage": "Validation lineage",
+                        "screenshotFiles": ["16-master-index-dialog-light.png", "39-xml-editor-dialog-light.png"],
+                    },
+                ]
+            },
+        },
+    )
+    return fixture
+
+
 class Next90M141EaRouteLocalComparePacketsTest(unittest.TestCase):
+    def test_worker_env_keeps_resolution_on_assigned_shard(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path)
+            stale_shard = tmp_path / "shard-9"
+            stale_runtime_handoff = stale_shard / "ACTIVE_RUN_HANDOFF.generated.md"
+            stale_telemetry = stale_shard / "runs" / "20260505T220000Z-shard-9" / "TASK_LOCAL_TELEMETRY.generated.json"
+            _write_text(stale_runtime_handoff, "- Run id: 20260505T220000Z-shard-9\n")
+            _write_json(
+                stale_telemetry,
+                {
+                    "mode": "implementation_only",
+                    "scope_label": "stale",
+                    "slice_summary": "stale",
+                    "status_query_supported": False,
+                    "polling_disabled": True,
+                    "remaining_open_milestones": 1,
+                    "remaining_not_started_milestones": 1,
+                    "missing_flagship_coverage": "desktop_client",
+                    "frontier_briefs": ["999 [flagship_product] stale."],
+                },
+            )
+            with mock.patch.dict(
+                os.environ,
+                {"CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_TELEMETRY_PATH": str(fixture["active_telemetry"])},
+                clear=False,
+            ):
+                assert _MODULE._resolve_runtime_handoff_path(None) == fixture["runtime_handoff"]
+                assert (
+                    _MODULE._resolve_task_local_telemetry_path(None, stale_runtime_handoff)
+                    == fixture["active_telemetry"]
+                )
+
+    def test_runtime_handoff_default_picks_newest_shard_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            shard_older = tmp_path / "shard-5" / "ACTIVE_RUN_HANDOFF.generated.md"
+            shard_newer = tmp_path / "shard-2" / "ACTIVE_RUN_HANDOFF.generated.md"
+            _write_text(shard_older, "- Run id: 20260505T223247Z-shard-5\n")
+            _write_text(shard_newer, "- Run id: 20260514T004051Z-shard-2\n")
+            os.utime(shard_older, (1, 1))
+            os.utime(shard_newer, (2, 2))
+
+            original_root = _MODULE.DEFAULT_SUPERVISOR_ROOT
+            try:
+                _MODULE.DEFAULT_SUPERVISOR_ROOT = tmp_path
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    resolved = _MODULE._resolve_runtime_handoff_path(None)
+            finally:
+                _MODULE.DEFAULT_SUPERVISOR_ROOT = original_root
+
+            assert resolved == shard_newer
+
     def test_materializer_uses_active_run_from_runtime_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             fixture = _fixture_tree(tmp_path)
+            artifact = tmp_path / "artifact.yaml"
+            markdown = tmp_path / "artifact.md"
+            with mock.patch.dict(os.environ, {}, clear=True):
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(MATERIALIZE_SCRIPT),
+                        "--output",
+                        str(artifact),
+                        "--markdown-output",
+                        str(markdown),
+                        "--runtime-handoff",
+                        str(fixture["runtime_handoff"]),
+                        "--readiness",
+                        str(fixture["readiness"]),
+                        "--capture-pack",
+                        str(fixture["capture_pack"]),
+                        "--workflow-pack",
+                        str(fixture["workflow_pack"]),
+                        "--parity-audit",
+                        str(fixture["parity_audit"]),
+                        "--screenshot-review-gate",
+                        str(fixture["screenshot_review_gate"]),
+                        "--desktop-visual-gate",
+                        str(fixture["desktop_visual_gate"]),
+                        "--veteran-task-gate",
+                        str(fixture["veteran_task_gate"]),
+                        "--ui-release-gate",
+                        str(fixture["ui_release_gate"]),
+                        "--import-receipts-doc",
+                        str(fixture["import_receipts_doc"]),
+                        "--import-receipts-json",
+                        str(fixture["import_receipts_json"]),
+                        "--import-parity-certification",
+                        str(fixture["import_parity_certification"]),
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+
+            payload = yaml.safe_load(artifact.read_text(encoding="utf-8"))
+            assert payload["sync_context"]["task_local_telemetry_path"] == str(fixture["active_telemetry"])
+            assert payload["milestone"]["frontier_id"] == 2841916304
+            assert payload["sync_context"]["desktop_visual_gate_generated_at"] == "2026-05-05T22:44:12Z"
+
+    def test_verifier_uses_runtime_handoff_when_task_local_path_is_not_explicit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(tmp_path)
+            artifact = tmp_path / "artifact.yaml"
+            markdown = tmp_path / "artifact.md"
+            with mock.patch.dict(os.environ, {}, clear=True):
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(MATERIALIZE_SCRIPT),
+                        "--output",
+                        str(artifact),
+                        "--markdown-output",
+                        str(markdown),
+                        "--runtime-handoff",
+                        str(fixture["runtime_handoff"]),
+                        "--readiness",
+                        str(fixture["readiness"]),
+                        "--capture-pack",
+                        str(fixture["capture_pack"]),
+                        "--workflow-pack",
+                        str(fixture["workflow_pack"]),
+                        "--parity-audit",
+                        str(fixture["parity_audit"]),
+                        "--screenshot-review-gate",
+                        str(fixture["screenshot_review_gate"]),
+                        "--desktop-visual-gate",
+                        str(fixture["desktop_visual_gate"]),
+                        "--veteran-task-gate",
+                        str(fixture["veteran_task_gate"]),
+                        "--ui-release-gate",
+                        str(fixture["ui_release_gate"]),
+                        "--import-receipts-doc",
+                        str(fixture["import_receipts_doc"]),
+                        "--import-receipts-json",
+                        str(fixture["import_receipts_json"]),
+                        "--import-parity-certification",
+                        str(fixture["import_parity_certification"]),
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+
+            with mock.patch.dict(os.environ, {}, clear=True):
+                verify = subprocess.run(
+                    [
+                        sys.executable,
+                        str(VERIFY_SCRIPT),
+                        "--artifact",
+                        str(artifact),
+                        "--markdown-artifact",
+                        str(markdown),
+                        "--runtime-handoff",
+                        str(fixture["runtime_handoff"]),
+                        "--readiness",
+                        str(fixture["readiness"]),
+                        "--capture-pack",
+                        str(fixture["capture_pack"]),
+                        "--workflow-pack",
+                        str(fixture["workflow_pack"]),
+                        "--parity-audit",
+                        str(fixture["parity_audit"]),
+                        "--screenshot-review-gate",
+                        str(fixture["screenshot_review_gate"]),
+                        "--desktop-visual-gate",
+                        str(fixture["desktop_visual_gate"]),
+                        "--veteran-task-gate",
+                        str(fixture["veteran_task_gate"]),
+                        "--ui-release-gate",
+                        str(fixture["ui_release_gate"]),
+                        "--import-receipts-doc",
+                        str(fixture["import_receipts_doc"]),
+                        "--import-receipts-json",
+                        str(fixture["import_receipts_json"]),
+                        "--import-parity-certification",
+                        str(fixture["import_parity_certification"]),
+                        "--json",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+
+            assert '"status": "pass"' in verify.stdout
+
+    def test_materializer_emits_explicit_artifact_and_receipt_checks_for_current_layout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree_current_receipt_layout(tmp_path)
             artifact = tmp_path / "artifact.yaml"
             markdown = tmp_path / "artifact.md"
             subprocess.run(
@@ -327,14 +602,23 @@ class Next90M141EaRouteLocalComparePacketsTest(unittest.TestCase):
             )
 
             payload = yaml.safe_load(artifact.read_text(encoding="utf-8"))
-            assert payload["sync_context"]["task_local_telemetry_path"] == str(fixture["active_telemetry"])
-            assert payload["milestone"]["frontier_id"] == 2841916304
-            assert payload["sync_context"]["desktop_visual_gate_generated_at"] == "2026-05-05T22:44:12Z"
+            translator = payload["route_local_screenshot_packs"][0]
+            assert translator["artifact_proof_pack"]["status"] == "pass"
+            assert translator["runtime_compare_packet"]["status"] == "pass"
+            assert translator["core_compare_packet"]["status"] == "pass"
+            assert translator["artifact_proof_pack"]["missing_review_jobs"] == []
+            assert translator["artifact_proof_pack"]["missing_screenshots"] == []
+            assert payload["source_inputs"]["ui_release_gate"]["path"] == str(fixture["ui_release_gate"])
+            assert len(payload["source_inputs"]["ui_release_gate"]["sha256"]) == 64
+            markdown_text = markdown.read_text(encoding="utf-8")
+            assert "- screenshot proof status: `pass`" in markdown_text
+            assert "- runtime proof status: `pass`" in markdown_text
+            assert "- core proof status: `pass`" in markdown_text
 
-    def test_verifier_uses_runtime_handoff_when_task_local_path_is_not_explicit(self) -> None:
+    def test_materializer_falls_back_to_current_ui_release_receipt_layout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
-            fixture = _fixture_tree(tmp_path)
+            fixture = _fixture_tree_current_receipt_layout(tmp_path)
             artifact = tmp_path / "artifact.yaml"
             markdown = tmp_path / "artifact.md"
             subprocess.run(
@@ -375,46 +659,23 @@ class Next90M141EaRouteLocalComparePacketsTest(unittest.TestCase):
                 text=True,
             )
 
-            verify = subprocess.run(
-                [
-                    sys.executable,
-                    str(VERIFY_SCRIPT),
-                    "--artifact",
-                    str(artifact),
-                    "--markdown-artifact",
-                    str(markdown),
-                    "--runtime-handoff",
-                    str(fixture["runtime_handoff"]),
-                    "--readiness",
-                    str(fixture["readiness"]),
-                    "--capture-pack",
-                    str(fixture["capture_pack"]),
-                    "--workflow-pack",
-                    str(fixture["workflow_pack"]),
-                    "--parity-audit",
-                    str(fixture["parity_audit"]),
-                    "--screenshot-review-gate",
-                    str(fixture["screenshot_review_gate"]),
-                    "--desktop-visual-gate",
-                    str(fixture["desktop_visual_gate"]),
-                    "--veteran-task-gate",
-                    str(fixture["veteran_task_gate"]),
-                    "--ui-release-gate",
-                    str(fixture["ui_release_gate"]),
-                    "--import-receipts-doc",
-                    str(fixture["import_receipts_doc"]),
-                    "--import-receipts-json",
-                    str(fixture["import_receipts_json"]),
-                    "--import-parity-certification",
-                    str(fixture["import_parity_certification"]),
-                    "--json",
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
+            payload = yaml.safe_load(artifact.read_text(encoding="utf-8"))
+            route_rows = {row["id"]: row for row in payload["route_local_screenshot_packs"]}
+            family_rows = {row["id"]: row for row in payload["family_compare_packets"]}
 
-            assert '"status": "pass"' in verify.stdout
+            assert route_rows["translator_route"]["route_local_screenshot_pack"]["workflow_family_id"] == (
+                "improvements-explain-result-parity"
+            )
+            assert route_rows["hero_lab_importer_route"]["route_local_screenshot_pack"]["legacy_behavior_lineage"] == (
+                "File menu lineage"
+            )
+            assert family_rows["custom_data_xml_and_translator_bridge"]["route_local_screenshot_pack"]["route_ids"] == [
+                "translator",
+                "xml_editor",
+                "source:translator_route",
+                "source:xml_amendment_editor_route",
+                "family:custom_data_xml_and_translator_bridge",
+            ]
 
 
 if __name__ == "__main__":

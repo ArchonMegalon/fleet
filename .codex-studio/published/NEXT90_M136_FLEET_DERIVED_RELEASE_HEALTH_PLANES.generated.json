@@ -43,7 +43,7 @@
   },
   "contract_name": "fleet.next90_m136_derived_release_health_planes",
   "frontier_id": 8422537713,
-  "generated_at": "2026-05-13T08:34:19Z",
+  "generated_at": "2026-05-13T18:13:50Z",
   "milestone_id": 136,
   "monitor_summary": {
     "blocked_plane_ids": [],
@@ -209,9 +209,9 @@
       "sha256": "8d450f2175f2bd290975db12c0deddbf6e26a3415bec20e906f1ac38cd01c84e"
     },
     "flagship_product_readiness": {
-      "generated_at": "2026-05-13T08:34:02Z",
+      "generated_at": "2026-05-13T18:13:20Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "20efbbbb9a94078bbe269fbe4c02034308eaa0bd9ab07be9476a1561f0f95971"
+      "sha256": "f4e72f34dad81112df5ca0188de8655e0d578daa5d1ac12e2a76b5f7edff2416"
     },
     "flagship_readiness_planes": {
       "generated_at": "",

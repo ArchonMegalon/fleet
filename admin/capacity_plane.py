@@ -564,11 +564,18 @@ def build_capacity_plan_payload(
     review_lane_name = str(review_shards.get("lane") or "review_shard").strip() or "review_shard"
     review_preflight = dict(review_fabric.get("preflight") or {})
     review_lane_row = capacity_by_lane.get(review_lane_name) or {}
+    review_lane_observed = bool(review_lane_row)
     review_ready_slots = max(0, _safe_int(review_lane_row.get("ready_slots")))
     active_review_workers = max(
         _safe_int(summary.get("active_review_workers")),
         review_ready_slots,
     )
+    review_parallelism = max(
+        _safe_int(review_shards.get("target_parallelism"), 1),
+        _safe_int(review_shards.get("service_floor"), 1),
+    )
+    if active_review_workers <= 0 and not review_lane_observed:
+        active_review_workers = review_parallelism
     queue_per_reviewer = max(
         1,
         _safe_int(review_shards.get("max_queue_depth_per_active_reviewer"))
@@ -586,6 +593,7 @@ def build_capacity_plan_payload(
     )
     review_cap = max(0, review_capacity_budget - max(0, queued_jury_jobs + blocked_on_jury - review_capacity_budget))
     review_cap = min(review_cap or review_capacity_budget, _safe_int(plane_caps.get("review_shard_cap"), review_capacity_budget or 1))
+    review_constraints_active = bool(queued_jury_jobs > 0 or blocked_on_jury > 0 or active_review_workers > 0)
 
     audit_lane_name = str(audit_fabric.get("lane") or "audit_shard").strip() or "audit_shard"
     audit_lane_row = capacity_by_lane.get(audit_lane_name) or {}
@@ -641,6 +649,7 @@ def build_capacity_plan_payload(
         )
     else:
         audit_cap = min(effective_audit_workers, audit_plane_cap)
+    audit_constraints_active = bool(open_incidents > 0 or active_audit_workers > 0 or pre_audit_equivalent_workers > 0)
     audit_lane_target = max(0, min(audit_plane_cap, active_audit_workers))
 
     project_safety_cap = 0
@@ -673,8 +682,8 @@ def build_capacity_plan_payload(
             credit_cap_until_next_topup,
             credit_cap_until_cycle_end,
             slot_cap,
-            review_cap,
-            audit_cap,
+            review_cap if review_constraints_active else None,
+            audit_cap if audit_constraints_active else None,
             project_safety_cap,
             _safe_int(plane_caps.get("global_booster_cap"), 0) or None,
         ]
@@ -731,8 +740,8 @@ def build_capacity_plan_payload(
             slot_cap,
             useful_work_cap,
             scope_cap,
-            review_cap,
-            audit_cap,
+            review_cap if review_constraints_active else None,
+            audit_cap if audit_constraints_active else None,
             project_safety_cap,
             _safe_int(plane_caps.get("global_booster_cap"), 0) or None,
         ]
@@ -744,7 +753,7 @@ def build_capacity_plan_payload(
         0,
         int(
             math.ceil(
-                float(max(0, ready_dispatchable_packages - active_boosters))
+                float(max(0, ready_dispatchable_packages))
                 / float(ready_reserve_step_divisor)
             )
         ),
@@ -756,9 +765,11 @@ def build_capacity_plan_payload(
         ramp_limits = [
             max(0, max_scale_up_per_tick),
             max(0, ready_scale_up_budget),
-            max(0, max(minimum_scale_up_step, review_spare_budget)) if review_spare_budget > 0 else 0,
-            max(0, max(minimum_scale_up_step, audit_spare_budget)) if audit_spare_budget > 0 else 0,
         ]
+        if review_constraints_active:
+            ramp_limits.append(max(0, max(minimum_scale_up_step, review_spare_budget)) if review_spare_budget > 0 else 0)
+        if audit_constraints_active:
+            ramp_limits.append(max(0, max(minimum_scale_up_step, audit_spare_budget)) if audit_spare_budget > 0 else 0)
         booster_scale_up_budget = min(ramp_limits) if ramp_limits else 0
         effective_booster_cap = min(desired_booster_target, active_boosters + booster_scale_up_budget)
     elif desired_booster_target < active_boosters:
@@ -855,7 +866,7 @@ def build_capacity_plan_payload(
                 observed_value=scope_cap,
             )
         )
-    if review_cap < max(1, slot_cap):
+    if review_constraints_active and review_cap < max(1, slot_cap):
         typed_findings.append(
             _typed_finding(
                 "review_backpressure",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -95,6 +96,63 @@ def test_support_packets_project_startup_smoke_receipt_contract(tmp_path: Path) 
         "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Windows ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
         "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
     ]
+
+
+def test_support_packets_default_release_channel_path_uses_resolver_override(tmp_path: Path) -> None:
+    intake = tmp_path / "SUPPORT_INTAKE.generated.json"
+    resolved_release_channel = tmp_path / "RESOLVED_RELEASE_CHANNEL.generated.json"
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+
+    intake.write_text(json.dumps({"generated_at": "2026-05-10T21:00:00Z", "cases": []}, indent=2) + "\n", encoding="utf-8")
+    resolved_release_channel.write_text(
+        json.dumps(
+            {
+                "channelId": "preview",
+                "status": "published",
+                "desktopTupleCoverage": {
+                    "promotedInstallerTuples": [
+                        {
+                            "tupleId": "avalonia:win-x64:windows",
+                            "artifactId": "avalonia-win-x64-installer",
+                            "head": "avalonia",
+                            "platform": "windows",
+                            "rid": "win-x64",
+                        }
+                    ],
+                    "missingRequiredPlatforms": [],
+                    "missingRequiredPlatformHeadPairs": [],
+                    "missingRequiredPlatformHeadRidTuples": [],
+                    "externalProofRequests": [],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    env = dict(os.environ)
+    env["CHUMMER_EXTERNAL_PROOF_RELEASE_CHANNEL"] = str(resolved_release_channel)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SUPPORT_SCRIPT),
+            "--source",
+            str(intake),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["unresolved_external_proof_request_count"] == 0
+    assert payload["summary"]["unresolved_external_proof_request_hosts"] == []
+    assert payload["summary"]["unresolved_external_proof_request_tuples"] == []
 
 
 def test_journey_gate_requires_support_startup_smoke_receipt_contract(tmp_path: Path) -> None:

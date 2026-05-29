@@ -188,7 +188,7 @@
   },
   "contract_name": "fleet.next90_m138_hero_path_closeout_gates",
   "frontier_id": 4764536356,
-  "generated_at": "2026-05-06T04:44:51Z",
+  "generated_at": "2026-05-13T17:14:01Z",
   "milestone_id": 138,
   "monitor_summary": {
     "bounded_faq_count": 2,
@@ -210,15 +210,15 @@
   "queue_title": "Fail closeout when the 90-second newcomer path, Ready for Tonight verdicts, adoption-confidence receipts, or Foundry-first handoff receipts are stale, missing, or contradicted by public posture.",
   "runtime_monitors": {
     "flagship_readiness_alignment": {
-      "flagship_ready_status": "missing",
-      "generated_at": "2026-05-06T04:42:47Z",
+      "flagship_ready_status": "ready",
+      "generated_at": "2026-05-13T17:09:42Z",
       "issues": [],
       "runtime_blockers": [],
       "state": "pass"
     },
     "hero_path_projections": {
-      "age_hours": 0.6,
-      "generated_at": "2026-05-06T04:08:49Z",
+      "age_hours": 0.0,
+      "generated_at": "2026-05-13T17:13:59Z",
       "issues": [],
       "projection_statuses": {
         "adoption_confidence": "pass",
@@ -246,19 +246,19 @@
       "sha256": "0a8a5fa1907f0f1de5f1cbb01277568773a67656d27d8187fdae2aeb0e151916"
     },
     "design_queue_staging": {
-      "generated_at": "2026-05-06T04:44:49Z",
+      "generated_at": "2026-05-13T16:52:18Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "05fe2feeafae90da905daddb4ca72f757e22bea85ce8e9f8563a823e316308af"
+      "sha256": "fa9f621dc6eddb503ec60c0905df3377cd36a78459b9b530293c14e28bbaf81d"
     },
     "flagship_readiness": {
-      "generated_at": "2026-05-06T04:42:47Z",
+      "generated_at": "2026-05-13T17:09:42Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "2490f91526fca02f115447ca24b82541e7a5b98e9abe8168701bb98a56d72bd0"
+      "sha256": "0017eb56616dca74626c07f0a172c3df0a65268916f74f52e2e8f447775cb3aa"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-05-06T04:44:49Z",
+      "generated_at": "2026-05-13T16:52:18Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "94c5042dc2adb91991decdfdabcd2c9a5d09352df51f9ce19917fb7ed7380c6a"
+      "sha256": "fa9f621dc6eddb503ec60c0905df3377cd36a78459b9b530293c14e28bbaf81d"
     },
     "foundry_first_handoff": {
       "generated_at": "2026-04-30T21:57:57Z",
@@ -266,9 +266,9 @@
       "sha256": "9640961e364d41667dc92a42a8ceecf0f36086158da05036e1811734c9bf833b"
     },
     "hero_path_projections": {
-      "generated_at": "2026-05-06T04:08:49Z",
+      "generated_at": "2026-05-13T17:13:59Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT90_M138_FLEET_HERO_PATH_PROJECTIONS.generated.json",
-      "sha256": "cb546b4a5c4f7390c29855e4a40fe9e66fba36562fba9d6155ff21cfb77774b8"
+      "sha256": "707f319befc1adcc603b136029c754334f7b22dffad3c56c0cf507e7ad5b12af"
     },
     "next90_guide": {
       "generated_at": "2026-05-05T19:47:04Z",
@@ -281,7 +281,7 @@
       "sha256": "6cf83e63cf56f9fb35e2ed30744fa20100f323eeb21b040e30d32093070f252d"
     },
     "public_faq": {
-      "generated_at": "2026-05-05T16:00:32Z",
+      "generated_at": "2026-05-12T21:01:16Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/FAQ.md",
       "sha256": "e2dfd9abccd3fae0ca6e216baefb1cdfb034a367aaeb7dbe3e8e2b608f27fb8c"
     },
@@ -291,19 +291,19 @@
       "sha256": "845cfafde512693e38495696b391ec36eb70d7078db17f89560619f5350363ef"
     },
     "public_feature_registry": {
-      "generated_at": "2026-05-04T09:39:41Z",
+      "generated_at": "2026-05-12T20:53:19Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FEATURE_REGISTRY.yaml",
-      "sha256": "cb90a2b1429a943a514d3627ae4ee208dcece66584caac1805aea152ff3ef9b8"
+      "sha256": "9436315e54f40f9921f0fb455d47622a3aae510dc5be6e236d92291cfcbb5aa5"
     },
     "public_guide_community_hub": {
-      "generated_at": "2026-05-05T23:52:11Z",
+      "generated_at": "2026-05-12T21:01:16Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/HORIZONS/community-hub.md",
-      "sha256": "bb0b76c600c2bc6febdb0427221a6fe06e03900aa380262c696cf0169b73744b"
+      "sha256": "edf3631e3cdbe5cfd639c3e7353274114ab17c6155859acca79fe8a4449c3240"
     },
     "public_landing_manifest": {
-      "generated_at": "2026-05-04T09:39:41Z",
+      "generated_at": "2026-05-12T20:58:07Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_LANDING_MANIFEST.yaml",
-      "sha256": "104c46bc68365be611735b6c6a4fc16a983eb87d7df2821f86e60e43affe3ce6"
+      "sha256": "3491b8c3e52527797e8cbd84cecb1f80cf662024ad8428f37a3c6af9cec1919a"
     },
     "public_onboarding_paths": {
       "generated_at": "2026-05-05T19:47:04Z",
@@ -341,9 +341,9 @@
       "sha256": "fa14b7cd799cf32abe812a4d037c9952dcd632e78967a65932b9ebad077e8e0a"
     },
     "successor_registry": {
-      "generated_at": "2026-05-06T04:44:49Z",
+      "generated_at": "2026-05-13T16:52:18Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "57f005675cf6c790f22a77d0b033697d3d713a1eb6722be26886f9c87ed585e6"
+      "sha256": "52f226d7a4043d33eed12287db7c4060de5305c6c728e150c1525c4ea1f6fa41"
     },
     "vtt_export_target_acceptance": {
       "generated_at": "2026-04-30T21:57:57Z",

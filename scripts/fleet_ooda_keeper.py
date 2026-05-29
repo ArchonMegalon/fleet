@@ -708,6 +708,81 @@ def autoheal_worktree_and_receipt_drift(app: Any, *, controller_url: str) -> Lis
     return actions
 
 
+def autoheal_projection_drift(app: Any) -> List[Dict[str, Any]]:
+    active_statuses = {"starting", "running", "verifying"}
+    idle_like_statuses = {
+        "dispatch_pending",
+        "waiting_capacity",
+        "waiting_dependency",
+        "awaiting_account",
+        "blocked",
+        "review_failed",
+    }
+    with app.db() as conn:
+        rows = conn.execute(
+            """
+            SELECT id,
+                   status,
+                   active_run_id
+            FROM projects
+            ORDER BY id
+            """
+        ).fetchall()
+    stale_active: List[Dict[str, Any]] = []
+    stale_inactive: List[Dict[str, Any]] = []
+    for row in rows:
+        project_id = str(row["id"] or "").strip()
+        if not project_id:
+            continue
+        status = str(row["status"] or "").strip().lower()
+        active_run_id = int(row["active_run_id"] or 0) or None
+        has_live_commitment = bool(app.project_has_live_runtime_commitment(project_id, active_run_id))
+        if (status in active_statuses or active_run_id) and not has_live_commitment:
+            stale_active.append(
+                {
+                    "project_id": project_id,
+                    "status": status,
+                    "active_run_id": active_run_id,
+                }
+            )
+            continue
+        if status in idle_like_statuses and has_live_commitment:
+            stale_inactive.append(
+                {
+                    "project_id": project_id,
+                    "status": status,
+                    "active_run_id": active_run_id,
+                }
+            )
+    actions: List[Dict[str, Any]] = []
+    if stale_active:
+        reconciled_count = int(app.reconcile_finished_run_links() or 0)
+        actions.append(
+            {
+                "trigger": "projection_drift_stale_active",
+                "project_ids": [item["project_id"] for item in stale_active],
+                "count": len(stale_active),
+                "reconciled_count": reconciled_count,
+            }
+        )
+    for item in stale_inactive:
+        project_id = str(item["project_id"] or "").strip()
+        if not project_id:
+            continue
+        app.sync_project_progress_from_packages(project_id)
+        actions.append(
+            {
+                "trigger": "projection_drift_stale_inactive",
+                "project_id": project_id,
+                "status": item["status"],
+                "active_run_id": item["active_run_id"],
+            }
+        )
+    if actions:
+        app.save_runtime_task_cache_snapshot()
+    return actions
+
+
 def repeated_failure_map(app: Any, *, lookback_minutes: int, threshold: int) -> Dict[str, Dict[str, Any]]:
     cutoff = utc_now() - dt.timedelta(minutes=max(1, lookback_minutes))
     blocked: Dict[str, Dict[str, Any]] = {}
@@ -1638,6 +1713,7 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
         workspace_root=workspace_root,
         controller_url=str(args.controller_url),
     )
+    autohealed_drift_actions.extend(autoheal_projection_drift(app))
     released_orphan_scope_claims = release_orphaned_active_scope_claims(app)
     pruned_stale_commitment_count = prune_stale_runtime_commitments(
         workspace_root,
@@ -1660,6 +1736,11 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
             stale_minutes=int(args.stale_local_review_minutes),
         )
     )
+    repeated_failures = repeated_failure_map(
+        app,
+        lookback_minutes=int(args.failure_lookback_minutes),
+        threshold=int(args.repeat_failure_threshold),
+    )
     transient_retries = auto_retry_transient_dispatch_pending_projects(
         app,
         controller_url=str(args.controller_url),
@@ -1670,11 +1751,6 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
             app,
             controller_url=str(args.controller_url),
         )
-    )
-    repeated_failures = repeated_failure_map(
-        app,
-        lookback_minutes=int(args.failure_lookback_minutes),
-        threshold=int(args.repeat_failure_threshold),
     )
     ready_before = ready_backlog_count(app, config, repeated_failures)
     guide_pause = pause_guide_if_feedback_backlog_is_empty(app, config, controller_url=str(args.controller_url))

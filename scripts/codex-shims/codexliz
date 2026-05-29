@@ -9,6 +9,8 @@ CODEXLIZ_PROVIDER_KEY="${CODEXLIZ_PROVIDER_KEY:-liz}"
 CODEXLIZ_PROVIDER_NAME="${CODEXLIZ_PROVIDER_NAME:-Liz Ollama}"
 CODEXLIZ_BASE_URL="${CODEXLIZ_BASE_URL:-https://code.girschele.com}"
 CODEXLIZ_MODEL="${CODEXLIZ_MODEL:-qwen3.5:122b}"
+CODEXLIZ_FALLBACK_BASE_URL="${CODEXLIZ_FALLBACK_BASE_URL:-}"
+CODEXLIZ_FALLBACK_MODEL="${CODEXLIZ_FALLBACK_MODEL:-}"
 CODEXLIZ_API_KEY_ENV_VAR="${CODEXLIZ_API_KEY_ENV_VAR:-CODEXLIZ_API_KEY}"
 CODEXLIZ_PROXY_HOST="${CODEXLIZ_PROXY_HOST:-127.0.0.1}"
 CODEXLIZ_PROXY_PORT="${CODEXLIZ_PROXY_PORT:-}"
@@ -25,6 +27,8 @@ CODEXLIZ_TRANSPORT_RETRY_ENABLED="${CODEXLIZ_TRANSPORT_RETRY_ENABLED:-1}"
 CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS:-60}"
 CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS:-300}"
 CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS:-86400}"
+CODEXLIZ_PROXY_RETRY_INTERVAL_SECONDS="${CODEXLIZ_PROXY_RETRY_INTERVAL_SECONDS:-10}"
+CODEXLIZ_PROXY_RETRY_MAX_WAIT_SECONDS="${CODEXLIZ_PROXY_RETRY_MAX_WAIT_SECONDS:-900}"
 CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS="${CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS:-5}"
 CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY="${CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY:-1}"
 CODEXLIZ_OUTAGE_STATE_FILE="${CODEXLIZ_OUTAGE_STATE_FILE:-${CODEXLIZ_STATE_DIR}/outage.json}"
@@ -335,6 +339,34 @@ with socket.create_connection((host, port), timeout=0.5):
 PY
 }
 
+proxy_pid_matches_requested_retry_policy() {
+  local pid="${1:-}"
+  local cmdline_path="/proc/${pid}/cmdline"
+
+  [ -n "${pid}" ] || return 1
+  [ -r "${cmdline_path}" ] || return 1
+
+  "${PROXY_PYTHON}" - "${cmdline_path}" "${CODEXLIZ_PROXY_RETRY_INTERVAL_SECONDS}" "${CODEXLIZ_PROXY_RETRY_MAX_WAIT_SECONDS}" <<'PY'
+import sys
+from pathlib import Path
+
+cmdline_path = Path(sys.argv[1])
+expected_interval = str(sys.argv[2] or "").strip()
+expected_max_wait = str(sys.argv[3] or "").strip()
+tokens = [token for token in cmdline_path.read_text(encoding="utf-8", errors="ignore").split("\0") if token]
+
+def token_matches(flag: str, expected: str) -> bool:
+    for index, token in enumerate(tokens[:-1]):
+        if token == flag and tokens[index + 1] == expected:
+            return True
+    return False
+
+if token_matches("--retry-interval-seconds", expected_interval) and token_matches("--retry-max-wait-seconds", expected_max_wait):
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
 select_free_proxy_port() {
   "${PROXY_PYTHON}" - "${CODEXLIZ_PROXY_HOST}" <<'PY'
 import socket
@@ -455,6 +487,9 @@ prepend_exec_trace_inline_prompt_args() {
       --json|--ephemeral)
         i=$((i + 1))
         ;;
+      -c|--config|--enable|--disable|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir|--remote|--remote-auth-token-env)
+        i=$((i + 2))
+        ;;
       -o|--output-last-message|--color|--output-schema)
         i=$((i + 2))
         ;;
@@ -500,6 +535,17 @@ is_codex_subcommand() {
   esac
 }
 
+is_worker_lane_token() {
+  case "${1:-}" in
+    core|survival|repair|audit_shard|jury|review_light|groundwork)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 wrap_prompt_invocation_with_exec() {
   local -a args=("$@")
   local -a exec_prefix=(exec)
@@ -508,6 +554,9 @@ wrap_prompt_invocation_with_exec() {
   local i=0
 
   [ "${#args[@]}" -gt 0 ] || return 0
+  if [ "${#args[@]}" -ge 2 ] && is_worker_lane_token "${args[0]}" && is_codex_subcommand "${args[1]}"; then
+    args=("${args[@]:1}")
+  fi
   if [ "${args[0]}" = "exec" ]; then
     printf '%s\0' "${args[@]}"
     return
@@ -706,7 +755,7 @@ if not status_matches:
 http_status = int(status_matches[-1]) if status_matches else None
 cf_matches = re.findall(r"cf-ray:\s*([A-Za-z0-9-]+)", stderr_text, flags=re.I)
 cf_ray = cf_matches[-1] if cf_matches else ""
-retryable_codes = {404, 429, 500, 502, 503, 504, 520, 522, 523, 524}
+retryable_codes = {404, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 530}
 reason = ""
 detail = ""
 retryable = False
@@ -1061,6 +1110,61 @@ if expected_model:
 PY
 }
 
+try_models_preflight() {
+  local target_url="${1:-}"
+  local target_label="${2:-transport}"
+  local expected_model="${3:-}"
+  local stderr_file="${4:-}"
+
+  if [ -n "${stderr_file}" ]; then
+    if run_models_preflight "${target_url}" "${target_label}" "${expected_model}" 2>"${stderr_file}"; then
+      return 0
+    fi
+    return 1
+  fi
+  run_models_preflight "${target_url}" "${target_label}" "${expected_model}"
+}
+
+activate_fallback_transport_if_configured() {
+  local failed_url="${1:-}"
+  local failed_model="${2:-}"
+  local failed_stderr_file="${3:-}"
+  local fallback_url_raw="${CODEXLIZ_FALLBACK_BASE_URL:-}"
+  local fallback_model="${CODEXLIZ_FALLBACK_MODEL:-}"
+  local fallback_url=""
+  local fallback_models_url=""
+  local fallback_stderr_file=""
+  local failure_summary=""
+
+  [ -n "${fallback_url_raw}" ] || return 1
+  [ -n "${fallback_model}" ] || return 1
+
+  fallback_url="$(normalize_remote_upstream_base_url "${fallback_url_raw}")"
+  fallback_models_url="$(build_preflight_url "${fallback_url}" "${CODEXLIZ_PREFLIGHT_MODELS_PATH}")"
+  fallback_stderr_file="$(mktemp "${TMPDIR:-/tmp}/codexliz-fallback-preflight.XXXXXX")"
+
+  if [ -n "${failed_stderr_file}" ] && [ -f "${failed_stderr_file}" ]; then
+    failure_summary="$(tr '\n' ' ' < "${failed_stderr_file}" | sed 's/[[:space:]]\\+/ /g' | cut -c1-220)"
+  fi
+  emit_transport_trace "fallback activating failed_url=${failed_url:-unknown} failed_model=${failed_model:-unknown} fallback_url=${fallback_url} fallback_model=${fallback_model}"
+  if [ -n "${failure_summary}" ]; then
+    emit_debug_trace "fallback reason=${failure_summary}"
+  fi
+
+  if ! try_models_preflight "${fallback_models_url}" "fallback remote /v1/models" "${fallback_model}" "${fallback_stderr_file}"; then
+    cat "${failed_stderr_file}" >&2 2>/dev/null || true
+    cat "${fallback_stderr_file}" >&2 2>/dev/null || true
+    rm -f "${fallback_stderr_file}"
+    return 1
+  fi
+
+  REMOTE_UPSTREAM_BASE_URL="${fallback_url}"
+  CODEXLIZ_MODEL="${fallback_model}"
+  CODEXLIZ_REMOTE_MODE="fallback"
+  rm -f "${fallback_stderr_file}"
+  return 0
+}
+
 start_proxy_if_needed() {
   local upstream_base_url="${1:-}"
   local requested_port="${2:-}"
@@ -1089,7 +1193,17 @@ start_proxy_if_needed() {
     fi
 
     if [ -n "${existing_pid}" ] && process_is_running "${existing_pid}" && proxy_is_ready "${CODEXLIZ_PROXY_HOST}" "${selected_port}" >/dev/null 2>&1; then
-      return 0
+      if proxy_pid_matches_requested_retry_policy "${existing_pid}"; then
+        return 0
+      fi
+      if [ "${port_is_explicit}" -eq 0 ]; then
+        selected_port="$(select_free_proxy_port)"
+        export CODEXLIZ_PROXY_PORT="${selected_port}"
+        write_proxy_port_file "${selected_port}"
+        existing_pid=""
+      else
+        kill "${existing_pid}" >/dev/null 2>&1 || true
+      fi
     fi
 
     rm -f "${CODEXLIZ_PROXY_PID_FILE}"
@@ -1098,6 +1212,8 @@ start_proxy_if_needed() {
       --listen-host "${CODEXLIZ_PROXY_HOST}" \
       --listen-port "${selected_port}" \
       --upstream-base-url "${upstream_base_url}" \
+      --retry-interval-seconds "${CODEXLIZ_PROXY_RETRY_INTERVAL_SECONDS}" \
+      --retry-max-wait-seconds "${CODEXLIZ_PROXY_RETRY_MAX_WAIT_SECONDS}" \
       >>"${CODEXLIZ_PROXY_LOG_FILE}" 2>&1 &
     started_pid="$!"
     printf '%s\n' "${started_pid}" > "${CODEXLIZ_PROXY_PID_FILE}"
@@ -1164,10 +1280,21 @@ CODEXLIZ_PROXY_PORT="$(resolve_proxy_port)"
 LOCAL_PROVIDER_BASE_URL="$(build_local_provider_base_url "${CODEXLIZ_PROXY_PORT}")"
 REMOTE_MODELS_URL="$(build_preflight_url "${REMOTE_UPSTREAM_BASE_URL}" "${CODEXLIZ_PREFLIGHT_MODELS_PATH}")"
 LOCAL_MODELS_URL="$(build_preflight_url "${LOCAL_PROVIDER_BASE_URL}" "${CODEXLIZ_PREFLIGHT_MODELS_PATH}")"
+CODEXLIZ_REMOTE_MODE="primary"
 
 emit_debug_trace "preflight primary=${PRIMARY_COMMAND:-none} remote=${REMOTE_MODELS_URL} local=${LOCAL_MODELS_URL} proxy_port=${CODEXLIZ_PROXY_PORT} retry=${CODEXLIZ_TRANSPORT_RETRY_ENABLED} log=${CODEXLIZ_DEBUG_LOG_FILE}"
 
-run_models_preflight "${REMOTE_MODELS_URL}" "remote /v1/models" "${CODEXLIZ_MODEL}"
+remote_preflight_stderr_file="$(mktemp "${TMPDIR:-/tmp}/codexliz-remote-preflight.XXXXXX")"
+if ! try_models_preflight "${REMOTE_MODELS_URL}" "remote /v1/models" "${CODEXLIZ_MODEL}" "${remote_preflight_stderr_file}"; then
+  if ! activate_fallback_transport_if_configured "${REMOTE_UPSTREAM_BASE_URL}" "${CODEXLIZ_MODEL}" "${remote_preflight_stderr_file}"; then
+    cat "${remote_preflight_stderr_file}" >&2 2>/dev/null || true
+    rm -f "${remote_preflight_stderr_file}"
+    exit 1
+  fi
+  REMOTE_MODELS_URL="$(build_preflight_url "${REMOTE_UPSTREAM_BASE_URL}" "${CODEXLIZ_PREFLIGHT_MODELS_PATH}")"
+  LOCAL_MODELS_URL="$(build_preflight_url "${LOCAL_PROVIDER_BASE_URL}" "${CODEXLIZ_PREFLIGHT_MODELS_PATH}")"
+fi
+rm -f "${remote_preflight_stderr_file}"
 
 start_proxy_if_needed "${REMOTE_UPSTREAM_BASE_URL}"
 run_models_preflight "${LOCAL_MODELS_URL}" "local proxy /v1/models" "${CODEXLIZ_MODEL}"

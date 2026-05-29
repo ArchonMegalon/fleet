@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-19T15:25:32Z'
+generated_at: '2026-05-21T17:13:32Z'
 mode: flagship_product
-state_root: /docker/fleet/state/chummer_design_supervisor/shard-17
+state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-17
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -29,13 +29,31 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - fleet
-  - chummer6-design
   - chummer6-ui
+  - chummer6-hub
+  - chummer6-core
+  - chummer6-mobile
   texts:
+  - build lab
+  - explain
+  - crew-fit
+  - rule-environment
+  - advancement
   - top flagship grade
-  - whole project frontier
-  - release-proof
+  - whole-project frontier
+  - no lowered standards
+  - feedback loop
+  - automatic bugfixing
+  - crash reporting
+  - support routing
+  - journey smoothness
+  - restore confidence
+  - accessibility
+  - localization
+  - performance
+  - proof shelf
+  - fit and finish
+  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -43,20 +61,75 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: trusted completion receipt plus whole-product release proof and Linux desktop
-    exit gate are ready
+  status: fail
+  reason: weekly product pulse reports release health as needs_attention
 full_product_audit:
-  status: pass
-  reason: flagship product readiness proof is current across desktop, rules, hub,
-    mobile, horizons, and operator lanes
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-19T15:22:21Z'
-  proof_status: pass
-  missing_coverage_keys: []
+  generated_at: '2026-05-21T17:06:29Z'
+  proof_status: fail
+  missing_coverage_keys:
+  - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 0
-frontier_ids: []
-frontier: []
+frontier_count: 1
+frontier_ids:
+- 4379554836
+frontier:
+- id: 4379554836
+  title: Add mobile runner-goal updates and player-safe consequence feed views for
+    campaign return moments.
+  wave: flagship_product
+  status: not_started
+  owners:
+  - chummer6-mobile
+  dependencies: []
+  exit_criteria:
+  - Add mobile runner-goal updates and player-safe consequence feed views for campaign
+    return moments.
+  - 'Own and prove the surface slice(s): add_mobile_runner_goal_updates:mobile'
+  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
+  - Refresh flagship proof and close out the queue slice honestly when this package
+    is landed for `chummer6-mobile` (next90-m122-mobile-add-mobile-runner-goal-updates-and-player-safe-consequen).
+  eta:
+    status: flagship_delivery
+    eta_human: 9h-22h
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Add mobile runner-goal updates and player-safe consequence
+      feed views for campaign return moments.'' remains open under the flagship closeout
+      frontier. Outstanding readiness coverage: desktop_client.'
+    predicted_completion_at: '2026-05-22T08:23:26Z'
+    range_low_hours: 8.55
+    range_high_hours: 21.78
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 1.8
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
+eta:
+  status: flagship_delivery
+  eta_human: 9h-22h
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: ''
+  summary: 'Milestone ''Add mobile runner-goal updates and player-safe consequence
+    feed views for campaign return moments.'' remains open under the flagship closeout
+    frontier. Outstanding readiness coverage: desktop_client.'
+  predicted_completion_at: '2026-05-22T08:23:26Z'
+  range_low_hours: 8.55
+  range_high_hours: 21.78
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 1.8

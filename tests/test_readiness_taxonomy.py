@@ -195,6 +195,71 @@ class ReadinessTaxonomyTests(unittest.TestCase):
 
         self.assertTrue(summary["dispatchable_truth_ready"])
 
+    def test_studio_compile_summary_ignores_non_publish_successor_queue_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            published = repo_root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            queue_fingerprint = self.readiness._work_package_source_queue_fingerprint([])
+            (published / "QUEUE.generated.yaml").write_text(
+                (
+                    f"source_queue_fingerprint: {queue_fingerprint}\n"
+                    "mode: append\n"
+                    "items: []\n"
+                ),
+                encoding="utf-8",
+            )
+            (published / "WORKPACKAGES.generated.yaml").write_text(
+                (
+                    f"source_queue_fingerprint: {queue_fingerprint}\n"
+                    "work_packages: []\n"
+                ),
+                encoding="utf-8",
+            )
+            (published / "compile.manifest.json").write_text(
+                json.dumps(
+                    {
+                        "published_at": "2026-03-23T10:00:00Z",
+                        "artifacts": ["QUEUE.generated.yaml", "WORKPACKAGES.generated.yaml"],
+                        "stages": {
+                            "design_compile": True,
+                            "policy_compile": True,
+                            "execution_compile": True,
+                            "package_compile": True,
+                            "capacity_compile": True,
+                        },
+                        "dispatchable_truth_ready": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            projects_dir = root / "config" / "projects"
+            projects_dir.mkdir(parents=True, exist_ok=True)
+            project_cfg_path = projects_dir / "fleet.yaml"
+            project_cfg_path.write_text(
+                json.dumps(
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [{"title": "Closed slice", "status": "done"}],
+                        "queue_sources": [
+                            {
+                                "kind": "next90_queue_staging",
+                                "path": "/tmp/unused",
+                                "mode": "append",
+                                "publish_queue_truth": False,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(self.readiness, "PROJECTS_CONFIG_DIR", projects_dir):
+                summary = self.readiness.studio_compile_summary(repo_root)
+
+        self.assertTrue(summary["dispatchable_truth_ready"])
+
     def test_compile_health_requires_package_and_capacity_compile_for_live_repo(self) -> None:
         health = self.readiness.compile_health(
             {

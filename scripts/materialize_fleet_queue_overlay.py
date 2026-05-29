@@ -101,7 +101,12 @@ def resolve_project_queue(repo_root: Path, projects_dir: Path, explicit_project_
             project_root = Path(raw_project_path).expanduser()
         if clean_explicit and project_id != clean_explicit:
             continue
-        if project_root != resolved_root:
+        path_matches = project_root == resolved_root
+        if clean_explicit and project_id == clean_explicit and not path_matches:
+            # Package worktrees keep canonical project paths in config; accept the
+            # explicit project match when materializing inside a forked worktree.
+            path_matches = True
+        if not path_matches:
             continue
         queue = list(payload.get("queue") or [])
         for source_cfg in payload.get("queue_sources") or []:

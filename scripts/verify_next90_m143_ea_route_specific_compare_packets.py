@@ -57,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--artifact", default=str(DEFAULT_OUTPUT))
     parser.add_argument("--markdown-artifact", default=str(DEFAULT_MARKDOWN_OUTPUT))
     parser.add_argument("--task-local-telemetry")
-    parser.add_argument("--runtime-handoff", default=str(DEFAULT_RUNTIME_HANDOFF))
+    parser.add_argument("--runtime-handoff", default=str(DEFAULT_RUNTIME_HANDOFF) if DEFAULT_RUNTIME_HANDOFF else "")
     parser.add_argument("--readiness", default=str(DEFAULT_READINESS))
     parser.add_argument("--workflow-pack", default=str(DEFAULT_WORKFLOW_PACK))
     parser.add_argument("--parity-audit", default=str(DEFAULT_PARITY_AUDIT))

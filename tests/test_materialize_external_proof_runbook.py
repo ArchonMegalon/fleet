@@ -61,6 +61,14 @@ def _write_bundle_archive(
     subprocess.run(["rm", "-rf", str(bundle_root)], check=True)
 
 
+def _read_tar_text(archive_path: Path, member_name: str) -> str:
+    with tarfile.open(archive_path, "r:gz") as archive:
+        member = archive.getmember(member_name)
+        handle = archive.extractfile(member)
+        assert handle is not None
+        return handle.read().decode("utf-8")
+
+
 def test_sanitize_proof_capture_command_preserves_version_hint_and_canonical_os_hint() -> None:
     module = _load_runbook_module()
 
@@ -230,6 +238,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     windows_validate_ps1 = commands_dir / "validate-windows-proof.ps1"
     windows_bundle_ps1 = commands_dir / "bundle-windows-proof.ps1"
     windows_ingest_ps1 = commands_dir / "ingest-windows-proof-bundle.ps1"
+    windows_prepare_ps1 = commands_dir / "prepare-windows-proof-command-pack.ps1"
     windows_command_pack = commands_dir / "windows-proof-command-pack.tgz"
     windows_command_pack_sha = commands_dir / "windows-proof-command-pack.tgz.sha256"
     macos_preflight = commands_dir / "preflight-macos-proof.sh"
@@ -237,6 +246,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     macos_validate = commands_dir / "validate-macos-proof.sh"
     macos_bundle = commands_dir / "bundle-macos-proof.sh"
     macos_ingest = commands_dir / "ingest-macos-proof-bundle.sh"
+    macos_prepare = commands_dir / "prepare-macos-proof-command-pack.sh"
     macos_command_pack = commands_dir / "macos-proof-command-pack.tgz"
     macos_command_pack_sha = commands_dir / "macos-proof-command-pack.tgz.sha256"
     linux_preflight = commands_dir / "preflight-linux-proof.sh"
@@ -244,6 +254,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     linux_validate = commands_dir / "validate-linux-proof.sh"
     linux_bundle = commands_dir / "bundle-linux-proof.sh"
     linux_ingest = commands_dir / "ingest-linux-proof-bundle.sh"
+    linux_prepare = commands_dir / "prepare-linux-proof-command-pack.sh"
     linux_run_lane = commands_dir / "run-linux-proof-lane.sh"
     linux_command_pack = commands_dir / "linux-proof-command-pack.tgz"
     linux_command_pack_sha = commands_dir / "linux-proof-command-pack.tgz.sha256"
@@ -256,6 +267,8 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "## Host: windows" in payload
     assert "## Host: macos" in payload
     assert "### Command Pack Verification" in payload
+    assert "prepare-macos-proof-command-pack.sh" in payload
+    assert "use `README.md` and `proof-host.env.example` in the extracted folder" in payload
     assert "shell_hint: Run canonical commands in Git Bash (or WSL bash)." in payload
     assert "shell_hint: Run commands in a POSIX shell (bash/zsh) on the required host." in payload
     assert "plan_generated_at: 2026-04-05T00:00:00Z" in payload
@@ -275,6 +288,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "### Commands (Host Validation)" in payload
     assert "### Commands (Host Bundle)" in payload
     assert "### Commands (Host Ingest)" in payload
+    assert "Set `CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE=1` to make the retained host-lane script ingest and republish automatically" in payload
     assert "### Commands (PowerShell Preflight Wrappers)" in payload
     assert "### Commands (PowerShell Wrappers)" in payload
     assert "### Commands (PowerShell Validation Wrappers)" in payload
@@ -294,10 +308,13 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert linux_run_lane.is_file()
     assert linux_command_pack.is_file()
     assert linux_command_pack_sha.is_file()
+    assert linux_prepare.is_file()
     assert macos_command_pack.is_file()
     assert macos_command_pack_sha.is_file()
+    assert macos_prepare.is_file()
     assert windows_command_pack.is_file()
     assert windows_command_pack_sha.is_file()
+    assert windows_prepare_ps1.is_file()
     assert (commands_dir / "host-proof-bundles" / "linux" / "external-proof-manifest.json").is_file()
     assert (commands_dir / "linux-proof-bundle.tgz").is_file()
     linux_pack_digest = hashlib.sha256(linux_command_pack.read_bytes()).hexdigest()
@@ -312,18 +329,94 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert f"command_pack_sha256: `{linux_pack_digest}`" in payload
     assert f"command_pack_sha256: `{macos_pack_digest}`" in payload
     assert f"command_pack_sha256: `{windows_pack_digest}`" in payload
-    assert f"shasum -a 256 -c {macos_command_pack_sha.name}" in payload
-    assert f"tar -xzf {macos_command_pack.name}" in payload
+    assert f"bash {macos_prepare.name} {macos_command_pack.name} {macos_command_pack_sha.name}" in payload
+    assert f"& .\\{windows_prepare_ps1.name} {windows_command_pack.name} {windows_command_pack_sha.name}" in payload
     assert "bash -lc 'set -euo pipefail" in payload
     assert "echo windows-proof" in payload
     assert "installer-preflight-sha256-mismatch" in payload
     assert "installer-download-html-response" in payload
+    macos_pack_readme = _read_tar_text(macos_command_pack, "README.md")
+    macos_pack_env = _read_tar_text(macos_command_pack, "proof-host.env.example")
+    macos_pack_finalize = _read_tar_text(macos_command_pack, "finalize-external-host-proof.sh")
+    macos_pack_ingest = _read_tar_text(macos_command_pack, "ingest-macos-proof-bundle.sh")
+    macos_pack_republish = _read_tar_text(macos_command_pack, "republish-after-host-proof.sh")
+    assert "bash ./run-macos-proof-lane.sh" in macos_pack_readme
+    assert "proof-host.env` and uncomment only the variables you need" in macos_pack_readme
+    assert "CHUMMER_UI_REPO_ROOT" in macos_pack_readme
+    assert "CHUMMER_EXTERNAL_PROOF_AUTH_HEADER" in macos_pack_readme
+    assert "CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE=1" in macos_pack_readme
+    assert "leave `CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE` unset" in macos_pack_readme
+    assert "bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-macos-proof-bundle.sh" in macos_pack_readme
+    assert "finalize-external-host-proof.sh" in macos_pack_readme
+    assert "republish-after-host-proof.sh" in macos_pack_readme
+    assert "proof-host.env" in macos_pack_env
+    assert "auto-loads proof-host.env" in macos_pack_env
+    assert "run-macos-proof-lane.sh" in macos_pack_env
+    assert "CHUMMER_EXTERNAL_PROOF_COOKIE_JAR" in macos_pack_env
+    lane_payload = _read_tar_text(macos_command_pack, "run-macos-proof-lane.sh")
+    assert '. "$SCRIPT_DIR/proof-host.env"' in lane_payload
+    assert "./validate-macos-proof.sh" in macos_pack_finalize
+    assert "Host proof bundle ingest complete" in macos_pack_ingest
+    assert "materialize_flagship_product_readiness.py" in macos_pack_republish
+
+
+def test_sync_dependent_flagship_truth_refreshes_default_publication_paths(monkeypatch) -> None:
+    module = _load_runbook_module()
+    calls: list[tuple[list[str], str | None]] = []
+
+    def fake_run(command, check, cwd=None):
+        calls.append((list(command), cwd))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.delenv(module.DEFAULT_SYNC_DISABLE_ENV, raising=False)
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    module._sync_dependent_flagship_truth(
+        out_path=module.DEFAULT_OUT.resolve(),
+        commands_dir=module.DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR.resolve(),
+    )
+
+    assert len(calls) >= 1
+    readiness_command = calls[0][0]
+    assert readiness_command[:2] == [sys.executable, str(module.FLEET_ROOT / "scripts" / "materialize_flagship_product_readiness.py")]
+    assert "--out" in readiness_command
+    assert str(module.DEFAULT_FLAGSHIP_PRODUCT_READINESS_OUT) in readiness_command
+    assert "--mirror-out" in readiness_command
+    assert str(module.FLEET_FLAGSHIP_PRODUCT_READINESS_MIRROR_PATH) in readiness_command
+    if module.DEFAULT_WEEKLY_PRODUCT_PULSE_SCRIPT.is_file():
+        assert len(calls) == 2
+        weekly_command = calls[1][0]
+        assert weekly_command[:2] == [sys.executable, str(module.DEFAULT_WEEKLY_PRODUCT_PULSE_SCRIPT)]
+        assert "--out" in weekly_command
+        assert str(module.DEFAULT_WEEKLY_PRODUCT_PULSE_OUT) in weekly_command
+
+
+def test_sync_dependent_flagship_truth_skips_custom_publication_paths(monkeypatch, tmp_path: Path) -> None:
+    module = _load_runbook_module()
+    calls: list[tuple[list[str], str | None]] = []
+
+    def fake_run(command, check, cwd=None):
+        calls.append((list(command), cwd))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.delenv(module.DEFAULT_SYNC_DISABLE_ENV, raising=False)
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    module._sync_dependent_flagship_truth(
+        out_path=(tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md").resolve(),
+        commands_dir=(tmp_path / "external-proof-commands").resolve(),
+    )
+
+    assert calls == []
     assert "installer-download-signature-mismatch" in payload
     assert "installer-postdownload-sha256-mismatch" in payload
     assert "external-proof-auth-missing" in payload
     assert "CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD" in payload
     assert "signed-in-download-route-required-or-bytes-drift" in payload
     assert 'REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}"' in payload
+    assert 'if [ -z "${CHUMMER_UI_REPO_ROOT:-}" ] && [ ! -d "$REPO_ROOT" ]; then' in payload
+    assert 'for candidate in /docker/chummercomplete/chummer6-ui /docker/chummercomplete/chummer6-ui-finish /docker/chummercomplete/chummer-presentation; do' in payload
+    assert 'if [ -d "$candidate" ]; then REPO_ROOT="$candidate" && export REPO_ROOT && break; fi;' in payload
     assert 'INSTALLER_PATH="$DOWNLOADS_ROOT/files/chummer-avalonia-win-x64-installer.exe"' in payload
     assert "hashlib.sha256" in payload
     assert "installer-contract-mismatch" in payload
@@ -337,6 +430,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "startup-smoke-receipt-stale" in payload
     max_age_token = f"max_age_seconds={module.STARTUP_SMOKE_MAX_AGE_SECONDS}"
     assert max_age_token in payload
+    assert "external-proof-ui-repo-root-missing: set CHUMMER_UI_REPO_ROOT if the UI repo is not checked out at" in payload
     assert "readyCheckpoint" in payload
     assert "hostClass" in payload
     assert "\"head_id\": \"avalonia\"" in payload
@@ -541,8 +635,13 @@ def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates
         encoding="utf-8"
     )
     ingest_payload = macos_ingest.read_text(encoding="utf-8")
-    assert "BUNDLE_ARCHIVE=\"$SCRIPT_DIR/macos-proof-bundle.tgz\"" in ingest_payload
-    assert "BUNDLE_DIR=\"$SCRIPT_DIR/host-proof-bundles/macos\"" in ingest_payload
+    assert "DEFAULT_BUNDLE_ARCHIVE=\"$SCRIPT_DIR/macos-proof-bundle.tgz\"" in ingest_payload
+    assert "DEFAULT_BUNDLE_DIR=\"$SCRIPT_DIR/host-proof-bundles/macos\"" in ingest_payload
+    assert 'BUNDLE_INPUT="${1:-}"' in ingest_payload
+    assert 'if [ -n "$BUNDLE_INPUT" ] && [ -f "$BUNDLE_INPUT" ]; then' in ingest_payload
+    assert 'BUNDLE_ARCHIVE="$BUNDLE_INPUT"' in ingest_payload
+    assert 'elif [ -n "$BUNDLE_INPUT" ] && [ -d "$BUNDLE_INPUT" ]; then' in ingest_payload
+    assert 'BUNDLE_DIR="$BUNDLE_INPUT"' in ingest_payload
     assert "if [ ! -s \"$BUNDLE_ARCHIVE\" ]; then" in ingest_payload
     assert "external-proof-bundle-path-unsafe" in ingest_payload
     assert "external-proof-bundle-member-unsafe" in ingest_payload
@@ -569,15 +668,18 @@ def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates
     assert "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json" not in post_capture.read_text(encoding="utf-8")
     assert "python3 scripts/chummer_design_supervisor.py status" not in post_capture.read_text(encoding="utf-8")
     finalize_payload = finalize.read_text(encoding="utf-8")
+    assert 'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"' in finalize_payload
+    assert 'cd "$SCRIPT_DIR"' in finalize_payload
+    assert 'BUNDLE_INPUT="${1:-}"' in finalize_payload
     assert "./validate-macos-proof.sh" in finalize_payload
-    assert "./ingest-macos-proof-bundle.sh" in finalize_payload
+    assert './ingest-macos-proof-bundle.sh "$BUNDLE_INPUT"' in finalize_payload
     assert "./validate-linux-proof.sh" not in finalize_payload
     assert "./ingest-linux-proof-bundle.sh" not in finalize_payload
     assert "./validate-windows-proof.sh" not in finalize_payload
     assert "./ingest-windows-proof-bundle.sh" not in finalize_payload
     assert "./republish-after-host-proof.sh" in finalize_payload
     assert finalize_payload.index("./validate-macos-proof.sh") < finalize_payload.index(
-        "./ingest-macos-proof-bundle.sh"
+        './ingest-macos-proof-bundle.sh "$BUNDLE_INPUT"'
     )
 
 
@@ -1096,22 +1198,216 @@ def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -
     assert f"- host_lane_powershell: `{commands_dir / 'run-windows-proof-lane.ps1'}`" in payload
     assert "### Resume Host Lane (PowerShell): windows" in payload
     assert "run-windows-proof-lane.ps1" in payload
+    assert "Set `$env:CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE = '1'` before the PowerShell host lane to trigger the same shared-workspace finalize path." in payload
     assert (commands_dir / "republish-after-host-proof.sh").is_file()
     finalize_payload = (commands_dir / "finalize-external-host-proof.sh").read_text(encoding="utf-8")
+    assert 'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"' in finalize_payload
+    assert 'cd "$SCRIPT_DIR"' in finalize_payload
+    assert 'BUNDLE_INPUT="${1:-}"' in finalize_payload
     for host in ("linux", "macos", "windows"):
+        lane_payload = (commands_dir / f"run-{host}-proof-lane.sh").read_text(encoding="utf-8")
+        assert 'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"' in lane_payload
+        assert 'cd "$SCRIPT_DIR"' in lane_payload
+        assert 'if [ "${CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE:-0}" = "1" ]; then' in lane_payload
+        assert '"$SCRIPT_DIR/finalize-external-host-proof.sh"' in lane_payload
+        assert "external-proof-auto-finalize-blocked" in lane_payload
+        assert "exit 1" in lane_payload
         assert f"./validate-{host}-proof.sh" in finalize_payload
-        assert f"./ingest-{host}-proof-bundle.sh" in finalize_payload
+        assert f'./ingest-{host}-proof-bundle.sh "$BUNDLE_INPUT"' in finalize_payload
     assert finalize_payload.index("./validate-linux-proof.sh") < finalize_payload.index(
-        "./ingest-linux-proof-bundle.sh"
+        './ingest-linux-proof-bundle.sh "$BUNDLE_INPUT"'
     )
     assert finalize_payload.index("./validate-macos-proof.sh") < finalize_payload.index(
-        "./ingest-macos-proof-bundle.sh"
+        './ingest-macos-proof-bundle.sh "$BUNDLE_INPUT"'
     )
     assert finalize_payload.index("./validate-windows-proof.sh") < finalize_payload.index(
-        "./ingest-windows-proof-bundle.sh"
+        './ingest-windows-proof-bundle.sh "$BUNDLE_INPUT"'
     )
     assert "finalize-external-host-proof.sh" in payload
     assert "republish-after-host-proof.sh" in payload
+
+
+def test_host_lane_optionally_runs_finalize_when_shared_workspace_is_present(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    out = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    support_packets.write_text(
+        json.dumps(
+            {
+                "unresolved_external_proof_execution_plan": {
+                    "request_count": 1,
+                    "hosts": ["macos"],
+                    "generated_at": "2026-04-05T00:00:00Z",
+                    "release_channel_generated_at": "2026-04-05T00:00:00Z",
+                    "capture_deadline_hours": 24,
+                    "capture_deadline_utc": "2026-04-06T00:00:00Z",
+                    "host_groups": {
+                        "macos": {
+                            "request_count": 1,
+                            "tuples": ["avalonia:osx-arm64:macos"],
+                            "requests": [
+                                {
+                                    "tuple_id": "avalonia:osx-arm64:macos",
+                                    "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                    "expected_artifact_id": "avalonia-osx-arm64-installer",
+                                    "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+                                    "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+                                    "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                                    "startup_smoke_receipt_contract": {
+                                        "ready_checkpoint": "pre_ui_event_loop",
+                                        "head_id": "avalonia",
+                                        "platform": "macos",
+                                        "rid": "osx-arm64",
+                                        "host_class_contains": "macos",
+                                        "status_any_of": ["pass", "ready"],
+                                    },
+                                    "capture_deadline_utc": "2026-04-06T00:00:00Z",
+                                    "proof_capture_commands": ["echo macos-proof"],
+                                }
+                            ],
+                        }
+                    },
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    journey_gates.write_text(json.dumps({"journeys": []}, indent=2) + "\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--out",
+            str(out),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    lane_payload = (out.parent / "external-proof-commands" / "run-macos-proof-lane.sh").read_text(encoding="utf-8")
+    assert "./bundle-macos-proof.sh" in lane_payload
+    assert 'if [ "${CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE:-0}" = "1" ]; then' in lane_payload
+    assert '[ -x "$SCRIPT_DIR/finalize-external-host-proof.sh" ] && [ -d /docker/fleet ] && [ -d /docker/chummercomplete ]' in lane_payload
+    assert '"$SCRIPT_DIR/finalize-external-host-proof.sh"' in lane_payload
+    assert "external-proof-auto-finalize-blocked" in lane_payload
+    assert "exit 1" in lane_payload
+
+
+def test_materialize_external_proof_runbook_backfills_missing_macos_installer_sha_from_release_train(
+    tmp_path: Path,
+) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    out = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    ui_repo = tmp_path / "ui"
+    release_channel = ui_repo / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
+    release_train = ui_repo / ".codex-studio" / "published" / "NEXT90_M101_UI_RELEASE_TRAIN.generated.json"
+    expected_sha = "ca6c25f0cdaf48bddfe83e3e983ff87b8763d973e671100165248c9edcd044bd"
+
+    support_packets.write_text(
+        json.dumps(
+            {
+                "unresolved_external_proof_execution_plan": {
+                    "request_count": 1,
+                    "hosts": ["macos"],
+                    "generated_at": "2026-05-13T00:00:00Z",
+                    "release_channel_generated_at": "2026-05-13T00:00:00Z",
+                    "capture_deadline_hours": 24,
+                    "capture_deadline_utc": "2026-05-14T00:00:00Z",
+                    "host_groups": {
+                        "macos": {
+                            "request_count": 1,
+                            "tuples": ["avalonia:osx-arm64:macos"],
+                            "requests": [
+                                {
+                                    "tuple_id": "avalonia:osx-arm64:macos",
+                                    "head_id": "avalonia",
+                                    "platform": "macos",
+                                    "rid": "osx-arm64",
+                                    "required_host": "macos",
+                                    "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                    "expected_artifact_id": "avalonia-osx-arm64-installer",
+                                    "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+                                    "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
+                                    "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+                                    "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                                    "startup_smoke_receipt_contract": {
+                                        "ready_checkpoint": "pre_ui_event_loop",
+                                        "head_id": "avalonia",
+                                        "platform": "macos",
+                                        "rid": "osx-arm64",
+                                        "host_class_contains": "macos",
+                                        "status_any_of": ["pass", "ready"],
+                                    },
+                                    "proof_capture_commands": ["echo macos-proof"],
+                                }
+                            ],
+                        }
+                    },
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    journey_gates.write_text(json.dumps({"journeys": []}, indent=2) + "\n", encoding="utf-8")
+    release_channel.parent.mkdir(parents=True, exist_ok=True)
+    release_channel.write_text(json.dumps({"status": "published"}, indent=2) + "\n", encoding="utf-8")
+    release_train.parent.mkdir(parents=True, exist_ok=True)
+    release_train.write_text(
+        json.dumps(
+            {
+                "evidence": {
+                    "platformResults": {
+                        "macos": {
+                            "artifactDigest": f"sha256:{expected_sha}",
+                            "artifactId": "avalonia-osx-arm64-installer",
+                            "expectedPublicInstallRoute": "/downloads/install/avalonia-osx-arm64-installer",
+                            "proofHead": "avalonia",
+                            "routeRid": "osx-arm64",
+                        }
+                    }
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--out",
+            str(out),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = out.read_text(encoding="utf-8")
+    assert f"installer_sha256: `{expected_sha}`" in payload
+    capture_payload = (out.parent / "external-proof-commands" / "capture-macos-proof.sh").read_text(encoding="utf-8")
+    assert expected_sha in capture_payload
 
 
 def test_materialize_external_proof_runbook_accepts_camel_case_plan_fields(tmp_path: Path) -> None:

@@ -3,7 +3,7 @@ lifecycle: live
 dispatch_priority: 260
 path: /docker/fleet
 design_doc: /docker/fleet/README.md
-verify_cmd: python3 scripts/check_consistency.py && python3 scripts/materialize_fleet_queue_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_package_compile_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json && python3 scripts/materialize_status_plane.py --status-json-out state/status-plane.verify.json && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && bash scripts/refresh_flagship_readiness_proof.sh && python3 scripts/materialize_campaign_os_continuity_monitor.py --out .codex-studio/published/CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json && python3 scripts/materialize_proof_orchestration.py --project-config config/projects/fleet.yaml --out .codex-studio/published/PROOF_ORCHESTRATION.generated.json && python3 scripts/chummer_design_supervisor.py active-shards --state-root /docker/fleet/state/chummer_design_supervisor && python3 -m py_compile controller/app.py admin/app.py studio/app.py auditor/app.py quartermaster/app.py scripts/fleet_codex_nonstop.py admin/studio_views.py scripts/materialize_support_case_packets.py scripts/materialize_fleet_queue_overlay.py scripts/materialize_package_compile_overlay.py scripts/materialize_journey_gates.py scripts/materialize_public_progress_report.py scripts/materialize_flagship_product_readiness.py scripts/materialize_campaign_os_continuity_monitor.py scripts/materialize_proof_orchestration.py scripts/materialize_next90_m136_fleet_aggregate_readiness_parity_gates.py scripts/refresh_flagship_readiness_proof.sh && python3 -m pytest -q tests/test_studio_publish_contract.py tests/test_materialize_support_case_packets.py tests/test_materialize_fleet_queue_overlay.py tests/test_published_queue_overlay.py tests/test_published_work_package_contracts.py tests/test_materialize_compile_manifest.py::test_published_compile_manifest_matches_generated_payload tests/test_materialize_package_compile_overlay.py tests/test_materialize_proof_orchestration.py tests/test_materialize_campaign_os_continuity_monitor.py tests/test_public_progress_report.py tests/test_design_mirror_product_contracts.py tests/test_admin_studio.py tests/test_operator_surface.py tests/test_queue_reconciliation.py tests/test_capacity_plane.py tests/test_codexliz_shim.py tests/test_quartermaster_service.py tests/test_quartermaster_ooda_e2e.py tests/test_work_package_collision_regressions.py tests/test_materialize_status_plane.py tests/test_materialize_public_progress_report.py tests/test_readiness_taxonomy.py tests/test_controller_routing.py tests/test_runtime_autoheal_contracts.py tests/test_rebuild_loop_autoheal_e2e.py
+verify_cmd: python3 scripts/check_consistency.py && python3 scripts/materialize_fleet_queue_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_package_compile_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json && python3 scripts/materialize_status_plane.py --status-json-out state/status-plane.verify.json && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && bash scripts/refresh_flagship_readiness_proof.sh && python3 scripts/materialize_release_completeness_ledger.py && python3 scripts/materialize_campaign_os_continuity_monitor.py --out .codex-studio/published/CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json && python3 scripts/materialize_proof_orchestration.py --project-config config/projects/fleet.yaml --out .codex-studio/published/PROOF_ORCHESTRATION.generated.json && python3 scripts/chummer_design_supervisor.py active-shards --state-root /docker/fleet/state/chummer_design_supervisor && python3 -m py_compile controller/app.py admin/app.py studio/app.py auditor/app.py quartermaster/app.py scripts/fleet_codex_nonstop.py admin/studio_views.py scripts/materialize_support_case_packets.py scripts/materialize_fleet_queue_overlay.py scripts/materialize_package_compile_overlay.py scripts/materialize_journey_gates.py scripts/materialize_public_progress_report.py scripts/materialize_flagship_product_readiness.py scripts/materialize_release_completeness_ledger.py scripts/materialize_campaign_os_continuity_monitor.py scripts/materialize_proof_orchestration.py scripts/materialize_next90_m136_fleet_aggregate_readiness_parity_gates.py scripts/refresh_flagship_readiness_proof.sh && python3 -m pytest -q tests/test_studio_publish_contract.py tests/test_materialize_support_case_packets.py tests/test_materialize_fleet_queue_overlay.py tests/test_published_queue_overlay.py tests/test_published_work_package_contracts.py tests/test_materialize_compile_manifest.py::test_published_compile_manifest_matches_generated_payload tests/test_materialize_package_compile_overlay.py tests/test_materialize_proof_orchestration.py tests/test_materialize_campaign_os_continuity_monitor.py tests/test_materialize_release_completeness_ledger.py tests/test_public_progress_report.py tests/test_design_mirror_product_contracts.py tests/test_admin_studio.py tests/test_operator_surface.py tests/test_queue_reconciliation.py tests/test_capacity_plane.py tests/test_codexliz_shim.py tests/test_quartermaster_service.py tests/test_quartermaster_ooda_e2e.py tests/test_work_package_collision_regressions.py tests/test_materialize_status_plane.py tests/test_materialize_public_progress_report.py tests/test_readiness_taxonomy.py tests/test_controller_routing.py tests/test_runtime_autoheal_contracts.py tests/test_rebuild_loop_autoheal_e2e.py
 feedback_dir: feedback
 state_file: .agent-state.json
 enabled: true
@@ -347,6 +347,7 @@ supervisor_contract:
       - desktop-client
       - release-proof
       - materializer
+      worker_bin: /docker/fleet/scripts/codex-shims/codexliz
       worker_lane: audit_shard
     - name: shard-15
       index: 15
@@ -848,6 +849,166 @@ queue:
   - POSTGOLD-003
   - POSTGOLD-004
   shipped: Closed on 2026-05-19 after refreshing the public feedback truth gates, rerunning the Black Ledger preseeded-world E2E receipt, and regenerating the gold janitor pass receipt from the current local host.
+- package_id: fleet-global-flagship-verdict-realignment
+  title: Realign stale global-flagship and closeout verdict artifacts to the current public-stable/mac-green truth so every mirrored audit bundle stops advertising old blocked state.
+  status: done
+  package_kind: implementation
+  design_owner: fleet-top-flagship
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  verification_bundle:
+  - /docker/chummercomplete/_completion/global_flagship_reaudit_all/FINAL_GLOBAL_FLAGSHIP_VERDICT.md
+  - /docker/chummercomplete/_completion/full_product_every_aspect/PUBLIC_SURFACE_VERDICT.md
+  - /docker/chummercomplete/_completion/full_product_every_aspect/PUBLIC_DOWNLOAD_SHELF_TRUTH.generated.json
+  - /docker/chummercomplete/chummer-design/_completion/gold_readiness_closure/FINAL_GOLD_VERDICT.md
+  handoff_note: /docker/fleet/feedback/2026-05-19-global-flagship-verdict-realignment.md
+  residual_blocker_ids:
+  - ERG6-P0-005
+  - ERG6-P0-012
+  - ERG6-P0-013
+  shipped: Closed on 2026-05-19 after realigning the global-flagship reaudit bundle, public-surface verdicts, and mirrored public-download shelf truth to the current public-stable release-channel and mac-green desktop evidence.
+- package_id: fleet-faction-video-provider-closure
+  title: Close the faction-video lane beyond fallback-only posture by proving a provider-backed lane or reauthoring the shipped first-party storyboard contract so the audits no longer stop at READY_VIA_FALLBACK.
+  status: done
+  package_kind: implementation
+  design_owner: fleet-top-flagship
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  verification_bundle:
+  - /home/tibor/chummer_every_repo_reaudit_v6_20260518.zip
+  - /docker/chummercomplete/_completion/pre_gold_full_product/FINAL_FACTION_VIDEO_VERDICT.md
+  - /docker/chummercomplete/_completion/gold_readiness_closure/FINAL_FACTION_VIDEO_VERDICT.md
+  - /docker/chummercomplete/chummer-design/_completion/gold_readiness_closure/FINAL_GOLD_VERDICT.md
+  handoff_note: /docker/fleet/feedback/2026-05-19-faction-video-provider-closure.md
+  residual_blocker_ids:
+  - ERG6-P0-010
+  shipped: Closed on 2026-05-19 by reauthoring the shipped faction-video contract around the first-party storyboard lane and removing READY_VIA_FALLBACK from the authoritative closeout verdicts.
+- package_id: fleet-chummer-gold-reaudit-v7-closure
+  title: Close the newest Tibor gold reaudit package from `/home/tibor/chummer_gold_reaudit_v7_20260519.zip` by mapping stale blockers to current truth, restoring any audit-facing proof aliases, and leaving only the external mac publish rerun as residual work.
+  status: done
+  package_kind: implementation
+  design_owner: fleet-top-flagship
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  audit_zip: /home/tibor/chummer_gold_reaudit_v7_20260519.zip
+  handoff_note: /docker/fleet/feedback/2026-05-20-gold-reaudit-v7-closure.md
+  verification_bundle:
+  - /home/tibor/chummer_gold_reaudit_v7_20260519.zip
+  - /docker/chummercomplete/chummer-design/_completion/gold_readiness_closure/FINAL_GOLD_VERDICT.md
+  - /docker/chummercomplete/_completion/global_flagship_reaudit_all/FINAL_GLOBAL_FLAGSHIP_VERDICT.md
+  - /docker/chummercomplete/_completion/gold_readiness_closure/FINAL_BLACK_LEDGER_XCOM_GLOBE_VERDICT.md
+  - /docker/chummercomplete/_completion/gold_readiness_closure/BLACK_LEDGER_GLOBE_PERFORMANCE.generated.json
+  residual_blocker_ids:
+  - GOLD7-P0-005
+  shipped: Closed repo-locally on 2026-05-20 after mapping stale V7 blockers to current green truth and restoring the remaining globe-proof aliases and test entrypoints. The only residual blocker left is the external mac publish rerun tracked separately in `WL-324`.
+- package_id: fleet-chummer-gold-reaudit-v8-closure
+  title: Close the newest Tibor gold reaudit package from `/home/tibor/chummer_gold_reaudit_v8_20260520.zip` by refreshing stale live-proof artifacts, restoring any exact gold-bundle proof aliases V8 still expects, and leaving only the external mac publish rerun as residual work.
+  status: done
+  package_kind: implementation
+  design_owner: fleet-top-flagship
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  audit_zip: /home/tibor/chummer_gold_reaudit_v8_20260520.zip
+  handoff_note: /docker/fleet/feedback/2026-05-20-gold-reaudit-v8-closure.md
+  verification_bundle:
+  - /home/tibor/chummer_gold_reaudit_v8_20260520.zip
+  - /docker/chummercomplete/chummer.run-services/.codex-studio/published/CHUMMER_PUBLIC_ROUTE_PROOF.generated.json
+  - /docker/chummercomplete/_completion/gold_readiness_closure/PUBLIC_OPERATOR_LEAK_SCAN.generated.json
+  - /docker/chummercomplete/_completion/gold_readiness_closure/BLACK_LEDGER_TURN1_NEWSREEL_EMAIL.generated.json
+  - /docker/chummercomplete/chummer-design/_completion/gold_readiness_closure/FINAL_GOLD_VERDICT.md
+  residual_blocker_ids:
+  - GOLD8-P0-012
+  shipped: Closed repo-locally on 2026-05-20 after materializing the fresh public route proof into the published artifact, mirroring the leak scan into the gold bundle, adding the newsreel email compatibility receipt, and confirming the rest of the V8 blocker list was stale against current green truth. The only residual blocker left is the external mac publish rerun tracked separately in `WL-324`.
+- package_id: fleet-release-perfection-public-route-honesty
+  title: Finish the release-grade public route honesty layer by adding explicit proof-state tags to every public route card and separating feedback, support, and governance semantics so customer-facing surfaces cannot overclaim or collapse distinct states into one lane.
+  status: done
+  package_kind: implementation
+  design_owner: fleet-top-flagship
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  verification_bundle:
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/USER_WISH_DESIGN_EXPANSION.md
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/CANON_TRUTH_MAP.md
+  - /docker/chummercomplete/chummer.run-services/.codex-design/product/TARGET_PUBLIC_ROUTES.yaml
+  handoff_note: /docker/fleet/feedback/2026-05-19-release-perfection-public-route-honesty.md
+  shipped: Closed on 2026-05-19 after binding every public route card to live proof-state tags in `admin/public_progress.py`, separating support/feedback/governance semantics, and covering the route-card proof rendering in `tests/test_public_progress_report.py`.
+- package_id: fleet-package-impact-explainability-closure
+  title: Make package compatibility, install, update, rollback, and revoke claims fully explainable to non-power users with public-safe provenance, route-level impact proofs, and linked gate evidence instead of expert-only registry assertions.
+  status: done
+  package_kind: implementation
+  design_owner: fleet-top-flagship
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  verification_bundle:
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/MISSED_POTENTIAL_AUDIT.md
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/USER_WISH_DESIGN_EXPANSION.md
+  - /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json
+  handoff_note: /docker/fleet/feedback/2026-05-19-package-impact-explainability-closure.md
+  shipped: Closed on 2026-05-19 after binding `/downloads` package claims to live release-channel, install-journey, rollback, revoke, and supportability evidence in `admin/public_progress.py` instead of expert-only registry inference.
+- package_id: fleet-mobile-account-portability-gold-closure
+  title: Close the remaining mobile/PWA and account portability release gaps by shipping session resume, offline queue replay, accessibility, cross-device migration, and conflict-recovery proof so premium/public release posture no longer depends on preview-safe caveats.
+  status: done
+  package_kind: implementation
+  design_owner: fleet-top-flagship
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  verification_bundle:
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/MISSED_POTENTIAL_AUDIT.md
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/USER_WISH_DESIGN_EXPANSION.md
+  handoff_note: /docker/fleet/feedback/2026-05-19-mobile-account-portability-gold-closure.md
+  shipped: Closed on 2026-05-19 after grounding the mobile/account portability lane on the current `chummer6-mobile` release proof for session resume, offline queue replay, accessibility, cross-device restore, and sync-conflict recovery, then republishing Fleet proof surfaces so release posture stops treating that slice as preview-only backlog.
+- package_id: fleet-governance-rollout-proof-depth
+  title: Deepen the ruleset and package governance loop so proposal-to-package transitions always carry rollback evidence, release-impact proof, and public-safe wording controls rather than reading like immediate rollout claims.
+  status: done
+  package_kind: implementation
+  design_owner: fleet-top-flagship
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  verification_bundle:
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/MISSED_POTENTIAL_AUDIT.md
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/FALSE_CLAIM_RISK.md
+  handoff_note: /docker/fleet/feedback/2026-05-19-governance-rollout-proof-depth.md
+  shipped: Closed on 2026-05-19 by binding the public governance route to live completion-audit, canary, freeze-launch, and rollback evidence so proposal-to-package posture stays claim-safe and release-impact aware.
+- package_id: fleet-ltt-and-12-ticks-certification
+  title: Build the authoritative LTT and 12-ticks release-completeness ledger so every promised release-critical track is explicitly implemented, integrated, and end-to-end tested, with no global-gold claim depending on inference or scattered artifacts.
+  status: done
+  package_kind: implementation
+  design_owner: fleet-top-flagship
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  verification_bundle:
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/RUN_STATE.yaml
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/COMPLETION_BACKLOG.yaml
+  - /docker/chummercomplete/_completion/chummer6_absolute_completion/BUG_AND_GAP_REGISTER.yaml
+  handoff_note: /docker/fleet/feedback/2026-05-19-ltt-and-12-ticks-certification.md
+  shipped: Closed on 2026-05-19 by publishing `LTT_AND_12_TICKS_RELEASE_COMPLETENESS.generated.json`, which turns flagship readiness, golden journeys, and public route cards into one explicit release-completeness ledger and blocks absolute-finish language until every tick and repo-local backlog row is clean.
 queue_sources:
 - kind: worklist
   path: WORKLIST.md

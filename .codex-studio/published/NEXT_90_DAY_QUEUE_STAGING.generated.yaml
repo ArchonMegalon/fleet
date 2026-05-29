@@ -3707,8 +3707,9 @@ items:
   - portable_dossier_export_ui
   proof:
   - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopHomeWindow.cs
-  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCampaignArtifactWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCreatorPublicationWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopOrganizerOperationsWindow.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/MainWindow.DesktopSurfaceNavigation.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/AccessibilitySignoffSmokeTests.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/Next90M115PortableDossierGuardTests.cs
@@ -3816,7 +3817,7 @@ items:
     the desktop publication and moderation slice.
   proof:
   - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopHomeWindow.cs
-  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
+  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopOrganizerOperationsWindow.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCreatorPublicationWindow.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/AccessibilitySignoffSmokeTests.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/Next90M116CreatorPublicationGuardTests.cs
@@ -3965,9 +3966,7 @@ items:
     artifact shelf slice.
   proof:
   - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopHomeWindow.cs
-  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCampaignArtifactWindow.cs
-  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopRuleEnvironmentStudioWindow.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCreatorPublicationWindow.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/AccessibilitySignoffSmokeTests.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/Next90M117ArtifactShelfGuardTests.cs
@@ -4121,7 +4120,6 @@ items:
     desktop package.
   proof:
   - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopHomeWindow.cs
-  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopOrganizerOperationsWindow.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/App.axaml.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Desktop.Runtime/DesktopStartupSurfaceCatalog.cs
@@ -4340,7 +4338,6 @@ items:
     registry plus queue rows instead of reopening this slice.
   proof:
   - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopHomeWindow.cs
-  - /docker/chummercomplete/chummer-presentation/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/AccessibilitySignoffSmokeTests.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/Next90M119FirstSessionFlowGuardTests.cs
   - /docker/chummercomplete/chummer-presentation/Chummer.Tests/Chummer.Tests.csproj
@@ -10044,4 +10041,72 @@ items:
   owned_surfaces:
   - flagship_gold_coherence_gate:fleet
   - pwa_docs_route_truth_gate:fleet
+- title: Prevent authenticated command-lane pages from being replayed out of shared PWA caches so offline support does not leak signed-in account surfaces after sign-out.
+  task: Prevent authenticated command-lane pages from being replayed out of shared PWA caches so offline support does not leak signed-in account surfaces after sign-out.
+  package_id: next90-m155-hub-pwa-auth-cache-privacy-bounds
+  work_task_id: '155.1'
+  frontier_id: 1551015501
+  milestone_id: 155
+  status: not_started
+  wave: W33
+  repo: chummer6-hub
+  allowed_paths:
+  - Chummer.Run.Api/wwwroot/service-worker.js
+  - scripts
+  - tests
+  owned_surfaces:
+  - pwa_authenticated_cache_privacy_bounds:hub
+  - offline_account_surface_fail_closed:hub
+- title: Upgrade the PWA flagship proof from route and source-text checks to real browser assertions for role entry, manifest registration, service worker presence, and notification-route behavior.
+  task: Upgrade the PWA flagship proof from route and source-text checks to real browser assertions for role entry, manifest registration, service worker presence, and notification-route behavior.
+  package_id: next90-m155-hub-pwa-runtime-role-contract-proof
+  work_task_id: '155.2'
+  frontier_id: 1552015502
+  milestone_id: 155
+  status: not_started
+  wave: W33
+  repo: chummer6-hub
+  allowed_paths:
+  - tests
+  - scripts
+  - .codex-studio/published
+  owned_surfaces:
+  - pwa_role_route_runtime_contracts:hub
+  - browser_level_pwa_acceptance:hub
+- title: Replace brittle string-rewrite guide shell transforms with structured section-aware rendering so flagship docs cannot silently drift on harmless upstream wording edits.
+  task: Replace brittle string-rewrite guide shell transforms with structured section-aware rendering so flagship docs cannot silently drift on harmless upstream wording edits.
+  package_id: next90-m155-guide-structured-shell-transform-contracts
+  work_task_id: '155.3'
+  frontier_id: 1553015503
+  milestone_id: 155
+  status: not_started
+  wave: W33
+  repo: Chummer6
+  allowed_paths:
+  - scripts
+  - README.md
+  - STATUS.md
+  - HELP.md
+  - FAQ.md
+  - DOWNLOAD.md
+  owned_surfaces:
+  - structured_public_guide_shell_transforms:guide
+  - flagship_shell_transform_drift_guard:guide
+- title: Add a fleet-owned flagship gold privacy-and-proof-depth gate that rejects release claims when authenticated cache bounds, browser-runtime PWA proof, and structured docs-shell rendering are not all green together.
+  task: Add a fleet-owned flagship gold privacy-and-proof-depth gate that rejects release claims when authenticated cache bounds, browser-runtime PWA proof, and structured docs-shell rendering are not all green together.
+  package_id: next90-m155-fleet-flagship-gold-privacy-proof-gates
+  work_task_id: '155.4'
+  frontier_id: 1554015504
+  milestone_id: 155
+  status: not_started
+  wave: W33
+  repo: fleet
+  allowed_paths:
+  - scripts
+  - tests
+  - .codex-studio/published
+  - /docker/chummercomplete/_completion/gold_readiness_closure
+  owned_surfaces:
+  - flagship_gold_privacy_gate:fleet
+  - flagship_gold_proof_depth_gate:fleet
 source_queue_fingerprint: e350c3be89d2f3ff2b04c700b0b4f43b554b9ad9

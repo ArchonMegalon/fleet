@@ -13,7 +13,7 @@ from typing import Any, Dict, List
 
 import yaml
 
-ROOT = Path("/docker/fleet")
+ROOT = Path(__file__).resolve().parents[1]
 PROJECT_CONFIG_DIR = ROOT / "config" / "projects"
 GROUP_CONFIG_PATH = ROOT / "config" / "groups.yaml"
 DEFAULT_STATUS_PLANE_PATH = ROOT / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
@@ -1003,7 +1003,12 @@ def load_admin_status(status_json_path: Path | None, *, use_default_snapshot: bo
 
 def run_verification(status_plane_path: Path, status_json_path: Path | None) -> None:
     actual = load_status_plane(status_plane_path)
-    admin_status = load_admin_status(status_json_path, use_default_snapshot=True)
+    try:
+        admin_status = load_admin_status(status_json_path, use_default_snapshot=bool(status_json_path))
+    except StatusPlaneDriftError:
+        if status_json_path is not None:
+            raise
+        admin_status = load_admin_status(None, use_default_snapshot=True)
     admin_status = _ensure_project_inventory(admin_status)
     expected = build_expected_status_plane(admin_status)
     errors = compare_status_plane(expected, actual)

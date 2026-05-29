@@ -1087,7 +1087,7 @@ def effective_runtime_status(
         review_runtime_status = "review_requested" if review_mode != "github" or int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
     if not enabled:
         return "paused"
-    if status in {"starting", "running", "verifying"} and active_run_id:
+    if status in {"starting", "running", "verifying"} and active_run_is_live(active_run_id):
         return status
     if int(queue_index) >= int(queue_len):
         if review_runtime_status:
@@ -3704,10 +3704,24 @@ def project_queue_length(project: Dict[str, Any]) -> int:
 
 
 def project_has_live_worker(project: Dict[str, Any]) -> bool:
-    active_run_id = str(project.get("active_run_id") or "").strip()
-    if active_run_id not in {"", "0"}:
+    active_run_id = int(project.get("active_run_id") or 0) or None
+    if active_run_is_live(active_run_id):
         return True
     return project_runtime_status(project).lower() in {"starting", "running", "verifying"}
+
+
+def active_run_is_live(run_id: Optional[int]) -> bool:
+    clean_run_id = int(run_id or 0) or None
+    if not clean_run_id:
+        return False
+    with db() as conn:
+        row = conn.execute(
+            "SELECT status, finished_at FROM runs WHERE id=?",
+            (clean_run_id,),
+        ).fetchone()
+    if not row:
+        return False
+    return str(row["status"] or "").strip().lower() in {"starting", "running", "verifying"} and not parse_iso(row["finished_at"])
 
 
 def runtime_status_for_active_run(base_status: str, run_row: Dict[str, Any]) -> str:
@@ -6804,7 +6818,7 @@ def merged_projects(*, cache_only: bool = False) -> List[Dict[str, Any]]:
             runtime_status = runtime_status_for_active_run(runtime_status, active_run)
         elif runtime_status not in {"starting", "running", "verifying"}:
             active_run_id = None
-        if not active_run_id and runtime_status in {"starting", "running", "verifying"}:
+        if not active_run_id and runtime_status in {"starting", "running", "verifying"} and active_run_is_live(runtime_row.get("active_run_id")):
             active_run_id = runtime_row.get("active_run_id")
         row["active_run_id"] = active_run_id
         row["active_run_trace_id"] = str(active_run.get("trace_id") or "").strip() if active_run_id else ""

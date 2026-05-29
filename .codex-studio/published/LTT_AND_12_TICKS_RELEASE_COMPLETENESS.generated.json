@@ -1,0 +1,584 @@
+{
+  "contract_name": "fleet.ltt_and_12_ticks_release_completeness",
+  "schema_version": 1,
+  "generated_at": "2026-05-19T22:04:27Z",
+  "summary": {
+    "ltt_inventory_count": 20,
+    "tick_count": 12,
+    "pass_count": 12,
+    "non_pass_count": 0,
+    "absolute_finish_allowed": true
+  },
+  "definition": {
+    "ltt_inventory_rule": "LTT is the fleet-wide release-critical inventory built from flagship readiness planes, golden journeys, and public route proof surfaces.",
+    "ticks_rule": "12-ticks is the current executable certification set: six golden journeys plus six public route cards. This grouping is a fleet synthesis over repo-local proof surfaces rather than a design-registry primitive."
+  },
+  "source_artifacts": {
+    "flagship_product_readiness": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+    "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+    "progress_report": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+    "completion_review_frontier": "/docker/fleet/.codex-studio/published/COMPLETION_REVIEW_FRONTIER.generated.yaml"
+  },
+  "ltt_inventory": [
+    {
+      "id": "desktop_client",
+      "family": "readiness_plane",
+      "title": "Desktop client",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "evidence": [
+        {
+          "surface": "flagship_product_readiness",
+          "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "rules_engine_and_import",
+      "family": "readiness_plane",
+      "title": "Rules engine and import",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "evidence": [
+        {
+          "surface": "flagship_product_readiness",
+          "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "hub_and_registry",
+      "family": "readiness_plane",
+      "title": "Hub and registry",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "evidence": [
+        {
+          "surface": "flagship_product_readiness",
+          "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "mobile_play_shell",
+      "family": "readiness_plane",
+      "title": "Mobile play shell",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "evidence": [
+        {
+          "surface": "flagship_product_readiness",
+          "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "ui_kit_and_flagship_polish",
+      "family": "readiness_plane",
+      "title": "UI kit and flagship polish",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "evidence": [
+        {
+          "surface": "flagship_product_readiness",
+          "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "media_artifacts",
+      "family": "readiness_plane",
+      "title": "Media artifacts",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "evidence": [
+        {
+          "surface": "flagship_product_readiness",
+          "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "horizons_and_public_surface",
+      "family": "readiness_plane",
+      "title": "Horizons and public surface",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "evidence": [
+        {
+          "surface": "flagship_product_readiness",
+          "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "fleet_and_operator_loop",
+      "family": "readiness_plane",
+      "title": "Fleet and operator loop",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "evidence": [
+        {
+          "surface": "flagship_product_readiness",
+          "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "install_claim_restore_continue",
+      "family": "golden_journey",
+      "title": "Install, claim, restore, continue",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "ready",
+      "evidence": [
+        {
+          "surface": "journey_gates",
+          "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "build_explain_publish",
+      "family": "golden_journey",
+      "title": "Build, explain, publish",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "ready",
+      "evidence": [
+        {
+          "surface": "journey_gates",
+          "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "campaign_session_recover_recap",
+      "family": "golden_journey",
+      "title": "Campaign, session, recover, recap",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "ready",
+      "evidence": [
+        {
+          "surface": "journey_gates",
+          "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "recover_from_sync_conflict",
+      "family": "golden_journey",
+      "title": "Recover from sync conflict",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "ready",
+      "evidence": [
+        {
+          "surface": "journey_gates",
+          "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "report_cluster_release_notify",
+      "family": "golden_journey",
+      "title": "Report, cluster, release, notify",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "ready",
+      "evidence": [
+        {
+          "surface": "journey_gates",
+          "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "organize_community_and_close_loop",
+      "family": "golden_journey",
+      "title": "Organize community and close the loop",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "ready",
+      "evidence": [
+        {
+          "surface": "journey_gates",
+          "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "downloads",
+      "family": "public_route",
+      "title": "Downloads and install truth",
+      "route": "/downloads",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "public-stable",
+      "evidence": [
+        {
+          "surface": "public_progress_route_card",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+          "status": "public-stable"
+        }
+      ]
+    },
+    {
+      "id": "workbench",
+      "family": "public_route",
+      "title": "Desktop workbench",
+      "route": "/home/work",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "public-stable",
+      "evidence": [
+        {
+          "surface": "public_progress_route_card",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+          "status": "public-stable"
+        }
+      ]
+    },
+    {
+      "id": "account",
+      "family": "public_route",
+      "title": "Account, restore, and device continuity",
+      "route": "/account/access",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "public-stable",
+      "evidence": [
+        {
+          "surface": "public_progress_route_card",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+          "status": "public-stable"
+        }
+      ]
+    },
+    {
+      "id": "support",
+      "family": "public_route",
+      "title": "Support and recovery",
+      "route": "/account/support",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "public-stable",
+      "evidence": [
+        {
+          "surface": "public_progress_route_card",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+          "status": "public-stable"
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "family": "public_route",
+      "title": "Feedback and discovery",
+      "route": "/feedback",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "public-stable",
+      "evidence": [
+        {
+          "surface": "public_progress_route_card",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+          "status": "public-stable"
+        }
+      ]
+    },
+    {
+      "id": "governance",
+      "family": "public_route",
+      "title": "Governance and rollout posture",
+      "route": "/roadmap",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "public-stable",
+      "evidence": [
+        {
+          "surface": "public_progress_route_card",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+          "status": "public-stable"
+        }
+      ]
+    }
+  ],
+  "ticks": [
+    {
+      "id": "install_claim_restore_continue",
+      "family": "golden_journey",
+      "title": "Install, claim, restore, continue",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "ready",
+      "evidence": [
+        {
+          "surface": "journey_gates",
+          "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "build_explain_publish",
+      "family": "golden_journey",
+      "title": "Build, explain, publish",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "ready",
+      "evidence": [
+        {
+          "surface": "journey_gates",
+          "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "campaign_session_recover_recap",
+      "family": "golden_journey",
+      "title": "Campaign, session, recover, recap",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "ready",
+      "evidence": [
+        {
+          "surface": "journey_gates",
+          "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "recover_from_sync_conflict",
+      "family": "golden_journey",
+      "title": "Recover from sync conflict",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "ready",
+      "evidence": [
+        {
+          "surface": "journey_gates",
+          "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "report_cluster_release_notify",
+      "family": "golden_journey",
+      "title": "Report, cluster, release, notify",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "ready",
+      "evidence": [
+        {
+          "surface": "journey_gates",
+          "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "organize_community_and_close_loop",
+      "family": "golden_journey",
+      "title": "Organize community and close the loop",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "ready",
+      "evidence": [
+        {
+          "surface": "journey_gates",
+          "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+          "status": "ready"
+        }
+      ]
+    },
+    {
+      "id": "downloads",
+      "family": "public_route",
+      "title": "Downloads and install truth",
+      "route": "/downloads",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "public-stable",
+      "evidence": [
+        {
+          "surface": "public_progress_route_card",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+          "status": "public-stable"
+        }
+      ]
+    },
+    {
+      "id": "workbench",
+      "family": "public_route",
+      "title": "Desktop workbench",
+      "route": "/home/work",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "public-stable",
+      "evidence": [
+        {
+          "surface": "public_progress_route_card",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+          "status": "public-stable"
+        }
+      ]
+    },
+    {
+      "id": "account",
+      "family": "public_route",
+      "title": "Account, restore, and device continuity",
+      "route": "/account/access",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "public-stable",
+      "evidence": [
+        {
+          "surface": "public_progress_route_card",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+          "status": "public-stable"
+        }
+      ]
+    },
+    {
+      "id": "support",
+      "family": "public_route",
+      "title": "Support and recovery",
+      "route": "/account/support",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "public-stable",
+      "evidence": [
+        {
+          "surface": "public_progress_route_card",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+          "status": "public-stable"
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "family": "public_route",
+      "title": "Feedback and discovery",
+      "route": "/feedback",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "public-stable",
+      "evidence": [
+        {
+          "surface": "public_progress_route_card",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+          "status": "public-stable"
+        }
+      ]
+    },
+    {
+      "id": "governance",
+      "family": "public_route",
+      "title": "Governance and rollout posture",
+      "route": "/roadmap",
+      "implemented": true,
+      "integrated": true,
+      "end_to_end_tested": true,
+      "status": "pass",
+      "current_state": "public-stable",
+      "evidence": [
+        {
+          "surface": "public_progress_route_card",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+          "status": "public-stable"
+        }
+      ]
+    }
+  ],
+  "release_claim_guard": {
+    "status": "pass",
+    "reason": "All twelve executable ticks are pass and the repo-local completion frontier is clean.",
+    "incomplete_tick_ids": [],
+    "completion_audit_status": "pass",
+    "completion_audit_reason": "trusted completion receipt plus whole-product release proof and Linux desktop exit gate are ready",
+    "repo_backlog_status": "pass",
+    "repo_backlog_reason": "no active repo-local backlog remains outside the closed design registry",
+    "repo_backlog_open_item_count": 0
+  }
+}

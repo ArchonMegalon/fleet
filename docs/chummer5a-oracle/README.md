@@ -15,15 +15,17 @@ This folder closes milestone `103` package `next90-m103-ea-parity-lab` for the E
 - `veteran_workflow_packs.yaml` carries both `task_local_frontier_context` and `whole_product_frontier_coverage`: the first preserves the shard-3 successor-wave assignment context from task-local telemetry, while the second records the current published readiness slice that matters to this oracle pack. It is oracle evidence, not a release certificate.
 - Both manifests carry `sync_context` so the package can be audited back to the exact worker-safe telemetry file, embedded task-local telemetry snapshot, Fleet readiness receipt, and UI desktop executable-gate receipt used for this sync.
 - The veteran workflow pack remains pinned to shard-3 run `20260505T194421Z-shard-3`, readiness receipt `2026-05-05T19:49:40Z`, shard runtime handoff first output `2026-05-05T19:49:01Z`, and desktop executable-gate receipt `2026-05-05T03:53:56.486187Z`.
-- The M141 route-local compare packet is pinned to shard-5 run `20260506T000258Z-shard-5`, frontier `2841916304`, screenshot-review receipt `2026-05-05T23:09:10.229745Z`, desktop-visual receipt `2026-05-06T00:00:28.536600Z`, and readiness receipt `2026-05-05T23:58:17Z`; inspect its embedded `sync_context` in `m141_import_route_compare_packets.yaml` for the exact worker-safe telemetry and proof-source tuple.
+- The M141 route-local compare packet is pinned to shard-2 run `20260516T161028Z-shard-2`, frontier `2841916304`, screenshot-review receipt `2026-05-16T00:39:39.035167Z`, desktop-visual receipt `2026-05-15T16:06:33.430811Z`, UI release receipt `2026-05-15T16:06:33.154236Z`, and readiness receipt `2026-05-16T16:11:13Z`; inspect its embedded `sync_context` in `m141_import_route_compare_packets.yaml` for the exact worker-safe telemetry and proof-source tuple.
 - The standalone M142 family-local packet is pinned to shard-9 run `20260505T231252Z-shard-9`, readiness receipt `2026-05-05T23:01:09Z`, and the live screenshot/runtime receipts named inside `m142_family_local_proof_packs.yaml`.
+- The M143 route-specific compare packet is refreshed from the latest shard runtime handoff and task-local telemetry snapshot rather than a hard-coded shard path; inspect `sync_context` in `m143_route_specific_compare_packets.yaml` for the exact run-bound proof tuple.
 
 ## Current Readiness Note
 
 - This folder is an oracle pack, not a completion certificate.
 - The latest published readiness proof must be checked separately at `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`.
-- At the time of this README refresh, that live proof is not green: `desktop_client` remains a warning coverage key in `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`.
+- At the time of this README refresh, that live proof is not green: `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json` reports `status: fail`, `warning_keys: [ui_kit_and_flagship_polish, fleet_and_operator_loop]`, and `missing_keys: [desktop_client]`.
 - This oracle pack now includes the family-local screenshot and interaction bundles the M142 closeout gate needs for `dense_builder_and_career_workflows`, `dice_initiative_and_table_utilities`, and `identity_contacts_lifestyles_history`, but that package evidence does not by itself overwrite the live readiness receipt.
+- Active task-local telemetry may still narrow the worker slice differently from the live readiness receipt; treat the embedded packet `sync_context` as queue context and the published readiness receipt as release truth.
 - The release-facing ledger for what remains below gold now lives in `/docker/fleet/.codex-design/product/WHAT_IS_STILL_BELOW_GOLD.md`.
 
 ## Milestone-103 Contract Coverage
@@ -38,7 +40,7 @@ This folder closes milestone `103` package `next90-m103-ea-parity-lab` for the E
 - standalone M142 family-local packet: `m142_family_local_proof_packs.yaml` and `m142_family_local_proof_packs.md`
 - direct import-route screenshot packs and compare packets: `m141_import_route_compare_packets.yaml` and `m141_import_route_compare_packets.md`
 - direct M143 route-specific compare packets and artifact-proof bundles: `m143_route_specific_compare_packets.yaml` and `m143_route_specific_compare_packets.md`
-- whole-frontier readiness map: `whole_product_frontier_coverage` in `veteran_workflow_packs.yaml`, aligned to the current published readiness receipt for `desktop_client` and `fleet_and_operator_loop`
+- whole-frontier readiness map: `whole_product_frontier_coverage` in `veteran_workflow_packs.yaml`, aligned to the current published readiness receipt for `ui_kit_and_flagship_polish`, `fleet_and_operator_loop`, and `desktop_client`
 - task-local frontier context: `task_local_frontier_context` in `veteran_workflow_packs.yaml`
 - below-gold release ledger: `/docker/fleet/.codex-design/product/WHAT_IS_STILL_BELOW_GOLD.md`
 

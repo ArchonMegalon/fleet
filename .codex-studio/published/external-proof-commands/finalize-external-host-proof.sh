@@ -1,11 +1,11 @@
 #!/bin/sh
 set -eu
 
-cd /docker/fleet/.codex-studio/published/external-proof-commands
-./validate-linux-proof.sh
-./ingest-linux-proof-bundle.sh
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+BUNDLE_INPUT="${1:-}"
 ./validate-macos-proof.sh
-./ingest-macos-proof-bundle.sh
+./ingest-macos-proof-bundle.sh "$BUNDLE_INPUT"
 ./validate-windows-proof.sh
-./ingest-windows-proof-bundle.sh
+./ingest-windows-proof-bundle.sh "$BUNDLE_INPUT"
 ./republish-after-host-proof.sh

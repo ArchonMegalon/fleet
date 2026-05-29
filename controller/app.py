@@ -116,6 +116,92 @@ def _default_config_root() -> pathlib.Path:
     return candidates[0]
 
 
+def _mounted_state_root() -> pathlib.Path:
+    return FLEET_MOUNT_ROOT / "state"
+
+
+def _default_db_path() -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_DB_PATH", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_db_path = _mounted_state_root() / "fleet.db"
+    if mounted_db_path.exists():
+        return mounted_db_path
+    return pathlib.Path("/var/lib/codex-fleet/fleet.db")
+
+
+def _default_state_root(db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_STATE_ROOT", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if db_path == mounted_state_root / "fleet.db":
+        return mounted_state_root
+    if db_path.name == "fleet.db" and db_path.parent.name == "state":
+        return db_path.parent
+    return db_path.parent / "state"
+
+
+def _default_log_dir(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_LOG_DIR", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "logs"
+    return pathlib.Path("/var/lib/codex-fleet/logs")
+
+
+def _default_worktree_root(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_WORKTREE_ROOT", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "worktrees"
+    return db_path.parent / "worktrees"
+
+
+def _default_queue_recovery_dir(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_QUEUE_RECOVERY_DIR", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "queue-recovery"
+    return db_path.parent / "queue-recovery"
+
+
+def _default_controller_heartbeat_path(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_CONTROLLER_HEARTBEAT_PATH", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "controller-heartbeat.json"
+    return db_path.parent / "controller-heartbeat.json"
+
+
+def _default_codex_home_root(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_CODEX_HOME_ROOT", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "codex-homes"
+    return pathlib.Path("/var/lib/codex-fleet/codex-homes")
+
+
+def _default_group_root(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_GROUP_ROOT", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "groups"
+    return db_path.parent / "groups"
+
+
 def resolve_participant_device_auth_helper() -> pathlib.Path:
     configured = str(os.environ.get("FLEET_PARTICIPANT_DEVICE_AUTH_HELPER", "") or "").strip()
     candidates: List[pathlib.Path] = []
@@ -201,13 +287,12 @@ DESIGN_MIRROR_REPO_FILES = [
 DESIGN_MIRROR_NOTE_START = "<!-- fleet-design-mirror:start -->"
 DESIGN_MIRROR_NOTE_END = "<!-- fleet-design-mirror:end -->"
 
-DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
-LOG_DIR = pathlib.Path(os.environ.get("FLEET_LOG_DIR", "/var/lib/codex-fleet/logs"))
-QUEUE_RECOVERY_DIR = pathlib.Path(os.environ.get("FLEET_QUEUE_RECOVERY_DIR", str(DB_PATH.parent / "queue-recovery")))
-WORKTREE_ROOT = pathlib.Path(os.environ.get("FLEET_WORKTREE_ROOT", str(DB_PATH.parent / "worktrees")))
-CONTROLLER_HEARTBEAT_PATH = pathlib.Path(
-    os.environ.get("FLEET_CONTROLLER_HEARTBEAT_PATH", str(DB_PATH.parent / "controller-heartbeat.json"))
-)
+DB_PATH = _default_db_path()
+STATE_ROOT = _default_state_root(DB_PATH)
+LOG_DIR = _default_log_dir(STATE_ROOT, DB_PATH)
+QUEUE_RECOVERY_DIR = _default_queue_recovery_dir(STATE_ROOT, DB_PATH)
+WORKTREE_ROOT = _default_worktree_root(STATE_ROOT, DB_PATH)
+CONTROLLER_HEARTBEAT_PATH = _default_controller_heartbeat_path(STATE_ROOT, DB_PATH)
 CONFIG_ROOT = _default_config_root()
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", str(CONFIG_ROOT / "fleet.yaml")))
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", str(CONFIG_ROOT / "accounts.yaml")))
@@ -217,8 +302,8 @@ ROUTING_PATH = CONFIG_PATH.with_name("routing.yaml")
 GROUPS_PATH = CONFIG_PATH.with_name("groups.yaml")
 PROJECTS_DIR = CONFIG_PATH.parent / "projects"
 PROJECT_INDEX_PATH = PROJECTS_DIR / "_index.yaml"
-CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
-GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
+CODEX_HOME_ROOT = _default_codex_home_root(STATE_ROOT, DB_PATH)
+GROUP_ROOT = _default_group_root(STATE_ROOT, DB_PATH)
 _MAIL_OUTBOX_ROOT_ENV = str(os.environ.get("FLEET_MAIL_OUTBOX_ROOT", "") or "").strip()
 _MAIL_STATE_PATH_ENV = str(os.environ.get("FLEET_MAIL_STATE_PATH", "") or "").strip()
 MAIL_OUTBOX_ROOT: Optional[pathlib.Path] = pathlib.Path(_MAIL_OUTBOX_ROOT_ENV) if _MAIL_OUTBOX_ROOT_ENV else None
@@ -2596,6 +2681,7 @@ def apply_generated_work_package_policy(
                 effective_denied_paths.append(clean_pattern)
 
     package_compile_target = f".codex-studio/published/{WORKPACKAGES_FILENAME}"
+    clean_allowed_paths = [normalize_scope_path(path) for path in allowed_paths if normalize_scope_path(path)]
     immutable_generated_paths = [path for path in allowed_paths if package_scope_matches(path, IMMUTABLE_PUBLISHED_GENERATED_SCOPE_PATTERNS)]
     if clean_package_kind == PACKAGE_COMPILE_PACKAGE_KIND:
         immutable_generated_paths = [
@@ -2603,6 +2689,11 @@ def apply_generated_work_package_policy(
             for path in immutable_generated_paths
             if normalize_scope_path(path) != normalize_scope_path(package_compile_target)
         ]
+    source_owned_paths = [
+        path
+        for path in clean_allowed_paths
+        if path not in immutable_generated_paths
+    ]
     proof_only_generated_scope = bool(allowed_paths) and bool(owned_surfaces) and all(
         normalize_scope_path(path).startswith((".codex-studio", "feedback"))
         for path in allowed_paths
@@ -2612,11 +2703,18 @@ def apply_generated_work_package_policy(
         for path in allowed_paths
     )
     if immutable_generated_paths and not compiler_backed_generated_artifacts and not proof_only_generated_scope:
-        policy["dispatchability_state"] = "blocked"
-        policy["dispatchability_reason"] = (
-            "generated published artifacts must be rebuilt from source compilers, not edited directly: "
-            + ", ".join(sorted(immutable_generated_paths))
-        )
+        if source_owned_paths:
+            policy["dispatchability_state"] = "dispatchable"
+            policy.pop("dispatchability_reason", None)
+            policy["generated_output_paths"] = sorted(immutable_generated_paths)
+            policy["effective_allowed_paths"] = sorted(source_owned_paths)
+            policy["generated_output_handling"] = "source_compiler_refresh_required"
+        else:
+            policy["dispatchability_state"] = "blocked"
+            policy["dispatchability_reason"] = (
+                "generated published artifacts must be rebuilt from source compilers, not edited directly: "
+                + ", ".join(sorted(immutable_generated_paths))
+            )
     if proof_only_generated_scope:
         effective_denied_paths = [
             pattern
@@ -2938,6 +3036,11 @@ def compile_project_work_packages(project_cfg: Dict[str, Any], *, lanes: Optiona
             package_kind=package_kind,
             horizon_family=horizon_family,
         )
+        allowed_paths = [
+            normalize_scope_path(item)
+            for item in (task_meta.get("effective_allowed_paths") or allowed_paths)
+            if normalize_scope_path(item)
+        ]
         denied_paths = [
             normalize_scope_path(item)
             for item in (task_meta.get("denied_paths") or denied_paths)
@@ -3303,7 +3406,12 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         project_row = conn.execute("SELECT * FROM projects WHERE id=?", (clean,)).fetchone()
         runtime_task_rows = conn.execute(
             """
-            SELECT COALESCE(package_id, '') AS package_id, task_state, run_id, COALESCE(task_kind, '') AS task_kind
+            SELECT COALESCE(package_id, '') AS package_id,
+                   task_state,
+                   run_id,
+                   scheduled_at,
+                   updated_at,
+                   COALESCE(task_kind, '') AS task_kind
             FROM runtime_tasks
             WHERE project_id=?
               AND task_state IN ('starting', 'scheduled', 'running', 'verifying', 'awaiting_review')
@@ -3312,15 +3420,56 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         ).fetchall()
         active_run_rows = conn.execute(
             """
-            SELECT id, COALESCE(package_id, '') AS package_id, status, COALESCE(job_kind, '') AS job_kind
+            SELECT id, COALESCE(package_id, '') AS package_id, status, COALESCE(job_kind, '') AS job_kind, finished_at
             FROM runs
             WHERE project_id=?
-              AND status IN ('starting', 'running', 'verifying', 'awaiting_review', 'local_review')
+              AND status IN ('starting', 'running', 'verifying', 'local_review')
             """,
             (clean,),
         ).fetchall()
     if not project_row:
         return
+    latest_run_ids = {
+        int(row.get("latest_run_id") or 0)
+        for row in ordered
+        if int(row.get("latest_run_id") or 0)
+    }
+    latest_runs_by_id: Dict[int, sqlite3.Row] = {}
+    if latest_run_ids:
+        placeholders = ",".join("?" for _ in latest_run_ids)
+        with db() as conn:
+            for latest_run in conn.execute(
+                f"SELECT id, status, finished_at FROM runs WHERE id IN ({placeholders})",
+                tuple(sorted(latest_run_ids)),
+            ).fetchall():
+                latest_runs_by_id[int(latest_run["id"])] = latest_run
+    live_package_commitment_by_id: dict[str, bool] = {}
+    active_latest_run_ids: set[int] = set()
+    for row in ordered:
+        package_id = str(row.get("package_id") or "").strip()
+        if not package_id:
+            continue
+        runtime_row = runtime_task_row(package_id)
+        latest_run_id = int(row.get("latest_run_id") or 0) or None
+        is_live = False
+        if runtime_row and persisted_runtime_task_active(package_id, runtime_row):
+            is_live = True
+        elif latest_run_id:
+            latest_run = latest_runs_by_id.get(latest_run_id)
+            is_live = bool(
+                latest_run
+                and str(latest_run["status"] or "").strip().lower() in ACTIVE_RUN_STATUSES
+                and parse_iso(latest_run["finished_at"]) is None
+            )
+        live_package_commitment_by_id[package_id] = is_live
+        if is_live and latest_run_id:
+            active_latest_run_ids.add(latest_run_id)
+    live_runtime_package_ids = {
+        str(item["package_id"] or "").strip()
+        for item in runtime_task_rows
+        if str(item["package_id"] or "").strip()
+        and persisted_runtime_task_active(str(item["package_id"] or "").strip(), dict(item))
+    }
     package_runtime_overrides: dict[str, str] = {}
     runtime_state_priority = {
         "awaiting_review": 4,
@@ -3334,6 +3483,8 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         task_state = str(item["task_state"] or "").strip().lower()
         if not package_id or task_state not in runtime_state_priority:
             continue
+        if not persisted_runtime_task_active(package_id, dict(item)):
+            continue
         current = package_runtime_overrides.get(package_id, "")
         if runtime_state_priority.get(task_state, 0) >= runtime_state_priority.get(current, 0):
             package_runtime_overrides[package_id] = task_state
@@ -3345,22 +3496,24 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         current = package_runtime_overrides.get(package_id, "")
         if runtime_state_priority.get(run_state, 0) >= runtime_state_priority.get(current, 0):
             package_runtime_overrides[package_id] = run_state
-    active_runtime_packages = {
-        str(item["package_id"] or "").strip()
-        for item in runtime_task_rows
-        if str(item["package_id"] or "").strip()
-    }
+    active_runtime_packages = set(live_runtime_package_ids)
     active_project_runtime_rows = [
         item
         for item in runtime_task_rows
-        if str(item["task_kind"] or "").strip().lower() == "local_review"
-        or not str(item["package_id"] or "").strip()
+        if (
+            str(item["task_kind"] or "").strip().lower() == "local_review"
+            or not str(item["package_id"] or "").strip()
+        )
+        and persisted_runtime_task_active(clean, dict(item))
     ]
     active_project_run_rows = [
         item
         for item in active_run_rows
-        if str(item["job_kind"] or "").strip().lower() == "local_review"
-        or not str(item["package_id"] or "").strip()
+        if (
+            str(item["job_kind"] or "").strip().lower() == "local_review"
+            or not str(item["package_id"] or "").strip()
+        )
+        and parse_iso(item["finished_at"]) is None
     ]
     active_run_ids = {
         int(item["id"] or 0)
@@ -3375,7 +3528,7 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         row
         for row in ordered
         if (
-            str(row.get("runtime_state") or "").strip().lower() in ACTIVE_WORK_PACKAGE_RUNTIME_STATES
+            live_package_commitment_by_id.get(str(row.get("package_id") or "").strip(), False)
             or str(row.get("package_id") or "").strip() in active_runtime_packages
             or int(row.get("latest_run_id") or 0) in active_run_ids
         )
@@ -3420,7 +3573,11 @@ def sync_project_progress_from_packages(project_id: str) -> None:
     rep_status = str(rep.get("status") or "").strip().lower()
     rep_runtime = package_runtime_overrides.get(
         str(rep.get("package_id") or "").strip(),
-        str(rep.get("runtime_state") or "").strip().lower(),
+        (
+            str(rep.get("runtime_state") or "").strip().lower()
+            if live_package_commitment_by_id.get(str(rep.get("package_id") or "").strip(), False)
+            else "idle"
+        ),
     )
     if rep_runtime == "verifying":
         runtime_status = "verifying"
@@ -3445,6 +3602,7 @@ def sync_project_progress_from_packages(project_id: str) -> None:
     active_run_id = (
         int(rep.get("latest_run_id") or 0) or None
         if rep_runtime in ACTIVE_WORK_PACKAGE_RUNTIME_STATES
+        and int(rep.get("latest_run_id") or 0) in active_latest_run_ids
         else active_project_run_id
     )
     current_slice_name = str(rep.get("slice_name") or "").strip() or None
@@ -3473,6 +3631,7 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         spider_tier=project_row["spider_tier"],
         spider_model=project_row["spider_model"],
         spider_reason=project_row["spider_reason"],
+        skip_live_runtime_guard=True,
     )
     with db() as conn:
         conn.execute(
@@ -5059,6 +5218,8 @@ def active_coding_runtime_keys(project_rows: Sequence[sqlite3.Row]) -> Set[str]:
             continue
         if run_status not in ACTIVE_RUN_STATUSES:
             continue
+        if not project_has_live_runtime_commitment(project_id, int(row["active_run_id"] or 0) or None):
+            continue
         runtime_key = str((run["package_id"] if run and "package_id" in run.keys() else "") or "").strip() or project_id
         if runtime_key not in runtime_task_rows():
             active.add(runtime_key)
@@ -6027,6 +6188,53 @@ def _quartermaster_status_fallback_payload() -> Tuple[Dict[str, Any], Optional[d
     return {}, None
 
 
+def _quartermaster_emergency_status_payload(
+    persisted_payload: Optional[Dict[str, Any]] = None,
+    *,
+    error: str = "",
+) -> Dict[str, Any]:
+    source_payload = persisted_payload if isinstance(persisted_payload, dict) else {}
+    source_plan = _quartermaster_plan_from_status_payload(source_payload)
+    lane_targets = {
+        str(key): int(max(0, float(value)))
+        for key, value in dict((source_plan or {}).get("lane_targets") or {}).items()
+        if str(key).strip() and isinstance(value, (int, float, str))
+    }
+    tick_policy = quartermaster_tick_policy()
+    generated_at = iso(utc_now())
+    plan = {
+        "generated_at": generated_at,
+        "mode": "observe_only",
+        "lane_targets": lane_targets,
+        "controller_tick": {
+            "driver": str(tick_policy.get("driver") or ""),
+            "baseline_tick_seconds": int(tick_policy.get("baseline_tick_seconds") or 0),
+            "event_tick_min_seconds": int(tick_policy.get("event_tick_min_seconds") or 0),
+            "plan_ttl_seconds": int(tick_policy.get("plan_ttl_seconds") or 0),
+            "max_scale_up_per_tick": int(tick_policy.get("max_scale_up_per_tick") or 0),
+            "max_scale_down_per_tick": int(tick_policy.get("max_scale_down_per_tick") or 0),
+            "min_worker_dwell_seconds": int(tick_policy.get("min_worker_dwell_seconds") or 0),
+            "idle_drain_seconds": int(tick_policy.get("idle_drain_seconds") or 0),
+            "triggers": list(tick_policy.get("triggers") or []),
+        },
+        "notes": [
+            "Quartermaster upstream status is unavailable or stale.",
+            "Controller is using an observe-only emergency fallback so scheduler-local guards continue while capacity enforcement is temporarily fail-open.",
+        ],
+    }
+    message = str(error or "").strip() or "quartermaster status unavailable or stale"
+    return {
+        "generated_at": generated_at,
+        "source_generated_at": str((source_plan or {}).get("generated_at") or source_payload.get("generated_at") or ""),
+        "source": "controller_emergency_fallback",
+        "degraded": True,
+        "cache_state": "stale",
+        "tick_reason": "",
+        "error": message,
+        "plan": plan,
+    }
+
+
 def quartermaster_status_payload(force: bool = False) -> Dict[str, Any]:
     now = time.time()
     cached = _QUARTERMASTER_STATUS_CACHE.get("payload")
@@ -6043,13 +6251,28 @@ def quartermaster_status_payload(force: bool = False) -> Dict[str, Any]:
     status_base_url = str(FLEET_QUARTERMASTER_BASE_URL).strip()
     if not status_base_url:
         if persisted_payload:
+            persisted_plan = _quartermaster_plan_from_status_payload(persisted_payload)
+            if not quartermaster_plan_is_fresh(persisted_plan):
+                emergency = _quartermaster_emergency_status_payload(
+                    persisted_payload,
+                    error="quartermaster status endpoint is not configured and persisted capacity state is stale",
+                )
+                _QUARTERMASTER_STATUS_CACHE["fetched_at"] = now
+                _QUARTERMASTER_STATUS_CACHE["payload"] = emergency
+                return emergency
             cache_now = now
             if persisted_fetched_at is not None:
                 cache_now = max(0.0, persisted_fetched_at.timestamp())
             _QUARTERMASTER_STATUS_CACHE["fetched_at"] = cache_now
             _QUARTERMASTER_STATUS_CACHE["payload"] = persisted_payload
             return dict(persisted_payload)
-        return {}
+        emergency = _quartermaster_emergency_status_payload(
+            {},
+            error="quartermaster status endpoint is not configured",
+        )
+        _QUARTERMASTER_STATUS_CACHE["fetched_at"] = now
+        _QUARTERMASTER_STATUS_CACHE["payload"] = emergency
+        return emergency
 
     request = urllib.request.Request(
         f"{status_base_url}/api/status",
@@ -6059,17 +6282,35 @@ def quartermaster_status_payload(force: bool = False) -> Dict[str, Any]:
     try:
         with urllib.request.urlopen(request, timeout=3) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except Exception:
+    except Exception as exc:
         if persisted_payload:
+            persisted_plan = _quartermaster_plan_from_status_payload(persisted_payload)
+            if not quartermaster_plan_is_fresh(persisted_plan):
+                emergency = _quartermaster_emergency_status_payload(
+                    persisted_payload,
+                    error=f"quartermaster status fetch failed: {exc.__class__.__name__}",
+                )
+                _QUARTERMASTER_STATUS_CACHE["fetched_at"] = now
+                _QUARTERMASTER_STATUS_CACHE["payload"] = emergency
+                return emergency
             cache_now = now
             if persisted_fetched_at is not None:
                 cache_now = max(0.0, persisted_fetched_at.timestamp())
             _QUARTERMASTER_STATUS_CACHE["fetched_at"] = cache_now
             _QUARTERMASTER_STATUS_CACHE["payload"] = persisted_payload
             return dict(persisted_payload)
-        payload = {}
+        payload = _quartermaster_emergency_status_payload(
+            {},
+            error=f"quartermaster status fetch failed: {exc.__class__.__name__}",
+        )
 
     payload = payload if isinstance(payload, dict) else {}
+    plan = _quartermaster_plan_from_status_payload(payload)
+    if payload and plan and not quartermaster_plan_is_fresh(plan):
+        payload = _quartermaster_emergency_status_payload(
+            payload,
+            error="quartermaster plan is stale",
+        )
     _QUARTERMASTER_STATUS_CACHE["fetched_at"] = now
     _QUARTERMASTER_STATUS_CACHE["payload"] = payload
     if payload:
@@ -9511,10 +9752,10 @@ def reconcile_finished_run_links() -> int:
     reconciled = 0
     for row in rows:
         run_status = str(row["run_status"] or "").strip().lower()
-        if run_status in {"starting", "running", "verifying"}:
-            continue
         project_id = str(row["id"] or "").strip()
         if not project_id:
+            continue
+        if project_has_live_runtime_commitment(project_id, int(row["active_run_id"] or 0) or None):
             continue
         clear_runtime_task(project_id)
         status = str(row["status"] or "").strip() or READY_STATUS
@@ -14281,12 +14522,22 @@ def effective_project_status(
             return review_runtime_status
         if status in REVIEW_VISIBLE_STATUSES:
             return status
-        if status in {"starting", "running", "verifying"} and active_run_id:
+        if (
+            status in {"starting", "running", "verifying"}
+            and active_run_id
+            and project_has_live_runtime_commitment(str(project_id or ""), int(active_run_id or 0) or None)
+        ):
             return status
         if status == SOURCE_BACKLOG_OPEN_STATUS or source_backlog_open:
             return SOURCE_BACKLOG_OPEN_STATUS
         return "complete"
     if status in {"complete", "paused", SOURCE_BACKLOG_OPEN_STATUS}:
+        return READY_STATUS
+    if (
+        status in {"starting", "running", "verifying"}
+        and project_id
+        and not project_has_live_runtime_commitment(str(project_id or ""), int(active_run_id or 0) or None)
+    ):
         return READY_STATUS
     return status
 
@@ -15375,7 +15626,7 @@ def maintain_active_worker_floor(
 
 
 def codex_active_project_ids(project_rows: Sequence[sqlite3.Row]) -> set[str]:
-    active_statuses = {"starting", "running"}
+    active_statuses = {"starting", "running", "verifying"}
     run_ids = [int(row["active_run_id"]) for row in project_rows if row["active_run_id"]]
     runs_by_id: Dict[int, sqlite3.Row] = {}
     if run_ids:
@@ -15395,9 +15646,37 @@ def codex_active_project_ids(project_rows: Sequence[sqlite3.Row]) -> set[str]:
         run = runs_by_id.get(int(row["active_run_id"] or 0)) if row["active_run_id"] else None
         run_status = str((run["status"] if run else row["status"]) or "").strip().lower()
         run_kind = str((run["job_kind"] if run else "coding") or "coding").strip().lower() or "coding"
+        if not project_has_live_runtime_commitment(project_id, int(row["active_run_id"] or 0) or None):
+            continue
         if run_status in active_statuses and run_kind in {"coding", "healing", "local_review"}:
             active.add(project_id)
     return active
+
+
+def project_has_live_runtime_commitment(project_id: str, active_run_id: Optional[int]) -> bool:
+    clean = str(project_id or "").strip()
+    run_id = int(active_run_id or 0) or None
+    if not clean:
+        return False
+    task_rows = runtime_task_rows_for_project(clean)
+    if task_rows:
+        for task_row in task_rows:
+            package_id = str(task_row.get("package_id") or "").strip()
+            runtime_key = package_id or clean
+            if persisted_runtime_task_active(runtime_key, task_row):
+                return True
+    if not run_id:
+        return False
+    with db() as conn:
+        row = conn.execute(
+            "SELECT status, finished_at FROM runs WHERE id=?",
+            (run_id,),
+        ).fetchone()
+    if not row:
+        return False
+    run_status = str(row["status"] or "").strip().lower()
+    run_finished_at = parse_iso(row["finished_at"])
+    return run_status in ACTIVE_RUN_STATUSES and run_finished_at is None
 
 
 def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, Any], row: sqlite3.Row, now: dt.datetime) -> "DispatchCandidate":
@@ -19001,14 +19280,24 @@ def update_project_status(
     spider_tier: Optional[str] = None,
     spider_model: Optional[str] = None,
     spider_reason: Optional[str] = None,
+    skip_live_runtime_guard: bool = False,
 ) -> None:
     previous_status = ""
     with db() as conn:
-        row = conn.execute("SELECT status, consecutive_failures FROM projects WHERE id=?", (project_id,)).fetchone()
+        row = conn.execute("SELECT status, consecutive_failures, active_run_id FROM projects WHERE id=?", (project_id,)).fetchone()
         previous_status = str((row["status"] if row else "") or "").strip()
         failures = row["consecutive_failures"] if row else 0
         if consecutive_failures is not None:
             failures = consecutive_failures
+        current_active_run_id = int(row["active_run_id"] or 0) or None if row else None
+        requested_status = str(status or "").strip().lower()
+        if (
+            not skip_live_runtime_guard
+            and requested_status not in ACTIVE_RUN_STATUSES
+            and project_has_live_runtime_commitment(project_id, current_active_run_id)
+        ):
+            sync_project_progress_from_packages(project_id)
+            return
         conn.execute(
             """
             UPDATE projects
@@ -23555,7 +23844,10 @@ async def scheduler_loop() -> None:
                 str(row["id"] or "").strip()
                 for row in projects
                 if str(row["id"] or "").strip()
-                and (bool(row["active_run_id"]) or str(row["status"] or "").strip() in ACTIVE_RUN_STATUSES)
+                and project_has_live_runtime_commitment(
+                    str(row["id"] or "").strip(),
+                    int(row["active_run_id"] or 0) or None,
+                )
             }
             active_codex_projects = codex_active_project_ids(projects)
             reconcile_runtime_tasks(active_project_ids)
@@ -24272,7 +24564,11 @@ def full_status_payload() -> Dict[str, Any]:
             pr_row = normalized_pull_request_row(project_cfg, pr_rows.get(project["id"]))
             lifecycle_state = normalize_lifecycle_state(project_cfg.get("lifecycle"), "dispatchable")
             project_groups = project_group_defs(config, project["id"])
-            active_run = active_run_row(project.get("active_run_id"))
+            live_commitment = project_has_live_runtime_commitment(
+                str(project["id"] or "").strip(),
+                int(project.get("active_run_id") or 0) or None,
+            )
+            active_run = active_run_row(project.get("active_run_id")) if live_commitment else None
             active_run_account_alias = str(active_run.get("account_alias") or "").strip()
             active_run_backend, active_run_identity = run_backend_and_identity(
                 active_run_account_alias,
@@ -24712,7 +25008,11 @@ def compact_status_payload() -> Dict[str, Any]:
         queue = json.loads(row.get("queue_json") or "[]")
         queue_index = int(row.get("queue_index") or 0)
         project_cfg = get_project_cfg(config, project_id)
-        active_run = active_run_row(row.get("active_run_id"))
+        live_commitment = project_has_live_runtime_commitment(
+            project_id,
+            int(row.get("active_run_id") or 0) or None,
+        )
+        active_run = active_run_row(row.get("active_run_id")) if live_commitment else None
         active_alias = str((active_run or {}).get("account_alias") or "").strip()
         active_model = str((active_run or {}).get("model") or "").strip()
         active_backend, active_identity = run_backend_and_identity(active_alias, accounts_cfg)
@@ -25668,6 +25968,7 @@ def api_run_project_now(project_id: str) -> Dict[str, Any]:
         if not planned:
             continue
         if launch_planned_project_task(config, planned):
+            sync_project_progress_from_packages(project_id)
             return {
                 "ok": True,
                 "project_id": project_id,

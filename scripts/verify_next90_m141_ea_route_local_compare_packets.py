@@ -20,11 +20,11 @@ try:
         DEFAULT_OUTPUT,
         DEFAULT_PARITY_AUDIT,
         DEFAULT_READINESS,
-        DEFAULT_RUNTIME_HANDOFF,
         DEFAULT_SCREENSHOT_REVIEW_GATE,
         DEFAULT_UI_RELEASE_GATE,
         DEFAULT_VETERAN_TASK_GATE,
         DEFAULT_WORKFLOW_PACK,
+        _resolve_runtime_handoff_path,
         _resolve_task_local_telemetry_path,
         build_markdown,
         build_payload,
@@ -40,11 +40,11 @@ except ModuleNotFoundError:
         DEFAULT_OUTPUT,
         DEFAULT_PARITY_AUDIT,
         DEFAULT_READINESS,
-        DEFAULT_RUNTIME_HANDOFF,
         DEFAULT_SCREENSHOT_REVIEW_GATE,
         DEFAULT_UI_RELEASE_GATE,
         DEFAULT_VETERAN_TASK_GATE,
         DEFAULT_WORKFLOW_PACK,
+        _resolve_runtime_handoff_path,
         _resolve_task_local_telemetry_path,
         build_markdown,
         build_payload,
@@ -61,7 +61,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--artifact", default=str(DEFAULT_OUTPUT))
     parser.add_argument("--markdown-artifact", default=str(DEFAULT_MARKDOWN_OUTPUT))
     parser.add_argument("--task-local-telemetry")
-    parser.add_argument("--runtime-handoff", default=str(DEFAULT_RUNTIME_HANDOFF))
+    parser.add_argument("--runtime-handoff")
     parser.add_argument("--readiness", default=str(DEFAULT_READINESS))
     parser.add_argument("--capture-pack", default=str(DEFAULT_CAPTURE_PACK))
     parser.add_argument("--workflow-pack", default=str(DEFAULT_WORKFLOW_PACK))
@@ -102,7 +102,7 @@ def main() -> int:
     args = parse_args()
     artifact_path = Path(args.artifact).resolve()
     markdown_artifact_path = Path(args.markdown_artifact).resolve()
-    runtime_handoff_path = Path(args.runtime_handoff).resolve()
+    runtime_handoff_path = _resolve_runtime_handoff_path(args.runtime_handoff).resolve()
     actual = _yaml(artifact_path)
     issues: List[str] = []
     if not actual:

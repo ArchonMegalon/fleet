@@ -711,6 +711,16 @@ def _require_tokens(payload: str, tokens: tuple[str, ...], issues: list[str], *,
             issues.append(f"{label} missing required token: {token}")
 
 
+def _contains_script_relative_commands_dir_entry(payload: str, commands_dir_path: Path) -> bool:
+    return (
+        f"cd {commands_dir_path}" in payload
+        or (
+            'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"' in payload
+            and 'cd "$SCRIPT_DIR"' in payload
+        )
+    )
+
+
 def _require_file_tokens(path: Path, tokens: tuple[str, ...], issues: list[str], *, label: str) -> None:
     try:
         payload = path.read_text(encoding="utf-8")
@@ -1376,7 +1386,7 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
             if lane_path.is_file():
                 lane_body = lane_path.read_text(encoding="utf-8")
                 _require(
-                    f"cd {commands_dir_path}" in lane_body,
+                    _contains_script_relative_commands_dir_entry(lane_body, commands_dir_path),
                     issues,
                     f"external proof host lane script does not enter retained commands dir for {host}",
                 )
@@ -1400,6 +1410,17 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
                             f"external proof host lane script has out-of-order token for {host}: {token}",
                         )
                         previous_index = token_index
+                for token in (
+                    'if [ "${CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE:-0}" = "1" ]; then',
+                    '"$SCRIPT_DIR/finalize-external-host-proof.sh"',
+                    "external-proof-auto-finalize-blocked",
+                    "exit 1",
+                ):
+                    _require(
+                        token in lane_body,
+                        issues,
+                        f"external proof host lane script is missing required token for {host}: {token}",
+                    )
             if bundle_path.is_file():
                 bundle_body = bundle_path.read_text(encoding="utf-8")
                 _require_tokens(
@@ -1461,7 +1482,7 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
                 "external proof Windows PowerShell host lane does not run a strict retained bash script",
             )
             _require(
-                f"cd {commands_dir_path}" in windows_powershell_lane_body,
+                _contains_script_relative_commands_dir_entry(windows_powershell_lane_body, commands_dir_path),
                 issues,
                 "external proof Windows PowerShell host lane does not enter retained commands dir",
             )

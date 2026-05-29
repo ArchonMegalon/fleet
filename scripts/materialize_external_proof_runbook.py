@@ -4,12 +4,14 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import io
 import json
 import os
 import re
 import shutil
 import sys
 import shlex
+import subprocess
 import tarfile
 from pathlib import Path
 from typing import Any
@@ -65,6 +67,16 @@ FLEET_DESIGN_PRODUCT_ROOT = CHUMMER_COMPLETE_ROOT / "chummer-design"
 FLEET_FLAGSHIP_PRODUCT_READINESS_MIRROR_PATH = (
     FLEET_ROOT / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 )
+DEFAULT_FLAGSHIP_PRODUCT_READINESS_OUT = (
+    FLEET_ROOT / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+)
+DEFAULT_WEEKLY_PRODUCT_PULSE_SCRIPT = (
+    FLEET_DESIGN_PRODUCT_ROOT / "scripts" / "ai" / "materialize_weekly_product_pulse_snapshot.py"
+)
+DEFAULT_WEEKLY_PRODUCT_PULSE_OUT = (
+    FLEET_DESIGN_PRODUCT_ROOT / "products" / "chummer" / "WEEKLY_PRODUCT_PULSE.generated.json"
+)
+DEFAULT_SYNC_DISABLE_ENV = "CHUMMER_SKIP_EXTERNAL_PROOF_RUNBOOK_SYNC"
 DEFAULT_EXTERNAL_PROOF_BASE_URL_EXPR = "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}"
 DEFAULT_EXTERNAL_PROOF_AUTH_HEADER_EXPR = "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}"
 DEFAULT_EXTERNAL_PROOF_COOKIE_HEADER_EXPR = "${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}"
@@ -76,10 +88,36 @@ STARTUP_SMOKE_MAX_AGE_SECONDS = 7 * 24 * 3600
 STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS = 300
 COMMAND_BUNDLE_SUFFIXES = frozenset({".sh", ".ps1"})
 UI_REPO_ROOT_ENV_EXPR = f"${{CHUMMER_UI_REPO_ROOT:-{UI_REPO_ROOT}}}"
+UI_REPO_ROOT_DISCOVERY_CANDIDATES = (
+    Path("/docker/chummercomplete/chummer6-ui"),
+    Path("/docker/chummercomplete/chummer6-ui-finish"),
+    Path("/docker/chummercomplete/chummer-presentation"),
+)
+
+
+def _ui_repo_root_discovery_shell_fragment() -> str:
+    candidates = " ".join(shlex.quote(str(candidate)) for candidate in UI_REPO_ROOT_DISCOVERY_CANDIDATES)
+    return (
+        f'REPO_ROOT="{UI_REPO_ROOT_ENV_EXPR}" && export REPO_ROOT'
+        + ' && if [ -z "${CHUMMER_UI_REPO_ROOT:-}" ] && [ ! -d "$REPO_ROOT" ]; then'
+        + f' for candidate in {candidates}; do'
+        + ' if [ -d "$candidate" ]; then REPO_ROOT="$candidate" && export REPO_ROOT && break; fi;'
+        + ' done;'
+        + " fi"
+    )
+
+
+def _ui_repo_root_missing_message() -> str:
+    candidates = ", ".join(str(path) for path in UI_REPO_ROOT_DISCOVERY_CANDIDATES)
+    return (
+        "external-proof-ui-repo-root-missing: set CHUMMER_UI_REPO_ROOT if the UI repo is not checked out at "
+        + candidates
+        + " on the proof host"
+    )
 
 
 def _ui_repo_root_setup_command() -> str:
-    return f'REPO_ROOT="{UI_REPO_ROOT_ENV_EXPR}" && export REPO_ROOT'
+    return _ui_repo_root_discovery_shell_fragment()
 
 
 def _ui_downloads_root_setup_command() -> str:
@@ -156,12 +194,14 @@ def _post_capture_republish_commands(
 def _finalize_after_host_proof_commands(*, hosts: list[str], commands_dir: Path) -> list[str]:
     retained_hosts = hosts or sorted(ALLOWED_REQUIRED_HOSTS)
     commands = [
-        f"cd {shlex.quote(str(commands_dir))}",
+        'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"',
+        'cd "$SCRIPT_DIR"',
+        'BUNDLE_INPUT="${1:-}"',
     ]
     for host in retained_hosts:
         host_token = _normalize_host_token(host)
         commands.append(f"./validate-{host_token}-proof.sh")
-        commands.append(f"./ingest-{host_token}-proof-bundle.sh")
+        commands.append(f"./ingest-{host_token}-proof-bundle.sh \"$BUNDLE_INPUT\"")
     commands.append("./republish-after-host-proof.sh")
     return commands
 
@@ -169,11 +209,104 @@ def _finalize_after_host_proof_commands(*, hosts: list[str], commands_dir: Path)
 def _host_proof_lane_commands(*, host: str, commands_dir: Path) -> list[str]:
     host_token = _normalize_host_token(host)
     return [
-        f"cd {shlex.quote(str(commands_dir))}",
+        'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"',
+        'cd "$SCRIPT_DIR"',
+        'if [ -f "$SCRIPT_DIR/proof-host.env" ]; then',
+        '  set -a',
+        '  . "$SCRIPT_DIR/proof-host.env"',
+        '  set +a',
+        'fi',
         f"./preflight-{host_token}-proof.sh",
         f"./capture-{host_token}-proof.sh",
         f"./validate-{host_token}-proof.sh",
         f"./bundle-{host_token}-proof.sh",
+        'if [ "${CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE:-0}" = "1" ]; then',
+        '  if [ -x "$SCRIPT_DIR/finalize-external-host-proof.sh" ] && [ -d /docker/fleet ] && [ -d /docker/chummercomplete ]; then',
+        '    "$SCRIPT_DIR/finalize-external-host-proof.sh"',
+        "  else",
+        (
+            "    echo 'external-proof-auto-finalize-blocked: "
+            "finalize-external-host-proof.sh requires the shared /docker/fleet and /docker/chummercomplete "
+            "workspace on this host. Either mount the shared workspace or unset "
+            "CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE and return the proof bundle for manual ingest.' >&2"
+        ),
+        "    exit 1",
+        "  fi",
+        "fi",
+    ]
+
+
+def _prepare_command_pack_shell_commands(*, host: str, commands_dir: Path) -> list[str]:
+    host_token = _normalize_host_token(host)
+    archive_name = f"{host_token}-proof-command-pack.tgz"
+    sha_name = f"{archive_name}.sha256"
+    return [
+        'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"',
+        f'ARCHIVE_PATH="${{1:-$SCRIPT_DIR/{archive_name}}}"',
+        f'SHA_PATH="${{2:-$SCRIPT_DIR/{sha_name}}}"',
+        'OUTPUT_DIR="${3:-$SCRIPT_DIR}"',
+        'export ARCHIVE_PATH',
+        'export SHA_PATH',
+        'export OUTPUT_DIR',
+        'test -s "$ARCHIVE_PATH"',
+        'test -s "$SHA_PATH"',
+        'if command -v shasum >/dev/null 2>&1; then',
+        '  ARCHIVE_DIR="$(dirname -- "$ARCHIVE_PATH")"',
+        '  ARCHIVE_NAME="$(basename -- "$ARCHIVE_PATH")"',
+        '  SHA_NAME="$(basename -- "$SHA_PATH")"',
+        '  (cd "$ARCHIVE_DIR" && shasum -a 256 -c "$SHA_NAME")',
+        'elif command -v sha256sum >/dev/null 2>&1; then',
+        '  ARCHIVE_DIR="$(dirname -- "$ARCHIVE_PATH")"',
+        '  ARCHIVE_NAME="$(basename -- "$ARCHIVE_PATH")"',
+        '  SHA_NAME="$(basename -- "$SHA_PATH")"',
+        '  (cd "$ARCHIVE_DIR" && sha256sum -c "$SHA_NAME")',
+        'elif command -v python3 >/dev/null 2>&1; then',
+        (
+            "  python3 -c 'import hashlib, os, pathlib, sys; archive=pathlib.Path(os.environ[\"ARCHIVE_PATH\"]);"
+            " sha_path=pathlib.Path(os.environ[\"SHA_PATH\"]); raw=sha_path.read_text(encoding=\"utf-8\").strip();"
+            " parts=raw.split(); sys.exit(f\"external-proof-command-pack-sha256-sidecar-invalid:{sha_path}\")"
+            " if len(parts) < 2 else None; expected=parts[0].strip().lower();"
+            " digest=hashlib.sha256(archive.read_bytes()).hexdigest().lower();"
+            " sys.exit(0) if digest == expected else sys.exit("
+            "f\"external-proof-command-pack-sha256-mismatch:{archive}:digest={digest}:expected={expected}\")'"
+        ),
+        'else',
+        "  echo 'external-proof-command-pack-sha256-tool-missing: need shasum, sha256sum, or python3 to verify the command pack' >&2",
+        '  exit 1',
+        'fi',
+        'mkdir -p "$OUTPUT_DIR"',
+        "python3 -c 'import os, pathlib, shutil, tarfile\n"
+        "archive=pathlib.Path(os.environ[\"ARCHIVE_PATH\"])\n"
+        "output_dir=pathlib.Path(os.environ[\"OUTPUT_DIR\"])\n"
+        "output_dir.mkdir(parents=True, exist_ok=True)\n"
+        "output_dir_resolved=output_dir.resolve()\n"
+        "bad=[]\n"
+        "copied=[]\n"
+        "with tarfile.open(archive, \"r:gz\") as payload:\n"
+        "    for member in payload.getmembers():\n"
+        "        pure=pathlib.PurePosixPath(member.name)\n"
+        "        parts=tuple(part for part in pure.parts if part not in (\"\", \".\"))\n"
+        "        if member.isdir():\n"
+        "            continue\n"
+        "        if member.name.startswith(\"/\") or \"..\" in parts or not member.isfile():\n"
+        "            bad.append(member.name)\n"
+        "            continue\n"
+        "        destination=output_dir.joinpath(*parts)\n"
+        "        destination_parent=destination.parent.resolve()\n"
+        "        if output_dir_resolved != destination_parent and output_dir_resolved not in destination_parent.parents:\n"
+        "            bad.append(member.name)\n"
+        "            continue\n"
+        "        source=payload.extractfile(member)\n"
+        "        if source is None:\n"
+        "            bad.append(member.name)\n"
+        "            continue\n"
+        "        destination.parent.mkdir(parents=True, exist_ok=True)\n"
+        "        with source, destination.open(\"wb\") as handle:\n"
+        "            shutil.copyfileobj(source, handle)\n"
+        "        copied.append(\"/\".join(parts))\n"
+        "assert not bad, \"external-proof-command-pack-member-unsafe:\" + \",\".join(sorted(set(bad)))\n"
+        "assert copied, \"external-proof-command-pack-empty:\" + str(archive)'",
+        'echo "Prepared $ARCHIVE_PATH into $OUTPUT_DIR"',
     ]
 
 
@@ -990,6 +1123,110 @@ def _merge_plan_with_journey_gates(plan: dict[str, Any], journey_gates: dict[str
     return merged
 
 
+def _ui_release_train_candidate_paths(release_channel_path: Path) -> list[Path]:
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+
+    def add(path: Path) -> None:
+        resolved = path.resolve()
+        if resolved in seen:
+            return
+        seen.add(resolved)
+        candidates.append(path)
+
+    override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
+    if override:
+        add(Path(override) / ".codex-studio" / "published" / "NEXT90_M101_UI_RELEASE_TRAIN.generated.json")
+
+    release_channel_name = release_channel_path.name.strip().lower()
+    if release_channel_name == "release_channel.generated.json":
+        parts = [part.strip().lower() for part in release_channel_path.parts if str(part).strip()]
+        if "docker" in parts and "downloads" in parts and len(release_channel_path.parents) >= 3:
+            add(release_channel_path.parents[2] / ".codex-studio" / "published" / "NEXT90_M101_UI_RELEASE_TRAIN.generated.json")
+        if "chummer.portal" in parts and "downloads" in parts and len(release_channel_path.parents) >= 3:
+            add(release_channel_path.parents[2] / ".codex-studio" / "published" / "NEXT90_M101_UI_RELEASE_TRAIN.generated.json")
+
+    for repo_root in UI_REPO_ROOT_DISCOVERY_CANDIDATES:
+        add(repo_root / ".codex-studio" / "published" / "NEXT90_M101_UI_RELEASE_TRAIN.generated.json")
+
+    return candidates
+
+
+def _load_release_train_platform_results(release_channel_path: Path) -> dict[str, dict[str, Any]]:
+    for candidate in _ui_release_train_candidate_paths(release_channel_path):
+        if not candidate.is_file():
+            continue
+        try:
+            payload = json.loads(candidate.read_text(encoding="utf-8-sig"))
+        except Exception:
+            continue
+        evidence = payload.get("evidence") if isinstance(payload, dict) else {}
+        platform_results = evidence.get("platformResults") if isinstance(evidence, dict) else {}
+        if not isinstance(platform_results, dict):
+            continue
+        normalized: dict[str, dict[str, Any]] = {}
+        for raw_platform, row in platform_results.items():
+            platform = _normalize_text(raw_platform).lower()
+            if platform and isinstance(row, dict):
+                normalized[platform] = dict(row)
+        if normalized:
+            return normalized
+    return {}
+
+
+def _normalize_sha256_contract_token(value: Any) -> str:
+    token = _normalize_text(value).strip().lower()
+    if token.startswith("sha256:"):
+        token = token.split(":", 1)[1].strip()
+    return token if re.fullmatch(r"[0-9a-f]{64}", token) else ""
+
+
+def _enrich_plan_with_release_train_fallbacks(plan: dict[str, Any], *, release_channel_path: Path) -> dict[str, Any]:
+    platform_results = _load_release_train_platform_results(release_channel_path)
+    if not platform_results:
+        return plan
+    host_groups = plan.get("host_groups")
+    if not isinstance(host_groups, dict):
+        return plan
+    for group in host_groups.values():
+        if not isinstance(group, dict):
+            continue
+        requests = group.get("requests")
+        if not isinstance(requests, list):
+            continue
+        for row in requests:
+            if not isinstance(row, dict):
+                continue
+            if _normalize_sha256_contract_token(row.get("expected_installer_sha256")):
+                continue
+            platform = _normalize_text(row.get("platform") or row.get("required_host")).lower()
+            candidate = platform_results.get(platform)
+            if not isinstance(candidate, dict):
+                continue
+            request_artifact_id = _normalize_text(row.get("expected_artifact_id")).lower()
+            candidate_artifact_id = _normalize_text(candidate.get("artifactId")).lower()
+            request_route = _normalize_text(row.get("expected_public_install_route"))
+            candidate_route = _normalize_text(
+                candidate.get("expectedPublicInstallRoute") or candidate.get("publicInstallRoute")
+            )
+            request_rid = _normalize_text(row.get("rid")).lower()
+            candidate_rid = _normalize_text(candidate.get("routeRid")).lower()
+            request_head = _normalize_text(row.get("head_id")).lower()
+            candidate_head = _normalize_text(candidate.get("proofHead") or candidate.get("primaryPromotedHead")).lower()
+            if request_artifact_id and candidate_artifact_id and request_artifact_id != candidate_artifact_id:
+                continue
+            if request_route and candidate_route and request_route != candidate_route:
+                continue
+            if request_rid and candidate_rid and request_rid != candidate_rid:
+                continue
+            if request_head and candidate_head and request_head != candidate_head:
+                continue
+            digest = _normalize_sha256_contract_token(candidate.get("artifactDigest"))
+            if digest:
+                row["expected_installer_sha256"] = digest
+    return plan
+
+
 def _normalize_relative_path(value: Any, *, field: str) -> str:
     return normalize_external_proof_relative_path(value, field=field)
 
@@ -1269,8 +1506,19 @@ def _ingest_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
     target_root = PORTAL_DOWNLOADS_ROOT
     commands = [
         "SCRIPT_DIR=\"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\"",
-        f"BUNDLE_ARCHIVE=\"$SCRIPT_DIR/{host_token}-proof-bundle.tgz\"",
-        f"BUNDLE_DIR=\"$SCRIPT_DIR/host-proof-bundles/{host_token}\"",
+        f"DEFAULT_BUNDLE_ARCHIVE=\"$SCRIPT_DIR/{host_token}-proof-bundle.tgz\"",
+        f"DEFAULT_BUNDLE_DIR=\"$SCRIPT_DIR/host-proof-bundles/{host_token}\"",
+        'BUNDLE_INPUT="${1:-}"',
+        'if [ -n "$BUNDLE_INPUT" ] && [ -f "$BUNDLE_INPUT" ]; then',
+        '  BUNDLE_ARCHIVE="$BUNDLE_INPUT"',
+        '  BUNDLE_DIR="$DEFAULT_BUNDLE_DIR"',
+        'elif [ -n "$BUNDLE_INPUT" ] && [ -d "$BUNDLE_INPUT" ]; then',
+        '  BUNDLE_ARCHIVE="$DEFAULT_BUNDLE_ARCHIVE"',
+        '  BUNDLE_DIR="$BUNDLE_INPUT"',
+        "else",
+        '  BUNDLE_ARCHIVE="$DEFAULT_BUNDLE_ARCHIVE"',
+        '  BUNDLE_DIR="$DEFAULT_BUNDLE_DIR"',
+        "fi",
         "export BUNDLE_ARCHIVE",
         "export BUNDLE_DIR",
         f"TARGET_ROOT={shlex.quote(str(target_root))}",
@@ -1305,7 +1553,6 @@ def _ingest_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
             "assert copied, 'external-proof-bundle-empty:' + str(bundle_dir)"
         ),
         "else",
-        "  tar -xzf \"$BUNDLE_ARCHIVE\" -C \"$TARGET_ROOT\"",
         "  python3 -c "
         + shlex.quote(
             "import os, pathlib, shutil, tarfile\n"
@@ -1658,9 +1905,12 @@ def _preflight_commands_for_group(group: dict[str, Any], *, host: str) -> list[s
     commands: list[str] = [
         "if ! command -v python3 >/dev/null 2>&1; then echo 'external-proof-python3-missing' >&2; exit 1; fi",
         "if ! command -v curl >/dev/null 2>&1; then echo 'external-proof-curl-missing' >&2; exit 1; fi",
-        f"if [ -z \"${{CHUMMER_UI_REPO_ROOT:-}}\" ] && [ ! -d {shlex.quote(str(UI_REPO_ROOT))} ]; then "
-        "echo 'external-proof-ui-repo-root-missing: set CHUMMER_UI_REPO_ROOT to the chummer6-ui checkout root on the proof host' >&2; "
-        "exit 1; fi",
+        "if [ -z \"${CHUMMER_UI_REPO_ROOT:-}\" ]"
+        + "".join(
+            f" && [ ! -d {shlex.quote(str(candidate))} ]"
+            for candidate in UI_REPO_ROOT_DISCOVERY_CANDIDATES
+        )
+        + f"; then echo '{_ui_repo_root_missing_message()}' >&2; exit 1; fi",
     ]
     normalized_host = _normalize_text(host).lower()
     if normalized_host == "macos":
@@ -1928,11 +2178,68 @@ def _materialize_zero_backlog_bundle_archive(bundle_archive: Path, bundle_dir: P
         archive.add(bundle_dir, arcname=".")
 
 
+def _build_host_command_pack_readme(*, host: str, host_token: str) -> str:
+    host_label = host.strip() or host_token
+    return (
+        f"# {host_label} External Proof Command Pack\n\n"
+        "This pack is the native-host half of the desktop proof lane.\n\n"
+        "## Files\n\n"
+        f"- `preflight-{host_token}-proof.sh`\n"
+        f"- `capture-{host_token}-proof.sh`\n"
+        f"- `validate-{host_token}-proof.sh`\n"
+        f"- `bundle-{host_token}-proof.sh`\n"
+        f"- `ingest-{host_token}-proof-bundle.sh`\n"
+        f"- `run-{host_token}-proof-lane.sh`\n"
+        "- `republish-after-host-proof.sh`\n"
+        "- `finalize-external-host-proof.sh`\n"
+        "- `host-proof-bundles/`\n"
+        "- `proof-host.env.example`\n\n"
+        "## Minimal flow\n\n"
+        f"1. Copy this unpacked folder to the matching native `{host_label}` host.\n"
+        "2. Copy `proof-host.env.example` to `proof-host.env` and uncomment only the variables you need, or export those values directly in your shell.\n"
+        f"3. Run `bash ./run-{host_token}-proof-lane.sh`.\n"
+        f"4. If the host has the shared `/docker/fleet` workspace mounted, set `CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE=1` so the lane validates, ingests, and republishes locally after capture.\n"
+        f"5. Otherwise leave `CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE` unset. The lane now fails closed when auto-finalize is requested without the shared workspace.\n"
+        f"6. Return `{host_token}-proof-bundle.tgz` to the shared workspace and run `bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-{host_token}-proof-bundle.sh /absolute/path/to/{host_token}-proof-bundle.tgz`.\n\n"
+        "## Required environment when defaults do not fit\n\n"
+        "- `CHUMMER_UI_REPO_ROOT`: set this when the UI repo is not checked out at the standard Chummer paths on the proof host.\n"
+        "- `CHUMMER_EXTERNAL_PROOF_AUTH_HEADER` or `CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER` or `CHUMMER_EXTERNAL_PROOF_COOKIE_JAR`: use one of these when the installer route needs signed-in access.\n"
+        "- `CHUMMER_EXTERNAL_PROOF_BASE_URL`: override the public base URL if you are not proving against `https://chummer.run`.\n"
+        "- `CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1`: only set this when guest download is intentionally allowed.\n"
+        "- `CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE=1`: only use this when the host also has the shared `/docker/fleet` and `/docker/chummercomplete` workspace mounted so ingest and republish can run locally.\n"
+    )
+
+
+def _build_host_command_pack_env_example(*, host_token: str) -> str:
+    return (
+        "# Copy this file to proof-host.env, then uncomment only the values you need.\n"
+        "# The lane script auto-loads proof-host.env from this folder before preflight.\n"
+        "# export CHUMMER_UI_REPO_ROOT=/absolute/path/to/chummer6-ui\n"
+        "# export CHUMMER_EXTERNAL_PROOF_AUTH_HEADER='Authorization: Bearer <token>'\n"
+        "# export CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER='session=<cookie>'\n"
+        "# export CHUMMER_EXTERNAL_PROOF_COOKIE_JAR=/absolute/path/to/cookies.txt\n"
+        "# export CHUMMER_EXTERNAL_PROOF_BASE_URL=https://chummer.run\n"
+        "# export CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=0\n"
+        "# export CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE=0\n"
+        f"# bash ./run-{host_token}-proof-lane.sh\n"
+    )
+
+
+def _add_generated_tar_text_file(archive: tarfile.TarFile, *, relative_path: str, content: str) -> None:
+    payload = content.encode("utf-8")
+    info = tarfile.TarInfo(name=relative_path)
+    info.size = len(payload)
+    info.mtime = int(dt.datetime.now(UTC).timestamp())
+    info.mode = 0o644
+    archive.addfile(info, io.BytesIO(payload))
+
+
 def _materialize_host_command_pack(
     *,
     command_pack_archive: Path,
     commands_dir: Path,
     host_token: str,
+    host: str,
     extra_relative_paths: list[str] | None = None,
 ) -> tuple[Path, str]:
     relative_paths = [
@@ -1940,7 +2247,10 @@ def _materialize_host_command_pack(
         f"capture-{host_token}-proof.sh",
         f"validate-{host_token}-proof.sh",
         f"bundle-{host_token}-proof.sh",
+        f"ingest-{host_token}-proof-bundle.sh",
         f"run-{host_token}-proof-lane.sh",
+        "republish-after-host-proof.sh",
+        "finalize-external-host-proof.sh",
         f"host-proof-bundles/{host_token}/external-proof-manifest.json",
     ]
     for rel in extra_relative_paths or []:
@@ -1954,6 +2264,16 @@ def _materialize_host_command_pack(
             source = commands_dir / relative_path
             if source.is_file():
                 archive.add(source, arcname=relative_path)
+        _add_generated_tar_text_file(
+            archive,
+            relative_path="README.md",
+            content=_build_host_command_pack_readme(host=host, host_token=host_token),
+        )
+        _add_generated_tar_text_file(
+            archive,
+            relative_path="proof-host.env.example",
+            content=_build_host_command_pack_env_example(host_token=host_token),
+        )
     return _write_sha256_sidecar(command_pack_archive)
 
 
@@ -1998,6 +2318,7 @@ def _materialize_command_files(
         bundle_script = commands_dir / f"bundle-{host_token}-proof.sh"
         ingest_script = commands_dir / f"ingest-{host_token}-proof-bundle.sh"
         host_lane_script = commands_dir / f"run-{host_token}-proof-lane.sh"
+        prepare_pack_script = commands_dir / f"prepare-{host_token}-proof-command-pack.sh"
         command_pack_path = commands_dir / f"{host_token}-proof-command-pack.tgz"
         _write_file(
             preflight_script,
@@ -2047,6 +2368,14 @@ def _materialize_command_files(
             ),
             executable=True,
         )
+        _write_file(
+            prepare_pack_script,
+            _render_bash_script(
+                _prepare_command_pack_shell_commands(host=host, commands_dir=commands_dir),
+                no_op_message=f"No command-pack prepare commands were generated for host '{host}'.",
+            ),
+            executable=True,
+        )
         host_file_row: dict[str, str] = {
             "host": host,
             "preflight_script": str(preflight_script),
@@ -2055,6 +2384,7 @@ def _materialize_command_files(
             "bundle_script": str(bundle_script),
             "ingest_script": str(ingest_script),
             "host_lane_script": str(host_lane_script),
+            "prepare_command_pack_script": str(prepare_pack_script),
         }
         if host.lower() == "windows":
             capture_wrappers = _powershell_wrappers(capture_commands)
@@ -2067,6 +2397,7 @@ def _materialize_command_files(
             ingest_ps1 = commands_dir / f"ingest-{host_token}-proof-bundle.ps1"
             preflight_ps1 = commands_dir / f"preflight-{host_token}-proof.ps1"
             host_lane_ps1 = commands_dir / f"run-{host_token}-proof-lane.ps1"
+            prepare_pack_ps1 = commands_dir / f"prepare-{host_token}-proof-command-pack.ps1"
             _write_file(
                 preflight_ps1,
                 _render_powershell_script(
@@ -2115,16 +2446,26 @@ def _materialize_command_files(
                 ),
                 executable=False,
             )
+            _write_file(
+                prepare_pack_ps1,
+                _render_powershell_script(
+                    _prepare_command_pack_shell_commands(host=host, commands_dir=commands_dir),
+                    no_op_message=f"No command-pack prepare commands were generated for host '{host}'.",
+                ),
+                executable=False,
+            )
             host_file_row["preflight_powershell"] = str(preflight_ps1)
             host_file_row["capture_powershell"] = str(capture_ps1)
             host_file_row["validation_powershell"] = str(validation_ps1)
             host_file_row["bundle_powershell"] = str(bundle_ps1)
             host_file_row["ingest_powershell"] = str(ingest_ps1)
             host_file_row["host_lane_powershell"] = str(host_lane_ps1)
+            host_file_row["prepare_command_pack_powershell"] = str(prepare_pack_ps1)
             command_pack_sha256_path, command_pack_sha256 = _materialize_host_command_pack(
                 command_pack_archive=command_pack_path,
                 commands_dir=commands_dir,
                 host_token=host_token,
+                host=host,
                 extra_relative_paths=[
                     preflight_ps1.name,
                     capture_ps1.name,
@@ -2138,6 +2479,7 @@ def _materialize_command_files(
                 command_pack_archive=command_pack_path,
                 commands_dir=commands_dir,
                 host_token=host_token,
+                host=host,
             )
         host_file_row["command_pack_path"] = str(command_pack_path)
         host_file_row["command_pack_sha256_path"] = str(command_pack_sha256_path)
@@ -2248,6 +2590,8 @@ def materialize_markdown(
             ingest_powershell = _normalize_text(host_row.get("ingest_powershell"))
             host_lane_script = _normalize_text(host_row.get("host_lane_script"))
             host_lane_powershell = _normalize_text(host_row.get("host_lane_powershell"))
+            prepare_command_pack_script = _normalize_text(host_row.get("prepare_command_pack_script"))
+            prepare_command_pack_powershell = _normalize_text(host_row.get("prepare_command_pack_powershell"))
             lines.append(f"- host `{host}`")
             if preflight_script:
                 lines.append(f"  preflight_script: `{preflight_script}`")
@@ -2261,6 +2605,8 @@ def materialize_markdown(
                 lines.append(f"  ingest_script: `{ingest_script}`")
             if host_lane_script:
                 lines.append(f"  host_lane_script: `{host_lane_script}`")
+            if prepare_command_pack_script:
+                lines.append(f"  prepare_command_pack_script: `{prepare_command_pack_script}`")
             command_pack_path = _normalize_text(host_row.get("command_pack_path"))
             if command_pack_path:
                 lines.append(f"  command_pack_path: `{command_pack_path}`")
@@ -2282,6 +2628,8 @@ def materialize_markdown(
                 lines.append(f"  ingest_powershell: `{ingest_powershell}`")
             if host_lane_powershell:
                 lines.append(f"  host_lane_powershell: `{host_lane_powershell}`")
+            if prepare_command_pack_powershell:
+                lines.append(f"  prepare_command_pack_powershell: `{prepare_command_pack_powershell}`")
         post_capture_script = _normalize_text(command_files.get("post_capture_script"))
         if post_capture_script:
             lines.append(f"- post_capture_script: `{post_capture_script}`")
@@ -2315,9 +2663,15 @@ def materialize_markdown(
             host_lane_script = _normalize_text(host_row.get("host_lane_script"))
             if host_lane_script:
                 lines.append(f"- host_lane_script: `{host_lane_script}`")
+            prepare_command_pack_script = _normalize_text(host_row.get("prepare_command_pack_script"))
+            if prepare_command_pack_script:
+                lines.append(f"- prepare_command_pack_script: `{prepare_command_pack_script}`")
             host_lane_powershell = _normalize_text(host_row.get("host_lane_powershell"))
             if host_lane_powershell:
                 lines.append(f"- host_lane_powershell: `{host_lane_powershell}`")
+            prepare_command_pack_powershell = _normalize_text(host_row.get("prepare_command_pack_powershell"))
+            if prepare_command_pack_powershell:
+                lines.append(f"- prepare_command_pack_powershell: `{prepare_command_pack_powershell}`")
             lines.append(f"- retained_bundle_archive_path: `{bundle_archive_path}`")
             lines.append(f"- retained_bundle_archive_present: `{str(bundle_archive_path.exists()).lower()}`")
             lines.append(f"- retained_bundle_directory_path: `{bundle_directory_path}`")
@@ -2427,6 +2781,12 @@ def materialize_markdown(
         if command_pack_sha256_path:
             lines.append(f"- command_pack_sha256_path: `{command_pack_sha256_path}`")
         command_pack_sha256 = _normalize_text(command_host_rows.get(host, {}).get("command_pack_sha256"))
+        prepare_command_pack_script = _normalize_text(
+            command_host_rows.get(host, {}).get("prepare_command_pack_script")
+        )
+        prepare_command_pack_powershell = _normalize_text(
+            command_host_rows.get(host, {}).get("prepare_command_pack_powershell")
+        )
         if command_pack_sha256:
             lines.append(f"- command_pack_sha256: `{command_pack_sha256}`")
         lines.append("")
@@ -2440,14 +2800,29 @@ def materialize_markdown(
             lines.append("### Command Pack Verification")
             lines.append("")
             lines.append(
-                "Verify the transferred command pack before unpacking it on the native proof host."
+                "Transfer the command pack, its SHA sidecar, and the retained prepare script to the native proof host. The prepare script verifies the archive and unpacks it into the target directory."
+            )
+            lines.append(
+                "After unpacking, use `README.md` and `proof-host.env.example` in the extracted folder as the host-local checklist before you run the lane."
             )
             lines.append("")
             lines.append("```bash")
-            lines.append(f"shasum -a 256 -c {command_pack_sha_name}")
-            lines.append(f"tar -xzf {command_pack_name}")
+            if prepare_command_pack_script:
+                lines.append(
+                    f"bash {Path(prepare_command_pack_script).name} {command_pack_name} {command_pack_sha_name}"
+                )
+            else:
+                lines.append(f"shasum -a 256 -c {command_pack_sha_name}")
+                lines.append(f"tar -xzf {command_pack_name}")
             lines.append("```")
             lines.append("")
+            if host.lower() == "windows" and prepare_command_pack_powershell:
+                lines.append("```powershell")
+                lines.append(
+                    f"& .\\{Path(prepare_command_pack_powershell).name} {command_pack_name} {command_pack_sha_name}"
+                )
+                lines.append("```")
+                lines.append("")
         lines.append("### Requested Tuples")
         lines.append("")
         for request in group.get("requests") or []:
@@ -2585,6 +2960,10 @@ def materialize_markdown(
             for command in host_lane_commands:
                 lines.append(command)
             lines.append("```")
+            lines.append("")
+            lines.append(
+                "Set `CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE=1` to make the retained host-lane script ingest and republish automatically when the shared `/docker/fleet` and `/docker/chummercomplete` workspace is mounted on the proof host."
+            )
         if host.lower() == "windows":
             wrappers = _powershell_wrappers(commands)
             validation_wrappers = _powershell_wrappers(validation_commands)
@@ -2652,6 +3031,10 @@ def materialize_markdown(
                 for command in host_lane_wrappers:
                     lines.append(command)
                 lines.append("```")
+                lines.append("")
+                lines.append(
+                    "Set `$env:CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE = '1'` before the PowerShell host lane to trigger the same shared-workspace finalize path."
+                )
         lines.append("")
 
     lines.append("## After Host Proof Capture")
@@ -2676,6 +3059,47 @@ def materialize_markdown(
     return "\n".join(lines)
 
 
+def _uses_default_external_proof_publication_paths(*, out_path: Path, commands_dir: Path) -> bool:
+    try:
+        return (
+            out_path.resolve() == DEFAULT_OUT.resolve()
+            and commands_dir.resolve() == DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR.resolve()
+        )
+    except OSError:
+        return False
+
+
+def _sync_dependent_flagship_truth(*, out_path: Path, commands_dir: Path) -> None:
+    if str(os.environ.get(DEFAULT_SYNC_DISABLE_ENV) or "").strip().lower() in {"1", "true", "yes", "on"}:
+        return
+    if not _uses_default_external_proof_publication_paths(out_path=out_path, commands_dir=commands_dir):
+        return
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(FLEET_ROOT / "scripts" / "materialize_flagship_product_readiness.py"),
+            "--out",
+            str(DEFAULT_FLAGSHIP_PRODUCT_READINESS_OUT),
+            "--mirror-out",
+            str(FLEET_FLAGSHIP_PRODUCT_READINESS_MIRROR_PATH),
+        ],
+        check=True,
+        cwd=str(FLEET_ROOT),
+    )
+    if DEFAULT_WEEKLY_PRODUCT_PULSE_SCRIPT.is_file():
+        subprocess.run(
+            [
+                sys.executable,
+                str(DEFAULT_WEEKLY_PRODUCT_PULSE_SCRIPT),
+                "--out",
+                str(DEFAULT_WEEKLY_PRODUCT_PULSE_OUT),
+            ],
+            check=True,
+            cwd=str(FLEET_DESIGN_PRODUCT_ROOT),
+        )
+
+
 def main() -> int:
     args = parse_args()
     support_packets = _load_support_packets(args.support_packets)
@@ -2690,6 +3114,7 @@ def main() -> int:
         _normalize_plan(support_packets.get("unresolved_external_proof_execution_plan")),
         journey_gates,
     )
+    plan = _enrich_plan_with_release_train_fallbacks(plan, release_channel_path=args.release_channel.resolve())
     failures = _validate_plan_relative_paths(plan)
     if failures:
         print("external-proof materialize failed: malformed relative paths", file=sys.stderr)
@@ -2710,6 +3135,7 @@ def main() -> int:
     markdown = materialize_markdown(plan, generated_at=utc_now_iso(), command_files=command_files)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(markdown, encoding="utf-8")
+    _sync_dependent_flagship_truth(out_path=args.out.resolve(), commands_dir=commands_dir)
     return 0
 
 

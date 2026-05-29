@@ -23,6 +23,7 @@ class FakeApp:
         self.synced = False
         self.reconciled = False
         self.snapshotted = False
+        self.synced_projects = []
 
     @contextlib.contextmanager
     def db(self):
@@ -67,6 +68,52 @@ class FakeApp:
     def save_runtime_task_cache_snapshot(self) -> None:
         self.snapshotted = True
 
+    def reconcile_finished_run_links(self) -> int:
+        self.reconciled = True
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE projects
+                SET status='dispatch_pending',
+                    active_run_id=NULL
+                WHERE active_run_id IS NOT NULL
+                """
+            )
+        return 1
+
+    def sync_project_progress_from_packages(self, project_id: str) -> None:
+        self.synced_projects.append(project_id)
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE projects
+                SET status='running'
+                WHERE id=?
+                """,
+                (project_id,),
+            )
+
+    def project_has_live_runtime_commitment(self, project_id: str, active_run_id: int | None) -> bool:
+        row = self._conn.execute(
+            """
+            SELECT 1
+            FROM runtime_tasks
+            WHERE project_id=?
+              AND task_state IN ('starting', 'scheduled', 'running', 'verifying', 'awaiting_review')
+            LIMIT 1
+            """,
+            (project_id,),
+        ).fetchone()
+        if row:
+            return True
+        if not active_run_id:
+            return False
+        run = self._conn.execute(
+            "SELECT status, finished_at FROM runs WHERE id=?",
+            (active_run_id,),
+        ).fetchone()
+        return bool(run and str(run["status"] or "") in keeper.ACTIVE_RUN_STATUSES and not str(run["finished_at"] or ""))
+
 
 def test_set_host_controller_env_defaults_points_host_import_at_state_db(monkeypatch, tmp_path) -> None:
     keys = [
@@ -109,6 +156,7 @@ def _seed_db() -> sqlite3.Connection:
         CREATE TABLE projects (
             id TEXT PRIMARY KEY,
             status TEXT,
+            active_run_id INTEGER,
             cooldown_until TEXT,
             last_error TEXT,
             current_slice TEXT
@@ -370,6 +418,70 @@ def test_autoheal_queue_scope_drift_narrows_live_queue_and_scope_claims(tmp_path
         ).fetchall()
     ]
     assert active_claims == [".codex-studio", "feedback"]
+
+
+def test_autoheal_projection_drift_clears_stale_active_project_links() -> None:
+    conn = _seed_db()
+    now = keeper.iso_now()
+    conn.execute(
+        """
+        INSERT INTO projects(id, status, cooldown_until, last_error, current_slice)
+        VALUES ('core', 'running', NULL, '', 'slice')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO runs(id, project_id, package_id, status, started_at, verify_exit_code, finished_at, error_message, error_class, log_path, final_message_path)
+        VALUES (34126, 'core', '', 'awaiting_review', ?, NULL, ?, '', '', '', '')
+        """,
+        (now, now),
+    )
+    conn.execute("UPDATE projects SET active_run_id=34126 WHERE id='core'")
+    app = FakeApp(conn)
+
+    actions = keeper.autoheal_projection_drift(app)
+
+    row = conn.execute("SELECT status, active_run_id FROM projects WHERE id='core'").fetchone()
+    assert any(action["trigger"] == "projection_drift_stale_active" for action in actions)
+    assert app.reconciled is True
+    assert app.snapshotted is True
+    assert str(row["status"]) == "dispatch_pending"
+    assert row["active_run_id"] is None
+
+
+def test_autoheal_projection_drift_resyncs_stale_inactive_project_rows() -> None:
+    conn = _seed_db()
+    now = keeper.iso_now()
+    conn.execute(
+        """
+        INSERT INTO projects(id, status, cooldown_until, last_error, current_slice)
+        VALUES ('ui-kit', 'waiting_capacity', NULL, '', 'slice')
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO runs(id, project_id, package_id, status, started_at, verify_exit_code, finished_at, error_message, error_class, log_path, final_message_path)
+        VALUES (537, 'ui-kit', 'pkg-ui-kit', 'running', ?, NULL, NULL, '', '', '', '')
+        """,
+        (now,),
+    )
+    conn.execute("UPDATE projects SET active_run_id=537 WHERE id='ui-kit'")
+    conn.execute(
+        """
+        INSERT INTO runtime_tasks(package_id, project_id, task_kind, task_state, payload_json, run_id, scheduled_at, started_at, updated_at)
+        VALUES('pkg-ui-kit', 'ui-kit', 'coding', 'running', '{}', 537, ?, ?, ?)
+        """,
+        (now, now, now),
+    )
+    app = FakeApp(conn)
+
+    actions = keeper.autoheal_projection_drift(app)
+
+    row = conn.execute("SELECT status FROM projects WHERE id='ui-kit'").fetchone()
+    assert any(action["trigger"] == "projection_drift_stale_inactive" for action in actions)
+    assert app.synced_projects == ["ui-kit"]
+    assert app.snapshotted is True
+    assert str(row["status"]) == "running"
 
 
 def test_ready_project_ids_excludes_active_and_repeat_failure_projects(monkeypatch) -> None:

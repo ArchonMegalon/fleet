@@ -193,6 +193,31 @@ class CodexLizShimTests(unittest.TestCase):
         self.assertEqual(payload["env"]["CODEX_WRAPPER_DISABLE_BOOTSTRAP"], "1")
         self.assertEqual(payload["env"]["CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT"], "1")
 
+    def test_codexliz_strips_worker_lane_prefix_before_forwarding(self) -> None:
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server, _thread = self._server(Handler)
+        completed = self._run_shim(
+            f"http://127.0.0.1:{server.server_port}",
+            extra_args=["core", "exec"],
+            default_prompt="repair the queue stall",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["argv"].count("core"), 0)
+        self.assertIn("exec", payload["argv"])
+
     def test_codexliz_prepends_exec_trace_prompt_to_inline_exec_prompt(self) -> None:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
@@ -246,6 +271,32 @@ class CodexLizShimTests(unittest.TestCase):
         self.assertIn("You are Codex running through the Fleet `codexliz` shim.", payload["stdin"])
         self.assertIn("repair the queue stall", payload["stdin"])
 
+    def test_codexliz_does_not_replace_model_argument_when_prepending_exec_prompt(self) -> None:
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server, _thread = self._server(Handler)
+        completed = self._run_shim(
+            f"http://127.0.0.1:{server.server_port}",
+            extra_args=["exec", "--json", "-m", "qwen2.5-coder:32b"],
+            default_prompt="repair the queue stall",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        model_index = payload["argv"].index("-m")
+        self.assertEqual(payload["argv"][model_index + 1], "qwen2.5-coder:32b")
+        self.assertIn("repair the queue stall", payload["argv"][-1])
+
     def test_codexliz_debug_mode_emits_preflight_and_launch_traces(self) -> None:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
@@ -293,6 +344,36 @@ class CodexLizShimTests(unittest.TestCase):
         self.assertIn("transport preflight failed", completed.stderr)
         self.assertIn("HTTP 524", completed.stderr)
         self.assertFalse(self.capture_path.exists())
+
+    def test_codexliz_falls_back_to_configured_local_provider_when_primary_preflight_fails(self) -> None:
+        class FallbackHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                body = json.dumps({"data": [{"id": "gpt-5.4"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        fallback_server, _thread = self._server(FallbackHandler)
+        unused_port = _pick_free_port()
+        completed = self._run_shim(
+            f"http://127.0.0.1:{unused_port}",
+            extra_env={
+                "CODEXLIZ_FALLBACK_BASE_URL": f"http://127.0.0.1:{fallback_server.server_port}",
+                "CODEXLIZ_FALLBACK_MODEL": "gpt-5.4",
+                "CODEXLIZ_PREFLIGHT_TIMEOUT_SECONDS": "1",
+            },
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("Trace: provider=liz transport=fallback activating", completed.stderr)
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        self.assertIn('model="gpt-5.4"', payload["argv"])
+        self.assertIn('model_providers.liz.base_url="http://127.0.0.1:', " ".join(payload["argv"]))
 
     def test_codexliz_fails_fast_when_expected_model_is_missing_from_models_surface(self) -> None:
         class Handler(BaseHTTPRequestHandler):
@@ -435,6 +516,111 @@ class CodexLizShimTests(unittest.TestCase):
         self.assertEqual(outage_state["retry_count"], 1)
         self.assertEqual(outage_state["last_reason"], "success")
         self.assertEqual(output_path.read_text(encoding="utf-8").strip(), "transport recovered")
+
+    def test_codexliz_retries_retryable_530_until_transport_recovers(self) -> None:
+        output_path = self.root / "last-message.txt"
+        attempt_counter_path = self.root / "attempt-count.txt"
+        self.fake_codex.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env python3",
+                    "import json, os, sys",
+                    "from pathlib import Path",
+                    "counter_path = Path(os.environ['CODEXLIZ_TEST_ATTEMPT_COUNTER'])",
+                    "try:",
+                    "    attempt = int(counter_path.read_text(encoding='utf-8').strip())",
+                    "except Exception:",
+                    "    attempt = 0",
+                    "attempt += 1",
+                    "counter_path.write_text(str(attempt), encoding='utf-8')",
+                    "if attempt == 1:",
+                    "    port = os.environ.get('CODEXLIZ_PROXY_PORT', '')",
+                    "    sys.stderr.write('ERROR: unexpected status 530 Origin DNS Error: {\\\"error\\\":\\\"upstream_http_error\\\"}, url: http://127.0.0.1:%s/v1/responses, cf-ray: retry-530-ray\\n' % port)",
+                    "    raise SystemExit(17)",
+                    "payload = {",
+                    "    'argv': sys.argv[1:],",
+                    "    'attempt': attempt,",
+                    "}",
+                    "with open(os.environ['CODEXLIZ_TEST_CAPTURE'], 'w', encoding='utf-8') as handle:",
+                    "    json.dump(payload, handle)",
+                    "output_path = Path(os.environ['CODEXLIZ_TEST_OUTPUT_PATH'])",
+                    "output_path.write_text('transport recovered\\n', encoding='utf-8')",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        self.fake_codex.chmod(self.fake_codex.stat().st_mode | stat.S_IXUSR)
+
+        requests: list[str] = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                requests.append(self.path)
+                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server, _thread = self._server(Handler)
+        completed = self._run_shim(
+            f"http://127.0.0.1:{server.server_port}",
+            extra_args=["exec", "-o", str(output_path)],
+            extra_env={
+                "CODEXLIZ_TEST_ATTEMPT_COUNTER": str(attempt_counter_path),
+                "CODEXLIZ_TEST_OUTPUT_PATH": str(output_path),
+                "CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS": "1",
+                "CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS": "1",
+                "CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS": "1",
+                "CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS": "30",
+            },
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("Trace: provider=liz transport=outage status=530", completed.stderr)
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["attempt"], 2)
+        outage_state = json.loads((self.state_dir / "outage.json").read_text(encoding="utf-8"))
+        self.assertEqual(outage_state["state"], "healthy")
+        self.assertFalse(outage_state["current_outage"])
+        self.assertEqual(outage_state["retry_count"], 1)
+        self.assertEqual(outage_state["last_reason"], "success")
+        self.assertEqual(output_path.read_text(encoding="utf-8").strip(), "transport recovered")
+
+    def test_codexliz_starts_proxy_with_bounded_retry_window(self) -> None:
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server, _thread = self._server(Handler)
+        completed = self._run_shim(
+            f"http://127.0.0.1:{server.server_port}",
+            include_proxy_port=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        proxy_pid = int(self.proxy_pid_file.read_text(encoding="utf-8").strip())
+        cmdline = [
+            token
+            for token in Path(f"/proc/{proxy_pid}/cmdline").read_text(encoding="utf-8").split("\0")
+            if token
+        ]
+        self.assertIn("--retry-interval-seconds", cmdline)
+        self.assertIn("10", cmdline)
+        self.assertIn("--retry-max-wait-seconds", cmdline)
+        self.assertIn("900", cmdline)
 
     def test_codexliz_retries_retryable_404_until_transport_recovers(self) -> None:
         output_path = self.root / "last-message.txt"

@@ -628,7 +628,10 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             lane_script = fixture["commands_dir"] / "run-linux-proof-lane.sh"
             lane_payload = lane_script.read_text(encoding="utf-8")
             lane_script.write_text(
-                lane_payload.replace(f"cd {fixture['commands_dir']}\n", "", 1),
+                lane_payload
+                .replace('SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\n', "", 1)
+                .replace('cd "$SCRIPT_DIR"\n', "", 1)
+                .replace(f"cd {fixture['commands_dir']}\n", "", 1),
                 encoding="utf-8",
             )
 
@@ -649,7 +652,8 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
                     [
                         "#!/usr/bin/env bash",
                         "set -euo pipefail",
-                        f"cd {fixture['commands_dir']}",
+                        'SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"',
+                        'cd "$SCRIPT_DIR"',
                         "./preflight-windows-proof.sh",
                         "./validate-windows-proof.sh",
                         "./capture-windows-proof.sh",
@@ -665,6 +669,24 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(
                 "external proof host lane script has out-of-order token for windows: ./validate-windows-proof.sh",
+                result.stderr,
+            )
+
+    def test_verifier_fails_when_host_lane_loses_fail_closed_auto_finalize_blocker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            lane_script = fixture["commands_dir"] / "run-macos-proof-lane.sh"
+            lane_payload = lane_script.read_text(encoding="utf-8")
+            lane_script.write_text(
+                lane_payload.replace("external-proof-auto-finalize-blocked", "external-proof-auto-finalize-skipped"),
+                encoding="utf-8",
+            )
+
+            result = _run_verifier(fixture)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "external proof host lane script is missing required token for macos: external-proof-auto-finalize-blocked",
                 result.stderr,
             )
 

@@ -80,6 +80,104 @@ class ControllerRoutingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.controller = load_controller_module()
 
+    def test_host_mounted_runtime_paths_are_preferred_when_env_is_unset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            mounted_state = root / "state"
+            mounted_state.mkdir(parents=True, exist_ok=True)
+            mounted_db = mounted_state / "fleet.db"
+            mounted_db.write_text("", encoding="utf-8")
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "FLEET_MOUNT_ROOT": str(root),
+                    "FLEET_DB_PATH": "",
+                    "FLEET_STATE_ROOT": "",
+                    "FLEET_LOG_DIR": "",
+                    "FLEET_QUEUE_RECOVERY_DIR": "",
+                    "FLEET_WORKTREE_ROOT": "",
+                    "FLEET_CONTROLLER_HEARTBEAT_PATH": "",
+                    "FLEET_CODEX_HOME_ROOT": "",
+                    "FLEET_GROUP_ROOT": "",
+                },
+                clear=False,
+            ):
+                controller = load_controller_module()
+
+            self.assertEqual(controller.DB_PATH, mounted_db)
+            self.assertEqual(controller.STATE_ROOT, mounted_state)
+            self.assertEqual(controller.LOG_DIR, mounted_state / "logs")
+            self.assertEqual(controller.QUEUE_RECOVERY_DIR, mounted_state / "queue-recovery")
+            self.assertEqual(controller.WORKTREE_ROOT, mounted_state / "worktrees")
+            self.assertEqual(controller.CONTROLLER_HEARTBEAT_PATH, mounted_state / "controller-heartbeat.json")
+            self.assertEqual(controller.CODEX_HOME_ROOT, mounted_state / "codex-homes")
+            self.assertEqual(controller.GROUP_ROOT, mounted_state / "groups")
+
+    def test_api_run_project_now_resyncs_project_progress_after_successful_package_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            old_db_path = self.controller.DB_PATH
+            self.controller.DB_PATH = db_path
+            self.addCleanup(setattr, self.controller, "DB_PATH", old_db_path)
+            self.controller.init_db()
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, status, queue_json, queue_index, current_slice, active_run_id,
+                        cooldown_until, last_run_at, last_error, consecutive_failures,
+                        spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "core",
+                        "/tmp/core",
+                        self.controller.READY_STATUS,
+                        "[]",
+                        0,
+                        "slice",
+                        None,
+                        None,
+                        None,
+                        None,
+                        0,
+                        "",
+                        "",
+                        "",
+                        "2026-05-23T06:00:00Z",
+                    ),
+                )
+
+            candidate = object()
+            planned = self.controller.PlannedLaunch(
+                project_id="core",
+                candidate=candidate,
+                decision={"quartermaster": {"target_lane": "core_booster"}},
+                account_alias="acct-ea-core",
+                selected_model="ea-coder-hard",
+                selection_note="test",
+                selection_trace=[],
+                package_id="pkg-core",
+            )
+
+            with mock.patch.object(self.controller, "api_retry_project", return_value={"ok": True, "project_id": "core", "status": self.controller.READY_STATUS, "action": "retry"}):
+                with mock.patch.object(self.controller, "normalize_config", return_value={"projects": [{"id": "core", "enabled": True}], "accounts": {}, "policies": {}, "lanes": self.controller.DEFAULT_LANES}):
+                    with mock.patch.object(self.controller, "project_uses_package_scheduler", return_value=True):
+                        with mock.patch.object(self.controller, "get_project_cfg", return_value={"id": "core", "enabled": True}):
+                            with mock.patch.object(self.controller, "quartermaster_tick_if_due", return_value={"mode": "enforce"}):
+                                with mock.patch.object(self.controller, "quartermaster_capacity_reconcile", return_value={}):
+                                    with mock.patch.object(self.controller, "prepare_work_package_dispatch_candidates", return_value=[candidate]):
+                                        with mock.patch.object(self.controller, "plan_candidate_launch", return_value=planned):
+                                            with mock.patch.object(self.controller, "launch_planned_project_task", return_value=True):
+                                                with mock.patch.object(self.controller, "sync_project_progress_from_packages") as sync_mock:
+                                                    result = self.controller.api_run_project_now("core")
+
+            self.assertEqual(result["status"], "scheduled")
+            self.assertEqual(result["package_id"], "pkg-core")
+            sync_mock.assert_called_once_with("core")
+
     def test_generated_artifact_packages_with_compilers_stay_dispatchable(self) -> None:
         policy = self.controller.apply_generated_work_package_policy(
             {
@@ -595,6 +693,81 @@ class ControllerRoutingTests(unittest.TestCase):
                 ).fetchone()
 
             self.assertEqual(row["status"], "verifying")
+            self.assertEqual(int(row["active_run_id"] or 0), 88)
+            self.assertIsNone(row["last_error"])
+            self.assertEqual(int(row["consecutive_failures"] or 0), 0)
+
+    def test_update_project_status_preserves_live_runtime_truth(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[]', 0, 1, 'waiting_capacity', 'Old slice', NULL, NULL, NULL, 'scope conflict with pkg-hub on path:hub/Chummer.Run.Api', '', '', '', ?)
+                    """,
+                    ("hub", str(repo_root), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, trace_id, project_id, package_id, account_alias, job_kind, slice_name, status, model, started_at
+                    )
+                    VALUES(88, 'trace-hub', 'hub', 'pkg-hub', 'acct-ea-hub', 'coding', 'Hub package', 'running', 'ea-coder-hard', ?)
+                    """,
+                    (now,),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO work_packages(
+                        package_id, project_id, title, slice_name, queue_index, status, runtime_state, latest_run_id,
+                        task_meta_json, dependencies_json, allowed_paths_json, denied_paths_json, owned_surfaces_json,
+                        created_at, updated_at
+                    )
+                    VALUES(?, ?, ?, ?, 0, 'running', 'running', 88, '{}', '[]', '[]', '[]', '[]', ?, ?)
+                    """,
+                    ("pkg-hub", "hub", "Hub package", "Hub package", now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runtime_tasks(package_id, project_id, task_kind, task_state, payload_json, run_id, scheduled_at, started_at, updated_at)
+                    VALUES(?, ?, 'coding', 'running', '{}', 88, ?, ?, ?)
+                    """,
+                    ("pkg-hub", "hub", now, now, now),
+                )
+
+            self.controller.update_project_status(
+                "hub",
+                status="waiting_capacity",
+                current_slice="Blocked slice",
+                active_run_id=None,
+                cooldown_until=None,
+                last_run_at=self.controller.utc_now(),
+                last_error="scope conflict with pkg-hub on path:hub/Chummer.Run.Api",
+                consecutive_failures=1,
+                spider_tier="",
+                spider_model="",
+                spider_reason="",
+            )
+
+            with self.controller.db() as conn:
+                row = conn.execute(
+                    "SELECT status, active_run_id, last_error, consecutive_failures FROM projects WHERE id='hub'"
+                ).fetchone()
+
+            self.assertEqual(row["status"], "running")
             self.assertEqual(int(row["active_run_id"] or 0), 88)
             self.assertIsNone(row["last_error"])
             self.assertEqual(int(row["consecutive_failures"] or 0), 0)
@@ -4197,6 +4370,35 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(gate["target_lane"], "easy")
         self.assertEqual(gate["remaining_by_lane"], {"core_booster": 0})
 
+    def test_quartermaster_status_payload_degrades_to_observe_only_when_persisted_plan_is_stale_and_upstream_is_unreachable(self) -> None:
+        stale_payload = {
+            "generated_at": "2026-03-23T10:00:01Z",
+            "source_generated_at": "2026-03-23T10:00:00Z",
+            "source": "live_admin",
+            "degraded": False,
+            "cache_state": "fresh",
+            "tick_reason": "event",
+            "error": "",
+            "plan": {
+                "generated_at": "2026-03-23T10:00:00Z",
+                "mode": "enforce",
+                "lane_targets": {"core_booster": 1},
+                "controller_tick": {"plan_ttl_seconds": 900},
+            },
+        }
+
+        with mock.patch.object(self.controller, "_QUARTERMASTER_STATUS_CACHE", {"fetched_at": 0.0, "payload": {}}):
+            with mock.patch.object(self.controller, "_QUARTERMASTER_PLAN_CACHE", {"fetched_at": 0.0, "payload": {}}):
+                with mock.patch.object(self.controller, "_quartermaster_status_fallback_payload", return_value=(stale_payload, None)):
+                    with mock.patch.object(self.controller.urllib.request, "urlopen", side_effect=OSError("dns failure")):
+                        payload = self.controller.quartermaster_status_payload(force=True)
+
+        self.assertEqual(payload["source"], "controller_emergency_fallback")
+        self.assertEqual(payload["cache_state"], "stale")
+        self.assertTrue(payload["degraded"])
+        self.assertEqual((payload.get("plan") or {}).get("mode"), "observe_only")
+        self.assertIn("failed", str(payload.get("error") or ""))
+
     def test_package_compile_targets_authority_capacity_even_when_lane_prefers_booster(self) -> None:
         target_lane = self.controller.quartermaster_target_lane_for_decision(
             {"lane": "core_booster", "requires_contract_authority": False},
@@ -5315,6 +5517,157 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(str(claim["claim_state"]), "released")
         self.assertTrue(claim["released_at"])
 
+    def test_reconcile_finished_run_links_clears_orphaned_project_active_run_without_runtime_task(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[\"slice\"]', 0, 0, 'running', 'slice', 34126, NULL, ?, '', '', '', '', ?)
+                    """,
+                    ("core", str(root), now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at, job_kind
+                    )
+                    VALUES(34126, 'core', 'acct-ea-core', 'slice', 'awaiting_review', 'ea-coder-hard', ?, ?, 'coding')
+                    """,
+                    (now, now),
+                )
+
+            reconciled = self.controller.reconcile_finished_run_links()
+
+            with self.controller.db() as conn:
+                row = conn.execute(
+                    "SELECT status, active_run_id FROM projects WHERE id='core'"
+                ).fetchone()
+
+        self.assertGreaterEqual(reconciled, 1)
+        self.assertEqual(str(row["status"]), self.controller.READY_STATUS)
+        self.assertIsNone(row["active_run_id"])
+
+    def test_project_has_live_runtime_commitment_ignores_stale_scheduled_runtime_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            old = self.controller.iso(self.controller.utc_now() - self.controller.dt.timedelta(hours=2))
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[\"slice\"]', 0, 0, 'dispatch_pending', 'slice', NULL, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    ("fleet", str(root), old),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runtime_tasks(package_id, project_id, task_kind, task_state, payload_json, run_id, scheduled_at, started_at, updated_at)
+                    VALUES('', 'fleet', 'coding', 'scheduled', '{}', NULL, ?, NULL, ?)
+                    """,
+                    (old, old),
+                )
+
+            self.assertFalse(self.controller.project_has_live_runtime_commitment("fleet", None))
+
+    def test_codex_active_project_ids_counts_verifying_live_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[\"slice\"]', 0, 0, 'verifying', 'slice', 91, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    ("design", str(root), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at, job_kind
+                    )
+                    VALUES(91, 'design', 'acct-ea-design', 'slice', 'verifying', 'ea-coder-hard', ?, NULL, 'coding')
+                    """,
+                    (now,),
+                )
+
+            with self.controller.db() as conn:
+                rows = conn.execute("SELECT * FROM projects ORDER BY id").fetchall()
+
+            self.assertEqual(self.controller.codex_active_project_ids(rows), {"design"})
+
+    def test_compact_status_payload_ignores_stale_active_run_metadata_without_live_commitment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[\"slice\"]', 0, 0, 'running', 'slice', 34126, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    ("core", str(root), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at, job_kind
+                    )
+                    VALUES(34126, 'core', 'acct-ea-core', 'slice', 'awaiting_review', 'ea-coder-hard', ?, ?, 'coding')
+                    """,
+                    (now, now),
+                )
+
+            payload = self.controller.compact_status_payload()
+            project = next(item for item in payload["projects"] if item["id"] == "core")
+
+        self.assertEqual(project["status"], self.controller.READY_STATUS)
+        self.assertIsNone(project["active_run_account_alias"])
+        self.assertEqual(project["active_run_brain"], "not active")
+
     def test_sync_project_progress_prefers_ready_package_compile_over_waiting_dependency(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -5386,6 +5739,186 @@ class ControllerRoutingTests(unittest.TestCase):
             "Compile booster-ready work packages from queue truth",
         )
         self.assertIsNone(row["active_run_id"])
+
+    def test_sync_project_progress_from_packages_ignores_stale_package_runtime_and_latest_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[\"Fresh slice\"]', 0, 0, 'dispatch_pending', 'Fresh slice', NULL, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    ("fleet", str(root), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, package_id, account_alias, slice_name, status, model, started_at, finished_at, job_kind
+                    )
+                    VALUES(10503, 'fleet', 'fleet-0000', 'acct-ea-core', 'Old slice', 'awaiting_review', 'ea-coder-hard', ?, ?, 'coding')
+                    """,
+                    (now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO work_packages(
+                        package_id, project_id, queue_index, title, slice_name, priority, created_at, updated_at,
+                        status, runtime_state, latest_run_id
+                    )
+                    VALUES('fleet-0000', 'fleet', 0, 'Fresh slice', 'Fresh slice', 100, ?, ?, 'running', 'running', 10503)
+                    """,
+                    (now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO work_packages(
+                        package_id, project_id, queue_index, title, slice_name, priority, created_at, updated_at,
+                        status, runtime_state
+                    )
+                    VALUES('fleet-0001', 'fleet', 1, 'Next slice', 'Next slice', 100, ?, ?, 'ready', 'idle')
+                    """,
+                    (now, now),
+                )
+
+            self.controller.sync_project_progress_from_packages("fleet")
+
+            with self.controller.db() as conn:
+                row = conn.execute(
+                    "SELECT status, active_run_id, current_slice FROM projects WHERE id='fleet'"
+                ).fetchone()
+
+        self.assertEqual(str(row["status"]), self.controller.READY_STATUS)
+        self.assertIsNone(row["active_run_id"])
+
+    def test_sync_project_progress_from_packages_ignores_terminal_project_level_awaiting_review_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[\"Fresh slice\"]', 0, 0, 'dispatch_pending', 'Fresh slice', NULL, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    ("hub", str(root), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, package_id, account_alias, slice_name, status, model, started_at, finished_at, job_kind
+                    )
+                    VALUES(396, 'hub', '', 'acct-ea-core', 'Old review slice', 'awaiting_review', 'ea-coder-hard', ?, ?, 'coding')
+                    """,
+                    (now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO work_packages(
+                        package_id, project_id, queue_index, title, slice_name, priority, created_at, updated_at,
+                        status, runtime_state
+                    )
+                    VALUES('hub-0000', 'hub', 0, 'Fresh slice', 'Fresh slice', 100, ?, ?, 'ready', 'idle')
+                    """,
+                    (now, now),
+                )
+
+            self.controller.sync_project_progress_from_packages("hub")
+
+            with self.controller.db() as conn:
+                row = conn.execute(
+                    "SELECT status, active_run_id FROM projects WHERE id='hub'"
+                ).fetchone()
+
+        self.assertEqual(str(row["status"]), self.controller.READY_STATUS)
+        self.assertIsNone(row["active_run_id"])
+
+    def test_sync_project_progress_from_packages_ignores_stale_scheduled_runtime_rows_without_live_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            old_now = self.controller.utc_now() - self.controller.dt.timedelta(minutes=10)
+            now = self.controller.iso(self.controller.utc_now())
+            old_iso = self.controller.iso(old_now)
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[\"Fresh slice\"]', 0, 0, 'running', 'Fresh slice', 49194, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    ("design", str(root), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, package_id, account_alias, slice_name, status, model, started_at, finished_at, job_kind
+                    )
+                    VALUES(49194, 'design', 'design-0000', 'acct-ea-core', 'Old slice', 'rejected', 'ea-coder-hard', ?, ?, 'coding')
+                    """,
+                    (old_iso, old_iso),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO work_packages(
+                        package_id, project_id, queue_index, title, slice_name, priority, created_at, updated_at,
+                        status, runtime_state, latest_run_id
+                    )
+                    VALUES('design-0000', 'design', 0, 'Fresh slice', 'Fresh slice', 100, ?, ?, 'running', 'running', 49194)
+                    """,
+                    (now, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runtime_tasks(package_id, project_id, task_kind, task_state, payload_json, run_id, scheduled_at, started_at, updated_at)
+                    VALUES('design-0000', 'design', 'coding', 'scheduled', ?, NULL, ?, NULL, ?)
+                    """,
+                    (
+                        json.dumps({"slice_name": "Fresh slice"}, sort_keys=True),
+                        old_iso,
+                        old_iso,
+                    ),
+                )
+
+            self.controller.sync_project_progress_from_packages("design")
+
+            with self.controller.db() as conn:
+                row = conn.execute(
+                    "SELECT status, active_run_id, current_slice FROM projects WHERE id='design'"
+                ).fetchone()
+
+        self.assertEqual(str(row["status"]), "complete")
+        self.assertIsNone(row["active_run_id"])
+        self.assertEqual(str(row["current_slice"]), "Fresh slice")
 
     def test_sync_work_packages_does_not_override_non_package_scheduler_project_progress(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -9576,6 +10109,61 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertEqual(package["status"], "blocked")
             self.assertEqual(package["task_meta"]["dispatchability_state"], "blocked")
             self.assertIn("generated published artifacts", package["task_meta"]["dispatchability_reason"])
+
+    def test_generated_work_package_rewrites_mixed_generated_and_source_scope_into_dispatchable_source_owner_work(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-rest-state",
+                        "    title: Rest State Convergence",
+                        "    allowed_paths:",
+                        "      - controller/app.py",
+                        "      - scripts/fleet_ooda_keeper.py",
+                        "      - .codex-studio/published/STATUS_PLANE.generated.yaml",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": [],
+                        "enabled": True,
+                        "booster_pool_contract": {"pool": "operator_funded", "project_safety_cap": 2},
+                    }
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+
+            package = self.controller.work_package_rows(project_id="fleet")[0]
+            self.assertEqual(package["status"], "ready")
+            self.assertEqual(package["allowed_paths"], ["controller/app.py", "scripts/fleet_ooda_keeper.py"])
+            self.assertEqual(
+                package["task_meta"]["generated_output_paths"],
+                [".codex-studio/published/STATUS_PLANE.generated.yaml"],
+            )
+            self.assertEqual(
+                package["task_meta"]["generated_output_handling"],
+                "source_compiler_refresh_required",
+            )
 
     def test_generated_work_package_promotes_policy_scope_to_authority(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

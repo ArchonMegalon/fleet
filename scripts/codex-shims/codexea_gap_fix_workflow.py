@@ -15,15 +15,16 @@ from typing import Any
 import yaml
 
 
-PORTAL_DOWNLOADS = Path("/docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads")
 PRESENTATION_ROOT = Path("/docker/chummercomplete/chummer-presentation")
+PORTAL_DOWNLOADS_CANDIDATES = (
+    PRESENTATION_ROOT / "Chummer.Portal" / "downloads",
+    Path("/docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads"),
+)
 UI_ALIAS_ROOT = Path("/docker/chummercomplete/chummer6-ui")
 UI_ROOT = UI_ALIAS_ROOT if UI_ALIAS_ROOT.exists() else PRESENTATION_ROOT
 HUB_ROOT = Path("/docker/chummercomplete/chummer-hub-registry")
 FLEET_ROOT = Path("/docker/fleet")
 
-RELEASE_CHANNEL_SRC = PORTAL_DOWNLOADS / "RELEASE_CHANNEL.generated.json"
-RELEASES_JSON_SRC = PORTAL_DOWNLOADS / "releases.json"
 RELEASE_CHANNEL_DST = HUB_ROOT / ".codex-studio" / "published" / "RELEASE_CHANNEL.generated.json"
 RELEASES_JSON_DST = HUB_ROOT / ".codex-studio" / "published" / "releases.json"
 UI_RELEASE_CHANNEL_DST = UI_ROOT / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
@@ -31,6 +32,8 @@ UI_RELEASES_JSON_DST = UI_ROOT / "Docker" / "Downloads" / "releases.json"
 HUB_STARTUP_SMOKE_DST = HUB_ROOT / ".codex-studio" / "published" / "startup-smoke"
 UI_STARTUP_SMOKE_DST = UI_ROOT / "Docker" / "Downloads" / "startup-smoke"
 UI_FILES_DST = UI_ROOT / "Docker" / "Downloads" / "files"
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -49,6 +52,34 @@ def _read_yaml(path: Path) -> dict[str, Any]:
     except Exception:
         return {}
     return loaded if isinstance(loaded, dict) else {}
+
+
+def _artifact_generated_at_timestamp(payload: dict[str, Any]) -> float:
+    raw = str(payload.get("generated_at") or payload.get("generatedAt") or "").strip()
+    if not raw:
+        return float("-inf")
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return float("-inf")
+
+
+def _resolve_portal_downloads_root() -> Path:
+    best_root: Path | None = None
+    best_score: tuple[float, float] = (float("-inf"), float("-inf"))
+    for candidate in PORTAL_DOWNLOADS_CANDIDATES:
+        release_channel = candidate / "RELEASE_CHANNEL.generated.json"
+        releases = candidate / "releases.json"
+        if not release_channel.is_file() or not releases.is_file():
+            continue
+        payload = _read_json(release_channel)
+        score = (_artifact_generated_at_timestamp(payload), release_channel.stat().st_mtime)
+        if score > best_score:
+            best_score = score
+            best_root = candidate
+    if best_root is None:
+        return PORTAL_DOWNLOADS_CANDIDATES[0]
+    return best_root
 
 
 def _excerpt(value: str, *, max_lines: int = 20, max_chars: int = 2400) -> str:
@@ -77,18 +108,21 @@ def _copy_file(src: Path, dst: Path) -> None:
 
 
 def _sync_promoted_release_mirrors() -> dict[str, Any]:
-    release_channel = _read_json(RELEASE_CHANNEL_SRC)
+    portal_downloads = _resolve_portal_downloads_root()
+    release_channel_src = portal_downloads / "RELEASE_CHANNEL.generated.json"
+    releases_json_src = portal_downloads / "releases.json"
+    release_channel = _read_json(release_channel_src)
     copied_files: list[str] = []
     copied_startup_smoke: list[str] = []
 
-    _copy_file(RELEASE_CHANNEL_SRC, RELEASE_CHANNEL_DST)
-    _copy_file(RELEASES_JSON_SRC, RELEASES_JSON_DST)
-    _copy_file(RELEASE_CHANNEL_SRC, UI_RELEASE_CHANNEL_DST)
-    _copy_file(RELEASES_JSON_SRC, UI_RELEASES_JSON_DST)
+    _copy_file(release_channel_src, RELEASE_CHANNEL_DST)
+    _copy_file(releases_json_src, RELEASES_JSON_DST)
+    _copy_file(release_channel_src, UI_RELEASE_CHANNEL_DST)
+    _copy_file(releases_json_src, UI_RELEASES_JSON_DST)
 
     for root in (HUB_STARTUP_SMOKE_DST, UI_STARTUP_SMOKE_DST):
         root.mkdir(parents=True, exist_ok=True)
-    for src in sorted((PORTAL_DOWNLOADS / "startup-smoke").glob("*")):
+    for src in sorted((portal_downloads / "startup-smoke").glob("*")):
         if not src.is_file():
             continue
         for dst_root in (HUB_STARTUP_SMOKE_DST, UI_STARTUP_SMOKE_DST):
@@ -105,7 +139,7 @@ def _sync_promoted_release_mirrors() -> dict[str, Any]:
             if not download_url.startswith("/downloads/files/"):
                 continue
             rel = download_url.removeprefix("/downloads/").lstrip("/")
-            src = PORTAL_DOWNLOADS / rel
+            src = portal_downloads / rel
             if not src.is_file():
                 continue
             dst = UI_ROOT / "Docker" / "Downloads" / rel
@@ -114,6 +148,7 @@ def _sync_promoted_release_mirrors() -> dict[str, Any]:
 
     return {
         "status": "pass",
+        "portal_downloads_root": str(portal_downloads),
         "portal_release_channel_version": str(release_channel.get("version") or "").strip(),
         "release_channel_target_count": 4,
         "artifact_file_count": len(copied_files),

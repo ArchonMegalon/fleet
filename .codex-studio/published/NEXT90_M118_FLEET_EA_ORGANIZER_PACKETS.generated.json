@@ -24,7 +24,7 @@
   "as_of": "2026-05-19",
   "contract_name": "fleet.next90_m118_organizer_operator_packets",
   "frontier_id": 4199699036,
-  "generated_at": "2026-05-19T12:13:28Z",
+  "generated_at": "2026-05-19T15:26:19Z",
   "milestone_id": 118,
   "next_actions": [
     "Promote the M118 organizer operator packet as a current operator-loop input and keep the sibling proofs fresh."
@@ -107,19 +107,19 @@
       "state": "ready"
     },
     "hub_local_release_proof": {
-      "generated_at": "2026-05-19T06:14:58Z",
+      "generated_at": "2026-05-19T14:33:36Z",
       "path": "/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
       "status": "passed"
     },
     "support_packets": {
-      "generated_at": "2026-05-19T12:04:52Z",
+      "generated_at": "2026-05-19T15:21:51Z",
       "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
       "successor_package_verification_status": "pass"
     },
     "weekly_governor_packet": {
-      "generated_at": "2026-05-19T12:13:24Z",
+      "generated_at": "2026-05-19T15:23:17Z",
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
-      "status": "blocked"
+      "status": "pass"
     }
   },
   "source_packet_links": {
