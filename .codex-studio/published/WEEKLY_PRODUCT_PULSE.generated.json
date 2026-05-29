@@ -1,7 +1,7 @@
 {
   "contract_name": "chummer.weekly_product_pulse",
   "contract_version": 3,
-  "generated_at": "2026-05-29T09:34:45Z",
+  "generated_at": "2026-05-29T10:53:41Z",
   "as_of": "2026-05-29",
   "scorecard_source": "products/chummer/PRODUCT_HEALTH_SCORECARD.yaml",
   "progress_report_source": "products/chummer/PROGRESS_REPORT.generated.json",
@@ -16,7 +16,7 @@
   },
   "flagship_readiness": {
     "state": "watch",
-    "reason": "Published flagship readiness proof is fail. Coverage gaps remain: desktop_client. Readiness-plane gaps remain: flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, public_shelf_ready, recovery_trust_ready, sr4_parity_ready, sr6_parity_ready.",
+    "reason": "Published flagship readiness proof is fail. Coverage gaps remain: desktop_client. Readiness-plane gaps remain: flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, public_shelf_ready, recovery_trust_ready.",
     "proof_status": "fail",
     "coverage_gap_keys": [
       "desktop_client"
@@ -27,9 +27,7 @@
       "primary_route_ready",
       "dense_workbench_ready",
       "public_shelf_ready",
-      "recovery_trust_ready",
-      "sr4_parity_ready",
-      "sr6_parity_ready"
+      "recovery_trust_ready"
     ]
   },
   "rule_environment_trust": {
@@ -109,7 +107,7 @@
         "local_release_proof_status=passed",
         "flagship_readiness_state=watch",
         "flagship_readiness_proof_status=fail",
-        "provider_canary_status=Canary evidence is still accumulating",
+        "provider_canary_status=Canary green on all active lanes",
         "closure_health_state=watch",
         "successor_dependency_state=ready",
         "successor_open_dependency_ids=",
@@ -127,7 +125,7 @@
     },
     "flagship_readiness": {
       "state": "watch",
-      "reason": "Published flagship readiness proof is fail. Coverage gaps remain: desktop_client. Readiness-plane gaps remain: flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, public_shelf_ready, recovery_trust_ready, sr4_parity_ready, sr6_parity_ready.",
+      "reason": "Published flagship readiness proof is fail. Coverage gaps remain: desktop_client. Readiness-plane gaps remain: flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, public_shelf_ready, recovery_trust_ready.",
       "proof_status": "fail",
       "coverage_gap_keys": [
         "desktop_client"
@@ -138,9 +136,7 @@
         "primary_route_ready",
         "dense_workbench_ready",
         "public_shelf_ready",
-        "recovery_trust_ready",
-        "sr4_parity_ready",
-        "sr6_parity_ready"
+        "recovery_trust_ready"
       ]
     },
     "rule_environment_trust": {
@@ -220,7 +216,7 @@
           "local_release_proof_status=passed",
           "flagship_readiness_state=watch",
           "flagship_readiness_proof_status=fail",
-          "provider_canary_status=Canary evidence is still accumulating",
+          "provider_canary_status=Canary green on all active lanes",
           "closure_health_state=watch",
           "successor_dependency_state=ready",
           "successor_open_dependency_ids=",
@@ -240,9 +236,9 @@
     "launch_readiness": "Hold launch expansion pending route-canary validation. 3 golden journey(s) remain blocked.",
     "provider_route_stewardship": {
       "default_status": "Pilot defaults are governed",
-      "canary_status": "Canary evidence is still accumulating",
+      "canary_status": "Canary green on all active lanes",
       "review_due": "2026-06-12",
-      "next_decision": "Hold broad promotion until public route canary coverage exists."
+      "next_decision": "Keep the current pilot default until support closure returns to a clear posture."
     },
     "successor_dependency_posture": {
       "state": "ready",

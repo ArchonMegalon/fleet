@@ -1,9 +1,9 @@
 # External Proof Runbook
 
-- generated_at: 2026-05-29T09:34:21Z
+- generated_at: 2026-05-29T10:53:39Z
 - unresolved_request_count: 2
 - unresolved_hosts: macos, windows
-- plan_generated_at: 2026-05-29T09:32:50Z
+- plan_generated_at: 2026-05-29T10:51:03Z
 - release_channel_generated_at: 2026-05-29T08:34:38Z
 - capture_deadline_hours: 24
 - capture_deadline_utc: 2026-05-30T08:34:38Z
@@ -19,7 +19,7 @@
 ## Generated Command Files
 
 - commands_dir: `/docker/fleet/.codex-studio/published/external-proof-commands`
-- command_bundle_sha256: `a09d7c1ee6492c3bc319c0c52b358f8948e7d57e6042b25624ab40157a2861d2`
+- command_bundle_sha256: `c190a91a769a3f6bb26067764bb0b6b265480878dda02d7b9a6faad253770311`
 - command_bundle_file_count: 30
 - host `linux`
   preflight_script: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-linux-proof.sh`
@@ -31,7 +31,7 @@
   prepare_command_pack_script: `/docker/fleet/.codex-studio/published/external-proof-commands/prepare-linux-proof-command-pack.sh`
   command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/linux-proof-command-pack.tgz`
   command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/linux-proof-command-pack.tgz.sha256`
-  command_pack_sha256: `f2e0a8ccf9e9401cbfa70d6e21f32721016ebefdcefe49452d5c21d20fc9abb4`
+  command_pack_sha256: `b7c206922da447d5875b860d3171cd6088d579d196c6be23fb0c32ef3458358f`
 - host `macos`
   preflight_script: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-macos-proof.sh`
   capture_script: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-macos-proof.sh`
@@ -42,7 +42,7 @@
   prepare_command_pack_script: `/docker/fleet/.codex-studio/published/external-proof-commands/prepare-macos-proof-command-pack.sh`
   command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz`
   command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz.sha256`
-  command_pack_sha256: `62aad50b50f5571e0d01f5c5f8fe44aa7cab93d88dbfa44cd8e398ec7d763974`
+  command_pack_sha256: `4790d1b0c9f016f254466f64ed51299f35fdcb526f47db911a87e6a8b62c438f`
 - host `windows`
   preflight_script: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh`
   capture_script: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh`
@@ -53,7 +53,7 @@
   prepare_command_pack_script: `/docker/fleet/.codex-studio/published/external-proof-commands/prepare-windows-proof-command-pack.sh`
   command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz`
   command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz.sha256`
-  command_pack_sha256: `bc9654a1ced7787b6ecc7771df6b7c8cb61236790365904ef496f02efeb820e4`
+  command_pack_sha256: `05207f159fbe1c67666dacdbc85d787cac52e64ca5e8a4b90b4ca54422138af5`
   preflight_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.ps1`
   capture_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1`
   validation_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.ps1`
@@ -77,7 +77,7 @@
 - command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz`
 - command_pack_present: `true`
 - command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/macos-proof-command-pack.tgz.sha256`
-- command_pack_sha256: `62aad50b50f5571e0d01f5c5f8fe44aa7cab93d88dbfa44cd8e398ec7d763974`
+- command_pack_sha256: `4790d1b0c9f016f254466f64ed51299f35fdcb526f47db911a87e6a8b62c438f`
 
 ### Command Pack Verification
 
@@ -103,7 +103,7 @@ bash prepare-macos-proof-command-pack.sh macos-proof-command-pack.tgz macos-proo
   local_startup_smoke_receipt_state: `stale`
   local_startup_smoke_receipt_path: `/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json`
   local_startup_smoke_receipt_recorded_at: `2026-05-18T22:12:25.078057+00:00`
-  local_startup_smoke_receipt_age_seconds: `904825`
+  local_startup_smoke_receipt_age_seconds: `909519`
   capture_deadline_utc: `2026-05-30T08:34:38Z`
   capture_deadline_state: `pending`
   commands:
@@ -289,7 +289,7 @@ Set `CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE=1` to make the retained host-lane scri
 - command_pack_path: `/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz`
 - command_pack_present: `true`
 - command_pack_sha256_path: `/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz.sha256`
-- command_pack_sha256: `bc9654a1ced7787b6ecc7771df6b7c8cb61236790365904ef496f02efeb820e4`
+- command_pack_sha256: `05207f159fbe1c67666dacdbc85d787cac52e64ca5e8a4b90b4ca54422138af5`
 
 ### Command Pack Verification
 
@@ -319,7 +319,7 @@ bash prepare-windows-proof-command-pack.sh windows-proof-command-pack.tgz window
   local_startup_smoke_receipt_state: `stale`
   local_startup_smoke_receipt_path: `/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json`
   local_startup_smoke_receipt_recorded_at: `2026-05-21T19:52:05.2855129+00:00`
-  local_startup_smoke_receipt_age_seconds: `654045`
+  local_startup_smoke_receipt_age_seconds: `658739`
   capture_deadline_utc: `2026-05-30T08:34:38Z`
   capture_deadline_state: `pending`
   commands:

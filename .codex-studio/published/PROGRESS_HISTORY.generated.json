@@ -1,8 +1,8 @@
 {
   "contract_name": "fleet.public_progress_history",
   "contract_version": "2026-03-23",
-  "generated_at": "2026-05-22T13:19:36Z",
-  "snapshot_count": 33,
+  "generated_at": "2026-05-29T10:51:11Z",
+  "snapshot_count": 34,
   "snapshots": [
     {
       "as_of": "2026-03-23",
@@ -2208,6 +2208,73 @@
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
           "recent_commit_count_7d": 79,
+          "uncovered_scope_count": 0,
+          "eta_weeks_low": 0,
+          "eta_weeks_high": 0,
+          "eta_source": "history_velocity"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-05-29",
+      "overall_progress_percent": 100,
+      "phase_label": "Public-fit polish",
+      "parts": [
+        {
+          "id": "core-engine",
+          "public_name": "Core Rules Engine",
+          "progress_percent": 100,
+          "remaining_open_weight": 0,
+          "remaining_open_milestones": 0,
+          "recent_commit_count_7d": 1,
+          "uncovered_scope_count": 0,
+          "eta_weeks_low": 0,
+          "eta_weeks_high": 0,
+          "eta_source": "history_velocity"
+        },
+        {
+          "id": "workbench-ui",
+          "public_name": "Workbench & Shared UI",
+          "progress_percent": 100,
+          "remaining_open_weight": 0,
+          "remaining_open_milestones": 0,
+          "recent_commit_count_7d": 24,
+          "uncovered_scope_count": 0,
+          "eta_weeks_low": 0,
+          "eta_weeks_high": 0,
+          "eta_source": "history_velocity"
+        },
+        {
+          "id": "live-play",
+          "public_name": "Live Play",
+          "progress_percent": 100,
+          "remaining_open_weight": 0,
+          "remaining_open_milestones": 0,
+          "recent_commit_count_7d": 3,
+          "uncovered_scope_count": 0,
+          "eta_weeks_low": 0,
+          "eta_weeks_high": 0,
+          "eta_source": "history_velocity"
+        },
+        {
+          "id": "community-cloud",
+          "public_name": "Community Cloud & Publishing",
+          "progress_percent": 100,
+          "remaining_open_weight": 0,
+          "remaining_open_milestones": 0,
+          "recent_commit_count_7d": 76,
+          "uncovered_scope_count": 0,
+          "eta_weeks_low": 0,
+          "eta_weeks_high": 0,
+          "eta_source": "history_velocity"
+        },
+        {
+          "id": "canon-guide",
+          "public_name": "Canon & Public Guide",
+          "progress_percent": 100,
+          "remaining_open_weight": 0,
+          "remaining_open_milestones": 0,
+          "recent_commit_count_7d": 36,
           "uncovered_scope_count": 0,
           "eta_weeks_low": 0,
           "eta_weeks_high": 0,

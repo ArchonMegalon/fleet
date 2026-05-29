@@ -1,8 +1,8 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-29T09:47:18Z'
-mode: flagship_product
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-1
+generated_at: '2026-05-29T10:51:35Z'
+mode: completion_review
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 projects_dir: /docker/fleet/config/projects
@@ -26,48 +26,17 @@ project_supervisor_contract:
     ui_linux_desktop_exit_gate: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
     ui_desktop_executable_exit_gate: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
 focus:
-  profiles:
-  - top_flagship_grade
-  - whole_project_frontier
-  owners:
-  - fleet
-  - chummer6-design
-  - chummer6-ui
-  - chummer6-core
-  - chummer6-ui-kit
-  texts:
-  - top flagship grade
-  - whole project frontier
-  - feedback
-  - automatic bugfixing
-  - crash
-  - support
-  - accessibility
-  - localization
-  - restore confidence
-  - fit and finish
-  - flagship-readiness
-  - desktop-client
-  - release-proof
-  - grade-bar
-  - materializer
-  - whole-project frontier
-  - no lowered standards
-  - feedback loop
-  - crash reporting
-  - support routing
-  - journey smoothness
-  - performance
-  - proof shelf
-  - desktop client
+  profiles: []
+  owners: []
+  texts: []
 completion_audit:
   status: fail
   reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260529T093101Z-shard-1 is not trusted: worker exit
+  reason: 'latest worker receipt 20260529T104140Z-shard-1 is not trusted: worker exit
     124'
-  latest_run_id: 20260529T093101Z-shard-1
+  latest_run_id: 20260529T104140Z-shard-1
   latest_run_reason: worker exit 124
 journey_gate_audit:
   status: fail
@@ -84,7 +53,7 @@ weekly_pulse_audit:
   status: fail
   reason: weekly product pulse reports journey gate health as blocked
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-29T09:34:45Z'
+  generated_at: '2026-05-29T10:51:30Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -100,7 +69,7 @@ blocking_audits:
   reason: weekly product pulse reports journey gate health as blocked
 - component: trusted_completion_receipt
   title: Trusted completion receipt
-  reason: 'latest worker receipt 20260529T093101Z-shard-1 is not trusted: worker exit
+  reason: 'latest worker receipt 20260529T104140Z-shard-1 is not trusted: worker exit
     124'
 frontier_count: 3
 frontier_ids:
@@ -129,7 +98,7 @@ frontier:
     field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected []
     but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows'].
   - repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json
-    is stale (397128s old > 172800s max).
+    is stale (401734s old > 172800s max).
   - 'release_channel.generated.json field ''desktopTupleCoverage.missingRequiredPlatformHeadRidTuples''
     external proof request: capture promoted_installer_artifact, startup_smoke_receipt
     on macos host for tuple avalonia:osx-arm64:macos. Expected targets: artifactId
@@ -191,14 +160,3 @@ frontier:
     avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe,
     public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt
     startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.'
-eta:
-  status: flagship_delivery
-  eta_human: 10h-1.1d
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Flagship desktop client and workbench finish'' remains open
-    under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'

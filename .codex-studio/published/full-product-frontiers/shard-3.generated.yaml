@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-29T09:42:23Z'
+generated_at: '2026-05-29T10:41:44Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-3
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -105,7 +105,7 @@ frontier:
     summary: 'Milestone ''Render build explainer video, audio, preview-card, and packet
       siblings from approved explain packets'' remains open under the flagship closeout
       frontier. Outstanding readiness coverage: desktop_client.'
-    predicted_completion_at: '2026-05-30T00:39:59Z'
+    predicted_completion_at: '2026-05-30T01:39:20Z'
     range_low_hours: 8.67
     range_high_hours: 21.25
     remaining_open_milestones: 1
