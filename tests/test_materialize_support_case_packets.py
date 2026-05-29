@@ -6419,6 +6419,72 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
     assert "ingest-windows-proof-bundle.sh" in execution_plan["recommended_action"]
 
 
+def test_materialize_support_case_packets_falls_back_to_resolved_release_channel_when_default_registry_path_is_missing(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    source = tmp_path / "support_cases.json"
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    resolved_release_channel = tmp_path / "resolved-RELEASE_CHANNEL.generated.json"
+    source.write_text(json.dumps({"items": []}, indent=2) + "\n", encoding="utf-8")
+    resolved_release_channel.write_text(
+        json.dumps(
+            {
+                "channelId": "preview",
+                "status": "published",
+                "version": "1.2.3",
+                "releaseProof": {"status": "passed"},
+                "desktopTupleCoverage": {
+                    "externalProofRequests": [
+                        {
+                            "tupleId": "avalonia:linux-x64:linux",
+                            "head": "avalonia",
+                            "platform": "linux",
+                            "rid": "linux-x64",
+                            "requiredHost": "linux",
+                            "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        },
+                        {
+                            "tupleId": "avalonia:win-x64:windows",
+                            "head": "avalonia",
+                            "platform": "windows",
+                            "rid": "win-x64",
+                            "requiredHost": "windows",
+                            "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        },
+                    ]
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    patch = _DirectMonkeyPatch()
+    try:
+        patch.setattr(module, "DEFAULT_RELEASE_CHANNEL_PATH", tmp_path / "missing-RELEASE_CHANNEL.generated.json")
+        patch.setattr(module, "REGISTRY_RELEASE_CHANNEL_PATH", tmp_path / "missing-registry-path.generated.json")
+        patch.setattr(module, "resolve_release_channel_path", lambda: resolved_release_channel)
+        result = module.main(["--source", str(source), "--out", str(out_path)])
+    finally:
+        patch.undo()
+
+    assert result == 0
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["unresolved_external_proof_request_count"] == 2
+    assert payload["summary"]["unresolved_external_proof_request_host_counts"] == {"linux": 1, "windows": 1}
+    assert payload["summary"]["unresolved_external_proof_request_hosts"] == ["linux", "windows"]
+    assert payload["summary"]["unresolved_external_proof_request_tuple_counts"] == {
+        "avalonia:linux-x64:linux": 1,
+        "avalonia:win-x64:windows": 1,
+    }
+    assert payload["summary"]["unresolved_external_proof_request_tuples"] == [
+        "avalonia:linux-x64:linux",
+        "avalonia:win-x64:windows",
+    ]
+
+
 def test_materialize_support_case_packets_dedupes_duplicate_external_proof_tuples(tmp_path: Path) -> None:
     source = tmp_path / "support_cases.json"
     release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"

@@ -17,7 +17,7 @@
   },
   "contract_name": "fleet.next90_m144_desktop_proof_integrity_closeout_gates",
   "frontier_id": 4185937434,
-  "generated_at": "2026-05-19T09:40:22Z",
+  "generated_at": "2026-05-21T09:18:19Z",
   "milestone_id": 144,
   "monitor_summary": {
     "canonical_issue_count": 0,
@@ -1417,7 +1417,7 @@
         "build_explain_publish_local_blocking_reason_count": 0,
         "build_explain_publish_relevant_external_proof_request_count": 0,
         "desktop_ignore_nonlinux_desktop_host_proof_blockers": false,
-        "install_claim_restore_continue": "ready",
+        "install_claim_restore_continue": "blocked",
         "install_claim_restore_continue_blocked_by_external_constraints_only": false,
         "install_claim_restore_continue_effective": "ready",
         "install_claim_restore_continue_external_blocking_reason_count": 0,
@@ -1425,7 +1425,7 @@
         "install_claim_restore_continue_external_proof_request_hosts": [],
         "install_claim_restore_continue_external_proof_request_tuples": [],
         "install_claim_restore_continue_external_proof_requests": [],
-        "install_claim_restore_continue_local_blocking_reason_count": 0,
+        "install_claim_restore_continue_local_blocking_reason_count": 1,
         "install_claim_restore_continue_relevant_external_proof_request_count": 0,
         "parity_registry_declared_blocking_family_count": 0,
         "parity_registry_declared_blocking_family_ids": [],
@@ -1439,13 +1439,13 @@
         "parity_registry_unresolved_families": [],
         "parity_registry_unresolved_family_count": 0,
         "parity_registry_unresolved_family_ids": [],
-        "release_channel_age_seconds": 11053,
-        "release_channel_effective_age_seconds": 11053,
-        "release_channel_effective_generated_at": "2026-05-19T06:34:10Z",
+        "release_channel_age_seconds": 147393,
+        "release_channel_effective_age_seconds": 44250,
+        "release_channel_effective_generated_at": "2026-05-20T21:00:49Z",
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
-        "release_channel_freshness_source": "canonical",
-        "release_channel_generated_at": "2026-05-19T06:34:10Z",
+        "release_channel_freshness_source": "verified_release_channel_mirror_with_ui_local_release_proof",
+        "release_channel_generated_at": "2026-05-19T16:21:46Z",
         "release_channel_has_linux_public_installer": true,
         "release_channel_has_macos_public_installer": true,
         "release_channel_has_windows_public_installer": true,
@@ -1453,7 +1453,7 @@
           "avalonia",
           "blazor-desktop"
         ],
-        "release_channel_id": "preview",
+        "release_channel_id": "public_stable",
         "release_channel_linux_channel_mismatch_keys": [],
         "release_channel_linux_duplicate_tuple_keys": [],
         "release_channel_linux_has_invalid_tuple_metadata": false,
@@ -1494,9 +1494,9 @@
           "macos",
           "windows"
         ],
-        "release_channel_rollout_state": "promoted_preview",
+        "release_channel_rollout_state": "public_stable",
         "release_channel_status": "published",
-        "release_channel_supportability_state": "preview_supported",
+        "release_channel_supportability_state": "gold_supported",
         "release_channel_tuple_coverage_declares_missing_required_heads": true,
         "release_channel_tuple_coverage_declares_missing_required_platform_head_pairs": true,
         "release_channel_tuple_coverage_declares_missing_required_platforms": true,
@@ -1507,10 +1507,13 @@
         "release_channel_tuple_coverage_reported_missing_required_heads": [],
         "release_channel_tuple_coverage_reported_missing_required_platform_head_pairs": [],
         "release_channel_tuple_coverage_reported_missing_required_platforms": [],
-        "release_channel_verified_mirror_age_seconds": null,
-        "release_channel_verified_mirror_generated_at": "",
-        "release_channel_verified_mirror_identity_match": false,
-        "release_channel_verified_mirror_path": "",
+        "release_channel_ui_local_release_proof_age_seconds": 44250,
+        "release_channel_ui_local_release_proof_generated_at": "2026-05-20T21:00:49Z",
+        "release_channel_ui_local_release_proof_supports_freshness": true,
+        "release_channel_verified_mirror_age_seconds": 126748,
+        "release_channel_verified_mirror_generated_at": "2026-05-19T22:05:51Z",
+        "release_channel_verified_mirror_identity_match": true,
+        "release_channel_verified_mirror_path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json",
         "release_channel_windows_channel_mismatch_keys": [],
         "release_channel_windows_duplicate_tuple_keys": [],
         "release_channel_windows_has_invalid_tuple_metadata": false,
@@ -1558,7 +1561,7 @@
         "ui_executable_exit_gate_reason_count": 0,
         "ui_executable_exit_gate_reasons": [],
         "ui_executable_exit_gate_status": "pass",
-        "ui_executable_gate_age_seconds": 4556,
+        "ui_executable_gate_age_seconds": 176152,
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_freshness_max_age_seconds": 86400,
@@ -1791,7 +1794,7 @@
         "ui_workflow_parity_effective_ready": true,
         "ui_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
         "ui_workflow_parity_recovered_from_workflow_execution_gate": true,
-        "ui_workflow_parity_status": "pass"
+        "ui_workflow_parity_status": "fail"
       },
       "flagship_status": "pass",
       "issues": [],
@@ -1810,21 +1813,21 @@
     },
     "release_channel_tuple_truth": {
       "issues": [],
-      "release_channel_generated_at": "2026-05-19T06:34:10Z",
+      "release_channel_generated_at": "2026-05-19T16:21:46Z",
       "release_channel_version": "run-20260518-220935",
       "runtime_blockers": [],
       "state": "pass",
       "windows_artifact": {
         "arch": "x64",
         "artifactId": "avalonia-win-x64-installer",
-        "channel": "preview",
-        "channelId": "preview",
+        "channel": "public_stable",
+        "channelId": "public_stable",
         "compatibilityState": "compatible",
         "downloadUrl": "/downloads/files/chummer-avalonia-win-x64-installer.exe",
         "embeddedRuntimeBundleHeadId": null,
         "fileName": "chummer-avalonia-win-x64-installer.exe",
-        "generatedAt": "2026-05-19T06:34:10Z",
-        "generated_at": "2026-05-19T06:34:10Z",
+        "generatedAt": "2026-05-19T16:21:46Z",
+        "generated_at": "2026-05-19T16:21:46Z",
         "head": "avalonia",
         "id": "avalonia-win-x64-installer",
         "installAccessClass": "account_required",
@@ -1949,7 +1952,7 @@
   },
   "source_inputs": {
     "design_queue_staging": {
-      "generated_at": "2026-05-17T19:18:13Z",
+      "generated_at": "2026-05-19T17:47:43Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
       "sha256": "797a7bf15503da99a3bd4fb767c0e15aca5667b0913de01d2bcd55a9d453f393"
@@ -1961,10 +1964,10 @@
       "sha256": "406ffd6c3d400c578d8f0ca154bc2f0244e4ad1f200c8bb7eb85d28171dc8faa"
     },
     "flagship_readiness": {
-      "generated_at": "2026-05-19T09:38:25Z",
+      "generated_at": "2026-05-21T09:18:19Z",
       "generated_at_source": "payload",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "6027dde314a5519b5db5bcef5b7b759f0a32fcdf14165ca2154a6e7803587c3d"
+      "sha256": "23b779efd833b2dddb384f8ab82f83f8b3efd41c7a673bbc676216afb0bd86f2"
     },
     "fleet_queue_staging": {
       "generated_at": "2026-05-17T19:18:13Z",
@@ -1973,16 +1976,16 @@
       "sha256": "4cd877009355dda3c453d5622786403dbeae36ac664951ec20020054948fdb5e"
     },
     "next90_guide": {
-      "generated_at": "2026-05-05T19:47:04Z",
+      "generated_at": "2026-05-19T17:47:43Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
       "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
     },
     "release_channel": {
-      "generated_at": "2026-05-19T06:34:10Z",
+      "generated_at": "2026-05-19T16:21:46Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
-      "sha256": "6cd29695543d95b2850721843e3055ad1139599d75a9197824131bc6735bbf1c"
+      "sha256": "7749afb87194b68f460f483019964fa8d029715b94f6fd195e898b17d9f3a827"
     },
     "startup_smoke_receipt": {
       "generated_at": "2026-05-18T05:44:17Z",
@@ -1991,7 +1994,7 @@
       "sha256": "4bfb3412678d7fe30cd5e6328d28fca5165b87ded0628dc252a8535575dd5b22"
     },
     "successor_registry": {
-      "generated_at": "2026-05-17T19:18:13Z",
+      "generated_at": "2026-05-19T17:47:43Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
       "sha256": "729540d98a517a298fd38fa9e4448e1f4ca56e72a21726a650edd5c289e44b43"

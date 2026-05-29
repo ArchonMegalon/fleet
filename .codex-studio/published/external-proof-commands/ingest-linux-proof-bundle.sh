@@ -2,8 +2,19 @@
 set -eu
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-BUNDLE_ARCHIVE="$SCRIPT_DIR/linux-proof-bundle.tgz"
-BUNDLE_DIR="$SCRIPT_DIR/host-proof-bundles/linux"
+DEFAULT_BUNDLE_ARCHIVE="$SCRIPT_DIR/linux-proof-bundle.tgz"
+DEFAULT_BUNDLE_DIR="$SCRIPT_DIR/host-proof-bundles/linux"
+BUNDLE_INPUT="${1:-}"
+if [ -n "$BUNDLE_INPUT" ] && [ -f "$BUNDLE_INPUT" ]; then
+  BUNDLE_ARCHIVE="$BUNDLE_INPUT"
+  BUNDLE_DIR="$DEFAULT_BUNDLE_DIR"
+elif [ -n "$BUNDLE_INPUT" ] && [ -d "$BUNDLE_INPUT" ]; then
+  BUNDLE_ARCHIVE="$DEFAULT_BUNDLE_ARCHIVE"
+  BUNDLE_DIR="$BUNDLE_INPUT"
+else
+  BUNDLE_ARCHIVE="$DEFAULT_BUNDLE_ARCHIVE"
+  BUNDLE_DIR="$DEFAULT_BUNDLE_DIR"
+fi
 export BUNDLE_ARCHIVE
 export BUNDLE_DIR
 TARGET_ROOT=/docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads
@@ -35,7 +46,6 @@ for source in sorted(bundle_dir.rglob('"'"'*'"'"')):
 assert not bad, '"'"'external-proof-bundle-path-unsafe:'"'"' + '"'"','"'"'.join(sorted(set(bad)))
 assert copied, '"'"'external-proof-bundle-empty:'"'"' + str(bundle_dir)'
 else
-  tar -xzf "$BUNDLE_ARCHIVE" -C "$TARGET_ROOT"
   python3 -c 'import os, pathlib, shutil, tarfile
 bundle=pathlib.Path(os.environ['"'"'BUNDLE_ARCHIVE'"'"'])
 target_root=pathlib.Path(os.environ['"'"'TARGET_ROOT'"'"'])

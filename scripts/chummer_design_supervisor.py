@@ -569,6 +569,11 @@ COMPLETION_AUDIT_HISTORY_LIMIT = 10
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 3600
 LINUX_DESKTOP_EXIT_GATE_MAX_AGE_SECONDS = 24 * 3600
 DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS = 24 * 3600
+DESKTOP_EXECUTABLE_EXIT_GATE_REQUIRED_PROOF_AGE_KEYS = (
+    "flagship UI release gate proof_age_seconds",
+    "desktop workflow execution gate proof_age_seconds",
+    "desktop visual familiarity gate proof_age_seconds",
+)
 FLAGSHIP_PRODUCT_READINESS_MAX_AGE_SECONDS = 7 * 24 * 3600
 ACTIVE_STATUSES = {"in_progress", "not_started", "open", "planned", "queued"}
 DONE_STATUSES = {"complete", "completed", "done", "closed", "released"}
@@ -4144,10 +4149,13 @@ def _assess_direct_worker_lane_health(
     synthetic_local_onemin = bool(row.get("synthetic")) and str(row.get("source") or "").strip() == "direct_local_onemin"
     state = str(row.get("primary_state") or capacity.get("state") or "").strip().lower() or "unknown"
     primary_provider_key = str(row.get("primary_provider_key") or "").strip()
-    if capacity.get("live_ready_slot_count") not in (None, ""):
-        ready_slots = max(0, _coerce_int(capacity.get("live_ready_slot_count"), 0))
+    if capacity.get("live_dispatchable_slot_count") not in (None, ""):
+        dispatchable_slots = max(0, _coerce_int(capacity.get("live_dispatchable_slot_count"), 0))
+    elif capacity.get("live_ready_slot_count") not in (None, ""):
+        dispatchable_slots = max(0, _coerce_int(capacity.get("live_ready_slot_count"), 0))
     else:
-        ready_slots = _coerce_int(capacity.get("ready_slots") or 0)
+        dispatchable_slots = _coerce_int(capacity.get("ready_slots") or 0)
+    ready_slots = dispatchable_slots
     degraded_slots = _coerce_int(capacity.get("degraded_slots") or 0)
     unavailable_slots = _coerce_int(capacity.get("unavailable_slots") or 0)
     configured_slots = _coerce_int(capacity.get("configured_slots") or 0)
@@ -4215,7 +4223,7 @@ def _assess_direct_worker_lane_health(
         elif state in PROVIDER_HEALTH_READY_STATES:
             routable = True
         elif state in PROVIDER_HEALTH_DEGRADED_STATES:
-            routable = ready_slots > 0 or has_absolute_credit_headroom or (
+            routable = dispatchable_slots > 0 or observed_error_actual_override or has_absolute_credit_headroom or (
                 synthetic_local_onemin
                 and (
                     remaining_percent is None
@@ -4254,7 +4262,7 @@ def _assess_direct_worker_lane_health(
         routable
         and lane in CORE_BATCH_WORKER_LANES
         and configured_slots > 0
-        and ready_slots <= 0
+        and dispatchable_slots <= 0
         and remaining_percent is not None
         and remaining_percent <= LOW_CAPACITY_RESERVE_PERCENT
         and not has_absolute_credit_headroom
@@ -4275,6 +4283,7 @@ def _assess_direct_worker_lane_health(
         "primary_provider_key": primary_provider_key,
         "provider_states": provider_states,
         "configured_slots": configured_slots,
+        "dispatchable_slots": dispatchable_slots,
         "ready_slots": ready_slots,
         "degraded_slots": degraded_slots,
         "unavailable_slots": unavailable_slots,
@@ -8200,6 +8209,17 @@ def _live_refresh_subcommand_timeout_seconds() -> int:
     )
 
 
+def _live_refresh_timeout_seconds_for_label(label: str) -> int:
+    base_timeout_seconds = _live_refresh_subcommand_timeout_seconds()
+    normalized_label = str(label or "").strip().lower()
+    if normalized_label == "journey gates":
+        # Journey-gate rematerialization is consistently a little slower than the
+        # generic 25s live-refresh budget on healthy hosts, so give it a small
+        # dedicated buffer instead of logging a false timeout at startup.
+        return max(base_timeout_seconds, 40)
+    return base_timeout_seconds
+
+
 def _fresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
     max_age_seconds = _live_refresh_readiness_cache_seconds()
     if max_age_seconds <= 0:
@@ -8443,8 +8463,8 @@ def _refresh_completion_audit_support_artifacts(args: argparse.Namespace) -> Non
             )
         )
 
-    refresh_timeout_seconds = _live_refresh_subcommand_timeout_seconds()
     for label, command in refresh_commands:
+        refresh_timeout_seconds = _live_refresh_timeout_seconds_for_label(label)
         try:
             completed = subprocess.run(
                 command,
@@ -8554,6 +8574,13 @@ def _refresh_weekly_product_pulse_artifact(
 def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
     if Path(args.workspace_root).resolve() != DEFAULT_WORKSPACE_ROOT.resolve():
         return None
+    candidate_state_root_raw = str(getattr(args, "state_root", "") or "").strip()
+    if candidate_state_root_raw:
+        candidate_state_root = _canonicalize_design_supervisor_state_root(Path(candidate_state_root_raw))
+        candidate_aggregate_root = _aggregate_state_root(candidate_state_root)
+        if candidate_state_root != candidate_aggregate_root and candidate_state_root.name.startswith("shard-"):
+            readiness_path = Path(str(getattr(args, "flagship_product_readiness_path", "") or "")).resolve()
+            return _fresh_flagship_product_readiness_artifact(args) or _read_state(readiness_path)
     fresh_readiness = _fresh_flagship_product_readiness_artifact(args)
     if fresh_readiness is not None:
         _refresh_completion_audit_support_artifacts(args)
@@ -8590,7 +8617,6 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
         aggregate_state_root = workspace_root / "state" / "chummer_design_supervisor"
         readiness_mirror_path = aggregate_state_root / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
         supervisor_state_path = _state_payload_path(aggregate_state_root)
-        candidate_state_root_raw = str(getattr(args, "state_root", "") or "").strip()
         if candidate_state_root_raw:
             candidate_state_root = _canonicalize_design_supervisor_state_root(Path(candidate_state_root_raw))
             candidate_state_path = _state_payload_path(candidate_state_root)
@@ -9997,7 +10023,10 @@ def _openai_escape_hatch_model_candidates() -> List[str]:
 
 
 def _openai_escape_hatch_disabled() -> bool:
-    return _runtime_env_flag_enabled("CHUMMER_DESIGN_SUPERVISOR_DISABLE_OPENAI_ESCAPE", "0")
+    return _runtime_env_file_first_default(
+        "CHUMMER_DESIGN_SUPERVISOR_DISABLE_OPENAI_ESCAPE",
+        os.environ.get("CHUMMER_DESIGN_SUPERVISOR_DISABLE_OPENAI_ESCAPE", "0") or "0",
+    ).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _openai_escape_hatch_enabled() -> bool:
@@ -12687,7 +12716,10 @@ def _run_worker_attempt(
     worker_uses_codexea = any("codexea" == Path(str(part or "").strip()).name.lower() for part in command[:1])
     codexea_lane = str(command[1] if worker_uses_codexea and len(command) > 1 else "").strip().lower()
     if worker_uses_codexea and codexea_lane in _direct_codexea_stream_lanes():
-        model_output_stall_seconds = min(
+        # Direct CodexEA lanes can spend a while emitting only upstream-wait traces
+        # before the first meaningful model output arrives. Honor the longer CodexEA
+        # wait budget instead of shrinking it to the generic model-output stall.
+        model_output_stall_seconds = max(
             model_output_stall_seconds,
             _codexea_wait_stall_seconds(workspace_root, timeout_seconds),
         )
@@ -13711,6 +13743,7 @@ def _retryable_internal_worker_blocker_text(value: Any) -> bool:
         or "missing final message" in lowered
         or "worker_status_helper_loop:repeated_blocked_status_polling" in lowered
         or "worker_silent_stalled" in lowered
+        or "no eligible worker account/model attempts were runnable" in lowered
         or "dispatch parked this shard until provider capacity recovers" in lowered
         or "dispatch launch selection is temporarily busy" in lowered
     )
@@ -13949,6 +13982,21 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
                     "blocker": current_blocker,
                 }
             )
+    has_local_completion_frontier_slice = bool(
+        str(updated.get("completion_review_frontier_path") or "").strip()
+        or str(updated.get("completion_review_frontier_mirror_path") or "").strip()
+    )
+    if not has_local_completion_frontier_slice and aggregate_active_run_count <= 0:
+        for shard in shard_rows:
+            if str(shard.get("active_run_id") or "").strip():
+                continue
+            if list(shard.get("active_frontier_ids") or []):
+                continue
+            progress_state = str(shard.get("active_run_progress_state") or "").strip().lower()
+            idle_reason = str(shard.get("idle_reason") or "").strip().lower()
+            if progress_state == "idle_claimed_frontier_without_active_run" or idle_reason == "claimed_frontier_without_active_run":
+                shard["idle_reason"] = "waiting_for_local_frontier_slice"
+                shard["active_run_progress_state"] = "idle_waiting_for_local_frontier_slice"
     updated["shards"] = shard_rows
     updated["active_runs_count"] = aggregate_active_run_count
     if len(shard_rows) > 1 and not aggregate_has_single_active_run_object:
@@ -14578,10 +14626,27 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
         updated.pop("last_run_blocker", None)
     idle_reason = str(updated.get("idle_reason") or "").strip()
     aggregate_active_runs = _coerce_int(updated.get("active_runs_count"), 0)
+    shard_rows = [dict(item or {}) for item in (updated.get("shards") or []) if isinstance(item, dict)]
+    has_local_completion_frontier_slice = bool(
+        str(updated.get("completion_review_frontier_path") or "").strip()
+        or str(updated.get("completion_review_frontier_mirror_path") or "").strip()
+    )
+    shard_claims_frontier = any(
+        bool(row.get("active_frontier_ids") or row.get("active_run_id"))
+        for row in shard_rows
+    )
     if aggregate_active_runs > 0 and not str(updated.get("active_run_id") or "").strip():
         idle_reason = ""
         if str(updated.get("active_run_progress_state") or "").strip().startswith("idle_"):
             updated.pop("active_run_progress_state", None)
+    elif (
+        not idle_reason
+        and not str(updated.get("active_run_id") or "").strip()
+        and not has_local_completion_frontier_slice
+        and not shard_claims_frontier
+        and list(updated.get("frontier_ids") or [])
+    ):
+        idle_reason = "waiting_for_local_frontier_slice"
     elif (
         not idle_reason
         and not str(updated.get("active_run_id") or "").strip()
@@ -19757,29 +19822,40 @@ def _resolve_routed_worker_account_plan(
     )
     if _worker_bin_uses_codexea(worker_bin) and not explicit_account_targets:
         account_candidates = [account for account in account_candidates if account.auth_kind == "ea"]
+    explicit_non_ea_targets = bool(account_candidates) and all(account.auth_kind != "ea" for account in account_candidates)
     routed_account_model_candidates = [
         str(candidate or "").strip() for candidate in (route_model_candidates or []) if str(candidate or "").strip()
     ]
-    if not routed_account_model_candidates:
-        routed_account_model_candidates = _preferred_ea_core_model_candidates(
+    if explicit_account_targets and explicit_non_ea_targets:
+        routed_account_model_candidates = _preferred_openai_escape_model_candidates(
             args,
             state_root,
             account_runtime,
-            worker_lane_health=worker_lane_health,
-            ea_provider_slot_health_index=routed_ea_provider_slot_health_index,
         )
-        routed_account_model_candidates = _rotate_model_candidates_after_recent_stall(
-            state_root,
-            routed_account_model_candidates,
-        )
+    elif not routed_account_model_candidates:
+        if not (explicit_account_targets and explicit_non_ea_targets):
+            routed_account_model_candidates = _preferred_ea_core_model_candidates(
+                args,
+                state_root,
+                account_runtime,
+                worker_lane_health=worker_lane_health,
+                ea_provider_slot_health_index=routed_ea_provider_slot_health_index,
+            )
+            routed_account_model_candidates = _rotate_model_candidates_after_recent_stall(
+                state_root,
+                routed_account_model_candidates,
+            )
     rescue_account_candidates: List[WorkerAccount] = []
     restore_probe_account_aliases: Set[str] = set()
     has_routed_ea_accounts = any(account.auth_kind == "ea" for account in account_candidates)
     routed_account_required = bool(
-        direct_worker_lane
-        and not explicit_account_targets
-        and _worker_bin_uses_codexea(worker_bin)
-        and has_routed_ea_accounts
+        (explicit_account_targets and account_candidates)
+        or (
+            direct_worker_lane
+            and not explicit_account_targets
+            and _worker_bin_uses_codexea(worker_bin)
+            and has_routed_ea_accounts
+        )
     )
     routed_full_lane_fallback_args: Optional[argparse.Namespace] = None
     if direct_worker_lane and not explicit_account_targets:
@@ -24635,12 +24711,50 @@ def _desktop_executable_exit_gate_audit(args: argparse.Namespace) -> Dict[str, A
         audit["status"] = "fail"
         audit["reason"] = "desktop executable exit gate proof generatedAt timestamp is in the future"
         return audit
-    audit["age_seconds"] = max(0, int(age_delta_seconds))
-    if audit["age_seconds"] > DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS:
-        audit["status"] = "fail"
-        audit["reason"] = f"desktop executable exit gate proof is stale ({audit['age_seconds']}s old)"
-        return audit
+    aggregate_age_seconds = max(0, int(age_delta_seconds))
+    audit["aggregate_generated_at_age_seconds"] = aggregate_age_seconds
+    audit["age_seconds"] = aggregate_age_seconds
+    audit["freshness_source"] = "aggregate_generated_at"
     audit["proof_status"] = str(payload.get("status") or "").strip()
+    evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
+    embedded_proof_ages: Dict[str, int] = {}
+    embedded_proof_age_issues: List[str] = []
+    for key in DESKTOP_EXECUTABLE_EXIT_GATE_REQUIRED_PROOF_AGE_KEYS:
+        raw_value = evidence.get(key)
+        if raw_value in (None, ""):
+            embedded_proof_age_issues.append(f"missing embedded freshness evidence '{key}'")
+            continue
+        try:
+            age_value = int(float(raw_value))
+        except (TypeError, ValueError):
+            embedded_proof_age_issues.append(f"embedded freshness evidence '{key}' is not numeric")
+            continue
+        if age_value < 0:
+            embedded_proof_age_issues.append(f"embedded freshness evidence '{key}' is negative")
+            continue
+        embedded_proof_ages[key] = age_value
+    audit["embedded_proof_age_seconds"] = dict(embedded_proof_ages)
+    audit["embedded_proof_age_issue_count"] = len(embedded_proof_age_issues)
+    if embedded_proof_age_issues:
+        audit["embedded_proof_age_issues"] = list(embedded_proof_age_issues)
+    if aggregate_age_seconds > DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS:
+        effective_embedded_proof_ages = {
+            key: aggregate_age_seconds + age_value for key, age_value in embedded_proof_ages.items()
+        }
+        audit["effective_embedded_proof_age_seconds"] = dict(effective_embedded_proof_ages)
+        proof_status = str(payload.get("status") or "").strip().lower()
+        if (
+            proof_status in {"pass", "passed", "ready"}
+            and len(embedded_proof_ages) == len(DESKTOP_EXECUTABLE_EXIT_GATE_REQUIRED_PROOF_AGE_KEYS)
+            and not embedded_proof_age_issues
+            and max(effective_embedded_proof_ages.values()) <= DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS
+        ):
+            audit["age_seconds"] = max(effective_embedded_proof_ages.values())
+            audit["freshness_source"] = "embedded_proof_ages_plus_receipt_age"
+        else:
+            audit["status"] = "fail"
+            audit["reason"] = f"desktop executable exit gate proof is stale ({aggregate_age_seconds}s old)"
+            return audit
     raw_blocked_external_only = payload.get("blockedByExternalConstraintsOnly")
     if raw_blocked_external_only is None:
         raw_blocked_external_only = payload.get("blocked_by_external_constraints_only")

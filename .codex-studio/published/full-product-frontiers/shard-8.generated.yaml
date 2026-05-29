@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-19T15:25:53Z'
+generated_at: '2026-05-21T17:09:49Z'
 mode: flagship_product
-state_root: /docker/fleet/state/chummer_design_supervisor/shard-8
+state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-8
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -29,13 +29,30 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - fleet
-  - chummer6-design
+  - chummer6-mobile
+  - chummer6-hub
   - chummer6-ui
   texts:
+  - travel
+  - offline
+  - mobile
+  - companion
+  - continuity
   - top flagship grade
-  - whole project frontier
-  - release-proof
+  - whole-project frontier
+  - no lowered standards
+  - feedback loop
+  - automatic bugfixing
+  - crash reporting
+  - support routing
+  - journey smoothness
+  - restore confidence
+  - accessibility
+  - localization
+  - performance
+  - proof shelf
+  - fit and finish
+  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -43,20 +60,76 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: trusted completion receipt plus whole-product release proof and Linux desktop
-    exit gate are ready
+  status: fail
+  reason: weekly product pulse reports release health as needs_attention
 full_product_audit:
-  status: pass
-  reason: flagship product readiness proof is current across desktop, rules, hub,
-    mobile, horizons, and operator lanes
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-19T15:22:21Z'
-  proof_status: pass
-  missing_coverage_keys: []
+  generated_at: '2026-05-21T17:06:29Z'
+  proof_status: fail
+  missing_coverage_keys:
+  - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 0
-frontier_ids: []
-frontier: []
+frontier_count: 1
+frontier_ids:
+- 4701958630
+frontier:
+- id: 4701958630
+  title: Capture fresh Windows, Linux, and macOS startup-smoke and executable-gate
+    proof for the currently promoted flagship bytes.
+  wave: flagship_product
+  status: not_started
+  owners:
+  - chummer6-ui
+  dependencies: []
+  exit_criteria:
+  - Capture fresh Windows, Linux, and macOS startup-smoke and executable-gate proof
+    for the currently promoted flagship bytes.
+  - 'Own and prove the surface slice(s): capture_fresh_windows_linux_and_macos_startup_smoke_and:ui'
+  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
+    Chummer.Tests, scripts'
+  - Refresh flagship proof and close out the queue slice honestly when this package
+    is landed for `chummer6-ui` (next90-m144-ui-capture-fresh-windows-linux-and-macos-startup-smoke-and-executable-gate-p).
+  eta:
+    status: flagship_delivery
+    eta_human: 9h-23h
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Capture fresh Windows, Linux, and macOS startup-smoke and
+      executable-gate proof for the currently promoted flagship bytes.'' remains open
+      under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
+    predicted_completion_at: '2026-05-22T09:00:13Z'
+    range_low_hours: 9.0
+    range_high_hours: 22.68
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 1.8
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
+eta:
+  status: flagship_delivery
+  eta_human: 9h-23h
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: ''
+  summary: 'Milestone ''Capture fresh Windows, Linux, and macOS startup-smoke and
+    executable-gate proof for the currently promoted flagship bytes.'' remains open
+    under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
+  predicted_completion_at: '2026-05-22T09:00:13Z'
+  range_low_hours: 9.0
+  range_high_hours: 22.68
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 1.8

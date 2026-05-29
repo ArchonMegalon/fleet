@@ -1528,6 +1528,57 @@ def test_model_selection_snapshot_prefers_gpt54_when_spark_is_backed_off(monkeyp
         assert snapshot["openai_escape"]["unavailable_models"][0] == "gpt-5.3-codex-spark"
 
 
+def test_model_selection_snapshot_disables_openai_escape_from_runtime_file_even_if_env_enables_it(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        auth_path = root / "chatgpt.auth.json"
+        auth_path.write_text("{}", encoding="utf-8")
+        (root / "accounts.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "accounts": {
+                        "acct-chatgpt-core": {
+                            "auth_kind": "chatgpt_auth_json",
+                            "auth_json_file": str(auth_path),
+                            "allowed_models": ["gpt-5.4"],
+                            "health_state": "ready",
+                            "max_parallel_runs": 2,
+                            "owner_id": "tibor.girschele",
+                        },
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        runtime_env = root / "runtime.env"
+        runtime_env.write_text(
+            "\n".join(
+                [
+                    "CHUMMER_DESIGN_SUPERVISOR_DISABLE_OPENAI_ESCAPE=1",
+                    "CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES=acct-chatgpt-core",
+                    "CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_MODELS=gpt-5.4",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_DISABLE_OPENAI_ESCAPE", "0")
+        monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", (runtime_env,))
+        args = _args(root)
+        state_root = Path(args.state_root)
+        state_root.mkdir(parents=True, exist_ok=True)
+
+        snapshot = module._model_selection_snapshot(args, state_root)
+
+        assert snapshot["openai_escape"]["status"] == "disabled"
+        assert snapshot["openai_escape"]["configured_models"] == []
+        assert snapshot["openai_escape"]["ordered_models"] == []
+        assert snapshot["openai_escape"]["available_models"] == []
+        assert snapshot["openai_escape"]["account_aliases"] == []
+        assert snapshot["openai_escape"]["reason"] == "openai escape hatch is disabled"
+
+
 def test_launch_worker_prefers_startup_selected_ea_core_model_over_static_primary(monkeypatch) -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -10576,6 +10627,100 @@ def test_run_worker_attempt_read_only_stdout_probe_does_not_suppress_model_stall
         assert payload.get("active_run_worker_first_output_at") in (None, "")
 
 
+def test_run_worker_attempt_direct_codexea_wait_budget_overrides_generic_stall(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43219
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "Trace: lane=core provider=ea model=ea-coder-hard mode=responses next=start_exec_session\n",
+                    "Trace: lane=core waiting for upstream response (total_duration=0s)\n",
+                    "Trace: lane=core waiting for upstream response (total_duration=10s)\n",
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            import time as _time
+
+            _time.sleep(0.05)
+            if self.returncode not in (None, 0):
+                return int(self.returncode or 0)
+            raise subprocess.TimeoutExpired(["codexea", "core", "exec"], timeout=timeout or 0.05)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+    monkeypatch.setattr(module, "_worker_model_output_stall_seconds", lambda workspace_root, timeout_seconds: 0.01)
+    monkeypatch.setattr(module, "_codexea_wait_stall_seconds", lambda workspace_root, timeout_seconds: 999.0)
+    monkeypatch.setattr(module.os, "killpg", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state"
+        module._write_json(
+            state_root / "state.json",
+            {
+                "active_run": {
+                    "run_id": "run-codexea-wait-budget",
+                    "started_at": "2026-05-24T16:37:47Z",
+                }
+            },
+        )
+        last_message_path = root / "last_message.txt"
+        completed = module._run_worker_attempt(
+            ["codexea", "core", "exec"],
+            prompt="Audit the fleet and patch the blocker.\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.1,
+            last_message_path=last_message_path,
+            state_root=state_root,
+            run_id="run-codexea-wait-budget",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        payload = module._read_state(state_root / "state.json")
+
+        assert completed.returncode == 124
+        assert "worker_timeout:0.1s" in completed.stderr
+        assert "worker_model_output_stalled:0.01s" not in completed.stderr
+        assert last_message_path.read_text(encoding="utf-8").strip() == "Error: worker_timeout:0.1s"
+        assert payload["active_run_progress_state"] in {"waiting_for_model_output", "stream_connected_waiting"}
+        assert module._retryable_worker_error(completed.stderr) is True
+
+
 def test_run_worker_attempt_recycles_after_meaningful_output_goes_silent(monkeypatch) -> None:
     module = _load_module()
 
@@ -10975,6 +11120,91 @@ def test_direct_worker_lane_health_snapshot_keeps_degraded_core_routable_with_ab
         assert snapshot["lanes"]["core"]["state"] == "degraded"
         assert snapshot["lanes"]["core"]["estimated_remaining_credits_total"] == 157051
         assert snapshot["lanes"]["core"]["live_remaining_credits_total"] == 157051
+
+
+def test_direct_worker_lane_health_snapshot_keeps_degraded_jury_routable_with_live_dispatchable_slots(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "jury"
+
+        def fake_urlopen(request, timeout=0):
+            payload = {
+                "provider_registry": {
+                    "lanes": [
+                        {
+                            "profile": "audit",
+                            "primary_provider_key": "onemin",
+                            "primary_state": "degraded",
+                            "capacity_summary": {
+                                "state": "degraded",
+                                "configured_slots": 19,
+                                "ready_slots": 0,
+                                "live_ready_slot_count": 0,
+                                "live_dispatchable_slot_count": 2,
+                                "degraded_slots": 12,
+                                "unavailable_slots": 7,
+                                "live_remaining_credits_total": 15262,
+                                "actual_remaining_credits_total": 393215.0,
+                                "live_remaining_percent_of_max": 0.02,
+                            },
+                            "providers": [
+                                {
+                                    "provider_key": "onemin",
+                                    "state": "degraded",
+                                    "detail": "",
+                                    "enabled": True,
+                                    "executable": True,
+                                    "slot_pool": {
+                                        "slot_state_counts": {"degraded": 12, "quarantine": 7},
+                                        "live_positive_balance_slot_count": 3,
+                                    },
+                                },
+                                {
+                                    "provider_key": "chatplayground",
+                                    "state": "missing",
+                                    "detail": "",
+                                    "enabled": False,
+                                    "executable": False,
+                                },
+                                {
+                                    "provider_key": "gemini_vortex",
+                                    "state": "missing",
+                                    "detail": "command_not_found:gemini",
+                                    "enabled": True,
+                                    "executable": True,
+                                },
+                            ],
+                        }
+                    ]
+                }
+            }
+
+            class _Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+                def read(self):
+                    return json.dumps(payload).encode("utf-8")
+
+            return _Response()
+
+        monkeypatch.setattr(module.urllib.request, "urlopen", fake_urlopen)
+
+        snapshot = module._direct_worker_lane_health_snapshot(args, ["jury"])
+
+        assert snapshot["status"] == "pass"
+        assert snapshot["routable_lanes"] == ["jury"]
+        assert snapshot["unroutable_lanes"] == []
+        assert snapshot["lanes"]["jury"]["routable"] is True
+        assert snapshot["lanes"]["jury"]["state"] == "degraded"
+        assert snapshot["lanes"]["jury"]["dispatchable_slots"] == 2
+        assert snapshot["lanes"]["jury"]["ready_slots"] == 2
 
 
 def test_direct_worker_lane_health_snapshot_cools_recent_backend_failure(monkeypatch) -> None:
@@ -13447,6 +13677,67 @@ def test_design_completion_audit_fails_when_desktop_executable_exit_gate_is_stal
         assert audit["status"] == "fail"
         assert audit["desktop_executable_exit_gate_audit"]["status"] == "fail"
         assert "stale" in str(audit["desktop_executable_exit_gate_audit"]["reason"]).lower()
+
+
+def test_desktop_executable_exit_gate_audit_rejects_stale_wrapper_when_embedded_proof_ages_are_no_longer_current() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        payload_path = root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        stale_text = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=2)).replace(microsecond=0).isoformat().replace(
+            "+00:00", "Z"
+        )
+        payload.update(
+            {
+                "generatedAt": stale_text,
+                "status": "pass",
+                "evidence": {
+                    "flagship UI release gate proof_age_seconds": 90,
+                    "desktop workflow execution gate proof_age_seconds": 15,
+                    "desktop visual familiarity gate proof_age_seconds": 75,
+                },
+            }
+        )
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._desktop_executable_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert audit["aggregate_generated_at_age_seconds"] > module.DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS
+
+
+def test_desktop_executable_exit_gate_audit_accepts_stale_wrapper_only_when_embedded_proof_ages_plus_receipt_age_stay_current() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        payload_path = root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        stale_text = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=23)).replace(microsecond=0).isoformat().replace(
+            "+00:00", "Z"
+        )
+        payload.update(
+            {
+                "generatedAt": stale_text,
+                "status": "pass",
+                "evidence": {
+                    "flagship UI release gate proof_age_seconds": 90,
+                    "desktop workflow execution gate proof_age_seconds": 15,
+                    "desktop visual familiarity gate proof_age_seconds": 75,
+                },
+            }
+        )
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._desktop_executable_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "pass"
+        assert audit["freshness_source"] == "embedded_proof_ages_plus_receipt_age"
+        assert audit["age_seconds"] > 23 * 3600
+        assert audit["age_seconds"] <= module.DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS
+        assert audit["aggregate_generated_at_age_seconds"] > module.DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS
 
 
 def test_desktop_executable_exit_gate_audit_rejects_external_only_contract_with_local_findings() -> None:
@@ -17359,6 +17650,203 @@ def test_run_supervisor_launcher_preserves_aggregate_state_snapshot() -> None:
         payload = json.loads(aggregate_state.read_text(encoding="utf-8"))
         assert payload["active_runs_count"] == 13
         assert payload["remaining_open_milestones"] == 8
+
+
+def test_run_supervisor_launcher_prefers_codexliz_for_single_shard_escape() -> None:
+    launcher = Path("/docker/fleet/scripts/run_chummer_design_supervisor.sh")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        wrapper = root / "python3"
+        wrapper.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env bash",
+                    "set -euo pipefail",
+                    "if [[ \"${1:-}\" == \"-\" ]]; then",
+                    "  cat >/dev/null",
+                    "  exit 0",
+                    "fi",
+                    "if [[ \"${1:-}\" == \"scripts/chummer_design_supervisor.py\" && \"${2:-}\" == \"status\" && \"${3:-}\" == \"--json\" ]]; then",
+                    "  printf '%s\\n' '{\"frontier_ids\": []}'",
+                    "  exit 0",
+                    "fi",
+                    "if [[ \"${1:-}\" == \"scripts/chummer_design_supervisor.py\" && \"${2:-}\" == \"loop\" ]]; then",
+                    f"  out=\"{root}/loop-args.$$\"",
+                    "  shift 2",
+                    "  printf '%s\\n' \"$@\" >\"$out\"",
+                    "  exit 0",
+                    "fi",
+                    "echo 'unexpected python3 invocation' >&2",
+                    "printf '%s\\n' \"$*\" >&2",
+                    "exit 99",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+        state_root = root / "state" / "chummer_design_supervisor"
+        result = subprocess.run(
+            [str(launcher)],
+            cwd="/docker/fleet",
+            env={
+                **os.environ,
+                "PATH": f"{root}:{os.environ['PATH']}",
+                "CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS": "2",
+                "CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT": str(state_root),
+                "CHUMMER_DESIGN_SUPERVISOR_FRONTIER_DERIVE_MODE": "skip",
+                "CHUMMER_DESIGN_SUPERVISOR_DYNAMIC_ACCOUNT_ROUTING": "1",
+                "CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_MODELS": "gpt-5.4",
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_START_STAGGER_SECONDS": "0",
+                "CODEXLIZ_MODEL": "qwen-test-123",
+            },
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "provider-local codexliz recovery shard" in result.stderr
+
+        loop_args_files = sorted(root.glob("loop-args.*"))
+        assert loop_args_files
+        args = loop_args_files[0].read_text(encoding="utf-8").splitlines()
+        assert "--worker-bin" in args
+        assert args[args.index("--worker-bin") + 1] == "/docker/fleet/scripts/codex-shims/codexliz"
+        assert "--state-root" in args
+        assert args[args.index("--state-root") + 1] == str(state_root / "shard-1")
+        assert "--account-alias" not in args
+
+
+def test_explicit_codexliz_account_targets_force_routed_account_plan() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state" / "chummer_design_supervisor" / "shard-1"
+        state_root.mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+        args.command = "loop"
+        args.state_root = str(state_root)
+        args.accounts_path = "/docker/fleet/config/accounts.yaml"
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexliz"
+        args.worker_lane = "core"
+        args.account_alias = ["acct-core-a", "acct-chatgpt-archon", "acct-ea-a"]
+        args.account_owner_id = []
+        account_runtime = {"sources": {}}
+
+        plan = module._resolve_routed_worker_account_plan(
+            args,
+            state_root,
+            account_runtime,
+            worker_lane_health={},
+            explicit_account_targets=True,
+            route_model_candidates=["gpt-5.4"],
+            ea_provider_slot_health_index={},
+        )
+
+        assert plan.routed_account_required is True
+        assert [account.alias for account in plan.account_candidates][:3] == [
+            "acct-chatgpt-archon",
+            "acct-core-a",
+            "acct-ea-a",
+        ]
+
+
+def test_explicit_codexliz_account_targets_default_to_openai_escape_models(monkeypatch) -> None:
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_DISABLE_OPENAI_ESCAPE", "0")
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state" / "chummer_design_supervisor" / "shard-1"
+        state_root.mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+        args.command = "loop"
+        args.state_root = str(state_root)
+        args.accounts_path = "/docker/fleet/config/accounts.yaml"
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexliz"
+        args.worker_lane = "core"
+        args.account_alias = ["acct-core-a", "acct-chatgpt-archon", "acct-ea-a"]
+        args.account_owner_id = []
+        account_runtime = {"sources": {}}
+
+        plan = module._resolve_routed_worker_account_plan(
+            args,
+            state_root,
+            account_runtime,
+            worker_lane_health={},
+            explicit_account_targets=True,
+            route_model_candidates=[],
+            ea_provider_slot_health_index={},
+        )
+
+        assert plan.routed_account_required is True
+        assert plan.routed_account_model_candidates[:2] == ["gpt-5.4", "gpt-5.3-codex-spark"]
+
+
+def test_retryable_internal_worker_blocker_text_accepts_no_eligible_account_model_attempts() -> None:
+    module = _load_module()
+
+    assert module._retryable_internal_worker_blocker_text(
+        "no eligible worker account/model attempts were runnable"
+    )
+
+
+def test_explicit_codexliz_account_targets_override_direct_lane_models(monkeypatch) -> None:
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_DISABLE_OPENAI_ESCAPE", "0")
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state" / "chummer_design_supervisor" / "shard-1"
+        state_root.mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+        args.command = "loop"
+        args.state_root = str(state_root)
+        args.accounts_path = "/docker/fleet/config/accounts.yaml"
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexliz"
+        args.worker_lane = "core"
+        args.worker_model = "qwen3.5:122b"
+        args.account_alias = ["acct-core-a", "acct-chatgpt-archon", "acct-ea-a"]
+        args.account_owner_id = []
+        account_runtime = {"sources": {}}
+
+        plan = module._resolve_routed_worker_account_plan(
+            args,
+            state_root,
+            account_runtime,
+            worker_lane_health={},
+            explicit_account_targets=True,
+            route_model_candidates=["qwen3.5:122b"],
+            ea_provider_slot_health_index={},
+        )
+
+        assert plan.routed_account_required is True
+        assert plan.routed_account_model_candidates[:2] == ["gpt-5.4", "gpt-5.3-codex-spark"]
+
+
+def test_shard_local_flagship_readiness_refresh_uses_existing_artifact() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state" / "chummer_design_supervisor" / "shard-1"
+        state_root.mkdir(parents=True, exist_ok=True)
+        readiness_path = root / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+        readiness_payload = {
+            "status": "pass",
+            "generated_at": "2026-05-21T20:00:00Z",
+            "reason": "ready",
+        }
+        readiness_path.write_text(json.dumps(readiness_payload) + "\n", encoding="utf-8")
+
+        args = _args(root)
+        args.workspace_root = "/docker/fleet"
+        args.state_root = str(state_root)
+        args.flagship_product_readiness_path = str(readiness_path)
+
+        payload = module._refresh_flagship_product_readiness_artifact(args)
+
+        assert payload["status"] == "pass"
+        assert payload["reason"] == "ready"
 
 
 def test_derive_completion_review_context_can_focus_repo_backlog_items_beyond_first_five() -> None:
@@ -31115,6 +31603,55 @@ def test_persist_live_state_snapshot_clears_shard_scoped_aliases_for_aggregate_r
     assert "selected_model" not in payload
 
 
+def test_apply_status_alias_fields_prefers_waiting_for_local_frontier_slice_over_claimed_idle() -> None:
+    module = _load_module()
+
+    updated = module._apply_status_alias_fields(
+        {
+            "frontier_ids": [1053850454],
+            "active_runs_count": 0,
+            "completion_review_frontier_path": "",
+            "completion_review_frontier_mirror_path": "",
+            "shards": [
+                {
+                    "name": "shard-1",
+                    "active_run_id": "",
+                    "active_frontier_ids": [],
+                }
+            ],
+        }
+    )
+
+    assert updated["idle_reason"] == "waiting_for_local_frontier_slice"
+    assert updated["active_run_progress_state"] == "idle_waiting_for_local_frontier_slice"
+
+
+def test_reconcile_aggregate_shard_truth_rewrites_claimed_idle_shards_without_local_slice() -> None:
+    module = _load_module()
+
+    updated = module._reconcile_aggregate_shard_truth(
+        {
+            "shards": [
+                {
+                    "name": "shard-1",
+                    "active_run_id": "",
+                    "active_frontier_ids": [],
+                    "frontier_ids": [34],
+                    "active_run_progress_state": "idle_claimed_frontier_without_active_run",
+                    "idle_reason": "claimed_frontier_without_active_run",
+                }
+            ],
+            "completion_review_frontier_path": "",
+            "completion_review_frontier_mirror_path": "",
+            "active_runs_count": 0,
+        }
+    )
+
+    shard = updated["shards"][0]
+    assert shard["idle_reason"] == "waiting_for_local_frontier_slice"
+    assert shard["active_run_progress_state"] == "idle_waiting_for_local_frontier_slice"
+
+
 def test_live_shard_summaries_prefer_supervisor_authored_manifest_on_host(monkeypatch, tmp_path: Path) -> None:
     module = _load_module()
     aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
@@ -32412,3 +32949,11 @@ def test_main_active_shards_command_uses_canonicalized_state_root_for_design_sup
 
     assert observed_calls["state_root"] == str(aggregate_root)
     assert stdout.getvalue().strip() == str(expected_manifest_path)
+
+
+def test_live_refresh_timeout_seconds_for_journey_gates_has_buffer(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_LIVE_REFRESH_SUBCOMMAND_TIMEOUT_SECONDS", "25")
+
+    assert module._live_refresh_timeout_seconds_for_label("status plane") == 25
+    assert module._live_refresh_timeout_seconds_for_label("journey gates") == 40

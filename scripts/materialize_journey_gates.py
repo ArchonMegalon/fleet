@@ -15,10 +15,12 @@ import yaml
 try:
     from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
     from scripts.materialize_support_case_packets import _refresh_weekly_governor_packet_if_possible
+    from scripts.external_proof_paths import resolve_release_channel_path
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
     from materialize_support_case_packets import _refresh_weekly_governor_packet_if_possible
+    from external_proof_paths import resolve_release_channel_path
 
 
 UTC = dt.timezone.utc
@@ -154,26 +156,75 @@ def _ui_independent_public_release_proof_passed(repo_root: Path) -> bool:
         published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
     )
     executable_gate_evidence = dict(desktop_executable_exit_gate.get("evidence") or {})
+    executable_gate_local_blocking_findings_count = int(
+        desktop_executable_exit_gate.get("localBlockingFindingsCount")
+        or desktop_executable_exit_gate.get("local_blocking_findings_count")
+        or 0
+    )
     user_journey_tester_audit = _load_json_file(published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json")
     element_parity_audit = _load_json_file(published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json")
     parity_summary = dict(element_parity_audit.get("summary") or {})
     open_blocking_findings_count = int(user_journey_tester_audit.get("open_blocking_findings_count") or 0)
     visual_no_count = int(parity_summary.get("visual_no_count") or 0)
     behavioral_no_count = int(parity_summary.get("behavioral_no_count") or 0)
+    workflow_execution_proven = _proof_passed(desktop_workflow_execution_gate) or (
+        str(executable_gate_evidence.get("workflow_execution_status") or "").strip().lower() == "pass"
+        and executable_gate_local_blocking_findings_count == 0
+    )
     visual_familiarity_proven = _proof_passed(desktop_visual_familiarity_exit_gate) or (
         str(executable_gate_evidence.get("visual_familiarity_status") or "").strip().lower() == "pass"
-        and int(desktop_executable_exit_gate.get("local_blocking_findings_count") or 0) == 0
+        and executable_gate_local_blocking_findings_count == 0
     )
     return (
         _proof_passed(ui_local_release_proof)
         and _proof_effectively_passed(desktop_executable_exit_gate)
-        and _proof_passed(desktop_workflow_execution_gate)
+        and workflow_execution_proven
         and visual_familiarity_proven
         and _proof_passed(user_journey_tester_audit)
         and open_blocking_findings_count == 0
         and visual_no_count == 0
         and behavioral_no_count == 0
     )
+
+
+def _refresh_completion_review_frontier_if_possible(repo_root: Path) -> bool:
+    if repo_root.resolve() != ROOT:
+        return False
+    try:
+        try:
+            from scripts import chummer_design_supervisor as supervisor
+        except ModuleNotFoundError:
+            sys.path.insert(0, str(ROOT / "scripts"))
+            import chummer_design_supervisor as supervisor  # type: ignore[no-redef]
+
+        argv_backup = list(sys.argv)
+        try:
+            sys.argv = [
+                "chummer_design_supervisor.py",
+                "derive",
+                "--workspace-root",
+                str(ROOT),
+            ]
+            args = supervisor.parse_args()
+        finally:
+            sys.argv = argv_backup
+        state_root = Path(str(getattr(args, "state_root", "") or supervisor.DEFAULT_STATE_ROOT)).resolve()
+        aggregate_root = supervisor._canonicalize_design_supervisor_state_root(state_root)
+        refresh_roots = [aggregate_root]
+        for shard_root in sorted(aggregate_root.glob("shard-*")):
+            if shard_root.is_dir():
+                refresh_roots.append(shard_root.resolve())
+
+        refreshed_any = False
+        for refresh_root in refresh_roots:
+            try:
+                supervisor.derive_completion_review_context(args, refresh_root)
+            except Exception:
+                continue
+            refreshed_any = True
+        return refreshed_any
+    except Exception:
+        return False
 
 
 def _ui_repo_candidate_score(candidate: Path) -> tuple[int, int]:
@@ -1472,6 +1523,20 @@ def resolve_repo_root(repo_name: str) -> Path | None:
     return None
 
 
+def resolve_repo_proof_path(repo_name: str, relative_path: str) -> Path | None:
+    clean_repo_name = str(repo_name or "").strip()
+    clean_relative_path = str(relative_path or "").strip()
+    if (
+        clean_repo_name == "chummer6-hub-registry"
+        and clean_relative_path == ".codex-studio/published/RELEASE_CHANNEL.generated.json"
+    ):
+        return resolve_release_channel_path()
+    repo_root = resolve_repo_root(clean_repo_name)
+    if repo_root is None:
+        return None
+    return (repo_root / clean_relative_path).resolve()
+
+
 def classify_blocking_reasons(blocking_reasons: List[str]) -> Tuple[List[str], List[str]]:
     external_blocking_reasons: List[str] = []
     local_blocking_reasons: List[str] = []
@@ -1489,6 +1554,19 @@ def classify_blocking_reasons(blocking_reasons: List[str]) -> Tuple[List[str], L
         else:
             local_blocking_reasons.append(reason)
     return external_blocking_reasons, local_blocking_reasons
+
+
+def _coverage_only_release_channel_local_blockers(
+    local_blocking_reasons: List[str],
+    *,
+    external_proof_requests: List[Dict[str, Any]],
+) -> bool:
+    if not local_blocking_reasons or not external_proof_requests:
+        return False
+    return all(
+        any(marker in str(reason or "").strip().lower() for marker in RELEASE_CHANNEL_PLATFORM_COVERAGE_MARKERS)
+        for reason in local_blocking_reasons
+    )
 
 
 def _desktop_executable_gate_effective_local_blockers(
@@ -1592,10 +1670,12 @@ def evaluate_journey(
             str(proof_row.get("repo") or "").strip() == "chummer6-hub-registry"
             and str(proof_row.get("path") or "").strip() == ".codex-studio/published/RELEASE_CHANNEL.generated.json"
         ):
-            repo_root = resolve_repo_root("chummer6-hub-registry")
-            if repo_root is None:
+            target_path = resolve_repo_proof_path(
+                "chummer6-hub-registry",
+                ".codex-studio/published/RELEASE_CHANNEL.generated.json",
+            )
+            if target_path is None:
                 break
-            target_path = (repo_root / ".codex-studio/published/RELEASE_CHANNEL.generated.json").resolve()
             if not target_path.is_file():
                 break
             try:
@@ -1670,11 +1750,10 @@ def evaluate_journey(
         proof_row = dict(proof or {})
         repo_name = str(proof_row.get("repo") or "").strip()
         relative_path = str(proof_row.get("path") or "").strip()
-        repo_root = resolve_repo_root(repo_name)
-        if repo_root is None:
+        target_path = resolve_repo_proof_path(repo_name, relative_path)
+        if target_path is None:
             blocking_reasons.append(f"repo proof root for {repo_name or 'unknown'} is not configured.")
             continue
-        target_path = (repo_root / relative_path).resolve()
         if not target_path.is_file():
             blocking_reasons.append(f"repo proof file is missing: {repo_name}:{relative_path}.")
             continue
@@ -2995,6 +3074,17 @@ def evaluate_journey(
 
     external_blocking_reasons, local_blocking_reasons = classify_blocking_reasons(blocking_reasons)
     blocked_by_external_constraints_only = bool(external_blocking_reasons) and not local_blocking_reasons
+    if (
+        not blocked_by_external_constraints_only
+        and external_blocking_reasons
+        and _coverage_only_release_channel_local_blockers(
+            local_blocking_reasons,
+            external_proof_requests=external_proof_requests,
+        )
+    ):
+        external_blocking_reasons = blocking_reasons[:]
+        local_blocking_reasons = []
+        blocked_by_external_constraints_only = True
     external_proof_hosts = sorted(
         {
             str(item.get("required_host") or "").strip().lower()
@@ -3262,6 +3352,7 @@ def main(argv: List[str] | None = None) -> int:
             manifest_repo_root,
             support_packets_path,
         )
+        _refresh_completion_review_frontier_if_possible(manifest_repo_root)
         if not refreshed_weekly:
             write_compile_manifest(manifest_repo_root)
     print(f"wrote journey gates: {out_path}")

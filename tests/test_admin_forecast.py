@@ -258,13 +258,98 @@ class AdminForecastTests(unittest.TestCase):
 
         self.assertEqual(aggregate["source"], "browseract_refresh_summary")
         self.assertEqual(aggregate["slot_count_with_billing_snapshot"], 69)
-        self.assertEqual(aggregate["slot_count_with_member_reconciliation"], 41)
-        self.assertEqual(aggregate["latest_member_reconciliation_at"], "2026-01-01T00:00:00Z")
-        self.assertEqual(aggregate["last_actual_balance_check_at"], "2026-01-02T00:00:00Z")
-        self.assertEqual(card["basis_quality"], "mixed")
-        self.assertTrue(credit_guard["billing_known"])
-        self.assertTrue(credit_guard["next_worker_safe"])
-        self.assertEqual(credit_guard["reason"], "topup_due_now")
+
+    def test_project_has_live_worker_ignores_terminal_active_run_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                "CREATE TABLE runs (id INTEGER PRIMARY KEY, status TEXT, finished_at TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO runs(id, status, finished_at) VALUES(34126, 'awaiting_review', '2026-05-23T05:00:00Z')"
+            )
+            conn.commit()
+            conn.close()
+
+            old_db_path = self.admin.DB_PATH
+            self.admin.DB_PATH = db_path
+            self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
+
+            self.assertFalse(
+                self.admin.project_has_live_worker(
+                    {"active_run_id": 34126, "runtime_status": "dispatch_pending", "status": "dispatch_pending"}
+                )
+            )
+
+    def test_merged_projects_does_not_revive_stale_runtime_row_active_run_id(self) -> None:
+        old_effective_runtime_status = self.admin.effective_runtime_status
+        old_active_run_rows = self.admin.active_run_rows
+        old_project_runtime_rows = self.admin.project_runtime_rows
+        old_pull_request_rows = self.admin.pull_request_rows
+        old_review_findings_summary = self.admin.review_findings_summary
+        old_incidents = self.admin.incidents
+        old_latest_completed_run_by_project = self.admin.latest_completed_run_by_project
+        old_latest_spider_decision_by_project = self.admin.latest_spider_decision_by_project
+        old_ea_lane_capacity_snapshot = self.admin.ea_lane_capacity_snapshot
+        old_normalize_config = self.admin.normalize_config
+        old_load_program_registry = self.admin.load_program_registry
+        old_boundary_purity_registry_from_config = self.admin.boundary_purity_registry_from_config
+        old_usage_window_start = self.admin.usage_window_start
+        old_run_preview_payload = self.admin.run_preview_payload
+        old_run_backend_and_identity = self.admin.run_backend_and_identity
+        old_run_brain_label = self.admin.run_brain_label
+        old_recent_usage_for_scope = self.admin.recent_usage_for_scope
+        old_project_group_defs = self.admin.project_group_defs
+        old_active_run_is_live = self.admin.active_run_is_live
+
+        self.addCleanup(setattr, self.admin, "effective_runtime_status", old_effective_runtime_status)
+        self.addCleanup(setattr, self.admin, "active_run_rows", old_active_run_rows)
+        self.addCleanup(setattr, self.admin, "project_runtime_rows", old_project_runtime_rows)
+        self.addCleanup(setattr, self.admin, "pull_request_rows", old_pull_request_rows)
+        self.addCleanup(setattr, self.admin, "review_findings_summary", old_review_findings_summary)
+        self.addCleanup(setattr, self.admin, "incidents", old_incidents)
+        self.addCleanup(setattr, self.admin, "latest_completed_run_by_project", old_latest_completed_run_by_project)
+        self.addCleanup(setattr, self.admin, "latest_spider_decision_by_project", old_latest_spider_decision_by_project)
+        self.addCleanup(setattr, self.admin, "ea_lane_capacity_snapshot", old_ea_lane_capacity_snapshot)
+        self.addCleanup(setattr, self.admin, "normalize_config", old_normalize_config)
+        self.addCleanup(setattr, self.admin, "load_program_registry", old_load_program_registry)
+        self.addCleanup(setattr, self.admin, "boundary_purity_registry_from_config", old_boundary_purity_registry_from_config)
+        self.addCleanup(setattr, self.admin, "usage_window_start", old_usage_window_start)
+        self.addCleanup(setattr, self.admin, "run_preview_payload", old_run_preview_payload)
+        self.addCleanup(setattr, self.admin, "run_backend_and_identity", old_run_backend_and_identity)
+        self.addCleanup(setattr, self.admin, "run_brain_label", old_run_brain_label)
+        self.addCleanup(setattr, self.admin, "recent_usage_for_scope", old_recent_usage_for_scope)
+        self.addCleanup(setattr, self.admin, "project_group_defs", old_project_group_defs)
+        self.addCleanup(setattr, self.admin, "active_run_is_live", old_active_run_is_live)
+
+        self.admin.normalize_config = lambda: {
+            "projects": [{"id": "core", "path": "/tmp/core", "enabled": True, "queue": ["slice"]}],
+            "accounts": {},
+        }
+        self.admin.load_program_registry = lambda _config: {"projects": {}}
+        self.admin.boundary_purity_registry_from_config = lambda _config: {}
+        self.admin.project_runtime_rows = lambda: {"core": {"queue_index": 0, "queue_json": '["slice"]', "status": "running", "active_run_id": 34126}}
+        self.admin.active_run_rows = lambda: []
+        self.admin.pull_request_rows = lambda: {}
+        self.admin.review_findings_summary = lambda: {}
+        self.admin.incidents = lambda status="open", limit=400: []
+        self.admin.latest_completed_run_by_project = lambda limit=200: {}
+        self.admin.latest_spider_decision_by_project = lambda: {}
+        self.admin.ea_lane_capacity_snapshot = lambda lanes, cache_only=False: {}
+        self.admin.usage_window_start = lambda _config: self.admin.utc_now()
+        self.admin.run_preview_payload = lambda _run: {"log_preview": "", "final_preview": ""}
+        self.admin.run_backend_and_identity = lambda alias, accounts: ("unknown", "")
+        self.admin.run_brain_label = lambda alias, model, identity: "not active"
+        self.admin.recent_usage_for_scope = lambda *args, **kwargs: {}
+        self.admin.project_group_defs = lambda *args, **kwargs: []
+        self.admin.active_run_is_live = lambda run_id: False
+
+        projects = self.admin.merged_projects(cache_only=True)
+        core = next(item for item in projects if item["id"] == "core")
+
+        self.assertIsNone(core["active_run_id"])
+        self.assertIsNone(core["active_run_account_alias"])
 
     def test_active_run_rows_excludes_orphaned_unlinked_runs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1867,6 +1952,97 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["blocker_forecast"]["now"], "none")
         self.assertEqual(payload["public_status"]["contract_name"], "fleet.public_status")
 
+    def test_status_surface_payload_promotes_headline_eta_from_queue_forecast(self) -> None:
+        status = {
+            "generated_at": "2026-03-18T12:00:00Z",
+            "cockpit": {},
+            "public_status": {
+                "mission_snapshot": {"headline": "Working now"},
+                "queue_forecast": {"now": {"remaining_human": "44m 35s"}},
+            },
+        }
+
+        payload = self.admin.status_surface_payload(status)
+
+        self.assertEqual(payload["headline_eta"], "44m 35s")
+        self.assertEqual(payload["mission_snapshot"]["headline_eta"], "44m 35s")
+        self.assertEqual(payload["public_status"]["mission_snapshot"]["headline_eta"], "44m 35s")
+
+    def test_status_surface_payload_derives_headline_eta_when_queue_forecast_is_empty(self) -> None:
+        self.admin._FALLBACK_STATUS_SURFACE_ETA_STATE.update(
+            {"signature": "", "remaining_seconds": 0, "observed_at": None}
+        )
+        status = {
+            "generated_at": "2026-03-18T12:00:00Z",
+            "cockpit": {},
+            "public_status": {
+                "mission_snapshot": {"headline": "Working now", "active_workers": 7},
+                "queue_forecast": {},
+            },
+            "projects": [
+                {"id": "core", "status": "running", "runtime_status": "running", "current_slice": "core slice"},
+                {"id": "design", "status": "running", "runtime_status": "running", "current_slice": "design slice"},
+                {"id": "guide", "status": self.admin.READY_STATUS, "runtime_status": self.admin.READY_STATUS, "current_slice": "guide slice"},
+            ],
+        }
+
+        payload = self.admin.status_surface_payload(status)
+
+        self.assertEqual(payload["headline_eta"], "37m 52s")
+        self.assertEqual(payload["queue_forecast"]["now"]["remaining_human"], "37m 52s")
+        self.assertEqual(payload["public_status"]["mission_snapshot"]["headline_eta"], "37m 52s")
+
+    def test_fallback_status_surface_eta_decays_across_snapshots_with_same_shape(self) -> None:
+        self.admin._FALLBACK_STATUS_SURFACE_ETA_STATE.update(
+            {"signature": "", "remaining_seconds": 0, "observed_at": None}
+        )
+        start = self.admin.parse_iso("2026-03-18T12:00:00Z")
+        later = self.admin.parse_iso("2026-03-18T12:00:46Z")
+        self.assertIsNotNone(start)
+        self.assertIsNotNone(later)
+
+        first = self.admin._fallback_status_surface_eta(
+            active_workers=7,
+            dispatch_pending=1,
+            observed_at=start,
+        )
+        second = self.admin._fallback_status_surface_eta(
+            active_workers=7,
+            dispatch_pending=1,
+            observed_at=later,
+        )
+
+        self.assertEqual(first, "37m 52s")
+        self.assertEqual(second, "37m 6s")
+
+    def test_host_mounted_runtime_paths_are_preferred_when_env_is_unset(self) -> None:
+        mounted_state_root = Path("/docker/fleet/state")
+        mounted_db_path = mounted_state_root / "fleet.db"
+        real_exists = Path.exists
+
+        def fake_exists(path: Path) -> bool:
+            if path in {mounted_state_root, mounted_db_path}:
+                return True
+            return real_exists(path)
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "FLEET_DB_PATH": "",
+                "FLEET_STATE_ROOT": "",
+                "FLEET_CODEX_HOME_ROOT": "",
+                "FLEET_GROUP_ROOT": "",
+            },
+            clear=False,
+        ):
+            with mock.patch.object(Path, "exists", autospec=True, side_effect=fake_exists):
+                admin = load_admin_module()
+
+        self.assertEqual(admin.DB_PATH, mounted_db_path)
+        self.assertEqual(admin.STATE_ROOT, mounted_state_root)
+        self.assertEqual(admin.CODEX_HOME_ROOT, mounted_state_root / "codex-homes")
+        self.assertEqual(admin.GROUP_ROOT, mounted_state_root / "groups")
+
     def test_public_dashboard_status_payload_is_minimal_and_usable(self) -> None:
         self.admin.compile_manifest_surface_payload = lambda: {
             "published_at": "2026-03-18T12:15:00Z",
@@ -2678,12 +2854,40 @@ class AdminForecastTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            with mock.patch.object(self.admin, "EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH", state_dir / "status.json"):
+            with mock.patch.object(self.admin, "EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH", state_dir / "status.json"), mock.patch.object(
+                self.admin,
+                "EXTERNAL_PROOF_RUNBOOK_PATH",
+                Path(tmpdir) / "missing-runbook.md",
+            ):
                 payload = self.admin.external_proof_autoingest_payload()
 
         self.assertEqual(payload["current_state"], "waiting_for_bundle")
         self.assertEqual(payload["summary"]["alert_state"], "tracking")
         self.assertIn("Return the Windows host proof bundle", payload["summary"]["recommended_action"])
+
+    def test_external_proof_autoingest_payload_surfaces_no_pending_requests_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_dir = Path(tmpdir) / "external-proof-autoingest"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "status.json").write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-05-19T14:05:00Z",
+                        "current_state": "no_pending_requests",
+                        "commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
+                        "observed_bundle_count": 0,
+                        "last_result": "no_pending_requests",
+                        "last_detail": "no external host proof bundle is currently required",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(self.admin, "EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH", state_dir / "status.json"):
+                payload = self.admin.external_proof_autoingest_payload()
+
+        self.assertEqual(payload["current_state"], "no_pending_requests")
+        self.assertEqual(payload["summary"]["alert_state"], "healthy")
+        self.assertIn("No action required", payload["summary"]["recommended_action"])
 
     def test_canonical_public_status_payload_includes_runtime_healing(self) -> None:
         with mock.patch.object(

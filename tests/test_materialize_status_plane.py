@@ -141,6 +141,46 @@ def test_ui_independent_public_release_proof_accepts_wrapped_windows_external_ga
     assert materialize_status_plane_module._ui_independent_public_release_proof_passed(published_dir) is True
 
 
+def test_ui_independent_public_release_proof_accepts_executable_gate_aggregate_fallback(tmp_path: Path) -> None:
+    published_dir = tmp_path / "published"
+    published_dir.mkdir(parents=True)
+    (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
+        json.dumps({"status": "passed"}),
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json").write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "local_blocking_findings_count": 0,
+                "evidence": {
+                    "visual_familiarity_status": "pass",
+                    "workflow_execution_status": "pass",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json").write_text(
+        json.dumps({"status": "fail"}),
+        encoding="utf-8",
+    )
+    (published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json").write_text(
+        json.dumps({"status": "fail"}),
+        encoding="utf-8",
+    )
+    (published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json").write_text(
+        json.dumps({"status": "pass", "open_blocking_findings_count": 0}),
+        encoding="utf-8",
+    )
+    (published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json").write_text(
+        json.dumps({"summary": {"visual_no_count": 0, "behavioral_no_count": 0}}),
+        encoding="utf-8",
+    )
+
+    assert materialize_status_plane_module._ui_independent_public_release_proof_passed(published_dir) is True
+
+
 def test_materialize_status_plane_from_status_json(tmp_path: Path) -> None:
     status_json = tmp_path / "admin_status.json"
     out_path = tmp_path / "STATUS_PLANE.generated.yaml"
@@ -281,6 +321,59 @@ def test_materialize_status_plane_from_status_json(tmp_path: Path) -> None:
     assert payload["projects"][0]["id"] == "guide"
     assert payload["projects"][0]["readiness_stage"] == "repo_local_complete"
     assert payload["groups"][0]["blocking_owner_projects"] == ["core", "guide"]
+
+
+def test_materialize_status_plane_preserves_no_pending_external_proof_state(tmp_path: Path) -> None:
+    status_json = tmp_path / "admin_status.json"
+    out_path = tmp_path / "STATUS_PLANE.generated.yaml"
+    status_json.write_text(
+        """
+{
+  "generated_at": "2026-05-19T14:10:00Z",
+  "public_status": {
+    "generated_at": "2026-05-19T14:10:00Z",
+    "mission_snapshot": {},
+    "queue_forecast": {},
+    "capacity_forecast": {},
+    "blocker_forecast": {},
+    "deployment_posture": {},
+    "readiness_summary": {"counts": {}, "warning_count": 0, "final_claim_ready": 0},
+    "runtime_healing": {"generated_at": "2026-05-19T14:10:00Z", "enabled": true, "summary": {"alert_state": "healthy"}, "services": []},
+    "external_proof_autoingest": {
+      "generated_at": "2026-05-19T14:10:00Z",
+      "enabled": true,
+      "current_state": "no_pending_requests",
+      "summary": {"alert_state": "healthy", "alert_reason": "No returned host proof bundle is currently required."}
+    },
+    "support_summary": {},
+    "publish_readiness": {}
+  },
+  "projects": [],
+  "groups": []
+}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--status-json",
+            str(status_json),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_script_env(tmp_path),
+    )
+    assert result.returncode == 0, result.stderr
+    payload = yaml.safe_load(out_path.read_text(encoding="utf-8"))
+    assert payload["external_proof_autoingest"]["current_state"] == "no_pending_requests"
+    assert payload["external_proof_autoingest"]["summary"]["alert_state"] == "healthy"
 
 
 def test_materialize_status_plane_refreshes_compile_manifest_for_published_output(tmp_path: Path) -> None:

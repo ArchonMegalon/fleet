@@ -13,7 +13,7 @@ from typing import Any, Dict, List
 
 import yaml
 
-ROOT = Path("/docker/fleet")
+ROOT = Path(__file__).resolve().parents[1]
 PROJECT_CONFIG_DIR = ROOT / "config" / "projects"
 GROUP_CONFIG_PATH = ROOT / "config" / "groups.yaml"
 DEFAULT_STATUS_PLANE_PATH = ROOT / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
@@ -28,6 +28,7 @@ RUNTIME_HEALING_EVENTS_PATH = REBUILDER_AUTOHEAL_STATE_DIR / "events.jsonl"
 RUNTIME_HEALING_MAX_AGE_HOURS = 6
 REBUILDER_EXTERNAL_PROOF_AUTOINGEST_STATE_DIR = REBUILDER_STATE_DIR / "external-proof-autoingest"
 EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH = REBUILDER_EXTERNAL_PROOF_AUTOINGEST_STATE_DIR / "status.json"
+EXTERNAL_PROOF_RUNBOOK_PATH = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
 STAGE_ORDER = (
     "pre_repo_local_complete",
     "repo_local_complete",
@@ -737,10 +738,25 @@ def _runtime_healing_from_autoheal_state() -> Dict[str, Any]:
 
 
 def _external_proof_autoingest_from_state() -> Dict[str, Any]:
+    unresolved_request_count = -1
+    if EXTERNAL_PROOF_RUNBOOK_PATH.is_file():
+        try:
+            for line in EXTERNAL_PROOF_RUNBOOK_PATH.read_text(encoding="utf-8").splitlines():
+                if line.startswith("- unresolved_request_count: "):
+                    unresolved_request_count = int(line.split(":", 1)[1].strip())
+                    break
+        except Exception:
+            unresolved_request_count = -1
     payload = _load_json_mapping(EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH)
     if not payload:
         return {}
     current_state = str(payload.get("current_state") or "unknown").strip() or "unknown"
+    if current_state == "waiting_for_bundle" and unresolved_request_count == 0:
+        current_state = "no_pending_requests"
+        payload = dict(payload)
+        payload["current_state"] = current_state
+        payload["last_result"] = "no_pending_requests"
+        payload["last_detail"] = "no external host proof bundle is currently required"
     last_detail = str(payload.get("last_detail") or "").strip()
     alert_state = "tracking"
     alert_reason = "Waiting for a returned host proof bundle."
@@ -749,6 +765,10 @@ def _external_proof_autoingest_from_state() -> Dict[str, Any]:
         alert_state = "action_needed"
         alert_reason = last_detail or "External proof auto-ingest is blocked."
         recommended_action = "Fix the rebuilder proof watcher or rerun finalize-external-host-proof.sh manually."
+    elif current_state == "no_pending_requests":
+        alert_state = "healthy"
+        alert_reason = "No returned host proof bundle is currently required."
+        recommended_action = "No action required until a future external host proof request is published."
     elif current_state == "ingested":
         alert_state = "healthy"
         alert_reason = "The latest returned host proof bundle has already been ingested."
@@ -983,7 +1003,12 @@ def load_admin_status(status_json_path: Path | None, *, use_default_snapshot: bo
 
 def run_verification(status_plane_path: Path, status_json_path: Path | None) -> None:
     actual = load_status_plane(status_plane_path)
-    admin_status = load_admin_status(status_json_path, use_default_snapshot=True)
+    try:
+        admin_status = load_admin_status(status_json_path, use_default_snapshot=bool(status_json_path))
+    except StatusPlaneDriftError:
+        if status_json_path is not None:
+            raise
+        admin_status = load_admin_status(None, use_default_snapshot=True)
     admin_status = _ensure_project_inventory(admin_status)
     expected = build_expected_status_plane(admin_status)
     errors = compare_status_plane(expected, actual)

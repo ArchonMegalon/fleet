@@ -22,7 +22,7 @@
   },
   "contract_name": "fleet.next90_m138_hero_path_projections",
   "frontier_id": 7914546694,
-  "generated_at": "2026-05-06T04:08:49Z",
+  "generated_at": "2026-05-13T17:13:59Z",
   "milestone_id": 138,
   "owned_surfaces": [
     "bind_ready_for_tonight_gates_role_kit_registry_vtt_expor:fleet"
@@ -174,14 +174,14 @@
       "sha256": "0a8a5fa1907f0f1de5f1cbb01277568773a67656d27d8187fdae2aeb0e151916"
     },
     "design_queue_staging": {
-      "generated_at": "2026-05-06T04:00:26Z",
+      "generated_at": "2026-05-13T16:52:18Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
+      "sha256": "fa9f621dc6eddb503ec60c0905df3377cd36a78459b9b530293c14e28bbaf81d"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-05-06T04:00:26Z",
+      "generated_at": "2026-05-13T16:52:18Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
+      "sha256": "fa9f621dc6eddb503ec60c0905df3377cd36a78459b9b530293c14e28bbaf81d"
     },
     "foundry_first_handoff": {
       "generated_at": "2026-04-30T21:57:57Z",
@@ -204,19 +204,19 @@
       "sha256": "845cfafde512693e38495696b391ec36eb70d7078db17f89560619f5350363ef"
     },
     "public_feature_registry": {
-      "generated_at": "2026-05-04T09:39:41Z",
+      "generated_at": "2026-05-12T20:53:19Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FEATURE_REGISTRY.yaml",
-      "sha256": "cb90a2b1429a943a514d3627ae4ee208dcece66584caac1805aea152ff3ef9b8"
+      "sha256": "9436315e54f40f9921f0fb455d47622a3aae510dc5be6e236d92291cfcbb5aa5"
     },
     "public_guide_community_hub": {
-      "generated_at": "2026-05-05T23:52:11Z",
+      "generated_at": "2026-05-12T21:01:16Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/HORIZONS/community-hub.md",
-      "sha256": "bb0b76c600c2bc6febdb0427221a6fe06e03900aa380262c696cf0169b73744b"
+      "sha256": "edf3631e3cdbe5cfd639c3e7353274114ab17c6155859acca79fe8a4449c3240"
     },
     "public_landing_manifest": {
-      "generated_at": "2026-05-04T09:39:41Z",
+      "generated_at": "2026-05-12T20:58:07Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_LANDING_MANIFEST.yaml",
-      "sha256": "104c46bc68365be611735b6c6a4fc16a983eb87d7df2821f86e60e43affe3ce6"
+      "sha256": "3491b8c3e52527797e8cbd84cecb1f80cf662024ad8428f37a3c6af9cec1919a"
     },
     "public_onboarding_paths": {
       "generated_at": "2026-05-05T19:47:04Z",
@@ -239,9 +239,9 @@
       "sha256": "fa14b7cd799cf32abe812a4d037c9952dcd632e78967a65932b9ebad077e8e0a"
     },
     "successor_registry": {
-      "generated_at": "2026-05-06T04:08:01Z",
+      "generated_at": "2026-05-13T16:52:18Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "3614d3f739de335843fcf1e7c54a85c6892c310e03ac5e565fffd6de4e399010"
+      "sha256": "52f226d7a4043d33eed12287db7c4060de5305c6c728e150c1525c4ea1f6fa41"
     },
     "vtt_export_target_acceptance": {
       "generated_at": "2026-04-30T21:57:57Z",

@@ -132,6 +132,52 @@ def _default_config_root() -> pathlib.Path:
     return candidates[0]
 
 
+def _mounted_state_root() -> pathlib.Path:
+    return FLEET_MOUNT_ROOT / "state"
+
+
+def _default_db_path() -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_DB_PATH", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_db_path = _mounted_state_root() / "fleet.db"
+    if mounted_db_path.exists():
+        return mounted_db_path
+    return pathlib.Path("/var/lib/codex-fleet/fleet.db")
+
+
+def _default_state_root(db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_STATE_ROOT", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if db_path == mounted_state_root / "fleet.db":
+        return mounted_state_root
+    if db_path.name == "fleet.db" and db_path.parent.name == "state":
+        return db_path.parent
+    return db_path.parent / "state"
+
+
+def _default_codex_home_root(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_CODEX_HOME_ROOT", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "codex-homes"
+    return pathlib.Path("/var/lib/codex-fleet/codex-homes")
+
+
+def _default_group_root(state_root: pathlib.Path, db_path: pathlib.Path) -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_GROUP_ROOT", "") or "").strip()
+    if configured:
+        return pathlib.Path(configured).expanduser()
+    mounted_state_root = _mounted_state_root()
+    if state_root == mounted_state_root or db_path.parent == mounted_state_root:
+        return state_root / "groups"
+    return db_path.parent / "groups"
+
+
 CONFIG_ROOT = _default_config_root()
 CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", str(CONFIG_ROOT / "fleet.yaml")))
 ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", str(CONFIG_ROOT / "accounts.yaml")))
@@ -140,8 +186,8 @@ ROUTING_PATH = CONFIG_PATH.with_name("routing.yaml")
 GROUPS_PATH = CONFIG_PATH.with_name("groups.yaml")
 PROJECTS_DIR = CONFIG_PATH.parent / "projects"
 PROJECT_INDEX_PATH = PROJECTS_DIR / "_index.yaml"
-DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
-STATE_ROOT = pathlib.Path(os.environ.get("FLEET_STATE_ROOT", str(DB_PATH.parent / "state")))
+DB_PATH = _default_db_path()
+STATE_ROOT = _default_state_root(DB_PATH)
 DESIGN_SUPERVISOR_STATE_ROOT = pathlib.Path(
     os.environ.get(
         "CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT",
@@ -153,13 +199,18 @@ RUNTIME_CACHE_WRITE_ATTEMPTS = int(os.environ.get("FLEET_RUNTIME_CACHE_WRITE_ATT
 RUNTIME_CACHE_WRITE_RETRY_SECONDS = float(os.environ.get("FLEET_RUNTIME_CACHE_WRITE_RETRY_SECONDS", "0.15"))
 _DB_WAL_READY = False
 _DB_WAL_LOCK = threading.Lock()
+_FALLBACK_STATUS_SURFACE_ETA_STATE: Dict[str, Any] = {
+    "signature": "",
+    "remaining_seconds": 0,
+    "observed_at": None,
+}
 REBUILDER_STATE_DIR = pathlib.Path(os.environ.get("FLEET_REBUILDER_STATE_DIR", str(FLEET_MOUNT_ROOT / "state" / "rebuilder")))
 REBUILDER_AUTOHEAL_STATE_DIR = REBUILDER_STATE_DIR / "autoheal"
 RUNTIME_HEALING_EVENTS_PATH = REBUILDER_AUTOHEAL_STATE_DIR / "events.jsonl"
 REBUILDER_EXTERNAL_PROOF_AUTOINGEST_STATE_DIR = REBUILDER_STATE_DIR / "external-proof-autoingest"
 EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH = REBUILDER_EXTERNAL_PROOF_AUTOINGEST_STATE_DIR / "status.json"
-CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
-GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
+CODEX_HOME_ROOT = _default_codex_home_root(STATE_ROOT, DB_PATH)
+GROUP_ROOT = _default_group_root(STATE_ROOT, DB_PATH)
 AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
 CONTROLLER_URL = os.environ.get("FLEET_CONTROLLER_URL", "http://fleet-controller:8090")
 RUNTIME_HEALING_MAX_AGE_HOURS = 6
@@ -1036,7 +1087,7 @@ def effective_runtime_status(
         review_runtime_status = "review_requested" if review_mode != "github" or int(pr.get("pr_number") or 0) > 0 else "awaiting_pr"
     if not enabled:
         return "paused"
-    if status in {"starting", "running", "verifying"} and active_run_id:
+    if status in {"starting", "running", "verifying"} and active_run_is_live(active_run_id):
         return status
     if int(queue_index) >= int(queue_len):
         if review_runtime_status:
@@ -3653,10 +3704,24 @@ def project_queue_length(project: Dict[str, Any]) -> int:
 
 
 def project_has_live_worker(project: Dict[str, Any]) -> bool:
-    active_run_id = str(project.get("active_run_id") or "").strip()
-    if active_run_id not in {"", "0"}:
+    active_run_id = int(project.get("active_run_id") or 0) or None
+    if active_run_is_live(active_run_id):
         return True
     return project_runtime_status(project).lower() in {"starting", "running", "verifying"}
+
+
+def active_run_is_live(run_id: Optional[int]) -> bool:
+    clean_run_id = int(run_id or 0) or None
+    if not clean_run_id:
+        return False
+    with db() as conn:
+        row = conn.execute(
+            "SELECT status, finished_at FROM runs WHERE id=?",
+            (clean_run_id,),
+        ).fetchone()
+    if not row:
+        return False
+    return str(row["status"] or "").strip().lower() in {"starting", "running", "verifying"} and not parse_iso(row["finished_at"])
 
 
 def runtime_status_for_active_run(base_status: str, run_row: Dict[str, Any]) -> str:
@@ -6753,7 +6818,7 @@ def merged_projects(*, cache_only: bool = False) -> List[Dict[str, Any]]:
             runtime_status = runtime_status_for_active_run(runtime_status, active_run)
         elif runtime_status not in {"starting", "running", "verifying"}:
             active_run_id = None
-        if not active_run_id and runtime_status in {"starting", "running", "verifying"}:
+        if not active_run_id and runtime_status in {"starting", "running", "verifying"} and active_run_is_live(runtime_row.get("active_run_id")):
             active_run_id = runtime_row.get("active_run_id")
         row["active_run_id"] = active_run_id
         row["active_run_trace_id"] = str(active_run.get("trace_id") or "").strip() if active_run_id else ""
@@ -14431,20 +14496,150 @@ def admin_logout(next: str = Form("/admin/login")) -> Response:
 
 
 def status_surface_payload(status: Dict[str, Any]) -> Dict[str, Any]:
-    cockpit = status.get("cockpit") or {}
-    public_status = status.get("public_status") or canonical_public_status_payload(status)
+    cockpit = dict(status.get("cockpit") or {})
+    public_status = dict(status.get("public_status") or canonical_public_status_payload(status) or {})
+    mission_snapshot = dict(public_status.get("mission_snapshot") or {})
+    queue_forecast = dict(public_status.get("queue_forecast") or {})
+    if not str(((queue_forecast.get("now") or {}).get("remaining_human") or "")).strip():
+        fallback_queue_forecast = fallback_status_surface_queue_forecast(status, mission_snapshot=mission_snapshot)
+        if fallback_queue_forecast:
+            queue_forecast = fallback_queue_forecast
+            public_status["queue_forecast"] = queue_forecast
+    headline_eta = (
+        str(((queue_forecast.get("now") or {}).get("remaining_human") or "")).strip()
+        or str(mission_snapshot.get("current_eta") or "").strip()
+        or str(((cockpit.get("mission_snapshot") or {}).get("current_eta") or "")).strip()
+    )
+    if headline_eta:
+        mission_snapshot["headline_eta"] = headline_eta
+        public_status["mission_snapshot"] = mission_snapshot
+        cockpit_mission_snapshot = dict(cockpit.get("mission_snapshot") or {})
+        cockpit_mission_snapshot["headline_eta"] = headline_eta
+        cockpit["mission_snapshot"] = cockpit_mission_snapshot
     return {
         **status,
+        "headline_eta": headline_eta,
         "explorer": cockpit,
         "public_status": public_status,
         "mission_board": public_status.get("mission_board", {}),
-        "mission_snapshot": public_status.get("mission_snapshot", {}),
-        "queue_forecast": public_status.get("queue_forecast", {}),
+        "mission_snapshot": mission_snapshot,
+        "queue_forecast": queue_forecast,
         "vision_forecast": public_status.get("vision_forecast", {}),
         "capacity_forecast": public_status.get("capacity_forecast", {}),
         "blocker_forecast": public_status.get("blocker_forecast", {}),
         "jury_telemetry": public_status.get("jury_telemetry", {}) or cockpit.get("jury_telemetry", {}),
     }
+
+
+def fallback_status_surface_queue_forecast(
+    status: Dict[str, Any],
+    *,
+    mission_snapshot: Dict[str, Any],
+) -> Dict[str, Any]:
+    projects = list(status.get("projects") or [])
+    if not projects:
+        return {}
+
+    active_projects = [
+        project for project in projects
+        if str(project.get("runtime_status") or project.get("status") or "").strip().lower() in {"running", "starting", "verifying"}
+    ]
+    dispatch_pending = [
+        project for project in projects
+        if str(project.get("status") or "").strip().lower() == READY_STATUS
+    ]
+    active_workers = int(mission_snapshot.get("active_workers") or len(active_projects) or 0)
+    remaining_human = fallback_status_surface_eta(
+        active_workers=active_workers,
+        dispatch_pending=len(dispatch_pending),
+        observed_at=parse_iso(str(status.get("generated_at") or "")),
+    )
+    if not remaining_human:
+        return {}
+
+    lead_project = active_projects[0] if active_projects else (dispatch_pending[0] if dispatch_pending else {})
+    return {
+        "now": {
+            "project_id": str(lead_project.get("id") or ""),
+            "title": first_nonempty(lead_project.get("current_slice"), lead_project.get("id"), "Fallback queue forecast"),
+            "lane": first_nonempty(lead_project.get("selected_lane"), "unknown"),
+            "provider": first_nonempty(lead_project.get("active_run_account_backend"), lead_project.get("last_run_account_backend"), "unknown"),
+            "brain": first_nonempty(lead_project.get("active_run_brain"), lead_project.get("last_run_brain"), "unknown"),
+            "reason": "Derived from live active and dispatch-pending counts because the rich queue forecast is unavailable.",
+            "remaining_human": remaining_human,
+        },
+        "next": {},
+        "then": {},
+    }
+
+
+def fallback_status_surface_eta(
+    *,
+    active_workers: int,
+    dispatch_pending: int,
+    observed_at: Optional[dt.datetime] = None,
+) -> str:
+    return _fallback_status_surface_eta(
+        active_workers=active_workers,
+        dispatch_pending=dispatch_pending,
+        observed_at=observed_at,
+    )
+
+
+def _fallback_status_surface_eta_seconds(
+    *,
+    active_workers: int,
+    dispatch_pending: int,
+    observed_at: Optional[dt.datetime] = None,
+) -> int:
+    active_workers = max(0, int(active_workers or 0))
+    dispatch_pending = max(0, int(dispatch_pending or 0))
+    total_slices = active_workers + dispatch_pending
+    if total_slices <= 0:
+        _FALLBACK_STATUS_SURFACE_ETA_STATE.update(
+            {"signature": "", "remaining_seconds": 0, "observed_at": None}
+        )
+        return 0
+    active_minutes = active_workers * 35
+    queued_minutes = dispatch_pending * 20
+    baseline_seconds = max(
+        10 * 60,
+        int(math.ceil((active_minutes + queued_minutes) * 60 / max(active_workers, 1))),
+    )
+    current_at = observed_at or utc_now()
+    signature = f"{active_workers}:{dispatch_pending}"
+    cached_signature = str(_FALLBACK_STATUS_SURFACE_ETA_STATE.get("signature") or "")
+    cached_remaining = int(_FALLBACK_STATUS_SURFACE_ETA_STATE.get("remaining_seconds") or 0)
+    cached_observed_at = _FALLBACK_STATUS_SURFACE_ETA_STATE.get("observed_at")
+    if signature == cached_signature and isinstance(cached_observed_at, dt.datetime):
+        elapsed_seconds = max(0, int((current_at - cached_observed_at).total_seconds()))
+        remaining_seconds = max(10 * 60, min(baseline_seconds, cached_remaining - elapsed_seconds))
+    else:
+        remaining_seconds = baseline_seconds
+    _FALLBACK_STATUS_SURFACE_ETA_STATE.update(
+        {
+            "signature": signature,
+            "remaining_seconds": remaining_seconds,
+            "observed_at": current_at,
+        }
+    )
+    return remaining_seconds
+
+
+def _fallback_status_surface_eta(
+    *,
+    active_workers: int,
+    dispatch_pending: int,
+    observed_at: Optional[dt.datetime] = None,
+) -> str:
+    remaining_seconds = _fallback_status_surface_eta_seconds(
+        active_workers=active_workers,
+        dispatch_pending=dispatch_pending,
+        observed_at=observed_at,
+    )
+    if remaining_seconds <= 0:
+        return ""
+    return human_duration(remaining_seconds)
 
 
 def public_dashboard_status_payload() -> Dict[str, Any]:
@@ -19050,12 +19245,7 @@ def admin_details(
     tab: Optional[str] = None,
     feedback_question: str = "",
 ) -> str:
-    return render_admin_dashboard(
-        show_details=True,
-        initial_focus_id=str(focus or "").strip(),
-        initial_tab=str(tab or "").strip(),
-        feedback_question=str(feedback_question or "").strip(),
-    )
+    return render_admin_dashboard(show_details=True, initial_focus_id=str(focus or "").strip(), initial_tab=str(tab or "").strip(), feedback_question=str(feedback_question or "").strip())
 
 
 @app.post("/admin/details/feedback-forge", response_class=HTMLResponse)

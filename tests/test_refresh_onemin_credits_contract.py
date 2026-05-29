@@ -5,6 +5,7 @@ import os
 import stat
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -152,6 +153,10 @@ def test_refresh_onemin_credits_prefers_fresher_browseract_refresh_summary(tmp_p
     browseract_root = tmp_path / "ea-state"
     latest_filename = "onemin_aggregate_latest.json"
     bin_dir.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc)
+    observed_one = (now - timedelta(minutes=5)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    observed_two = (now - timedelta(minutes=4)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    finished_at = (now - timedelta(minutes=3)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     stale_payload = {
         "sum_free_credits": 111,
         "sum_max_credits": 262550000,
@@ -180,7 +185,7 @@ def test_refresh_onemin_credits_prefers_fresher_browseract_refresh_summary(tmp_p
                 "daily_bonus_available": True,
                 "daily_bonus_credits": 500,
                 "basis": "actual_billing_usage_page",
-                "persisted_snapshot": {"observed_at": "2026-04-15T10:09:56Z"},
+                "persisted_snapshot": {"observed_at": observed_one},
             },
             {
                 "account_label": "ONEMIN_AI_API_KEY_FALLBACK_1",
@@ -190,7 +195,7 @@ def test_refresh_onemin_credits_prefers_fresher_browseract_refresh_summary(tmp_p
                 "daily_bonus_available": True,
                 "daily_bonus_credits": 250,
                 "basis": "actual_billing_usage_page",
-                "persisted_snapshot": {"observed_at": "2026-04-15T10:10:50Z"},
+                "persisted_snapshot": {"observed_at": observed_two},
             },
             {
                 "account_label": "ONEMIN_AI_API_KEY_FALLBACK_2",
@@ -198,7 +203,7 @@ def test_refresh_onemin_credits_prefers_fresher_browseract_refresh_summary(tmp_p
                 "failure_code": "invalid_credentials",
             },
         ],
-        finished_at_utc="2026-04-15T10:11:00Z",
+        finished_at_utc=finished_at,
     )
 
     env = os.environ.copy()
@@ -345,3 +350,79 @@ def test_refresh_onemin_credits_prefers_successful_browseract_snapshot_over_late
     assert latest_payload["sum_free_credits"] == 12345
     assert latest_payload["browseract_refresh_success_count"] == 1
     assert latest_payload["browseract_refresh_failure_count"] == 0
+
+
+def test_refresh_onemin_credits_promotes_container_global_refresh_over_stale_cache_payload(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    runtime_root = tmp_path / "runtime"
+    history_path = tmp_path / "onemin_credit_history.csv"
+    latest_filename = "onemin_aggregate_latest.json"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+
+    stale_payload = {
+        "sum_free_credits": 111,
+        "sum_max_credits": 262550000,
+        "basis_summary": "status_local_runtime_cache x59",
+        "payload_source": "status_local_runtime_cache",
+        "payload_fetched_at": "2026-03-23T08:41:04Z",
+        "recorded_at_utc": "2026-03-23T08:41:04Z",
+        "used_precomputed_aggregate": True,
+        "slots": [{"free_credits": 111, "max_credits": 262550000}],
+    }
+    codexea_path = bin_dir / "codexea"
+    codexea_path.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        f"print(json.dumps({stale_payload!r}))\n",
+        encoding="utf-8",
+    )
+    codexea_path.chmod(codexea_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    container_payload = {
+        "principal_id": "codex-fleet",
+        "fetched_at_utc": "2026-05-23T13:30:00Z",
+        "billing_lookup": {
+            "provider_api_scope": "global",
+            "global_aggregate_snapshot": {"sum_free_credits": 105506336},
+        },
+        "global_aggregate_snapshot": {
+            "provider_key": "onemin",
+            "scope": "global_pool",
+            "sum_free_credits": 105506336,
+            "sum_max_credits": 262550000,
+            "remaining_percent_total": 40.18,
+            "slot_count": 69,
+            "slot_count_with_billing_snapshot": 69,
+            "basis_summary": "actual_billing_usage_page x69",
+            "slots": [{"free_credits": 105506336, "max_credits": 262550000}],
+        },
+    }
+    docker_path = bin_dir / "docker"
+    docker_path.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        f"print(json.dumps({container_payload!r}))\n",
+        encoding="utf-8",
+    )
+    docker_path.chmod(docker_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+    env["ONEMIN_CREDIT_HISTORY_PATH"] = str(history_path)
+    env["ONEMIN_AGGREGATE_RUNTIME_ROOT"] = str(runtime_root)
+    env["ONEMIN_AGGREGATE_LATEST_FILENAME"] = latest_filename
+    env["ONEMIN_BROWSERACT_REFRESH_STATE_ROOT"] = str(tmp_path / "empty-browseract")
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    latest_payload = json.loads((runtime_root / latest_filename).read_text(encoding="utf-8"))
+    assert latest_payload["sum_free_credits"] == 105506336
+    assert latest_payload["payload_source"] == "actual_provider_api_snapshot_rollup"
+    assert latest_payload["measurement_trust"] == "fresh"

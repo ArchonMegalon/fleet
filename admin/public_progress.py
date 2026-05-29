@@ -35,6 +35,9 @@ CHUMMER_DESIGN_ROOT = pathlib.Path("/docker/chummercomplete/chummer-design")
 CHUMMER_PRODUCT_CANON_DIR = CHUMMER_DESIGN_ROOT / "products" / "chummer"
 CHUMMER_HUB_ROOT = pathlib.Path("/docker/chummercomplete/chummer6-hub")
 CHUMMER_CORE_ROOT = pathlib.Path("/docker/chummercomplete/chummer6-core")
+CHUMMER_RELEASE_CHANNEL_PATH = pathlib.Path(
+    "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json"
+)
 
 
 def _published_status(path: pathlib.Path) -> tuple[int, int]:
@@ -159,6 +162,9 @@ DEFAULT_PROJECTS_DIR = FLEET_ROOT / "config" / "projects"
 DEFAULT_PROGRESS_REPORT_PATH = FLEET_ROOT / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
 DEFAULT_PROGRESS_HISTORY_PATH = FLEET_ROOT / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
 DEFAULT_COMPLETION_FRONTIER_PATH = FLEET_ROOT / ".codex-studio" / "published" / "COMPLETION_REVIEW_FRONTIER.generated.yaml"
+DEFAULT_JOURNEY_GATES_PATH = FLEET_ROOT / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
+DEFAULT_SUPPORT_PACKETS_PATH = FLEET_ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+DEFAULT_WEEKLY_GOVERNOR_PACKET_PATH = FLEET_ROOT / ".codex-studio" / "published" / "WEEKLY_GOVERNOR_PACKET.generated.json"
 DEFAULT_POSTER_PATH = (MOUNTED_ADMIN_DIR if MOUNTED_ADMIN_DIR.exists() else ADMIN_DIR) / "assets" / "progress_poster.svg"
 DEFAULT_DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", str(FLEET_ROOT / "state" / "fleet.db")))
 DEFAULT_DESIGN_SUPERVISOR_STATE_PATH = FLEET_ROOT / "state" / "chummer_design_supervisor" / "state.json"
@@ -583,8 +589,11 @@ def _join_sentences(*parts: Any) -> str:
     return f"{'. '.join(clean_parts)}." if clean_parts else ""
 
 
-def _flagship_readiness_truth() -> Dict[str, Any]:
-    flagship_readiness = _load_json(DEFAULT_FLAGSHIP_PRODUCT_READINESS_PATH)
+def _flagship_readiness_truth(*, repo_root: pathlib.Path = FLEET_ROOT) -> Dict[str, Any]:
+    flagship_readiness_path = DEFAULT_FLAGSHIP_PRODUCT_READINESS_PATH
+    if not _same_path(repo_root, FLEET_ROOT):
+        flagship_readiness_path = repo_root / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    flagship_readiness = _load_json(flagship_readiness_path)
     if _status_is_pass_like(flagship_readiness.get("status")):
         return {
             "status": "ready",
@@ -784,8 +793,9 @@ def _repo_local_backlog_snapshot(project_cfgs: Dict[str, Dict[str, Any]]) -> Dic
 
 
 def _published_completion_frontier_repo_backlog_snapshot(
-    path: pathlib.Path = DEFAULT_COMPLETION_FRONTIER_PATH,
+    path: pathlib.Path | None = None,
 ) -> Dict[str, Any] | None:
+    path = path or DEFAULT_COMPLETION_FRONTIER_PATH
     payload = _load_yaml(path)
     if not payload:
         return None
@@ -824,9 +834,291 @@ def _published_completion_frontier_repo_backlog_snapshot(
     }
 
 
-def _published_completion_frontier_payload(path: pathlib.Path = DEFAULT_COMPLETION_FRONTIER_PATH) -> Dict[str, Any]:
+def _published_completion_frontier_payload(path: pathlib.Path | None = None) -> Dict[str, Any]:
+    path = path or DEFAULT_COMPLETION_FRONTIER_PATH
     payload = _load_yaml(path)
     return payload if isinstance(payload, dict) else {}
+
+
+def _journey_gates_payload(path: pathlib.Path | None = None) -> Dict[str, Any]:
+    path = path or DEFAULT_JOURNEY_GATES_PATH
+    return _load_json(path)
+
+
+def _support_packets_payload(path: pathlib.Path | None = None) -> Dict[str, Any]:
+    path = path or DEFAULT_SUPPORT_PACKETS_PATH
+    return _load_json(path)
+
+
+def _weekly_governor_payload(path: pathlib.Path | None = None) -> Dict[str, Any]:
+    path = path or DEFAULT_WEEKLY_GOVERNOR_PACKET_PATH
+    return _load_json(path)
+
+
+def _release_channel_payload(path: pathlib.Path | None = None) -> Dict[str, Any]:
+    path = path or CHUMMER_RELEASE_CHANNEL_PATH
+    return _load_json(path)
+
+
+def _proof_routes_set(release_channel: Dict[str, Any]) -> set[str]:
+    proof_routes = (
+        ((release_channel.get("releaseProof") or {}).get("proofRoutes") or [])
+        if isinstance(release_channel, dict)
+        else []
+    )
+    return {str(item).strip() for item in proof_routes if str(item).strip()}
+
+
+def _public_proof_badge(state: str) -> Dict[str, str]:
+    normalized = str(state or "").strip().lower() or "blocked"
+    label_map = {
+        "implemented": "Implemented",
+        "public-stable": "Public stable",
+        "preview-bounded": "Preview bounded",
+        "blocked": "Blocked",
+    }
+    tone_map = {
+        "implemented": "implemented",
+        "public-stable": "stable",
+        "preview-bounded": "preview",
+        "blocked": "blocked",
+    }
+    return {
+        "state": normalized,
+        "label": label_map.get(normalized, "Blocked"),
+        "tone": tone_map.get(normalized, "blocked"),
+    }
+
+
+def _public_route_cards(
+    *,
+    flagship_readiness: Dict[str, Any],
+    completion_frontier: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    release_channel = _release_channel_payload()
+    journey_gates = _journey_gates_payload()
+    support_packets = _support_packets_payload()
+    weekly_governor = _weekly_governor_payload()
+    proof_routes = _proof_routes_set(release_channel)
+
+    release_proof = dict(release_channel.get("releaseProof") or {})
+    release_proof_status = str(release_proof.get("status") or "").strip().lower()
+    release_channel_status = str(release_channel.get("status") or "").strip().lower()
+    rollout_state = str(release_channel.get("rolloutState") or release_channel.get("rollout_state") or "").strip().lower()
+    supportability_state = str(release_channel.get("supportabilityState") or "").strip().lower()
+    artifacts = [dict(item) for item in (release_channel.get("artifacts") or []) if isinstance(item, dict)]
+    installer_artifacts = [item for item in artifacts if str(item.get("kind") or "").strip().lower() == "installer"]
+    compatible_installers = [
+        item for item in installer_artifacts if str(item.get("compatibilityState") or "").strip().lower() == "compatible"
+    ]
+
+    journey_summary = dict(journey_gates.get("summary") or {})
+    install_journey = next(
+        (
+            dict(item)
+            for item in (journey_gates.get("journeys") or [])
+            if isinstance(item, dict) and str(item.get("id") or "").strip() == "install_claim_restore_continue"
+        ),
+        {},
+    )
+    install_journey_state = str(install_journey.get("state") or "").strip().lower()
+
+    support_summary = dict(support_packets.get("summary") or {})
+    support_source = dict(support_packets.get("source") or {})
+    feedback_plan = dict(support_packets.get("feedback_discovery_plan") or {})
+
+    completion_audit = dict(completion_frontier.get("completion_audit") or {})
+    completion_audit_status = str(completion_audit.get("status") or "").strip().lower()
+    completion_audit_reason = str(completion_audit.get("reason") or "").strip()
+
+    decision_board = dict(weekly_governor.get("decision_board") or {})
+    launch_state = str(((decision_board.get("launch_expand") or {}).get("state")) or "").strip().lower()
+    freeze_state = str(((decision_board.get("freeze_launch") or {}).get("state")) or "").strip().lower()
+    rollback_state = str(((decision_board.get("rollback") or {}).get("state")) or "").strip().lower()
+    canary_state = str(((decision_board.get("canary") or {}).get("state")) or "").strip().lower()
+
+    release_proven = release_channel_status in {"published", "publishable"} and release_proof_status in {"pass", "passed", "ready"}
+    install_route_proven = {"/downloads", "/home/access", "/home/work"}.issubset(proof_routes)
+    account_route_proven = {"/account/access", "/account/work", "/account/support"}.issubset(proof_routes)
+    workbench_route_proven = "/home/work" in proof_routes
+
+    cards: List[Dict[str, Any]] = []
+
+    downloads_state = "blocked"
+    if release_proven and install_journey_state == "ready" and install_route_proven and compatible_installers:
+        downloads_state = "public-stable" if rollout_state == "public_stable" else "implemented"
+    elif release_proven and compatible_installers:
+        downloads_state = "implemented"
+    elif release_channel:
+        downloads_state = "preview-bounded"
+    cards.append(
+        {
+            "id": "downloads",
+            "route": "/downloads",
+            "title": "Downloads and install truth",
+            "semantic_family": "supportable_install",
+            "proof_state": downloads_state,
+            "proof_badge": _public_proof_badge(downloads_state),
+            "summary": "Package compatibility, install, update, rollback, and revoke claims are published from the current release shelf instead of helper folklore.",
+            "detail": (
+                f"{len(compatible_installers)} compatible installer tuple(s) are published. "
+                f"Rollout state is {rollout_state or 'unknown'}, support posture is {supportability_state or 'unknown'}, "
+                f"and rollback stays {rollback_state or 'unknown'}."
+            ),
+            "evidence": [
+                f"Release channel: {release_channel_status or 'missing'}",
+                f"Release proof: {release_proof_status or 'missing'}",
+                f"Install journey: {install_journey_state or 'missing'}",
+                f"Fix availability: {str(release_channel.get('fixAvailabilitySummary') or 'not published').strip()}",
+            ],
+            "package_claims": {
+                "compatible_installer_count": len(compatible_installers),
+                "published_installer_count": len(installer_artifacts),
+                "rollout_state": rollout_state or "unknown",
+                "supportability_state": supportability_state or "unknown",
+                "rollback_state": rollback_state or "unknown",
+                "revoke_state": "not_revoked" if rollout_state not in {"revoked", "paused"} else (rollout_state or "unknown"),
+                "known_issue_summary": str(release_channel.get("knownIssueSummary") or "").strip(),
+                "supportability_summary": str(release_channel.get("supportabilitySummary") or "").strip(),
+            },
+        }
+    )
+
+    workbench_state = "blocked"
+    if str(flagship_readiness.get("status") or "").strip().lower() == "ready" and workbench_route_proven:
+        workbench_state = "public-stable"
+    elif flagship_readiness:
+        workbench_state = "implemented"
+    cards.append(
+        {
+            "id": "workbench",
+            "route": "/home/work",
+            "title": "Desktop workbench",
+            "semantic_family": "desktop_flagship",
+            "proof_state": workbench_state,
+            "proof_badge": _public_proof_badge(workbench_state),
+            "summary": "The public route only claims the flagship workbench when executable proof and veteran-familiar desktop signals agree.",
+            "detail": str(flagship_readiness.get("summary") or "Flagship readiness proof is unavailable.").strip(),
+            "evidence": [
+                f"Flagship readiness: {str(flagship_readiness.get('status') or 'unknown').strip().lower() or 'unknown'}",
+                f"Desktop executable gate: {str(flagship_readiness.get('desktop_executable_gate_status') or 'unknown').strip().lower() or 'unknown'}",
+                f"Workbench route proof: {'present' if workbench_route_proven else 'missing'}",
+            ],
+        }
+    )
+
+    account_state = "blocked"
+    if install_journey_state == "ready" and account_route_proven:
+        account_state = "public-stable"
+    elif install_journey:
+        account_state = "implemented"
+    cards.append(
+        {
+            "id": "account",
+            "route": "/account/access",
+            "title": "Account, restore, and device continuity",
+            "semantic_family": "restore_and_portability",
+            "proof_state": account_state,
+            "proof_badge": _public_proof_badge(account_state),
+            "summary": "Account value is framed as claim, restore, second-device continuation, and support continuity, not as a browser ritual.",
+            "detail": str(install_journey.get("user_promise") or "Account restore proof is not available.").strip(),
+            "evidence": [
+                f"Journey state: {install_journey_state or 'missing'}",
+                f"Account route proof: {'present' if account_route_proven else 'missing'}",
+                f"Journey recommendation: {str(install_journey.get('recommended_action') or 'not published').strip()}",
+            ],
+        }
+    )
+
+    support_state = "blocked"
+    refresh_error = str(support_source.get("refresh_error") or "").strip()
+    open_packets = int(support_summary.get("open_packet_count") or 0)
+    waiting_release = int(support_summary.get("closure_waiting_on_release_truth") or 0)
+    if support_packets or not refresh_error:
+        support_state = "implemented"
+        if open_packets == 0 and waiting_release == 0:
+            support_state = "public-stable"
+        elif refresh_error:
+            support_state = "preview-bounded"
+    cards.append(
+        {
+            "id": "support",
+            "route": "/account/support",
+            "title": "Support and recovery",
+            "semantic_family": "support",
+            "proof_state": support_state,
+            "proof_badge": _public_proof_badge(support_state),
+            "summary": "Support is a closure lane tied to install and release receipts. It is not the same thing as votes, proposals, or roadmap wishes.",
+            "detail": (
+                f"{open_packets} open packet(s); {waiting_release} waiting on release truth."
+                + (f" Current source refresh is degraded: {refresh_error}" if refresh_error else "")
+            ),
+            "evidence": [
+                f"Support packets artifact: {'present' if bool(support_packets) else 'missing'}",
+                f"Open packets: {open_packets}",
+                f"Waiting on release truth: {waiting_release}",
+            ],
+        }
+    )
+
+    feedback_state = "blocked"
+    workflow_ready = bool(feedback_plan.get("workflow_ready"))
+    if workflow_ready:
+        feedback_state = "implemented"
+        if bool(feedback_plan.get("ltd_discovery_system_ready")):
+            feedback_state = "public-stable"
+    cards.append(
+        {
+            "id": "feedback",
+            "route": "/feedback",
+            "title": "Feedback and discovery",
+            "semantic_family": "feedback",
+            "proof_state": feedback_state,
+            "proof_badge": _public_proof_badge(feedback_state),
+            "summary": "Feedback is an advisory intake lane. It informs governed discovery work, but it never masquerades as support closure or shipped rollout authority.",
+            "detail": str(feedback_plan.get("source_rule") or "Feedback discovery workflow is not published.").strip(),
+            "evidence": [
+                f"Workflow ready: {'yes' if workflow_ready else 'no'}",
+                f"Discovery system ready: {'yes' if bool(feedback_plan.get('ltd_discovery_system_ready')) else 'no'}",
+                f"Candidate count: {int(feedback_plan.get('candidate_count') or 0)}",
+            ],
+        }
+    )
+
+    governance_state = "blocked"
+    if weekly_governor:
+        governance_state = "implemented"
+        if completion_audit_status == "pass":
+            if freeze_state == "active" or launch_state in {"active", "ready", "pass"}:
+                governance_state = "public-stable"
+        elif canary_state or freeze_state == "active" or completion_audit_status == "fail":
+            governance_state = "preview-bounded"
+    cards.append(
+        {
+            "id": "governance",
+            "route": "/roadmap",
+            "title": "Governance and rollout posture",
+            "semantic_family": "governance",
+            "proof_state": governance_state,
+            "proof_badge": _public_proof_badge(governance_state),
+            "summary": "Governance cards describe launch, canary, rollback, and claim-safety posture. They do not imply immediate rollout just because a proposal exists.",
+            "detail": (
+                completion_audit_reason
+                or str(((decision_board.get("freeze_launch") or {}).get("reason")) or "")
+                or "Governor proof is available."
+            ),
+            "evidence": [
+                f"Completion audit: {completion_audit_status or 'missing'}",
+                f"Launch expand: {launch_state or 'missing'}",
+                f"Freeze launch: {freeze_state or 'missing'}",
+                f"Canary: {canary_state or 'missing'}",
+                f"Rollback: {rollback_state or 'missing'}",
+                f"Journey summary: {str(journey_summary.get('overall_state') or 'missing').strip().lower() or 'missing'}",
+            ],
+        }
+    )
+
+    return cards
 
 
 def _open_milestone_items(project_meta: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1508,7 +1800,10 @@ def build_progress_report_payload(
     repo_backlog_open_item_count = int(repo_backlog.get("open_item_count") or 0)
     repo_backlog_open_project_count = int(repo_backlog.get("open_project_count") or 0)
     repo_backlog_lead_task = str(repo_backlog.get("lead_task") or "").strip()
-    supervisor_state = _load_chummer_design_supervisor_state()
+    supervisor_state_path = None
+    if not _same_path(repo_root, FLEET_ROOT):
+        supervisor_state_path = repo_root / "state" / "chummer_design_supervisor" / "state.json"
+    supervisor_state = _load_chummer_design_supervisor_state(state_path=supervisor_state_path)
     supervisor_eta = dict(supervisor_state.get("eta") or {})
     supervisor_open_frontier_milestones = int(supervisor_eta.get("remaining_open_milestones") or 0)
     supervisor_frontier_ids = list(supervisor_state.get("frontier_ids") or [])
@@ -1525,7 +1820,7 @@ def build_progress_report_payload(
         supervisor_eta
     )
     supervisor_eta_is_full_product = supervisor_eta_scope_kind == "flagship_product_readiness"
-    flagship_readiness = _flagship_readiness_truth()
+    flagship_readiness = _flagship_readiness_truth(repo_root=repo_root)
     supervisor_full_product_eta_weeks_low, supervisor_full_product_eta_weeks_high = (
         _parse_eta_human_weeks(supervisor_eta_human)
         if supervisor_eta_is_full_product
@@ -1783,6 +2078,10 @@ def build_progress_report_payload(
     overall_status = str(active_wave_status or release_readiness.get("status") or phase_label or "tracked").strip()
     if completion_audit_status == "fail" and overall_status.lower() == "complete":
         overall_status = "active"
+    public_route_cards = _public_route_cards(
+        flagship_readiness=flagship_readiness,
+        completion_frontier=completion_frontier,
+    )
 
     return {
         "contract_name": PUBLIC_PROGRESS_CONTRACT_NAME,
@@ -1808,6 +2107,7 @@ def build_progress_report_payload(
         "release_readiness": release_readiness,
         "parity": parity,
         "repo_backlog": repo_backlog,
+        "public_route_cards": public_route_cards,
         "hero": {
             "headline": headline,
             "support": str(((config.get("hero") or {}).get("support")) or "").strip(),
@@ -1861,6 +2161,7 @@ def build_progress_report_payload(
             "mode": supervisor_mode,
             "active_runs_count": supervisor_active_runs_count,
             "active_frontier_ids": [int(item) for item in supervisor_frontier_ids if isinstance(item, int)],
+            "open_milestone_ids": [int(item) for item in supervisor_open_milestone_ids if isinstance(item, int)],
             "open_frontier_milestones": supervisor_open_frontier_milestones,
             "open_milestone_ids_count": len([item for item in supervisor_open_milestone_ids if str(item).strip()]),
             "eta": {
@@ -1991,6 +2292,7 @@ def render_progress_report_html(payload: Dict[str, Any], *, poster_url: str = "/
         if top_mover_labels
         else "The fastest-moving areas are the ones closest to milestone closure."
     )
+    route_cards_payload = [dict(card or {}) for card in (payload.get("public_route_cards") or []) if isinstance(card, dict)]
 
     ctas = []
     for item in hero.get("ctas") or []:
@@ -2001,6 +2303,50 @@ def render_progress_report_html(payload: Dict[str, Any], *, poster_url: str = "/
 
     part_rows = []
     timeline_rows = []
+    route_card_rows = []
+    for card in route_cards_payload:
+        badge = dict(card.get("proof_badge") or {})
+        route_title = html.escape(str(card.get("title") or "Public route"))
+        route_path = html.escape(str(card.get("route") or ""))
+        semantic_family = html.escape(str(card.get("semantic_family") or "route"))
+        summary = html.escape(str(card.get("summary") or ""))
+        detail = html.escape(str(card.get("detail") or ""))
+        badge_label = html.escape(str(badge.get("label") or "Blocked"))
+        badge_tone = html.escape(str(badge.get("tone") or "blocked"))
+        evidence_rows = "".join(
+            f"<li>{html.escape(str(item))}</li>"
+            for item in (card.get("evidence") or [])
+            if str(item).strip()
+        )
+        package_claims = dict(card.get("package_claims") or {})
+        package_meta = ""
+        if package_claims:
+            package_meta = (
+                f'<div class="route-proof-meta">'
+                f'<span>Compatibility: {html.escape(str(package_claims.get("compatible_installer_count") or 0))}/'
+                f'{html.escape(str(package_claims.get("published_installer_count") or 0))} installer tuples</span>'
+                f'<span>Rollback: {html.escape(str(package_claims.get("rollback_state") or "unknown"))}</span>'
+                f'<span>Revoke: {html.escape(str(package_claims.get("revoke_state") or "unknown"))}</span>'
+                f"</div>"
+            )
+        route_card_rows.append(
+            f"""
+      <article class="route-card route-card-{badge_tone}">
+        <div class="route-card-head">
+          <div>
+            <div class="route-card-path">{route_path}</div>
+            <h3>{route_title}</h3>
+          </div>
+          <span class="proof-badge proof-badge-{badge_tone}">{badge_label}</span>
+        </div>
+        <div class="route-semantic">{semantic_family}</div>
+        <p>{summary}</p>
+        <div class="route-detail">{detail}</div>
+        {package_meta}
+        <ul class="route-evidence">{evidence_rows}</ul>
+      </article>
+""".rstrip()
+        )
     for part in parts_payload:
         public_name = html.escape(str(part.get("public_name") or ""))
         summary = html.escape(str(part.get("summary") or ""))
@@ -2317,6 +2663,106 @@ def render_progress_report_html(payload: Dict[str, Any], *, poster_url: str = "/
     .part-list, .timeline-wrap, .weekly-list {{
       border-top: 1px solid var(--line);
     }}
+    .route-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }}
+    .route-card {{
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.02));
+      padding: 22px;
+      min-height: 100%;
+    }}
+    .route-card-head {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }}
+    .route-card-path {{
+      color: var(--muted);
+      font-size: .78rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }}
+    .route-card h3 {{
+      margin: 0;
+      font-size: 1.24rem;
+      letter-spacing: -.02em;
+    }}
+    .route-semantic {{
+      color: rgba(246,251,255,.68);
+      font-size: .8rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }}
+    .route-card p {{
+      margin: 0 0 12px;
+      color: rgba(246,251,255,.82);
+      line-height: 1.6;
+    }}
+    .route-detail {{
+      color: rgba(246,251,255,.72);
+      line-height: 1.58;
+      margin-bottom: 12px;
+    }}
+    .proof-badge {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 7px 11px;
+      font-size: .76rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }}
+    .proof-badge-stable {{
+      background: rgba(138,229,158,.12);
+      border-color: rgba(138,229,158,.34);
+      color: #cbffd4;
+    }}
+    .proof-badge-implemented {{
+      background: rgba(137,182,255,.12);
+      border-color: rgba(137,182,255,.32);
+      color: #d6e6ff;
+    }}
+    .proof-badge-preview {{
+      background: rgba(243,169,93,.13);
+      border-color: rgba(243,169,93,.34);
+      color: #ffe3c1;
+    }}
+    .proof-badge-blocked {{
+      background: rgba(255,122,122,.12);
+      border-color: rgba(255,122,122,.3);
+      color: #ffd4d4;
+    }}
+    .route-proof-meta {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: rgba(246,251,255,.74);
+      font-size: .88rem;
+      margin-bottom: 12px;
+    }}
+    .route-proof-meta span {{
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.08);
+    }}
+    .route-evidence {{
+      margin: 0;
+      padding-left: 18px;
+      color: rgba(246,251,255,.76);
+      line-height: 1.6;
+    }}
     .part-row, .timeline-row, .weekly-item {{
       border-bottom: 1px solid var(--line);
     }}
@@ -2532,6 +2978,7 @@ def render_progress_report_html(payload: Dict[str, Any], *, poster_url: str = "/
       .pulse-grid {{ grid-template-columns: repeat(2, 1fr); }}
       .pulse-cell:nth-child(2) {{ border-right: 0; }}
       .pulse-cell:nth-child(-n+2) {{ border-bottom: 1px solid var(--line); }}
+      .route-grid {{ grid-template-columns: 1fr; }}
       .timeline-track {{ grid-template-columns: 1fr; gap: 12px; }}
       .timeline-track::before {{ display: none; }}
       .timeline-step {{ padding-top: 0; padding-left: 34px; }}
@@ -2590,6 +3037,17 @@ def render_progress_report_html(payload: Dict[str, Any], *, poster_url: str = "/
           <span class="pulse-value">{longest_pole_label}</span>
           <span class="pulse-copy">Hosted account, registry, and media surfaces still carry the deepest remaining completion wave.</span>
         </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div class="kicker">Public route truth</div>
+        <h2>Every public route card carries an explicit proof state.</h2>
+        <p>Support, feedback, and governance are separate lanes. Package/install claims stay tied to current release, journey, and rollback evidence instead of collapsing into one generic trust message.</p>
+      </div>
+      <div class="route-grid">
+{_html_list(route_card_rows)}
       </div>
     </section>
 

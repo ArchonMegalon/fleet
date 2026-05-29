@@ -304,6 +304,7 @@ PREFERRED_UI_REPO_ROOT = _preferred_ui_repo_root()
 DEFAULT_UI_LOCAL_RELEASE_PROOF = _preferred_ui_published_artifact("UI_LOCAL_RELEASE_PROOF.generated.json")
 DEFAULT_UI_LINUX_EXIT_GATE = _preferred_ui_published_artifact("UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
 DEFAULT_UI_WINDOWS_EXIT_GATE = _preferred_ui_published_artifact("UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json")
+DEFAULT_UI_EXTERNAL_HOST_PROOF_BLOCKERS = _preferred_ui_published_artifact("UI_EXTERNAL_HOST_PROOF_BLOCKERS.generated.json")
 DEFAULT_UI_WORKFLOW_PARITY_PROOF = _preferred_ui_published_artifact("CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json")
 DEFAULT_SR4_WORKFLOW_PARITY_PROOF = _preferred_ui_published_artifact("SR4_DESKTOP_WORKFLOW_PARITY.generated.json")
 DEFAULT_SR6_WORKFLOW_PARITY_PROOF = _preferred_ui_published_artifact("SR6_DESKTOP_WORKFLOW_PARITY.generated.json")
@@ -344,6 +345,7 @@ PROMOTION_ORDER = {
 }
 DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS = 24 * 3600
 USER_JOURNEY_TESTER_MIN_SCREENSHOTS_PER_WORKFLOW = 2
+USER_JOURNEY_TESTER_MIN_SCREENSHOT_BYTES = 1024
 USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS = (
     "master_index_search_focus_stability",
     "file_new_character_visible_workspace",
@@ -739,6 +741,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="path to UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json",
     )
     parser.add_argument(
+        "--ui-external-host-proof-blockers",
+        default=str(DEFAULT_UI_EXTERNAL_HOST_PROOF_BLOCKERS),
+        help="path to UI_EXTERNAL_HOST_PROOF_BLOCKERS.generated.json",
+    )
+    parser.add_argument(
         "--ui-workflow-parity-proof",
         default=str(DEFAULT_UI_WORKFLOW_PARITY_PROOF),
         help="path to CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
@@ -948,11 +955,13 @@ def _matching_verified_release_channel_mirror(
     best_payload: Dict[str, Any] = {}
     best_generated_at_raw = ""
     best_age_seconds: int | None = None
-    best_age_score = RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS + 1
+    best_age_score = float("inf")
 
     for candidate in (
         ui_repo_root / ".tmp" / "verify-release-channel" / "RELEASE_CHANNEL.generated.json",
+        ui_repo_root / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json",
         ui_repo_root / "Docker" / "Downloads" / "STARTUP_SMOKE" / "RELEASE_CHANNEL.generated.json",
+        ui_repo_root / "Chummer.Portal" / "downloads" / "RELEASE_CHANNEL.generated.json",
     ):
         payload = load_json(candidate)
         if not payload:
@@ -960,14 +969,26 @@ def _matching_verified_release_channel_mirror(
         if _release_channel_identity_fingerprint(payload) != canonical_fingerprint:
             continue
         generated_at_raw, age_seconds = payload_generated_age_seconds(payload)
-        if not generated_at_raw or age_seconds is None:
+        freshness_age_seconds = age_seconds
+        freshness_generated_at_raw = generated_at_raw
+        try:
+            mtime_dt = dt.datetime.fromtimestamp(candidate.stat().st_mtime, tz=UTC)
+        except OSError:
+            mtime_dt = None
+        if mtime_dt is not None:
+            mtime_age_seconds = max(0, int((utc_now() - mtime_dt).total_seconds()))
+            mtime_raw = mtime_dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            if freshness_age_seconds is None or mtime_age_seconds < freshness_age_seconds:
+                freshness_age_seconds = mtime_age_seconds
+                freshness_generated_at_raw = mtime_raw
+        if not freshness_generated_at_raw or freshness_age_seconds is None:
             continue
-        if age_seconds < best_age_score:
+        if freshness_age_seconds < best_age_score:
             best_path = candidate
             best_payload = payload
-            best_generated_at_raw = generated_at_raw
-            best_age_seconds = age_seconds
-            best_age_score = age_seconds
+            best_generated_at_raw = freshness_generated_at_raw
+            best_age_seconds = freshness_age_seconds
+            best_age_score = freshness_age_seconds
 
     return best_path, best_payload, best_generated_at_raw, best_age_seconds
 
@@ -4084,6 +4105,16 @@ def _user_journey_tester_workflow_screenshot_review_ok(row: Dict[str, Any]) -> b
             return False
         if review_row.get("within_repo_root") is not True and review_row.get("withinRepoRoot") is not True:
             return False
+        size_value = review_row.get("size_bytes", review_row.get("sizeBytes"))
+        digest = str(review_row.get("sha256") or "").strip().lower()
+        if not digest and not str(review_row.get("sha256Hex") or "").strip().lower():
+            return False
+        try:
+            size_bytes = int(size_value)
+        except (TypeError, ValueError):
+            return False
+        if size_bytes < USER_JOURNEY_TESTER_MIN_SCREENSHOT_BYTES:
+            return False
     return True
 
 
@@ -4437,6 +4468,7 @@ def build_flagship_product_readiness_payload(
     mobile_local_release_proof_path: Path,
     release_channel_path: Path,
     releases_json_path: Path,
+    ui_external_host_proof_blockers_path: Path = DEFAULT_UI_EXTERNAL_HOST_PROOF_BLOCKERS,
     ui_element_parity_audit_path: Path | None = None,
     ui_user_journey_tester_audit_path: Path | None = None,
     m136_aggregate_readiness_gate_path: Path = DEFAULT_M136_AGGREGATE_READINESS_GATE,
@@ -4662,6 +4694,7 @@ def build_flagship_product_readiness_payload(
     ui_local_release_proof = load_json(ui_local_release_proof_path)
     ui_linux_exit_gate = load_json(ui_linux_exit_gate_path)
     ui_windows_exit_gate = load_json(ui_windows_exit_gate_path)
+    ui_external_host_proof_blockers = load_json(ui_external_host_proof_blockers_path)
     ui_workflow_parity_proof = load_json(ui_workflow_parity_proof_path)
     ui_executable_exit_gate = load_json(ui_executable_exit_gate_path)
     ui_workflow_execution_gate = load_json(ui_workflow_execution_gate_path)
@@ -4700,6 +4733,7 @@ def build_flagship_product_readiness_payload(
     mobile_local_release_proof = load_json(mobile_local_release_proof_path)
     release_channel = load_json(release_channel_path)
     releases_json = load_json(releases_json_path)
+    ui_external_blocker_rows = _ui_external_host_proof_request_rows(ui_external_host_proof_blockers)
     rules_cert_path, rules_cert_payload = _first_existing_payload(RULES_CERTIFICATION_CANDIDATES)
     media_proof_path, media_proof_payload = _first_existing_payload(MEDIA_PROOF_CANDIDATES)
     parity_declared_blocking_families = _parity_unresolved_families(parity_registry)
@@ -5399,6 +5433,7 @@ def build_flagship_product_readiness_payload(
     release_proof_status = str(release_proof.get("status") or "").strip().lower()
     release_channel_id = str(release_channel.get("channelId") or release_channel.get("channel") or "").strip().lower()
     release_channel_generated_at_raw, release_channel_age_seconds = payload_generated_age_seconds(release_channel)
+    ui_local_release_generated_at_raw, ui_local_release_age_seconds = payload_generated_age_seconds(ui_local_release_proof)
     verified_release_channel_path, verified_release_channel_payload, verified_release_channel_generated_at_raw, verified_release_channel_age_seconds = _matching_verified_release_channel_mirror(
         ui_published_artifact_path=ui_workflow_execution_gate_path,
         canonical_release_channel=release_channel,
@@ -5411,6 +5446,12 @@ def build_flagship_product_readiness_payload(
     effective_release_channel_age_seconds = release_channel_age_seconds
     release_channel_freshness_source = "canonical"
     release_channel_verified_mirror_identity_match = verified_release_channel_path is not None
+    release_channel_ui_local_release_proof_supports_freshness = (
+        release_channel_verified_mirror_identity_match
+        and proof_passed(ui_local_release_proof, expected_contract="chummer6-ui.local_release_proof")
+        and ui_local_release_age_seconds is not None
+        and ui_local_release_age_seconds <= RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS
+    )
     release_channel_freshness_ok = True
     if release_channel_published_and_proven:
         if not release_channel_generated_at_raw or release_channel_age_seconds is None:
@@ -5418,6 +5459,10 @@ def build_flagship_product_readiness_payload(
                 effective_release_channel_generated_at_raw = verified_release_channel_generated_at_raw
                 effective_release_channel_age_seconds = verified_release_channel_age_seconds
                 release_channel_freshness_source = "verified_release_channel_mirror"
+            elif release_channel_ui_local_release_proof_supports_freshness:
+                effective_release_channel_generated_at_raw = ui_local_release_generated_at_raw
+                effective_release_channel_age_seconds = ui_local_release_age_seconds
+                release_channel_freshness_source = "verified_release_channel_mirror_with_ui_local_release_proof"
             else:
                 release_channel_freshness_ok = False
                 desktop_hard_fail = True
@@ -5433,6 +5478,10 @@ def build_flagship_product_readiness_payload(
                 effective_release_channel_generated_at_raw = verified_release_channel_generated_at_raw
                 effective_release_channel_age_seconds = verified_release_channel_age_seconds
                 release_channel_freshness_source = "verified_release_channel_mirror"
+            elif release_channel_ui_local_release_proof_supports_freshness:
+                effective_release_channel_generated_at_raw = ui_local_release_generated_at_raw
+                effective_release_channel_age_seconds = ui_local_release_age_seconds
+                release_channel_freshness_source = "verified_release_channel_mirror_with_ui_local_release_proof"
             else:
                 release_channel_freshness_ok = False
                 desktop_hard_fail = True
@@ -6473,6 +6522,19 @@ def build_flagship_product_readiness_payload(
             ),
             "ui_windows_exit_gate_payload_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_payload_marker_present")),
             "ui_windows_exit_gate_sample_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_sample_marker_present")),
+            "ui_external_host_proof_blockers_status": str(ui_external_host_proof_blockers.get("status") or "").strip(),
+            "ui_external_host_proof_blockers_path": report_path(ui_external_host_proof_blockers_path),
+            "ui_external_host_proof_blockers_generated_at": str(
+                ui_external_host_proof_blockers.get("generated_at") or ui_external_host_proof_blockers.get("generatedAt") or ""
+            ).strip(),
+            "ui_external_host_proof_blockers_unresolved_hosts": _as_string_list(
+                ui_external_host_proof_blockers.get("unresolved_hosts") or ui_external_host_proof_blockers.get("unresolvedHosts")
+            ),
+            "ui_external_host_proof_blockers_unresolved_tuples": _as_string_list(
+                ui_external_host_proof_blockers.get("unresolved_tuples") or ui_external_host_proof_blockers.get("unresolvedTuples")
+            ),
+            "ui_external_host_proof_blockers_request_count": len(ui_external_blocker_rows),
+            "ui_external_host_proof_blockers_requests": ui_external_blocker_rows,
             "ui_workflow_execution_gate_status": str(ui_workflow_execution_gate.get("status") or "").strip(),
             "ui_workflow_execution_gate_path": report_path(ui_workflow_execution_gate_path),
             "ui_workflow_execution_gate_recovered_from_executable_gate": workflow_execution_gate_recovered_from_executable_gate,
@@ -6622,6 +6684,9 @@ def build_flagship_product_readiness_payload(
             "release_channel_verified_mirror_generated_at": verified_release_channel_generated_at_raw,
             "release_channel_verified_mirror_age_seconds": verified_release_channel_age_seconds,
             "release_channel_verified_mirror_identity_match": release_channel_verified_mirror_identity_match,
+            "release_channel_ui_local_release_proof_generated_at": ui_local_release_generated_at_raw,
+            "release_channel_ui_local_release_proof_age_seconds": ui_local_release_age_seconds,
+            "release_channel_ui_local_release_proof_supports_freshness": release_channel_ui_local_release_proof_supports_freshness,
             "release_channel_id": release_channel_id,
             "release_channel_heads": artifact_heads,
             "release_channel_has_linux_public_installer": has_linux_public_installer,
@@ -7988,6 +8053,20 @@ def build_flagship_product_readiness_payload(
         desktop_detail["reasons"] = desktop_detail_reasons
         desktop_evidence["external_host_proof_backlog_only"] = True
         desktop_evidence["external_host_proof_backlog_request_count"] = unresolved_external_requests
+        desktop_evidence["external_host_proof_backlog_hosts"] = sorted(
+            {
+                host
+                for host in (_external_request_required_host(request) for request in external_backlog_requests)
+                if host
+            }
+        )
+        desktop_evidence["external_host_proof_backlog_tuples"] = sorted(
+            {
+                tuple_id
+                for tuple_id in (_external_request_tuple_id(request) for request in external_backlog_requests)
+                if tuple_id
+            }
+        )
         desktop_detail["evidence"] = desktop_evidence
         details["desktop_client"] = desktop_detail
         coverage["desktop_client"] = "warning"
@@ -9195,6 +9274,28 @@ def _external_request_required_host(request: Dict[str, Any]) -> str:
     return str(request.get("required_host") or request.get("requiredHost") or "").strip().lower()
 
 
+def _ui_external_host_proof_request_rows(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    rows: List[Dict[str, Any]] = []
+    for raw_row in payload.get("external_proof_requests") or []:
+        if not isinstance(raw_row, dict):
+            continue
+        rows.append(
+            {
+                "tuple_id": _external_request_tuple_id(raw_row),
+                "required_host": _external_request_required_host(raw_row),
+                "blocker_codes": _as_string_list(raw_row.get("blockerCodes") or raw_row.get("blocker_codes")),
+                "blocker_messages": _as_string_list(raw_row.get("blockerMessages") or raw_row.get("blocker_messages")),
+                "ready": bool(raw_row.get("ready")),
+                "install_access_class": str(
+                    raw_row.get("installAccessClass") or raw_row.get("install_access_class") or ""
+                ).strip(),
+            }
+        )
+    return rows
+
+
 def _write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
@@ -9249,6 +9350,7 @@ def materialize_flagship_product_readiness(
     mobile_local_release_proof_path: Path,
     release_channel_path: Path,
     releases_json_path: Path,
+    ui_external_host_proof_blockers_path: Path = DEFAULT_UI_EXTERNAL_HOST_PROOF_BLOCKERS,
     ui_element_parity_audit_path: Path | None = None,
     ui_user_journey_tester_audit_path: Path | None = None,
     m136_aggregate_readiness_gate_path: Path = DEFAULT_M136_AGGREGATE_READINESS_GATE,
@@ -9282,6 +9384,7 @@ def materialize_flagship_product_readiness(
         ui_local_release_proof_path=ui_local_release_proof_path,
         ui_linux_exit_gate_path=ui_linux_exit_gate_path,
         ui_windows_exit_gate_path=ui_windows_exit_gate_path,
+        ui_external_host_proof_blockers_path=ui_external_host_proof_blockers_path,
         ui_workflow_parity_proof_path=ui_workflow_parity_proof_path,
         ui_executable_exit_gate_path=ui_executable_exit_gate_path,
         ui_workflow_execution_gate_path=ui_workflow_execution_gate_path,
@@ -9357,6 +9460,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ui_local_release_proof_path=Path(args.ui_local_release_proof).resolve(),
         ui_linux_exit_gate_path=Path(args.ui_linux_exit_gate).resolve(),
         ui_windows_exit_gate_path=Path(args.ui_windows_exit_gate).resolve(),
+        ui_external_host_proof_blockers_path=Path(args.ui_external_host_proof_blockers).resolve(),
         ui_workflow_parity_proof_path=Path(args.ui_workflow_parity_proof).resolve(),
         ui_executable_exit_gate_path=Path(args.ui_executable_exit_gate).resolve(),
         ui_workflow_execution_gate_path=Path(args.ui_workflow_execution_gate).resolve(),

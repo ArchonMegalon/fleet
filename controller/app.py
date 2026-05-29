@@ -3513,7 +3513,7 @@ def sync_project_progress_from_packages(project_id: str) -> None:
             str(item["job_kind"] or "").strip().lower() == "local_review"
             or not str(item["package_id"] or "").strip()
         )
-        and parse_iso(item.get("finished_at")) is None
+        and parse_iso(item["finished_at"]) is None
     ]
     active_run_ids = {
         int(item["id"] or 0)

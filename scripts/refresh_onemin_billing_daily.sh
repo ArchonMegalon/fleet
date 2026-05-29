@@ -7,24 +7,32 @@ timestamp() {
 
 echo "[$(timestamp)] starting 1min billing refresh"
 
-docker exec ea-api python - <<'PY'
+docker exec -i ea-api python - <<'PY'
 import json
 import os
-import sys
 
 import requests
 
 base_url = "http://127.0.0.1:8090"
 api_token = str(os.environ.get("EA_API_TOKEN") or "").strip()
-principal_id = "codex-fleet"
+principal_id = ""
+for env_name in ("EA_OPERATOR_PRINCIPAL_IDS", "EA_OPERATOR_PRINCIPALS"):
+    raw = str(os.environ.get(env_name) or "").strip()
+    if not raw:
+        continue
+    for item in raw.split(","):
+        item = str(item or "").strip()
+        if item:
+            principal_id = item
+            break
+    if principal_id:
+        break
+if not principal_id:
+    principal_id = str(os.environ.get("EA_DEFAULT_PRINCIPAL_ID") or "").strip() or "codex-fleet"
 
-if not api_token:
-    raise SystemExit("EA_API_TOKEN missing in ea-api container")
-
-headers = {
-    "Authorization": f"Bearer {api_token}",
-    "X-EA-Principal-ID": principal_id,
-}
+headers = {"X-EA-Principal-ID": principal_id}
+if api_token:
+    headers["Authorization"] = f"Bearer {api_token}"
 
 refresh_payload = {
     "include_members": True,
@@ -41,21 +49,18 @@ refresh = requests.post(
 )
 refresh.raise_for_status()
 refresh_json = refresh.json()
-
-aggregate = requests.get(
-    f"{base_url}/v1/providers/onemin/aggregate?scope=global",
-    headers=headers,
-    timeout=300,
-)
-aggregate.raise_for_status()
-aggregate_json = aggregate.json()
+aggregate_json = refresh_json.get("global_aggregate_snapshot") or {}
 
 summary = {
+    "principal_id": principal_id,
     "refresh_status": refresh.status_code,
     "scheduled_binding_jobs": len(refresh_json.get("scheduled_binding_jobs") or []),
     "browseract_billing_results": len(refresh_json.get("billing_results") or []),
     "browseract_member_results": len(refresh_json.get("member_results") or []),
-    "provider_api_results": len(refresh_json.get("provider_api_results") or []),
+    "api_billing_refresh_count": int(refresh_json.get("api_billing_refresh_count") or 0),
+    "api_member_reconciliation_count": int(refresh_json.get("api_member_reconciliation_count") or 0),
+    "provider_api_scope": refresh_json.get("provider_api_scope"),
+    "api_rate_limited": bool(refresh_json.get("api_rate_limited")),
     "errors": len(refresh_json.get("errors") or []),
     "aggregate_account_count": aggregate_json.get("account_count"),
     "aggregate_ready_account_count": aggregate_json.get("ready_account_count"),

@@ -46,6 +46,7 @@ fallback_minimum_window_seconds="${FLEET_OODA_CODEXEA_FALLBACK_MINIMUM_WINDOW_SE
 codexea_lane="${FLEET_OODA_CODEXEA_LANE:-core}"
 fallback_lane="${FLEET_OODA_CODEXEA_FALLBACK_LANE:-repair}"
 first_response_timeout_seconds="${FLEET_OODA_CODEXEA_FIRST_RESPONSE_TIMEOUT_SECONDS:-360}"
+keeper_timeout_seconds="${FLEET_OODA_CODEXEA_KEEPER_TIMEOUT_SECONDS:-${FLEET_OODA_CODEX_KEEPER_TIMEOUT_SECONDS:-90}}"
 model_arg=()
 codexea_model="${FLEET_OODA_CODEXEA_MODEL:-${FLEET_OODA_CODEX_MODEL:-}}"
 if [[ -n "$codexea_model" ]]; then
@@ -106,6 +107,7 @@ metadata_path="${current_run}/timer_run.env"
   printf 'service_budget_seconds=%s\n' "$service_budget_seconds"
   printf 'fallback_minimum_window_seconds=%s\n' "$fallback_minimum_window_seconds"
   printf 'first_response_timeout_seconds=%s\n' "$first_response_timeout_seconds"
+  printf 'keeper_timeout_seconds=%s\n' "$keeper_timeout_seconds"
 } >"$metadata_path"
 
 prompt_path="${current_run}/prompt.md"
@@ -151,7 +153,8 @@ Required OODA loop:
    - Run timeout 60s scripts/chummer_design_supervisor.py status --json and use timeout 90s scripts/chummer_design_supervisor.py status --json --live-refresh if completion proof fields are stale or missing.
    - Check docker compose ps for fleet-controller, fleet-design-supervisor, and fleet-design-overwatch.
    - Check recent supervisor logs, disk, and memory.
-   - Run scripts/fleet_ooda_keeper.py --once --target-active ${target_shards} when the controller queue needs more work scheduled.
+- Run scripts/fleet_ooda_keeper.py --once --target-active ${target_shards} when the controller queue needs more work scheduled.
+- A bounded keeper pass already runs before CodexEA starts. Use CodexEA for deeper repair, not as the only path for transient re-dispatch.
 2. Orient:
    - Identify current blockers: low active shards, stale status, repeated worker_silent_stalled, provider capacity, disk pressure, failing proof gates, review holds, or dead services.
 3. Decide and Act:
@@ -185,6 +188,16 @@ export HOME="${HOME:-/home/tibor}"
 export PATH="/home/tibor/bin:/home/tibor/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
 
 printf '%s started fleet OODA CodexEA run %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$current_run" >>"${state_root}/timer.log"
+
+printf '%s pre-codex keeper start target_active=%s timeout=%ss\n' \
+  "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$target_shards" "$keeper_timeout_seconds" >>"${state_root}/timer.log"
+set +e
+timeout "${keeper_timeout_seconds}s" python3 scripts/fleet_ooda_keeper.py --once --target-active "$target_shards" \
+  >"${current_run}/pre_codex_keeper.stdout.log" \
+  2>"${current_run}/pre_codex_keeper.stderr.log"
+keeper_rc=$?
+set -e
+printf '%s pre-codex keeper finish rc=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$keeper_rc" >>"${state_root}/timer.log"
 
 run_codexea_attempt() {
   local requested_lane="$1"

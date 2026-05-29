@@ -846,6 +846,295 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertNotIn("Average active boosters", rendered)
         self.assertNotIn("Mission Control &amp; AI Runtime", rendered)
 
+    def test_build_progress_report_payload_includes_public_route_cards_with_separate_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            with mock.patch.object(
+                self.progress,
+                "_release_channel_payload",
+                return_value={
+                    "status": "published",
+                    "rolloutState": "public_stable",
+                    "supportabilityState": "gold_supported",
+                    "knownIssueSummary": "Known issues are current.",
+                    "fixAvailabilitySummary": "Fix notices stay tied to release receipts.",
+                    "releaseProof": {
+                        "status": "passed",
+                        "proofRoutes": [
+                            "/downloads",
+                            "/home/access",
+                            "/home/work",
+                            "/account/access",
+                            "/account/work",
+                            "/account/support",
+                        ],
+                    },
+                    "artifacts": [
+                        {"kind": "installer", "compatibilityState": "compatible"},
+                        {"kind": "installer", "compatibilityState": "compatible"},
+                    ],
+                },
+            ):
+                with mock.patch.object(
+                    self.progress,
+                    "_journey_gates_payload",
+                    return_value={
+                        "summary": {"overall_state": "ready"},
+                        "journeys": [
+                            {
+                                "id": "install_claim_restore_continue",
+                                "state": "ready",
+                                "user_promise": "Install, claim, restore, continue.",
+                                "recommended_action": "Keep this under weekly proof.",
+                            }
+                        ],
+                    },
+                ):
+                    with mock.patch.object(
+                        self.progress,
+                        "_support_packets_payload",
+                        return_value={
+                            "summary": {"open_packet_count": 0, "closure_waiting_on_release_truth": 0},
+                            "source": {},
+                            "feedback_discovery_plan": {
+                                "workflow_ready": True,
+                                "ltd_discovery_system_ready": True,
+                                "candidate_count": 2,
+                                "source_rule": "Feedback is advisory and discovery-routed.",
+                            },
+                        },
+                    ):
+                        with mock.patch.object(
+                            self.progress,
+                            "_weekly_governor_payload",
+                            return_value={
+                                "decision_board": {
+                                    "launch_expand": {"state": "blocked"},
+                                    "freeze_launch": {"state": "active", "reason": "Canary still accumulating."},
+                                    "rollback": {"state": "armed"},
+                                    "canary": {"state": "accumulating"},
+                                }
+                            },
+                        ):
+                            with mock.patch.object(
+                                self.progress,
+                                "_published_completion_frontier_payload",
+                                return_value={
+                                    "completion_audit": {
+                                        "status": "fail",
+                                        "reason": "Repo-local backlog reopened.",
+                                    }
+                                },
+                            ):
+                                with mock.patch.object(
+                                    self.progress,
+                                    "_published_completion_frontier_repo_backlog_snapshot",
+                                    return_value={"open_item_count": 1, "open_project_count": 1, "lead_task": "Route honesty", "open_items": []},
+                                ):
+                                    with mock.patch.object(
+                                        self.progress,
+                                        "_flagship_readiness_truth",
+                                        return_value={
+                                            "status": "ready",
+                                            "summary": "Flagship proof is green.",
+                                            "desktop_executable_gate_status": "pass",
+                                        },
+                                    ):
+                                        with mock.patch.object(self.progress, "_same_path", return_value=True):
+                                            payload = self.progress.build_progress_report_payload(
+                                                repo_root=root,
+                                                now=dt.datetime(2026, 3, 23, 10, 0, tzinfo=UTC),
+                                                commit_counter=lambda _repo: 8,
+                                            )
+
+        cards = {card["id"]: card for card in payload["public_route_cards"]}
+        self.assertEqual(cards["downloads"]["proof_state"], "public-stable")
+        self.assertEqual(cards["downloads"]["package_claims"]["compatible_installer_count"], 2)
+        self.assertEqual(cards["workbench"]["proof_state"], "public-stable")
+        self.assertEqual(cards["account"]["proof_state"], "public-stable")
+        self.assertEqual(cards["support"]["semantic_family"], "support")
+        self.assertEqual(cards["feedback"]["semantic_family"], "feedback")
+        self.assertEqual(cards["governance"]["semantic_family"], "governance")
+        self.assertEqual(cards["support"]["proof_state"], "public-stable")
+        self.assertEqual(cards["governance"]["proof_state"], "preview-bounded")
+
+    def test_build_progress_report_payload_marks_governance_public_stable_for_healthy_freeze_hold(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            with mock.patch.object(
+                self.progress,
+                "_release_channel_payload",
+                return_value={
+                    "status": "published",
+                    "rolloutState": "public_stable",
+                    "supportabilityState": "gold_supported",
+                    "releaseProof": {"status": "passed", "proofRoutes": ["/downloads", "/account/support"]},
+                    "artifacts": [{"kind": "installer", "compatibilityState": "compatible"}],
+                },
+            ):
+                with mock.patch.object(
+                    self.progress,
+                    "_journey_gates_payload",
+                    return_value={"summary": {"overall_state": "ready"}, "journeys": []},
+                ):
+                    with mock.patch.object(
+                        self.progress,
+                        "_support_packets_payload",
+                        return_value={
+                            "summary": {"open_packet_count": 0, "closure_waiting_on_release_truth": 0},
+                            "source": {},
+                            "feedback_discovery_plan": {"workflow_ready": True, "ltd_discovery_system_ready": True, "candidate_count": 0},
+                        },
+                    ):
+                        with mock.patch.object(
+                            self.progress,
+                            "_weekly_governor_payload",
+                            return_value={
+                                "decision_board": {
+                                    "launch_expand": {"state": "blocked"},
+                                    "freeze_launch": {"state": "active", "reason": "Healthy governed hold while canary evidence completes."},
+                                    "rollback": {"state": "armed"},
+                                    "canary": {"state": "accumulating"},
+                                }
+                            },
+                        ):
+                            with mock.patch.object(
+                                self.progress,
+                                "_published_completion_frontier_payload",
+                                return_value={"completion_audit": {"status": "pass", "reason": ""}},
+                            ):
+                                with mock.patch.object(
+                                    self.progress,
+                                    "_published_completion_frontier_repo_backlog_snapshot",
+                                    return_value={"open_item_count": 0, "open_project_count": 0, "lead_task": "", "open_items": []},
+                                ):
+                                    with mock.patch.object(
+                                        self.progress,
+                                        "_flagship_readiness_truth",
+                                        return_value={"status": "ready", "summary": "Flagship proof is green.", "desktop_executable_gate_status": "pass"},
+                                    ):
+                                        with mock.patch.object(self.progress, "_same_path", return_value=True):
+                                            payload = self.progress.build_progress_report_payload(
+                                                repo_root=root,
+                                                now=dt.datetime(2026, 3, 23, 10, 0, tzinfo=UTC),
+                                                commit_counter=lambda _repo: 8,
+                                            )
+
+        cards = {card["id"]: card for card in payload["public_route_cards"]}
+        self.assertEqual(cards["governance"]["proof_state"], "public-stable")
+
+    def test_build_progress_report_payload_keeps_support_public_stable_on_clean_cached_truth_when_refresh_is_degraded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            with mock.patch.object(
+                self.progress,
+                "_release_channel_payload",
+                return_value={
+                    "status": "published",
+                    "rolloutState": "public_stable",
+                    "supportabilityState": "gold_supported",
+                    "releaseProof": {"status": "passed", "proofRoutes": ["/downloads", "/account/support"]},
+                    "artifacts": [{"kind": "installer", "compatibilityState": "compatible"}],
+                },
+            ):
+                with mock.patch.object(self.progress, "_journey_gates_payload", return_value={"summary": {"overall_state": "ready"}, "journeys": []}):
+                    with mock.patch.object(
+                        self.progress,
+                        "_support_packets_payload",
+                        return_value={
+                            "summary": {"open_packet_count": 0, "closure_waiting_on_release_truth": 0},
+                            "source": {"refresh_error": "connection refused"},
+                            "packets": [],
+                            "feedback_discovery_plan": {"workflow_ready": True, "ltd_discovery_system_ready": True, "candidate_count": 0},
+                        },
+                    ):
+                        with mock.patch.object(self.progress, "_weekly_governor_payload", return_value={}):
+                            with mock.patch.object(
+                                self.progress,
+                                "_published_completion_frontier_payload",
+                                return_value={"completion_audit": {"status": "pass", "reason": ""}},
+                            ):
+                                with mock.patch.object(
+                                    self.progress,
+                                    "_published_completion_frontier_repo_backlog_snapshot",
+                                    return_value={"open_item_count": 0, "open_project_count": 0, "lead_task": "", "open_items": []},
+                                ):
+                                    with mock.patch.object(
+                                        self.progress,
+                                        "_flagship_readiness_truth",
+                                        return_value={"status": "ready", "summary": "Flagship proof is green.", "desktop_executable_gate_status": "pass"},
+                                    ):
+                                        payload = self.progress.build_progress_report_payload(
+                                            repo_root=root,
+                                            now=dt.datetime(2026, 3, 23, 10, 0, tzinfo=UTC),
+                                            commit_counter=lambda _repo: 8,
+                                        )
+
+        cards = {card["id"]: card for card in payload["public_route_cards"]}
+        self.assertEqual(cards["support"]["proof_state"], "public-stable")
+
+    def test_render_progress_report_html_shows_public_route_proof_badges(self) -> None:
+        payload = {
+            "brand": "Chummer6",
+            "hero": {"headline": "Headline", "support": "Support copy.", "ctas": []},
+            "overall_progress_percent": 75,
+            "phase_label": "Scale & stabilize",
+            "next_checkpoint_eta_weeks_low": 2,
+            "next_checkpoint_eta_weeks_high": 4,
+            "longest_pole": {"label": "Workbench"},
+            "as_of": "2026-03-23",
+            "parts": [],
+            "recent_movement": [],
+            "participation": {"headline": "How to participate", "body": "Body", "cta_href": "/participate", "cta_label": "Open"},
+            "method": {"copy": "Method", "limitations": []},
+            "closing": {"headline": "Closing", "body": "Body"},
+            "public_route_cards": [
+                {
+                    "id": "support",
+                    "route": "/account/support",
+                    "title": "Support and recovery",
+                    "semantic_family": "support",
+                    "proof_badge": {"label": "Preview bounded", "tone": "preview"},
+                    "summary": "Support summary.",
+                    "detail": "Support detail.",
+                    "evidence": ["Support packets artifact: present"],
+                },
+                {
+                    "id": "feedback",
+                    "route": "/feedback",
+                    "title": "Feedback and discovery",
+                    "semantic_family": "feedback",
+                    "proof_badge": {"label": "Implemented", "tone": "implemented"},
+                    "summary": "Feedback summary.",
+                    "detail": "Feedback detail.",
+                    "evidence": ["Workflow ready: yes"],
+                },
+                {
+                    "id": "governance",
+                    "route": "/roadmap",
+                    "title": "Governance and rollout posture",
+                    "semantic_family": "governance",
+                    "proof_badge": {"label": "Blocked", "tone": "blocked"},
+                    "summary": "Governance summary.",
+                    "detail": "Governance detail.",
+                    "evidence": ["Completion audit: fail"],
+                },
+            ],
+        }
+
+        rendered = self.progress.render_progress_report_html(payload)
+
+        self.assertIn("Every public route card carries an explicit proof state.", rendered)
+        self.assertIn("Support and recovery", rendered)
+        self.assertIn("Feedback and discovery", rendered)
+        self.assertIn("Governance and rollout posture", rendered)
+        self.assertIn("Preview bounded", rendered)
+        self.assertIn("Implemented", rendered)
+        self.assertIn("Blocked", rendered)
+
     def test_build_progress_report_payload_updates_history_limitations_once_snapshots_exist(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

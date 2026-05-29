@@ -34,7 +34,7 @@ except ModuleNotFoundError:
     )
 
 UTC = dt.timezone.utc
-ROOT = Path("/docker/fleet")
+ROOT = Path(__file__).resolve().parents[1]
 PROJECT_CONFIG_DIR = ROOT / "config" / "projects"
 GROUP_CONFIG_PATH = ROOT / "config" / "groups.yaml"
 FLAGSHIP_READINESS_PATH = ROOT / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
@@ -284,20 +284,29 @@ def _ui_independent_public_release_proof_passed(published_dir: Path) -> bool:
         published_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
     )
     executable_gate_evidence = dict(desktop_executable_exit_gate.get("evidence") or {})
+    executable_gate_local_blocking_findings_count = int(
+        desktop_executable_exit_gate.get("localBlockingFindingsCount")
+        or desktop_executable_exit_gate.get("local_blocking_findings_count")
+        or 0
+    )
     user_journey_tester_audit = _load_json_file(published_dir / "USER_JOURNEY_TESTER_AUDIT.generated.json")
     element_parity_audit = _load_json_file(published_dir / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json")
     parity_summary = dict(element_parity_audit.get("summary") or {})
     open_blocking_findings_count = int(user_journey_tester_audit.get("open_blocking_findings_count") or 0)
     visual_no_count = int(parity_summary.get("visual_no_count") or 0)
     behavioral_no_count = int(parity_summary.get("behavioral_no_count") or 0)
+    workflow_execution_proven = _proof_passed(desktop_workflow_execution_gate) or (
+        str(executable_gate_evidence.get("workflow_execution_status") or "").strip().lower() == "pass"
+        and executable_gate_local_blocking_findings_count == 0
+    )
     visual_familiarity_proven = _proof_passed(desktop_visual_familiarity_exit_gate) or (
         str(executable_gate_evidence.get("visual_familiarity_status") or "").strip().lower() == "pass"
-        and int(desktop_executable_exit_gate.get("local_blocking_findings_count") or 0) == 0
+        and executable_gate_local_blocking_findings_count == 0
     )
     return (
         _proof_passed(ui_local_release_proof)
         and _proof_effectively_passed(desktop_executable_exit_gate)
-        and _proof_passed(desktop_workflow_execution_gate)
+        and workflow_execution_proven
         and visual_familiarity_proven
         and _proof_passed(user_journey_tester_audit)
         and open_blocking_findings_count == 0

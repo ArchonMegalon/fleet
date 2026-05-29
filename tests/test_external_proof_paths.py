@@ -165,7 +165,7 @@ def test_resolve_release_channel_path_prefers_registry_tuple_coverage_truth_over
     assert resolved == registry
 
 
-def test_resolve_release_channel_path_ignores_stale_registry_mirror_when_same_release_portal_is_more_complete(
+def test_resolve_release_channel_path_keeps_registry_truth_when_same_release_portal_claims_more_complete_coverage(
     tmp_path: Path,
 ) -> None:
     module = _load_module()
@@ -216,7 +216,7 @@ def test_resolve_release_channel_path_ignores_stale_registry_mirror_when_same_re
 
     resolved = module.resolve_release_channel_path(candidates=(registry, portal))
 
-    assert resolved == portal
+    assert resolved == registry
 
 
 def test_resolve_release_channel_path_keeps_fresh_registry_truth_over_same_release_ui_docker_mirror(
@@ -309,3 +309,122 @@ def test_resolve_release_channel_path_prefers_fresh_same_release_ui_docker_mirro
     resolved = module.resolve_release_channel_path(candidates=(registry, docker))
 
     assert resolved == docker
+
+
+def test_resolve_release_channel_path_keeps_stale_registry_when_portal_copy_only_advances_coverage_claims(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_utc_now", lambda: module.datetime.fromisoformat("2026-05-06T19:31:15+00:00"))
+    registry = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    portal = tmp_path / "portal" / "RELEASE_CHANNEL.generated.json"
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    portal.parent.mkdir(parents=True, exist_ok=True)
+    registry.write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "channelId": "public_stable",
+                "version": "run-20260503-163502",
+                "generatedAt": "2026-05-05T05:16:58Z",
+                "artifacts": [{"artifactId": "avalonia-linux-x64-installer"}],
+                "desktopTupleCoverage": {
+                    "missingRequiredPlatforms": ["windows"],
+                    "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                    "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                    "externalProofRequests": [{"tupleId": "avalonia:win-x64:windows"}],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    portal.write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "channelId": "public_stable",
+                "version": "run-20260503-163502",
+                "generatedAt": "2026-05-06T18:31:51Z",
+                "artifacts": [{"artifactId": "avalonia-linux-x64-installer"}],
+                "desktopTupleCoverage": {
+                    "missingRequiredPlatforms": [],
+                    "missingRequiredPlatformHeadPairs": [],
+                    "missingRequiredPlatformHeadRidTuples": [],
+                    "externalProofRequests": [],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    resolved = module.resolve_release_channel_path(candidates=(registry, portal))
+
+    assert resolved == registry
+
+
+def test_resolve_release_channel_path_prefers_newer_portal_when_stale_registry_is_missing_same_release_installer_tuple(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_utc_now", lambda: module.datetime.fromisoformat("2026-05-22T13:40:00+00:00"))
+    registry = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    portal = tmp_path / "portal" / "RELEASE_CHANNEL.generated.json"
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    portal.parent.mkdir(parents=True, exist_ok=True)
+    registry.write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "channelId": "public_stable",
+                "version": "run-20260518-220935",
+                "generatedAt": "2026-05-21T09:58:10Z",
+                "artifacts": [
+                    {"artifactId": "avalonia-linux-x64-installer", "kind": "installer", "head": "avalonia", "platform": "linux"},
+                    {"artifactId": "avalonia-osx-arm64-installer", "kind": "installer", "head": "avalonia", "platform": "macos"},
+                ],
+                "desktopTupleCoverage": {
+                    "missingRequiredPlatforms": ["windows"],
+                    "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                    "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                    "externalProofRequests": [{"tupleId": "avalonia:win-x64:windows"}],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    portal.write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "channelId": "public_stable",
+                "version": "run-20260518-220935",
+                "generatedAt": "2026-05-21T13:27:33Z",
+                "artifacts": [
+                    {"artifactId": "avalonia-linux-x64-installer", "kind": "installer", "head": "avalonia", "platform": "linux"},
+                    {"artifactId": "avalonia-osx-arm64-installer", "kind": "installer", "head": "avalonia", "platform": "macos"},
+                    {"artifactId": "avalonia-win-x64-installer", "kind": "installer", "head": "avalonia", "platform": "windows"},
+                ],
+                "desktopTupleCoverage": {
+                    "missingRequiredPlatforms": [],
+                    "missingRequiredPlatformHeadPairs": [],
+                    "missingRequiredPlatformHeadRidTuples": [],
+                    "externalProofRequests": [],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    resolved = module.resolve_release_channel_path(candidates=(registry, portal))
+
+    assert resolved == portal

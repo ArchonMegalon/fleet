@@ -1,7 +1,7 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-05-19T12:04:50Z'
-source_public_status_generated_at: '2026-05-19T12:04:49Z'
+generated_at: '2026-05-29T09:34:42Z'
+source_public_status_generated_at: '2026-05-29T09:34:41Z'
 mission_snapshot: {}
 queue_forecast: {}
 capacity_forecast: {}
@@ -9,36 +9,52 @@ blocker_forecast: {}
 deployment_posture: {}
 readiness_summary:
   counts:
-    pre_repo_local_complete: 1
+    pre_repo_local_complete: 0
     repo_local_complete: 2
-    package_canonical: 0
+    package_canonical: 1
     boundary_pure: 5
     publicly_promoted: 3
-  warning_count: 0
+  warning_count: 8
   final_claim_ready: 3
   final_claim_ready_project_ids:
   - hub
   - mobile
   - ui
-  whole_product_final_claim_status: pass
+  whole_product_final_claim_status: fail
   whole_product_final_claim_bar: top_flagship_grade
   whole_product_final_claim_whole_project_frontier_required: true
   whole_product_final_claim_feedback_autofix_loop_required: true
   whole_product_final_claim_accept_lowered_standards: false
-  whole_product_final_claim_ready: 1
-  whole_product_final_claim_warning_keys: []
+  whole_product_final_claim_ready: 0
+  whole_product_final_claim_warning_keys:
+  - dense_workbench_ready
+  - flagship_ready
+  - primary_route_ready
+  - public_shelf_ready
+  - recovery_trust_ready
+  - sr4_parity_ready
+  - sr6_parity_ready
+  - veteran_deep_workflow_ready
 final_claim_ready: 3
 final_claim_ready_project_ids:
 - hub
 - mobile
 - ui
-whole_product_final_claim_status: pass
+whole_product_final_claim_status: fail
 whole_product_final_claim_bar: top_flagship_grade
 whole_product_final_claim_whole_project_frontier_required: true
 whole_product_final_claim_feedback_autofix_loop_required: true
 whole_product_final_claim_accept_lowered_standards: false
-whole_product_final_claim_ready: 1
-whole_product_final_claim_warning_keys: []
+whole_product_final_claim_ready: 0
+whole_product_final_claim_warning_keys:
+- dense_workbench_ready
+- flagship_ready
+- primary_route_ready
+- public_shelf_ready
+- recovery_trust_ready
+- sr4_parity_ready
+- sr6_parity_ready
+- veteran_deep_workflow_ready
 dispatch_policy: {}
 support_summary: {}
 publish_readiness: {}
@@ -121,7 +137,7 @@ projects:
 - id: guide
   lifecycle: signoff_only
   runtime_status: dispatch_pending
-  readiness_stage: pre_repo_local_complete
+  readiness_stage: package_canonical
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0

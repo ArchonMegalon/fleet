@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -15,14 +16,11 @@ ROOT = Path("/docker/fleet")
 DOCS_ROOT = ROOT / "docs" / "chummer5a-oracle"
 PUBLISHED_ROOT = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published")
 CORE_DOCS = Path("/docker/chummercomplete/chummer-core-engine/docs")
+SUPERVISOR_ROOT = Path("/var/lib/codex-fleet/chummer_design_supervisor")
 
 DEFAULT_OUTPUT = DOCS_ROOT / "m143_route_specific_compare_packets.yaml"
 DEFAULT_MARKDOWN_OUTPUT = DOCS_ROOT / "m143_route_specific_compare_packets.md"
-DEFAULT_RUNTIME_HANDOFF = Path("/var/lib/codex-fleet/chummer_design_supervisor/shard-14/ACTIVE_RUN_HANDOFF.generated.md")
-DEFAULT_TASK_LOCAL_TELEMETRY_FALLBACK = Path(
-    "/var/lib/codex-fleet/chummer_design_supervisor/shard-14/runs/20260505T224238Z-shard-14/TASK_LOCAL_TELEMETRY.generated.json"
-)
-DEFAULT_TASK_LOCAL_TELEMETRY = DEFAULT_TASK_LOCAL_TELEMETRY_FALLBACK
+TASK_LOCAL_TELEMETRY_ENV = "CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_TELEMETRY_PATH"
 DEFAULT_READINESS = ROOT / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 DEFAULT_WORKFLOW_PACK = DOCS_ROOT / "veteran_workflow_packs.yaml"
 DEFAULT_PARITY_AUDIT = PUBLISHED_ROOT / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
@@ -45,12 +43,23 @@ FAMILY_LABELS = {
 }
 
 
+def _latest_existing_path(pattern: str, fallback: Path | None = None) -> Path | None:
+    matches = sorted(SUPERVISOR_ROOT.glob(pattern), key=lambda path: path.stat().st_mtime, reverse=True)
+    if matches:
+        return matches[0]
+    return fallback
+
+
+DEFAULT_RUNTIME_HANDOFF = _latest_existing_path("shard-*/ACTIVE_RUN_HANDOFF.generated.md")
+DEFAULT_TASK_LOCAL_TELEMETRY = _latest_existing_path("shard-*/runs/*/TASK_LOCAL_TELEMETRY.generated.json")
+
+
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Materialize EA route-specific compare packets for milestone 143.")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
     parser.add_argument("--markdown-output", default=str(DEFAULT_MARKDOWN_OUTPUT))
     parser.add_argument("--task-local-telemetry")
-    parser.add_argument("--runtime-handoff", default=str(DEFAULT_RUNTIME_HANDOFF))
+    parser.add_argument("--runtime-handoff", default=str(DEFAULT_RUNTIME_HANDOFF) if DEFAULT_RUNTIME_HANDOFF else "")
     parser.add_argument("--readiness", default=str(DEFAULT_READINESS))
     parser.add_argument("--workflow-pack", default=str(DEFAULT_WORKFLOW_PACK))
     parser.add_argument("--parity-audit", default=str(DEFAULT_PARITY_AUDIT))
@@ -107,13 +116,21 @@ def _parse_generated_at(path: Path, payload: Dict[str, Any]) -> str:
 def _resolve_task_local_telemetry_path(explicit_path: str | None, runtime_handoff_path: Path) -> Path:
     if explicit_path:
         return Path(explicit_path)
-    for line in _load_text(runtime_handoff_path).splitlines():
-        if line.startswith("- Run id: "):
-            run_id = line.split(": ", 1)[1].strip()
-            candidate = runtime_handoff_path.parent / "runs" / run_id / "TASK_LOCAL_TELEMETRY.generated.json"
-            if candidate.exists():
-                return candidate
-    return DEFAULT_TASK_LOCAL_TELEMETRY_FALLBACK
+    if runtime_handoff_path.exists():
+        for line in _load_text(runtime_handoff_path).splitlines():
+            if line.startswith("- Run id: "):
+                run_id = line.split(": ", 1)[1].strip()
+                candidate = runtime_handoff_path.parent / "runs" / run_id / "TASK_LOCAL_TELEMETRY.generated.json"
+                if candidate.exists():
+                    return candidate
+    env_path = os.environ.get(TASK_LOCAL_TELEMETRY_ENV)
+    if env_path:
+        candidate = Path(env_path)
+        if candidate.exists():
+            return candidate
+    if DEFAULT_TASK_LOCAL_TELEMETRY and DEFAULT_TASK_LOCAL_TELEMETRY.exists():
+        return DEFAULT_TASK_LOCAL_TELEMETRY
+    raise FileNotFoundError("Could not resolve task-local telemetry path from explicit input, environment, runtime handoff, or latest supervisor snapshot.")
 
 
 def _task_local_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -173,6 +190,16 @@ def _coverage_status(readiness: Dict[str, Any], key: str) -> str:
     return "ready"
 
 
+def _coverage_lists(readiness: Dict[str, Any]) -> Dict[str, List[str]]:
+    return {
+        "warning_keys": _normalize_list(readiness.get("warning_keys")),
+        "missing_keys": _normalize_list(readiness.get("missing_keys")),
+        "scoped_warning_keys": _normalize_list(readiness.get("scoped_warning_keys")),
+        "scoped_missing_keys": _normalize_list(readiness.get("scoped_missing_keys")),
+        "coverage_gap_keys": _normalize_list(dict(readiness.get("flagship_readiness_audit") or {}).get("coverage_gap_keys")),
+    }
+
+
 def build_payload(
     *,
     task_local_telemetry_path: Path,
@@ -210,7 +237,7 @@ def build_payload(
     route_packs = _route_packs(workflow_pack)
     parity_rows = _parity_rows(parity_audit)
     gate_family_summary = dict((fleet_m143_gate.get("runtime_monitors") or {}).get("proof_corpus", {}).get("family_receipt_summary") or {})
-    readiness_missing_keys = _normalize_list(readiness.get("missing_keys"))
+    readiness_coverage = _coverage_lists(readiness)
 
     family_packets: List[Dict[str, Any]] = []
     for family_id in (
@@ -352,7 +379,11 @@ def build_payload(
         "whole_product_frontier_coverage": {
             "readiness_status": _normalize_text(readiness.get("status")),
             "desktop_client_status": _coverage_status(readiness, "desktop_client"),
-            "missing_keys": readiness_missing_keys,
+            "warning_keys": readiness_coverage["warning_keys"],
+            "missing_keys": readiness_coverage["missing_keys"],
+            "scoped_warning_keys": readiness_coverage["scoped_warning_keys"],
+            "scoped_missing_keys": readiness_coverage["scoped_missing_keys"],
+            "coverage_gap_keys": readiness_coverage["coverage_gap_keys"],
             "summary": _normalize_text(
                 dict(readiness.get("flagship_readiness_audit") or {}).get("reason")
                 or dict(readiness.get("completion_audit") or {}).get("reason")
@@ -422,7 +453,11 @@ def build_markdown(payload: Dict[str, Any]) -> str:
             "",
             f"- desktop_client status: `{coverage['desktop_client_status']}`",
             f"- summary: {coverage['summary']}",
+            f"- warning keys: `{', '.join(coverage['warning_keys']) or 'none'}`",
             f"- missing keys: `{', '.join(coverage['missing_keys']) or 'none'}`",
+            f"- scoped warning keys: `{', '.join(coverage['scoped_warning_keys']) or 'none'}`",
+            f"- scoped missing keys: `{', '.join(coverage['scoped_missing_keys']) or 'none'}`",
+            f"- coverage gap keys: `{', '.join(coverage['coverage_gap_keys']) or 'none'}`",
             "",
         ]
     )

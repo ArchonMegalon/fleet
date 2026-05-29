@@ -243,3 +243,34 @@ def test_rebuild_loop_ignores_retained_zero_backlog_external_proof_bundle(tmp_pa
     assert payload["current_state"] == "waiting_for_bundle"
     assert payload["observed_bundle_count"] == 0
     assert payload["last_result"] == "waiting_for_bundle"
+
+
+def test_external_proof_autoingest_reports_no_pending_requests_when_runbook_is_clear(tmp_path: Path) -> None:
+    commands_dir = tmp_path / ".codex-studio" / "published" / "external-proof-commands"
+    commands_dir.mkdir(parents=True, exist_ok=True)
+    finalize_script = commands_dir / "finalize-external-host-proof.sh"
+    finalize_script.write_text("#!/usr/bin/env bash\nset -eu\nexit 99\n", encoding="utf-8")
+    finalize_script.chmod(finalize_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    runbook = tmp_path / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    runbook.parent.mkdir(parents=True, exist_ok=True)
+    runbook.write_text("# External Proof Runbook\n\n- unresolved_request_count: 0\n", encoding="utf-8")
+
+    result = _run_loop(
+        tmp_path,
+        extra_env={
+            "FLEET_AUTOHEAL_ENABLED": "false",
+            "FLEET_EXTERNAL_PROOF_AUTOINGEST_ENABLED": "true",
+            "FLEET_EXTERNAL_PROOF_COMMANDS_DIR": str(commands_dir),
+            "FLEET_EXTERNAL_PROOF_RUNBOOK_PATH": str(runbook),
+            "FLEET_EXTERNAL_PROOF_AUTOINGEST_COOLDOWN_SECONDS": "0",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+
+    status_path = tmp_path / "state" / "rebuilder" / "external-proof-autoingest" / "status.json"
+    payload = json.loads(status_path.read_text(encoding="utf-8"))
+    assert payload["current_state"] == "no_pending_requests"
+    assert payload["observed_bundle_count"] == 0
+    assert payload["last_result"] == "no_pending_requests"

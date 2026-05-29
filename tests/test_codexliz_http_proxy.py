@@ -176,6 +176,79 @@ class CodexLizHttpProxyTests(unittest.TestCase):
             self.assertGreaterEqual(int(payload["attempt"]), 2)
             self.assertGreaterEqual(attempts["count"], 2)
 
+    def test_proxy_retries_cloudflare_530_until_upstream_recovers(self) -> None:
+        attempts = {"count": 0}
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802
+                attempts["count"] += 1
+                if attempts["count"] == 1:
+                    body = (
+                        "<!DOCTYPE html><html><head><title>Cloudflare Tunnel error</title></head>"
+                        "<body>530 The origin has been unregistered from Argo Tunnel</body></html>"
+                    ).encode("utf-8")
+                    self.send_response(530, "Origin DNS Error")
+                    self.send_header("Content-Type", "text/html; charset=UTF-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.send_header("CF-Ray", "retry-530-FRA")
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+
+                body = json.dumps({"ok": True, "attempt": attempts["count"]}).encode("utf-8")
+                self.send_response(200, "OK")
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server, _thread = self._server(Handler)
+        proxy_port = _pick_free_port()
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "proxy.log"
+            proxy = subprocess.Popen(
+                [
+                    "python3",
+                    str(PROXY_PATH),
+                    "--listen-host",
+                    "127.0.0.1",
+                    "--listen-port",
+                    str(proxy_port),
+                    "--upstream-base-url",
+                    f"http://127.0.0.1:{server.server_port}",
+                    "--retry-interval-seconds",
+                    "0.1",
+                    "--retry-max-wait-seconds",
+                    "1.0",
+                ],
+                stdout=log_path.open("w", encoding="utf-8"),
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+
+            def cleanup_proxy() -> None:
+                if proxy.poll() is None:
+                    proxy.terminate()
+                proxy.wait(5)
+
+            self.addCleanup(cleanup_proxy)
+            self._wait_for_proxy(proxy_port)
+
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{proxy_port}/v1/responses",
+                data=b'{"model":"qwen3-coder-next:q8_0"}',
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(request, timeout=5.0) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+
+            self.assertEqual(payload["ok"], True)
+            self.assertGreaterEqual(int(payload["attempt"]), 2)
+            self.assertGreaterEqual(attempts["count"], 2)
+
     def test_proxy_retries_timeout_until_retry_window_exhausts(self) -> None:
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self) -> None:  # noqa: N802

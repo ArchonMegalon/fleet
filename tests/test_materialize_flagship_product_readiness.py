@@ -309,6 +309,7 @@ def _materialize_flagship_readiness_with_parity_lab(
     ui_workflow_execution_gate_payload: dict | None = None,
     user_journey_tester_audit_payload: dict | None = None,
     ui_element_parity_audit_payload: dict | None = None,
+    ui_external_host_proof_blockers_payload: dict | None = None,
     executable_platforms: tuple[str, ...] = ("linux", "windows", "macos"),
     release_channel_platforms: tuple[str, ...] = ("linux", "windows", "macos"),
     linux_exit_gate_status: str = "passed",
@@ -341,6 +342,7 @@ def _materialize_flagship_readiness_with_parity_lab(
     ui_local_release_path = tmp_path / "ui" / "UI_LOCAL_RELEASE_PROOF.generated.json"
     ui_exit_gate_path = tmp_path / "ui" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
     ui_windows_exit_gate_path = tmp_path / "ui" / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
+    ui_external_host_proof_blockers_path = tmp_path / "ui" / "UI_EXTERNAL_HOST_PROOF_BLOCKERS.generated.json"
     ui_workflow_parity_path = tmp_path / "ui" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
     ui_executable_exit_gate_path = tmp_path / "ui" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
     ui_workflow_execution_gate_path = tmp_path / "ui" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
@@ -408,6 +410,17 @@ def _materialize_flagship_readiness_with_parity_lab(
                 "embedded_payload_marker_present": True,
                 "embedded_sample_marker_present": True,
             },
+        },
+    )
+    _write_json(
+        ui_external_host_proof_blockers_path,
+        ui_external_host_proof_blockers_payload
+        or {
+            "contract_name": "chummer6-ui.external_host_proof_blockers",
+            "status": "pass",
+            "external_proof_requests": [],
+            "unresolved_hosts": [],
+            "unresolved_tuples": [],
         },
     )
     _write_json(
@@ -500,6 +513,8 @@ def _materialize_flagship_readiness_with_parity_lab(
             str(ui_exit_gate_path),
             "--ui-windows-exit-gate",
             str(ui_windows_exit_gate_path),
+            "--ui-external-host-proof-blockers",
+            str(ui_external_host_proof_blockers_path),
             "--ui-workflow-parity-proof",
             str(ui_workflow_parity_path),
             "--ui-executable-exit-gate",
@@ -701,12 +716,38 @@ def test_materialize_flagship_product_readiness_fails_closed_when_only_external_
             "non_external_packets_without_lane": 0,
         },
     )
+    ui_external_host_proof_blockers = {
+        "contract_name": "chummer6-ui.external_host_proof_blockers",
+        "generated_at": current_iso,
+        "status": "blocked",
+        "unresolved_hosts": ["linux", "windows"],
+        "unresolved_tuples": ["avalonia:linux-x64:linux", "avalonia:win-x64:windows"],
+        "external_proof_requests": [
+            {
+                "tupleId": "avalonia:linux-x64:linux",
+                "requiredHost": "linux",
+                "blockerCodes": ["receipt_stale"],
+                "blockerMessages": ["linux startup smoke receipt is stale"],
+                "ready": False,
+                "installAccessClass": "open_public",
+            },
+            {
+                "tupleId": "avalonia:win-x64:windows",
+                "requiredHost": "windows",
+                "blockerCodes": ["receipt_precedes_release_publication"],
+                "blockerMessages": ["windows startup smoke receipt predates the current release publication"],
+                "ready": False,
+                "installAccessClass": "account_required",
+            },
+        ],
+    }
 
     payload = _materialize_flagship_readiness_with_parity_lab(
         tmp_path,
         module,
         journey_gates_payload=journey_gates,
         support_packets_payload=support_packets,
+        ui_external_host_proof_blockers_payload=ui_external_host_proof_blockers,
         synced_external_runbook=True,
         release_channel_platforms=("macos",),
         release_channel_journeys_passed=(
@@ -793,6 +834,21 @@ def test_materialize_flagship_product_readiness_fails_closed_when_only_external_
     assert detail["summary"] == "Desktop flagship proof is waiting on external host-proof capture."
     assert detail["evidence"]["external_host_proof_backlog_only"] is True
     assert detail["evidence"]["external_host_proof_backlog_request_count"] == 2
+    assert detail["evidence"]["external_host_proof_backlog_hosts"] == ["linux", "windows"]
+    assert detail["evidence"]["external_host_proof_backlog_tuples"] == [
+        "avalonia:linux-x64:linux",
+        "avalonia:win-x64:windows",
+    ]
+    assert detail["evidence"]["ui_external_host_proof_blockers_status"] == "blocked"
+    assert detail["evidence"]["ui_external_host_proof_blockers_request_count"] == 2
+    assert detail["evidence"]["ui_external_host_proof_blockers_unresolved_tuples"] == [
+        "avalonia:linux-x64:linux",
+        "avalonia:win-x64:windows",
+    ]
+    assert detail["evidence"]["ui_external_host_proof_blockers_requests"][1]["tuple_id"] == "avalonia:win-x64:windows"
+    assert detail["evidence"]["ui_external_host_proof_blockers_requests"][1]["blocker_codes"] == [
+        "receipt_precedes_release_publication"
+    ]
 
 
 def test_materialize_flagship_product_readiness_recovers_visual_gate_from_fresh_executable_proof_when_only_stale_capture_drift_remains(
@@ -1593,12 +1649,14 @@ def _user_journey_tester_audit_pass_payload(module) -> dict:
                             "exists": True,
                             "is_png": True,
                             "within_repo_root": True,
+                            "size_bytes": 4096,
                         },
                         {
                             "path": f".codex-studio/published/user-journey-tester-screenshots/{workflow_id}-after.png",
                             "exists": True,
                             "is_png": True,
                             "within_repo_root": True,
+                            "size_bytes": 4096,
                         },
                     ],
                     "assertions": {
@@ -8024,6 +8082,7 @@ def test_user_journey_tester_audit_requires_visible_focus_and_new_character_work
                                 "exists": True,
                                 "is_png": True,
                                 "within_repo_root": True,
+                                "size_bytes": 4096,
                             }
                         ],
                         "assertions": {
@@ -8070,6 +8129,159 @@ def test_user_journey_tester_audit_rejects_counter_only_screenshot_claims() -> N
     assert "workflow_screenshots_must_be_paths_not_counters" in gaps["missing_execution_discipline"]
     assert "workflow_screenshot_review_must_prove_existing_pngs" in gaps["missing_execution_discipline"]
     assert "workflow_assertions_must_prove_visible_user_results" in gaps["missing_execution_discipline"]
+
+
+def test_user_journey_tester_audit_rejects_placeholder_sized_pngs() -> None:
+    module = _load_module()
+
+    gaps = module.user_journey_tester_audit_gaps(
+        {
+            "contract_name": "chummer6-ui.user_journey_tester_audit",
+            "status": "pass",
+            "evidence": {
+                "linux_binary_under_test": True,
+                "used_internal_apis": False,
+                "fix_shard_separate": True,
+                "open_blocking_findings_count": 0,
+                "workflows": [
+                    {
+                        "id": workflow_id,
+                        "status": "pass",
+                        "screenshots": [f"{workflow_id}-before.png", f"{workflow_id}-after.png"],
+                        "screenshotReview": [
+                            {
+                                "path": f"{workflow_id}-before.png",
+                                "exists": True,
+                                "is_png": True,
+                                "within_repo_root": True,
+                                "size_bytes": 37,
+                                "sha256": "a" * 64,
+                            },
+                            {
+                                "path": f"{workflow_id}-after.png",
+                                "exists": True,
+                                "is_png": True,
+                                "within_repo_root": True,
+                                "size_bytes": 49,
+                                "sha256": "b" * 64,
+                            },
+                        ],
+                        "assertions": {
+                            assertion: True
+                            for assertion in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS[workflow_id]
+                        },
+                    }
+                    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
+                ],
+            },
+        }
+    )
+
+    assert gaps["ready"] is False
+    assert gaps["unverified_screenshot_workflows"] == sorted(module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS)
+    assert "workflow_screenshot_review_must_prove_existing_pngs" in gaps["missing_execution_discipline"]
+
+
+def test_user_journey_tester_audit_accepts_credible_reviewed_pngs() -> None:
+    module = _load_module()
+
+    gaps = module.user_journey_tester_audit_gaps(
+        {
+            "contract_name": "chummer6-ui.user_journey_tester_audit",
+            "status": "pass",
+            "evidence": {
+                "linux_binary_under_test": True,
+                "used_internal_apis": False,
+                "fix_shard_separate": True,
+                "open_blocking_findings_count": 0,
+                "workflows": [
+                    {
+                        "id": workflow_id,
+                        "status": "pass",
+                        "screenshots": [f"{workflow_id}-before.png", f"{workflow_id}-after.png"],
+                        "screenshotReview": [
+                            {
+                                "path": f"{workflow_id}-before.png",
+                                "exists": True,
+                                "is_png": True,
+                                "within_repo_root": True,
+                                "size_bytes": module.USER_JOURNEY_TESTER_MIN_SCREENSHOT_BYTES,
+                                "sha256": "a" * 64,
+                            },
+                            {
+                                "path": f"{workflow_id}-after.png",
+                                "exists": True,
+                                "is_png": True,
+                                "within_repo_root": True,
+                                "size_bytes": module.USER_JOURNEY_TESTER_MIN_SCREENSHOT_BYTES + 512,
+                                "sha256": "b" * 64,
+                            },
+                        ],
+                        "assertions": {
+                            assertion: True
+                            for assertion in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS[workflow_id]
+                        },
+                    }
+                    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
+                ],
+            },
+        }
+    )
+
+    assert gaps["ready"] is True
+    assert gaps["unverified_screenshot_workflows"] == []
+    assert "workflow_screenshot_review_must_prove_existing_pngs" not in gaps["missing_execution_discipline"]
+
+
+def test_user_journey_tester_audit_rejects_zero_byte_screenshot_reviews() -> None:
+    module = _load_module()
+
+    gaps = module.user_journey_tester_audit_gaps(
+        {
+            "contract_name": "chummer6-ui.user_journey_tester_audit",
+            "status": "pass",
+            "evidence": {
+                "linux_binary_under_test": True,
+                "used_internal_apis": False,
+                "fix_shard_separate": True,
+                "open_blocking_findings_count": 0,
+                "workflows": [
+                    {
+                        "id": workflow_id,
+                        "status": "pass",
+                        "screenshots": [f"{workflow_id}-before.png", f"{workflow_id}-after.png"],
+                        "screenshotReview": [
+                            {
+                                "path": f"{workflow_id}-before.png",
+                                "exists": True,
+                                "is_png": True,
+                                "within_repo_root": True,
+                                "size_bytes": 0,
+                                "sha256": "",
+                            },
+                            {
+                                "path": f"{workflow_id}-after.png",
+                                "exists": True,
+                                "is_png": True,
+                                "within_repo_root": True,
+                                "size_bytes": 0,
+                                "sha256": "",
+                            },
+                        ],
+                        "assertions": {
+                            assertion: True
+                            for assertion in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS[workflow_id]
+                        },
+                    }
+                    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
+                ],
+            },
+        }
+    )
+
+    assert gaps["ready"] is False
+    assert gaps["unverified_screenshot_workflows"] == sorted(module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS)
+    assert "workflow_screenshot_review_must_prove_existing_pngs" in gaps["missing_execution_discipline"]
 
 
 def test_user_journey_tester_audit_requires_seeded_starter_attribute_assertions() -> None:
@@ -12052,6 +12264,326 @@ def test_materialize_flagship_product_readiness_fail_closes_stale_release_channe
     assert evidence["release_channel_generated_at"] == "2026-03-01T08:00:00Z"
     assert isinstance(evidence["release_channel_age_seconds"], int)
     assert evidence["release_channel_age_seconds"] > 86400
+
+
+def test_materialize_flagship_product_readiness_accepts_stale_release_channel_generated_at_when_public_shelf_mirror_is_current(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
+    out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+    status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
+    progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
+    progress_history_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
+    journey_gates_path = tmp_path / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
+    support_packets_path = tmp_path / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+    supervisor_state_path = tmp_path / "state" / "chummer_design_supervisor" / "state.json"
+    ooda_state_path = tmp_path / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
+    ui_local_release_path = tmp_path / "ui" / ".codex-studio" / "published" / "UI_LOCAL_RELEASE_PROOF.generated.json"
+    ui_exit_gate_path = tmp_path / "ui" / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+    ui_windows_exit_gate_path = tmp_path / "ui" / ".codex-studio" / "published" / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
+    ui_executable_exit_gate_path = tmp_path / "ui" / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+    ui_workflow_execution_gate_path = tmp_path / "ui" / ".codex-studio" / "published" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+    ui_visual_familiarity_exit_gate_path = tmp_path / "ui" / ".codex-studio" / "published" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    ui_workflow_parity_path = tmp_path / "ui" / ".codex-studio" / "published" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr4_workflow_parity_path = tmp_path / "ui" / ".codex-studio" / "published" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr6_workflow_parity_path = tmp_path / "ui" / ".codex-studio" / "published" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr4_sr6_frontier_receipt_path = tmp_path / "ui" / ".codex-studio" / "published" / "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"
+    ui_user_journey_tester_audit_path = tmp_path / "ui" / ".codex-studio" / "published" / "USER_JOURNEY_TESTER_AUDIT.generated.json"
+    ui_element_parity_audit_path = tmp_path / "ui" / ".codex-studio" / "published" / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
+    hub_local_release_path = tmp_path / "hub" / "HUB_LOCAL_RELEASE_PROOF.generated.json"
+    mobile_local_release_path = tmp_path / "mobile" / "MOBILE_LOCAL_RELEASE_PROOF.generated.json"
+    release_channel_path = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    releases_json_path = tmp_path / "registry" / "releases.json"
+    ui_public_shelf_release_channel_path = tmp_path / "ui" / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
+
+    _write_yaml(acceptance_path, _base_acceptance())
+    _write_yaml(status_plane_path, _base_status_plane())
+    _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
+    _write_json(progress_history_path, {"snapshot_count": 6})
+    _write_json(journey_gates_path, _base_journey_gates())
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso))
+    _write_json(supervisor_state_path, _base_supervisor_state())
+    _write_json(ooda_state_path, _base_ooda_state())
+    _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
+    _write_json(ui_exit_gate_path, {"contract_name": "chummer6-ui.linux_desktop_exit_gate", "status": "passed"})
+    _write_json(
+        ui_windows_exit_gate_path,
+        {
+            "contract_name": "chummer6-ui.windows_desktop_exit_gate",
+            "status": "passed",
+            "checks": {
+                "embedded_payload_marker_present": True,
+                "embedded_sample_marker_present": True,
+            },
+        },
+    )
+    _write_json(
+        ui_executable_exit_gate_path,
+        _desktop_executable_exit_gate_pass_payload(
+            heads=("avalonia",),
+            platforms=("linux", "windows", "macos"),
+            generated_at=current_iso,
+        ),
+    )
+    _write_json(
+        ui_workflow_execution_gate_path,
+        {"contract_name": "chummer6-ui.desktop_workflow_execution_gate", "status": "pass"},
+    )
+    _write_json(ui_visual_familiarity_exit_gate_path, _desktop_visual_familiarity_pass_payload(module))
+    _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_sr6_frontier_receipt_path, {"contract_name": "chummer6-ui.sr4_sr6_desktop_parity_frontier", "status": "passed"})
+    _write_json(ui_user_journey_tester_audit_path, _user_journey_tester_audit_pass_payload(module))
+    _write_json(ui_element_parity_audit_path, _ui_element_parity_audit_pass_payload(module))
+    _write_json(hub_local_release_path, {"contract_name": "chummer6-hub.local_release_proof", "status": "passed"})
+    _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
+
+    stale_channel_payload = _release_channel_payload(
+        heads=("avalonia",),
+        platforms=("linux", "windows", "macos"),
+        journeys_passed=("install_claim_restore_continue", "build_explain_publish"),
+        generated_at="2026-03-01T08:00:00Z",
+    )
+    _write_json(release_channel_path, stale_channel_payload)
+    _write_json(ui_public_shelf_release_channel_path, stale_channel_payload)
+    _write_json(releases_json_path, {"status": "published"})
+    os.utime(ui_public_shelf_release_channel_path, None)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(tmp_path),
+            "--out",
+            str(out_path),
+            "--mirror-out",
+            "",
+            "--acceptance",
+            str(acceptance_path),
+            "--status-plane",
+            str(status_plane_path),
+            "--progress-report",
+            str(progress_report_path),
+            "--progress-history",
+            str(progress_history_path),
+            "--journey-gates",
+            str(journey_gates_path),
+            "--support-packets",
+            str(support_packets_path),
+            "--supervisor-state",
+            str(supervisor_state_path),
+            "--ooda-state",
+            str(ooda_state_path),
+            "--ui-local-release-proof",
+            str(ui_local_release_path),
+            "--ui-linux-exit-gate",
+            str(ui_exit_gate_path),
+            "--ui-windows-exit-gate",
+            str(ui_windows_exit_gate_path),
+            "--ui-executable-exit-gate",
+            str(ui_executable_exit_gate_path),
+            "--ui-workflow-execution-gate",
+            str(ui_workflow_execution_gate_path),
+            "--ui-visual-familiarity-exit-gate",
+            str(ui_visual_familiarity_exit_gate_path),
+            "--ui-workflow-parity-proof",
+            str(ui_workflow_parity_path),
+            "--ui-user-journey-tester-audit",
+            str(ui_user_journey_tester_audit_path),
+            "--ui-element-parity-audit",
+            str(ui_element_parity_audit_path),
+            "--sr4-workflow-parity-proof",
+            str(sr4_workflow_parity_path),
+            "--sr6-workflow-parity-proof",
+            str(sr6_workflow_parity_path),
+            "--sr4-sr6-frontier-receipt",
+            str(sr4_sr6_frontier_receipt_path),
+            "--hub-local-release-proof",
+            str(hub_local_release_path),
+            "--mobile-local-release-proof",
+            str(mobile_local_release_path),
+            "--release-channel",
+            str(release_channel_path),
+            "--releases-json",
+            str(releases_json_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["coverage"]["desktop_client"] == "ready"
+    evidence = payload["coverage_details"]["desktop_client"]["evidence"]
+    assert evidence["release_channel_freshness_source"] == "verified_release_channel_mirror"
+    assert str(evidence["release_channel_verified_mirror_path"]).endswith("Docker/Downloads/RELEASE_CHANNEL.generated.json")
+    assert evidence["release_channel_effective_age_seconds"] <= 86400
+
+
+def test_materialize_flagship_product_readiness_accepts_identical_verified_release_channel_mirror_with_fresh_ui_release_proof(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
+    out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+    status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
+    progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
+    progress_history_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
+    journey_gates_path = tmp_path / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
+    support_packets_path = tmp_path / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+    supervisor_state_path = tmp_path / "state" / "chummer_design_supervisor" / "state.json"
+    ooda_state_path = tmp_path / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
+    ui_local_release_path = tmp_path / "ui" / ".codex-studio" / "published" / "UI_LOCAL_RELEASE_PROOF.generated.json"
+    ui_exit_gate_path = tmp_path / "ui" / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+    ui_windows_exit_gate_path = tmp_path / "ui" / ".codex-studio" / "published" / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
+    ui_executable_exit_gate_path = tmp_path / "ui" / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+    ui_workflow_execution_gate_path = tmp_path / "ui" / ".codex-studio" / "published" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+    ui_visual_familiarity_exit_gate_path = tmp_path / "ui" / ".codex-studio" / "published" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    ui_workflow_parity_path = tmp_path / "ui" / ".codex-studio" / "published" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr4_workflow_parity_path = tmp_path / "ui" / ".codex-studio" / "published" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr6_workflow_parity_path = tmp_path / "ui" / ".codex-studio" / "published" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr4_sr6_frontier_receipt_path = tmp_path / "ui" / ".codex-studio" / "published" / "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"
+    ui_user_journey_tester_audit_path = tmp_path / "ui" / ".codex-studio" / "published" / "USER_JOURNEY_TESTER_AUDIT.generated.json"
+    ui_element_parity_audit_path = tmp_path / "ui" / ".codex-studio" / "published" / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
+    hub_local_release_path = tmp_path / "hub" / "HUB_LOCAL_RELEASE_PROOF.generated.json"
+    mobile_local_release_path = tmp_path / "mobile" / "MOBILE_LOCAL_RELEASE_PROOF.generated.json"
+    release_channel_path = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    releases_json_path = tmp_path / "registry" / "releases.json"
+    ui_public_shelf_release_channel_path = tmp_path / "ui" / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
+
+    _write_yaml(acceptance_path, _base_acceptance())
+    _write_yaml(status_plane_path, _base_status_plane())
+    _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
+    _write_json(progress_history_path, {"snapshot_count": 6})
+    _write_json(journey_gates_path, _base_journey_gates())
+    _write_json(support_packets_path, _base_support_packets_payload(current_iso))
+    _write_json(supervisor_state_path, _base_supervisor_state())
+    _write_json(ooda_state_path, _base_ooda_state())
+    _write_json(
+        ui_local_release_path,
+        {"contract_name": "chummer6-ui.local_release_proof", "status": "passed", "generated_at": current_iso},
+    )
+    _write_json(ui_exit_gate_path, {"contract_name": "chummer6-ui.linux_desktop_exit_gate", "status": "passed"})
+    _write_json(
+        ui_windows_exit_gate_path,
+        {
+            "contract_name": "chummer6-ui.windows_desktop_exit_gate",
+            "status": "passed",
+            "checks": {
+                "embedded_payload_marker_present": True,
+                "embedded_sample_marker_present": True,
+            },
+        },
+    )
+    _write_json(
+        ui_executable_exit_gate_path,
+        _desktop_executable_exit_gate_pass_payload(
+            heads=("avalonia",),
+            platforms=("linux", "windows", "macos"),
+            generated_at=current_iso,
+        ),
+    )
+    _write_json(
+        ui_workflow_execution_gate_path,
+        {"contract_name": "chummer6-ui.desktop_workflow_execution_gate", "status": "pass"},
+    )
+    _write_json(ui_visual_familiarity_exit_gate_path, _desktop_visual_familiarity_pass_payload(module))
+    _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_sr6_frontier_receipt_path, {"contract_name": "chummer6-ui.sr4_sr6_desktop_parity_frontier", "status": "passed"})
+    _write_json(ui_user_journey_tester_audit_path, _user_journey_tester_audit_pass_payload(module))
+    _write_json(ui_element_parity_audit_path, _ui_element_parity_audit_pass_payload(module))
+    _write_json(hub_local_release_path, {"contract_name": "chummer6-hub.local_release_proof", "status": "passed"})
+    _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
+
+    stale_channel_payload = _release_channel_payload(
+        heads=("avalonia",),
+        platforms=("linux", "windows", "macos"),
+        journeys_passed=("install_claim_restore_continue", "build_explain_publish"),
+        generated_at="2026-03-01T08:00:00Z",
+    )
+    _write_json(release_channel_path, stale_channel_payload)
+    _write_json(ui_public_shelf_release_channel_path, stale_channel_payload)
+    _write_json(releases_json_path, {"status": "published"})
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(tmp_path),
+            "--out",
+            str(out_path),
+            "--mirror-out",
+            "",
+            "--acceptance",
+            str(acceptance_path),
+            "--status-plane",
+            str(status_plane_path),
+            "--progress-report",
+            str(progress_report_path),
+            "--progress-history",
+            str(progress_history_path),
+            "--journey-gates",
+            str(journey_gates_path),
+            "--support-packets",
+            str(support_packets_path),
+            "--supervisor-state",
+            str(supervisor_state_path),
+            "--ooda-state",
+            str(ooda_state_path),
+            "--ui-local-release-proof",
+            str(ui_local_release_path),
+            "--ui-linux-exit-gate",
+            str(ui_exit_gate_path),
+            "--ui-windows-exit-gate",
+            str(ui_windows_exit_gate_path),
+            "--ui-executable-exit-gate",
+            str(ui_executable_exit_gate_path),
+            "--ui-workflow-execution-gate",
+            str(ui_workflow_execution_gate_path),
+            "--ui-visual-familiarity-exit-gate",
+            str(ui_visual_familiarity_exit_gate_path),
+            "--ui-workflow-parity-proof",
+            str(ui_workflow_parity_path),
+            "--ui-user-journey-tester-audit",
+            str(ui_user_journey_tester_audit_path),
+            "--ui-element-parity-audit",
+            str(ui_element_parity_audit_path),
+            "--sr4-workflow-parity-proof",
+            str(sr4_workflow_parity_path),
+            "--sr6-workflow-parity-proof",
+            str(sr6_workflow_parity_path),
+            "--sr4-sr6-frontier-receipt",
+            str(sr4_sr6_frontier_receipt_path),
+            "--hub-local-release-proof",
+            str(hub_local_release_path),
+            "--mobile-local-release-proof",
+            str(mobile_local_release_path),
+            "--release-channel",
+            str(release_channel_path),
+            "--releases-json",
+            str(releases_json_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["coverage"]["desktop_client"] == "ready"
+    evidence = payload["coverage_details"]["desktop_client"]["evidence"]
+    assert evidence["release_channel_freshness_source"] == "verified_release_channel_mirror_with_ui_local_release_proof"
+    assert evidence["release_channel_ui_local_release_proof_supports_freshness"] is True
+    assert evidence["release_channel_effective_age_seconds"] <= 86400
 
 
 def test_materialize_flagship_product_readiness_keeps_executable_gate_generated_at_evidence_when_gate_fails(tmp_path: Path) -> None:

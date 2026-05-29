@@ -910,6 +910,27 @@ queue:
   residual_blocker_ids:
   - GOLD7-P0-005
   shipped: Closed repo-locally on 2026-05-20 after mapping stale V7 blockers to current green truth and restoring the remaining globe-proof aliases and test entrypoints. The only residual blocker left is the external mac publish rerun tracked separately in `WL-324`.
+- package_id: fleet-chummer-gold-reaudit-v8-closure
+  title: Close the newest Tibor gold reaudit package from `/home/tibor/chummer_gold_reaudit_v8_20260520.zip` by refreshing stale live-proof artifacts, restoring any exact gold-bundle proof aliases V8 still expects, and leaving only the external mac publish rerun as residual work.
+  status: done
+  package_kind: implementation
+  design_owner: fleet-top-flagship
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  audit_zip: /home/tibor/chummer_gold_reaudit_v8_20260520.zip
+  handoff_note: /docker/fleet/feedback/2026-05-20-gold-reaudit-v8-closure.md
+  verification_bundle:
+  - /home/tibor/chummer_gold_reaudit_v8_20260520.zip
+  - /docker/chummercomplete/chummer.run-services/.codex-studio/published/CHUMMER_PUBLIC_ROUTE_PROOF.generated.json
+  - /docker/chummercomplete/_completion/gold_readiness_closure/PUBLIC_OPERATOR_LEAK_SCAN.generated.json
+  - /docker/chummercomplete/_completion/gold_readiness_closure/BLACK_LEDGER_TURN1_NEWSREEL_EMAIL.generated.json
+  - /docker/chummercomplete/chummer-design/_completion/gold_readiness_closure/FINAL_GOLD_VERDICT.md
+  residual_blocker_ids:
+  - GOLD8-P0-012
+  shipped: Closed repo-locally on 2026-05-20 after materializing the fresh public route proof into the published artifact, mirroring the leak scan into the gold bundle, adding the newsreel email compatibility receipt, and confirming the rest of the V8 blocker list was stale against current green truth. The only residual blocker left is the external mac publish rerun tracked separately in `WL-324`.
 - package_id: fleet-release-perfection-public-route-honesty
   title: Finish the release-grade public route honesty layer by adding explicit proof-state tags to every public route card and separating feedback, support, and governance semantics so customer-facing surfaces cannot overclaim or collapse distinct states into one lane.
   status: done

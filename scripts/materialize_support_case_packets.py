@@ -27,22 +27,26 @@ except ModuleNotFoundError:
     from next90_queue_staging import read_next90_queue_staging_yaml
 try:
     from scripts.external_proof_paths import (
+        DEFAULT_RELEASE_CHANNEL,
         REGISTRY_RELEASE_CHANNEL_PATH,
         UI_DOCKER_DOWNLOADS_ROOT,
         normalize_external_proof_relative_path,
+        resolve_release_channel_path,
     )
 except ModuleNotFoundError:
     from external_proof_paths import (
+        DEFAULT_RELEASE_CHANNEL,
         REGISTRY_RELEASE_CHANNEL_PATH,
         UI_DOCKER_DOWNLOADS_ROOT,
         normalize_external_proof_relative_path,
+        resolve_release_channel_path,
     )
 
 
 ROOT = Path("/docker/fleet")
 DEFAULT_OUT_PATH = Path("/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json")
 DEFAULT_SOURCE_MIRROR_NAME = "SUPPORT_CASE_SOURCE_MIRROR.generated.json"
-DEFAULT_RELEASE_CHANNEL_PATH = REGISTRY_RELEASE_CHANNEL_PATH
+DEFAULT_RELEASE_CHANNEL_PATH = DEFAULT_RELEASE_CHANNEL
 KARMA_FORGE_DISCOVERY_WORKFLOW_PATH = (
     ROOT / ".codex-design" / "product" / "KARMA_FORGE_DISCOVERY_LAB_WORKFLOWS.yaml"
 )
@@ -222,7 +226,10 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--release-channel",
         default=str(DEFAULT_RELEASE_CHANNEL_PATH),
-        help="optional RELEASE_CHANNEL.generated.json path for install-specific diagnosis enrichment",
+        help=(
+            "optional RELEASE_CHANNEL.generated.json path for install-specific diagnosis enrichment; "
+            "when omitted or left at the default registry path, the best available release-channel candidate is used"
+        ),
     )
     parser.add_argument(
         "--source-mirror",
@@ -3791,7 +3798,7 @@ def _external_proof_execution_plan(
             operator_commands = dict(host_group.get("operator_commands") or {})
             command_pack_path = _normalize_text(host_group.get("command_pack_path"))
             part = (
-                f"{host}: transfer {command_pack_path}, set CHUMMER_UI_REPO_ROOT and either "
+                f"{host}: transfer {command_pack_path}, set CHUMMER_UI_REPO_ROOT if the UI repo is not checked out at the standard Chummer UI paths on that host, and set either "
                 f"CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the signed-in proof cookies, run "
                 f"{operator_commands.get('preflight', '')}, {operator_commands.get('capture', '')}, "
                 f"{operator_commands.get('validate', '')}, {operator_commands.get('bundle', '')}, "
@@ -4780,7 +4787,24 @@ def main(argv: List[str] | None = None) -> int:
     )
     source_label = _source_value(args.source)
     bearer_token = _source_bearer_token(args.bearer_token)
-    release_channel_payload = _load_release_channel(str(args.release_channel))
+    requested_release_channel = _normalize_text(args.release_channel)
+    requested_release_channel_path = (
+        Path(requested_release_channel).expanduser() if requested_release_channel else Path("")
+    )
+    use_resolved_release_channel = (
+        not requested_release_channel
+        or (
+            requested_release_channel_path.resolve()
+            in {
+                Path(DEFAULT_RELEASE_CHANNEL_PATH).resolve(),
+                Path(REGISTRY_RELEASE_CHANNEL_PATH).resolve(),
+            }
+        )
+    )
+    effective_release_channel_path = (
+        resolve_release_channel_path() if use_resolved_release_channel else requested_release_channel_path
+    )
+    release_channel_payload = _load_release_channel(str(effective_release_channel_path))
     release_channel_index = _release_channel_index(release_channel_payload)
     try:
         source_payload, source_label = _load_json_source(source_label, bearer_token=bearer_token)

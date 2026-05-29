@@ -20,7 +20,7 @@
       "platforms": {
         "linux": {
           "primary_package_kind": "deb",
-          "public_shelf_status": "preview_support_directed",
+          "public_shelf_status": "support_directed_release",
           "signing_posture": "package_integrity_required",
           "startup_smoke_gate": "required",
           "supportability": "secondary",
@@ -28,15 +28,15 @@
         },
         "macOS": {
           "primary_package_kind": "setup_script",
-          "public_shelf_status": "account_gated_setup_script_preview",
+          "public_shelf_status": "account_gated_setup_script_release",
           "signing_posture": "codesign_and_notarization_required",
           "startup_smoke_gate": "required",
-          "supportability": "account_gated_setup_script_preview",
+          "supportability": "account_gated_setup_script_release",
           "updater_mode": "claimed_setup_script_then_dmg_handoff"
         },
         "windows": {
           "primary_package_kind": "installer",
-          "public_shelf_status": "promoted_preview",
+          "public_shelf_status": "promoted_release",
           "signing_posture": "required_for_promoted_release",
           "startup_smoke_gate": "required",
           "supportability": "primary",
@@ -45,8 +45,8 @@
       },
       "state": "pass",
       "warnings": [
-        "Acceptance matrix keeps linux in preview_support_directed posture instead of a promoted public lane.",
-        "Acceptance matrix keeps macOS in account_gated_setup_script_preview posture instead of a promoted public lane."
+        "Acceptance matrix keeps linux in support_directed_release posture instead of a promoted public lane.",
+        "Acceptance matrix keeps macOS in account_gated_setup_script_release posture instead of a promoted public lane."
       ]
     },
     "next90_guide": {
@@ -179,7 +179,7 @@
     "platforms": {
       "linux": {
         "primary_package_kind": "deb",
-        "public_shelf_status": "preview_support_directed",
+        "public_shelf_status": "support_directed_release",
         "signing_posture": "package_integrity_required",
         "startup_smoke_gate": "required",
         "supportability": "secondary",
@@ -187,15 +187,15 @@
       },
       "macOS": {
         "primary_package_kind": "setup_script",
-        "public_shelf_status": "account_gated_setup_script_preview",
+        "public_shelf_status": "account_gated_setup_script_release",
         "signing_posture": "codesign_and_notarization_required",
         "startup_smoke_gate": "required",
-        "supportability": "account_gated_setup_script_preview",
+        "supportability": "account_gated_setup_script_release",
         "updater_mode": "claimed_setup_script_then_dmg_handoff"
       },
       "windows": {
         "primary_package_kind": "installer",
-        "public_shelf_status": "promoted_preview",
+        "public_shelf_status": "promoted_release",
         "signing_posture": "required_for_promoted_release",
         "startup_smoke_gate": "required",
         "supportability": "primary",
@@ -204,7 +204,7 @@
     },
     "release_gate_status": "pass"
   },
-  "generated_at": "2026-05-06T04:08:22Z",
+  "generated_at": "2026-05-13T17:14:00Z",
   "milestone_id": 127,
   "owned_surfaces": [
     "promote_platform_acceptance_release_evidence:fleet"
@@ -213,8 +213,8 @@
     "blockers": [],
     "state": "pass",
     "warnings": [
-      "Acceptance matrix keeps linux in preview_support_directed posture instead of a promoted public lane.",
-      "Acceptance matrix keeps macOS in account_gated_setup_script_preview posture instead of a promoted public lane.",
+      "Acceptance matrix keeps linux in support_directed_release posture instead of a promoted public lane.",
+      "Acceptance matrix keeps macOS in account_gated_setup_script_release posture instead of a promoted public lane.",
       "Repo hardening initiative RH-001 is still proposed.",
       "Repo hardening initiative RH-002 is still proposed.",
       "Repo hardening initiative RH-003 is still proposed.",
@@ -227,10 +227,10 @@
   "queue_title": "Promote platform acceptance, release evidence packs, repo hardening, and external-host proof orchestration into repeatable gates.",
   "runtime_monitors": {
     "external_proof_runbook": {
-      "capture_deadline_utc": "2026-05-06T19:17:52Z",
+      "capture_deadline_utc": "2026-05-14T07:55:01Z",
       "command_bundle_sha256": "6e4d89c896b996b55d387ac31ba32d991748d1a11a2be3e05194a5bac396d30a",
       "gate_failures": [],
-      "generated_at": "2026-05-06T04:01:38Z",
+      "generated_at": "2026-05-13T17:10:16Z",
       "has_zero_backlog_note": true,
       "issues": [],
       "release_gate_status": "pass",
@@ -242,7 +242,7 @@
     "flagship_product_readiness": {
       "external_host_proof": {
         "command_bundle_sha256": "6e4d89c896b996b55d387ac31ba32d991748d1a11a2be3e05194a5bac396d30a",
-        "runbook_generated_at": "2026-05-06T04:01:38Z",
+        "runbook_generated_at": "2026-05-13T17:09:39Z",
         "runbook_synced": true,
         "unresolved_request_count": 0
       },
@@ -260,22 +260,22 @@
     "acceptance_matrix": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/DESKTOP_PLATFORM_ACCEPTANCE_MATRIX.yaml",
-      "sha256": "932e29baf04cdd9b2380fe10d44dd75d5e4b05457e1fd348ffdecb846a4c4a34"
+      "sha256": "1d23282b1437aed0fcaab450ce1818de3e480a7951d2e027ae5f488ecf38675f"
     },
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
+      "sha256": "fa9f621dc6eddb503ec60c0905df3377cd36a78459b9b530293c14e28bbaf81d"
     },
     "external_proof_runbook": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-      "sha256": "2c8105bcff4b1c6ac0ae7eb63273ce4bce4970c77d2dae5d0f063eb371b0f0ce"
+      "sha256": "3dfe02a05aa32b38e939ebb4db6ed4032a279b16edd36804f3aa0f59ab339eac"
     },
     "flagship_product_readiness": {
-      "generated_at": "2026-05-06T04:01:39Z",
+      "generated_at": "2026-05-13T17:09:42Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "6407de1f137d225d951be3f4c4164f8a46f1ba7422b597cff5b3adb46c2a5e48"
+      "sha256": "0017eb56616dca74626c07f0a172c3df0a65268916f74f52e2e8f447775cb3aa"
     },
     "next90_guide": {
       "generated_at": "",
@@ -290,12 +290,12 @@
     "public_downloads_policy": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_DOWNLOADS_POLICY.md",
-      "sha256": "9b71db85e3519be256a627e9ea04e3663e2caa7a86d3dd4d9f243bafffd7a4ef"
+      "sha256": "b56e48c619e177907d71ade49fc3aaf9f83323775671df11e25305ed14402b35"
     },
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "d3b272f3c1119c2f78a32477dd55e0795fae317943a3a23fd595db23e5b27855"
+      "sha256": "fa9f621dc6eddb503ec60c0905df3377cd36a78459b9b530293c14e28bbaf81d"
     },
     "repo_hardening_checklist": {
       "generated_at": "",
@@ -310,7 +310,7 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "3614d3f739de335843fcf1e7c54a85c6892c310e03ac5e565fffd6de4e399010"
+      "sha256": "52f226d7a4043d33eed12287db7c4060de5305c6c728e150c1525c4ea1f6fa41"
     }
   },
   "status": "pass",

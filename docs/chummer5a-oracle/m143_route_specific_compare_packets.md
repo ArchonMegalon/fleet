@@ -5,8 +5,8 @@ This EA-owned packet compiles the direct route receipts and artifact proof bundl
 - milestone: `143`
 - package: `next90-m143-ea-compile-route-specific-compare-packs-and-artifact-proofs-for-print-export`
 - work task: `143.5`
-- generated_at: `2026-05-06T00:57:53Z`
-- live desktop readiness: `warning`
+- generated_at: `2026-05-19T07:07:04Z`
+- live desktop readiness: `missing`
 
 ## Family route-specific compare packets
 
@@ -42,7 +42,7 @@ This EA-owned packet compiles the direct route receipts and artifact proof bundl
 - screenshot markers: `print_export_exchange, open_for_printing_menu_route, open_for_export_menu_route, print_multiple_menu_route`
 - output receipts: `/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md`
 - output tokens: `WorkspaceExchangeDeterministicReceipt, family:sheet_export_print_viewer_and_exchange`
-- status: `pass`
+- status: `fail`
 
 ### SR6 supplements, designers, and house rules
 
@@ -76,10 +76,14 @@ This EA-owned packet compiles the direct route receipts and artifact proof bundl
 - screenshot markers: `sr6_rule_environment, sr6_supplements, house_rules`
 - output receipts: `none`
 - output tokens: `none`
-- status: `pass`
+- status: `fail`
 
 ## Live readiness note
 
-- desktop_client status: `warning`
-- summary: flagship product readiness proof is not green: fail; warning coverage: desktop_client; readiness plane gaps: flagship_ready, veteran_deep_workflow_ready, dense_workbench_ready, recovery_trust_ready, sr6_parity_ready
-- missing keys: `none`
+- desktop_client status: `missing`
+- summary: flagship product readiness proof is not green: fail; missing coverage: desktop_client; readiness plane gaps: structural_ready, flagship_ready, veteran_ready, sr5_veteran_ready, veteran_deep_workflow_ready, dense_workbench_ready, public_shelf_ready, recovery_trust_ready, sr4_parity_ready
+- warning keys: `ui_kit_and_flagship_polish, fleet_and_operator_loop`
+- missing keys: `desktop_client`
+- scoped warning keys: `ui_kit_and_flagship_polish, fleet_and_operator_loop`
+- scoped missing keys: `desktop_client`
+- coverage gap keys: `ui_kit_and_flagship_polish, fleet_and_operator_loop, desktop_client`

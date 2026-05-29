@@ -2,7 +2,7 @@
 set -eu
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" && export REPO_ROOT && DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads" && export DOWNLOADS_ROOT
+REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" && export REPO_ROOT && if [ -z "${CHUMMER_UI_REPO_ROOT:-}" ] && [ ! -d "$REPO_ROOT" ]; then for candidate in /docker/chummercomplete/chummer6-ui /docker/chummercomplete/chummer6-ui-finish /docker/chummercomplete/chummer-presentation; do if [ -d "$candidate" ]; then REPO_ROOT="$candidate" && export REPO_ROOT && break; fi; done; fi && DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads" && export DOWNLOADS_ROOT
 BUNDLE_ROOT="$SCRIPT_DIR/host-proof-bundles/linux"
 BUNDLE_ARCHIVE="$SCRIPT_DIR/linux-proof-bundle.tgz"
 export BUNDLE_ROOT
