@@ -1,0 +1,14 @@
+{
+  "generated_at_utc": "2026-05-29T19:26:27Z",
+  "status": "pass",
+  "verdict": "GOLD_READY",
+  "required_gates": {
+    "rafter_pixefy": {
+      "required": true,
+      "verdict_file": "_completion/rafter_pixefy/FINAL_RAFTER_PIXEFY_QA_STACK_VERDICT.md",
+      "required_value": "RAFTER_PIXEFY_QA_STACK_READY",
+      "actual_value": "RAFTER_PIXEFY_QA_STACK_READY"
+    }
+  },
+  "reasons": []
+}

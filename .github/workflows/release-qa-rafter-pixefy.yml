@@ -1,0 +1,47 @@
+name: Release QA - Rafter and Pixefy
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  verify-ltd-inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Rafter/Pixefy LTD entries
+        run: python3 scripts/verify_ltds_rafter_pixefy_entries.py
+
+  rafter-security-gate:
+    runs-on: ubuntu-latest
+    needs: verify-ltd-inventory
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Rafter provider
+        run: python3 providers/rafter/verify_rafter_provider.py
+      - name: Run Rafter security gold gate
+        run: python3 providers/rafter/run_rafter_security_gold_gate.py
+
+  pixefy-visual-gate:
+    runs-on: ubuntu-latest
+    needs: verify-ltd-inventory
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Pixefy provider
+        run: python3 providers/pixefy/verify_pixefy_provider.py
+      - name: Run Pixefy responsive visual QA
+        run: python3 providers/pixefy/run_pixefy_responsive_visual_qa.py
+
+  final-rafter-pixefy-verdict:
+    runs-on: ubuntu-latest
+    needs:
+      - rafter-security-gate
+      - pixefy-visual-gate
+    steps:
+      - uses: actions/checkout@v4
+      - name: Final Rafter/Pixefy verdict
+        run: python3 scripts/final_rafter_pixefy_qa_stack_verdict.py

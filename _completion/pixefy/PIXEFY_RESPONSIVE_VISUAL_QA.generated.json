@@ -1,0 +1,36 @@
+{
+  "gate": "PIXEFY_RESPONSIVE_VISUAL_QA",
+  "generated_at_utc": "2026-05-29T19:49:43Z",
+  "provider_verification_id": "PIXEFY_PROVIDER_VERIFICATION.generated.json",
+  "screenshot_freshness": {
+    "max_age_hours_for_gold": 72,
+    "oldest_capture_age_hours": 0,
+    "fresh": true
+  },
+  "coverage": {
+    "required_routes": 10,
+    "captured_routes": 10,
+    "missing_routes": [],
+    "required_devices": 11,
+    "captured_device_route_pairs": 110,
+    "missing_device_route_pairs": []
+  },
+  "visual_findings": {
+    "critical_layout_blockers": 0,
+    "mobile_blockers": 0,
+    "tablet_blockers": 0,
+    "desktop_blockers": 0,
+    "contrast_blockers": 0,
+    "overflow_blockers": 0,
+    "dead_or_hidden_cta_blockers": 0,
+    "unreadable_text_blockers": 0
+  },
+  "review": {
+    "human_review_file": "PIXEFY_HUMAN_VISUAL_REVIEW.md",
+    "human_review_status": "pass"
+  },
+  "status": "pass",
+  "gold_blocker": true,
+  "summary": "Pixefy responsive visual QA passed with public-route screenshot evidence.",
+  "failures": []
+}

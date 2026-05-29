@@ -1,0 +1,100 @@
+{
+  "generated_at_utc": "2026-05-29T19:49:43Z",
+  "provider": "Pixefy",
+  "routes": [
+    {
+      "id": "home",
+      "url": "https://chummer.run/",
+      "checks": [
+        "black_ledger_hero_visible",
+        "primary_cta_visible",
+        "no_dead_buttons",
+        "no_demo_runner_copy"
+      ]
+    },
+    {
+      "id": "downloads",
+      "url": "https://chummer.run/downloads",
+      "checks": [
+        "platform_cards_visible",
+        "no_contradictory_platform_copy",
+        "no_demo_runner_copy",
+        "download_ctas_visible"
+      ]
+    },
+    {
+      "id": "status",
+      "url": "https://chummer.run/status",
+      "checks": [
+        "release_channel_visible",
+        "build_visible",
+        "proof_freshness_visible",
+        "no_gold_claim_if_stale"
+      ]
+    },
+    {
+      "id": "ledger",
+      "url": "https://chummer.run/ledger",
+      "checks": [
+        "ledger_shell_visible",
+        "faction_entry_visible",
+        "globe_or_video_globe_visible",
+        "no_dead_links"
+      ]
+    },
+    {
+      "id": "ledger_map",
+      "url": "https://chummer.run/ledger/map",
+      "checks": [
+        "globe_large_enough",
+        "markers_readable",
+        "score_strip_readable",
+        "hover_or_focus_states_work"
+      ]
+    },
+    {
+      "id": "ledger_factions",
+      "url": "https://chummer.run/ledger/factions",
+      "checks": [
+        "all_seeded_factions_visible",
+        "faction_cards_have_logo_or_identity",
+        "no_empty_subpages"
+      ]
+    },
+    {
+      "id": "ledger_newsroom",
+      "url": "https://chummer.run/ledger/newsroom",
+      "checks": [
+        "newsreel_page_visible",
+        "poster_or_video_visible",
+        "transcript_link_visible"
+      ]
+    },
+    {
+      "id": "play",
+      "url": "https://chummer.run/play",
+      "checks": [
+        "pwa_install_guidance_visible",
+        "mobile_layout_usable"
+      ]
+    },
+    {
+      "id": "help",
+      "url": "https://chummer.run/help",
+      "checks": [
+        "support_route_visible",
+        "no_rules_copyright_overexposure"
+      ]
+    },
+    {
+      "id": "feedback",
+      "url": "https://chummer.run/feedback",
+      "checks": [
+        "productlift_or_feedback_surface_visible",
+        "no_dead_form"
+      ]
+    }
+  ],
+  "required_route_count": 10,
+  "status": "pass"
+}
