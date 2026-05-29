@@ -1,12 +1,12 @@
 {
   "contract_name": "chummer.weekly_product_pulse",
   "contract_version": 3,
-  "generated_at": "2026-05-29T10:53:41Z",
+  "generated_at": "2026-05-29T11:04:10Z",
   "as_of": "2026-05-29",
   "scorecard_source": "products/chummer/PRODUCT_HEALTH_SCORECARD.yaml",
   "progress_report_source": "products/chummer/PROGRESS_REPORT.generated.json",
   "progress_history_source": "products/chummer/PROGRESS_HISTORY.generated.json",
-  "summary": "Next 12 Biggest Wins is materially closed as the latest recommended closeout wave; journey proof is blocked; flagship replacement readiness is still open; overall progress is 99% in 'Public-fit polish'; the longest pole remains Core Engine; support closure still needs follow-through.",
+  "summary": "Next 12 Biggest Wins is materially closed as the latest recommended closeout wave; journey proof is blocked only by external macos, windows host proof on 3 tuple(s); flagship replacement readiness is still open; overall progress is 99% in 'Public-fit polish'; the longest pole is now external Windows host proof; support closure still needs follow-through.",
   "active_wave": "Next 12 Biggest Wins",
   "active_wave_status": "complete",
   "release_health": {
@@ -40,11 +40,11 @@
   },
   "journey_gate_health": {
     "state": "blocked",
-    "reason": "Resolve the blocking golden-journey gaps before widening publish claims.",
+    "reason": "Only external host-proof gaps remain: run the missing macos, windows proof lane for 2 desktop tuple(s), ingest receipts, and then republish release truth.",
     "blocked_count": 3,
     "warning_count": 0,
-    "blocked_external_only_count": 2,
-    "blocked_with_local_count": 1,
+    "blocked_external_only_count": 3,
+    "blocked_with_local_count": 0,
     "blocked_external_only_hosts": [
       "macos",
       "windows"
@@ -73,7 +73,7 @@
     },
     {
       "cluster_id": "long_pole_visibility",
-      "summary": "The current longest pole is Core Engine, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product.",
+      "summary": "The current longest pole is external macos, windows host proof, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product.",
       "source_paths": [
         "products/chummer/PROGRESS_REPORT.generated.json",
         "products/chummer/RELEASE_EVIDENCE_PACK.md"
@@ -87,13 +87,13 @@
     {
       "decision_id": "2026-05-29-focus-next-12-biggest-wins",
       "action": "focus_shift",
-      "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 99% overall progress in 'Public-fit polish', history depth has reached 20 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
+      "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 99% overall progress in 'Public-fit polish', history depth has reached 20 snapshots, and the pacing risk remains concentrated in external macos, windows host proof while trust/publication/utility closure still needs measured completion on the active registry.",
       "cited_signals": [
         "overall_progress_percent=99",
         "history_snapshot_count=20",
         "oldest_blocker_days=0",
         "phase_label=Public-fit polish",
-        "longest_pole=Core Engine",
+        "longest_pole=external macos, windows host proof",
         "active_wave_status=complete"
       ]
     },
@@ -149,11 +149,11 @@
     },
     "journey_gate_health": {
       "state": "blocked",
-      "reason": "Resolve the blocking golden-journey gaps before widening publish claims.",
+      "reason": "Only external host-proof gaps remain: run the missing macos, windows proof lane for 2 desktop tuple(s), ingest receipts, and then republish release truth.",
       "blocked_count": 3,
       "warning_count": 0,
-      "blocked_external_only_count": 2,
-      "blocked_with_local_count": 1,
+      "blocked_external_only_count": 3,
+      "blocked_with_local_count": 0,
       "blocked_external_only_hosts": [
         "macos",
         "windows"
@@ -182,7 +182,7 @@
       },
       {
         "cluster_id": "long_pole_visibility",
-        "summary": "The current longest pole is Core Engine, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product.",
+        "summary": "The current longest pole is external macos, windows host proof, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product.",
         "source_paths": [
           "products/chummer/PROGRESS_REPORT.generated.json",
           "products/chummer/RELEASE_EVIDENCE_PACK.md"
@@ -196,13 +196,13 @@
       {
         "decision_id": "2026-05-29-focus-next-12-biggest-wins",
         "action": "focus_shift",
-        "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 99% overall progress in 'Public-fit polish', history depth has reached 20 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
+        "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 99% overall progress in 'Public-fit polish', history depth has reached 20 snapshots, and the pacing risk remains concentrated in external macos, windows host proof while trust/publication/utility closure still needs measured completion on the active registry.",
         "cited_signals": [
           "overall_progress_percent=99",
           "history_snapshot_count=20",
           "oldest_blocker_days=0",
           "phase_label=Public-fit polish",
-          "longest_pole=Core Engine",
+          "longest_pole=external macos, windows host proof",
           "active_wave_status=complete"
         ]
       },
@@ -232,7 +232,7 @@
     "overall_progress_percent": 99,
     "phase_label": "Public-fit polish",
     "history_snapshot_count": 20,
-    "longest_pole": "Core Engine",
+    "longest_pole": "external macos, windows host proof",
     "launch_readiness": "Hold launch expansion pending route-canary validation. 3 golden journey(s) remain blocked.",
     "provider_route_stewardship": {
       "default_status": "Pilot defaults are governed",
