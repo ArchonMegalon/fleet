@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-05-29T09:34:21Z",
+  "generated_at": "2026-05-29T10:53:40Z",
   "status": "fail",
   "scoped_status": "fail",
   "ready_keys": [
@@ -24,7 +24,7 @@
   "deferred_warning_keys": [],
   "completion_audit": {
     "status": "fail",
-    "reason": "Flagship product readiness planes are not green: flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, public_shelf_ready, recovery_trust_ready, sr4_parity_ready, sr6_parity_ready.",
+    "reason": "Flagship product readiness planes are not green: flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, public_shelf_ready, recovery_trust_ready.",
     "external_only": false,
     "unresolved_external_proof_request_count": 2,
     "unresolved_external_proof_request_hosts": [
@@ -38,7 +38,7 @@
   },
   "flagship_readiness_audit": {
     "status": "fail",
-    "reason": "flagship product readiness proof is not green: fail; missing coverage: desktop_client; readiness plane gaps: flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, public_shelf_ready, recovery_trust_ready, sr4_parity_ready, sr6_parity_ready",
+    "reason": "flagship product readiness proof is not green: fail; missing coverage: desktop_client; readiness plane gaps: flagship_ready, veteran_deep_workflow_ready, primary_route_ready, dense_workbench_ready, public_shelf_ready, recovery_trust_ready",
     "coverage_gap_keys": [
       "desktop_client"
     ],
@@ -68,13 +68,13 @@
       "avalonia:win-x64:windows"
     ],
     "runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-    "runbook_generated_at": "2026-05-29T09:34:21Z",
-    "runbook_plan_generated_at": "2026-05-29T09:32:50Z",
+    "runbook_generated_at": "2026-05-29T10:53:39Z",
+    "runbook_plan_generated_at": "2026-05-29T10:51:03Z",
     "runbook_release_channel_generated_at": "2026-05-29T08:34:38Z",
     "commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
-    "command_bundle_sha256": "a09d7c1ee6492c3bc319c0c52b358f8948e7d57e6042b25624ab40157a2861d2",
+    "command_bundle_sha256": "c190a91a769a3f6bb26067764bb0b6b265480878dda02d7b9a6faad253770311",
     "command_bundle_file_count": 30,
-    "runbook_command_bundle_sha256": "a09d7c1ee6492c3bc319c0c52b358f8948e7d57e6042b25624ab40157a2861d2",
+    "runbook_command_bundle_sha256": "c190a91a769a3f6bb26067764bb0b6b265480878dda02d7b9a6faad253770311",
     "runbook_command_bundle_file_count": 30,
     "runbook_synced": true,
     "runbook_sync_reasons": []
@@ -86,7 +86,7 @@
     "scoped_warning_count": 0,
     "scoped_missing_count": 1,
     "deferred_warning_count": 0,
-    "history_snapshot_count": 33
+    "history_snapshot_count": 34
   },
   "quality_policy": {
     "bar": "top_flagship_grade",
@@ -109,7 +109,7 @@
     },
     "routes": [
       {
-        "route_id": "route-5b9169569f01",
+        "route_id": "route-c04550c2ae4c",
         "journey_id": "install_claim_restore_continue",
         "journey_state": "blocked",
         "owner_repo": "chummer6-mobile",
@@ -117,7 +117,7 @@
         "package_id": "autofix-install-claim-restore-continue-chummer6-mobile-1",
         "category_id": "",
         "evidence_path": ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
-        "reason": "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (397071s old > 172800s max)."
+        "reason": "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (401734s old > 172800s max)."
       }
     ],
     "unrouted_reasons": []
@@ -150,9 +150,7 @@
         "Dense-workbench readiness plane is not ready.",
         "Veteran deep-workflow readiness plane is not ready.",
         "Public-shelf readiness plane is not ready.",
-        "Recovery-trust readiness plane is not ready.",
-        "SR4 parity readiness plane is not ready.",
-        "SR6 parity readiness plane is not ready."
+        "Recovery-trust readiness plane is not ready."
       ],
       "evidence": {
         "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml",
@@ -191,8 +189,8 @@
         "rules_explainability_ready": true,
         "custom_data_survival_ready": true,
         "large_sheet_performance_ready": true,
-        "sr4_parity_ready": false,
-        "sr6_parity_ready": false,
+        "sr4_parity_ready": true,
+        "sr6_parity_ready": true,
         "m136_aggregate_readiness_gate_path": "/docker/fleet/.codex-studio/published/NEXT90_M136_FLEET_AGGREGATE_READINESS_PARITY_GATES.generated.json",
         "m136_aggregate_readiness_gate_ready": true,
         "m136_aggregate_readiness_gate_status": "pass",
@@ -493,8 +491,8 @@
           "signitic",
           "teable"
         ],
-        "support_generated_at": "2026-05-29T09:32:50Z",
-        "support_generated_age_seconds": 91,
+        "support_generated_at": "2026-05-29T10:51:03Z",
+        "support_generated_age_seconds": 157,
         "support_source_refresh_mode": "source_mirror_fallback",
         "support_source_refresh_mode_recovered_from_external_only_backlog": true,
         "support_source_refresh_mode_recovered_from_fresh_zero_backlog_mirror": false,
@@ -625,37 +623,31 @@
       }
     },
     "sr4_parity_ready": {
-      "status": "missing",
-      "summary": "SR4 parity proof is still incomplete.",
-      "reasons": [
-        "SR4 desktop workflow parity proof is not ready.",
-        "SR4/SR6 desktop parity frontier receipt is not ready."
-      ],
+      "status": "ready",
+      "summary": "SR4 parity proof is explicit and current.",
+      "reasons": [],
       "evidence": {
-        "sr4_workflow_parity_status": "fail",
+        "sr4_workflow_parity_status": "pass",
         "sr4_workflow_parity_external_only_missing_api_surface_contract": false,
-        "sr4_sr6_frontier_receipt_status": "fail"
+        "sr4_sr6_frontier_receipt_status": "pass"
       }
     },
     "sr6_parity_ready": {
-      "status": "missing",
-      "summary": "SR6 parity proof is still incomplete.",
-      "reasons": [
-        "SR6 desktop workflow parity proof is not ready.",
-        "SR4/SR6 desktop parity frontier receipt is not ready."
-      ],
+      "status": "ready",
+      "summary": "SR6 parity proof is explicit and current.",
+      "reasons": [],
       "evidence": {
-        "sr6_workflow_parity_status": "fail",
+        "sr6_workflow_parity_status": "pass",
         "sr6_workflow_parity_external_only_missing_api_surface_contract": false,
-        "sr4_sr6_frontier_receipt_status": "fail",
+        "sr4_sr6_frontier_receipt_status": "pass",
         "ui_element_parity_audit_gap_ids": []
       }
     }
   },
   "readiness_plane_summary": {
-    "ready_count": 8,
+    "ready_count": 10,
     "warning_count": 5,
-    "missing_count": 3
+    "missing_count": 1
   },
   "readiness_plane_gap_keys": [
     "flagship_ready",
@@ -663,9 +655,7 @@
     "primary_route_ready",
     "dense_workbench_ready",
     "public_shelf_ready",
-    "recovery_trust_ready",
-    "sr4_parity_ready",
-    "sr6_parity_ready"
+    "recovery_trust_ready"
   ],
   "source_documents": [
     "FLAGSHIP_PRODUCT_BAR.md",
@@ -730,10 +720,6 @@
       "summary": "Desktop flagship proof is still incomplete.",
       "reasons": [
         "Executable desktop workflow execution gate proof is missing or not passed. Catalog parity without click-through receipts does not pass.",
-        "Chummer5a desktop workflow parity proof is missing or not passed. Representative shell parity is not enough.",
-        "SR4 desktop workflow parity proof is missing or not passed. Chummer4 parity must remain open until a real desktop parity gate lands.",
-        "SR6 desktop workflow parity proof is missing or not passed. Cumulative carry-forward workflows are not complete yet.",
-        "SR4/SR6 desktop parity frontier receipt is missing or not passed. Cross-edition completion cannot close on isolated family proofs alone.",
         "Release channel does not publish any promoted Windows installer media.",
         "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:macos, avalonia:windows."
       ],
@@ -755,7 +741,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-05-28T18:32:06.792586Z",
-        "ui_executable_gate_age_seconds": 54134,
+        "ui_executable_gate_age_seconds": 58893,
         "ui_linux_exit_gate_status": "passed",
         "ui_linux_exit_gate_recovered_from_executable_gate": true,
         "ui_linux_exit_gate_effective_ready": true,
@@ -764,13 +750,50 @@
         "ui_windows_exit_gate_effective_ready": true,
         "ui_windows_exit_gate_payload_marker_present": true,
         "ui_windows_exit_gate_sample_marker_present": true,
-        "ui_external_host_proof_blockers_status": "ready",
+        "ui_external_host_proof_blockers_status": "blocked",
         "ui_external_host_proof_blockers_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_EXTERNAL_HOST_PROOF_BLOCKERS.generated.json",
-        "ui_external_host_proof_blockers_generated_at": "2026-05-29T07:11:43Z",
-        "ui_external_host_proof_blockers_unresolved_hosts": [],
-        "ui_external_host_proof_blockers_unresolved_tuples": [],
-        "ui_external_host_proof_blockers_request_count": 0,
-        "ui_external_host_proof_blockers_requests": [],
+        "ui_external_host_proof_blockers_generated_at": "2026-05-29T10:18:43Z",
+        "ui_external_host_proof_blockers_unresolved_hosts": [
+          "macos",
+          "windows"
+        ],
+        "ui_external_host_proof_blockers_unresolved_tuples": [
+          "avalonia:osx-arm64:macos",
+          "avalonia:win-x64:windows"
+        ],
+        "ui_external_host_proof_blockers_request_count": 2,
+        "ui_external_host_proof_blockers_requests": [
+          {
+            "tuple_id": "avalonia:osx-arm64:macos",
+            "required_host": "macos",
+            "blocker_codes": [
+              "receipt_stale",
+              "receipt_precedes_release_publication",
+              "public_route_unhealthy"
+            ],
+            "blocker_messages": [
+              "startup smoke receipt is stale (age_seconds=907577, max_age_seconds=604800)",
+              "startup smoke receipt was captured before the current release channel was published (receipt_recorded_at=2026-05-18T22:12:25Z, release_published_at=2026-05-29T10:18:35Z)",
+              "public install route unhealthy (status=403, error=http_403)"
+            ],
+            "ready": false,
+            "install_access_class": "open_public"
+          },
+          {
+            "tuple_id": "avalonia:win-x64:windows",
+            "required_host": "windows",
+            "blocker_codes": [
+              "receipt_stale",
+              "receipt_precedes_release_publication"
+            ],
+            "blocker_messages": [
+              "startup smoke receipt is stale (age_seconds=656797, max_age_seconds=604800)",
+              "startup smoke receipt was captured before the current release channel was published (receipt_recorded_at=2026-05-21T19:52:05Z, release_published_at=2026-05-29T10:18:35Z)"
+            ],
+            "ready": false,
+            "install_access_class": "account_required"
+          }
+        ],
         "ui_workflow_execution_gate_status": "fail",
         "ui_workflow_execution_gate_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
         "ui_workflow_execution_gate_recovered_from_executable_gate": false,
@@ -943,29 +966,29 @@
         "ui_localization_release_gate_translation_backlog_findings": [],
         "ui_localization_release_gate_untranslated_locale_count": 0,
         "ui_localization_release_gate_untranslated_counts_by_locale": {},
-        "ui_workflow_parity_status": "fail",
-        "ui_workflow_parity_effective_ready": false,
+        "ui_workflow_parity_status": "pass",
+        "ui_workflow_parity_effective_ready": true,
         "ui_workflow_parity_recovered_from_workflow_execution_gate": false,
         "ui_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
-        "sr4_workflow_parity_status": "fail",
-        "sr4_workflow_parity_effective_ready": false,
+        "sr4_workflow_parity_status": "pass",
+        "sr4_workflow_parity_effective_ready": true,
         "sr4_workflow_parity_external_only_missing_api_surface_contract": false,
         "sr4_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
-        "sr6_workflow_parity_status": "fail",
-        "sr6_workflow_parity_effective_ready": false,
+        "sr6_workflow_parity_status": "pass",
+        "sr6_workflow_parity_effective_ready": true,
         "sr6_workflow_parity_external_only_missing_api_surface_contract": false,
         "sr6_workflow_parity_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
-        "sr4_sr6_frontier_receipt_status": "fail",
-        "sr4_sr6_frontier_receipt_external_only_missing_api_surface_contract": false,
+        "sr4_sr6_frontier_receipt_status": "pass",
+        "sr4_sr6_frontier_receipt_external_only_missing_api_surface_contract": true,
         "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
         "ui_workflow_execution_gate_direct_flagship_slice_runtime_proof": true,
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-05-29T08:34:38Z",
         "release_channel_effective_generated_at": "2026-05-29T08:34:38Z",
-        "release_channel_effective_age_seconds": 3583,
+        "release_channel_effective_age_seconds": 8342,
         "release_channel_freshness_source": "canonical",
-        "release_channel_age_seconds": 3583,
+        "release_channel_age_seconds": 8342,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_verified_mirror_path": "",
@@ -973,7 +996,7 @@
         "release_channel_verified_mirror_age_seconds": null,
         "release_channel_verified_mirror_identity_match": false,
         "release_channel_ui_local_release_proof_generated_at": "2026-05-29T07:11:43Z",
-        "release_channel_ui_local_release_proof_age_seconds": 8558,
+        "release_channel_ui_local_release_proof_age_seconds": 13317,
         "release_channel_ui_local_release_proof_supports_freshness": false,
         "release_channel_id": "public_stable",
         "release_channel_heads": [
@@ -1354,7 +1377,7 @@
       "reasons": [],
       "evidence": {
         "public_group_deployment_status": "public",
-        "progress_report_generated_at": "2026-05-22T13:19:36Z",
+        "progress_report_generated_at": "2026-05-29T10:51:12Z",
         "install_claim_restore_continue": "blocked",
         "install_claim_restore_continue_desktop_scoped_blocked": false,
         "install_claim_restore_continue_effective_state": "ready",
@@ -1416,7 +1439,7 @@
         },
         "journey_local_blocker_route_sample": [
           {
-            "route_id": "route-5b9169569f01",
+            "route_id": "route-c04550c2ae4c",
             "journey_id": "install_claim_restore_continue",
             "journey_state": "blocked",
             "owner_repo": "chummer6-mobile",
@@ -1424,13 +1447,13 @@
             "package_id": "autofix-install-claim-restore-continue-chummer6-mobile-1",
             "category_id": "",
             "evidence_path": ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
-            "reason": "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (397071s old > 172800s max)."
+            "reason": "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (401734s old > 172800s max)."
           }
         ],
         "journey_local_blocker_unrouted_reason_sample": [],
-        "history_snapshot_count": 33,
-        "support_packets_generated_at": "2026-05-29T09:32:50Z",
-        "support_packets_generated_age_seconds": 91,
+        "history_snapshot_count": 34,
+        "support_packets_generated_at": "2026-05-29T10:51:03Z",
+        "support_packets_generated_age_seconds": 157,
         "support_packets_refresh_mode": "source_mirror_fallback",
         "support_open_packet_count": 2,
         "support_open_non_external_packet_count": 0,
@@ -1443,18 +1466,18 @@
         "external_proof_backlog_request_observation_count": 6,
         "external_proof_backlog_duplicate_observation_count": 4,
         "external_proof_runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-        "external_proof_runbook_generated_at": "2026-05-29T09:34:21Z",
-        "external_proof_runbook_plan_generated_at": "2026-05-29T09:32:50Z",
+        "external_proof_runbook_generated_at": "2026-05-29T10:53:39Z",
+        "external_proof_runbook_plan_generated_at": "2026-05-29T10:51:03Z",
         "external_proof_runbook_release_channel_generated_at": "2026-05-29T08:34:38Z",
         "external_proof_commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
-        "external_proof_command_bundle_sha256": "a09d7c1ee6492c3bc319c0c52b358f8948e7d57e6042b25624ab40157a2861d2",
+        "external_proof_command_bundle_sha256": "c190a91a769a3f6bb26067764bb0b6b265480878dda02d7b9a6faad253770311",
         "external_proof_command_bundle_file_count": 30,
-        "external_proof_runbook_command_bundle_sha256": "a09d7c1ee6492c3bc319c0c52b358f8948e7d57e6042b25624ab40157a2861d2",
+        "external_proof_runbook_command_bundle_sha256": "c190a91a769a3f6bb26067764bb0b6b265480878dda02d7b9a6faad253770311",
         "external_proof_runbook_command_bundle_file_count": 30,
         "external_proof_runbook_synced": true,
         "external_proof_runbook_sync_issue_count": 0,
         "dispatchable_truth_ready": true,
-        "active_shards_generated_at": "2026-05-29T09:33:56Z",
+        "active_shards_generated_at": "2026-05-29T10:53:38Z",
         "active_shards_manifest_kind": "configured_shard_topology",
         "active_shards_count": 3,
         "configured_shards_count": 20,
@@ -1462,12 +1485,12 @@
         "ooda_state_recovered_from_active_shards": false,
         "ooda_state_recovery_source": "",
         "supervisor_mode": "sharded",
-        "supervisor_completion_status": "pass",
-        "supervisor_completion_external_only": false,
+        "supervisor_completion_status": "fail",
+        "supervisor_completion_external_only": true,
         "supervisor_completion_desktop_scoped": false,
         "supervisor_completion_routed_local_only": false,
         "supervisor_successor_wave_steering_ready": false,
-        "supervisor_updated_at": "2026-05-29T09:33:55Z",
+        "supervisor_updated_at": "2026-05-29T10:53:35Z",
         "supervisor_recent_enough": true,
         "supervisor_focus_profiles": [
           "top_flagship_grade",
@@ -1478,7 +1501,7 @@
           "whole_project_frontier"
         ],
         "supervisor_state_recovered_from_active_shards": false,
-        "supervisor_focus_profiles_recovered_from_runtime_env": true,
+        "supervisor_focus_profiles_recovered_from_runtime_env": false,
         "supervisor_hard_flagship_ready": true,
         "supervisor_whole_project_frontier_ready": true,
         "ooda_controller": "up",
