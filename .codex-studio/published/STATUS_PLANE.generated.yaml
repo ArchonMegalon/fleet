@@ -1,14 +1,14 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-05-29T11:04:08Z'
-source_public_status_generated_at: '2026-05-29T11:04:01Z'
+generated_at: '2026-05-29T11:05:05Z'
+source_public_status_generated_at: '2026-05-29T11:04:58Z'
 mission_snapshot:
   headline: 'Working now: Bound BeHuman and Answerly into the living-world loop as
-    safe engagement rails instead of uncontrolled authority planes.. ETA: 28m 25s.
+    safe engagement rails instead of uncontrolled authority planes.. ETA: 27m 28s.
     Next: Add milestone mapping or executable queue work for Moderation and publication
     projections still need explicit registry-owned read models... Vision: 0s. Capacity:
     Core 0%, Easy 0%, Jury 0%. Stop risk: none.'
-  current_eta: 28m 25s
+  current_eta: 27m 28s
   next_title: Add milestone mapping or executable queue work for Moderation and publication
     projections still need explicit registry-owned read models..
   vision_eta: 0s
@@ -19,7 +19,7 @@ mission_snapshot:
   - Easy 0%
   - Jury 0%
   stop_risk: none
-  headline_eta: 28m 25s
+  headline_eta: 27m 28s
 queue_forecast:
   now:
     project_id: hub
@@ -29,10 +29,10 @@ queue_forecast:
     provider: EA
     brain: EA backend / ea-coder-hard-batch
     reason: interactive_or_first_pass
-    elapsed_seconds: 1895
-    elapsed_human: 31m 35s
-    remaining_seconds: 1705
-    remaining_human: 28m 25s
+    elapsed_seconds: 1952
+    elapsed_human: 32m 32s
+    remaining_seconds: 1648
+    remaining_human: 27m 28s
     total_seconds: 3600
     total_human: 1h
     verify_or_review_ahead: true
@@ -56,13 +56,12 @@ queue_forecast:
       dispatch
     confidence: stable
   then:
-    project_id: ui-kit
-    title: Add milestone mapping or executable queue work for Catalog, visual-regression,
-      and release discipline for the shared kit are not yet materialized..
+    project_id: core
+    title: Stabilize design-doc parity hygiene loop
     lane: easy
     provider: not active
     brain: not active
-    reason: interactive_or_first_pass
+    reason: the auditor is materializing the next scoped queue from backlog evidence
     elapsed_seconds: 0
     elapsed_human: 0s
     remaining_seconds: 3600
@@ -70,9 +69,9 @@ queue_forecast:
     total_seconds: 3600
     total_human: 1h
     verify_or_review_ahead: true
-    prerequisites: configured queue has remaining work and is waiting for scheduler
-      dispatch
-    confidence: stable
+    prerequisites: the current queue materialization is exhausted, but the backlog
+      source still reports open work
+    confidence: volatile
 capacity_forecast:
   lanes:
   - lane: easy
@@ -572,12 +571,11 @@ readiness_summary:
     boundary_pure: 5
     publicly_promoted: 2
   warning_count: 6
-  final_claim_ready: 4
+  final_claim_ready: 3
   final_claim_ready_project_ids:
   - fleet
   - hub
   - mobile
-  - ui-kit
   whole_product_final_claim_status: fail
   whole_product_final_claim_bar: top_flagship_grade
   whole_product_final_claim_whole_project_frontier_required: true
@@ -591,12 +589,11 @@ readiness_summary:
   - public_shelf_ready
   - recovery_trust_ready
   - veteran_deep_workflow_ready
-final_claim_ready: 4
+final_claim_ready: 3
 final_claim_ready_project_ids:
 - fleet
 - hub
 - mobile
-- ui-kit
 whole_product_final_claim_status: fail
 whole_product_final_claim_bar: top_flagship_grade
 whole_product_final_claim_whole_project_frontier_required: true
@@ -863,8 +860,8 @@ support_summary:
   freshness:
     available: true
     at: '2026-05-29T10:51:03Z'
-    age_seconds: 784
-    age_human: 13m 4s
+    age_seconds: 840
+    age_human: 14m
     state: fresh
     label: fresh
 publish_readiness:
@@ -1048,11 +1045,11 @@ projects:
   deployment_access_posture: public
 - id: ui-kit
   lifecycle: scaffold
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: true
-  readiness_warning_count: 0
+  readiness_final_claim_allowed: false
+  readiness_warning_count: 1
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''
