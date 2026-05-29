@@ -1,608 +1,599 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-05-29T10:51:04Z'
-source_public_status_generated_at: '2026-05-29T10:41:22Z'
+generated_at: '2026-05-29T11:05:05Z'
+source_public_status_generated_at: '2026-05-29T11:04:58Z'
 mission_snapshot:
-  current_eta: 47m 41s
-  headline: 'Working now: Add milestone mapping or executable queue work for Catalog,
-    visual-regression, and release discipline for the shared kit are not yet materialized...
-    ETA: 47m 41s. Next: Canonize the Table Pulse heat reaction system so ownership,
-    receipts, privacy, GM authority, and Black Ledger boundaries are explicit before
-    implementation work fans out.. Vision: 0s. Capacity: Core 0%, Easy 0%, Jury 0%.
-    Stop risk: none.'
-  headline_eta: 47m 41s
+  headline: 'Working now: Bound BeHuman and Answerly into the living-world loop as
+    safe engagement rails instead of uncontrolled authority planes.. ETA: 27m 28s.
+    Next: Add milestone mapping or executable queue work for Moderation and publication
+    projections still need explicit registry-owned read models... Vision: 0s. Capacity:
+    Core 0%, Easy 0%, Jury 0%. Stop risk: none.'
+  current_eta: 27m 28s
+  next_title: Add milestone mapping or executable queue work for Moderation and publication
+    projections still need explicit registry-owned read models..
+  vision_eta: 0s
+  milestone_title: chummer-vnext
+  milestone_eta: 0s
   lane_capacity_summary:
   - Core 0%
   - Easy 0%
   - Jury 0%
-  milestone_eta: 0s
-  milestone_title: chummer-vnext
-  next_title: Canonize the Table Pulse heat reaction system so ownership, receipts,
-    privacy, GM authority, and Black Ledger boundaries are explicit before implementation
-    work fans out.
   stop_risk: none
-  vision_eta: 0s
+  headline_eta: 27m 28s
 queue_forecast:
-  next:
-    brain: not active
-    confidence: stable
-    elapsed_human: 0s
-    elapsed_seconds: 0
-    lane: easy
-    prerequisites: configured queue has remaining work and is waiting for scheduler
-      dispatch
-    project_id: design
-    provider: not active
-    reason: interactive_or_first_pass
-    remaining_human: 1h
-    remaining_seconds: 3600
-    title: Canonize the Table Pulse heat reaction system so ownership, receipts, privacy,
-      GM authority, and Black Ledger boundaries are explicit before implementation
-      work fans out.
-    total_human: 1h
-    total_seconds: 3600
-    verify_or_review_ahead: true
   now:
-    brain: EA backend / ea-coder-hard-batch
-    elapsed_human: 12m 19s
-    elapsed_seconds: 739
+    project_id: hub
+    title: Bound BeHuman and Answerly into the living-world loop as safe engagement
+      rails instead of uncontrolled authority planes.
     lane: easy
-    prerequisites: none
-    project_id: ui-kit
     provider: EA
+    brain: EA backend / ea-coder-hard-batch
     reason: interactive_or_first_pass
-    remaining_human: 47m 41s
-    remaining_seconds: 2861
-    title: Add milestone mapping or executable queue work for Catalog, visual-regression,
-      and release discipline for the shared kit are not yet materialized..
-    total_human: 1h
+    elapsed_seconds: 1952
+    elapsed_human: 32m 32s
+    remaining_seconds: 1648
+    remaining_human: 27m 28s
     total_seconds: 3600
+    total_human: 1h
     verify_or_review_ahead: true
-  then:
+    prerequisites: none
+  next:
+    project_id: hub-registry
+    title: Add milestone mapping or executable queue work for Moderation and publication
+      projections still need explicit registry-owned read models..
+    lane: easy
+    provider: not active
     brain: not active
-    confidence: stable
-    elapsed_human: 0s
+    reason: interactive_or_first_pass
     elapsed_seconds: 0
-    lane: core_booster
+    elapsed_human: 0s
+    remaining_seconds: 3600
+    remaining_human: 1h
+    total_seconds: 3600
+    total_human: 1h
+    verify_or_review_ahead: true
     prerequisites: configured queue has remaining work and is waiting for scheduler
       dispatch
-    project_id: fleet
-    provider: not active
-    reason: cheap_first_default
-    remaining_human: 1h
-    remaining_seconds: 3600
-    title: Prove the flagship stack stays at rest across repeated real runs by capturing
-      soak receipts for projection truth, ETA honesty, billing freshness, and canonical
-      release convergence without manual operator correction.
-    total_human: 1h
-    total_seconds: 3600
-    verify_or_review_ahead: true
-capacity_forecast:
-  account_pressure: []
-  critical_path_lane: core
-  critical_path_stop: unknown
-  group_pressure:
-  - bottleneck: lockstep dispatch blocked until all member projects and group blockers
-      are ready
-    confidence: high
-    deployment_summary: Public Chummer portal is live at chummer.run as a promoted
-      preview release shell for the split heads.
-    drain_share_percent: 0
-    eligible_parallel_slots: 0
-    finish_outlook: public_fast_path
-    group_id: chummer-vnext
-    pool_level: unknown
-    program_eta: 0s
-    remaining_slices: 0
-    runway_risk: high
-    slot_share_percent: 0
-  - bottleneck: group dispatch blocked by current runtime and contract state
-    confidence: high
-    deployment_summary: Fleet control-plane services and the governed EA runtime substrate
-      are internal-only operator surfaces.
-    drain_share_percent: 0
-    eligible_parallel_slots: 0
-    finish_outlook: public_fast_path
-    group_id: control-plane
-    pool_level: unknown
-    program_eta: 0s
-    remaining_slices: 0
-    runway_risk: high
-    slot_share_percent: 0
-  lanes:
-  - backend: gemini_vortex
-    brain: ea-coder-fast
-    configured_slots: 1
-    degraded_slots: 1
-    hot_runway: unknown
-    hours_text: unknown
+    confidence: stable
+  then:
+    project_id: core
+    title: Stabilize design-doc parity hygiene loop
     lane: easy
+    provider: not active
+    brain: not active
+    reason: the auditor is materializing the next scoped queue from backlog evidence
+    elapsed_seconds: 0
+    elapsed_human: 0s
+    remaining_seconds: 3600
+    remaining_human: 1h
+    total_seconds: 3600
+    total_human: 1h
+    verify_or_review_ahead: true
+    prerequisites: the current queue materialization is exhausted, but the backlog
+      source still reports open work
+    confidence: volatile
+capacity_forecast:
+  lanes:
+  - lane: easy
+    profile: easy
+    model: ea-coder-fast
+    brain: ea-coder-fast
+    backend: gemini_vortex
+    provider: gemini_vortex
+    state: missing
+    remaining_percent: 0.0
+    remaining_text: 0%
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: 0% allowance
+    native_allowance:
+      provider_key: gemini_vortex
+      state: missing
+      remaining_percent_of_max: 0.0
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 1
+    ready_slots: 0
+    degraded_slots: 1
+    slot_owners: []
     local_estimated_burn_usd: 2.900591
     local_run_count: 5
     mission_ready: false
+  - lane: repair
+    profile: repair
     model: ea-coder-fast
-    native_allowance:
-      estimated_burn_credits_per_hour: null
-      estimated_hours_remaining_at_current_pace: null
-      estimated_remaining_credits_total: null
-      max_credits_per_day: null
-      max_credits_per_hour: null
-      max_requests_per_hour: null
-      provider_key: gemini_vortex
-      remaining_percent_of_max: 0.0
-      state: missing
-    profile: easy
+    brain: ea-coder-fast
+    backend: gemini_vortex
     provider: gemini_vortex
-    ready_slots: 0
+    state: missing
     remaining_percent: 0.0
     remaining_text: 0%
-    slot_owners: []
-    state: missing
-    sustainable_runway: 0% allowance
-  - backend: gemini_vortex
-    brain: ea-coder-fast
-    configured_slots: 1
-    degraded_slots: 1
-    hot_runway: unknown
     hours_text: unknown
-    lane: repair
+    hot_runway: unknown
+    sustainable_runway: 0% allowance
+    native_allowance:
+      provider_key: gemini_vortex
+      state: missing
+      remaining_percent_of_max: 0.0
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 1
+    ready_slots: 0
+    degraded_slots: 1
+    slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
     mission_ready: false
-    model: ea-coder-fast
-    native_allowance:
-      estimated_burn_credits_per_hour: null
-      estimated_hours_remaining_at_current_pace: null
-      estimated_remaining_credits_total: null
-      max_credits_per_day: null
-      max_credits_per_hour: null
-      max_requests_per_hour: null
-      provider_key: gemini_vortex
-      remaining_percent_of_max: 0.0
-      state: missing
-    profile: repair
-    provider: gemini_vortex
-    ready_slots: 0
-    remaining_percent: 0.0
-    remaining_text: 0%
-    slot_owners: []
-    state: missing
-    sustainable_runway: 0% allowance
-  - backend: gemini_vortex
+  - lane: groundwork
+    profile: groundwork
+    model: ea-groundwork-gemini
     brain: ea-groundwork-gemini
-    configured_slots: 1
-    degraded_slots: 1
-    hot_runway: unknown
+    backend: gemini_vortex
+    provider: gemini_vortex
+    state: missing
+    remaining_percent: null
+    remaining_text: missing
     hours_text: unknown
-    lane: groundwork
+    hot_runway: unknown
+    sustainable_runway: unknown
+    native_allowance:
+      provider_key: gemini_vortex
+      state: missing
+      remaining_percent_of_max: null
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 1
+    ready_slots: 0
+    degraded_slots: 1
+    slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 1
     mission_ready: false
-    model: ea-groundwork-gemini
-    native_allowance:
-      estimated_burn_credits_per_hour: null
-      estimated_hours_remaining_at_current_pace: null
-      estimated_remaining_credits_total: null
-      max_credits_per_day: null
-      max_credits_per_hour: null
-      max_requests_per_hour: null
-      provider_key: gemini_vortex
-      remaining_percent_of_max: null
-      state: missing
-    profile: groundwork
-    provider: gemini_vortex
-    ready_slots: 0
-    remaining_percent: null
-    remaining_text: missing
-    slot_owners: []
-    state: missing
-    sustainable_runway: unknown
-  - backend: gemini_vortex
+  - lane: review_light
+    profile: review_light
+    model: ea-review-light
     brain: ea-review-light
-    configured_slots: 1
-    degraded_slots: 1
-    hot_runway: unknown
+    backend: gemini_vortex
+    provider: browseract
+    state: missing
+    remaining_percent: 0.0
+    remaining_text: 0%
     hours_text: unknown
-    lane: review_light
+    hot_runway: unknown
+    sustainable_runway: 0% allowance
+    native_allowance:
+      provider_key: browseract
+      state: missing
+      remaining_percent_of_max: 0.0
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 1
+    ready_slots: 0
+    degraded_slots: 1
+    slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
     mission_ready: false
-    model: ea-review-light
-    native_allowance:
-      estimated_burn_credits_per_hour: null
-      estimated_hours_remaining_at_current_pace: null
-      estimated_remaining_credits_total: null
-      max_credits_per_day: null
-      max_credits_per_hour: null
-      max_requests_per_hour: null
-      provider_key: browseract
-      remaining_percent_of_max: 0.0
-      state: missing
-    profile: review_light
-    provider: browseract
-    ready_slots: 0
+  - lane: core
+    profile: core
+    model: ea-coder-hard
+    brain: ea-coder-hard
+    backend: onemin
+    provider: onemin
+    state: unconfigured
     remaining_percent: 0.0
     remaining_text: 0%
-    slot_owners: []
-    state: missing
-    sustainable_runway: 0% allowance
-  - backend: onemin
-    brain: ea-coder-hard
-    configured_slots: 19
-    degraded_slots: 14
-    hot_runway: unknown
     hours_text: unknown
-    lane: core
+    hot_runway: unknown
+    sustainable_runway: 0% allowance
+    native_allowance:
+      provider_key: onemin
+      state: unconfigured
+      remaining_percent_of_max: 0.0
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: 100
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 19
+    ready_slots: 1
+    degraded_slots: 14
+    slot_owners: []
     local_estimated_burn_usd: 3.105556
     local_run_count: 14
     mission_ready: false
-    model: ea-coder-hard
-    native_allowance:
-      estimated_burn_credits_per_hour: null
-      estimated_hours_remaining_at_current_pace: null
-      estimated_remaining_credits_total: 100
-      max_credits_per_day: 600000
-      max_credits_per_hour: 80000
-      max_requests_per_hour: 120
-      provider_key: onemin
-      remaining_percent_of_max: 0.0
-      state: unconfigured
+  - lane: core_authority
     profile: core
+    model: ea-coder-hard
+    brain: ea-coder-hard
+    backend: onemin
     provider: onemin
-    ready_slots: 1
+    state: unconfigured
     remaining_percent: 0.0
     remaining_text: 0%
-    slot_owners: []
-    state: unconfigured
-    sustainable_runway: 0% allowance
-  - backend: onemin
-    brain: ea-coder-hard
-    configured_slots: 19
-    degraded_slots: 14
-    hot_runway: unknown
     hours_text: unknown
-    lane: core_authority
+    hot_runway: unknown
+    sustainable_runway: 0% allowance
+    native_allowance:
+      provider_key: onemin
+      state: unconfigured
+      remaining_percent_of_max: 0.0
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: 100
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 19
+    ready_slots: 1
+    degraded_slots: 14
+    slot_owners: []
     local_estimated_burn_usd: 1.126012
     local_run_count: 2
     mission_ready: false
-    model: ea-coder-hard
-    native_allowance:
-      estimated_burn_credits_per_hour: null
-      estimated_hours_remaining_at_current_pace: null
-      estimated_remaining_credits_total: 100
-      max_credits_per_day: 600000
-      max_credits_per_hour: 80000
-      max_requests_per_hour: 120
-      provider_key: onemin
-      remaining_percent_of_max: 0.0
-      state: unconfigured
+  - lane: core_booster
     profile: core
-    provider: onemin
-    ready_slots: 1
-    remaining_percent: 0.0
-    remaining_text: 0%
-    slot_owners: []
-    state: unconfigured
-    sustainable_runway: 0% allowance
-  - backend: onemin
+    model: ea-coder-hard
     brain: ea-coder-hard
-    configured_slots: 19
-    degraded_slots: 14
-    hot_runway: unknown
+    backend: onemin
+    provider: onemin
+    state: unconfigured
+    remaining_percent: 0.0
+    remaining_text: 0%
     hours_text: unknown
-    lane: core_booster
+    hot_runway: unknown
+    sustainable_runway: 0% allowance
+    native_allowance:
+      provider_key: onemin
+      state: unconfigured
+      remaining_percent_of_max: 0.0
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: 100
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 19
+    ready_slots: 1
+    degraded_slots: 14
+    slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
     mission_ready: false
-    model: ea-coder-hard
-    native_allowance:
-      estimated_burn_credits_per_hour: null
-      estimated_hours_remaining_at_current_pace: null
-      estimated_remaining_credits_total: 100
-      max_credits_per_day: 600000
-      max_credits_per_hour: 80000
-      max_requests_per_hour: 120
-      provider_key: onemin
-      remaining_percent_of_max: 0.0
-      state: unconfigured
+  - lane: core_rescue
     profile: core
-    provider: onemin
-    ready_slots: 1
-    remaining_percent: 0.0
-    remaining_text: 0%
-    slot_owners: []
-    state: unconfigured
-    sustainable_runway: 0% allowance
-  - backend: onemin
+    model: ea-coder-hard
     brain: ea-coder-hard
-    configured_slots: 19
-    degraded_slots: 14
-    hot_runway: unknown
-    hours_text: unknown
-    lane: core_rescue
-    local_estimated_burn_usd: 0.0
-    local_run_count: 0
-    mission_ready: false
-    model: ea-coder-hard
-    native_allowance:
-      estimated_burn_credits_per_hour: null
-      estimated_hours_remaining_at_current_pace: null
-      estimated_remaining_credits_total: 100
-      max_credits_per_day: 600000
-      max_credits_per_hour: 80000
-      max_requests_per_hour: 120
-      provider_key: onemin
-      remaining_percent_of_max: 0.0
-      state: unconfigured
-    profile: core
+    backend: onemin
     provider: onemin
-    ready_slots: 1
+    state: unconfigured
     remaining_percent: 0.0
     remaining_text: 0%
-    slot_owners: []
-    state: unconfigured
-    sustainable_runway: 0% allowance
-  - backend: gemini_vortex
-    brain: ea-review-light
-    configured_slots: 1
-    degraded_slots: 1
-    hot_runway: unknown
     hours_text: unknown
-    lane: review_shard
+    hot_runway: unknown
+    sustainable_runway: 0% allowance
+    native_allowance:
+      provider_key: onemin
+      state: unconfigured
+      remaining_percent_of_max: 0.0
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: 100
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 19
+    ready_slots: 1
+    degraded_slots: 14
+    slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
     mission_ready: false
-    model: ea-review-light
-    native_allowance:
-      estimated_burn_credits_per_hour: null
-      estimated_hours_remaining_at_current_pace: null
-      estimated_remaining_credits_total: null
-      max_credits_per_day: null
-      max_credits_per_hour: null
-      max_requests_per_hour: null
-      provider_key: browseract
-      remaining_percent_of_max: 0.0
-      state: missing
+  - lane: review_shard
     profile: review_light
+    model: ea-review-light
+    brain: ea-review-light
+    backend: gemini_vortex
     provider: browseract
-    ready_slots: 0
+    state: missing
     remaining_percent: 0.0
     remaining_text: 0%
-    slot_owners: []
-    state: missing
-    sustainable_runway: 0% allowance
-  - backend: gemini_vortex
-    brain: ea-audit-jury
-    configured_slots: 1
-    degraded_slots: 1
-    hot_runway: unknown
     hours_text: unknown
-    lane: audit_shard
-    local_estimated_burn_usd: 0.0
-    local_run_count: 0
-    mission_ready: false
-    model: ea-audit-jury
+    hot_runway: unknown
+    sustainable_runway: 0% allowance
     native_allowance:
-      estimated_burn_credits_per_hour: null
-      estimated_hours_remaining_at_current_pace: null
-      estimated_remaining_credits_total: null
-      max_credits_per_day: null
-      max_credits_per_hour: null
-      max_requests_per_hour: null
       provider_key: browseract
-      remaining_percent_of_max: 0.0
       state: missing
-    profile: audit
-    provider: browseract
-    ready_slots: 0
-    remaining_percent: 0.0
-    remaining_text: 0%
-    slot_owners: []
-    state: missing
-    sustainable_runway: 0% allowance
-  - backend: gemini_vortex
-    brain: ea-audit-jury
+      remaining_percent_of_max: 0.0
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
     configured_slots: 1
+    ready_slots: 0
     degraded_slots: 1
-    hot_runway: unknown
-    hours_text: unknown
-    lane: jury
+    slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
     mission_ready: false
+  - lane: audit_shard
+    profile: audit
     model: ea-audit-jury
-    native_allowance:
-      estimated_burn_credits_per_hour: null
-      estimated_hours_remaining_at_current_pace: null
-      estimated_remaining_credits_total: null
-      max_credits_per_day: null
-      max_credits_per_hour: null
-      max_requests_per_hour: null
-      provider_key: browseract
-      remaining_percent_of_max: 0.0
-      state: missing
-    profile: audit
+    brain: ea-audit-jury
+    backend: gemini_vortex
     provider: browseract
-    ready_slots: 0
+    state: missing
     remaining_percent: 0.0
     remaining_text: 0%
-    slot_owners: []
-    state: missing
-    sustainable_runway: 0% allowance
-  - backend: ''
-    brain: ea-coder-survival
-    configured_slots: 1
-    degraded_slots: 1
-    hot_runway: unknown
     hours_text: unknown
-    lane: survival
+    hot_runway: unknown
+    sustainable_runway: 0% allowance
+    native_allowance:
+      provider_key: browseract
+      state: missing
+      remaining_percent_of_max: 0.0
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 1
+    ready_slots: 0
+    degraded_slots: 1
+    slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
     mission_ready: false
-    model: ea-coder-survival
+  - lane: jury
+    profile: audit
+    model: ea-audit-jury
+    brain: ea-audit-jury
+    backend: gemini_vortex
+    provider: browseract
+    state: missing
+    remaining_percent: 0.0
+    remaining_text: 0%
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: 0% allowance
     native_allowance:
-      estimated_burn_credits_per_hour: null
-      estimated_hours_remaining_at_current_pace: null
-      estimated_remaining_credits_total: null
-      max_credits_per_day: null
-      max_credits_per_hour: null
-      max_requests_per_hour: null
       provider_key: browseract
+      state: missing
       remaining_percent_of_max: 0.0
-      state: unavailable
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 1
+    ready_slots: 0
+    degraded_slots: 1
+    slot_owners: []
+    local_estimated_burn_usd: 0.0
+    local_run_count: 0
+    mission_ready: false
+  - lane: survival
     profile: survival
+    model: ea-coder-survival
+    brain: ea-coder-survival
+    backend: ''
     provider: browseract
-    ready_slots: 0
+    state: unavailable
     remaining_percent: 0.0
     remaining_text: 0%
-    slot_owners: []
-    state: unavailable
+    hours_text: unknown
+    hot_runway: unknown
     sustainable_runway: 0% allowance
-  mission_runway: unknown
+    native_allowance:
+      provider_key: browseract
+      state: unavailable
+      remaining_percent_of_max: 0.0
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 1
+    ready_slots: 0
+    degraded_slots: 1
+    slot_owners: []
+    local_estimated_burn_usd: 0.0
+    local_run_count: 0
+    mission_ready: false
+  critical_path_lane: core
+  critical_path_stop: unknown
   pool_runway: unknown
+  mission_runway: unknown
+  group_pressure:
+  - group_id: chummer-vnext
+    runway_risk: high
+    pool_level: unknown
+    finish_outlook: public_fast_path
+    eligible_parallel_slots: 0
+    remaining_slices: 0
+    slot_share_percent: 0
+    drain_share_percent: 0
+    bottleneck: lockstep dispatch blocked until all member projects and group blockers
+      are ready
+    deployment_summary: Public Chummer portal is live at chummer.run as a promoted
+      preview release shell for the split heads.
+    program_eta: 0s
+    confidence: high
+  - group_id: control-plane
+    runway_risk: high
+    pool_level: unknown
+    finish_outlook: public_fast_path
+    eligible_parallel_slots: 0
+    remaining_slices: 0
+    slot_share_percent: 0
+    drain_share_percent: 0
+    bottleneck: group dispatch blocked by current runtime and contract state
+    deployment_summary: Fleet control-plane services and the governed EA runtime substrate
+      are internal-only operator surfaces.
+    program_eta: 0s
+    confidence: high
+  account_pressure: []
 blocker_forecast:
-  next: configured queue has remaining work and is waiting for scheduler dispatch
   now: none
+  next: configured queue has remaining work and is waiting for scheduler dispatch
   vision: blocked unresolved incidents, active workers, and healing runs
 deployment_posture:
-  command_deck_path: /admin
-  dashboard_path: /
-  explorer_path: /admin/details
-  login_path: /admin/login
-  mission_bridge_path: /
   operator_auth_required: true
+  login_path: /admin/login
+  dashboard_path: /
+  mission_bridge_path: /
   ops_path: /ops/
+  command_deck_path: /admin
+  explorer_path: /admin/details
+  studio_path: /studio
   public_target_count: 11
   public_targets:
-  - display: Public Chummer portal is live at chummer.run as a promoted preview release
-      shell for the split heads.
-    promotion_stage: promoted_preview
-    release_gate: ''
+  - scope_type: group
     scope_id: chummer-vnext
-    scope_type: group
-    status: public
-    surface: public portal shell
     target_url: https://chummer.run
-  - display: hub
+    display: Public Chummer portal is live at chummer.run as a promoted preview release
+      shell for the split heads.
+    surface: public portal shell
+    status: public
     promotion_stage: promoted_preview
     release_gate: ''
+  - scope_type: group
     scope_id: chummer-vnext
-    scope_type: group
-    status: public
+    target_url: https://chummer.run/hub/
+    display: hub
     surface: hosted hub head
-    target_url: https://chummer.run/hub/
-  - display: workbench
+    status: public
     promotion_stage: promoted_preview
     release_gate: ''
+  - scope_type: group
     scope_id: chummer-vnext
-    scope_type: group
-    status: public
+    target_url: https://chummer.run/blazor/
+    display: workbench
     surface: browser workbench preview
-    target_url: https://chummer.run/blazor/
-  - display: play
+    status: public
     promotion_stage: promoted_preview
     release_gate: ''
+  - scope_type: group
     scope_id: chummer-vnext
-    scope_type: group
-    status: public
+    target_url: https://chummer.run/session
+    display: play
     surface: player and GM shell preview
-    target_url: https://chummer.run/session
-  - display: coach
+    status: public
     promotion_stage: promoted_preview
     release_gate: ''
+  - scope_type: group
     scope_id: chummer-vnext
-    scope_type: group
-    status: public
-    surface: coach preview
     target_url: https://chummer.run/coach/
-  - display: Fleet control-plane services and the governed EA runtime substrate are
-      internal-only operator surfaces.
-    promotion_stage: internal
+    display: coach
+    surface: coach preview
+    status: public
+    promotion_stage: promoted_preview
     release_gate: ''
+  - scope_type: group
     scope_id: control-plane
-    scope_type: group
-    status: internal
-    surface: local operator dashboard
     target_url: http://127.0.0.1:18090
-  - display: admin
+    display: Fleet control-plane services and the governed EA runtime substrate are
+      internal-only operator surfaces.
+    surface: local operator dashboard
+    status: internal
     promotion_stage: internal
     release_gate: ''
+  - scope_type: group
     scope_id: control-plane
-    scope_type: group
-    status: internal
-    surface: local operator admin
     target_url: http://127.0.0.1:18090/admin
-  - display: studio
+    display: admin
+    surface: local operator admin
+    status: internal
     promotion_stage: internal
     release_gate: ''
+  - scope_type: group
     scope_id: control-plane
-    scope_type: group
-    status: internal
-    surface: local fleet studio
     target_url: http://127.0.0.1:18090/studio
-  - display: Public browser workbench is live at /blazor/ on chummer.run as a promoted
-      preview deployment.
-    promotion_stage: promoted_preview
+    display: studio
+    surface: local fleet studio
+    status: internal
+    promotion_stage: internal
     release_gate: ''
+  - scope_type: project
     scope_id: ui
-    scope_type: project
-    status: public
-    surface: browser workbench on the public Chummer portal
     target_url: https://chummer.run/blazor/
-  - display: Public hub is live at /hub/ on chummer.run as a promoted preview deployment
-      for account-aware continuity, support closure, and coordination.
+    display: Public browser workbench is live at /blazor/ on chummer.run as a promoted
+      preview deployment.
+    surface: browser workbench on the public Chummer portal
+    status: public
     promotion_stage: promoted_preview
     release_gate: ''
+  - scope_type: project
     scope_id: hub
-    scope_type: project
-    status: public
-    surface: hosted hub on the public Chummer portal
     target_url: https://chummer.run/hub/
-  - display: Public session shell is live at /session/ on chummer.run as a promoted
-      preview deployment with rejoin and resume guarantees.
+    display: Public hub is live at /hub/ on chummer.run as a promoted preview deployment
+      for account-aware continuity, support closure, and coordination.
+    surface: hosted hub on the public Chummer portal
+    status: public
     promotion_stage: promoted_preview
     release_gate: ''
+  - scope_type: project
     scope_id: mobile
-    scope_type: project
-    status: public
-    surface: play shell on the public Chummer portal
     target_url: https://chummer.run/session
-  studio_path: /studio
+    display: Public session shell is live at /session/ on chummer.run as a promoted
+      preview deployment with rejoin and resume guarantees.
+    surface: play shell on the public Chummer portal
+    status: public
+    promotion_stage: promoted_preview
+    release_gate: ''
 readiness_summary:
   counts:
     pre_repo_local_complete: 0
-    repo_local_complete: 2
+    repo_local_complete: 3
     package_canonical: 1
     boundary_pure: 5
-    publicly_promoted: 3
-  final_claim_ready: 4
+    publicly_promoted: 2
+  warning_count: 6
+  final_claim_ready: 3
   final_claim_ready_project_ids:
   - fleet
   - hub
   - mobile
-  - ui
-  warning_count: 8
-  whole_product_final_claim_accept_lowered_standards: false
-  whole_product_final_claim_bar: top_flagship_grade
-  whole_product_final_claim_feedback_autofix_loop_required: true
-  whole_product_final_claim_ready: 0
   whole_product_final_claim_status: fail
+  whole_product_final_claim_bar: top_flagship_grade
+  whole_product_final_claim_whole_project_frontier_required: true
+  whole_product_final_claim_feedback_autofix_loop_required: true
+  whole_product_final_claim_accept_lowered_standards: false
+  whole_product_final_claim_ready: 0
   whole_product_final_claim_warning_keys:
   - dense_workbench_ready
   - flagship_ready
   - primary_route_ready
   - public_shelf_ready
   - recovery_trust_ready
-  - sr4_parity_ready
-  - sr6_parity_ready
   - veteran_deep_workflow_ready
-  whole_product_final_claim_whole_project_frontier_required: true
-final_claim_ready: 4
+final_claim_ready: 3
 final_claim_ready_project_ids:
 - fleet
 - hub
 - mobile
-- ui
 whole_product_final_claim_status: fail
 whole_product_final_claim_bar: top_flagship_grade
 whole_product_final_claim_whole_project_frontier_required: true
@@ -615,29 +606,27 @@ whole_product_final_claim_warning_keys:
 - primary_route_ready
 - public_shelf_ready
 - recovery_trust_ready
-- sr4_parity_ready
-- sr6_parity_ready
 - veteran_deep_workflow_ready
 dispatch_policy:
-  operator_only_projects: []
-  participant_dispatch_canaries:
-  - eligible_task_classes:
-    - bounded_fix
-    - multi_file_impl
-    landing_lane: jury
-    participant_first_dispatch: true
-    project_id: core
-    require_jury_before_land: true
-    review_mode: github
-  - eligible_task_classes:
-    - bounded_fix
-    - multi_file_impl
-    landing_lane: jury
-    participant_first_dispatch: true
-    project_id: hub
-    require_jury_before_land: true
-    review_mode: github
   participant_dispatch_canary_count: 2
+  participant_dispatch_canaries:
+  - project_id: core
+    review_mode: github
+    eligible_task_classes:
+    - bounded_fix
+    - multi_file_impl
+    landing_lane: jury
+    require_jury_before_land: true
+    participant_first_dispatch: true
+  - project_id: hub
+    review_mode: github
+    eligible_task_classes:
+    - bounded_fix
+    - multi_file_impl
+    landing_lane: jury
+    require_jury_before_land: true
+    participant_first_dispatch: true
+  operator_only_projects: []
 support_summary:
   closure_waiting_on_release_truth: 0
   design_impact_count: 0
@@ -651,14 +640,6 @@ support_summary:
   feedback_discovery_missing_route_count: 0
   feedback_followthrough_ready_count: 0
   fix_available_ready_count: 0
-  freshness:
-    age_human: 17m 29s
-    age_seconds: 1049
-    at: '2026-05-29T10:23:59Z'
-    available: true
-    label: fresh
-    state: fresh
-  generated_at: '2026-05-29T10:23:59Z'
   install_truth_state_counts:
     tuple_not_on_promoted_shelf: 2
   lane_counts:
@@ -682,10 +663,6 @@ support_summary:
   status_counts:
     awaiting_evidence: 2
   support_case_backed_open_count: 0
-  top_clusters:
-  - count: 2
-    kind: external_proof_request
-    target_repo: chummer6-ui
   unresolved_external_proof_request_count: 2
   unresolved_external_proof_request_host_counts:
     macos: 1
@@ -710,7 +687,7 @@ support_summary:
           sha256_matches_expected: false
           state: present_sha256_mismatch
         startup_smoke_receipt:
-          age_seconds: 907894
+          age_seconds: 909518
           contract_matches_expected: true
           max_age_seconds: 604800
           path: /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json
@@ -796,7 +773,7 @@ support_summary:
           sha256_matches_expected: true
           state: present_sha256_match
         startup_smoke_receipt:
-          age_seconds: 657114
+          age_seconds: 658738
           contract_matches_expected: false
           max_age_seconds: 604800
           path: /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json
@@ -875,44 +852,28 @@ support_summary:
   update_required_case_count: 0
   update_required_misrouted_case_count: 0
   update_required_routed_to_downloads_count: 0
+  top_clusters:
+  - kind: external_proof_request
+    target_repo: chummer6-ui
+    count: 2
+  generated_at: '2026-05-29T10:51:03Z'
+  freshness:
+    available: true
+    at: '2026-05-29T10:51:03Z'
+    age_seconds: 840
+    age_human: 14m
+    state: fresh
+    label: fresh
 publish_readiness:
-  blocking_reason_count: 4
+  state: blocked
+  blocking_reason_count: 3
+  warning_reason_count: 4
   blocking_reasons:
-  - status plane is stale.
   - public guide/progress is stale.
   - Freeze launch expansion while 3 golden journey(s) remain blocked and journey health
     is blocked.
-  - Resolve the blocking golden-journey gaps before widening publish claims.
-  recommended_action: Resolve the blocking publish-readiness issues before promoting
-    public truth.
-  signals:
-    campaign_os_monitor_freshness_state: stale
-    journey_gate_blocked_count: 3
-    journey_gate_state: blocked
-    journey_gate_warning_count: 0
-    journey_gates_freshness_state: fresh
-    progress_report_freshness_state: stale
-    provider_fallback_thin_count: 5
-    provider_revert_now_count: 0
-    provider_review_due_count: 0
-    release_channel_freshness_state: fresh
-    release_channel_proof_freshness_state: fresh
-    release_channel_proof_status: passed
-    release_channel_rollout_state: coverage_incomplete
-    release_channel_status: published
-    release_channel_supportability_state: review_required
-    runtime_healing_alert_state: healthy
-    status_plane_freshness_state: stale
-    support_closure_waiting_count: 0
-    support_freshness_state: fresh
-    support_needs_human_response_count: 2
-    weekly_governor_launch_action: freeze_launch
-    weekly_governor_packet_freshness_state: fresh
-    weekly_governor_packet_schedule_state: scheduled
-    weekly_governor_packet_status: blocked
-    weekly_governor_public_state: freeze_with_rollback_watch
-  state: blocked
-  warning_reason_count: 4
+  - 'Only external host-proof gaps remain: run the missing macos, windows proof lane
+    for 2 desktop tuple(s), ingest receipts, and then republish release truth.'
   warning_reasons:
   - 'Treat the current shelf as review-required because required desktop tuple coverage
     is incomplete (platforms: windows, macos; pairs: avalonia:windows, avalonia:macos;
@@ -920,37 +881,65 @@ publish_readiness:
   - Live source state is 6d 21h newer than the published campaign OS continuity monitor.
   - Support cases still need human response.
   - Provider-route fallback coverage is still thin for the current release posture.
+  recommended_action: Resolve the blocking publish-readiness issues before promoting
+    public truth.
+  signals:
+    runtime_healing_alert_state: healthy
+    status_plane_freshness_state: fresh
+    progress_report_freshness_state: stale
+    journey_gates_freshness_state: fresh
+    release_channel_freshness_state: fresh
+    support_freshness_state: fresh
+    weekly_governor_packet_freshness_state: fresh
+    weekly_governor_packet_schedule_state: scheduled
+    weekly_governor_packet_status: blocked
+    weekly_governor_launch_action: freeze_launch
+    weekly_governor_public_state: freeze_with_rollback_watch
+    campaign_os_monitor_freshness_state: stale
+    journey_gate_state: blocked
+    release_channel_status: published
+    release_channel_rollout_state: coverage_incomplete
+    release_channel_supportability_state: review_required
+    release_channel_proof_status: passed
+    release_channel_proof_freshness_state: fresh
+    journey_gate_blocked_count: 3
+    journey_gate_warning_count: 0
+    provider_review_due_count: 0
+    provider_fallback_thin_count: 5
+    provider_revert_now_count: 0
+    support_closure_waiting_count: 0
+    support_needs_human_response_count: 2
 runtime_healing:
   enabled: true
-  services: []
   summary:
-    alert_reason: No runtime healing drift is currently recorded.
-    alert_state: healthy
-    cooldown_active_count: 0
+    service_count: 0
     degraded_service_count: 0
+    cooldown_active_count: 0
     escalated_service_count: 0
-    last_event_at: ''
-    last_event_detail: ''
-    last_event_kind: ''
-    last_event_service: ''
-    last_recovered_at: ''
-    last_recovered_service: ''
     recent_restart_count: 0
+    alert_state: healthy
+    alert_reason: No runtime healing drift is currently recorded.
     recommended_action: Keep the bounded auto-heal loop enabled and review the weekly
       healer history.
-    service_count: 0
+    last_event_at: ''
+    last_event_service: ''
+    last_event_kind: ''
+    last_event_detail: ''
+    last_recovered_service: ''
+    last_recovered_at: ''
+  services: []
 external_proof_autoingest:
-  commands_dir: /docker/fleet/.codex-studio/published/external-proof-commands
-  current_state: waiting_for_bundle
   enabled: true
-  last_attempt_at: '2026-05-01T09:58:19Z'
-  last_detail: waiting for a returned host proof bundle
-  last_result: waiting_for_bundle
-  last_success_at: ''
+  current_state: waiting_for_bundle
+  commands_dir: /docker/fleet/.codex-studio/published/external-proof-commands
   observed_bundle_count: 0
+  last_attempt_at: '2026-05-01T09:58:19Z'
+  last_success_at: ''
+  last_result: waiting_for_bundle
+  last_detail: waiting for a returned host proof bundle
   summary:
-    alert_reason: Waiting for a returned host proof bundle.
     alert_state: tracking
+    alert_reason: Waiting for a returned host proof bundle.
     recommended_action: Return the Windows host proof bundle to the published external-proof
       commands directory.
 projects:
@@ -966,7 +955,7 @@ projects:
   deployment_access_posture: ''
 - id: design
   lifecycle: dispatchable
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -976,7 +965,7 @@ projects:
   deployment_access_posture: ''
 - id: ea
   lifecycle: live
-  runtime_status: verifying
+  runtime_status: running
   readiness_stage: repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -986,7 +975,7 @@ projects:
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -1026,7 +1015,7 @@ projects:
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: dispatchable
-  runtime_status: waiting_dependency
+  runtime_status: verifying
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1036,7 +1025,7 @@ projects:
   deployment_access_posture: ''
 - id: mobile
   lifecycle: dispatchable
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: publicly_promoted
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: true
@@ -1047,16 +1036,16 @@ projects:
 - id: ui
   lifecycle: live
   runtime_status: healing
-  readiness_stage: publicly_promoted
+  readiness_stage: repo_local_complete
   readiness_terminal_stage: publicly_promoted
-  readiness_final_claim_allowed: true
+  readiness_final_claim_allowed: false
   readiness_warning_count: 1
   deployment_status: public
   deployment_promotion_stage: promoted_preview
   deployment_access_posture: public
 - id: ui-kit
   lifecycle: scaffold
-  runtime_status: verifying
+  runtime_status: running
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false

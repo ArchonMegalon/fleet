@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-05-29T10:53:42Z
+Generated: 2026-05-29T11:05:09Z
 As of: 2026-05-29
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -20,7 +20,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Package verification: pass
 - Weekly input health: pass
 - Source input health: pass
-- Source input fingerprint: 8ec9732619590ba661745f0b0165c1f03a7fb82877c5ba24a8f8284838549233
+- Source input fingerprint: 6c05eb4ee799390c9cabbba862c2cd83b17d76d1b7054e3a194383fe4522d5ab
 - Launch cited signal truth alignment: pass
 - Decision alignment: pass
 - Expected launch action: freeze_launch
@@ -29,7 +29,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Do not reopen package: True
 - Measured rollout loop: blocked
 - Governor packet cadence: weekly
-- Next packet due: 2026-06-05T10:53:42Z
+- Next packet due: 2026-06-05T11:05:09Z
 - Decision action coverage: pass
 - Decision actions covered: 5 / 5
 - Decision source coverage: pass
@@ -117,7 +117,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Derived from: measured_rollout_loop.decision_action_matrix
 - Decision actions: launch_expand, freeze_launch, canary, rollback, focus_shift
 - Schedule ref: governor_packet_schedule.next_packet_due_at
-- Next packet due: 2026-06-05T10:53:42Z
+- Next packet due: 2026-06-05T11:05:09Z
 - Max age seconds: 604800
 - Freshness policy: refresh_before_public_status_or_operator_action_if_packet_is_overdue
 - Headline: Launch expansion is frozen with rollback watch active.
@@ -197,11 +197,11 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 | Action | State | Route | Operator action | Receipt | Next review due | Next review due ref | Max age seconds | Freshness policy | Blocking gates | Next decision |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| launch_expand | blocked | weekly_governor_packet.launch_expand | do_not_expand_launch | m106-launch_expand-9044f6cb4092f93d | 2026-06-05T10:53:42Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | weekly_launch_decision, flagship_readiness, status_plane_final_claim, journey_gates, closure_health | Weekly pulse holds launch expansion: Freeze launch expansion while 3 golden journey(s) remain blocked and journey health is blocked. |
-| freeze_launch | active | weekly_governor_packet.freeze_launch | keep_launch_frozen | m106-freeze_launch-2a31ff91b5b0ab40 | 2026-06-05T10:53:42Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | fail_closed_default | Freeze launch expansion while 3 golden journey(s) remain blocked and journey health is blocked. |
-| canary | ready | measured_rollout_loop.canary | keep_canary_ready | m106-canary-afc3d2be95960739 | 2026-06-05T10:53:42Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Canary green on all active lanes |
-| rollback | watch | measured_rollout_loop.rollback | prepare_rollback_or_revoke | m106-rollback-54b25698c3bf1ddd | 2026-06-05T10:53:42Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | release_health | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. |
-| focus_shift | queued_successor_wave | measured_rollout_loop.focus_shift | route_remaining_work_to_dependency_or_sibling_packages | m106-focus_shift-9e0a36a10f3ebf57 | 2026-06-05T10:53:42Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice. |
+| launch_expand | blocked | weekly_governor_packet.launch_expand | do_not_expand_launch | m106-launch_expand-9044f6cb4092f93d | 2026-06-05T11:05:09Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | weekly_launch_decision, flagship_readiness, status_plane_final_claim, journey_gates, closure_health | Weekly pulse holds launch expansion: Freeze launch expansion while 3 golden journey(s) remain blocked and journey health is blocked. |
+| freeze_launch | active | weekly_governor_packet.freeze_launch | keep_launch_frozen | m106-freeze_launch-2a31ff91b5b0ab40 | 2026-06-05T11:05:09Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | fail_closed_default | Freeze launch expansion while 3 golden journey(s) remain blocked and journey health is blocked. |
+| canary | ready | measured_rollout_loop.canary | keep_canary_ready | m106-canary-afc3d2be95960739 | 2026-06-05T11:05:09Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Canary green on all active lanes |
+| rollback | watch | measured_rollout_loop.rollback | prepare_rollback_or_revoke | m106-rollback-54b25698c3bf1ddd | 2026-06-05T11:05:09Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | release_health | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. |
+| focus_shift | queued_successor_wave | measured_rollout_loop.focus_shift | route_remaining_work_to_dependency_or_sibling_packages | m106-focus_shift-9e0a36a10f3ebf57 | 2026-06-05T11:05:09Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice. |
 
 ## Evidence Requirements
 
@@ -229,7 +229,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 - next12_trust_publication_launch_scale: Next 12 Biggest Wins is the active pressure cluster: finish install-specific trust/support truth, creator publication and shelf posture, pulse-v3 launch governance, and no-step-back utility parity.
 - public_release_follow_through: Downloads, updates, support closure, and channel-aware trust copy now exist as first-party surfaces and must keep moving in lockstep instead of drifting back into separate promises.
-- long_pole_visibility: The current longest pole is Core Engine, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product.
+- long_pole_visibility: The current longest pole is external macos, windows host proof, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product.
 
 ## Dependency Package Routes
 
