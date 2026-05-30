@@ -1,0 +1,118 @@
+{
+  "generated_at_utc": "2026-05-30T07:11:13Z",
+  "status": "pass",
+  "base_url": "https://chummer.run",
+  "public_host": "chummer.run",
+  "strict_positive": true,
+  "route_count": 15,
+  "failed_count": 0,
+  "failed_paths": [],
+  "demo_runner_paths": [],
+  "routes": [
+    {
+      "url": "https://chummer.run/",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 21660,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/downloads",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 25665,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/status",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 25523,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/ledger",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 48261,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/ledger/map",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 48395,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/ledger/factions",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 48292,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/ledger/newsroom",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 48996,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/play",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 27182,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/mobile",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 27174,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/help",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 28338,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/feedback",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 42330,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/feedback/operations",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 2881,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/karma-forge",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 37905,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/participate/karma-forge",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 37905,
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/proofs/mac-codex-release/HUB_LOCAL_RELEASE_PROOF.generated.json",
+      "status_code": 200,
+      "ok": true,
+      "body_bytes_sampled": 92641,
+      "demo_runner_hit": false
+    }
+  ]
+}

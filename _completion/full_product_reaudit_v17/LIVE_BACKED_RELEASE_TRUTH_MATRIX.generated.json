@@ -1,0 +1,17 @@
+{
+  "generated_at_utc": "2026-05-30T07:11:11Z",
+  "status": "pass",
+  "base_url": "https://chummer.run",
+  "live_sources": {
+    "status_url": "https://chummer.run/status",
+    "downloads_url": "https://chummer.run/downloads"
+  },
+  "checks": {
+    "status_has_build_id": true,
+    "build_id": "run-20260518-220935",
+    "status_stale_or_not_gold_hits": [],
+    "downloads_demo_runner_hits": [],
+    "gold_claim_allowed": true,
+    "supportability_state": "gold_supported"
+  }
+}

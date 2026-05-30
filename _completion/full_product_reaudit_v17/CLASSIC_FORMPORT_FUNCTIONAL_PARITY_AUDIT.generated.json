@@ -1,0 +1,33 @@
+{
+  "checked_files": [
+    "/docker/chummercomplete/chummer-presentation/Chummer.Avalonia/Controls/ClassicFormPorts/CharacterCareerClassicPort.axaml",
+    "/docker/chummercomplete/chummer-presentation/Chummer.Avalonia/Controls/ClassicFormPorts/CharacterCareerClassicPort.axaml.cs",
+    "/docker/chummercomplete/chummer-presentation/Chummer.Avalonia/Controls/ClassicFormPorts/CharacterCreateClassicPort.axaml",
+    "/docker/chummercomplete/chummer-presentation/Chummer.Avalonia/Controls/ClassicFormPorts/CharacterCreateClassicPort.axaml.cs",
+    "/docker/chummercomplete/chummer-presentation/Chummer.Avalonia/Controls/ClassicFormPorts/GearClassicPort.axaml",
+    "/docker/chummercomplete/chummer-presentation/Chummer.Avalonia/Controls/ClassicFormPorts/GearClassicPort.axaml.cs",
+    "/docker/chummercomplete/chummer-presentation/Chummer.Avalonia/Controls/ClassicFormPorts/MasterIndexClassicPort.axaml",
+    "/docker/chummercomplete/chummer-presentation/Chummer.Avalonia/Controls/ClassicFormPorts/MasterIndexClassicPort.axaml.cs",
+    "/docker/chummercomplete/chummer-presentation/Chummer.Avalonia/Controls/ClassicFormPorts/SettingsClassicPort.axaml",
+    "/docker/chummercomplete/chummer-presentation/Chummer.Avalonia/Controls/ClassicFormPorts/SettingsClassicPort.axaml.cs"
+  ],
+  "contract_name": "chummer.full_product_reaudit_v16.classic_formport_functional_parity",
+  "generated_at_utc": "2026-05-30T05:28:57Z",
+  "generic_projection_hits": [],
+  "missing_surface": false,
+  "requirements": {
+    "add_edit_delete_flows": true,
+    "context_menus": true,
+    "fixture_data": true,
+    "keyboard_shortcuts": true,
+    "list_detail_layouts": true,
+    "no_primary_state_rows_token_matching": true,
+    "side_by_side_screenshots": true,
+    "typed_command_bridge": true,
+    "typed_view_model": true,
+    "veteran_user_task_review": true
+  },
+  "status": "pass",
+  "summary": "Classic FormPort W1 surfaces expose typed view-model bridges, Add/Edit/Delete workflows, context menus, keyboard shortcuts, fixture coverage, screenshot evidence, and human review receipts without generic state.Rows projection.",
+  "verdict": "CLASSIC_FORMPORT_FUNCTIONAL_PARITY_READY"
+}

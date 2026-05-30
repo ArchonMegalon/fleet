@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-from pathlib import Path
-import subprocess
+from _v17_verdict_common import check_verdict
 
-SCRIPT = Path("/docker/fleet/scripts/materialize_rafter_pixefy_completion.py")
-VERDICT = Path("/docker/chummercomplete/_completion/RAFTER_PIXEFY_QA_STACK_VERDICT.md")
-
-result = subprocess.run(["python3", str(SCRIPT)], check=False)
-print(VERDICT.read_text(encoding="utf-8").strip())
-raise SystemExit(result.returncode)
+raise SystemExit(check_verdict("FINAL_RAFTER_PIXEFY_QA_STACK_VERDICT.md", "RAFTER_PIXEFY_QA_STACK_READY"))
