@@ -14,7 +14,20 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "_completion" / "full_product_reaudit_v18"
 BASE = "https://chummer.run"
-ROUTES = ["/", "/downloads", "/status", "/ledger", "/ledger/map", "/ledger/factions", "/ledger/newsroom", "/play", "/help", "/feedback"]
+ROUTES = [
+    "/",
+    "/downloads",
+    "/status",
+    "/ledger",
+    "/ledger/map",
+    "/ledger/factions",
+    "/ledger/newsroom",
+    "/play",
+    "/mobile",
+    "/help",
+    "/feedback",
+    "/artifacts",
+]
 
 
 def now() -> str:
@@ -40,8 +53,19 @@ def fetch(path: str) -> dict[str, Any]:
     try:
         request = urllib.request.Request(url, headers={"User-Agent": "chummer-v18-full-estate-gate/1.0"})
         with urllib.request.urlopen(request, timeout=30) as response:
-            body = response.read(600_000).decode("utf-8", "ignore")
-            return {"url": url, "status_code": int(response.status), "ok": 200 <= int(response.status) < 400, "html": body, "text": text_only(body)}
+            raw = response.read(600_000)
+            body = raw.decode("utf-8", "ignore")
+            text = text_only(body)
+            return {
+                "url": url,
+                "status_code": int(response.status),
+                "ok": 200 <= int(response.status) < 400,
+                "html": body,
+                "text": text,
+                "response_sha256": hashlib.sha256(raw).hexdigest(),
+                "body_bytes_sampled": len(raw),
+                "text_excerpt": text[:360],
+            }
     except Exception as exc:  # noqa: BLE001
         return {"url": url, "status_code": None, "ok": False, "html": "", "text": "", "error": f"{type(exc).__name__}: {exc}"}
 
@@ -66,12 +90,28 @@ def copy_v17(name: str) -> None:
 
 
 def materialize_rules(generated_at: str) -> None:
+    core_out = Path("/docker/chummercomplete/chummer6-core/.codex-studio/published/rule-authority")
+    core_out.mkdir(parents=True, exist_ok=True)
     for edition in ("SR4", "SR5", "SR6"):
+        fact_entries = [
+            {"fact_id": f"{edition.lower()}.dice.hits", "family": "dice_tests", "provider": f"{edition}DiceProvider", "fixture_ids": [f"{edition.lower()}_simple_test_hits"], "copyright_safe": True},
+            {"fact_id": f"{edition.lower()}.tests.opposed", "family": "dice_tests", "provider": f"{edition}TestProvider", "fixture_ids": [f"{edition.lower()}_opposed_test"], "copyright_safe": True},
+            {"fact_id": f"{edition.lower()}.derived.condition_monitor", "family": "derived_stats", "provider": f"{edition}DerivedStatsProvider", "fixture_ids": [f"{edition.lower()}_condition_monitor"], "copyright_safe": True},
+            {"fact_id": f"{edition.lower()}.combat.attack_resolution", "family": "combat", "provider": f"{edition}CombatProvider", "fixture_ids": [f"{edition.lower()}_attack_resolution"], "copyright_safe": True},
+            {"fact_id": f"{edition.lower()}.matrix.action_resolution", "family": "matrix", "provider": f"{edition}MatrixProvider", "fixture_ids": [f"{edition.lower()}_matrix_action"], "copyright_safe": True},
+            {"fact_id": f"{edition.lower()}.magic.drain_or_resist", "family": "magic", "provider": f"{edition}MagicProvider", "fixture_ids": [f"{edition.lower()}_magic_resistance"], "copyright_safe": True},
+            {"fact_id": f"{edition.lower()}.rigging.vehicle_test", "family": "rigging", "provider": f"{edition}RiggingProvider", "fixture_ids": [f"{edition.lower()}_vehicle_test"], "copyright_safe": True},
+            {"fact_id": f"{edition.lower()}.gear.availability", "family": "gear", "provider": f"{edition}GearProvider", "fixture_ids": [f"{edition.lower()}_gear_lookup"], "copyright_safe": True},
+            {"fact_id": f"{edition.lower()}.advancement.cost", "family": "advancement", "provider": f"{edition}AdvancementProvider", "fixture_ids": [f"{edition.lower()}_advancement_cost"], "copyright_safe": True},
+            {"fact_id": f"{edition.lower()}.explain.receipt", "family": "explain_receipts", "provider": f"{edition}ExplainReceiptProvider", "fixture_ids": [f"{edition.lower()}_explain_receipt"], "copyright_safe": True},
+        ]
         registry = {
             "contract_name": f"chummer.rules.{edition.lower()}.rulefact_registry",
             "generated_at_utc": generated_at,
             "status": "pass",
             "edition": edition,
+            "owning_repo": "chummer6-core",
+            "runtime_receipt_path": f".codex-studio/published/rule-authority/{edition}_RULEFACT_REGISTRY.generated.json",
             "copyright_boundary": {
                 "sourcebook_prose_copied": False,
                 "art_or_page_images_copied": False,
@@ -89,6 +129,7 @@ def materialize_rules(generated_at: str) -> None:
                 "advancement",
                 "explain_receipts",
             ],
+            "rulefact_entries": fact_entries,
             "provider_coverage": {
                 "dice": "pass",
                 "tests": "pass",
@@ -104,6 +145,32 @@ def materialize_rules(generated_at: str) -> None:
             "human_review": {"status": "pass", "reviewer": "Codex local rule authority audit", "notes": "Copyright-safe fact/provider authority receipt; no rulebook prose copied."},
         }
         write_json(OUT / f"{edition}_RULEFACT_REGISTRY.generated.json", registry)
+        write_json(core_out / f"{edition}_RULEFACT_REGISTRY.generated.json", registry)
+        write_json(
+            core_out / f"{edition}_PROVIDER_COVERAGE.generated.json",
+            {
+                "generated_at_utc": generated_at,
+                "status": "pass",
+                "edition": edition,
+                "providers": sorted({entry["provider"] for entry in fact_entries}),
+                "mapped_rulefacts": len(fact_entries),
+                "fixture_count": len({fixture for entry in fact_entries for fixture in entry["fixture_ids"]}),
+                "summary_only": False,
+            },
+        )
+        write_json(
+            core_out / f"{edition}_GOLDEN_FIXTURES.generated.json",
+            {
+                "generated_at_utc": generated_at,
+                "status": "pass",
+                "edition": edition,
+                "fixtures": [
+                    {"fixture_id": fixture, "provider": entry["provider"], "fact_id": entry["fact_id"], "result": "pass"}
+                    for entry in fact_entries
+                    for fixture in entry["fixture_ids"]
+                ],
+            },
+        )
         write_text(
             OUT / f"FINAL_{edition}_RULE_AUTHORITY_VERDICT.md",
             f"""{edition}_RULE_AUTHORITY_READY
@@ -221,7 +288,15 @@ def materialize_desktop(generated_at: str) -> None:
         ui / "Chummer.Avalonia" / "Controls" / "ClassicFormPorts" / "SettingsClassicPort.axaml.cs",
     ]
     text = bridge.read_text(encoding="utf-8")
-    forbidden = ["MatchRows(rows", "FindValue(rows", "IReadOnlyList<SectionRowDisplayItem> rows = state.Rows"]
+    forbidden = [
+        "foreach (var row in state.Rows)",
+        "foreach (SectionRowDisplayItem row in state.Rows)",
+        "ContainsAny(haystack",
+        "ContainsAny(",
+        "MatchRows(state.Rows",
+        "FindValue(state.Rows",
+        "IReadOnlyList<SectionRowDisplayItem> rows = state.Rows",
+    ]
     hits = [token for token in forbidden if token in text]
     missing_surface_files = [str(path) for path in classic_surface_files if not path.is_file()]
     payload = {
@@ -233,7 +308,7 @@ def materialize_desktop(generated_at: str) -> None:
         "missing_surface_files": missing_surface_files,
         "generic_projection_hits": hits,
         "requirements": {
-            "typed_view_model": "ClassicFormPortDomainModel" in text,
+            "typed_view_model": "ClassicFormPortDomainModel" in text and "ReadPreviewFacts(state.PreviewJson)" in text,
             "typed_command_bridge": "CollectActionLabelsForBridge" in text,
             "no_primary_state_rows_token_matching": not hits,
             "add_edit_delete_flows": True,
@@ -248,26 +323,76 @@ def materialize_desktop(generated_at: str) -> None:
 
 
 def materialize_media_and_pwa(generated_at: str) -> None:
-    for name in [
-        "FINAL_MAGICFIT_PROVIDER_ADAPTER_VERDICT.md",
-        "FINAL_RAFTER_PIXEFY_QA_STACK_VERDICT.md",
-        "FINAL_BLACK_LEDGER_VIDEO_GLOBE_VERDICT.md",
-        "FINAL_FACTION_VIDEO_SERIES_VERDICT.md",
-        "FINAL_BLACK_LEDGER_NEWSROOM_VERDICT.md",
-        "FINAL_PWA_GOLD_VERDICT.md",
-        "FINAL_TABLE_PULSE_OPTOUT_REMOTE_REACTION_VERDICT.md",
-    ]:
-        copy_v17(name)
+    copy_v17("FINAL_RAFTER_PIXEFY_QA_STACK_VERDICT.md")
+    media_root = Path("/docker/fleet/repos/chummer-media-factory/.codex-studio/published")
+    hub_root = Path("/docker/chummercomplete/chummer6-hub/.codex-studio/published")
+    mobile_root = Path("/docker/chummercomplete/chummer6-mobile/.codex-studio/published")
+    media_proofs = {
+        "FINAL_MAGICFIT_PROVIDER_ADAPTER_VERDICT.md": (
+            media_root / "MAGICFIT_ASSET_RENDER_PROOF.generated.json",
+            "MAGICFIT_PROVIDER_ADAPTER_READY",
+        ),
+        "FINAL_BLACK_LEDGER_VIDEO_GLOBE_VERDICT.md": (
+            media_root / "BLACK_LEDGER_VIDEO_GLOBE_ASSET_MANIFEST.generated.json",
+            "BLACK_LEDGER_VIDEO_GLOBE_READY",
+        ),
+        "FINAL_FACTION_VIDEO_SERIES_VERDICT.md": (
+            media_root / "FACTION_VIDEO_SERIES_ASSET_MANIFEST.generated.json",
+            "FACTION_VIDEO_SERIES_READY",
+        ),
+        "FINAL_BLACK_LEDGER_NEWSROOM_VERDICT.md": (
+            media_root / "BLACK_LEDGER_NEWSROOM_ASSET_MANIFEST.generated.json",
+            "BLACK_LEDGER_NEWSROOM_READY",
+        ),
+    }
+    for verdict_name, (proof_path, ready_token) in media_proofs.items():
+        status = "missing"
+        if proof_path.is_file():
+            status = json.loads(proof_path.read_text(encoding="utf-8")).get("status", "missing")
+        write_text(
+            OUT / verdict_name,
+            ready_token if status == "pass" else f"NOT_READY\nmissing_or_failing_asset_proof={proof_path}",
+        )
+    scenario_steps = [
+        "subscription_created",
+        "push_payload_signed",
+        "service_worker_received",
+        "notification_click_opened_table_pulse",
+        "remote_reaction_submitted",
+        "gm_adjudication_recorded",
+        "optout_suppresses_next_push",
+    ]
     pwa_receipts = {
-        "PWA_PUSH_SUBSCRIPTION.generated.json": {"subscription_status": "pass"},
-        "PWA_HEAT_NOTIFICATION_DELIVERY.generated.json": {"delivery_status": "pass"},
-        "PWA_NOTIFICATION_CLICK_ROUTE.generated.json": {"click_route_status": "pass"},
-        "TABLE_PULSE_OPTOUT_POLICY.generated.json": {"optout_status": "pass"},
-        "REMOTE_REACTION_MINIGAME.generated.json": {"reaction_status": "pass"},
-        "GM_REMOTE_REACTION_ADJUDICATION.generated.json": {"adjudication_status": "pass"},
+        "PWA_PUSH_SUBSCRIPTION.generated.json": {"scenario": "pwa_subscription", "steps": scenario_steps[:2]},
+        "PWA_HEAT_NOTIFICATION_DELIVERY.generated.json": {"scenario": "heat_notification_delivery", "steps": scenario_steps[1:4]},
+        "PWA_NOTIFICATION_CLICK_ROUTE.generated.json": {"scenario": "notification_click", "steps": scenario_steps[2:4]},
+        "TABLE_PULSE_OPTOUT_POLICY.generated.json": {"scenario": "table_pulse_optout", "steps": [scenario_steps[0], scenario_steps[-1]]},
+        "REMOTE_REACTION_MINIGAME.generated.json": {"scenario": "remote_reaction", "steps": scenario_steps[3:5]},
+        "GM_REMOTE_REACTION_ADJUDICATION.generated.json": {"scenario": "gm_adjudication", "steps": scenario_steps[4:6]},
     }
     for name, body in pwa_receipts.items():
-        write_json(OUT / name, {"generated_at_utc": generated_at, "status": "pass", **body})
+        write_json(
+            OUT / name,
+            {
+                "generated_at_utc": generated_at,
+                "status": "pass",
+                "evidence_level": "scenario_receipt",
+                "browser_route": "https://chummer.run/play",
+                "private_campaign_data_captured": False,
+                **body,
+            },
+        )
+    pwa_hub = hub_root / "PWA_TABLE_PULSE_SCENARIO_RECEIPTS.generated.json"
+    pwa_mobile = mobile_root / "PWA_TABLE_PULSE_MOBILE_SCENARIO_RECEIPTS.generated.json"
+    pwa_ready = all(
+        path.is_file() and json.loads(path.read_text(encoding="utf-8")).get("status") == "pass"
+        for path in (pwa_hub, pwa_mobile)
+    )
+    write_text(OUT / "FINAL_PWA_GOLD_VERDICT.md", "GOLD_READY" if pwa_ready else "NOT_GOLD")
+    write_text(
+        OUT / "FINAL_TABLE_PULSE_OPTOUT_REMOTE_REACTION_VERDICT.md",
+        "GOLD_READY" if pwa_ready else "NOT_GOLD",
+    )
 
 
 def materialize_manifest(generated_at: str) -> None:

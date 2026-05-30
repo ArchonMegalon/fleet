@@ -1,6 +1,6 @@
 SR4_RULE_AUTHORITY_READY
 
-Generated: 2026-05-30T11:15:10Z
+Generated: 2026-05-30T16:23:36Z
 
 Durable V18 authority package:
 - `SR4_RULEFACT_REGISTRY.generated.json`

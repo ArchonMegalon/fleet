@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import re
 import urllib.request
 from pathlib import Path
 
@@ -33,13 +35,17 @@ def probe(url: str) -> dict[str, object]:
     try:
         request = urllib.request.Request(url, headers={"User-Agent": "chummer-v17-route-proof/1.0"})
         with urllib.request.urlopen(request, timeout=30) as response:
-            body = response.read(250_000).decode("utf-8", "ignore")
+            raw = response.read(250_000)
+            body = raw.decode("utf-8", "ignore")
             lowered = body.lower()
+            text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", body)).strip()
             return {
                 "url": url,
                 "status_code": int(response.status),
                 "ok": 200 <= int(response.status) < 400,
-                "body_bytes_sampled": len(body.encode("utf-8")),
+                "body_bytes_sampled": len(raw),
+                "response_sha256": hashlib.sha256(raw).hexdigest(),
+                "text_excerpt": text[:360],
                 "demo_runner_hit": "demo runner" in lowered or "load demo runner" in lowered,
             }
     except Exception as exc:

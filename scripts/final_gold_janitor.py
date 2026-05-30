@@ -4,7 +4,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
+import urllib.request
 from pathlib import Path
 
 from rafter_pixefy_common import COMPLETION, now_utc, write_json
@@ -13,6 +15,25 @@ from rafter_pixefy_common import COMPLETION, now_utc, write_json
 ROOT = Path(__file__).resolve().parents[1]
 V18 = ROOT / "_completion" / "full_product_reaudit_v18"
 MANIFEST = V18 / "FULL_ESTATE_DURABLE_ARTIFACT_MANIFEST.generated.json"
+BASE_URL = "https://chummer.run"
+LIVE_RECHECK_ROUTES = [
+    "/",
+    "/downloads",
+    "/status",
+    "/ledger",
+    "/ledger/map",
+    "/ledger/factions",
+    "/ledger/newsroom",
+    "/play",
+    "/mobile",
+    "/help",
+    "/feedback",
+    "/artifacts",
+]
+FORBIDDEN_LIVE_TOKENS = {
+    "/downloads": ("load demo runner", "demo runner"),
+    "/status": ("review-required", "not gold", "not-gold", "incomplete", "unavailable", "stale"),
+}
 
 REQUIRED_GATES = {
     "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json": "json_pass",
@@ -57,6 +78,84 @@ def read_json_status(path: Path) -> str:
     except json.JSONDecodeError:
         return "invalid_json"
     return str(payload.get("status") or "missing")
+
+
+def text_only(html: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
+
+
+def fetch_live(path: str) -> dict[str, object]:
+    url = BASE_URL + path
+    try:
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "chummer-v19-final-gold-janitor/1.0",
+                "Accept": "text/html,application/xhtml+xml,application/json",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read(750_000)
+        text = text_only(body.decode("utf-8", "ignore"))
+        lowered = text.lower()
+        hits = [token for token in FORBIDDEN_LIVE_TOKENS.get(path, ()) if token in lowered]
+        return {
+            "path": path,
+            "url": url,
+            "status_code": int(response.status),
+            "ok": 200 <= int(response.status) < 400,
+            "response_sha256": hashlib.sha256(body).hexdigest(),
+            "body_bytes_sampled": len(body),
+            "forbidden_hits": hits,
+            "excerpt": text[:360],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "path": path,
+            "url": url,
+            "status_code": None,
+            "ok": False,
+            "response_sha256": "",
+            "body_bytes_sampled": 0,
+            "forbidden_hits": [],
+            "error": f"{type(exc).__name__}: {exc}",
+            "excerpt": "",
+        }
+
+
+def live_recheck() -> tuple[list[str], dict[str, object]]:
+    routes = [fetch_live(path) for path in LIVE_RECHECK_ROUTES]
+    reasons: list[str] = []
+    for row in routes:
+        if not row.get("ok"):
+            reasons.append(f"live_route_failed:{row.get('path')}")
+        for token in row.get("forbidden_hits", []):
+            reasons.append(f"live_forbidden_copy:{row.get('path')}:{token}")
+
+    proof_path = V18 / "LIVE_CHUMMER_RUN_ROUTE_PROOF.generated.json"
+    if proof_path.is_file():
+        proof = json.loads(proof_path.read_text(encoding="utf-8"))
+        proof_routes = {
+            str(item.get("path") or ""): item
+            for item in proof.get("routes", [])
+            if isinstance(item, dict)
+        }
+        for row in routes:
+            stored = proof_routes.get(str(row.get("path")))
+            if stored is None:
+                reasons.append(f"live_route_missing_from_proof:{row.get('path')}")
+                continue
+            if not stored.get("response_sha256"):
+                reasons.append(f"live_route_proof_missing_hash:{row.get('path')}")
+    else:
+        reasons.append("live_route_proof_missing")
+
+    return reasons, {
+        "base_url": BASE_URL,
+        "route_count": len(routes),
+        "status": "pass" if not reasons else "fail",
+        "routes": routes,
+    }
 
 
 def gate_pass(path: Path, expected: str) -> bool:
@@ -136,6 +235,10 @@ def main() -> int:
     reasons += [f"failing:{name}" for name in failing]
     if args.live_backed and manifest_payload.get("live_backed") is not True:
         reasons.append("manifest_not_live_backed")
+    live_recheck_payload: dict[str, object] = {"status": "skipped"}
+    if args.live_backed:
+        live_reasons, live_recheck_payload = live_recheck()
+        reasons += live_reasons
     final = "GOLD_READY" if not reasons else "NOT_GOLD"
     if args.allow_local_dry_run and final == "GOLD_READY":
         reasons.append("local_dry_run_cannot_write_gold")
@@ -150,6 +253,7 @@ def main() -> int:
         "artifact_manifest": rel(MANIFEST),
         "durable_artifacts_required": bool(args.require_durable_artifacts),
         "live_backed_required": bool(args.live_backed),
+        "live_recheck": live_recheck_payload,
         "required_gates": gate_results,
         "missing_gates": missing,
         "untracked_gates": untracked,
