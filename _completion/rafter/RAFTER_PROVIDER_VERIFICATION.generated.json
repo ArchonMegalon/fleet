@@ -1,0 +1,73 @@
+{
+  "service": "Rafter",
+  "verification_version": "rafter-provider-verification-v1",
+  "verified_at_utc": "2026-05-29T19:49:41Z",
+  "account": {
+    "account_email": "the.girscheles@gmail.com",
+    "license_plan": "License Tier 3 / highest AppSumo tier",
+    "license_status": "verified",
+    "workspace_id": "",
+    "provider_dashboard_url": "",
+    "verified_by": "manual_admin",
+    "api_key_present": true,
+    "api_key_fingerprint": "ec5dedf79e511ff7"
+  },
+  "capabilities": {
+    "github_public_repo_scan": true,
+    "github_private_repo_scan": true,
+    "secret_scanning": true,
+    "dependency_scanning": true,
+    "live_site_scan": true,
+    "performance_scan": true,
+    "accessibility_scan": true,
+    "best_practices_scan": true,
+    "seo_scan": true,
+    "api_available": true,
+    "cli_available": false,
+    "ci_integration_available": true,
+    "mcp_available": false,
+    "findings_export_available": true,
+    "ai_ready_fix_export_available": true
+  },
+  "quotas": {
+    "fast_scans_per_month": null,
+    "site_limit": null,
+    "repo_limit": null,
+    "team_seats": null
+  },
+  "github_access_scope": {
+    "access_model": "manual_upload",
+    "least_privilege_reviewed": true,
+    "private_repo_access_approved": true,
+    "write_access_granted": false,
+    "admin_access_granted": false,
+    "secrets_access_granted": false,
+    "repos_in_scope": [
+      "ArchonMegalon/Chummer6",
+      "ArchonMegalon/chummer6-core",
+      "ArchonMegalon/chummer6-ui",
+      "ArchonMegalon/chummer6-ui-kit",
+      "ArchonMegalon/chummer6-hub",
+      "ArchonMegalon/chummer6-hub-registry",
+      "ArchonMegalon/chummer6-mobile",
+      "ArchonMegalon/chummer6-media-factory",
+      "ArchonMegalon/chummer6-design",
+      "ArchonMegalon/fleet",
+      "ArchonMegalon/executive-assistant"
+    ]
+  },
+  "privacy_and_security": {
+    "no_private_campaign_data": true,
+    "no_user_personal_data": true,
+    "data_retention_reviewed": true,
+    "export_contains_no_secrets": true,
+    "provider_may_auto_commit": false,
+    "provider_may_deploy": false
+  },
+  "status": "verified",
+  "gold_claim_allowed": false,
+  "notes": [
+    "Verified from gitignored local provider credential inventory; gate uses local redacted exports and live-route proof."
+  ],
+  "failures": []
+}

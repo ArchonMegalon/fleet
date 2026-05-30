@@ -1,0 +1,63 @@
+{
+  "generated_at_utc": "2026-05-29T19:49:43Z",
+  "provider": "Pixefy",
+  "devices": [
+    {
+      "id": "iphone_se",
+      "class": "mobile",
+      "viewport": "375x667"
+    },
+    {
+      "id": "iphone_pro",
+      "class": "mobile",
+      "viewport": "393x852"
+    },
+    {
+      "id": "iphone_pro_max",
+      "class": "mobile",
+      "viewport": "430x932"
+    },
+    {
+      "id": "android_small",
+      "class": "mobile",
+      "viewport": "360x740"
+    },
+    {
+      "id": "android_large",
+      "class": "mobile",
+      "viewport": "412x915"
+    },
+    {
+      "id": "ipad_portrait",
+      "class": "tablet",
+      "viewport": "768x1024"
+    },
+    {
+      "id": "ipad_landscape",
+      "class": "tablet",
+      "viewport": "1024x768"
+    },
+    {
+      "id": "desktop_1366",
+      "class": "desktop",
+      "viewport": "1366x768"
+    },
+    {
+      "id": "desktop_1440",
+      "class": "desktop",
+      "viewport": "1440x900"
+    },
+    {
+      "id": "desktop_1920",
+      "class": "desktop",
+      "viewport": "1920x1080"
+    },
+    {
+      "id": "desktop_ultrawide",
+      "class": "desktop",
+      "viewport": "2560x1080"
+    }
+  ],
+  "required_device_count": 11,
+  "status": "pass"
+}

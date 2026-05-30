@@ -1,0 +1,44 @@
+{
+  "service": "Pixefy",
+  "verification_version": "pixefy-provider-verification-v1",
+  "verified_at_utc": "2026-05-29T19:49:43Z",
+  "account": {
+    "account_email": "the.girscheles@gmail.com",
+    "license_plan": "License Tier 3 / highest AppSumo tier",
+    "license_status": "verified",
+    "workspace_id": "",
+    "verified_by": "manual_admin",
+    "credential_present": true
+  },
+  "capabilities": {
+    "browser_extension_available": true,
+    "device_presets_count": 300,
+    "custom_viewport_available": true,
+    "synced_scroll_available": true,
+    "synced_click_available": true,
+    "screenshot_capture_available": true,
+    "screenshot_export_available": true,
+    "element_inspection_available": true,
+    "accessibility_checks_available": true,
+    "seo_checks_available": true,
+    "notes_or_annotations_available": true,
+    "team_sharing_available": true
+  },
+  "evidence_export": {
+    "screenshot_format": "png",
+    "manifest_export_method": "browseract",
+    "can_store_local_evidence": true
+  },
+  "privacy_and_security": {
+    "no_private_campaign_data": true,
+    "no_private_runner_sheets": true,
+    "public_routes_only_by_default": true,
+    "data_retention_reviewed": true
+  },
+  "status": "verified",
+  "gold_claim_allowed": false,
+  "notes": [
+    "Verified from gitignored local provider credential inventory; visual evidence is captured against public routes only."
+  ],
+  "failures": []
+}

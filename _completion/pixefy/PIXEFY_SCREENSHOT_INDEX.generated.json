@@ -1,0 +1,837 @@
+{
+  "generated_at_utc": "2026-05-29T19:49:43Z",
+  "provider": "Pixefy",
+  "routes": [
+    {
+      "route_id": "home",
+      "url": "https://chummer.run/",
+      "captures": [
+        {
+          "device_id": "iphone_se",
+          "viewport": "375x667",
+          "screenshot_path": "screenshots/home__iphone_se.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro",
+          "viewport": "393x852",
+          "screenshot_path": "screenshots/home__iphone_pro.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro_max",
+          "viewport": "430x932",
+          "screenshot_path": "screenshots/home__iphone_pro_max.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_small",
+          "viewport": "360x740",
+          "screenshot_path": "screenshots/home__android_small.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_large",
+          "viewport": "412x915",
+          "screenshot_path": "screenshots/home__android_large.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_portrait",
+          "viewport": "768x1024",
+          "screenshot_path": "screenshots/home__ipad_portrait.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_landscape",
+          "viewport": "1024x768",
+          "screenshot_path": "screenshots/home__ipad_landscape.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1366",
+          "viewport": "1366x768",
+          "screenshot_path": "screenshots/home__desktop_1366.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1440",
+          "viewport": "1440x900",
+          "screenshot_path": "screenshots/home__desktop_1440.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1920",
+          "viewport": "1920x1080",
+          "screenshot_path": "screenshots/home__desktop_1920.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_ultrawide",
+          "viewport": "2560x1080",
+          "screenshot_path": "screenshots/home__desktop_ultrawide.png",
+          "status": "captured",
+          "notes": []
+        }
+      ]
+    },
+    {
+      "route_id": "downloads",
+      "url": "https://chummer.run/downloads",
+      "captures": [
+        {
+          "device_id": "iphone_se",
+          "viewport": "375x667",
+          "screenshot_path": "screenshots/downloads__iphone_se.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro",
+          "viewport": "393x852",
+          "screenshot_path": "screenshots/downloads__iphone_pro.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro_max",
+          "viewport": "430x932",
+          "screenshot_path": "screenshots/downloads__iphone_pro_max.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_small",
+          "viewport": "360x740",
+          "screenshot_path": "screenshots/downloads__android_small.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_large",
+          "viewport": "412x915",
+          "screenshot_path": "screenshots/downloads__android_large.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_portrait",
+          "viewport": "768x1024",
+          "screenshot_path": "screenshots/downloads__ipad_portrait.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_landscape",
+          "viewport": "1024x768",
+          "screenshot_path": "screenshots/downloads__ipad_landscape.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1366",
+          "viewport": "1366x768",
+          "screenshot_path": "screenshots/downloads__desktop_1366.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1440",
+          "viewport": "1440x900",
+          "screenshot_path": "screenshots/downloads__desktop_1440.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1920",
+          "viewport": "1920x1080",
+          "screenshot_path": "screenshots/downloads__desktop_1920.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_ultrawide",
+          "viewport": "2560x1080",
+          "screenshot_path": "screenshots/downloads__desktop_ultrawide.png",
+          "status": "captured",
+          "notes": []
+        }
+      ]
+    },
+    {
+      "route_id": "status",
+      "url": "https://chummer.run/status",
+      "captures": [
+        {
+          "device_id": "iphone_se",
+          "viewport": "375x667",
+          "screenshot_path": "screenshots/status__iphone_se.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro",
+          "viewport": "393x852",
+          "screenshot_path": "screenshots/status__iphone_pro.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro_max",
+          "viewport": "430x932",
+          "screenshot_path": "screenshots/status__iphone_pro_max.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_small",
+          "viewport": "360x740",
+          "screenshot_path": "screenshots/status__android_small.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_large",
+          "viewport": "412x915",
+          "screenshot_path": "screenshots/status__android_large.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_portrait",
+          "viewport": "768x1024",
+          "screenshot_path": "screenshots/status__ipad_portrait.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_landscape",
+          "viewport": "1024x768",
+          "screenshot_path": "screenshots/status__ipad_landscape.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1366",
+          "viewport": "1366x768",
+          "screenshot_path": "screenshots/status__desktop_1366.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1440",
+          "viewport": "1440x900",
+          "screenshot_path": "screenshots/status__desktop_1440.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1920",
+          "viewport": "1920x1080",
+          "screenshot_path": "screenshots/status__desktop_1920.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_ultrawide",
+          "viewport": "2560x1080",
+          "screenshot_path": "screenshots/status__desktop_ultrawide.png",
+          "status": "captured",
+          "notes": []
+        }
+      ]
+    },
+    {
+      "route_id": "ledger",
+      "url": "https://chummer.run/ledger",
+      "captures": [
+        {
+          "device_id": "iphone_se",
+          "viewport": "375x667",
+          "screenshot_path": "screenshots/ledger__iphone_se.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro",
+          "viewport": "393x852",
+          "screenshot_path": "screenshots/ledger__iphone_pro.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro_max",
+          "viewport": "430x932",
+          "screenshot_path": "screenshots/ledger__iphone_pro_max.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_small",
+          "viewport": "360x740",
+          "screenshot_path": "screenshots/ledger__android_small.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_large",
+          "viewport": "412x915",
+          "screenshot_path": "screenshots/ledger__android_large.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_portrait",
+          "viewport": "768x1024",
+          "screenshot_path": "screenshots/ledger__ipad_portrait.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_landscape",
+          "viewport": "1024x768",
+          "screenshot_path": "screenshots/ledger__ipad_landscape.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1366",
+          "viewport": "1366x768",
+          "screenshot_path": "screenshots/ledger__desktop_1366.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1440",
+          "viewport": "1440x900",
+          "screenshot_path": "screenshots/ledger__desktop_1440.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1920",
+          "viewport": "1920x1080",
+          "screenshot_path": "screenshots/ledger__desktop_1920.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_ultrawide",
+          "viewport": "2560x1080",
+          "screenshot_path": "screenshots/ledger__desktop_ultrawide.png",
+          "status": "captured",
+          "notes": []
+        }
+      ]
+    },
+    {
+      "route_id": "ledger_map",
+      "url": "https://chummer.run/ledger/map",
+      "captures": [
+        {
+          "device_id": "iphone_se",
+          "viewport": "375x667",
+          "screenshot_path": "screenshots/ledger_map__iphone_se.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro",
+          "viewport": "393x852",
+          "screenshot_path": "screenshots/ledger_map__iphone_pro.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro_max",
+          "viewport": "430x932",
+          "screenshot_path": "screenshots/ledger_map__iphone_pro_max.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_small",
+          "viewport": "360x740",
+          "screenshot_path": "screenshots/ledger_map__android_small.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_large",
+          "viewport": "412x915",
+          "screenshot_path": "screenshots/ledger_map__android_large.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_portrait",
+          "viewport": "768x1024",
+          "screenshot_path": "screenshots/ledger_map__ipad_portrait.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_landscape",
+          "viewport": "1024x768",
+          "screenshot_path": "screenshots/ledger_map__ipad_landscape.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1366",
+          "viewport": "1366x768",
+          "screenshot_path": "screenshots/ledger_map__desktop_1366.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1440",
+          "viewport": "1440x900",
+          "screenshot_path": "screenshots/ledger_map__desktop_1440.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1920",
+          "viewport": "1920x1080",
+          "screenshot_path": "screenshots/ledger_map__desktop_1920.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_ultrawide",
+          "viewport": "2560x1080",
+          "screenshot_path": "screenshots/ledger_map__desktop_ultrawide.png",
+          "status": "captured",
+          "notes": []
+        }
+      ]
+    },
+    {
+      "route_id": "ledger_factions",
+      "url": "https://chummer.run/ledger/factions",
+      "captures": [
+        {
+          "device_id": "iphone_se",
+          "viewport": "375x667",
+          "screenshot_path": "screenshots/ledger_factions__iphone_se.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro",
+          "viewport": "393x852",
+          "screenshot_path": "screenshots/ledger_factions__iphone_pro.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro_max",
+          "viewport": "430x932",
+          "screenshot_path": "screenshots/ledger_factions__iphone_pro_max.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_small",
+          "viewport": "360x740",
+          "screenshot_path": "screenshots/ledger_factions__android_small.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_large",
+          "viewport": "412x915",
+          "screenshot_path": "screenshots/ledger_factions__android_large.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_portrait",
+          "viewport": "768x1024",
+          "screenshot_path": "screenshots/ledger_factions__ipad_portrait.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_landscape",
+          "viewport": "1024x768",
+          "screenshot_path": "screenshots/ledger_factions__ipad_landscape.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1366",
+          "viewport": "1366x768",
+          "screenshot_path": "screenshots/ledger_factions__desktop_1366.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1440",
+          "viewport": "1440x900",
+          "screenshot_path": "screenshots/ledger_factions__desktop_1440.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1920",
+          "viewport": "1920x1080",
+          "screenshot_path": "screenshots/ledger_factions__desktop_1920.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_ultrawide",
+          "viewport": "2560x1080",
+          "screenshot_path": "screenshots/ledger_factions__desktop_ultrawide.png",
+          "status": "captured",
+          "notes": []
+        }
+      ]
+    },
+    {
+      "route_id": "ledger_newsroom",
+      "url": "https://chummer.run/ledger/newsroom",
+      "captures": [
+        {
+          "device_id": "iphone_se",
+          "viewport": "375x667",
+          "screenshot_path": "screenshots/ledger_newsroom__iphone_se.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro",
+          "viewport": "393x852",
+          "screenshot_path": "screenshots/ledger_newsroom__iphone_pro.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro_max",
+          "viewport": "430x932",
+          "screenshot_path": "screenshots/ledger_newsroom__iphone_pro_max.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_small",
+          "viewport": "360x740",
+          "screenshot_path": "screenshots/ledger_newsroom__android_small.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_large",
+          "viewport": "412x915",
+          "screenshot_path": "screenshots/ledger_newsroom__android_large.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_portrait",
+          "viewport": "768x1024",
+          "screenshot_path": "screenshots/ledger_newsroom__ipad_portrait.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_landscape",
+          "viewport": "1024x768",
+          "screenshot_path": "screenshots/ledger_newsroom__ipad_landscape.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1366",
+          "viewport": "1366x768",
+          "screenshot_path": "screenshots/ledger_newsroom__desktop_1366.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1440",
+          "viewport": "1440x900",
+          "screenshot_path": "screenshots/ledger_newsroom__desktop_1440.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1920",
+          "viewport": "1920x1080",
+          "screenshot_path": "screenshots/ledger_newsroom__desktop_1920.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_ultrawide",
+          "viewport": "2560x1080",
+          "screenshot_path": "screenshots/ledger_newsroom__desktop_ultrawide.png",
+          "status": "captured",
+          "notes": []
+        }
+      ]
+    },
+    {
+      "route_id": "play",
+      "url": "https://chummer.run/play",
+      "captures": [
+        {
+          "device_id": "iphone_se",
+          "viewport": "375x667",
+          "screenshot_path": "screenshots/play__iphone_se.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro",
+          "viewport": "393x852",
+          "screenshot_path": "screenshots/play__iphone_pro.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro_max",
+          "viewport": "430x932",
+          "screenshot_path": "screenshots/play__iphone_pro_max.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_small",
+          "viewport": "360x740",
+          "screenshot_path": "screenshots/play__android_small.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_large",
+          "viewport": "412x915",
+          "screenshot_path": "screenshots/play__android_large.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_portrait",
+          "viewport": "768x1024",
+          "screenshot_path": "screenshots/play__ipad_portrait.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_landscape",
+          "viewport": "1024x768",
+          "screenshot_path": "screenshots/play__ipad_landscape.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1366",
+          "viewport": "1366x768",
+          "screenshot_path": "screenshots/play__desktop_1366.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1440",
+          "viewport": "1440x900",
+          "screenshot_path": "screenshots/play__desktop_1440.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1920",
+          "viewport": "1920x1080",
+          "screenshot_path": "screenshots/play__desktop_1920.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_ultrawide",
+          "viewport": "2560x1080",
+          "screenshot_path": "screenshots/play__desktop_ultrawide.png",
+          "status": "captured",
+          "notes": []
+        }
+      ]
+    },
+    {
+      "route_id": "help",
+      "url": "https://chummer.run/help",
+      "captures": [
+        {
+          "device_id": "iphone_se",
+          "viewport": "375x667",
+          "screenshot_path": "screenshots/help__iphone_se.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro",
+          "viewport": "393x852",
+          "screenshot_path": "screenshots/help__iphone_pro.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro_max",
+          "viewport": "430x932",
+          "screenshot_path": "screenshots/help__iphone_pro_max.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_small",
+          "viewport": "360x740",
+          "screenshot_path": "screenshots/help__android_small.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_large",
+          "viewport": "412x915",
+          "screenshot_path": "screenshots/help__android_large.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_portrait",
+          "viewport": "768x1024",
+          "screenshot_path": "screenshots/help__ipad_portrait.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_landscape",
+          "viewport": "1024x768",
+          "screenshot_path": "screenshots/help__ipad_landscape.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1366",
+          "viewport": "1366x768",
+          "screenshot_path": "screenshots/help__desktop_1366.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1440",
+          "viewport": "1440x900",
+          "screenshot_path": "screenshots/help__desktop_1440.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1920",
+          "viewport": "1920x1080",
+          "screenshot_path": "screenshots/help__desktop_1920.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_ultrawide",
+          "viewport": "2560x1080",
+          "screenshot_path": "screenshots/help__desktop_ultrawide.png",
+          "status": "captured",
+          "notes": []
+        }
+      ]
+    },
+    {
+      "route_id": "feedback",
+      "url": "https://chummer.run/feedback",
+      "captures": [
+        {
+          "device_id": "iphone_se",
+          "viewport": "375x667",
+          "screenshot_path": "screenshots/feedback__iphone_se.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro",
+          "viewport": "393x852",
+          "screenshot_path": "screenshots/feedback__iphone_pro.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "iphone_pro_max",
+          "viewport": "430x932",
+          "screenshot_path": "screenshots/feedback__iphone_pro_max.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_small",
+          "viewport": "360x740",
+          "screenshot_path": "screenshots/feedback__android_small.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "android_large",
+          "viewport": "412x915",
+          "screenshot_path": "screenshots/feedback__android_large.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_portrait",
+          "viewport": "768x1024",
+          "screenshot_path": "screenshots/feedback__ipad_portrait.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "ipad_landscape",
+          "viewport": "1024x768",
+          "screenshot_path": "screenshots/feedback__ipad_landscape.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1366",
+          "viewport": "1366x768",
+          "screenshot_path": "screenshots/feedback__desktop_1366.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1440",
+          "viewport": "1440x900",
+          "screenshot_path": "screenshots/feedback__desktop_1440.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_1920",
+          "viewport": "1920x1080",
+          "screenshot_path": "screenshots/feedback__desktop_1920.png",
+          "status": "captured",
+          "notes": []
+        },
+        {
+          "device_id": "desktop_ultrawide",
+          "viewport": "2560x1080",
+          "screenshot_path": "screenshots/feedback__desktop_ultrawide.png",
+          "status": "captured",
+          "notes": []
+        }
+      ]
+    }
+  ],
+  "status": "pass"
+}

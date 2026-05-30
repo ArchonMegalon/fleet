@@ -1,0 +1,45 @@
+{
+  "generated_at_utc": "2026-05-29T19:49:42Z",
+  "provider": "Rafter",
+  "required_repos": [
+    "ArchonMegalon/Chummer6",
+    "ArchonMegalon/chummer6-core",
+    "ArchonMegalon/chummer6-ui",
+    "ArchonMegalon/chummer6-ui-kit",
+    "ArchonMegalon/chummer6-hub",
+    "ArchonMegalon/chummer6-hub-registry",
+    "ArchonMegalon/chummer6-mobile",
+    "ArchonMegalon/chummer6-media-factory",
+    "ArchonMegalon/chummer6-design",
+    "ArchonMegalon/fleet",
+    "ArchonMegalon/executive-assistant"
+  ],
+  "scanned_repos": [
+    "ArchonMegalon/Chummer6",
+    "ArchonMegalon/chummer6-core",
+    "ArchonMegalon/chummer6-ui",
+    "ArchonMegalon/chummer6-ui-kit",
+    "ArchonMegalon/chummer6-hub",
+    "ArchonMegalon/chummer6-hub-registry",
+    "ArchonMegalon/chummer6-mobile",
+    "ArchonMegalon/chummer6-media-factory",
+    "ArchonMegalon/chummer6-design",
+    "ArchonMegalon/fleet",
+    "ArchonMegalon/executive-assistant"
+  ],
+  "repo_paths": {
+    "ArchonMegalon/Chummer6": "/docker/chummercomplete/Chummer6",
+    "ArchonMegalon/chummer6-core": "/docker/chummercomplete/chummer-core-engine",
+    "ArchonMegalon/chummer6-ui": "/docker/chummercomplete/chummer-presentation",
+    "ArchonMegalon/chummer6-ui-kit": "/docker/chummercomplete/chummer-ui-kit",
+    "ArchonMegalon/chummer6-hub": "/docker/chummercomplete/chummer.run-services",
+    "ArchonMegalon/chummer6-hub-registry": "/docker/chummercomplete/chummer-hub-registry",
+    "ArchonMegalon/chummer6-mobile": "/docker/chummercomplete/.tmp-mobile-main-widen",
+    "ArchonMegalon/chummer6-media-factory": "/docker/fleet/repos/chummer-media-factory",
+    "ArchonMegalon/chummer6-design": "/docker/chummercomplete/chummer-design",
+    "ArchonMegalon/fleet": "/docker/chummercomplete/.integrated/fleet",
+    "ArchonMegalon/executive-assistant": "/docker/EA"
+  },
+  "missing_repos": [],
+  "status": "pass"
+}

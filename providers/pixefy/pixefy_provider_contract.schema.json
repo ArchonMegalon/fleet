@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pixefy Provider Contract",
+  "type": "object",
+  "required": ["service", "verification_version", "account", "capabilities", "evidence_export", "privacy_and_security", "status"],
+  "properties": {
+    "service": { "const": "Pixefy" },
+    "verification_version": { "const": "pixefy-provider-verification-v1" },
+    "account": { "type": "object" },
+    "capabilities": { "type": "object" },
+    "evidence_export": { "type": "object" },
+    "privacy_and_security": { "type": "object" },
+    "status": { "enum": ["verified", "pilot", "rejected"] },
+    "gold_claim_allowed": { "const": false }
+  }
+}

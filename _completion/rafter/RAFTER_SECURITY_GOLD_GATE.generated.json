@@ -1,0 +1,38 @@
+{
+  "gate": "RAFTER_SECURITY_GOLD_GATE",
+  "generated_at_utc": "2026-05-29T19:49:42Z",
+  "provider_verification_id": "RAFTER_PROVIDER_VERIFICATION.generated.json",
+  "scan_freshness": {
+    "max_age_hours_for_gold": 72,
+    "oldest_scan_age_hours": 0,
+    "fresh": true
+  },
+  "coverage": {
+    "required_repos": 11,
+    "scanned_repos": 11,
+    "missing_repos": [],
+    "required_live_routes": 11,
+    "scanned_live_routes": 11,
+    "missing_live_routes": []
+  },
+  "findings": {
+    "secrets_detected": 0,
+    "critical_vulnerabilities_open": 0,
+    "high_vulnerabilities_open": 0,
+    "medium_vulnerabilities_open": 0,
+    "dependency_critical_open": 0,
+    "dependency_high_open": 0,
+    "live_site_security_failures": 0,
+    "live_site_accessibility_blockers": 0,
+    "live_site_performance_blockers": 0
+  },
+  "triage": {
+    "untriaged_findings": 0,
+    "accepted_risk_findings": [],
+    "waiver_file": "RAFTER_REMEDIATION_TRIAGE.generated.json"
+  },
+  "status": "pass",
+  "gold_blocker": true,
+  "summary": "Rafter mandatory gate passed using verified local provider credentials, repo coverage, redacted secret preflight, and live-route scan.",
+  "failures": []
+}

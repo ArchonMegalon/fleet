@@ -1,0 +1,112 @@
+{
+  "generated_at_utc": "2026-05-29T19:49:42Z",
+  "provider": "Rafter",
+  "required_live_routes": [
+    "https://chummer.run/",
+    "https://chummer.run/downloads",
+    "https://chummer.run/status",
+    "https://chummer.run/ledger",
+    "https://chummer.run/ledger/map",
+    "https://chummer.run/ledger/factions",
+    "https://chummer.run/ledger/newsroom",
+    "https://chummer.run/play",
+    "https://chummer.run/mobile",
+    "https://chummer.run/help",
+    "https://chummer.run/feedback"
+  ],
+  "scanned_live_routes": [
+    "https://chummer.run/",
+    "https://chummer.run/downloads",
+    "https://chummer.run/status",
+    "https://chummer.run/ledger",
+    "https://chummer.run/ledger/map",
+    "https://chummer.run/ledger/factions",
+    "https://chummer.run/ledger/newsroom",
+    "https://chummer.run/play",
+    "https://chummer.run/mobile",
+    "https://chummer.run/help",
+    "https://chummer.run/feedback"
+  ],
+  "missing_live_routes": [],
+  "route_results": [
+    {
+      "url": "https://chummer.run/",
+      "status_code": 200,
+      "body_bytes_sampled": 21660,
+      "ok": true,
+      "forbidden_public_copy_hits": []
+    },
+    {
+      "url": "https://chummer.run/downloads",
+      "status_code": 200,
+      "body_bytes_sampled": 25665,
+      "ok": true,
+      "forbidden_public_copy_hits": []
+    },
+    {
+      "url": "https://chummer.run/status",
+      "status_code": 200,
+      "body_bytes_sampled": 25506,
+      "ok": true,
+      "forbidden_public_copy_hits": []
+    },
+    {
+      "url": "https://chummer.run/ledger",
+      "status_code": 200,
+      "body_bytes_sampled": 48261,
+      "ok": true,
+      "forbidden_public_copy_hits": []
+    },
+    {
+      "url": "https://chummer.run/ledger/map",
+      "status_code": 200,
+      "body_bytes_sampled": 48395,
+      "ok": true,
+      "forbidden_public_copy_hits": []
+    },
+    {
+      "url": "https://chummer.run/ledger/factions",
+      "status_code": 200,
+      "body_bytes_sampled": 48292,
+      "ok": true,
+      "forbidden_public_copy_hits": []
+    },
+    {
+      "url": "https://chummer.run/ledger/newsroom",
+      "status_code": 200,
+      "body_bytes_sampled": 48996,
+      "ok": true,
+      "forbidden_public_copy_hits": []
+    },
+    {
+      "url": "https://chummer.run/play",
+      "status_code": 200,
+      "body_bytes_sampled": 27378,
+      "ok": true,
+      "forbidden_public_copy_hits": []
+    },
+    {
+      "url": "https://chummer.run/mobile",
+      "status_code": 200,
+      "body_bytes_sampled": 27370,
+      "ok": true,
+      "forbidden_public_copy_hits": []
+    },
+    {
+      "url": "https://chummer.run/help",
+      "status_code": 200,
+      "body_bytes_sampled": 28338,
+      "ok": true,
+      "forbidden_public_copy_hits": []
+    },
+    {
+      "url": "https://chummer.run/feedback",
+      "status_code": 200,
+      "body_bytes_sampled": 42330,
+      "ok": true,
+      "forbidden_public_copy_hits": []
+    }
+  ],
+  "forbidden_public_copy_routes": [],
+  "status": "pass"
+}

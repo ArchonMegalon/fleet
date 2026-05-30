@@ -1,0 +1,15 @@
+{
+  "service": "Rafter",
+  "plan": "License Tier 3 / highest AppSumo tier",
+  "holding": "1 account",
+  "status": "Owned",
+  "workspace_integration_tier": "Tier 3",
+  "runtime_status": "not_wired",
+  "provider_verification_status": "pending",
+  "release_gate_status": "not_ready",
+  "source": "user_reported",
+  "updated_at_utc": "2026-05-29T19:49:41Z",
+  "gold_claim_allowed": false,
+  "verification_status": "pass",
+  "failures": []
+}

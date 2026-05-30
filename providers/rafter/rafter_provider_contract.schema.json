@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rafter Provider Contract",
+  "type": "object",
+  "required": ["service", "verification_version", "account", "capabilities", "github_access_scope", "privacy_and_security", "status"],
+  "properties": {
+    "service": { "const": "Rafter" },
+    "verification_version": { "const": "rafter-provider-verification-v1" },
+    "account": { "type": "object" },
+    "capabilities": { "type": "object" },
+    "quotas": { "type": "object" },
+    "github_access_scope": { "type": "object" },
+    "privacy_and_security": { "type": "object" },
+    "status": { "enum": ["verified", "pilot", "rejected"] },
+    "gold_claim_allowed": { "const": false }
+  }
+}

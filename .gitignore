@@ -31,6 +31,8 @@ __pycache__/
 *.py[cod]
 
 # Local build artifacts
+*.bin
+*.exe
 *.zip
 .venv/
 .nuget/packages/
