@@ -1,15 +1,15 @@
 {
   "contract_name": "fleet.public_progress_report",
   "contract_version": "2026-03-23",
-  "generated_at": "2026-05-29T10:51:12Z",
-  "as_of": "2026-05-29",
-  "history_snapshot_count": 34,
+  "generated_at": "2026-05-30T09:00:17Z",
+  "as_of": "2026-05-30",
+  "history_snapshot_count": 35,
   "brand": "Chummer6",
   "active_wave": "Next 12 Biggest Wins",
   "active_wave_status": "complete",
   "active_slice": "Next 12 Biggest Wins",
   "headline": "Progress report for a product becoming a build machine.",
-  "overall_status": "active",
+  "overall_status": "complete",
   "progress_percent": 100,
   "percent_complete": 100,
   "percent_inflight": 0,
@@ -20,25 +20,21 @@
   },
   "top_risks": [
     {
-      "key": "completion_frontier",
-      "summary": "Completion frontier closeout proof is still failing. Resolve the blocking golden-journey gaps before widening publish claims."
-    },
-    {
       "key": "full_product_queue",
-      "summary": "2 open milestones remain in the full-product frontier."
+      "summary": "3 open milestones remain in the full-product frontier. The current supervisor ETA is scoped to Next 90-day product advance wave, not full-product parity."
     }
   ],
   "flagship_readiness": {
     "status": "ready",
-    "summary": "Feature parity, desktop layout familiarity, and executable flagship proof are all green.",
+    "summary": "{'ready_count': 8, 'warning_count': 0, 'missing_count': 0, 'scoped_warning_count': 0, 'scoped_missing_count': 0, 'deferred_warning_count': 0, 'history_snapshot_count': 34}",
     "feature_parity_proven": true,
     "layout_familiarity_proven": true,
     "desktop_executable_gate_status": "pass",
-    "desktop_executable_gate_summary": "Desktop executable exit gate is proven by passing packaged-head receipts for promoted desktop platforms (Linux, macOS, Windows) and per-head flagship UI release proof.",
+    "desktop_executable_gate_summary": "Published flagship readiness proof is green.",
     "windows_blocking_reason_count": 0,
     "windows_blocking_reasons": [],
     "proofs": {
-      "import_parity_status": "passed",
+      "import_parity_status": "pass",
       "chummer5a_workflow_parity_status": "pass",
       "sr4_workflow_parity_status": "pass",
       "sr6_workflow_parity_status": "pass",
@@ -47,8 +43,8 @@
     }
   },
   "release_readiness": {
-    "status": "warning",
-    "summary": "Completion frontier closeout proof is still failing. Resolve the blocking golden-journey gaps before widening publish claims. Mapped public parts are at zero open milestone weight, but there are still 2 open milestones in the full-product frontier.",
+    "status": "tracked",
+    "summary": "Mapped public parts are at zero open milestone weight, but there are still 3 open milestones in the full-product frontier. The current supervisor ETA is scoped to Next 90-day product advance wave, so it should not be read as a full-product parity ETA.",
     "blocking_parts": []
   },
   "parity": {
@@ -68,29 +64,29 @@
       "route": "/downloads",
       "title": "Downloads and install truth",
       "semantic_family": "supportable_install",
-      "proof_state": "implemented",
+      "proof_state": "public-stable",
       "proof_badge": {
-        "state": "implemented",
-        "label": "Implemented",
-        "tone": "implemented"
+        "state": "public-stable",
+        "label": "Public stable",
+        "tone": "stable"
       },
       "summary": "Package compatibility, install, update, rollback, and revoke claims are published from the current release shelf instead of helper folklore.",
-      "detail": "1 compatible installer tuple(s) are published. Rollout state is coverage_incomplete, support posture is review_required, and rollback stays watch.",
+      "detail": "3 compatible installer tuple(s) are published. Rollout state is public_stable, support posture is gold_supported, and rollback stays armed.",
       "evidence": [
         "Release channel: published",
         "Release proof: passed",
-        "Install journey: blocked",
-        "Fix availability: Do not send fixed notices until required desktop tuple coverage is complete for the promoted shelf."
+        "Install journey: ready",
+        "Fix availability: Only send fixed notices after the affected install can receive the published channel artifact now on the shelf."
       ],
       "package_claims": {
-        "compatible_installer_count": 1,
-        "published_installer_count": 1,
-        "rollout_state": "coverage_incomplete",
-        "supportability_state": "review_required",
-        "rollback_state": "watch",
+        "compatible_installer_count": 3,
+        "published_installer_count": 3,
+        "rollout_state": "public_stable",
+        "supportability_state": "gold_supported",
+        "rollback_state": "armed",
         "revoke_state": "not_revoked",
-        "known_issue_summary": "Known issue: required desktop tuple coverage is incomplete (platforms: windows, macos; pairs: avalonia:windows, avalonia:macos; tuples: avalonia:osx-arm64:macos, avalonia:win-x64:windows).",
-        "supportability_summary": "Treat the current shelf as review-required because required desktop tuple coverage is incomplete (platforms: windows, macos; pairs: avalonia:windows, avalonia:macos; tuples: avalonia:osx-arm64:macos, avalonia:win-x64:windows)."
+        "known_issue_summary": "Current release proof is green, and the shelf has recent install, claimed-device recovery, clustered release notification, community closure, bounded offline prefetch, and support proof instead of only manifest presence.",
+        "supportability_summary": "Gold release proof passed for: install_claim_restore_continue, build_explain_publish, campaign_session_recover_recap, report_cluster_release_notify, organize_community_and_close_loop. Claimed-device restore and bounded offline prefetch stayed grounded on the current shelf. Clustered release notification stayed grounded on the current shelf. Community organizer closure stayed grounded on the current shelf."
       }
     },
     {
@@ -105,7 +101,7 @@
         "tone": "stable"
       },
       "summary": "The public route only claims the flagship workbench when executable proof and veteran-familiar desktop signals agree.",
-      "detail": "Feature parity, desktop layout familiarity, and executable flagship proof are all green.",
+      "detail": "{'ready_count': 8, 'warning_count': 0, 'missing_count': 0, 'scoped_warning_count': 0, 'scoped_missing_count': 0, 'deferred_warning_count': 0, 'history_snapshot_count': 34}",
       "evidence": [
         "Flagship readiness: ready",
         "Desktop executable gate: pass",
@@ -117,18 +113,18 @@
       "route": "/account/access",
       "title": "Account, restore, and device continuity",
       "semantic_family": "restore_and_portability",
-      "proof_state": "implemented",
+      "proof_state": "public-stable",
       "proof_badge": {
-        "state": "implemented",
-        "label": "Implemented",
-        "tone": "implemented"
+        "state": "public-stable",
+        "label": "Public stable",
+        "tone": "stable"
       },
       "summary": "Account value is framed as claim, restore, second-device continuation, and support continuity, not as a browser ritual.",
       "detail": "A person can install the flagship client, claim it, restore the right workspace, and continue safely on a known install.",
       "evidence": [
-        "Journey state: blocked",
+        "Journey state: ready",
         "Account route proof: present",
-        "Journey recommendation: Resolve the blocking artifact or posture gap before widening promotion or trust claims."
+        "Journey recommendation: Keep the journey under routine weekly proof."
       ]
     },
     {
@@ -136,17 +132,17 @@
       "route": "/account/support",
       "title": "Support and recovery",
       "semantic_family": "support",
-      "proof_state": "preview-bounded",
+      "proof_state": "public-stable",
       "proof_badge": {
-        "state": "preview-bounded",
-        "label": "Preview bounded",
-        "tone": "preview"
+        "state": "public-stable",
+        "label": "Public stable",
+        "tone": "stable"
       },
       "summary": "Support is a closure lane tied to install and release receipts. It is not the same thing as votes, proposals, or roadmap wishes.",
-      "detail": "2 open packet(s); 0 waiting on release truth. Current source refresh is degraded: unable to load support-case source http://host.docker.internal:8091/api/v1/support/cases/triage: HTTP Error 404: Not Found",
+      "detail": "0 open packet(s); 0 waiting on release truth. Current source refresh is degraded: unable to load support-case source http://host.docker.internal:8091/api/v1/support/cases/triage: HTTP Error 401: Unauthorized",
       "evidence": [
         "Support packets artifact: present",
-        "Open packets: 2",
+        "Open packets: 0",
         "Waiting on release truth: 0"
       ]
     },
@@ -174,21 +170,21 @@
       "route": "/roadmap",
       "title": "Governance and rollout posture",
       "semantic_family": "governance",
-      "proof_state": "preview-bounded",
+      "proof_state": "implemented",
       "proof_badge": {
-        "state": "preview-bounded",
-        "label": "Preview bounded",
-        "tone": "preview"
+        "state": "implemented",
+        "label": "Implemented",
+        "tone": "implemented"
       },
       "summary": "Governance cards describe launch, canary, rollback, and claim-safety posture. They do not imply immediate rollout just because a proposal exists.",
-      "detail": "Resolve the blocking golden-journey gaps before widening publish claims.",
+      "detail": "trusted completion receipt plus whole-product release proof and Linux desktop exit gate are ready",
       "evidence": [
-        "Completion audit: fail",
-        "Launch expand: blocked",
-        "Freeze launch: active",
+        "Completion audit: pass",
+        "Launch expand: allowed",
+        "Freeze launch: available",
         "Canary: ready",
-        "Rollback: watch",
-        "Journey summary: blocked"
+        "Rollback: armed",
+        "Journey summary: ready"
       ]
     }
   ],
@@ -216,10 +212,10 @@
   "overall_progress_percent": 100,
   "phase_label": "Public-fit polish",
   "current_phase": "Public-fit polish",
-  "next_checkpoint_eta_weeks_low": 1,
-  "next_checkpoint_eta_weeks_high": 1,
-  "eta_summary": "1 weeks",
-  "eta_human": "1 weeks",
+  "next_checkpoint_eta_weeks_low": 0,
+  "next_checkpoint_eta_weeks_high": 0,
+  "eta_summary": "tracked in full-product frontier",
+  "eta_human": "tracked in full-product frontier",
   "longest_pole": {
     "id": "core-engine",
     "label": "Core Engine",
@@ -256,7 +252,7 @@
           "body": "A boring, auditable core runtime with no hidden legacy cargo."
         }
       ],
-      "recent_commit_count_7d": 1,
+      "recent_commit_count_7d": 18,
       "remaining_open_weight": 0,
       "remaining_open_milestones": 0,
       "uncovered_scope_count": 0,
@@ -288,7 +284,7 @@
           "repo_slug": "chummer6-core",
           "path": "/docker/chummercomplete/chummer6-core",
           "lifecycle": "live",
-          "recent_commit_count_7d": 1,
+          "recent_commit_count_7d": 18,
           "design_total_weight": 40,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
@@ -342,7 +338,7 @@
           "body": "Complete desktop/browser workbench with accessibility, localization, and polished shared components."
         }
       ],
-      "recent_commit_count_7d": 24,
+      "recent_commit_count_7d": 61,
       "remaining_open_weight": 0,
       "remaining_open_milestones": 0,
       "uncovered_scope_count": 0,
@@ -375,13 +371,13 @@
           "repo_slug": "chummer6-ui",
           "path": "/docker/chummercomplete/chummer6-ui",
           "lifecycle": "live",
-          "recent_commit_count_7d": 22,
+          "recent_commit_count_7d": 54,
           "design_total_weight": 56,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-05-29T10:50:44.845403Z",
+            "published_at": "2026-05-29T22:38:50.513205Z",
             "stages": {
               "capacity_compile": true,
               "design_compile": true,
@@ -465,7 +461,7 @@
           "repo_slug": "chummer6-ui-kit",
           "path": "/docker/chummercomplete/chummer-ui-kit",
           "lifecycle": "scaffold",
-          "recent_commit_count_7d": 2,
+          "recent_commit_count_7d": 7,
           "design_total_weight": 40,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
@@ -518,7 +514,7 @@
           "body": "A reliable session shell that survives weak networks and resumes cleanly."
         }
       ],
-      "recent_commit_count_7d": 3,
+      "recent_commit_count_7d": 8,
       "remaining_open_weight": 0,
       "remaining_open_milestones": 0,
       "uncovered_scope_count": 0,
@@ -550,13 +546,13 @@
           "repo_slug": "chummer6-mobile",
           "path": "/docker/chummercomplete/chummer6-mobile",
           "lifecycle": "dispatchable",
-          "recent_commit_count_7d": 3,
+          "recent_commit_count_7d": 8,
           "design_total_weight": 44,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-05-29T06:24:42.845264Z",
+            "published_at": "2026-05-29T20:12:20.219947Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -606,7 +602,7 @@
           "body": "A cohesive hosted community and publication stack ready for real public participation."
         }
       ],
-      "recent_commit_count_7d": 76,
+      "recent_commit_count_7d": 98,
       "remaining_open_weight": 0,
       "remaining_open_milestones": 0,
       "uncovered_scope_count": 0,
@@ -639,13 +635,13 @@
           "repo_slug": "chummer6-hub",
           "path": "/docker/chummercomplete/chummer6-hub",
           "lifecycle": "live",
-          "recent_commit_count_7d": 61,
+          "recent_commit_count_7d": 76,
           "design_total_weight": 60,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-05-29T08:28:35.688384Z",
+            "published_at": "2026-05-30T06:50:30.775230Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -697,13 +693,13 @@
           "repo_slug": "chummer6-hub-registry",
           "path": "/docker/chummercomplete/chummer-hub-registry",
           "lifecycle": "dispatchable",
-          "recent_commit_count_7d": 15,
+          "recent_commit_count_7d": 22,
           "design_total_weight": 44,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-05-29T08:34:38.297674Z",
+            "published_at": "2026-05-29T20:14:22.634805Z",
             "stages": {
               "capacity_compile": true,
               "design_compile": true,
@@ -781,7 +777,7 @@
           "body": "One authoritative public story, compiled cleanly into every downstream surface."
         }
       ],
-      "recent_commit_count_7d": 36,
+      "recent_commit_count_7d": 53,
       "remaining_open_weight": 0,
       "remaining_open_milestones": 0,
       "uncovered_scope_count": 0,
@@ -802,7 +798,7 @@
         "capacity_compile": true,
         "capacity_compile_count": 2,
         "published_artifacts_present": true,
-        "published_artifact_count": 3,
+        "published_artifact_count": 4,
         "lifecycle_counts": {
           "dispatchable": 1,
           "signoff_only": 1
@@ -814,7 +810,7 @@
           "repo_slug": "chummer6-design",
           "path": "/docker/chummercomplete/chummer-design",
           "lifecycle": "dispatchable",
-          "recent_commit_count_7d": 21,
+          "recent_commit_count_7d": 30,
           "design_total_weight": 44,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
@@ -841,13 +837,13 @@
           "repo_slug": "Chummer6",
           "path": "/docker/chummercomplete/Chummer6",
           "lifecycle": "signoff_only",
-          "recent_commit_count_7d": 15,
+          "recent_commit_count_7d": 23,
           "design_total_weight": 1,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-05-29T06:25:03.875191Z",
+            "published_at": "2026-05-30T05:29:21.411340Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -857,7 +853,8 @@
             },
             "dispatchable_truth_ready": true,
             "artifacts": [
-              "QUEUE.generated.yaml"
+              "QUEUE.generated.yaml",
+              "RELEASE_TRUTH_MATRIX.generated.json"
             ],
             "lifecycle": ""
           }
@@ -904,59 +901,54 @@
     "limitations": [
       "ETA is a momentum-based planning band, not a delivery promise.",
       "Weekly public progress history is now available; ETA uses recorded velocity where enough snapshots exist and falls back to the short-horizon momentum proxy elsewhere.",
-      "Mapped public milestones are complete, but the full-product frontier remains open with 2 milestone(s). Full completion requires full frontier closure."
+      "Mapped public milestones are complete, but the full-product frontier remains open with 3 milestone(s). Full completion requires full frontier closure.",
+      "The current supervisor ETA is tactical or otherwise not yet calendar-grade enough for a full-product parity forecast, so the public surface tracks the remaining frontier without publishing a parity date band."
     ],
-    "history_snapshot_count": 34
+    "history_snapshot_count": 35
   },
-  "eta_scope": "full_product_queue",
+  "eta_scope": "full_product_queue_unestimated",
   "full_product_queue": {
-    "mode": "flagship_product",
-    "active_runs_count": 3,
+    "mode": "successor_wave",
+    "active_runs_count": 2,
     "active_frontier_ids": [
-      2541246989,
-      4066417069
+      1466344565,
+      4037265286,
+      4132724850
     ],
     "open_milestone_ids": [
-      2541246989,
-      4066417069
+      1466344565,
+      4037265286,
+      4132724850
     ],
-    "open_frontier_milestones": 2,
-    "open_milestone_ids_count": 2,
+    "open_frontier_milestones": 3,
+    "open_milestone_ids_count": 3,
     "eta": {
-      "eta_human": "10h-1.1d",
-      "eta_status": "tracked",
-      "scope_kind": "flagship_product_readiness",
-      "scope_label": "Full Chummer5A parity and flagship proof closeout",
-      "scope_warning": "",
-      "eta_weeks_low": 1,
-      "eta_weeks_high": 1,
-      "remaining_open_milestones": 2,
-      "remaining_in_progress_milestones": 2,
+      "eta_human": "1w-2.5w after unblock",
+      "eta_status": "blocked",
+      "scope_kind": "next_90_day_successor_wave",
+      "scope_label": "Next 90-day product advance wave",
+      "scope_warning": "This successor-wave ETA is tracked separately from the current flagship closeout frontier. It assumes spare-shard execution continues without stealing active closeout shards.",
+      "eta_weeks_low": null,
+      "eta_weeks_high": null,
+      "remaining_open_milestones": 3,
+      "remaining_in_progress_milestones": 3,
       "remaining_not_started_milestones": 0
     },
     "active_runs": [
       {
-        "run_id": "20260529T104906Z-shard-1",
+        "run_id": "20260530T084925Z-shard-1",
         "shard": "shard-1",
         "frontier_count": 1,
         "frontier_ids": [
-          4066417069
+          4037265286
         ]
       },
       {
-        "run_id": "20260529T104144Z-shard-2",
+        "run_id": "20260530T083023Z-shard-2",
         "shard": "shard-2",
         "frontier_count": 1,
         "frontier_ids": [
-          4066417069
-        ]
-      },
-      {
-        "run_id": "20260529T104147Z-shard-3",
-        "shard": "shard-3",
-        "frontier_count": 1,
-        "frontier_ids": [
-          2541246989
+          4132724850
         ]
       }
     ]

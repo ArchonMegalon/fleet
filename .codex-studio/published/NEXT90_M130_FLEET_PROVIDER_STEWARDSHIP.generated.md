@@ -3,20 +3,20 @@
 - status: pass
 - package_id: next90-m130-fleet-add-provider-health-credit-runway-kill-switch-fallback-a
 - frontier_id: 7382989835
-- generated_at: 2026-05-19T15:27:38Z
+- generated_at: 2026-05-30T09:06:35Z
 
 ## Runtime posture
 - governed routes: 0
 - fallback-thin lanes: 0
 - review-due lanes: 0
 - revert-now lanes: 0
-- credit provider: 1min
-- free credits: 0
-- next top-up: unknown
+- credit provider: local_governed_credit_summary
+- free credits: 348252
+- next top-up: 2026-06-01T00:00:00Z
 
 ## Governor posture
-- launch action: freeze_launch
-- canary state: accumulating
+- launch action: launch_expand
+- canary state: ready
 - rollback state: armed
 
 ## Canon posture
@@ -28,6 +28,4 @@
 ## Package closeout
 - state: pass
 - warnings:
-  - Provider canary remains accumulating.
   - Rollback posture remains armed.
-  - Current launch action is freeze_launch.

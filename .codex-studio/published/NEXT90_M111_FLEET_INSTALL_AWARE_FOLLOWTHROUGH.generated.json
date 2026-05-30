@@ -1,20 +1,20 @@
 {
   "contract_name": "fleet.install_aware_followthrough_gate",
   "schema_version": 1,
-  "generated_at": "2026-05-19T12:21:35Z",
+  "generated_at": "2026-05-30T09:06:31Z",
   "status": "pass",
-  "reason": "Install-aware followthrough is clear and public proof is correctly held while weekly governor posture remains freeze_launch.",
+  "reason": "Install-aware followthrough is clear: install receipts, weekly governor truth, and public proof posture all agree.",
   "summary": {
     "followthrough_mail_state": "pass",
-    "public_proof_promotion_state": "hold",
+    "public_proof_promotion_state": "pass",
     "mail_hold_reason_count": 0,
-    "public_hold_reason_count": 1,
+    "public_hold_reason_count": 0,
     "publication_ref_count": 4,
     "publication_ref_as_of_aligned": true
   },
   "gate_summary": {
     "followthrough_mail": "pass",
-    "public_proof_promotion": "hold"
+    "public_proof_promotion": "pass"
   },
   "package_id": "next90-m111-fleet-install-aware-followthrough",
   "frontier_id": 5200108449,
@@ -65,7 +65,7 @@
     "queue_staging": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
   },
   "support_receipt_truth": {
-    "support_packets_generated_at": "2026-05-19T12:04:52Z",
+    "support_packets_generated_at": "2026-05-29T23:33:10Z",
     "successor_package_verification_status": "pass",
     "reporter_followthrough_blocked_missing_install_receipts_count": 0,
     "reporter_followthrough_blocked_receipt_mismatch_count": 0,
@@ -75,22 +75,22 @@
     "followthrough_ready_count": 0
   },
   "launch_truth": {
-    "weekly_product_pulse_generated_at": "2026-05-19T12:05:24Z",
-    "weekly_product_pulse_as_of": "2026-05-19",
-    "weekly_product_pulse_action": "freeze_launch",
-    "weekly_product_pulse_reason": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
-    "weekly_governor_packet_generated_at": "2026-05-19T12:20:51Z",
-    "weekly_governor_packet_as_of": "2026-05-19",
-    "governor_expected_action": "freeze_launch",
-    "governor_actual_action": "freeze_launch",
+    "weekly_product_pulse_generated_at": "2026-05-30T09:01:31Z",
+    "weekly_product_pulse_as_of": "2026-05-30",
+    "weekly_product_pulse_action": "launch_expand",
+    "weekly_product_pulse_reason": "Launch expansion is approved for the next bounded window while canaries and support closure remain clear.",
+    "weekly_governor_packet_generated_at": "2026-05-30T09:06:30Z",
+    "weekly_governor_packet_as_of": "2026-05-30",
+    "governor_expected_action": "launch_expand",
+    "governor_actual_action": "launch_expand",
     "governor_alignment_status": "pass",
-    "freeze_launch_state": "active",
-    "launch_expand_state": "blocked",
+    "freeze_launch_state": "available",
+    "launch_expand_state": "allowed",
     "rollback_state": "armed",
-    "public_status_state": "freeze_launch",
-    "public_status_headline": "Launch expansion remains frozen.",
-    "public_status_body": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
-    "expected_public_status_state": "freeze_with_rollback_watch"
+    "public_status_state": "launch_expand_allowed",
+    "public_status_headline": "Measured launch expansion is allowed.",
+    "public_status_body": "Readiness, parity, support, canary, dependency, and release-proof gates are green for this weekly packet.",
+    "expected_public_status_state": "launch_expand_allowed"
   },
   "publication_refs": [
     {
@@ -98,8 +98,8 @@
       "role": "install-aware followthrough receipt source",
       "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
       "exists": true,
-      "sha256": "73a9e3c907ac50be2ea10f6537583340b399c9baa2b3562c694325774b7de68f",
-      "generated_at": "2026-05-19T12:04:52Z",
+      "sha256": "d62d3da6d8f8e41066da2d77ef1f2c3354181a153d55ed4d11a9e288db4070a7",
+      "generated_at": "2026-05-29T23:33:10Z",
       "as_of": ""
     },
     {
@@ -107,27 +107,27 @@
       "role": "promotion and kill-switch ledger",
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
       "exists": true,
-      "sha256": "0b71a742a003d7427c4c6b3de8a0e17c44a8b1d551cc52bcc04b442f5ffba257",
-      "generated_at": "2026-05-19T12:20:51Z",
-      "as_of": "2026-05-19"
+      "sha256": "aad2fc7c610280f14018062db56558fa770c746b5393bce8582c0a6fd87186a8",
+      "generated_at": "2026-05-30T09:06:30Z",
+      "as_of": "2026-05-30"
     },
     {
       "name": "weekly_product_pulse",
       "role": "public promotion decision source",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
       "exists": true,
-      "sha256": "3de065e5ab28e986e0a998eec872ce5247a5ebbb71ffbfca2f3d3561be655a08",
-      "generated_at": "2026-05-19T12:05:24Z",
-      "as_of": "2026-05-19"
+      "sha256": "7d4f586f41a0ebf406d0d62756eedc771befe6bf9456de80b1b74ec7456e4139",
+      "generated_at": "2026-05-30T09:01:31Z",
+      "as_of": "2026-05-30"
     },
     {
       "name": "progress_report",
       "role": "public proof shelf snapshot",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PROGRESS_REPORT.generated.json",
       "exists": true,
-      "sha256": "3a25c81910b46c514545662bc665bb9b7b9e7d635c2a4e8602a10f012be1b411",
-      "generated_at": "2026-05-19T12:15:19Z",
-      "as_of": "2026-05-19"
+      "sha256": "452a1070b9d36be9708ae90e874f13352e0c33b6328cb733af6b6530690ac561",
+      "generated_at": "2026-05-30T09:00:17Z",
+      "as_of": "2026-05-30"
     }
   ],
   "agreement": {
@@ -143,14 +143,14 @@
     "publication_refs_present": true,
     "publication_ref_as_of_aligned": true,
     "publication_refs_agree": true,
-    "healthy_hold": true
+    "healthy_hold": false
   },
   "kill_switch_posture": {
-    "freeze_launch_state": "active",
+    "freeze_launch_state": "available",
     "rollback_state": "armed",
-    "launch_expand_state": "blocked",
-    "expected_public_status_state": "freeze_with_rollback_watch",
-    "allows_public_promotion": false
+    "launch_expand_state": "allowed",
+    "expected_public_status_state": "launch_expand_allowed",
+    "allows_public_promotion": true
   },
   "gates": {
     "followthrough_mail": {
@@ -158,8 +158,8 @@
       "reason": "Install-aware followthrough mail is clear: support receipt blockers are zero, support closure is current, and the source support packet remains verifier-backed."
     },
     "public_proof_promotion": {
-      "state": "hold",
-      "reason": "governor action is freeze_launch instead of launch_expand"
+      "state": "pass",
+      "reason": "Public proof promotion is clear: install-aware receipt gates are green, weekly launch truth agrees, and the promoted publication refs share one public snapshot."
     }
   }
 }

@@ -1,9 +1,9 @@
 {
   "adoption_health": {
-    "pulse_as_of": "2026-05-19",
+    "pulse_as_of": "2026-05-30",
     "raw_state": "clear",
     "source": {
-      "history_snapshot_count": 30,
+      "history_snapshot_count": 35,
       "local_release_proof_status": "passed",
       "proven_journey_count": 5,
       "proven_route_count": 10,
@@ -23,7 +23,7 @@
       }
     },
     "state": "pass",
-    "summary": "Current local edge proof passed. 5 journey proofs and 10 trust routes are on record. 30 weekly snapshots are on record for the current public trust posture."
+    "summary": "Current local edge proof passed. 5 journey proofs and 10 trust routes are on record. 35 weekly snapshots are on record for the current public trust posture."
   },
   "agreement": {
     "design_queue_status": "complete",
@@ -42,23 +42,23 @@
     ".codex-studio",
     "feedback"
   ],
-  "as_of": "2026-05-19",
+  "as_of": "2026-05-30",
   "contract_name": "fleet.next90_m120_launch_pulse",
   "frontier_id": 2614855152,
-  "generated_at": "2026-05-19T12:13:25Z",
+  "generated_at": "2026-05-30T09:06:35Z",
   "launch_pulse": {
     "alignment_ok": true,
     "decision_alignment": {
-      "actual_action": "freeze_launch",
-      "expected_action": "freeze_launch",
+      "actual_action": "launch_expand",
+      "expected_action": "launch_expand",
       "status": "pass"
     },
     "focus_shift_reason": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
-    "governor_action": "freeze_launch",
-    "public_status_body": "Freeze launch expansion until provider-route canaries return to green (current: Canary evidence is still accumulating).",
-    "public_status_copy_state": "freeze_launch",
-    "public_status_headline": "Launch expansion remains frozen.",
-    "pulse_action": "freeze_launch",
+    "governor_action": "launch_expand",
+    "public_status_body": "Readiness, parity, support, canary, dependency, and release-proof gates are green for this weekly packet.",
+    "public_status_copy_state": "launch_expand_allowed",
+    "public_status_headline": "Measured launch expansion is allowed.",
+    "pulse_action": "launch_expand",
     "state": "pass"
   },
   "milestone_id": 120,
@@ -74,90 +74,90 @@
     "missing_input_count": 0,
     "source_rows": {
       "flagship_readiness": {
-        "age_seconds": 484,
+        "age_seconds": 307,
         "exists": true,
-        "generated_at": "2026-05-19T12:05:21Z",
-        "generated_at_sha256": "6eebe22a533c8c90254fc474c7e989835a68d9a4279cc4b9df75a10e634f64b7",
+        "generated_at": "2026-05-30T09:01:28Z",
+        "generated_at_sha256": "02cbaf073b2537d063d08737d45d32242c382cdd071a7fde855faea0ed52cec0",
         "max_age_seconds": 172800,
         "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "sha256": "4be96037efa242fd9ab94c59a06806d05cae70f938ad10bad5841f457a706d1a",
+        "sha256": "50027dc97f03b45f14aed7af5700ca7ee5268b688abd81e358556407c9389512",
         "state": "pass",
         "status": "pass"
       },
       "journey_gates": {
-        "age_seconds": 509,
+        "age_seconds": 350,
         "exists": true,
-        "generated_at": "2026-05-19T12:04:56Z",
-        "generated_at_sha256": "c0d312b004212e8cea45ed3542a666903a8421a36cc41cf13ce90725fac62a27",
+        "generated_at": "2026-05-30T09:00:45Z",
+        "generated_at_sha256": "0914aa18306c8a78e60c3e9be9ef75fbb1b1b4ec4439ba5cebe0f0d7cb403113",
         "max_age_seconds": 172800,
         "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "sha256": "b9f78a9e24e2ba50a20bf05bd178ede22628fd4509250f4bf667a31239ae6204",
+        "sha256": "b39948ed9eb4442d66ee67398b02fdf82fe98c97f902b041b8f0a40ba627289b",
         "state": "pass",
         "status": "pass"
       },
       "progress_report": {
-        "age_seconds": 9151,
+        "age_seconds": 378,
         "exists": true,
-        "generated_at": "2026-05-19T09:40:54Z",
-        "generated_at_sha256": "ba09908a8db61e960617a3a1b2d9a3bbc6c46543de71a7dbb309359df6999721",
+        "generated_at": "2026-05-30T09:00:17Z",
+        "generated_at_sha256": "7bfb77d50a80c57fc6a9b6fe29d454c0e12019b6cf4ece927e6ff2ac5ff5b215",
         "max_age_seconds": 172800,
         "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
-        "sha256": "a3155c7a038d0ba921299a0a7cbbe890b5d91681d6ad52bffb401b462067696d",
+        "sha256": "452a1070b9d36be9708ae90e874f13352e0c33b6328cb733af6b6530690ac561",
         "state": "pass",
         "status": "pass"
       },
       "proof_orchestration": {
-        "age_seconds": 9139,
+        "age_seconds": 427,
         "exists": true,
-        "generated_at": "2026-05-19T09:41:06Z",
-        "generated_at_sha256": "30ec72f8512609f9673c661837b5e06ca95232f31cf8e6e25a6b3f020502cef1",
+        "generated_at": "2026-05-30T08:59:28Z",
+        "generated_at_sha256": "9ee57e63f4ed4d24158eb01ef1fc031eb634dc0279070814661506b65db7fb17",
         "max_age_seconds": 172800,
         "path": "/docker/fleet/.codex-studio/published/PROOF_ORCHESTRATION.generated.json",
-        "sha256": "d9b5b680f8c6016a2b140e8568c4d0d43c9d0c85a6a1b69d202f113a93d2af3c",
+        "sha256": "1b99eab421933ef9c8ef354aec988cd81838ebff35ec12beef7c9cc4a6500019",
         "state": "pass",
         "status": "pass"
       },
       "status_plane": {
-        "age_seconds": 515,
+        "age_seconds": 352,
         "exists": true,
-        "generated_at": "2026-05-19T12:04:50Z",
-        "generated_at_sha256": "6ad916bd01a77a62118bd535c43d8b39ea4d79be288db157a88f8343c0b868ad",
+        "generated_at": "2026-05-30T09:00:43Z",
+        "generated_at_sha256": "47ee04d97d7b6cd4a6d5a9628fbed8baed7a883897adbd5522a01f7eb3bc1226",
         "max_age_seconds": 172800,
         "path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
-        "sha256": "4fd3198175d95bdc767afab867eb4e6fd619e8d3a9e82e348729c69e6f08a23c",
+        "sha256": "e2b011e0f0729c40dc8d4e65d4a6e5f9482d08c52b0197a73321a95e9fe8df96",
         "state": "pass",
         "status": "pass"
       },
       "support_packets": {
-        "age_seconds": 513,
+        "age_seconds": 34405,
         "exists": true,
-        "generated_at": "2026-05-19T12:04:52Z",
-        "generated_at_sha256": "1e5fc8fcc17e78d2ebeb93eeb5c6bd28f1dce8b4b15bd5850c6821d0be54f8b3",
+        "generated_at": "2026-05-29T23:33:10Z",
+        "generated_at_sha256": "63f8746960666dde93cebe5878970f9c84c7ec3fc8905c189fdd5ad37af86753",
         "max_age_seconds": 172800,
         "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "sha256": "73a9e3c907ac50be2ea10f6537583340b399c9baa2b3562c694325774b7de68f",
+        "sha256": "d62d3da6d8f8e41066da2d77ef1f2c3354181a153d55ed4d11a9e288db4070a7",
         "state": "pass",
         "status": "pass"
       },
       "weekly_governor_packet": {
-        "age_seconds": 1,
+        "age_seconds": 5,
         "exists": true,
-        "generated_at": "2026-05-19T12:13:24Z",
-        "generated_at_sha256": "20d7bf293d9c5a8a675888a781eb074031ba89184935981c2fb72c1a4fb74cb7",
+        "generated_at": "2026-05-30T09:06:30Z",
+        "generated_at_sha256": "2b2842221569878b4acd061a1d24fe24f7cd5400478a7e0ef69bc8bc6dc76deb",
         "max_age_seconds": 172800,
         "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
-        "sha256": "a0f7f4fc7c095e6824ceab702de39d3688bcaf8dd1bb113250d87dd08d84f728",
+        "sha256": "aad2fc7c610280f14018062db56558fa770c746b5393bce8582c0a6fd87186a8",
         "state": "pass",
         "status": "pass"
       },
       "weekly_product_pulse": {
-        "age_seconds": 481,
+        "age_seconds": 304,
         "exists": true,
-        "generated_at": "2026-05-19T12:05:24Z",
-        "generated_at_sha256": "42c4b0ba53a695a62e58fe96fd7be41217c2efcdeeebdd2bb9171342d7910775",
+        "generated_at": "2026-05-30T09:01:31Z",
+        "generated_at_sha256": "488d6150966f6b2f609cac97d5f3f12389772ae81cfaf23ef0bf3f0f8d96c445",
         "max_age_seconds": 172800,
         "path": "/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
-        "sha256": "3de065e5ab28e986e0a998eec872ce5247a5ebbb71ffbfca2f3d3561be655a08",
+        "sha256": "7d4f586f41a0ebf406d0d62756eedc771befe6bf9456de80b1b74ec7456e4139",
         "state": "pass",
         "status": "pass"
       }
@@ -179,7 +179,7 @@
       "top_risks": [
         {
           "key": "full_product_queue",
-          "summary": "6 open milestones remain in the full-product frontier. The current supervisor ETA is scoped to Next 90-day product advance wave, not full-product parity."
+          "summary": "3 open milestones remain in the full-product frontier. The current supervisor ETA is scoped to Next 90-day product advance wave, not full-product parity."
         }
       ]
     },
@@ -191,90 +191,90 @@
   "queue_title": "Compile launch pulse and adoption health into governor packets",
   "source_input_health": {
     "flagship_readiness": {
-      "age_seconds": 484,
+      "age_seconds": 307,
       "exists": true,
-      "generated_at": "2026-05-19T12:05:21Z",
-      "generated_at_sha256": "6eebe22a533c8c90254fc474c7e989835a68d9a4279cc4b9df75a10e634f64b7",
+      "generated_at": "2026-05-30T09:01:28Z",
+      "generated_at_sha256": "02cbaf073b2537d063d08737d45d32242c382cdd071a7fde855faea0ed52cec0",
       "max_age_seconds": 172800,
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "4be96037efa242fd9ab94c59a06806d05cae70f938ad10bad5841f457a706d1a",
+      "sha256": "50027dc97f03b45f14aed7af5700ca7ee5268b688abd81e358556407c9389512",
       "state": "pass",
       "status": "pass"
     },
     "journey_gates": {
-      "age_seconds": 509,
+      "age_seconds": 350,
       "exists": true,
-      "generated_at": "2026-05-19T12:04:56Z",
-      "generated_at_sha256": "c0d312b004212e8cea45ed3542a666903a8421a36cc41cf13ce90725fac62a27",
+      "generated_at": "2026-05-30T09:00:45Z",
+      "generated_at_sha256": "0914aa18306c8a78e60c3e9be9ef75fbb1b1b4ec4439ba5cebe0f0d7cb403113",
       "max_age_seconds": 172800,
       "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-      "sha256": "b9f78a9e24e2ba50a20bf05bd178ede22628fd4509250f4bf667a31239ae6204",
+      "sha256": "b39948ed9eb4442d66ee67398b02fdf82fe98c97f902b041b8f0a40ba627289b",
       "state": "pass",
       "status": "pass"
     },
     "progress_report": {
-      "age_seconds": 9151,
+      "age_seconds": 378,
       "exists": true,
-      "generated_at": "2026-05-19T09:40:54Z",
-      "generated_at_sha256": "ba09908a8db61e960617a3a1b2d9a3bbc6c46543de71a7dbb309359df6999721",
+      "generated_at": "2026-05-30T09:00:17Z",
+      "generated_at_sha256": "7bfb77d50a80c57fc6a9b6fe29d454c0e12019b6cf4ece927e6ff2ac5ff5b215",
       "max_age_seconds": 172800,
       "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
-      "sha256": "a3155c7a038d0ba921299a0a7cbbe890b5d91681d6ad52bffb401b462067696d",
+      "sha256": "452a1070b9d36be9708ae90e874f13352e0c33b6328cb733af6b6530690ac561",
       "state": "pass",
       "status": "pass"
     },
     "proof_orchestration": {
-      "age_seconds": 9139,
+      "age_seconds": 427,
       "exists": true,
-      "generated_at": "2026-05-19T09:41:06Z",
-      "generated_at_sha256": "30ec72f8512609f9673c661837b5e06ca95232f31cf8e6e25a6b3f020502cef1",
+      "generated_at": "2026-05-30T08:59:28Z",
+      "generated_at_sha256": "9ee57e63f4ed4d24158eb01ef1fc031eb634dc0279070814661506b65db7fb17",
       "max_age_seconds": 172800,
       "path": "/docker/fleet/.codex-studio/published/PROOF_ORCHESTRATION.generated.json",
-      "sha256": "d9b5b680f8c6016a2b140e8568c4d0d43c9d0c85a6a1b69d202f113a93d2af3c",
+      "sha256": "1b99eab421933ef9c8ef354aec988cd81838ebff35ec12beef7c9cc4a6500019",
       "state": "pass",
       "status": "pass"
     },
     "status_plane": {
-      "age_seconds": 515,
+      "age_seconds": 352,
       "exists": true,
-      "generated_at": "2026-05-19T12:04:50Z",
-      "generated_at_sha256": "6ad916bd01a77a62118bd535c43d8b39ea4d79be288db157a88f8343c0b868ad",
+      "generated_at": "2026-05-30T09:00:43Z",
+      "generated_at_sha256": "47ee04d97d7b6cd4a6d5a9628fbed8baed7a883897adbd5522a01f7eb3bc1226",
       "max_age_seconds": 172800,
       "path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
-      "sha256": "4fd3198175d95bdc767afab867eb4e6fd619e8d3a9e82e348729c69e6f08a23c",
+      "sha256": "e2b011e0f0729c40dc8d4e65d4a6e5f9482d08c52b0197a73321a95e9fe8df96",
       "state": "pass",
       "status": "pass"
     },
     "support_packets": {
-      "age_seconds": 513,
+      "age_seconds": 34405,
       "exists": true,
-      "generated_at": "2026-05-19T12:04:52Z",
-      "generated_at_sha256": "1e5fc8fcc17e78d2ebeb93eeb5c6bd28f1dce8b4b15bd5850c6821d0be54f8b3",
+      "generated_at": "2026-05-29T23:33:10Z",
+      "generated_at_sha256": "63f8746960666dde93cebe5878970f9c84c7ec3fc8905c189fdd5ad37af86753",
       "max_age_seconds": 172800,
       "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-      "sha256": "73a9e3c907ac50be2ea10f6537583340b399c9baa2b3562c694325774b7de68f",
+      "sha256": "d62d3da6d8f8e41066da2d77ef1f2c3354181a153d55ed4d11a9e288db4070a7",
       "state": "pass",
       "status": "pass"
     },
     "weekly_governor_packet": {
-      "age_seconds": 1,
+      "age_seconds": 5,
       "exists": true,
-      "generated_at": "2026-05-19T12:13:24Z",
-      "generated_at_sha256": "20d7bf293d9c5a8a675888a781eb074031ba89184935981c2fb72c1a4fb74cb7",
+      "generated_at": "2026-05-30T09:06:30Z",
+      "generated_at_sha256": "2b2842221569878b4acd061a1d24fe24f7cd5400478a7e0ef69bc8bc6dc76deb",
       "max_age_seconds": 172800,
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
-      "sha256": "a0f7f4fc7c095e6824ceab702de39d3688bcaf8dd1bb113250d87dd08d84f728",
+      "sha256": "aad2fc7c610280f14018062db56558fa770c746b5393bce8582c0a6fd87186a8",
       "state": "pass",
       "status": "pass"
     },
     "weekly_product_pulse": {
-      "age_seconds": 481,
+      "age_seconds": 304,
       "exists": true,
-      "generated_at": "2026-05-19T12:05:24Z",
-      "generated_at_sha256": "42c4b0ba53a695a62e58fe96fd7be41217c2efcdeeebdd2bb9171342d7910775",
+      "generated_at": "2026-05-30T09:01:31Z",
+      "generated_at_sha256": "488d6150966f6b2f609cac97d5f3f12389772ae81cfaf23ef0bf3f0f8d96c445",
       "max_age_seconds": 172800,
       "path": "/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
-      "sha256": "3de065e5ab28e986e0a998eec872ce5247a5ebbb71ffbfca2f3d3561be655a08",
+      "sha256": "7d4f586f41a0ebf406d0d62756eedc771befe6bf9456de80b1b74ec7456e4139",
       "state": "pass",
       "status": "pass"
     }
@@ -439,14 +439,14 @@
     },
     "weekly_governor_packet": {
       "contract_name": "fleet.weekly_governor_packet",
-      "current_launch_action": "freeze_launch",
+      "current_launch_action": "launch_expand",
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json"
     },
     "weekly_product_pulse": {
-      "as_of": "2026-05-19",
+      "as_of": "2026-05-30",
       "contract_name": "chummer.weekly_product_pulse",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
-      "pulse_action": "freeze_launch"
+      "pulse_action": "launch_expand"
     }
   },
   "status": "pass",

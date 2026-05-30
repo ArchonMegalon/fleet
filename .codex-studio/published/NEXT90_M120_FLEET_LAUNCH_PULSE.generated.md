@@ -1,14 +1,14 @@
 # Fleet M120 launch-pulse and governor followthrough packet
 
-- Generated at: `2026-05-19T12:13:25Z`
+- Generated at: `2026-05-30T09:06:35Z`
 - Status: `pass`
 - Status reason: All sources are aligned and governed from release truth.
-- As of: `2026-05-19`
+- As of: `2026-05-30`
 - Queue scope aligned: `True`
 - Registry scope aligned: `True`
 - Launch action match: `True`
-- Governor launch action: `freeze_launch`
-- Pulse launch action: `freeze_launch`
+- Governor launch action: `launch_expand`
+- Pulse launch action: `launch_expand`
 - Launch state: `pass`
 - Adoption health: `pass` (clear)
 - Support risk: `low`

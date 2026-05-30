@@ -132,7 +132,7 @@
       },
       {
         "name": "weekly_adoption_truth",
-        "observed": "clear / 20 history snapshots",
+        "observed": "clear / 35 history snapshots",
         "required": "present with measured history",
         "state": "pass"
       },
@@ -188,7 +188,7 @@
       }
     ]
   },
-  "generated_at": "2026-05-30T08:15:04Z",
+  "generated_at": "2026-05-30T09:06:30Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -224,9 +224,9 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-05-30T08:15:04Z",
+    "generated_at": "2026-05-30T09:06:30Z",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-06-06T08:15:04Z",
+    "next_packet_due_at": "2026-06-06T09:06:30Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -889,7 +889,7 @@
       "incomplete_actions": [],
       "launch_gate_blocking_names": [],
       "missing_actions": [],
-      "next_review_due_at": "2026-06-06T08:15:04Z",
+      "next_review_due_at": "2026-06-06T09:06:30Z",
       "required_actions": [
         "launch_expand",
         "freeze_launch",
@@ -931,7 +931,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "All measured launch gates are green.",
-          "next_review_due_at": "2026-06-06T08:15:04Z",
+          "next_review_due_at": "2026-06-06T09:06:30Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "promote_measured_launch_expansion",
           "receipt_id": "m106-launch_expand-16e298f80f85949d",
@@ -948,7 +948,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Launch expansion is approved for the next bounded window while canaries and support closure remain clear.",
-          "next_review_due_at": "2026-06-06T08:15:04Z",
+          "next_review_due_at": "2026-06-06T09:06:30Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "leave_freeze_available",
           "receipt_id": "m106-freeze_launch-65253d4d25b49f81",
@@ -965,7 +965,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Canary green on all active lanes",
-          "next_review_due_at": "2026-06-06T08:15:04Z",
+          "next_review_due_at": "2026-06-06T09:06:30Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_canary_ready",
           "receipt_id": "m106-canary-afc3d2be95960739",
@@ -985,7 +985,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "next_review_due_at": "2026-06-06T08:15:04Z",
+          "next_review_due_at": "2026-06-06T09:06:30Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_rollback_armed",
           "receipt_id": "m106-rollback-fcedde06369bab3d",
@@ -1002,7 +1002,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
-          "next_review_due_at": "2026-06-06T08:15:04Z",
+          "next_review_due_at": "2026-06-06T09:06:30Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "route_remaining_work_to_dependency_or_sibling_packages",
           "receipt_id": "m106-focus_shift-9e0a36a10f3ebf57",
@@ -1972,7 +1972,7 @@
     "freshness_policy": "refresh_before_public_status_or_operator_action_if_packet_is_overdue",
     "headline": "Measured launch expansion is allowed.",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-06-06T08:15:04Z",
+    "next_packet_due_at": "2026-06-06T09:06:30Z",
     "schedule_ref": "governor_packet_schedule.next_packet_due_at",
     "state": "launch_expand_allowed"
   },
@@ -2634,13 +2634,13 @@
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "a65e5799e3a50e3d778b46d306c47505d993171ccfe5809f3d3ea5bb2d242626",
+    "combined_source_sha256": "331c68bc932472250c0f86ed0f16ceaa98063c1d1ee4afa26bea737b2fa704ec",
     "missing_inputs": [],
     "rows": [
       {
         "name": "successor_registry",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "6b91d86d226f6c4edbb01a735cf4a2288f0c68d529e6f36a146984bd75c60ef6"
+        "source_sha256": "d1f8affcce376c4efeabd8b950e87701e2b82fb75f67086a9638ad95379426b4"
       },
       {
         "name": "closed_flagship_registry",
@@ -2660,17 +2660,17 @@
       {
         "name": "weekly_pulse",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "8efecf448f04fecb904e9a2247a4f3d894ce167c6852b297b1af9214cc1ad76a"
+        "source_sha256": "7d4f586f41a0ebf406d0d62756eedc771befe6bf9456de80b1b74ec7456e4139"
       },
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "721407b2c020edcba4f96534c7e1877ccdcf29aeb85ca8f559e8cbfbac856d6b"
+        "source_sha256": "50027dc97f03b45f14aed7af5700ca7ee5268b688abd81e358556407c9389512"
       },
       {
         "name": "journey_gates",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "4c583cccb7a5e50fd045e20249ab888103ff00762d71e552f5d44797562ddb4d"
+        "source_sha256": "b39948ed9eb4442d66ee67398b02fdf82fe98c97f902b041b8f0a40ba627289b"
       },
       {
         "name": "support_packets",
@@ -2680,7 +2680,7 @@
       {
         "name": "status_plane",
         "source_path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
-        "source_sha256": "a8e290a524d42ce3fed893f1c443e8c6484eedd827362a5ba9b8fbccc1ea0aec"
+        "source_sha256": "e2b011e0f0729c40dc8d4e65d4a6e5f9482d08c52b0197a73321a95e9fe8df96"
       }
     ],
     "source_count": 9,
@@ -2708,19 +2708,19 @@
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-05-29T23:34:37Z",
+        "generated_at": "2026-05-30T09:01:28Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "721407b2c020edcba4f96534c7e1877ccdcf29aeb85ca8f559e8cbfbac856d6b",
+        "source_sha256": "50027dc97f03b45f14aed7af5700ca7ee5268b688abd81e358556407c9389512",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-05-29T23:35:02Z",
+        "generated_at": "2026-05-30T09:00:45Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "4c583cccb7a5e50fd045e20249ab888103ff00762d71e552f5d44797562ddb4d",
+        "source_sha256": "b39948ed9eb4442d66ee67398b02fdf82fe98c97f902b041b8f0a40ba627289b",
         "state": "present"
       },
       "launch_signal_truth_alignment": {
@@ -2902,17 +2902,17 @@
         "state": "pass"
       },
       "status_plane": {
-        "generated_at": "2026-05-30T08:15:00Z",
+        "generated_at": "2026-05-30T09:00:43Z",
         "max_age_seconds": 691200,
         "required_key": "whole_product_final_claim_status",
         "source_path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
-        "source_sha256": "a8e290a524d42ce3fed893f1c443e8c6484eedd827362a5ba9b8fbccc1ea0aec",
+        "source_sha256": "e2b011e0f0729c40dc8d4e65d4a6e5f9482d08c52b0197a73321a95e9fe8df96",
         "state": "present"
       },
       "successor_registry": {
         "required_key": "program_wave",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "6b91d86d226f6c4edbb01a735cf4a2288f0c68d529e6f36a146984bd75c60ef6",
+        "source_sha256": "d1f8affcce376c4efeabd8b950e87701e2b82fb75f67086a9638ad95379426b4",
         "state": "present"
       },
       "support_packets": {
@@ -2925,10 +2925,10 @@
         "successor_package_verification_status": "pass"
       },
       "weekly_pulse": {
-        "generated_at": "2026-05-30T08:15:01Z",
+        "generated_at": "2026-05-30T09:01:31Z",
         "required_key": "contract_name",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "8efecf448f04fecb904e9a2247a4f3d894ce167c6852b297b1af9214cc1ad76a",
+        "source_sha256": "7d4f586f41a0ebf406d0d62756eedc771befe6bf9456de80b1b74ec7456e4139",
         "state": "present"
       }
     },
@@ -2952,12 +2952,12 @@
   ],
   "truth_inputs": {
     "adoption_health": {
-      "history_snapshot_count": 20,
+      "history_snapshot_count": 35,
       "local_release_proof_status": "passed",
       "proven_journey_count": 5,
       "proven_route_count": 10,
       "state": "clear",
-      "summary": "Current local edge proof passed. 5 journey proofs and 10 trust routes are on record. 20 weekly snapshots are on record for the current public trust posture."
+      "summary": "Current local edge proof passed. 5 journey proofs and 10 trust routes are on record. 35 weekly snapshots are on record for the current public trust posture."
     },
     "closed_flagship_registry_status": "complete",
     "closure_health_state": "clear",
@@ -3163,7 +3163,7 @@
   },
   "wave_id": "W8",
   "weekly_input_health": {
-    "generated_at": "2026-05-30T08:15:01Z",
+    "generated_at": "2026-05-30T09:01:31Z",
     "issues": [],
     "max_age_seconds": 691200,
     "required_launch_signals": [
