@@ -1,14 +1,123 @@
 {
-  "generated_at_utc": "2026-05-29T19:26:27Z",
+  "generated_at_utc": "2026-05-30T04:50:48Z",
   "status": "pass",
   "verdict": "GOLD_READY",
+  "scope": "full_estate_v16",
   "required_gates": {
-    "rafter_pixefy": {
+    "RELEASE_TRUTH_MATRIX.generated.json": {
       "required": true,
-      "verdict_file": "_completion/rafter_pixefy/FINAL_RAFTER_PIXEFY_QA_STACK_VERDICT.md",
-      "required_value": "RAFTER_PIXEFY_QA_STACK_READY",
-      "actual_value": "RAFTER_PIXEFY_QA_STACK_READY"
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/RELEASE_TRUTH_MATRIX.generated.json",
+      "expected": "json_pass",
+      "exists": true,
+      "status": "pass",
+      "pass": true
+    },
+    "LIVE_STATUS_RELEASE_ALIGNMENT.generated.json": {
+      "required": true,
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/LIVE_STATUS_RELEASE_ALIGNMENT.generated.json",
+      "expected": "json_pass",
+      "exists": true,
+      "status": "pass",
+      "pass": true
+    },
+    "LIVE_CHUMMER_RUN_ROUTE_PROOF.generated.json": {
+      "required": true,
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/LIVE_CHUMMER_RUN_ROUTE_PROOF.generated.json",
+      "expected": "json_pass",
+      "exists": true,
+      "status": "pass",
+      "pass": true
+    },
+    "CLASSIC_FORMPORT_FUNCTIONAL_PARITY_AUDIT.generated.json": {
+      "required": true,
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/CLASSIC_FORMPORT_FUNCTIONAL_PARITY_AUDIT.generated.json",
+      "expected": "json_pass",
+      "exists": true,
+      "status": "pass",
+      "pass": true
+    },
+    "FINAL_SR4_RULE_AUTHORITY_VERDICT.md": {
+      "required": true,
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/FINAL_SR4_RULE_AUTHORITY_VERDICT.md",
+      "expected": "SR4_RULE_AUTHORITY_READY",
+      "exists": true,
+      "status": "present",
+      "pass": true
+    },
+    "FINAL_SR5_RULE_AUTHORITY_VERDICT.md": {
+      "required": true,
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/FINAL_SR5_RULE_AUTHORITY_VERDICT.md",
+      "expected": "SR5_RULE_AUTHORITY_READY",
+      "exists": true,
+      "status": "present",
+      "pass": true
+    },
+    "FINAL_SR6_RULE_AUTHORITY_VERDICT.md": {
+      "required": true,
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/FINAL_SR6_RULE_AUTHORITY_VERDICT.md",
+      "expected": "SR6_RULE_AUTHORITY_READY",
+      "exists": true,
+      "status": "present",
+      "pass": true
+    },
+    "FINAL_MAGICFIT_PROVIDER_ADAPTER_VERDICT.md": {
+      "required": true,
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/FINAL_MAGICFIT_PROVIDER_ADAPTER_VERDICT.md",
+      "expected": "MAGICFIT_PROVIDER_ADAPTER_READY",
+      "exists": true,
+      "status": "present",
+      "pass": true
+    },
+    "FINAL_RAFTER_PIXEFY_QA_STACK_VERDICT.md": {
+      "required": true,
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/FINAL_RAFTER_PIXEFY_QA_STACK_VERDICT.md",
+      "expected": "RAFTER_PIXEFY_QA_STACK_READY",
+      "exists": true,
+      "status": "present",
+      "pass": true
+    },
+    "FINAL_BLACK_LEDGER_VIDEO_GLOBE_VERDICT.md": {
+      "required": true,
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/FINAL_BLACK_LEDGER_VIDEO_GLOBE_VERDICT.md",
+      "expected": "BLACK_LEDGER_VIDEO_GLOBE_READY",
+      "exists": true,
+      "status": "present",
+      "pass": true
+    },
+    "FINAL_FACTION_VIDEO_SERIES_VERDICT.md": {
+      "required": true,
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/FINAL_FACTION_VIDEO_SERIES_VERDICT.md",
+      "expected": "FACTION_VIDEO_SERIES_READY",
+      "exists": true,
+      "status": "present",
+      "pass": true
+    },
+    "FINAL_BLACK_LEDGER_NEWSROOM_VERDICT.md": {
+      "required": true,
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/FINAL_BLACK_LEDGER_NEWSROOM_VERDICT.md",
+      "expected": "BLACK_LEDGER_NEWSROOM_READY",
+      "exists": true,
+      "status": "present",
+      "pass": true
+    },
+    "FINAL_PWA_GOLD_VERDICT.md": {
+      "required": true,
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/FINAL_PWA_GOLD_VERDICT.md",
+      "expected": "GOLD_READY",
+      "exists": true,
+      "status": "present",
+      "pass": true
+    },
+    "FINAL_TABLE_PULSE_OPTOUT_REMOTE_REACTION_VERDICT.md": {
+      "required": true,
+      "path": "/docker/chummercomplete/_completion/full_product_reaudit_v16/FINAL_TABLE_PULSE_OPTOUT_REMOTE_REACTION_VERDICT.md",
+      "expected": "GOLD_READY",
+      "exists": true,
+      "status": "present",
+      "pass": true
     }
   },
+  "missing_gates": [],
+  "failing_gates": [],
   "reasons": []
 }
