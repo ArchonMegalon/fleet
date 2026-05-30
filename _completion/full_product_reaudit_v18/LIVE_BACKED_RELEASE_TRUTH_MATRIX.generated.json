@@ -1,0 +1,18 @@
+{
+  "generated_at_utc": "2026-05-30T10:40:14Z",
+  "status": "pass",
+  "base_url": "https://chummer.run",
+  "public_host": "chummer.run",
+  "live_backed": true,
+  "gold_claim_allowed": true,
+  "release_manifest": {
+    "supportabilityState": "gold_supported"
+  },
+  "checks": {
+    "downloads_contains_demo_runner": false,
+    "status_caution_hits": [],
+    "home_black_ledger_first": true,
+    "build_id": "run-20260518-220935"
+  },
+  "reasons": []
+}

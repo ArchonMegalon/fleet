@@ -1,0 +1,83 @@
+{
+  "generated_at_utc": "2026-05-30T10:40:14Z",
+  "status": "pass",
+  "base_url": "https://chummer.run",
+  "public_host": "chummer.run",
+  "strict_positive": true,
+  "route_count": 10,
+  "failed_count": 0,
+  "failed_paths": [],
+  "demo_runner_paths": [],
+  "routes": [
+    {
+      "url": "https://chummer.run/",
+      "status_code": 200,
+      "ok": true,
+      "path": "/",
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/downloads",
+      "status_code": 200,
+      "ok": true,
+      "path": "/downloads",
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/status",
+      "status_code": 200,
+      "ok": true,
+      "path": "/status",
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/ledger",
+      "status_code": 200,
+      "ok": true,
+      "path": "/ledger",
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/ledger/map",
+      "status_code": 200,
+      "ok": true,
+      "path": "/ledger/map",
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/ledger/factions",
+      "status_code": 200,
+      "ok": true,
+      "path": "/ledger/factions",
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/ledger/newsroom",
+      "status_code": 200,
+      "ok": true,
+      "path": "/ledger/newsroom",
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/play",
+      "status_code": 200,
+      "ok": true,
+      "path": "/play",
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/help",
+      "status_code": 200,
+      "ok": true,
+      "path": "/help",
+      "demo_runner_hit": false
+    },
+    {
+      "url": "https://chummer.run/feedback",
+      "status_code": 200,
+      "ok": true,
+      "path": "/feedback",
+      "demo_runner_hit": false
+    }
+  ]
+}

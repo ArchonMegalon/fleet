@@ -10,7 +10,7 @@ from rafter_pixefy_common import now_utc, write_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "_completion" / "full_product_reaudit_v17"
+OUT = ROOT / "_completion" / "full_product_reaudit_v18"
 STATUS_URL = "https://chummer.run/status"
 DOWNLOADS_URL = "https://chummer.run/downloads"
 
@@ -34,12 +34,15 @@ def main() -> int:
     downloads_lower = downloads_text.lower()
     stale_hits = [
         phrase
-        for phrase in ("proof freshness is missing", "proof freshness missing", "proof is stale", "missing or stale", "not gold-ready", "not gold ready")
+        for phrase in ("proof freshness is missing", "proof freshness missing", "proof is stale", "missing or stale", "not gold-ready", "not gold ready", "review-required", "incomplete", "unavailable")
         if phrase in status_lower
     ]
     demo_hits = [phrase for phrase in ("load demo runner", "demo runner") if phrase in downloads_lower]
+    home_text = text_only(fetch("https://chummer.run/"))
+    home_lower = home_text.lower()
+    home_black_ledger_first = "black ledger" in home_lower[:2200] and "faction" in home_lower[:2200]
     build_match = re.search(r"run-\d{8}-\d{6}", status_text)
-    status = "pass" if not stale_hits and not demo_hits and build_match else "fail"
+    status = "pass" if not stale_hits and not demo_hits and build_match and home_black_ledger_first else "fail"
     matrix = {
         "generated_at_utc": now_utc(),
         "status": status,
@@ -53,6 +56,7 @@ def main() -> int:
             "build_id": build_match.group(0) if build_match else "",
             "status_stale_or_not_gold_hits": stale_hits,
             "downloads_demo_runner_hits": demo_hits,
+            "home_black_ledger_first": home_black_ledger_first,
             "gold_claim_allowed": status == "pass",
             "supportability_state": "gold_supported" if status == "pass" else "not_gold",
         },

@@ -5,10 +5,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 V17 = ROOT / "_completion" / "full_product_reaudit_v17"
+V18 = ROOT / "_completion" / "full_product_reaudit_v18"
 
 
 def check_verdict(filename: str, token: str) -> int:
-    path = V17 / filename
+    path = V18 / filename
+    if not path.is_file():
+        path = V17 / filename
     if not path.is_file():
         print(f"missing:{filename}")
         return 1

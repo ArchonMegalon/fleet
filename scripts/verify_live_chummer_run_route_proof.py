@@ -9,7 +9,7 @@ from rafter_pixefy_common import now_utc, write_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "_completion" / "full_product_reaudit_v17" / "LIVE_CHUMMER_RUN_ROUTE_PROOF.generated.json"
+OUT = ROOT / "_completion" / "full_product_reaudit_v18" / "LIVE_CHUMMER_RUN_ROUTE_PROOF.generated.json"
 ROUTES = [
     "/",
     "/downloads",

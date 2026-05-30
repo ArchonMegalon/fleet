@@ -10,6 +10,8 @@ FORBIDDEN = (
     "/docker/chummercomplete/_completion/full_product_reaudit_v16",
     'Path("/docker/chummercomplete")',
     "WORKSPACE = Path",
+    'Path("/docker/',
+    "Path('/docker/",
 )
 
 
@@ -19,11 +21,14 @@ def main() -> int:
     if hits:
         print("gold janitor still uses local-only gate roots: " + ", ".join(hits))
         return 1
-    if 'ROOT / "_completion" / "full_product_reaudit_v17"' not in text:
-        print("gold janitor does not use repo-relative V17 artifact root")
+    if 'ROOT / "_completion" / "full_product_reaudit_v18"' not in text:
+        print("gold janitor does not use repo-relative V18 artifact root")
         return 1
     if '"ls-files"' not in text or "--error-unmatch" not in text:
         print("gold janitor does not verify git-tracked durable artifacts")
+        return 1
+    if "sha256_mismatch" not in text or "forbidden_absolute_path" not in text:
+        print("gold janitor does not enforce SHA256 and local absolute path rejection")
         return 1
     print("gold janitor durable artifact policy passed")
     return 0

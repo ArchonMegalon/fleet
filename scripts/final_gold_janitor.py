@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -10,7 +11,8 @@ from rafter_pixefy_common import COMPLETION, now_utc, write_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
-V17 = ROOT / "_completion" / "full_product_reaudit_v17"
+V18 = ROOT / "_completion" / "full_product_reaudit_v18"
+MANIFEST = V18 / "FULL_ESTATE_DURABLE_ARTIFACT_MANIFEST.generated.json"
 
 REQUIRED_GATES = {
     "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json": "json_pass",
@@ -32,6 +34,19 @@ REQUIRED_GATES = {
 
 def rel(path: Path) -> str:
     return str(path.resolve().relative_to(ROOT.resolve()))
+
+
+def has_forbidden_absolute_root(path_text: str) -> bool:
+    forbidden = ("/docker/", "/tmp/", "/mnt/", "/home/", "C:\\")
+    return path_text.startswith(forbidden)
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def read_json_status(path: Path) -> str:
@@ -64,48 +79,88 @@ def git_tracked(path: Path) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--require-durable-artifacts", action="store_true")
+    parser.add_argument("--live-backed", action="store_true")
+    parser.add_argument("--allow-local-dry-run", action="store_true")
     args = parser.parse_args()
+
+    manifest_payload: dict[str, object] = {}
+    if MANIFEST.is_file():
+        manifest_payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    manifest_by_name = {
+        str(item.get("name") or ""): item
+        for item in manifest_payload.get("artifacts", [])
+        if isinstance(item, dict)
+    }
 
     gate_results: dict[str, dict[str, object]] = {}
     for name, expected in REQUIRED_GATES.items():
-        path = V17 / name
+        path = V18 / name
+        manifest_item = manifest_by_name.get(name, {})
+        path_text = str(manifest_item.get("path") or rel(path))
+        path_forbidden = has_forbidden_absolute_root(path_text)
         result = {
             "required": True,
-            "path": rel(path),
+            "path": path_text,
             "expected": expected,
             "exists": path.is_file(),
             "tracked": git_tracked(path),
             "status": read_json_status(path) if expected == "json_pass" else ("present" if path.is_file() else "missing"),
+            "sha256": sha256(path) if path.is_file() else "",
+            "manifest_sha256": str(manifest_item.get("sha256") or ""),
+            "forbidden_absolute_path": path_forbidden,
             "pass": gate_pass(path, expected),
         }
         if args.require_durable_artifacts:
-            result["pass"] = bool(result["pass"] and result["tracked"])
+            result["pass"] = bool(
+                result["pass"]
+                and result["tracked"]
+                and not path_forbidden
+                and result["sha256"]
+                and result["sha256"] == result["manifest_sha256"]
+            )
         gate_results[name] = result
 
     missing = [name for name, result in gate_results.items() if not result["exists"]]
     untracked = [name for name, result in gate_results.items() if args.require_durable_artifacts and not result["tracked"]]
+    bad_paths = [name for name, result in gate_results.items() if result.get("forbidden_absolute_path")]
+    bad_sha = [
+        name
+        for name, result in gate_results.items()
+        if args.require_durable_artifacts and result.get("exists") and result.get("sha256") != result.get("manifest_sha256")
+    ]
     failing = [name for name, result in gate_results.items() if result["exists"] and not result["pass"] and name not in untracked]
     reasons = [f"missing:{name}" for name in missing]
     reasons += [f"not_durable:{name}" for name in untracked]
+    reasons += [f"local_absolute_path:{name}" for name in bad_paths]
+    reasons += [f"sha256_mismatch:{name}" for name in bad_sha]
     reasons += [f"failing:{name}" for name in failing]
+    if args.live_backed and manifest_payload.get("live_backed") is not True:
+        reasons.append("manifest_not_live_backed")
     final = "GOLD_READY" if not reasons else "NOT_GOLD"
+    if args.allow_local_dry_run and final == "GOLD_READY":
+        reasons.append("local_dry_run_cannot_write_gold")
+        final = "NOT_GOLD"
 
     output = {
         "generated_at_utc": now_utc(),
         "status": "pass" if final == "GOLD_READY" else "fail",
         "verdict": final,
-        "scope": "full_estate_v17",
-        "artifact_root": rel(V17),
+        "scope": "full_estate_v18",
+        "artifact_root": rel(V18),
+        "artifact_manifest": rel(MANIFEST),
         "durable_artifacts_required": bool(args.require_durable_artifacts),
+        "live_backed_required": bool(args.live_backed),
         "required_gates": gate_results,
         "missing_gates": missing,
         "untracked_gates": untracked,
+        "local_absolute_path_gates": bad_paths,
+        "sha256_mismatch_gates": bad_sha,
         "failing_gates": failing,
         "reasons": reasons,
     }
     write_json(COMPLETION / "FINAL_GOLD_JANITOR.generated.json", output)
-    write_json(V17 / "FINAL_GOLD_JANITOR.generated.json", output)
-    (V17 / "FINAL_GOLD_VERDICT.md").write_text(final + "\n", encoding="utf-8")
+    write_json(V18 / "FINAL_GOLD_JANITOR.generated.json", output)
+    (V18 / "FINAL_GOLD_VERDICT.md").write_text(final + "\n", encoding="utf-8")
     print(final)
     return 0 if final == "GOLD_READY" else 1
 

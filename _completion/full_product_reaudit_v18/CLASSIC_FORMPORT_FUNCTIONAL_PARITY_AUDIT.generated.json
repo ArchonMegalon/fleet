@@ -1,0 +1,34 @@
+{
+  "contract_name": "chummer.v18.classic_formport_functional_parity",
+  "generated_at_utc": "2026-05-30T10:40:14Z",
+  "status": "pass",
+  "verdict": "CLASSIC_FORMPORT_FUNCTIONAL_PARITY_READY",
+  "checked_files": [
+    "/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/ClassicFormPorts/ClassicFormPortViewModelBridge.cs",
+    "/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/ClassicFormPorts/ClassicFormPortSurfaceControl.cs",
+    "/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/ClassicFormPorts/ClassicFormDesignerParser.cs",
+    "/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/ClassicFormPorts/CharacterCreateClassicPort.axaml",
+    "/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/ClassicFormPorts/CharacterCreateClassicPort.axaml.cs",
+    "/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/ClassicFormPorts/CharacterCareerClassicPort.axaml",
+    "/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/ClassicFormPorts/CharacterCareerClassicPort.axaml.cs",
+    "/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/ClassicFormPorts/GearClassicPort.axaml",
+    "/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/ClassicFormPorts/GearClassicPort.axaml.cs",
+    "/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/ClassicFormPorts/MasterIndexClassicPort.axaml",
+    "/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/ClassicFormPorts/MasterIndexClassicPort.axaml.cs",
+    "/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/ClassicFormPorts/SettingsClassicPort.axaml",
+    "/docker/chummercomplete/chummer6-ui/Chummer.Avalonia/Controls/ClassicFormPorts/SettingsClassicPort.axaml.cs"
+  ],
+  "missing_surface_files": [],
+  "generic_projection_hits": [],
+  "requirements": {
+    "typed_view_model": true,
+    "typed_command_bridge": true,
+    "no_primary_state_rows_token_matching": true,
+    "add_edit_delete_flows": true,
+    "context_menus": true,
+    "keyboard_shortcuts": true,
+    "side_by_side_screenshots": true,
+    "veteran_user_task_review": true
+  },
+  "summary": "V18 rejects Classic FormPort bridge implementations that primarily project generic SectionRowDisplayItem token matches."
+}

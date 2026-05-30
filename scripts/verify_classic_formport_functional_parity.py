@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-AUDIT = ROOT / "_completion" / "full_product_reaudit_v17" / "CLASSIC_FORMPORT_FUNCTIONAL_PARITY_AUDIT.generated.json"
+AUDIT = ROOT / "_completion" / "full_product_reaudit_v18" / "CLASSIC_FORMPORT_FUNCTIONAL_PARITY_AUDIT.generated.json"
 UI_ROOT = Path("/docker/chummercomplete/chummer-presentation")
 
 
