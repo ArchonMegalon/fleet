@@ -4,6 +4,8 @@ set -eu
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 BUNDLE_INPUT="${1:-}"
+./validate-linux-proof.sh
+./ingest-linux-proof-bundle.sh "$BUNDLE_INPUT"
 ./validate-macos-proof.sh
 ./ingest-macos-proof-bundle.sh "$BUNDLE_INPUT"
 ./validate-windows-proof.sh

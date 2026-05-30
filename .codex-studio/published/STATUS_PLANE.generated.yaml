@@ -1,16 +1,19 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-05-29T11:05:05Z'
-source_public_status_generated_at: '2026-05-29T11:04:58Z'
+generated_at: '2026-05-29T23:35:00Z'
+source_public_status_generated_at: '2026-05-29T23:34:54Z'
 mission_snapshot:
-  headline: 'Working now: Bound BeHuman and Answerly into the living-world loop as
-    safe engagement rails instead of uncontrolled authority planes.. ETA: 27m 28s.
-    Next: Add milestone mapping or executable queue work for Moderation and publication
-    projections still need explicit registry-owned read models... Vision: 0s. Capacity:
-    Core 0%, Easy 0%, Jury 0%. Stop risk: none.'
-  current_eta: 27m 28s
-  next_title: Add milestone mapping or executable queue work for Moderation and publication
-    projections still need explicit registry-owned read models..
+  headline: 'Working now: Finish hardening canonical downloads truth so live manifest,
+    desktop surface refs, install-aware registry, and canonical verifier all converge
+    from one authority at publish time.. ETA: 48m 8s. Next: Prove the flagship stack
+    stays at rest across repeated real runs by capturing soak receipts for projection
+    truth, ETA honesty, billing freshness, and canonical release convergence without
+    manual operator correction.. Vision: 0s. Capacity: Core 0%, Easy 0%, Jury 0%.
+    Stop risk: none.'
+  current_eta: 48m 8s
+  next_title: Prove the flagship stack stays at rest across repeated real runs by
+    capturing soak receipts for projection truth, ETA honesty, billing freshness,
+    and canonical release convergence without manual operator correction.
   vision_eta: 0s
   milestone_title: chummer-vnext
   milestone_eta: 0s
@@ -19,32 +22,34 @@ mission_snapshot:
   - Easy 0%
   - Jury 0%
   stop_risk: none
-  headline_eta: 27m 28s
+  headline_eta: 48m 8s
 queue_forecast:
   now:
     project_id: hub
-    title: Bound BeHuman and Answerly into the living-world loop as safe engagement
-      rails instead of uncontrolled authority planes.
+    title: Finish hardening canonical downloads truth so live manifest, desktop surface
+      refs, install-aware registry, and canonical verifier all converge from one authority
+      at publish time.
     lane: easy
     provider: EA
     brain: EA backend / ea-coder-hard-batch
     reason: interactive_or_first_pass
-    elapsed_seconds: 1952
-    elapsed_human: 32m 32s
-    remaining_seconds: 1648
-    remaining_human: 27m 28s
+    elapsed_seconds: 712
+    elapsed_human: 11m 52s
+    remaining_seconds: 2888
+    remaining_human: 48m 8s
     total_seconds: 3600
     total_human: 1h
     verify_or_review_ahead: true
     prerequisites: none
   next:
-    project_id: hub-registry
-    title: Add milestone mapping or executable queue work for Moderation and publication
-      projections still need explicit registry-owned read models..
-    lane: easy
+    project_id: fleet
+    title: Prove the flagship stack stays at rest across repeated real runs by capturing
+      soak receipts for projection truth, ETA honesty, billing freshness, and canonical
+      release convergence without manual operator correction.
+    lane: core_booster
     provider: not active
     brain: not active
-    reason: interactive_or_first_pass
+    reason: cheap_first_default
     elapsed_seconds: 0
     elapsed_human: 0s
     remaining_seconds: 3600
@@ -52,9 +57,8 @@ queue_forecast:
     total_seconds: 3600
     total_human: 1h
     verify_or_review_ahead: true
-    prerequisites: configured queue has remaining work and is waiting for scheduler
-      dispatch
-    confidence: stable
+    prerequisites: none
+    confidence: volatile
   then:
     project_id: core
     title: Stabilize design-doc parity hygiene loop
@@ -78,60 +82,60 @@ capacity_forecast:
     profile: easy
     model: ea-coder-fast
     brain: ea-coder-fast
-    backend: gemini_vortex
-    provider: gemini_vortex
-    state: missing
-    remaining_percent: 0.0
+    backend: onemin
+    provider: onemin
+    state: ready
+    remaining_percent: 0.41
     remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
     sustainable_runway: 0% allowance
     native_allowance:
-      provider_key: gemini_vortex
-      state: missing
-      remaining_percent_of_max: 0.0
+      provider_key: onemin
+      state: ready
+      remaining_percent_of_max: 0.41
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: null
-      max_requests_per_hour: null
-      max_credits_per_hour: null
-      max_credits_per_day: null
-    configured_slots: 1
-    ready_slots: 0
-    degraded_slots: 1
+      estimated_remaining_credits_total: 348252
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 19
+    ready_slots: 4
+    degraded_slots: 14
     slot_owners: []
     local_estimated_burn_usd: 2.900591
     local_run_count: 5
-    mission_ready: false
+    mission_ready: true
   - lane: repair
     profile: repair
     model: ea-coder-fast
     brain: ea-coder-fast
-    backend: gemini_vortex
-    provider: gemini_vortex
-    state: missing
-    remaining_percent: 0.0
+    backend: onemin
+    provider: onemin
+    state: ready
+    remaining_percent: 0.41
     remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
     sustainable_runway: 0% allowance
     native_allowance:
-      provider_key: gemini_vortex
-      state: missing
-      remaining_percent_of_max: 0.0
+      provider_key: onemin
+      state: ready
+      remaining_percent_of_max: 0.41
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: null
-      max_requests_per_hour: null
-      max_credits_per_hour: null
-      max_credits_per_day: null
-    configured_slots: 1
-    ready_slots: 0
-    degraded_slots: 1
+      estimated_remaining_credits_total: 348252
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 19
+    ready_slots: 4
+    degraded_slots: 14
     slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: false
+    mission_ready: true
   - lane: groundwork
     profile: groundwork
     model: ea-groundwork-gemini
@@ -165,18 +169,18 @@ capacity_forecast:
     profile: review_light
     model: ea-review-light
     brain: ea-review-light
-    backend: gemini_vortex
+    backend: browseract
     provider: browseract
-    state: missing
-    remaining_percent: 0.0
+    state: ready
+    remaining_percent: 0.41
     remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
     sustainable_runway: 0% allowance
     native_allowance:
       provider_key: browseract
-      state: missing
-      remaining_percent_of_max: 0.0
+      state: ready
+      remaining_percent_of_max: 0.41
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
       estimated_remaining_credits_total: null
@@ -184,144 +188,144 @@ capacity_forecast:
       max_credits_per_hour: null
       max_credits_per_day: null
     configured_slots: 1
-    ready_slots: 0
-    degraded_slots: 1
+    ready_slots: 1
+    degraded_slots: 0
     slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: false
+    mission_ready: true
   - lane: core
     profile: core
     model: ea-coder-hard
     brain: ea-coder-hard
     backend: onemin
     provider: onemin
-    state: unconfigured
-    remaining_percent: 0.0
+    state: ready
+    remaining_percent: 0.41
     remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
     sustainable_runway: 0% allowance
     native_allowance:
       provider_key: onemin
-      state: unconfigured
-      remaining_percent_of_max: 0.0
+      state: ready
+      remaining_percent_of_max: 0.41
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 100
+      estimated_remaining_credits_total: 348252
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 19
-    ready_slots: 1
+    ready_slots: 4
     degraded_slots: 14
     slot_owners: []
     local_estimated_burn_usd: 3.105556
     local_run_count: 14
-    mission_ready: false
+    mission_ready: true
   - lane: core_authority
     profile: core
     model: ea-coder-hard
     brain: ea-coder-hard
     backend: onemin
     provider: onemin
-    state: unconfigured
-    remaining_percent: 0.0
+    state: ready
+    remaining_percent: 0.41
     remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
     sustainable_runway: 0% allowance
     native_allowance:
       provider_key: onemin
-      state: unconfigured
-      remaining_percent_of_max: 0.0
+      state: ready
+      remaining_percent_of_max: 0.41
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 100
+      estimated_remaining_credits_total: 348252
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 19
-    ready_slots: 1
+    ready_slots: 4
     degraded_slots: 14
     slot_owners: []
     local_estimated_burn_usd: 1.126012
     local_run_count: 2
-    mission_ready: false
+    mission_ready: true
   - lane: core_booster
     profile: core
     model: ea-coder-hard
     brain: ea-coder-hard
     backend: onemin
     provider: onemin
-    state: unconfigured
-    remaining_percent: 0.0
+    state: ready
+    remaining_percent: 0.41
     remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
     sustainable_runway: 0% allowance
     native_allowance:
       provider_key: onemin
-      state: unconfigured
-      remaining_percent_of_max: 0.0
+      state: ready
+      remaining_percent_of_max: 0.41
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 100
+      estimated_remaining_credits_total: 348252
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 19
-    ready_slots: 1
+    ready_slots: 4
     degraded_slots: 14
     slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: false
+    mission_ready: true
   - lane: core_rescue
     profile: core
     model: ea-coder-hard
     brain: ea-coder-hard
     backend: onemin
     provider: onemin
-    state: unconfigured
-    remaining_percent: 0.0
+    state: ready
+    remaining_percent: 0.41
     remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
     sustainable_runway: 0% allowance
     native_allowance:
       provider_key: onemin
-      state: unconfigured
-      remaining_percent_of_max: 0.0
+      state: ready
+      remaining_percent_of_max: 0.41
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 100
+      estimated_remaining_credits_total: 348252
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 19
-    ready_slots: 1
+    ready_slots: 4
     degraded_slots: 14
     slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: false
+    mission_ready: true
   - lane: review_shard
     profile: review_light
     model: ea-review-light
     brain: ea-review-light
-    backend: gemini_vortex
+    backend: browseract
     provider: browseract
-    state: missing
-    remaining_percent: 0.0
+    state: ready
+    remaining_percent: 0.41
     remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
     sustainable_runway: 0% allowance
     native_allowance:
       provider_key: browseract
-      state: missing
-      remaining_percent_of_max: 0.0
+      state: ready
+      remaining_percent_of_max: 0.41
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
       estimated_remaining_credits_total: null
@@ -329,28 +333,28 @@ capacity_forecast:
       max_credits_per_hour: null
       max_credits_per_day: null
     configured_slots: 1
-    ready_slots: 0
-    degraded_slots: 1
+    ready_slots: 1
+    degraded_slots: 0
     slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: false
+    mission_ready: true
   - lane: audit_shard
     profile: audit
     model: ea-audit-jury
     brain: ea-audit-jury
-    backend: gemini_vortex
+    backend: browseract
     provider: browseract
-    state: missing
-    remaining_percent: 0.0
+    state: ready
+    remaining_percent: 0.41
     remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
     sustainable_runway: 0% allowance
     native_allowance:
       provider_key: browseract
-      state: missing
-      remaining_percent_of_max: 0.0
+      state: ready
+      remaining_percent_of_max: 0.41
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
       estimated_remaining_credits_total: null
@@ -358,28 +362,28 @@ capacity_forecast:
       max_credits_per_hour: null
       max_credits_per_day: null
     configured_slots: 1
-    ready_slots: 0
-    degraded_slots: 1
+    ready_slots: 1
+    degraded_slots: 0
     slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: false
+    mission_ready: true
   - lane: jury
     profile: audit
     model: ea-audit-jury
     brain: ea-audit-jury
-    backend: gemini_vortex
+    backend: browseract
     provider: browseract
-    state: missing
-    remaining_percent: 0.0
+    state: ready
+    remaining_percent: 0.41
     remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
     sustainable_runway: 0% allowance
     native_allowance:
       provider_key: browseract
-      state: missing
-      remaining_percent_of_max: 0.0
+      state: ready
+      remaining_percent_of_max: 0.41
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
       estimated_remaining_credits_total: null
@@ -387,41 +391,41 @@ capacity_forecast:
       max_credits_per_hour: null
       max_credits_per_day: null
     configured_slots: 1
-    ready_slots: 0
-    degraded_slots: 1
+    ready_slots: 1
+    degraded_slots: 0
     slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: false
+    mission_ready: true
   - lane: survival
     profile: survival
     model: ea-coder-survival
     brain: ea-coder-survival
-    backend: ''
-    provider: browseract
-    state: unavailable
-    remaining_percent: 0.0
+    backend: onemin
+    provider: onemin
+    state: ready
+    remaining_percent: 0.41
     remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
     sustainable_runway: 0% allowance
     native_allowance:
-      provider_key: browseract
-      state: unavailable
-      remaining_percent_of_max: 0.0
+      provider_key: onemin
+      state: ready
+      remaining_percent_of_max: 0.41
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: null
-      max_requests_per_hour: null
-      max_credits_per_hour: null
-      max_credits_per_day: null
-    configured_slots: 1
-    ready_slots: 0
-    degraded_slots: 1
+      estimated_remaining_credits_total: 348252
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 19
+    ready_slots: 4
+    degraded_slots: 14
     slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: false
+    mission_ready: true
   critical_path_lane: core
   critical_path_stop: unknown
   pool_runway: unknown
@@ -457,7 +461,7 @@ capacity_forecast:
   account_pressure: []
 blocker_forecast:
   now: none
-  next: configured queue has remaining work and is waiting for scheduler dispatch
+  next: none
   vision: blocked unresolved incidents, active workers, and healing runs
 deployment_posture:
   operator_auth_required: true
@@ -566,47 +570,39 @@ deployment_posture:
 readiness_summary:
   counts:
     pre_repo_local_complete: 0
-    repo_local_complete: 3
+    repo_local_complete: 2
     package_canonical: 1
     boundary_pure: 5
-    publicly_promoted: 2
-  warning_count: 6
-  final_claim_ready: 3
+    publicly_promoted: 3
+  warning_count: 0
+  final_claim_ready: 5
   final_claim_ready_project_ids:
   - fleet
   - hub
   - mobile
-  whole_product_final_claim_status: fail
+  - ui
+  - ui-kit
+  whole_product_final_claim_status: pass
   whole_product_final_claim_bar: top_flagship_grade
   whole_product_final_claim_whole_project_frontier_required: true
   whole_product_final_claim_feedback_autofix_loop_required: true
   whole_product_final_claim_accept_lowered_standards: false
-  whole_product_final_claim_ready: 0
-  whole_product_final_claim_warning_keys:
-  - dense_workbench_ready
-  - flagship_ready
-  - primary_route_ready
-  - public_shelf_ready
-  - recovery_trust_ready
-  - veteran_deep_workflow_ready
-final_claim_ready: 3
+  whole_product_final_claim_ready: 1
+  whole_product_final_claim_warning_keys: []
+final_claim_ready: 5
 final_claim_ready_project_ids:
 - fleet
 - hub
 - mobile
-whole_product_final_claim_status: fail
+- ui
+- ui-kit
+whole_product_final_claim_status: pass
 whole_product_final_claim_bar: top_flagship_grade
 whole_product_final_claim_whole_project_frontier_required: true
 whole_product_final_claim_feedback_autofix_loop_required: true
 whole_product_final_claim_accept_lowered_standards: false
-whole_product_final_claim_ready: 0
-whole_product_final_claim_warning_keys:
-- dense_workbench_ready
-- flagship_ready
-- primary_route_ready
-- public_shelf_ready
-- recovery_trust_ready
-- veteran_deep_workflow_ready
+whole_product_final_claim_ready: 1
+whole_product_final_claim_warning_keys: []
 dispatch_policy:
   participant_dispatch_canary_count: 2
   participant_dispatch_canaries:
@@ -640,246 +636,51 @@ support_summary:
   feedback_discovery_missing_route_count: 0
   feedback_followthrough_ready_count: 0
   fix_available_ready_count: 0
-  install_truth_state_counts:
-    tuple_not_on_promoted_shelf: 2
-  lane_counts:
-    ops: 2
-  needs_human_response: 2
+  install_truth_state_counts: {}
+  lane_counts: {}
+  needs_human_response: 0
   non_external_needs_human_response: 0
   non_external_packets_without_lane: 0
   non_external_packets_without_named_owner: 0
   open_case_count: 0
   open_non_external_packet_count: 0
-  open_packet_count: 2
-  operator_packet_count: 2
-  owner_repo_counts:
-    chummer6-ui: 2
+  open_packet_count: 0
+  operator_packet_count: 0
+  owner_repo_counts: {}
   please_test_ready_count: 0
   recovery_loop_ready_count: 0
   reporter_followthrough_blocked_missing_install_receipts_count: 0
   reporter_followthrough_blocked_receipt_mismatch_count: 0
   reporter_followthrough_hold_until_fix_receipt_count: 0
   reporter_followthrough_ready_count: 0
-  status_counts:
-    awaiting_evidence: 2
+  status_counts: {}
   support_case_backed_open_count: 0
-  unresolved_external_proof_request_count: 2
-  unresolved_external_proof_request_host_counts:
-    macos: 1
-    windows: 1
-  unresolved_external_proof_request_hosts:
-  - macos
-  - windows
-  unresolved_external_proof_request_specs:
-    avalonia:osx-arm64:macos:
-      channel_id: public_stable
-      expected_artifact_id: avalonia-osx-arm64-installer
-      expected_installer_file_name: chummer-avalonia-osx-arm64-installer.dmg
-      expected_installer_relative_path: files/chummer-avalonia-osx-arm64-installer.dmg
-      expected_installer_sha256: c82393b1bcff3897faf2ea9255e8775ccc1cefa512b3e16a7cb06e52ba48b07e
-      expected_public_install_route: /downloads/install/avalonia-osx-arm64-installer
-      expected_startup_smoke_receipt_path: startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json
-      local_evidence:
-        installer_artifact:
-          path: /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg
-          present: true
-          sha256: 282adc773f1a86f81a89aefa82d595e67d9f663e4eedab2cd45269d6ab0e9a45
-          sha256_matches_expected: false
-          state: present_sha256_mismatch
-        startup_smoke_receipt:
-          age_seconds: 909518
-          contract_matches_expected: true
-          max_age_seconds: 604800
-          path: /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json
-          present: true
-          recorded_at_utc: '2026-05-18T22:12:25.078057+00:00'
-          state: stale
-      proof_capture_commands:
-      - 'REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}"
-        && export REPO_ROOT && INSTALLER_PATH="$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg"
-        && EXPECTED_INSTALLER_SHA256=c82393b1bcff3897faf2ea9255e8775ccc1cefa512b3e16a7cb06e52ba48b07e
-        && EXPECTED_INSTALLER_MAGIC='''' && export INSTALLER_PATH EXPECTED_INSTALLER_SHA256
-        EXPECTED_INSTALLER_MAGIC && cd "$REPO_ROOT" && mkdir -p "$(dirname "$INSTALLER_PATH")"
-        && python3 -c ''import hashlib, os, pathlib; p=pathlib.Path(os.environ[''"''"''INSTALLER_PATH''"''"'']);
-        expected=os.environ[''"''"''EXPECTED_INSTALLER_SHA256''"''"'']; import sys;
-        sys.exit(0) if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower();
-        sys.exit(0) if digest==expected else print(f''"''"''installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}''"''"'')
-        or p.unlink()'' && if [ ! -s "$INSTALLER_PATH" ]; then if [ -z "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}"
-        ] && [ -z "${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}" ] && [ -z "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}"
-        ] && [ "${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}" != "1" ]; then
-        echo ''external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER,
-        CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR
-        (or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)'' >&2; exit
-        1; fi; set -- curl -fL --retry 3 --retry-delay 2; if [ -n "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}"
-        ]; then set -- "$@" -H "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}"; fi; if [
-        -n "${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}" ]; then set -- "$@" -H "Cookie:
-        ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}"; fi; if [ -n "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}"
-        ]; then set -- "$@" --cookie "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}"; fi;
-        set -- "$@" "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-osx-arm64-installer"
-        -o "$INSTALLER_PATH"; "$@"; fi; python3 -c ''import os, pathlib, sys; p=pathlib.Path(os.environ[''"''"''INSTALLER_PATH''"''"'']);
-        expected_magic=os.environ[''"''"''EXPECTED_INSTALLER_MAGIC''"''"'']; sys.exit(f''"''"''installer-download-missing:{p}''"''"'')
-        if (not p.is_file()) else None; probe=p.read_bytes()[:8192]; probe_text=probe.decode(''"''"''latin-1''"''"'',
-        errors=''"''"''ignore''"''"'').lower(); auth_header_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_AUTH_HEADER''"''"'',''"''"''''"''"'')).strip());
-        cookie_header_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER''"''"'',''"''"''''"''"'')).strip());
-        cookie_jar_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_COOKIE_JAR''"''"'',''"''"''''"''"'')).strip());
-        html_like=(''"''"''<!doctype html''"''"'' in probe_text) or (''"''"''<html''"''"''
-        in probe_text) or (''"''"''<head''"''"'' in probe_text); sys.exit(f''"''"''installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-missing-auth''"''"'')
-        if html_like else None; sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode(''"''"''latin-1''"''"'')))
-        else sys.exit(f''"''"''installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=unexpected-binary-format-or-route-response''"''"'')'';
-        python3 -c ''import hashlib, os, pathlib, sys; p=pathlib.Path(os.environ[''"''"''INSTALLER_PATH''"''"'']);
-        expected=os.environ[''"''"''EXPECTED_INSTALLER_SHA256''"''"'']; sys.exit(f''"''"''installer-download-missing:{p}''"''"'')
-        if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower();
-        auth_header_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_AUTH_HEADER''"''"'',''"''"''''"''"'')).strip());
-        cookie_header_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER''"''"'',''"''"''''"''"'')).strip());
-        cookie_jar_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_COOKIE_JAR''"''"'',''"''"''''"''"'')).strip());
-        sys.exit(0) if digest==expected else sys.exit(f''"''"''installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-bytes-drift''"''"'')'''
-      - REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" &&
-        export REPO_ROOT && INSTALLER_PATH="$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg"
-        && STARTUP_SMOKE_DIR="$REPO_ROOT/Docker/Downloads/startup-smoke" && cd "$REPO_ROOT"
-        && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=macOS
-        ./scripts/run-desktop-startup-smoke.sh "$INSTALLER_PATH" avalonia osx-arm64
-        Chummer.Avalonia "$STARTUP_SMOKE_DIR" run-20260518-220935
-      - REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" &&
-        export REPO_ROOT && cd "$REPO_ROOT" && ./scripts/generate-releases-manifest.sh
-      required_host: macos
-      required_proofs:
-      - promoted_installer_artifact
-      - startup_smoke_receipt
-      startup_smoke_receipt_contract:
-        head_id: avalonia
-        host_class_contains: macos
-        platform: macos
-        ready_checkpoint: pre_ui_event_loop
-        rid: osx-arm64
-        status_any_of:
-        - pass
-        - passed
-        - ready
-      tuple_entry_count: 1
-      tuple_unique: true
-    avalonia:win-x64:windows:
-      channel_id: public_stable
-      expected_artifact_id: avalonia-win-x64-installer
-      expected_installer_file_name: chummer-avalonia-win-x64-installer.exe
-      expected_installer_relative_path: files/chummer-avalonia-win-x64-installer.exe
-      expected_installer_sha256: 54966da8ac6f1ca7321b301b025bfb626398f461c78441c132d5c59d9c2bedde
-      expected_public_install_route: /downloads/install/avalonia-win-x64-installer
-      expected_startup_smoke_receipt_path: startup-smoke/startup-smoke-avalonia-win-x64.receipt.json
-      local_evidence:
-        installer_artifact:
-          path: /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe
-          present: true
-          sha256: 54966da8ac6f1ca7321b301b025bfb626398f461c78441c132d5c59d9c2bedde
-          sha256_matches_expected: true
-          state: present_sha256_match
-        startup_smoke_receipt:
-          age_seconds: 658738
-          contract_matches_expected: false
-          max_age_seconds: 604800
-          path: /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json
-          present: true
-          recorded_at_utc: '2026-05-21T19:52:05.2855129+00:00'
-          state: stale
-      proof_capture_commands:
-      - 'REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}"
-        && export REPO_ROOT && INSTALLER_PATH="$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe"
-        && EXPECTED_INSTALLER_SHA256=54966da8ac6f1ca7321b301b025bfb626398f461c78441c132d5c59d9c2bedde
-        && EXPECTED_INSTALLER_MAGIC=MZ && export INSTALLER_PATH EXPECTED_INSTALLER_SHA256
-        EXPECTED_INSTALLER_MAGIC && cd "$REPO_ROOT" && mkdir -p "$(dirname "$INSTALLER_PATH")"
-        && python3 -c ''import hashlib, os, pathlib; p=pathlib.Path(os.environ[''"''"''INSTALLER_PATH''"''"'']);
-        expected=os.environ[''"''"''EXPECTED_INSTALLER_SHA256''"''"'']; import sys;
-        sys.exit(0) if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower();
-        sys.exit(0) if digest==expected else print(f''"''"''installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}''"''"'')
-        or p.unlink()'' && if [ ! -s "$INSTALLER_PATH" ]; then if [ -z "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}"
-        ] && [ -z "${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}" ] && [ -z "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}"
-        ] && [ "${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}" != "1" ]; then
-        echo ''external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER,
-        CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR
-        (or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)'' >&2; exit
-        1; fi; set -- curl -fL --retry 3 --retry-delay 2; if [ -n "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}"
-        ]; then set -- "$@" -H "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}"; fi; if [
-        -n "${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}" ]; then set -- "$@" -H "Cookie:
-        ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}"; fi; if [ -n "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}"
-        ]; then set -- "$@" --cookie "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}"; fi;
-        set -- "$@" "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-win-x64-installer"
-        -o "$INSTALLER_PATH"; "$@"; fi; python3 -c ''import os, pathlib, sys; p=pathlib.Path(os.environ[''"''"''INSTALLER_PATH''"''"'']);
-        expected_magic=os.environ[''"''"''EXPECTED_INSTALLER_MAGIC''"''"'']; sys.exit(f''"''"''installer-download-missing:{p}''"''"'')
-        if (not p.is_file()) else None; probe=p.read_bytes()[:8192]; probe_text=probe.decode(''"''"''latin-1''"''"'',
-        errors=''"''"''ignore''"''"'').lower(); auth_header_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_AUTH_HEADER''"''"'',''"''"''''"''"'')).strip());
-        cookie_header_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER''"''"'',''"''"''''"''"'')).strip());
-        cookie_jar_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_COOKIE_JAR''"''"'',''"''"''''"''"'')).strip());
-        html_like=(''"''"''<!doctype html''"''"'' in probe_text) or (''"''"''<html''"''"''
-        in probe_text) or (''"''"''<head''"''"'' in probe_text); sys.exit(f''"''"''installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-missing-auth''"''"'')
-        if html_like else None; sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode(''"''"''latin-1''"''"'')))
-        else sys.exit(f''"''"''installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=unexpected-binary-format-or-route-response''"''"'')'';
-        python3 -c ''import hashlib, os, pathlib, sys; p=pathlib.Path(os.environ[''"''"''INSTALLER_PATH''"''"'']);
-        expected=os.environ[''"''"''EXPECTED_INSTALLER_SHA256''"''"'']; sys.exit(f''"''"''installer-download-missing:{p}''"''"'')
-        if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower();
-        auth_header_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_AUTH_HEADER''"''"'',''"''"''''"''"'')).strip());
-        cookie_header_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER''"''"'',''"''"''''"''"'')).strip());
-        cookie_jar_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_COOKIE_JAR''"''"'',''"''"''''"''"'')).strip());
-        sys.exit(0) if digest==expected else sys.exit(f''"''"''installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-bytes-drift''"''"'')'''
-      - REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" &&
-        export REPO_ROOT && INSTALLER_PATH="$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe"
-        && STARTUP_SMOKE_DIR="$REPO_ROOT/Docker/Downloads/startup-smoke" && cd "$REPO_ROOT"
-        && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Windows
-        ./scripts/run-desktop-startup-smoke.sh "$INSTALLER_PATH" avalonia win-x64
-        Chummer.Avalonia.exe "$STARTUP_SMOKE_DIR" run-20260518-220935
-      - REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" &&
-        export REPO_ROOT && cd "$REPO_ROOT" && ./scripts/generate-releases-manifest.sh
-      required_host: windows
-      required_proofs:
-      - promoted_installer_artifact
-      - startup_smoke_receipt
-      startup_smoke_receipt_contract:
-        head_id: avalonia
-        host_class_contains: windows
-        platform: windows
-        ready_checkpoint: pre_ui_event_loop
-        rid: win-x64
-        status_any_of:
-        - pass
-        - passed
-        - ready
-      tuple_entry_count: 1
-      tuple_unique: true
-  unresolved_external_proof_request_tuple_counts:
-    avalonia:osx-arm64:macos: 1
-    avalonia:win-x64:windows: 1
-  unresolved_external_proof_request_tuples:
-  - avalonia:osx-arm64:macos
-  - avalonia:win-x64:windows
+  unresolved_external_proof_request_count: 0
+  unresolved_external_proof_request_host_counts: {}
+  unresolved_external_proof_request_hosts: []
+  unresolved_external_proof_request_specs: {}
+  unresolved_external_proof_request_tuple_counts: {}
+  unresolved_external_proof_request_tuples: []
   update_required_case_count: 0
   update_required_misrouted_case_count: 0
   update_required_routed_to_downloads_count: 0
-  top_clusters:
-  - kind: external_proof_request
-    target_repo: chummer6-ui
-    count: 2
-  generated_at: '2026-05-29T10:51:03Z'
+  top_clusters: []
+  generated_at: '2026-05-29T23:33:10Z'
   freshness:
     available: true
-    at: '2026-05-29T10:51:03Z'
-    age_seconds: 840
-    age_human: 14m
+    at: '2026-05-29T23:33:10Z'
+    age_seconds: 109
+    age_human: 1m 49s
     state: fresh
     label: fresh
 publish_readiness:
   state: blocked
-  blocking_reason_count: 3
-  warning_reason_count: 4
+  blocking_reason_count: 1
+  warning_reason_count: 2
   blocking_reasons:
   - public guide/progress is stale.
-  - Freeze launch expansion while 3 golden journey(s) remain blocked and journey health
-    is blocked.
-  - 'Only external host-proof gaps remain: run the missing macos, windows proof lane
-    for 2 desktop tuple(s), ingest receipts, and then republish release truth.'
   warning_reasons:
-  - 'Treat the current shelf as review-required because required desktop tuple coverage
-    is incomplete (platforms: windows, macos; pairs: avalonia:windows, avalonia:macos;
-    tuples: avalonia:osx-arm64:macos, avalonia:win-x64:windows).'
-  - Live source state is 6d 21h newer than the published campaign OS continuity monitor.
-  - Support cases still need human response.
+  - Live source state is 7d 10h newer than the published campaign OS continuity monitor.
   - Provider-route fallback coverage is still thin for the current release posture.
   recommended_action: Resolve the blocking publish-readiness issues before promoting
     public truth.
@@ -892,23 +693,23 @@ publish_readiness:
     support_freshness_state: fresh
     weekly_governor_packet_freshness_state: fresh
     weekly_governor_packet_schedule_state: scheduled
-    weekly_governor_packet_status: blocked
-    weekly_governor_launch_action: freeze_launch
-    weekly_governor_public_state: freeze_with_rollback_watch
+    weekly_governor_packet_status: pass
+    weekly_governor_launch_action: launch_expand
+    weekly_governor_public_state: launch_expand_allowed
     campaign_os_monitor_freshness_state: stale
-    journey_gate_state: blocked
+    journey_gate_state: ready
     release_channel_status: published
-    release_channel_rollout_state: coverage_incomplete
-    release_channel_supportability_state: review_required
+    release_channel_rollout_state: public_stable
+    release_channel_supportability_state: gold_supported
     release_channel_proof_status: passed
     release_channel_proof_freshness_state: fresh
-    journey_gate_blocked_count: 3
+    journey_gate_blocked_count: 0
     journey_gate_warning_count: 0
     provider_review_due_count: 0
     provider_fallback_thin_count: 5
     provider_revert_now_count: 0
     support_closure_waiting_count: 0
-    support_needs_human_response_count: 2
+    support_needs_human_response_count: 0
 runtime_healing:
   enabled: true
   summary:
@@ -975,7 +776,7 @@ projects:
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: running
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -1005,7 +806,7 @@ projects:
   deployment_access_posture: public
 - id: hub-registry
   lifecycle: dispatchable
-  runtime_status: dispatch_pending
+  runtime_status: waiting_dependency
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1015,7 +816,7 @@ projects:
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: dispatchable
-  runtime_status: verifying
+  runtime_status: running
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -1036,20 +837,20 @@ projects:
 - id: ui
   lifecycle: live
   runtime_status: healing
-  readiness_stage: repo_local_complete
+  readiness_stage: publicly_promoted
   readiness_terminal_stage: publicly_promoted
-  readiness_final_claim_allowed: false
+  readiness_final_claim_allowed: true
   readiness_warning_count: 1
   deployment_status: public
   deployment_promotion_stage: promoted_preview
   deployment_access_posture: public
 - id: ui-kit
   lifecycle: scaffold
-  runtime_status: running
+  runtime_status: waiting_dependency
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: false
-  readiness_warning_count: 1
+  readiness_final_claim_allowed: true
+  readiness_warning_count: 0
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''

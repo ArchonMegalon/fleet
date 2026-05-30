@@ -5424,11 +5424,8 @@ items:
   - scripts
   owned_surfaces:
   - wire_mobile_localization_offline_degraded:mobile
-- title: Emit explanation packets, coverage-registry truth, and bounded counterfactual
-    packets for every visible mechanical result.
-  task: Emit first-party explanation packets, coverage-registry rows, and deterministic
-    counterfactual packets for promoted visible mechanical results, legality states,
-    warnings, and before-after deltas.
+- title: Emit explanation packets, coverage-registry truth, and bounded counterfactual packets for every visible mechanical result.
+  task: Emit first-party explanation packets, coverage-registry rows, and deterministic counterfactual packets for promoted visible mechanical results, legality states, warnings, and before-after deltas.
   package_id: next90-m145-core-explain-every-value-packets
   work_task_id: '145.1'
   frontier_id: 1451045101

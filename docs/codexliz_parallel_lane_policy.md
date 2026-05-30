@@ -31,7 +31,7 @@ export CODEX_HOME=/docker/fleet/state/manual-codexliz/lane-a
 export HOME="$CODEX_HOME"
 export CODEXLIZ_STATE_DIR="$CODEX_HOME/.cache/codexliz"
 unset CODEXLIZ_PROXY_PORT
-codexliz --model qwen2.5-coder:32b
+codexliz --model qwen3-coder-next:q8_0
 ```
 
 For a second lane, change all three writable paths before launching it.

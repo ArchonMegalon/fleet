@@ -1,0 +1,63 @@
+name: Release Proof Sync
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/release-proof-sync.yml"
+      - "scripts/verify_cross_repo_release_proof_sync.py"
+      - "tests/test_verify_cross_repo_release_proof_sync.py"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/release-proof-sync.yml"
+      - "scripts/verify_cross_repo_release_proof_sync.py"
+      - "tests/test_verify_cross_repo_release_proof_sync.py"
+
+permissions:
+  contents: read
+
+jobs:
+  release-proof-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependency
+        run: python3 -m pip install --disable-pip-version-check pytest
+
+      - name: Require cross-repo read token
+        env:
+          CROSS_REPO_READ_TOKEN: ${{ secrets.CROSS_REPO_READ_TOKEN }}
+        run: |
+          if [ -z "${CROSS_REPO_READ_TOKEN}" ]; then
+            echo "::error::Missing secret CROSS_REPO_READ_TOKEN with read access to ArchonMegalon/executive-assistant, ArchonMegalon/chummer6-hub-registry, ArchonMegalon/chummer6-ui, and ArchonMegalon/chummer6-mobile."
+            exit 1
+          fi
+
+      - name: Clone sibling repos at main
+        env:
+          CROSS_REPO_READ_TOKEN: ${{ secrets.CROSS_REPO_READ_TOKEN }}
+        run: |
+          mkdir -p repos
+          git clone --depth=1 --branch main "https://x-access-token:${CROSS_REPO_READ_TOKEN}@github.com/ArchonMegalon/executive-assistant.git" repos/executive-assistant
+          git clone --depth=1 --branch main "https://x-access-token:${CROSS_REPO_READ_TOKEN}@github.com/ArchonMegalon/chummer6-hub-registry.git" repos/chummer6-hub-registry
+          git clone --depth=1 --branch main "https://x-access-token:${CROSS_REPO_READ_TOKEN}@github.com/ArchonMegalon/chummer6-ui.git" repos/chummer6-ui
+          git clone --depth=1 --branch main "https://x-access-token:${CROSS_REPO_READ_TOKEN}@github.com/ArchonMegalon/chummer6-mobile.git" repos/chummer6-mobile
+
+      - name: Run release-proof sync unit test
+        run: python3 -m pytest -q tests/test_verify_cross_repo_release_proof_sync.py
+
+      - name: Verify cross-repo release proof sync
+        run: |
+          python3 scripts/verify_cross_repo_release_proof_sync.py \
+            --fleet-root . \
+            --ea-root repos/executive-assistant \
+            --hub-registry-root repos/chummer6-hub-registry \
+            --ui-root repos/chummer6-ui \
+            --mobile-root repos/chummer6-mobile

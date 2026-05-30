@@ -81,7 +81,7 @@ class CodexLizShimTests(unittest.TestCase):
         self,
         upstream_url: str,
         *,
-        model: str = "qwen2.5-coder:32b",
+        model: str = "qwen3-coder-next:q8_0",
         state_dir: Path | None = None,
         capture_path: Path | None = None,
         proxy_pid_file: Path | None = None,
@@ -145,7 +145,7 @@ class CodexLizShimTests(unittest.TestCase):
                 body = json.dumps(
                     {
                         "data": [
-                            {"id": "qwen2.5-coder:32b"},
+                            {"id": "qwen3-coder-next:q8_0"},
                             {"id": "fallback-model"},
                         ]
                     }
@@ -165,7 +165,7 @@ class CodexLizShimTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
         self.assertIn('model_provider="liz"', payload["argv"])
-        self.assertIn('model="qwen2.5-coder:32b"', payload["argv"])
+        self.assertIn('model="qwen3-coder-next:q8_0"', payload["argv"])
         self.assertIn("exec", payload["argv"])
         self.assertTrue(any(path == "/v1/models" for path in requests))
         self.assertGreaterEqual(requests.count("/v1/models"), 2)
@@ -173,7 +173,7 @@ class CodexLizShimTests(unittest.TestCase):
     def test_codexliz_wraps_bare_prompt_as_exec(self) -> None:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
-                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                body = json.dumps({"data": [{"id": "qwen3-coder-next:q8_0"}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -196,7 +196,7 @@ class CodexLizShimTests(unittest.TestCase):
     def test_codexliz_strips_worker_lane_prefix_before_forwarding(self) -> None:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
-                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                body = json.dumps({"data": [{"id": "qwen3-coder-next:q8_0"}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -221,7 +221,7 @@ class CodexLizShimTests(unittest.TestCase):
     def test_codexliz_prepends_exec_trace_prompt_to_inline_exec_prompt(self) -> None:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
-                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                body = json.dumps({"data": [{"id": "qwen3-coder-next:q8_0"}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -247,7 +247,7 @@ class CodexLizShimTests(unittest.TestCase):
     def test_codexliz_prepends_exec_trace_prompt_to_stdin_exec_prompt(self) -> None:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
-                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                body = json.dumps({"data": [{"id": "qwen3-coder-next:q8_0"}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -274,7 +274,7 @@ class CodexLizShimTests(unittest.TestCase):
     def test_codexliz_does_not_replace_model_argument_when_prepending_exec_prompt(self) -> None:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
-                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                body = json.dumps({"data": [{"id": "qwen3-coder-next:q8_0"}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -287,20 +287,20 @@ class CodexLizShimTests(unittest.TestCase):
         server, _thread = self._server(Handler)
         completed = self._run_shim(
             f"http://127.0.0.1:{server.server_port}",
-            extra_args=["exec", "--json", "-m", "qwen2.5-coder:32b"],
+            extra_args=["exec", "--json", "-m", "qwen3-coder-next:q8_0"],
             default_prompt="repair the queue stall",
         )
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
         model_index = payload["argv"].index("-m")
-        self.assertEqual(payload["argv"][model_index + 1], "qwen2.5-coder:32b")
+        self.assertEqual(payload["argv"][model_index + 1], "qwen3-coder-next:q8_0")
         self.assertIn("repair the queue stall", payload["argv"][-1])
 
     def test_codexliz_debug_mode_emits_preflight_and_launch_traces(self) -> None:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
-                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                body = json.dumps({"data": [{"id": "qwen3-coder-next:q8_0"}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -393,7 +393,7 @@ class CodexLizShimTests(unittest.TestCase):
 
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("expected model", completed.stderr)
-        self.assertIn("qwen2.5-coder:32b", completed.stderr)
+        self.assertIn("qwen3-coder-next:q8_0", completed.stderr)
         self.assertFalse(self.capture_path.exists())
 
     def test_codexliz_auto_assigns_distinct_proxy_ports_per_state_dir(self) -> None:
@@ -402,7 +402,7 @@ class CodexLizShimTests(unittest.TestCase):
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
                 requests.append(self.path)
-                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                body = json.dumps({"data": [{"id": "qwen3-coder-next:q8_0"}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -482,7 +482,7 @@ class CodexLizShimTests(unittest.TestCase):
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
                 requests.append(self.path)
-                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                body = json.dumps({"data": [{"id": "qwen3-coder-next:q8_0"}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -556,7 +556,7 @@ class CodexLizShimTests(unittest.TestCase):
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
                 requests.append(self.path)
-                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                body = json.dumps({"data": [{"id": "qwen3-coder-next:q8_0"}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -594,7 +594,7 @@ class CodexLizShimTests(unittest.TestCase):
     def test_codexliz_starts_proxy_with_bounded_retry_window(self) -> None:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
-                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                body = json.dumps({"data": [{"id": "qwen3-coder-next:q8_0"}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -661,7 +661,7 @@ class CodexLizShimTests(unittest.TestCase):
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
                 requests.append(self.path)
-                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                body = json.dumps({"data": [{"id": "qwen3-coder-next:q8_0"}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -729,7 +729,7 @@ class CodexLizShimTests(unittest.TestCase):
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
-                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                body = json.dumps({"data": [{"id": "qwen3-coder-next:q8_0"}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -776,7 +776,7 @@ class CodexLizShimTests(unittest.TestCase):
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
-                body = json.dumps({"data": [{"id": "qwen2.5-coder:32b"}]}).encode("utf-8")
+                body = json.dumps({"data": [{"id": "qwen3-coder-next:q8_0"}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -793,7 +793,7 @@ class CodexLizShimTests(unittest.TestCase):
                 "CODEXLIZ_BASE_CODEX_SHIM": str(self.fake_codex),
                 "CODEXLIZ_TEST_CAPTURE": str(self.capture_path),
                 "CODEXLIZ_BASE_URL": f"http://127.0.0.1:{server.server_port}",
-                "CODEXLIZ_MODEL": "qwen2.5-coder:32b",
+                "CODEXLIZ_MODEL": "qwen3-coder-next:q8_0",
                 "CODEXLIZ_STATE_DIR": str(self.state_dir),
                 "CODEXLIZ_PROXY_PID_FILE": str(self.proxy_pid_file),
                 "CODEXLIZ_PROXY_LOG_FILE": str(self.proxy_log_file),

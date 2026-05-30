@@ -229,7 +229,7 @@ Example manual launch pattern:
 export CODEX_HOME=/docker/fleet/state/manual-codexliz/lane-a
 export HOME="$CODEX_HOME"
 unset CODEXLIZ_PROXY_PORT
-codexliz --model qwen2.5-coder:32b
+codexliz --model qwen3-coder-next:q8_0
 ```
 
 Optional retry tuning for prolonged upstream outages:
