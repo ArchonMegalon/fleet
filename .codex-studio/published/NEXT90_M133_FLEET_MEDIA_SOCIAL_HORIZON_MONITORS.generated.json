@@ -33,93 +33,43 @@
     "external_tools_plane": {
       "checks": {
         "campaign_packet_requirements": true,
-        "emailit_promotion_gate": false,
+        "emailit_promotion_gate": true,
         "first_party_authority": true,
         "open_run_discovery_boundary": true,
         "receipt_and_provenance_rule": true
       },
-      "issues": [
-        "External tools plane canon missing required marker: emailit_promotion_gate"
-      ],
-      "state": "fail"
+      "issues": [],
+      "state": "pass"
     },
     "horizon_registry": {
-      "issues": [
-        "Horizon `jackpoint` is missing required `allowed_surfaces`.",
-        "Horizon `jackpoint` is missing required `proof_gate`.",
-        "Horizon `jackpoint` is missing required `public_claim_posture`.",
-        "Horizon `jackpoint` is missing required `stop_condition`.",
-        "Horizon `jackpoint` current_state drifted away from `horizon`.",
-        "Horizon `jackpoint` next_state drifted away from `bounded_research`.",
-        "Horizon `community-hub` is missing required `allowed_surfaces`.",
-        "Horizon `community-hub` is missing required `proof_gate`.",
-        "Horizon `community-hub` is missing required `public_claim_posture`.",
-        "Horizon `community-hub` is missing required `stop_condition`.",
-        "Horizon `community-hub` current_state drifted away from `horizon`.",
-        "Horizon `community-hub` next_state drifted away from `bounded_research`.",
-        "Horizon `runsite` is missing required `allowed_surfaces`.",
-        "Horizon `runsite` is missing required `proof_gate`.",
-        "Horizon `runsite` is missing required `public_claim_posture`.",
-        "Horizon `runsite` is missing required `stop_condition`.",
-        "Horizon `runsite` current_state drifted away from `horizon`.",
-        "Horizon `runsite` next_state drifted away from `bounded_research`.",
-        "Horizon `runbook-press` is missing required `allowed_surfaces`.",
-        "Horizon `runbook-press` is missing required `proof_gate`.",
-        "Horizon `runbook-press` is missing required `public_claim_posture`.",
-        "Horizon `runbook-press` is missing required `stop_condition`.",
-        "Horizon `ghostwire` is missing required `allowed_surfaces`.",
-        "Horizon `ghostwire` is missing required `proof_gate`.",
-        "Horizon `ghostwire` is missing required `public_claim_posture`.",
-        "Horizon `ghostwire` is missing required `stop_condition`.",
-        "Horizon `table-pulse` is missing required `allowed_surfaces`.",
-        "Horizon `table-pulse` is missing required `proof_gate`.",
-        "Horizon `table-pulse` is missing required `public_claim_posture`.",
-        "Horizon `table-pulse` is missing required `stop_condition`.",
-        "Horizon `table-pulse` current_state drifted away from `horizon`.",
-        "Horizon `table-pulse` next_state drifted away from `bounded_research`."
-      ],
+      "issues": [],
       "monitored_horizons": [
         {
-          "current_state": "signed_in_command_lane_live",
+          "current_state": "horizon",
           "id": "jackpoint",
-          "missing_required_field_count": 4,
-          "missing_required_fields": [
-            "allowed_surfaces",
-            "proof_gate",
-            "public_claim_posture",
-            "stop_condition"
-          ],
-          "next_state": "bounded_coaching_expansion",
+          "missing_required_field_count": 0,
+          "missing_required_fields": [],
+          "next_state": "bounded_research",
           "owner_handoff_gate": "Registry manifests and media receipts must survive format changes before the studio is promoted beyond horizon.",
           "owning_repo_count": 3,
           "title": "JACKPOINT"
         },
         {
-          "current_state": "signed_in_command_lane_live",
+          "current_state": "horizon",
           "id": "community-hub",
-          "missing_required_field_count": 4,
-          "missing_required_fields": [
-            "allowed_surfaces",
-            "proof_gate",
-            "public_claim_posture",
-            "stop_condition"
-          ],
-          "next_state": "bounded_coaching_expansion",
+          "missing_required_field_count": 0,
+          "missing_required_fields": [],
+          "next_state": "bounded_research",
           "owner_handoff_gate": "Open-run listing, accepted roster, meeting handoff, observer consent, and reputation events must stay Chummer-owned even when third-party meeting or analysis tools are in the loop.",
           "owning_repo_count": 6,
           "title": "COMMUNITY HUB"
         },
         {
-          "current_state": "signed_in_command_lane_live",
+          "current_state": "horizon",
           "id": "runsite",
-          "missing_required_field_count": 4,
-          "missing_required_fields": [
-            "allowed_surfaces",
-            "proof_gate",
-            "public_claim_posture",
-            "stop_condition"
-          ],
-          "next_state": "bounded_coaching_expansion",
+          "missing_required_field_count": 0,
+          "missing_required_fields": [],
+          "next_state": "bounded_research",
           "owner_handoff_gate": "Spatial artifacts must remain clearly outside live mechanics and combat truth before any promotion.",
           "owning_repo_count": 2,
           "title": "RUNSITE"
@@ -127,13 +77,8 @@
         {
           "current_state": "horizon",
           "id": "runbook-press",
-          "missing_required_field_count": 4,
-          "missing_required_fields": [
-            "allowed_surfaces",
-            "proof_gate",
-            "public_claim_posture",
-            "stop_condition"
-          ],
+          "missing_required_field_count": 0,
+          "missing_required_fields": [],
           "next_state": "bounded_research",
           "owner_handoff_gate": "Publication and compatibility metadata must remain registry-owned before this lane becomes research-ready.",
           "owning_repo_count": 3,
@@ -142,35 +87,25 @@
         {
           "current_state": "horizon",
           "id": "ghostwire",
-          "missing_required_field_count": 4,
-          "missing_required_fields": [
-            "allowed_surfaces",
-            "proof_gate",
-            "public_claim_posture",
-            "stop_condition"
-          ],
+          "missing_required_field_count": 0,
+          "missing_required_fields": [],
           "next_state": "bounded_research",
           "owner_handoff_gate": "Replay must prove reducer-safe, receipt-backed reconstruction before it can leave horizon status.",
           "owning_repo_count": 4,
           "title": "GHOSTWIRE"
         },
         {
-          "current_state": "signed_in_command_lane_live",
+          "current_state": "horizon",
           "id": "table-pulse",
-          "missing_required_field_count": 4,
-          "missing_required_fields": [
-            "allowed_surfaces",
-            "proof_gate",
-            "public_claim_posture",
-            "stop_condition"
-          ],
-          "next_state": "bounded_coaching_expansion",
+          "missing_required_field_count": 0,
+          "missing_required_fields": [],
+          "next_state": "bounded_research",
           "owner_handoff_gate": "Table Pulse Live and Table Pulse Aftermath must stay explicitly separate, with live pressure GM-governed and aftermath analysis privacy-bounded, before the broader product moves beyond horizon.",
           "owning_repo_count": 2,
           "title": "TABLE PULSE"
         }
       ],
-      "state": "fail",
+      "state": "pass",
       "target_horizon_count": 6
     },
     "ltd_integration_guide": {
@@ -195,72 +130,32 @@
     "next90_guide": {
       "checks": {
         "exit_contract": true,
-        "wave_21": false
+        "wave_21": true
       },
-      "issues": [
-        "Next90 guide canon missing required marker: wave_21"
-      ],
-      "state": "fail"
+      "issues": [],
+      "state": "pass"
     }
   },
   "contract_name": "fleet.next90_m133_media_social_horizon_monitors",
   "frontier_id": 2336165027,
-  "generated_at": "2026-05-30T08:58:58Z",
+  "generated_at": "2026-05-30T10:02:14Z",
   "milestone_id": 133,
   "monitor_summary": {
     "journey_count": 3,
     "media_proof_status": "passed",
-    "media_social_status": "blocked",
+    "media_social_status": "warning",
     "provider_canary_gate_state": "ready",
-    "runtime_blocker_count": 1,
-    "runtime_blockers": [
-      "publication_proof_monitor: media: Media local release proof freshness exceeded threshold (676444s > 172800s)."
-    ],
+    "runtime_blocker_count": 0,
+    "runtime_blockers": [],
     "warning_count": 1
   },
   "owned_surfaces": [
     "monitor_media_social_horizon_proof:fleet"
   ],
   "package_closeout": {
-    "blockers": [
-      "next90_guide: Next90 guide canon missing required marker: wave_21",
-      "external_tools_plane: External tools plane canon missing required marker: emailit_promotion_gate",
-      "horizon_registry: Horizon `jackpoint` is missing required `allowed_surfaces`.",
-      "horizon_registry: Horizon `jackpoint` is missing required `proof_gate`.",
-      "horizon_registry: Horizon `jackpoint` is missing required `public_claim_posture`.",
-      "horizon_registry: Horizon `jackpoint` is missing required `stop_condition`.",
-      "horizon_registry: Horizon `jackpoint` current_state drifted away from `horizon`.",
-      "horizon_registry: Horizon `jackpoint` next_state drifted away from `bounded_research`.",
-      "horizon_registry: Horizon `community-hub` is missing required `allowed_surfaces`.",
-      "horizon_registry: Horizon `community-hub` is missing required `proof_gate`.",
-      "horizon_registry: Horizon `community-hub` is missing required `public_claim_posture`.",
-      "horizon_registry: Horizon `community-hub` is missing required `stop_condition`.",
-      "horizon_registry: Horizon `community-hub` current_state drifted away from `horizon`.",
-      "horizon_registry: Horizon `community-hub` next_state drifted away from `bounded_research`.",
-      "horizon_registry: Horizon `runsite` is missing required `allowed_surfaces`.",
-      "horizon_registry: Horizon `runsite` is missing required `proof_gate`.",
-      "horizon_registry: Horizon `runsite` is missing required `public_claim_posture`.",
-      "horizon_registry: Horizon `runsite` is missing required `stop_condition`.",
-      "horizon_registry: Horizon `runsite` current_state drifted away from `horizon`.",
-      "horizon_registry: Horizon `runsite` next_state drifted away from `bounded_research`.",
-      "horizon_registry: Horizon `runbook-press` is missing required `allowed_surfaces`.",
-      "horizon_registry: Horizon `runbook-press` is missing required `proof_gate`.",
-      "horizon_registry: Horizon `runbook-press` is missing required `public_claim_posture`.",
-      "horizon_registry: Horizon `runbook-press` is missing required `stop_condition`.",
-      "horizon_registry: Horizon `ghostwire` is missing required `allowed_surfaces`.",
-      "horizon_registry: Horizon `ghostwire` is missing required `proof_gate`.",
-      "horizon_registry: Horizon `ghostwire` is missing required `public_claim_posture`.",
-      "horizon_registry: Horizon `ghostwire` is missing required `stop_condition`.",
-      "horizon_registry: Horizon `table-pulse` is missing required `allowed_surfaces`.",
-      "horizon_registry: Horizon `table-pulse` is missing required `proof_gate`.",
-      "horizon_registry: Horizon `table-pulse` is missing required `public_claim_posture`.",
-      "horizon_registry: Horizon `table-pulse` is missing required `stop_condition`.",
-      "horizon_registry: Horizon `table-pulse` current_state drifted away from `horizon`.",
-      "horizon_registry: Horizon `table-pulse` next_state drifted away from `bounded_research`."
-    ],
-    "state": "blocked",
+    "blockers": [],
+    "state": "pass",
     "warnings": [
-      "publication_proof_monitor: media: Media local release proof freshness exceeded threshold (676444s > 172800s).",
       "Governor rollback posture remains armed."
     ]
   },
@@ -329,7 +224,7 @@
     },
     "publication_proof": {
       "hub_local_release": {
-        "age_hours": 2.27,
+        "age_hours": 3.33,
         "generated_at": "2026-05-30T06:42:42Z",
         "issues": [],
         "path": "/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
@@ -340,23 +235,21 @@
       },
       "issues": [],
       "media_local_release": {
-        "age_hours": 187.9,
-        "generated_at": "2026-05-22T13:04:54Z",
+        "age_hours": 0.06,
+        "generated_at": "2026-05-30T09:58:46Z",
         "issues": [],
         "path": "/docker/fleet/repos/chummer-media-factory/.codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json",
-        "runtime_blockers": [
-          "Media local release proof freshness exceeded threshold (676444s > 172800s)."
-        ],
+        "runtime_blockers": [],
         "state": "pass",
         "status": "passed",
         "warnings": []
       },
       "release_channel": {
-        "age_hours": 12.74,
+        "age_hours": 13.8,
         "generated_at": "2026-05-29T20:14:22Z",
         "issues": [],
         "path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
-        "release_proof_age_hours": 15.78,
+        "release_proof_age_hours": 16.83,
         "release_proof_generated_at": "2026-05-29T17:12:12Z",
         "release_proof_status": "passed",
         "runtime_blockers": [],
@@ -364,9 +257,7 @@
         "status": "published",
         "warnings": []
       },
-      "runtime_blockers": [
-        "media: Media local release proof freshness exceeded threshold (676444s > 172800s)."
-      ],
+      "runtime_blockers": [],
       "state": "pass",
       "warnings": []
     }
@@ -390,17 +281,17 @@
     "external_tools_plane": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/EXTERNAL_TOOLS_PLANE.md",
-      "sha256": "208fadfb839e53006d537847dca960707f295a53af83db79fc97664c07ec2051"
+      "sha256": "05c3f1e5c8399ff3b290c0141bde0faa1aba4bbef335854cb3ca6337af08dbd0"
     },
     "flagship_readiness": {
-      "generated_at": "2026-05-29T23:34:37Z",
+      "generated_at": "2026-05-30T09:59:21Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "721407b2c020edcba4f96534c7e1877ccdcf29aeb85ca8f559e8cbfbac856d6b"
+      "sha256": "33fcd80fb0c43278b48425bd3f38ec70e8334502e06b1cd6ff75e690f67d8308"
     },
     "horizon_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/HORIZON_REGISTRY.yaml",
-      "sha256": "4d7afefd264f4e80f2ddbf869d94136e70ddd23b043c5a1892c22883ffdd5a89"
+      "sha256": "c793da60ed161645019bd09eb5b5ce4a08f6a6e488f6e41636f5484a6540fab8"
     },
     "hub_local_release_proof": {
       "generated_at": "2026-05-30T06:42:42Z",
@@ -408,14 +299,14 @@
       "sha256": "d8e3fd45cd47ed3acfbb2de088a3527251a7d7e94788bb93f887dc81c9abc784"
     },
     "journey_gates": {
-      "generated_at": "2026-05-29T23:35:02Z",
+      "generated_at": "2026-05-30T09:48:02Z",
       "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-      "sha256": "4c583cccb7a5e50fd045e20249ab888103ff00762d71e552f5d44797562ddb4d"
+      "sha256": "8586925077b956dc8c874cd38de6269669ce8392daabd4c0f878a0fb598fcb11"
     },
     "media_local_release_proof": {
-      "generated_at": "2026-05-22T13:04:54Z",
+      "generated_at": "2026-05-30T09:58:46Z",
       "path": "/docker/fleet/repos/chummer-media-factory/.codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json",
-      "sha256": "d8d0a8b42d4e2d8c4e3851e3854647f7bdd80f5ecd9ce1e93a3cdf47367a3070"
+      "sha256": "a18b7e2c15e2678455abb30a145afb79edd3539a4c5eb5153e5e0ac53e2227cc"
     },
     "media_social_ltd_guide": {
       "generated_at": "",
@@ -425,17 +316,17 @@
     "next90_guide": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
-      "sha256": "622c47db05ec3ddaeffc2a8dd60188f8c1112e82eee55d8b99e44f9e8a04af61"
+      "sha256": "984957267d7ee1ae4f3b20a7c67446925d356887019a5f910018ce9001cf36a5"
     },
     "provider_stewardship": {
-      "generated_at": "2026-05-30T08:58:57Z",
+      "generated_at": "2026-05-30T09:12:41Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT90_M130_FLEET_PROVIDER_STEWARDSHIP.generated.json",
-      "sha256": "25c23abcd7f6e31c43614c6da65d625fa5cd42395e774394ba08e5f9835a4ee2"
+      "sha256": "0966b704723eac339a186e579d3eccf6c8b57cb7477b853cff1a0d8c5d0456b3"
     },
     "queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "ab055ffe4f5bb30d014134888f9618a6598bb7fb003fb268a1215aa97d82c331"
+      "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
     },
     "release_channel": {
       "generated_at": "2026-05-29T20:14:22Z",
@@ -445,10 +336,10 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "6b91d86d226f6c4edbb01a735cf4a2288f0c68d529e6f36a146984bd75c60ef6"
+      "sha256": "08e9f9a475f1c1295f94a672ac2f173a0e1271ec5683cbff5beac389055e793a"
     }
   },
-  "status": "blocked",
+  "status": "pass",
   "wave": "W21",
   "work_task_id": "133.7"
 }

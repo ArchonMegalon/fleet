@@ -98,19 +98,19 @@
       "runtime_blockers": [],
       "state": "pass",
       "warnings": [],
-      "work_task_status": "complete"
+      "work_task_status": ""
     }
   },
   "contract_name": "fleet.next90_m136_aggregate_readiness_parity_gates",
   "frontier_id": 2277811964,
-  "generated_at": "2026-05-13T18:13:49Z",
+  "generated_at": "2026-05-30T10:02:22Z",
   "milestone_id": 136,
   "monitor_summary": {
     "aggregate_readiness_status": "pass",
     "receipt_runtime_blocker_count": 0,
     "required_family_count": 7,
     "runtime_blockers": [],
-    "warning_count": 1
+    "warning_count": 0
   },
   "owned_surfaces": [
     "fail_closed_on_aggregate_readiness_when_family_level_par:fleet"
@@ -118,16 +118,14 @@
   "package_closeout": {
     "blockers": [],
     "state": "pass",
-    "warnings": [
-      "Chummer5A UI element parity audit is stale (138.7h > 72h)."
-    ]
+    "warnings": []
   },
   "package_id": "next90-m136-fleet-fail-closed-on-aggregate-readiness-when-family-level-parity-proof-sub",
   "queue_title": "Fail closed on aggregate readiness when family-level parity proof, sub-dialog screenshot packs, dialog-level element inventories, or continuity journey receipts are stale or missing.",
   "runtime_monitors": {
     "aggregate_readiness": {
-      "age_hours": 0.01,
-      "generated_at": "2026-05-13T18:13:20Z",
+      "age_hours": 0.05,
+      "generated_at": "2026-05-30T09:59:21Z",
       "issues": [],
       "runtime_blockers": [],
       "state": "pass",
@@ -136,24 +134,24 @@
     },
     "continuity_receipts": {
       "campaign_continuity_front_state": "healthy",
-      "continuity_age_hours": 0.01,
-      "continuity_generated_at": "2026-05-13T18:13:23Z",
+      "continuity_age_hours": 0.09,
+      "continuity_generated_at": "2026-05-30T09:57:01Z",
       "continuity_status": "pass",
       "issues": [],
-      "journey_age_hours": 0.08,
-      "journey_generated_at": "2026-05-13T18:08:53Z",
+      "journey_age_hours": 0.24,
+      "journey_generated_at": "2026-05-30T09:48:02Z",
       "journey_overall_state": "ready",
       "runtime_blockers": [],
       "state": "pass",
       "warnings": []
     },
     "parity_family_proof": {
-      "age_hours": 138.7,
+      "age_hours": 0.09,
       "behavioral_no_count": 0,
       "effective_behavioral_no_count": 0,
       "effective_visual_no_count": 0,
       "element_count": 84,
-      "generated_at": "2026-05-07T23:31:39.358211Z",
+      "generated_at": "2026-05-30T09:56:44.536198Z",
       "issues": [],
       "missing_family_proofs": [],
       "overridden_family_proofs": [],
@@ -170,23 +168,21 @@
       "state": "pass",
       "unresolved_family_proofs": [],
       "visual_no_count": 0,
-      "warnings": [
-        "Chummer5A UI element parity audit is stale (138.7h > 72h)."
-      ]
+      "warnings": []
     },
     "screenshot_packs": {
       "issues": [],
       "runtime_blockers": [],
       "screenshot_review_gate": {
-        "age_hours": 20.27,
-        "generated_at": "2026-05-12T21:57:34.928016Z",
+        "age_hours": 13.53,
+        "generated_at": "2026-05-29T20:30:48.757236Z",
         "runtime_blockers": [],
         "status": "pass"
       },
       "state": "pass",
       "visual_familiarity_gate": {
-        "age_hours": 20.28,
-        "generated_at": "2026-05-12T21:57:12.446833Z",
+        "age_hours": 13.53,
+        "generated_at": "2026-05-29T20:30:44.388179Z",
         "runtime_blockers": [],
         "status": "pass"
       },
@@ -195,39 +191,39 @@
   },
   "source_inputs": {
     "campaign_continuity_liveness": {
-      "generated_at": "2026-05-13T18:13:23Z",
+      "generated_at": "2026-05-30T09:57:01Z",
       "path": "/docker/fleet/.codex-studio/published/CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json",
-      "sha256": "3822834b84a60e604d24a6eb49a30fb016df2d6f28b10b51289d585b9e388fe8"
+      "sha256": "dfb34f04a5a0b81788551027acd17f68f3509e359a7f948e4d465fb4b6be82e1"
     },
     "design_queue_staging": {
-      "generated_at": "2026-05-13T18:08:11Z",
+      "generated_at": "2026-05-29T06:21:39Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "fa9f621dc6eddb503ec60c0905df3377cd36a78459b9b530293c14e28bbaf81d"
+      "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
     },
     "flagship_product_readiness": {
-      "generated_at": "2026-05-13T18:13:20Z",
+      "generated_at": "2026-05-30T09:59:21Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "f4e72f34dad81112df5ca0188de8655e0d578daa5d1ac12e2a76b5f7edff2416"
+      "sha256": "33fcd80fb0c43278b48425bd3f38ec70e8334502e06b1cd6ff75e690f67d8308"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-05-13T18:08:11Z",
+      "generated_at": "2026-05-30T09:58:41Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "fa9f621dc6eddb503ec60c0905df3377cd36a78459b9b530293c14e28bbaf81d"
+      "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
     },
     "journey_gates": {
-      "generated_at": "2026-05-13T18:08:53Z",
+      "generated_at": "2026-05-30T09:48:02Z",
       "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-      "sha256": "1f05625dbdecbc79848ca7873a5a1e16950ace6dd9977ad3496d88ac001766ef"
+      "sha256": "8586925077b956dc8c874cd38de6269669ce8392daabd4c0f878a0fb598fcb11"
     },
     "next90_guide": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
-      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+      "sha256": "984957267d7ee1ae4f3b20a7c67446925d356887019a5f910018ce9001cf36a5"
     },
     "parity_audit": {
-      "generated_at": "2026-05-07T23:31:39.358211Z",
+      "generated_at": "2026-05-30T09:56:44.536198Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
-      "sha256": "b9a152dc5ed598b13238dcaf742bfdcc880604bc1b91883ef0743f10cc7f3558"
+      "sha256": "383da4091adb49c87667bbe4da1fedde0dd9300816f8c4b87f39dba302f2e41e"
     },
     "parity_matrix": {
       "generated_at": "2026-04-30T15:40:33Z",
@@ -235,24 +231,24 @@
       "sha256": "03459b1bfd51868a99ef7399a279c0a9ca9f4b1514a893638553d8c678b7d2ae"
     },
     "screenshot_review_gate": {
-      "generated_at": "2026-05-12T21:57:34.928016Z",
+      "generated_at": "2026-05-29T20:30:48.757236Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
-      "sha256": "8b6e923a5725f99608985f00f2a1857121a3603184ec6ef0cdbd9bb0fff7addd"
+      "sha256": "789217dc2b35bc86ff897dc6a71f3e6d6f4dd6774a0c64c0ecc079d93a28fedc"
     },
     "successor_registry": {
-      "generated_at": "2026-05-13T18:08:12Z",
+      "generated_at": "2026-05-30T09:58:41Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "52f226d7a4043d33eed12287db7c4060de5305c6c728e150c1525c4ea1f6fa41"
+      "sha256": "08e9f9a475f1c1295f94a672ac2f173a0e1271ec5683cbff5beac389055e793a"
     },
     "ui_direct_workflow_proof": {
-      "generated_at": "2026-05-11T15:01:10.232783Z",
+      "generated_at": "2026-05-29T21:04:31.879428Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json",
-      "sha256": "86da0407c2a787ddb965137158bc3264dbd642e1d31d52b3d7d0eb192aea679f"
+      "sha256": "008ce460fbcbc0aedb803ef1a6141102b153f9898ea0da1ba424f5115a2644df"
     },
     "visual_familiarity_gate": {
-      "generated_at": "2026-05-12T21:57:12.446833Z",
+      "generated_at": "2026-05-29T20:30:44.388179Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
-      "sha256": "6ada83a31888c3ce9a963f1d74fc005f7be538aa4bdf14de1c4529dca38b5502"
+      "sha256": "abe7aad0810cd038e9400e5fe913baadd85b6b038a185297a719ee0869f110fd"
     }
   },
   "status": "pass",

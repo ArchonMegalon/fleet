@@ -4,7 +4,7 @@
 - matrix_binding_status: pass
 - package_id: next90-m136-fleet-bind-the-machine-readable-human-parity-matrix-into-audit-gate-consumpt
 - frontier_id: 4491585022
-- generated_at: 2026-05-19T12:13:30Z
+- generated_at: 2026-05-30T10:02:24Z
 
 ## Runtime summary
 - release_blocking_family_count: 7

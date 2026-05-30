@@ -1,18 +1,17 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-05-30T09:11:52Z'
-source_public_status_generated_at: '2026-05-30T09:11:46Z'
+generated_at: '2026-05-30T10:01:59Z'
+source_public_status_generated_at: '2026-05-30T10:01:53Z'
 mission_snapshot:
-  headline: 'Working now: Build Pulse Director modes and the GM cockpit so Table Pulse
-    becomes a governed living-world control surface instead of only a notification
-    pipeline.. ETA: 40m 23s. Next: Rebuild flagship visuals, globe-linked media manifests,
-    and proof-safe presentation assets so visuals reinforce the product story without
-    becoming proof authority.. Vision: 0s. Capacity: Core 0%, Easy 0%, Jury 0%. Stop
-    risk: none.'
-  current_eta: 40m 23s
-  next_title: Rebuild flagship visuals, globe-linked media manifests, and proof-safe
-    presentation assets so visuals reinforce the product story without becoming proof
-    authority.
+  headline: 'Working now: Fail-close Table Pulse on privacy, consent, quiet-hours,
+    moderation, and rate-limit gates before any external heat notification can leave
+    the session boundary.. ETA: 42m 27s. Next: Add milestone mapping or executable
+    queue work for Catalog, visual-regression, and release discipline for the shared
+    kit are not yet materialized... Vision: 0s. Capacity: Core 0%, Easy 0%, Jury 0%.
+    Stop risk: none.'
+  current_eta: 42m 27s
+  next_title: Add milestone mapping or executable queue work for Catalog, visual-regression,
+    and release discipline for the shared kit are not yet materialized..
   vision_eta: 0s
   milestone_title: chummer-vnext
   milestone_eta: 0s
@@ -21,29 +20,29 @@ mission_snapshot:
   - Easy 0%
   - Jury 0%
   stop_risk: none
-  headline_eta: 40m 23s
+  headline_eta: 42m 27s
 queue_forecast:
   now:
-    project_id: hub
-    title: Build Pulse Director modes and the GM cockpit so Table Pulse becomes a
-      governed living-world control surface instead of only a notification pipeline.
-    lane: easy
+    project_id: fleet
+    title: Fail-close Table Pulse on privacy, consent, quiet-hours, moderation, and
+      rate-limit gates before any external heat notification can leave the session
+      boundary.
+    lane: core_booster
     provider: EA
     brain: EA backend / ea-coder-hard-batch
-    reason: interactive_or_first_pass
-    elapsed_seconds: 1177
-    elapsed_human: 19m 37s
-    remaining_seconds: 2423
-    remaining_human: 40m 23s
+    reason: cheap_first_default
+    elapsed_seconds: 1053
+    elapsed_human: 17m 33s
+    remaining_seconds: 2547
+    remaining_human: 42m 27s
     total_seconds: 3600
     total_human: 1h
     verify_or_review_ahead: true
     prerequisites: none
   next:
-    project_id: media-factory
-    title: Rebuild flagship visuals, globe-linked media manifests, and proof-safe
-      presentation assets so visuals reinforce the product story without becoming
-      proof authority.
+    project_id: ui-kit
+    title: Add milestone mapping or executable queue work for Catalog, visual-regression,
+      and release discipline for the shared kit are not yet materialized..
     lane: easy
     provider: not active
     brain: not active
@@ -59,13 +58,12 @@ queue_forecast:
       dispatch
     confidence: stable
   then:
-    project_id: mobile
-    title: Build the mobile and signed-in notification surfaces for Table Pulse packets
-      so recipients can inspect, react, and return to the correct GM-governed lane.
+    project_id: core
+    title: Stabilize design-doc parity hygiene loop
     lane: easy
     provider: not active
     brain: not active
-    reason: interactive_or_first_pass
+    reason: the auditor is materializing the next scoped queue from backlog evidence
     elapsed_seconds: 0
     elapsed_human: 0s
     remaining_seconds: 3600
@@ -73,9 +71,9 @@ queue_forecast:
     total_seconds: 3600
     total_human: 1h
     verify_or_review_ahead: true
-    prerequisites: configured queue has remaining work and is waiting for scheduler
-      dispatch
-    confidence: stable
+    prerequisites: the current queue materialization is exhausted, but the backlog
+      source still reports open work
+    confidence: volatile
 capacity_forecast:
   lanes:
   - lane: easy
@@ -439,7 +437,8 @@ capacity_forecast:
     remaining_slices: 0
     slot_share_percent: 0
     drain_share_percent: 0
-    bottleneck: 'core: runtime queue exhausted while source backlog remains open'
+    bottleneck: lockstep dispatch blocked until all member projects and group blockers
+      are ready
     deployment_summary: Public Chummer portal is live at chummer.run as a promoted
       preview release shell for the split heads.
     program_eta: 0s
@@ -574,12 +573,13 @@ readiness_summary:
     boundary_pure: 5
     publicly_promoted: 3
   warning_count: 0
-  final_claim_ready: 4
+  final_claim_ready: 5
   final_claim_ready_project_ids:
   - fleet
   - hub
   - mobile
   - ui
+  - ui-kit
   whole_product_final_claim_status: pass
   whole_product_final_claim_bar: top_flagship_grade
   whole_product_final_claim_whole_project_frontier_required: true
@@ -587,12 +587,13 @@ readiness_summary:
   whole_product_final_claim_accept_lowered_standards: false
   whole_product_final_claim_ready: 1
   whole_product_final_claim_warning_keys: []
-final_claim_ready: 4
+final_claim_ready: 5
 final_claim_ready_project_ids:
 - fleet
 - hub
 - mobile
 - ui
+- ui-kit
 whole_product_final_claim_status: pass
 whole_product_final_claim_bar: top_flagship_grade
 whole_product_final_claim_whole_project_frontier_required: true
@@ -662,27 +663,29 @@ support_summary:
   update_required_misrouted_case_count: 0
   update_required_routed_to_downloads_count: 0
   top_clusters: []
-  generated_at: '2026-05-30T09:11:05Z'
+  generated_at: '2026-05-30T09:47:59Z'
   freshness:
     available: true
-    at: '2026-05-30T09:11:05Z'
-    age_seconds: 46
-    age_human: 46s
+    at: '2026-05-30T09:47:59Z'
+    age_seconds: 839
+    age_human: 13m 59s
     state: fresh
     label: fresh
 publish_readiness:
-  state: warning
-  blocking_reason_count: 0
-  warning_reason_count: 2
-  blocking_reasons: []
+  state: blocked
+  blocking_reason_count: 2
+  warning_reason_count: 1
+  blocking_reasons:
+  - status plane is stale.
+  - public guide/progress is stale.
   warning_reasons:
-  - Live source state is 7d 19h newer than the published campaign OS continuity monitor.
   - Provider-route fallback coverage is still thin for the current release posture.
-  recommended_action: Review the warning signals before claiming the surface is steady.
+  recommended_action: Resolve the blocking publish-readiness issues before promoting
+    public truth.
   signals:
     runtime_healing_alert_state: healthy
-    status_plane_freshness_state: fresh
-    progress_report_freshness_state: fresh
+    status_plane_freshness_state: stale
+    progress_report_freshness_state: stale
     journey_gates_freshness_state: fresh
     release_channel_freshness_state: fresh
     support_freshness_state: fresh
@@ -691,7 +694,7 @@ publish_readiness:
     weekly_governor_packet_status: pass
     weekly_governor_launch_action: launch_expand
     weekly_governor_public_state: launch_expand_allowed
-    campaign_os_monitor_freshness_state: stale
+    campaign_os_monitor_freshness_state: fresh
     journey_gate_state: ready
     release_channel_status: published
     release_channel_rollout_state: public_stable
@@ -751,7 +754,7 @@ projects:
   deployment_access_posture: ''
 - id: design
   lifecycle: dispatchable
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: repo_local_complete
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -771,7 +774,7 @@ projects:
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: verifying
+  runtime_status: running
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: true
@@ -791,7 +794,7 @@ projects:
   deployment_access_posture: ''
 - id: hub
   lifecycle: live
-  runtime_status: verifying
+  runtime_status: running
   readiness_stage: publicly_promoted
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: true
@@ -811,7 +814,7 @@ projects:
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: dispatchable
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -821,7 +824,7 @@ projects:
   deployment_access_posture: ''
 - id: mobile
   lifecycle: dispatchable
-  runtime_status: dispatch_pending
+  runtime_status: running
   readiness_stage: publicly_promoted
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: true
@@ -841,11 +844,11 @@ projects:
   deployment_access_posture: public
 - id: ui-kit
   lifecycle: scaffold
-  runtime_status: running
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: false
-  readiness_warning_count: 1
+  readiness_final_claim_allowed: true
+  readiness_warning_count: 0
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''

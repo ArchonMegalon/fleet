@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-30T09:12:07Z'
+generated_at: '2026-05-30T09:48:12Z'
 mode: completion_review
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-13
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -56,7 +56,7 @@ weekly_pulse_audit:
   reason: weekly product pulse is fresh and reports no remaining drift or blocker
     pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-30T09:11:55Z'
+  generated_at: '2026-05-30T09:48:02Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry

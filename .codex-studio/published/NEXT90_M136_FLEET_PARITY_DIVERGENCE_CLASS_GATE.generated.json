@@ -50,7 +50,7 @@
   },
   "contract_name": "fleet.next90_m136_parity_divergence_class_gate",
   "frontier_id": 2977536653,
-  "generated_at": "2026-05-19T12:13:29Z",
+  "generated_at": "2026-05-30T10:02:27Z",
   "milestone_id": 136,
   "monitor_summary": {
     "classified_delta_count": 0,
@@ -91,37 +91,37 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "797a7bf15503da99a3bd4fb767c0e15aca5667b0913de01d2bcd55a9d453f393"
+      "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
     },
     "flagship_product_bar": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PRODUCT_BAR.md",
-      "sha256": "8d450f2175f2bd290975db12c0deddbf6e26a3415bec20e906f1ac38cd01c84e"
+      "sha256": "a3806d153b58a5f316f6e922480a66cd2b102d5be5781f13fcebe5f8e449def5"
     },
     "flagship_readiness_planes": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_READINESS_PLANES.yaml",
-      "sha256": "b4bd6b9ef9cc85be2fc4aff49dd713d88199cc1699fea8110fbde98f4272344f"
+      "sha256": "8ad75c3ba486de36007401d66634d066c39966715c2586febbe4b3c078d8e400"
     },
     "flagship_release_acceptance": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_RELEASE_ACCEPTANCE.yaml",
-      "sha256": "b233c4051d1c7684dc28231e14f3d5ce82669f5eadd00be2253efeec52c1e83f"
+      "sha256": "922811069e646a30d3c5234e8670a943666591a638108c6d1cd1d01e6732ed3a"
     },
     "fleet_queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "4cd877009355dda3c453d5622786403dbeae36ac664951ec20020054948fdb5e"
+      "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
     },
     "next90_guide": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
-      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+      "sha256": "984957267d7ee1ae4f3b20a7c67446925d356887019a5f910018ce9001cf36a5"
     },
     "parity_audit": {
-      "generated_at": "2026-05-07T23:31:39.358211Z",
+      "generated_at": "2026-05-30T09:56:44.536198Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
-      "sha256": "b9a152dc5ed598b13238dcaf742bfdcc880604bc1b91883ef0743f10cc7f3558"
+      "sha256": "383da4091adb49c87667bbe4da1fedde0dd9300816f8c4b87f39dba302f2e41e"
     },
     "parity_spec": {
       "generated_at": "",
@@ -131,7 +131,7 @@
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "729540d98a517a298fd38fa9e4448e1f4ca56e72a21726a650edd5c289e44b43"
+      "sha256": "08e9f9a475f1c1295f94a672ac2f173a0e1271ec5683cbff5beac389055e793a"
     }
   },
   "status": "pass",

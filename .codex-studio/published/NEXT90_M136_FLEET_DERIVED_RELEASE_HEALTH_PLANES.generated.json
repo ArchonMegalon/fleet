@@ -43,7 +43,7 @@
   },
   "contract_name": "fleet.next90_m136_derived_release_health_planes",
   "frontier_id": 8422537713,
-  "generated_at": "2026-05-13T18:13:50Z",
+  "generated_at": "2026-05-30T10:02:26Z",
   "milestone_id": 136,
   "monitor_summary": {
     "blocked_plane_ids": [],
@@ -201,37 +201,37 @@
     "design_queue_staging": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "fa9f621dc6eddb503ec60c0905df3377cd36a78459b9b530293c14e28bbaf81d"
+      "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
     },
     "flagship_product_bar": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PRODUCT_BAR.md",
-      "sha256": "8d450f2175f2bd290975db12c0deddbf6e26a3415bec20e906f1ac38cd01c84e"
+      "sha256": "a3806d153b58a5f316f6e922480a66cd2b102d5be5781f13fcebe5f8e449def5"
     },
     "flagship_product_readiness": {
-      "generated_at": "2026-05-13T18:13:20Z",
+      "generated_at": "2026-05-30T09:59:21Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "f4e72f34dad81112df5ca0188de8655e0d578daa5d1ac12e2a76b5f7edff2416"
+      "sha256": "33fcd80fb0c43278b48425bd3f38ec70e8334502e06b1cd6ff75e690f67d8308"
     },
     "flagship_readiness_planes": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_READINESS_PLANES.yaml",
-      "sha256": "b4bd6b9ef9cc85be2fc4aff49dd713d88199cc1699fea8110fbde98f4272344f"
+      "sha256": "8ad75c3ba486de36007401d66634d066c39966715c2586febbe4b3c078d8e400"
     },
     "fleet_queue_staging": {
       "generated_at": "",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "fa9f621dc6eddb503ec60c0905df3377cd36a78459b9b530293c14e28bbaf81d"
+      "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
     },
     "next90_guide": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
-      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+      "sha256": "984957267d7ee1ae4f3b20a7c67446925d356887019a5f910018ce9001cf36a5"
     },
     "successor_registry": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "52f226d7a4043d33eed12287db7c4060de5305c6c728e150c1525c4ea1f6fa41"
+      "sha256": "08e9f9a475f1c1295f94a672ac2f173a0e1271ec5683cbff5beac389055e793a"
     }
   },
   "status": "pass",

@@ -4,7 +4,7 @@
 - divergence_status: pass
 - package_id: next90-m136-fleet-fail-parity-closeout-when-remaining-deltas-are-not-classified-as-must
 - frontier_id: 2977536653
-- generated_at: 2026-05-19T12:13:29Z
+- generated_at: 2026-05-30T10:02:27Z
 
 ## Runtime summary
 - delta_row_count: 0
