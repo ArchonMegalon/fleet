@@ -1,0 +1,15 @@
+{
+  "generated_at_utc": "2026-05-30T16:24:02Z",
+  "status": "pass",
+  "source_paths": [
+    "/docker/chummercomplete/_completion/chummer_run_redesign_closure/BLACK_LEDGER_GLOBE_RENDER.generated.json",
+    "/docker/chummercomplete/_completion/chummer_run_redesign_closure/BLACK_LEDGER_GLOBE_MOTION.generated.json",
+    "/docker/chummercomplete/_completion/chummer_run_redesign_closure/BLACK_LEDGER_GLOBE_REDUCED_MOTION.generated.json",
+    "/docker/chummercomplete/_completion/chummer_run_redesign_closure/BLACK_LEDGER_GLOBE_NO_NOISE.generated.json"
+  ],
+  "renderer": "canvas-geoscape",
+  "route": "/ledger/map",
+  "event_count": 4,
+  "district_count": 8,
+  "missing_evidence": []
+}

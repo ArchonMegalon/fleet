@@ -1,43 +1,14 @@
 {
-  "contract_name": "chummer.rules.sr5.rulefact_registry",
-  "generated_at_utc": "2026-05-30T10:40:14Z",
+  "acceptance_proof_status": "pass",
+  "book_profile": "sr5_core",
+  "copyright_boundary": "implementation facts and structured Chummer data only; no sourcebook prose, art, tables, or page images are reproduced",
+  "depth_status": "pass",
+  "final_verdict": "SR5_RULE_AUTHORITY_READY",
+  "operator_review_promoted_at_utc": "2026-05-29T16:59:27Z",
+  "ruleset": "sr5",
+  "schema": "sr5-rule-authority-registry-v1",
   "status": "pass",
-  "edition": "SR5",
-  "copyright_boundary": {
-    "sourcebook_prose_copied": false,
-    "art_or_page_images_copied": false,
-    "public_artifact_contains_formulas_and_fact_ids_only": true
-  },
-  "rulefact_families": [
-    "dice_tests",
-    "character_creation",
-    "derived_stats",
-    "combat",
-    "gear",
-    "magic",
-    "matrix",
-    "rigging",
-    "advancement",
-    "explain_receipts"
-  ],
-  "provider_coverage": {
-    "dice": "pass",
-    "tests": "pass",
-    "edge_or_limits": "pass",
-    "combat": "pass",
-    "matrix": "pass",
-    "magic": "pass",
-    "gear": "pass",
-    "advancement": "pass",
-    "explain": "pass"
-  },
-  "golden_fixtures": {
-    "status": "pass",
-    "fixture_count": 24
-  },
-  "human_review": {
-    "status": "pass",
-    "reviewer": "Codex local rule authority audit",
-    "notes": "Copyright-safe fact/provider authority receipt; no rulebook prose copied."
-  }
+  "table_import_status": "accepted_sr5_structured_data_indexed",
+  "fleet_materialized_at_utc": "2026-05-30T16:24:02Z",
+  "fleet_source_path": "/docker/chummercomplete/chummer-core-engine/.codex-studio/published/SR5_RULE_AUTHORITY_REGISTRY.generated.json"
 }

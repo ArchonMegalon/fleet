@@ -1,0 +1,11 @@
+{
+  "generated_at_utc": "2026-05-30T16:24:02Z",
+  "status": "pass",
+  "route": "/ledger/turns/1/newsreel.json",
+  "video_mp4_href": "/media/ledger/newsreels/turn-1-newsreel.mp4?v=1779367858",
+  "video_webm_href": "/media/ledger/newsreels/turn-1-newsreel.webm?v=1779367953",
+  "poster_href": "/media/ledger/newsreels/turn-1-newsreel-poster.png?v=1779367575",
+  "captions_href": "/media/ledger/newsreels/turn-1-newsreel.vtt?v=1779367564",
+  "duration_label": "00:16",
+  "missing_evidence": []
+}
