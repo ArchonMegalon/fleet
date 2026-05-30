@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.install_aware_followthrough_gate",
   "schema_version": 1,
-  "generated_at": "2026-05-30T09:06:31Z",
+  "generated_at": "2026-05-30T09:12:37Z",
   "status": "pass",
   "reason": "Install-aware followthrough is clear: install receipts, weekly governor truth, and public proof posture all agree.",
   "summary": {
@@ -65,7 +65,7 @@
     "queue_staging": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
   },
   "support_receipt_truth": {
-    "support_packets_generated_at": "2026-05-29T23:33:10Z",
+    "support_packets_generated_at": "2026-05-30T09:11:05Z",
     "successor_package_verification_status": "pass",
     "reporter_followthrough_blocked_missing_install_receipts_count": 0,
     "reporter_followthrough_blocked_receipt_mismatch_count": 0,
@@ -75,11 +75,11 @@
     "followthrough_ready_count": 0
   },
   "launch_truth": {
-    "weekly_product_pulse_generated_at": "2026-05-30T09:01:31Z",
+    "weekly_product_pulse_generated_at": "2026-05-30T09:12:35Z",
     "weekly_product_pulse_as_of": "2026-05-30",
     "weekly_product_pulse_action": "launch_expand",
     "weekly_product_pulse_reason": "Launch expansion is approved for the next bounded window while canaries and support closure remain clear.",
-    "weekly_governor_packet_generated_at": "2026-05-30T09:06:30Z",
+    "weekly_governor_packet_generated_at": "2026-05-30T09:12:37Z",
     "weekly_governor_packet_as_of": "2026-05-30",
     "governor_expected_action": "launch_expand",
     "governor_actual_action": "launch_expand",
@@ -98,8 +98,8 @@
       "role": "install-aware followthrough receipt source",
       "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
       "exists": true,
-      "sha256": "d62d3da6d8f8e41066da2d77ef1f2c3354181a153d55ed4d11a9e288db4070a7",
-      "generated_at": "2026-05-29T23:33:10Z",
+      "sha256": "a3398b5b49d0d640c552845b79ec00454a98748e698c1574092768c2a5d3733a",
+      "generated_at": "2026-05-30T09:11:05Z",
       "as_of": ""
     },
     {
@@ -107,8 +107,8 @@
       "role": "promotion and kill-switch ledger",
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
       "exists": true,
-      "sha256": "aad2fc7c610280f14018062db56558fa770c746b5393bce8582c0a6fd87186a8",
-      "generated_at": "2026-05-30T09:06:30Z",
+      "sha256": "573192d0ebb3fad4f0137fa1578d3de1e006b45277b159908d65cd471dd2c54b",
+      "generated_at": "2026-05-30T09:12:37Z",
       "as_of": "2026-05-30"
     },
     {
@@ -116,8 +116,8 @@
       "role": "public promotion decision source",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
       "exists": true,
-      "sha256": "7d4f586f41a0ebf406d0d62756eedc771befe6bf9456de80b1b74ec7456e4139",
-      "generated_at": "2026-05-30T09:01:31Z",
+      "sha256": "a9357f85f8a3a35a8716d2ca9924f0b7af5514caaaad3bf77479c1c409f00afb",
+      "generated_at": "2026-05-30T09:12:35Z",
       "as_of": "2026-05-30"
     },
     {
@@ -125,8 +125,8 @@
       "role": "public proof shelf snapshot",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PROGRESS_REPORT.generated.json",
       "exists": true,
-      "sha256": "452a1070b9d36be9708ae90e874f13352e0c33b6328cb733af6b6530690ac561",
-      "generated_at": "2026-05-30T09:00:17Z",
+      "sha256": "3af41c8f516e46617137f1a86f6290c987189292e193474218ce41483bbd2d37",
+      "generated_at": "2026-05-30T09:11:34Z",
       "as_of": "2026-05-30"
     }
   ],

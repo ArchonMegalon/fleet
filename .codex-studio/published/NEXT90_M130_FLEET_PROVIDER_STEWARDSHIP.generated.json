@@ -58,7 +58,7 @@
   },
   "contract_name": "fleet.next90_m130_provider_stewardship_monitor",
   "frontier_id": 7382989835,
-  "generated_at": "2026-05-30T09:06:35Z",
+  "generated_at": "2026-05-30T09:12:41Z",
   "governor_monitors": {
     "canary_reason": "Canary green on all active lanes",
     "canary_state": "ready",
@@ -127,16 +127,16 @@
       "warnings": []
     },
     "runtime_healing_summary": {
-      "generated_at": "2026-05-30T09:00:41Z",
+      "generated_at": "2026-05-30T09:11:45Z",
       "service_count": 0,
-      "source_age_seconds": 354
+      "source_age_seconds": 56
     }
   },
   "source_inputs": {
     "admin_status": {
-      "generated_at": "2026-05-30T09:00:42Z",
+      "generated_at": "2026-05-30T09:11:46Z",
       "path": "/tmp/fleet-status-plane-admin-status.json",
-      "sha256": "8f5e1a45db64434ef2496bdc55d27e0665bbd63013b24fb92484d57e7b503ea3"
+      "sha256": "3b14a765a2df59d9fe6308682d26fe2defd8ce181d1da39b9465fa59faf78ede"
     },
     "design_queue_staging": {
       "generated_at": "",
@@ -174,9 +174,9 @@
       "sha256": "d1f8affcce376c4efeabd8b950e87701e2b82fb75f67086a9638ad95379426b4"
     },
     "weekly_governor_packet": {
-      "generated_at": "2026-05-30T09:06:30Z",
+      "generated_at": "2026-05-30T09:12:37Z",
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
-      "sha256": "aad2fc7c610280f14018062db56558fa770c746b5393bce8582c0a6fd87186a8"
+      "sha256": "573192d0ebb3fad4f0137fa1578d3de1e006b45277b159908d65cd471dd2c54b"
     }
   },
   "status": "pass",

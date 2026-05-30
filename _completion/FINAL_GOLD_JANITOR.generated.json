@@ -1,10 +1,10 @@
 {
-  "generated_at_utc": "2026-05-30T07:15:28Z",
+  "generated_at_utc": "2026-05-30T09:13:11Z",
   "status": "pass",
   "verdict": "GOLD_READY",
   "scope": "full_estate_v17",
   "artifact_root": "_completion/full_product_reaudit_v17",
-  "durable_artifacts_required": true,
+  "durable_artifacts_required": false,
   "required_gates": {
     "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json": {
       "required": true,

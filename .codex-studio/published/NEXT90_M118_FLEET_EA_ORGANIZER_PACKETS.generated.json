@@ -24,7 +24,7 @@
   "as_of": "2026-05-30",
   "contract_name": "fleet.next90_m118_organizer_operator_packets",
   "frontier_id": 4199699036,
-  "generated_at": "2026-05-30T09:06:34Z",
+  "generated_at": "2026-05-30T09:12:40Z",
   "milestone_id": 118,
   "next_actions": [
     "Promote the M118 organizer operator packet as a current operator-loop input and keep the sibling proofs fresh."
@@ -112,12 +112,12 @@
       "status": "passed"
     },
     "support_packets": {
-      "generated_at": "2026-05-29T23:33:10Z",
+      "generated_at": "2026-05-30T09:11:05Z",
       "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
       "successor_package_verification_status": "pass"
     },
     "weekly_governor_packet": {
-      "generated_at": "2026-05-30T09:06:30Z",
+      "generated_at": "2026-05-30T09:12:37Z",
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
       "status": "pass"
     }

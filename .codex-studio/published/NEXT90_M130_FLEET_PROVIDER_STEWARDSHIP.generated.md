@@ -3,7 +3,7 @@
 - status: pass
 - package_id: next90-m130-fleet-add-provider-health-credit-runway-kill-switch-fallback-a
 - frontier_id: 7382989835
-- generated_at: 2026-05-30T09:06:35Z
+- generated_at: 2026-05-30T09:12:41Z
 
 ## Runtime posture
 - governed routes: 0
