@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-05-30T17:56:49Z",
+  "generated_at_utc": "2026-05-30T18:01:14Z",
   "status": "pass",
   "verdict": "GOLD_READY",
   "scope": "full_estate_v18",
@@ -87,8 +87,8 @@
         "url": "https://chummer.run/play",
         "status_code": 200,
         "ok": true,
-        "response_sha256": "2212d3924b9937537416121970b36289bc3f6839b70db1f0de14f5ee41033db4",
-        "body_bytes_sampled": 27192,
+        "response_sha256": "90185711c51ef45c13298730c40339ead94aa6d24190f15a9b6121f79cb22868",
+        "body_bytes_sampled": 27237,
         "forbidden_hits": [],
         "excerpt": "Player entry \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Install Chummer on Windows Navigation Player entry Hide Get started The flagship front door stays simple: get the build, check what works today, keep help nearby, and return through one account path. Get Chummer What Works Today Help Account Worlds Worlds "
       },
@@ -97,8 +97,8 @@
         "url": "https://chummer.run/mobile",
         "status_code": 200,
         "ok": true,
-        "response_sha256": "3d0724adb64b02d7254d16b61b95470078eb79ee5628538ebb4dd97697358754",
-        "body_bytes_sampled": 27184,
+        "response_sha256": "c03a1eb53ba4c3856be4b0916b93d8e4ca7ae1756e6adbd25136c513d14add9a",
+        "body_bytes_sampled": 27229,
         "forbidden_hits": [],
         "excerpt": "Mobile and PWA entry \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Install Chummer on Windows Navigation Mobile and PWA entry Hide Get started The flagship front door stays simple: get the build, check what works today, keep help nearby, and return through one account path. Get Chummer What Works Today Help Accoun"
       },
