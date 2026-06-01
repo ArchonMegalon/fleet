@@ -1,6 +1,21 @@
 {
-  "generated_at_utc": "2026-05-29T19:49:44Z",
+  "generated_at_utc": "2026-06-01T15:53:05Z",
   "verdict": "RAFTER_PIXEFY_QA_STACK_READY",
+  "gold_claim_allowed": true,
+  "active_release_binding": {
+    "version": "run-20260601-070650",
+    "rafter_version": "run-20260601-070650",
+    "pixefy_version": "run-20260601-070650"
+  },
+  "provider_failures": {
+    "Rafter": [],
+    "Pixefy": []
+  },
   "reasons": [],
-  "gold_claim_allowed": true
+  "checked_artifacts": [
+    "_completion/rafter_pixefy/FINAL_RAFTER_PIXEFY_QA_STACK_VERDICT.md",
+    "_completion/full_product_reaudit_v18/FINAL_RAFTER_PIXEFY_QA_STACK_VERDICT.md",
+    "_completion/full_product_reaudit_v17/FINAL_RAFTER_PIXEFY_QA_STACK_VERDICT.md",
+    "scripts/verify_committed_rafter_pixefy_ci_receipt.py"
+  ]
 }

@@ -211,17 +211,13 @@ def require_pixefy_screenshots(spec: dict[str, Any], gate: dict[str, Any], failu
         failures.append("pixefy_screenshot_files_missing_or_empty")
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Verify committed Rafter/Pixefy CI receipts without local provider secrets.")
-    parser.add_argument("provider", choices=sorted(PROVIDERS))
-    args = parser.parse_args()
-
-    spec = PROVIDERS[args.provider]
+def collect_provider_failures(provider_name: str) -> list[str]:
+    spec = PROVIDERS[provider_name]
     provider = load_json(spec["provider_path"])
     gate = load_json(spec["gate_path"])
     failures: list[str] = []
 
-    if str(provider.get("service") or "").strip() != args.provider:
+    if str(provider.get("service") or "").strip() != provider_name:
         failures.append("provider_service_mismatch")
     if str(provider.get("status") or "").strip().lower() != spec["provider_status"]:
         failures.append("provider_not_verified")
@@ -237,9 +233,17 @@ def main() -> int:
         failures.append("gate_missing_generation_timestamp")
     require_active_release_binding(gate, failures)
     require_live_release_alignment(gate, failures)
-    require_public_route_manifest(spec, args.provider, failures)
+    require_public_route_manifest(spec, provider_name, failures)
     require_pixefy_screenshots(spec, gate, failures)
+    return failures
 
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Verify committed Rafter/Pixefy CI receipts without local provider secrets.")
+    parser.add_argument("provider", choices=sorted(PROVIDERS))
+    args = parser.parse_args()
+
+    failures = collect_provider_failures(args.provider)
     if failures:
         print(f"{args.provider} committed CI receipt failed: {', '.join(failures)}", file=sys.stderr)
         return 1

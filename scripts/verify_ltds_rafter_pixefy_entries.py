@@ -66,7 +66,13 @@ def main() -> int:
     if text.count("| `Pixefy` |") != 1:
         failures.append("pixefy_row_count_not_one")
 
-    updated = now_utc()
+    rafter_out = COMPLETION / "ltd_inventory" / "RAFTER_TIER3_LTDS_ENTRY.generated.json"
+    pixefy_out = COMPLETION / "ltd_inventory" / "PIXEFY_TIER3_LTDS_ENTRY.generated.json"
+    rafter_existing = load_optional_json(rafter_out) or {}
+    pixefy_existing = load_optional_json(pixefy_out) or {}
+    generated = now_utc()
+    rafter_updated = str(rafter_existing.get("updated_at_utc") or generated)
+    pixefy_updated = str(pixefy_existing.get("updated_at_utc") or generated)
     write_json(COMPLETION / "ltd_inventory" / "RAFTER_TIER3_LTDS_ENTRY.generated.json", {
         "service": "Rafter",
         "plan": "License Tier 3 / highest AppSumo tier",
@@ -77,7 +83,7 @@ def main() -> int:
         "provider_verification_status": "verified" if service_verified.get("Rafter") else "pending",
         "release_gate_status": "pass" if service_verified.get("Rafter") else "not_ready",
         "source": "user_reported",
-        "updated_at_utc": updated,
+        "updated_at_utc": rafter_updated,
         "gold_claim_allowed": False,
         "verification_status": "pass" if not failures else "fail",
         "failures": [f for f in failures if f.startswith("rafter")],
@@ -92,7 +98,7 @@ def main() -> int:
         "provider_verification_status": "verified" if service_verified.get("Pixefy") else "pending",
         "release_gate_status": "pass" if service_verified.get("Pixefy") else "not_ready",
         "source": "user_reported",
-        "updated_at_utc": updated,
+        "updated_at_utc": pixefy_updated,
         "gold_claim_allowed": False,
         "verification_status": "pass" if not failures else "fail",
         "failures": [f for f in failures if f.startswith("pixefy")],
