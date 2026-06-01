@@ -84,7 +84,10 @@ def test_gateway_cockpit_uses_stdin_for_operator_password(tmp_path: Path) -> Non
         tmp_path / "docker",
         """#!/usr/bin/env bash
         set -euo pipefail
-        python3 -c 'import json, os, pathlib, sys; pathlib.Path(os.environ["DOCKER_CAPTURE"]).write_text(json.dumps({"argv": sys.argv[1:], "stdin": sys.stdin.read()}), encoding="utf-8")' "$@"
+        if [ "${1:-}" = "container" ] && [ "${2:-}" = "inspect" ]; then
+          exit 1
+        fi
+        python3 -c 'import json, os, pathlib, sys; path = pathlib.Path(os.environ["DOCKER_CAPTURE"]); record = {"argv": sys.argv[1:], "stdin": sys.stdin.read()}; existing = path.read_text(encoding="utf-8") if path.exists() else ""; path.write_text(existing + json.dumps(record) + "\\n", encoding="utf-8")' "$@"
         printf '%s' '{"cockpit":{"summary":{"fleet_health":"ok","active_workers":3,"open_incidents":0,"approvals_waiting":1},"workers":[{"project_id":"fleet"}]}}'
         """,
     )
@@ -112,6 +115,21 @@ def test_gateway_cockpit_uses_stdin_for_operator_password(tmp_path: Path) -> Non
     assert payload["fleet_health"] == "ok"
     assert payload["worker_ids"] == ["fleet"]
 
-    docker_payload = json.loads(docker_capture.read_text(encoding="utf-8"))
-    assert "super-secret-password" not in " ".join(docker_payload["argv"])
-    assert docker_payload["stdin"].strip() == "super-secret-password"
+    docker_payloads = [
+        json.loads(line)
+        for line in docker_capture.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert docker_payloads
+    assert all("super-secret-password" not in " ".join(payload["argv"]) for payload in docker_payloads)
+    assert any(payload["stdin"].strip() == "super-secret-password" for payload in docker_payloads)
+
+
+def test_chummer_portal_probe_fails_closed_on_bad_routes() -> None:
+    source = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert '("api_health", "http://127.0.0.1:8091/api/health")' in source
+    assert '("docs", "http://127.0.0.1:8091/docs/")' in source
+    assert "chummer-portal probe failed for:" in source
+    assert 'int(result.get("status") or 0) >= 400' in source
+    assert "raise SystemExit(1)" in source

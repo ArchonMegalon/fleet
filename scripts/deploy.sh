@@ -1739,6 +1739,7 @@ case "${1:-}" in
   chummer-portal)
     python3 - <<'PY'
 import json
+import sys
 import urllib.error
 import urllib.request
 
@@ -1788,6 +1789,13 @@ for name, url in targets:
         )
 
 print(json.dumps(results, indent=2))
+failed = [
+    result for result in results
+    if "error" in result or int(result.get("status") or 0) < 200 or int(result.get("status") or 0) >= 400
+]
+if failed:
+    print("chummer-portal probe failed for: " + ", ".join(str(result.get("target")) for result in failed), file=sys.stderr)
+    raise SystemExit(1)
 PY
     ;;
   build-chummer-windows-downloads)
