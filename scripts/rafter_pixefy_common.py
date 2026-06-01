@@ -43,6 +43,19 @@ REQUIRED_LIVE_ROUTES = [
     "https://chummer.run/feedback",
 ]
 
+REQUIRED_PROMOTED_PLATFORM_HEAD_RID_TUPLES = [
+    "avalonia:linux-x64:linux",
+    "avalonia:osx-arm64:macos",
+    "avalonia:win-x64:windows",
+]
+
+RELEASE_CHANNEL_CANDIDATE_PATHS = [
+    WORKSPACE_ROOT / "chummer-hub-registry" / ".codex-studio" / "published" / "RELEASE_CHANNEL.generated.json",
+    WORKSPACE_ROOT / "chummer.run-services" / "Chummer.Portal" / "downloads" / "RELEASE_CHANNEL.generated.json",
+    WORKSPACE_ROOT / "chummer-presentation" / "Chummer.Portal" / "downloads" / "RELEASE_CHANNEL.generated.json",
+    WORKSPACE_ROOT / ".tmp-hub-main-widen" / ".codex-studio" / "published" / "RELEASE_CHANNEL.generated.json",
+]
+
 PIXEFY_DEVICES = [
     {"id": "iphone_se", "class": "mobile", "viewport": "375x667"},
     {"id": "iphone_pro", "class": "mobile", "viewport": "393x852"},
@@ -135,6 +148,90 @@ def load_optional_json(path: Path) -> dict[str, Any] | None:
         return read_json(path)
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def active_release_binding(generated_at_utc: str | None = None) -> dict[str, Any]:
+    generated = generated_at_utc or now_utc()
+    checked = [str(path) for path in RELEASE_CHANNEL_CANDIDATE_PATHS]
+    for path in RELEASE_CHANNEL_CANDIDATE_PATHS:
+        payload = load_optional_json(path)
+        if not payload:
+            continue
+
+        coverage = payload.get("desktopTupleCoverage") if isinstance(payload.get("desktopTupleCoverage"), dict) else {}
+        promoted_tuples = _string_list(coverage.get("promotedPlatformHeadRidTuples"))
+        missing_tuples = _string_list(coverage.get("missingRequiredPlatformHeadRidTuples"))
+        missing_required = [
+            tuple_id
+            for tuple_id in REQUIRED_PROMOTED_PLATFORM_HEAD_RID_TUPLES
+            if tuple_id not in promoted_tuples
+        ]
+        channel_id = str(payload.get("channelId") or payload.get("channel") or "").strip()
+        release_status = str(payload.get("status") or "").strip()
+        rollout_state = str(payload.get("rolloutState") or "").strip()
+        version = str(payload.get("version") or payload.get("releaseVersion") or "").strip()
+        artifacts = payload.get("artifacts")
+        verification_failures = []
+        if channel_id != "public_stable":
+            verification_failures.append("release_channel_not_public_stable")
+        if release_status != "published":
+            verification_failures.append("release_status_not_published")
+        if rollout_state != "public_stable":
+            verification_failures.append("release_rollout_state_not_public_stable")
+        if not version:
+            verification_failures.append("release_version_missing")
+        if missing_tuples:
+            verification_failures.append("release_channel_missing_promoted_tuples")
+        if missing_required:
+            verification_failures.append("release_channel_missing_required_build_tuple")
+
+        return {
+            "verified_at_utc": generated,
+            "source_path": str(path),
+            "source_paths_checked": checked,
+            "base_url": "https://chummer.run",
+            "channelId": channel_id,
+            "channel": str(payload.get("channel") or channel_id),
+            "status": release_status,
+            "rolloutState": rollout_state,
+            "version": version,
+            "publishedAt": payload.get("publishedAt") or payload.get("published_at"),
+            "generatedAt": payload.get("generatedAt") or payload.get("generated_at"),
+            "artifact_count": len(artifacts) if isinstance(artifacts, list) else None,
+            "promotedPlatformHeadRidTuples": promoted_tuples,
+            "requiredPromotedPlatformHeadRidTuples": REQUIRED_PROMOTED_PLATFORM_HEAD_RID_TUPLES,
+            "missingRequiredPlatformHeadRidTuples": missing_tuples,
+            "missingRequiredPromotedPlatformHeadRidTuples": missing_required,
+            "verification_status": "pass" if not verification_failures else "fail",
+            "verification_failures": verification_failures,
+        }
+
+    return {
+        "verified_at_utc": generated,
+        "source_path": "",
+        "source_paths_checked": checked,
+        "base_url": "https://chummer.run",
+        "channelId": "",
+        "channel": "",
+        "status": "missing",
+        "rolloutState": "",
+        "version": "",
+        "publishedAt": None,
+        "generatedAt": None,
+        "artifact_count": None,
+        "promotedPlatformHeadRidTuples": [],
+        "requiredPromotedPlatformHeadRidTuples": REQUIRED_PROMOTED_PLATFORM_HEAD_RID_TUPLES,
+        "missingRequiredPlatformHeadRidTuples": [],
+        "missingRequiredPromotedPlatformHeadRidTuples": REQUIRED_PROMOTED_PLATFORM_HEAD_RID_TUPLES,
+        "verification_status": "fail",
+        "verification_failures": ["release_channel_manifest_missing"],
+    }
 
 
 def parse_env_file(path: Path = EA_ENV) -> dict[str, str]:

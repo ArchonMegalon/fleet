@@ -5,15 +5,18 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-from rafter_pixefy_common import COMPLETION, REPO_PATHS, REQUIRED_LIVE_ROUTES, REQUIRED_REPOS, load_optional_json, now_utc, probe_url, run_git_grep, write_json
+from rafter_pixefy_common import COMPLETION, REPO_PATHS, REQUIRED_LIVE_ROUTES, REQUIRED_REPOS, active_release_binding, load_optional_json, now_utc, probe_url, run_git_grep, write_json
 
 
 def main() -> int:
     generated = now_utc()
+    release_binding = active_release_binding(generated)
     provider = load_optional_json(COMPLETION / "rafter" / "RAFTER_PROVIDER_VERIFICATION.generated.json")
     failures: list[str] = []
     if not provider or provider.get("status") != "verified":
         failures.append("rafter_provider_verification_not_verified")
+    if release_binding.get("verification_status") != "pass":
+        failures.extend(release_binding.get("verification_failures") or ["release_binding_failed"])
 
     secret_hits = run_git_grep(r"(api[_-]?key|secret|token|password)\s*[:=]\s*['\"]?[A-Za-z0-9_./+=-]{16,}")
     redacted_hits = [
@@ -68,6 +71,7 @@ def main() -> int:
     live_site_scan = {
         "generated_at_utc": generated,
         "provider": "Rafter",
+        "active_release_binding": release_binding,
         "required_live_routes": REQUIRED_LIVE_ROUTES,
         "scanned_live_routes": [row["url"] for row in live_route_rows if row.get("ok")],
         "missing_live_routes": missing_live_routes,
@@ -97,6 +101,7 @@ def main() -> int:
         "gate": "RAFTER_SECURITY_GOLD_GATE",
         "generated_at_utc": generated,
         "provider_verification_id": "RAFTER_PROVIDER_VERIFICATION.generated.json",
+        "active_release_binding": release_binding,
         "scan_freshness": {"max_age_hours_for_gold": 72, "oldest_scan_age_hours": 0, "fresh": not failures and not redacted_hits},
         "coverage": {
             "required_repos": len(REQUIRED_REPOS),

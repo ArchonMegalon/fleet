@@ -1,6 +1,39 @@
 {
-  "generated_at_utc": "2026-06-01T13:45:30Z",
+  "generated_at_utc": "2026-06-01T15:34:49Z",
   "provider": "Pixefy",
+  "active_release_binding": {
+    "verified_at_utc": "2026-06-01T15:34:49Z",
+    "source_path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
+    "source_paths_checked": [
+      "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
+      "/docker/chummercomplete/chummer.run-services/Chummer.Portal/downloads/RELEASE_CHANNEL.generated.json",
+      "/docker/chummercomplete/chummer-presentation/Chummer.Portal/downloads/RELEASE_CHANNEL.generated.json",
+      "/docker/chummercomplete/.tmp-hub-main-widen/.codex-studio/published/RELEASE_CHANNEL.generated.json"
+    ],
+    "base_url": "https://chummer.run",
+    "channelId": "public_stable",
+    "channel": "public_stable",
+    "status": "published",
+    "rolloutState": "public_stable",
+    "version": "run-20260601-070650",
+    "publishedAt": "2026-06-01T07:06:50Z",
+    "generatedAt": "2026-06-01T07:06:51Z",
+    "artifact_count": 3,
+    "promotedPlatformHeadRidTuples": [
+      "avalonia:linux-x64:linux",
+      "avalonia:osx-arm64:macos",
+      "avalonia:win-x64:windows"
+    ],
+    "requiredPromotedPlatformHeadRidTuples": [
+      "avalonia:linux-x64:linux",
+      "avalonia:osx-arm64:macos",
+      "avalonia:win-x64:windows"
+    ],
+    "missingRequiredPlatformHeadRidTuples": [],
+    "missingRequiredPromotedPlatformHeadRidTuples": [],
+    "verification_status": "pass",
+    "verification_failures": []
+  },
   "routes": [
     {
       "id": "home",

@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-from rafter_pixefy_common import COMPLETION, PIXEFY_DEVICES, PIXEFY_ROUTES, load_optional_json, now_utc, probe_url, write_json
+from rafter_pixefy_common import COMPLETION, PIXEFY_DEVICES, PIXEFY_ROUTES, active_release_binding, load_optional_json, now_utc, probe_url, write_json
 
 
 def capture_screenshot(url: str, viewport: str, output: Path) -> tuple[bool, str]:
@@ -36,10 +36,13 @@ def capture_screenshot(url: str, viewport: str, output: Path) -> tuple[bool, str
 
 def main() -> int:
     generated = now_utc()
+    release_binding = active_release_binding(generated)
     provider = load_optional_json(COMPLETION / "pixefy" / "PIXEFY_PROVIDER_VERIFICATION.generated.json")
     failures: list[str] = []
     if not provider or provider.get("status") != "verified":
         failures.append("pixefy_provider_verification_not_verified")
+    if release_binding.get("verification_status") != "pass":
+        failures.extend(release_binding.get("verification_failures") or ["release_binding_failed"])
     screenshot_root = COMPLETION / "pixefy" / "screenshots"
     captures_by_route = []
     missing_pairs: list[str] = []
@@ -80,6 +83,7 @@ def main() -> int:
     write_json(COMPLETION / "pixefy" / "PIXEFY_ROUTE_CAPTURE_MANIFEST.generated.json", {
         "generated_at_utc": generated,
         "provider": "Pixefy",
+        "active_release_binding": release_binding,
         "routes": PIXEFY_ROUTES,
         "required_route_count": len(PIXEFY_ROUTES),
         "status": "pass",
@@ -154,6 +158,7 @@ Release candidate: https://chummer.run
         "gate": "PIXEFY_RESPONSIVE_VISUAL_QA",
         "generated_at_utc": generated,
         "provider_verification_id": "PIXEFY_PROVIDER_VERIFICATION.generated.json",
+        "active_release_binding": release_binding,
         "screenshot_freshness": {"max_age_hours_for_gold": 72, "oldest_capture_age_hours": 0, "fresh": not missing_pairs},
         "coverage": {
             "required_routes": len(PIXEFY_ROUTES),

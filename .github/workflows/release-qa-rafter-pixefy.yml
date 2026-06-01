@@ -4,6 +4,22 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "0 3 * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/release-qa-rafter-pixefy.yml"
+      - "_completion/ltd_inventory/RAFTER_TIER3_LTDS_ENTRY.generated.json"
+      - "_completion/ltd_inventory/PIXEFY_TIER3_LTDS_ENTRY.generated.json"
+      - "_completion/rafter/**"
+      - "_completion/pixefy/**"
+      - "_completion/rafter_pixefy/**"
+      - "providers/rafter/**"
+      - "providers/pixefy/**"
+      - "scripts/rafter_pixefy_common.py"
+      - "scripts/verify_committed_rafter_pixefy_ci_receipt.py"
+      - "scripts/verify_ltds_rafter_pixefy_entries.py"
+      - "scripts/final_rafter_pixefy_qa_stack_verdict.py"
   pull_request:
     branches:
       - main
