@@ -103,7 +103,7 @@
   },
   "contract_name": "fleet.next90_m136_aggregate_readiness_parity_gates",
   "frontier_id": 2277811964,
-  "generated_at": "2026-06-01T13:05:48Z",
+  "generated_at": "2026-06-01T14:49:28Z",
   "milestone_id": 136,
   "monitor_summary": {
     "aggregate_readiness_status": "pass",
@@ -125,7 +125,7 @@
   "runtime_monitors": {
     "aggregate_readiness": {
       "age_hours": 0.0,
-      "generated_at": "2026-06-01T13:05:44Z",
+      "generated_at": "2026-06-01T14:49:24Z",
       "issues": [],
       "runtime_blockers": [],
       "state": "pass",
@@ -134,11 +134,11 @@
     },
     "continuity_receipts": {
       "campaign_continuity_front_state": "warning",
-      "continuity_age_hours": 0.03,
+      "continuity_age_hours": 1.75,
       "continuity_generated_at": "2026-06-01T13:04:14Z",
       "continuity_status": "fail",
       "issues": [],
-      "journey_age_hours": 0.04,
+      "journey_age_hours": 1.77,
       "journey_generated_at": "2026-06-01T13:03:16Z",
       "journey_overall_state": "ready",
       "runtime_blockers": [],
@@ -151,7 +151,7 @@
       "effective_behavioral_no_count": 0,
       "effective_visual_no_count": 0,
       "element_count": 84,
-      "generated_at": "2026-06-01T13:05:46.341532Z",
+      "generated_at": "2026-06-01T14:49:26.270160Z",
       "issues": [],
       "missing_family_proofs": [],
       "overridden_family_proofs": [],
@@ -174,14 +174,14 @@
       "issues": [],
       "runtime_blockers": [],
       "screenshot_review_gate": {
-        "age_hours": 0.54,
+        "age_hours": 2.27,
         "generated_at": "2026-06-01T12:33:17.193597Z",
         "runtime_blockers": [],
         "status": "pass"
       },
       "state": "pass",
       "visual_familiarity_gate": {
-        "age_hours": 0.54,
+        "age_hours": 2.27,
         "generated_at": "2026-06-01T12:33:14.978109Z",
         "runtime_blockers": [],
         "status": "pass"
@@ -201,9 +201,9 @@
       "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
     },
     "flagship_product_readiness": {
-      "generated_at": "2026-06-01T13:05:44Z",
+      "generated_at": "2026-06-01T14:49:24Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "8f119a1854d4634fbae1ecbf96fddf377a8a19a52aec4d72b1a4e43f2a25bdb5"
+      "sha256": "88da00b8feb3915e1629e5fa14e5e0e9ceba90b0983ac08a78c626b9a93ce8e3"
     },
     "fleet_queue_staging": {
       "generated_at": "2026-05-30T09:58:41Z",
@@ -221,9 +221,9 @@
       "sha256": "984957267d7ee1ae4f3b20a7c67446925d356887019a5f910018ce9001cf36a5"
     },
     "parity_audit": {
-      "generated_at": "2026-06-01T13:05:46.341532Z",
+      "generated_at": "2026-06-01T14:49:26.270160Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
-      "sha256": "84098d6e4defaf7f5bcc75c12f7f80d9b8aa95494f964ffe310c0fe230009dc9"
+      "sha256": "57a2a15bc8eeddbcfdf7e419395e4d7050cd6c1f22ddc86a184b44d9f41b63f6"
     },
     "parity_matrix": {
       "generated_at": "2026-04-30T15:40:33Z",

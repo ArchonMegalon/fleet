@@ -22,7 +22,7 @@
   },
   "contract_name": "fleet.next90_m138_hero_path_projections",
   "frontier_id": 7914546694,
-  "generated_at": "2026-06-01T13:05:48Z",
+  "generated_at": "2026-06-01T14:49:28Z",
   "milestone_id": 138,
   "owned_surfaces": [
     "bind_ready_for_tonight_gates_role_kit_registry_vtt_expor:fleet"
@@ -156,7 +156,7 @@
     }
   },
   "public_truth_projection": {
-    "community_hub_discord_boundary": "chummer_truth_discord_projection",
+    "community_hub_discord_boundary": "unknown",
     "community_hub_stage": "future_concept",
     "faq_entries": {
       "Is Chummer trying to replace Discord or VTTs?": "No. The intended posture is that Chummer owns rules, applications, scheduling records, and world consequences, while Discord, Teams, and VTTs remain play or communication surfaces.",
@@ -209,9 +209,9 @@
       "sha256": "cf07663a479a6b115e786fc8dbaa525d00be34ac15daed0d0b0eb9b02bccb6fd"
     },
     "public_guide_community_hub": {
-      "generated_at": "2026-06-01T12:58:15Z",
+      "generated_at": "2026-06-01T13:07:35Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/HORIZONS/community-hub.md",
-      "sha256": "76bee0b83ff3490466c00446d0a49a96286360a6729d84e67c85da41c782c670"
+      "sha256": "d6b1ef23c0a7e4d31166943e121d530ebee8b0fcca8730705b7509ca064e4562"
     },
     "public_landing_manifest": {
       "generated_at": "2026-05-31T13:59:33Z",

@@ -1,7 +1,7 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-06-01T13:03:14Z'
-source_public_status_generated_at: '2026-06-01T13:03:09Z'
+generated_at: '2026-06-01T14:56:02Z'
+source_public_status_generated_at: '2026-06-01T14:55:57Z'
 mission_snapshot:
   headline: 'Working now: Finish hardening canonical downloads truth so live manifest,
     desktop surface refs, install-aware registry, and canonical verifier all converge
@@ -31,8 +31,8 @@ queue_forecast:
     provider: EA
     brain: EA backend / ea-coder-hard-batch
     reason: interactive_or_first_pass
-    elapsed_seconds: 101344
-    elapsed_human: 1d 4h
+    elapsed_seconds: 108112
+    elapsed_human: 1d 6h
     remaining_seconds: 600
     remaining_human: 10m
     total_seconds: 3600
@@ -573,7 +573,7 @@ readiness_summary:
     package_canonical: 1
     boundary_pure: 5
     publicly_promoted: 3
-  warning_count: 3
+  warning_count: 0
   final_claim_ready: 5
   final_claim_ready_project_ids:
   - fleet
@@ -581,16 +581,13 @@ readiness_summary:
   - mobile
   - ui
   - ui-kit
-  whole_product_final_claim_status: fail
+  whole_product_final_claim_status: pass
   whole_product_final_claim_bar: top_flagship_grade
   whole_product_final_claim_whole_project_frontier_required: true
   whole_product_final_claim_feedback_autofix_loop_required: true
   whole_product_final_claim_accept_lowered_standards: false
-  whole_product_final_claim_ready: 0
-  whole_product_final_claim_warning_keys:
-  - feedback_loop_ready
-  - flagship_ready
-  - recovery_trust_ready
+  whole_product_final_claim_ready: 1
+  whole_product_final_claim_warning_keys: []
 final_claim_ready: 5
 final_claim_ready_project_ids:
 - fleet
@@ -598,16 +595,13 @@ final_claim_ready_project_ids:
 - mobile
 - ui
 - ui-kit
-whole_product_final_claim_status: fail
+whole_product_final_claim_status: pass
 whole_product_final_claim_bar: top_flagship_grade
 whole_product_final_claim_whole_project_frontier_required: true
 whole_product_final_claim_feedback_autofix_loop_required: true
 whole_product_final_claim_accept_lowered_standards: false
-whole_product_final_claim_ready: 0
-whole_product_final_claim_warning_keys:
-- feedback_loop_ready
-- flagship_ready
-- recovery_trust_ready
+whole_product_final_claim_ready: 1
+whole_product_final_claim_warning_keys: []
 dispatch_policy:
   participant_dispatch_canary_count: 2
   participant_dispatch_canaries:
@@ -670,23 +664,22 @@ support_summary:
   update_required_misrouted_case_count: 0
   update_required_routed_to_downloads_count: 0
   top_clusters: []
-  generated_at: '2026-06-01T13:00:54Z'
+  generated_at: '2026-06-01T14:55:31Z'
   freshness:
     available: true
-    at: '2026-06-01T13:00:54Z'
-    age_seconds: 139
-    age_human: 2m 19s
+    at: '2026-06-01T14:55:31Z'
+    age_seconds: 30
+    age_human: 30s
     state: fresh
     label: fresh
 publish_readiness:
   state: blocked
-  blocking_reason_count: 3
+  blocking_reason_count: 2
   warning_reason_count: 1
   blocking_reasons:
   - status plane is stale.
-  - Freeze launch expansion while 6 golden journey(s) remain blocked and journey health
-    is blocked.
-  - Resolve the blocking golden-journey gaps before widening publish claims.
+  - 'Freeze launch expansion until the whole-product final claim returns to pass (current:
+    fail).'
   warning_reasons:
   - Provider-route fallback coverage is still thin for the current release posture.
   recommended_action: Resolve the blocking publish-readiness issues before promoting
@@ -702,15 +695,15 @@ publish_readiness:
     weekly_governor_packet_schedule_state: scheduled
     weekly_governor_packet_status: blocked
     weekly_governor_launch_action: freeze_launch
-    weekly_governor_public_state: freeze_with_rollback_watch
+    weekly_governor_public_state: freeze_launch
     campaign_os_monitor_freshness_state: fresh
-    journey_gate_state: blocked
+    journey_gate_state: ready
     release_channel_status: published
     release_channel_rollout_state: public_stable
     release_channel_supportability_state: gold_supported
     release_channel_proof_status: passed
     release_channel_proof_freshness_state: fresh
-    journey_gate_blocked_count: 6
+    journey_gate_blocked_count: 0
     journey_gate_warning_count: 0
     provider_review_due_count: 0
     provider_fallback_thin_count: 5

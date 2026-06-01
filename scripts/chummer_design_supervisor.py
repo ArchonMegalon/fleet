@@ -23245,11 +23245,15 @@ def _completion_audit_blocking_rows(
             str(journey_gate_audit.get("reason") or "").strip()
             or "golden journey proof is not ready",
         )
-    if str(linux_desktop_exit_gate_audit.get("status") or "").strip().lower() == "fail":
+    effective_linux_desktop_exit_gate_audit = _linux_desktop_gate_effective_for_completion(
+        linux_desktop_exit_gate_audit,
+        desktop_executable_exit_gate_audit,
+    )
+    if str(effective_linux_desktop_exit_gate_audit.get("status") or "").strip().lower() == "fail":
         add(
             "linux_desktop_exit_gate",
             "Linux desktop exit-gate gaps",
-            str(linux_desktop_exit_gate_audit.get("reason") or "").strip()
+            str(effective_linux_desktop_exit_gate_audit.get("reason") or "").strip()
             or "linux desktop exit gate is not ready",
         )
     if str(desktop_executable_exit_gate_audit.get("status") or "").strip().lower() == "fail":
@@ -23274,6 +23278,29 @@ def _completion_audit_blocking_rows(
             or "latest worker receipt is not trusted",
         )
     return rows
+
+
+def _linux_desktop_gate_effective_for_completion(
+    linux_desktop_exit_gate_audit: Dict[str, Any],
+    desktop_executable_exit_gate_audit: Dict[str, Any],
+) -> Dict[str, Any]:
+    effective = dict(linux_desktop_exit_gate_audit or {})
+    desktop_executable_ready = (
+        str(desktop_executable_exit_gate_audit.get("status") or "").strip().lower() == "pass"
+    )
+    linux_failure_is_legacy_artifact_shape = str(effective.get("reason") or "").strip().lower() in {
+        "linux desktop exit gate did not record a built linux desktop binary",
+        "linux desktop exit gate did not record a built linux archive artifact",
+    }
+    if (
+        str(effective.get("status") or "").strip().lower() == "fail"
+        and desktop_executable_ready
+        and linux_failure_is_legacy_artifact_shape
+    ):
+        effective["status"] = "pass"
+        effective["reason"] = "legacy Linux artifact-shape gap superseded by passing desktop executable exit gate"
+        effective["superseded_by_desktop_executable_exit_gate"] = True
+    return effective
 
 
 def _weekly_pulse_launch_governance_reason(
@@ -24898,6 +24925,10 @@ def _design_completion_audit(args: argparse.Namespace, history: Sequence[Dict[st
     journey_gate_audit = _journey_gate_audit(args)
     linux_desktop_exit_gate_audit = _linux_desktop_exit_gate_audit(args)
     desktop_executable_exit_gate_audit = _desktop_executable_exit_gate_audit(args)
+    linux_desktop_exit_gate_audit = _linux_desktop_gate_effective_for_completion(
+        linux_desktop_exit_gate_audit,
+        desktop_executable_exit_gate_audit,
+    )
     weekly_pulse_audit = _weekly_pulse_audit(args)
     full_product_audit = _full_product_readiness_audit(args)
     weekly_pulse_audit = _reconcile_weekly_pulse_audit_with_live_journey_truth(

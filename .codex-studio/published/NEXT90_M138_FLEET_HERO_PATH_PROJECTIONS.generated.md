@@ -3,7 +3,7 @@
 - status: pass
 - package_id: next90-m138-fleet-bind-ready-for-tonight-gates-role-kit-registry-vtt-export-target-accep
 - frontier_id: 7914546694
-- generated_at: 2026-06-01T13:05:48Z
+- generated_at: 2026-06-01T14:49:28Z
 
 ## Projection summary
 - projection_count: 4

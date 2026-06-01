@@ -1,13 +1,13 @@
 {
   "contract_name": "fleet.campaign_os_continuity_liveness",
   "schema_version": 1,
-  "generated_at": "2026-06-01T13:04:14Z",
-  "status": "fail",
-  "monitor_state": "blocked",
+  "generated_at": "2026-06-01T14:56:32Z",
+  "status": "pass",
+  "monitor_state": "warming_up",
   "summary": {
-    "blocking_issue_count": 1,
-    "warning_issue_count": 1,
-    "warming_up_front_count": 0,
+    "blocking_issue_count": 0,
+    "warning_issue_count": 0,
+    "warming_up_front_count": 1,
     "coverage_window_days": 70,
     "required_window_days": 120,
     "snapshot_count": 36,
@@ -31,12 +31,10 @@
     {
       "id": "campaign_continuity",
       "title": "Campaign continuity proof front",
-      "state": "warning",
-      "reasons": [
-        "flagship readiness status is fail"
-      ],
+      "state": "healthy",
+      "reasons": [],
       "signals": {
-        "flagship_readiness_status": "fail",
+        "flagship_readiness_status": "pass",
         "flagship_readiness_freshness": "fresh",
         "journey_gates_state": "ready",
         "journey_gates_freshness": "fresh"
@@ -45,9 +43,8 @@
     {
       "id": "publication_quality",
       "title": "Publication quality and continuity history front",
-      "state": "blocked",
+      "state": "warming_up",
       "reasons": [
-        "progress report claims flagship readiness is ready while current readiness proof is not green",
         "observed history covers 70 of 120 required days"
       ],
       "signals": {
@@ -79,35 +76,35 @@
   "evidence": {
     "flagship_product_readiness": {
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "generated_at": "2026-06-01T13:04:00Z",
+      "generated_at": "2026-06-01T14:52:43Z",
       "freshness": "fresh"
     },
     "journey_gates": {
       "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-      "generated_at": "2026-06-01T13:03:16Z",
+      "generated_at": "2026-06-01T14:56:05Z",
       "freshness": "fresh"
     },
     "support_case_packets": {
       "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-      "generated_at": "2026-06-01T13:00:54Z",
+      "generated_at": "2026-06-01T14:55:31Z",
       "freshness": "fresh"
     },
     "progress_history": {
       "path": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
-      "generated_at": "2026-06-01T13:04:08Z"
+      "generated_at": "2026-06-01T14:55:39Z"
     },
     "progress_report": {
       "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
-      "generated_at": "2026-06-01T13:04:09Z"
+      "generated_at": "2026-06-01T14:55:39Z"
     },
     "weekly_governor_packet": {
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
-      "generated_at": "2026-06-01T13:04:03Z",
+      "generated_at": "2026-06-01T14:56:06Z",
       "freshness": "fresh"
     },
     "completion_review_frontier": {
       "path": "/docker/fleet/.codex-studio/published/COMPLETION_REVIEW_FRONTIER.generated.yaml",
-      "generated_at": "2026-06-01T13:03:20Z"
+      "generated_at": "2026-06-01T14:56:08Z"
     }
   }
 }

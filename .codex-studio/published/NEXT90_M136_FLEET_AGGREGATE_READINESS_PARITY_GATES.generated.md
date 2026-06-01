@@ -4,7 +4,7 @@
 - aggregate_readiness_status: pass
 - package_id: next90-m136-fleet-fail-closed-on-aggregate-readiness-when-family-level-parity-proof-sub
 - frontier_id: 2277811964
-- generated_at: 2026-06-01T13:05:48Z
+- generated_at: 2026-06-01T14:49:28Z
 
 ## Runtime summary
 - required_family_count: 7

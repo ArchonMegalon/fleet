@@ -34,6 +34,24 @@ def _load_module():
     return module
 
 
+def test_completion_audit_does_not_let_legacy_linux_artifact_shape_override_executable_gate() -> None:
+    module = _load_module()
+
+    rows = module._completion_audit_blocking_rows(
+        receipt_audit={"status": "pass"},
+        journey_gate_audit={"status": "pass"},
+        linux_desktop_exit_gate_audit={
+            "status": "fail",
+            "reason": "linux desktop exit gate did not record a built Linux desktop binary",
+        },
+        desktop_executable_exit_gate_audit={"status": "pass"},
+        weekly_pulse_audit={"status": "pass"},
+        repo_backlog_audit={"status": "pass"},
+    )
+
+    assert rows == []
+
+
 def _worktree_fingerprint(root: Path, *, exclude_paths: tuple[Path, ...] = ()) -> tuple[str, int]:
     exclude_markers: list[str] = []
     for candidate in exclude_paths:

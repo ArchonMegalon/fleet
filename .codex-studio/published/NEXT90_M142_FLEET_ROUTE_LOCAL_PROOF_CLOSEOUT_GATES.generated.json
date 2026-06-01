@@ -21,7 +21,7 @@
   },
   "contract_name": "fleet.next90_m142_route_local_proof_closeout_gates",
   "frontier_id": 7414599441,
-  "generated_at": "2026-06-01T13:05:46Z",
+  "generated_at": "2026-06-01T14:49:26Z",
   "milestone_id": 142,
   "monitor_summary": {
     "canonical_issue_count": 0,
@@ -244,10 +244,10 @@
       "sha256": "984957267d7ee1ae4f3b20a7c67446925d356887019a5f910018ce9001cf36a5"
     },
     "parity_audit": {
-      "generated_at": "2026-06-01T13:05:46.341532Z",
+      "generated_at": "2026-06-01T14:49:26.270160Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
-      "sha256": "84098d6e4defaf7f5bcc75c12f7f80d9b8aa95494f964ffe310c0fe230009dc9"
+      "sha256": "57a2a15bc8eeddbcfdf7e419395e4d7050cd6c1f22ddc86a184b44d9f41b63f6"
     },
     "screenshot_review_gate": {
       "generated_at": "2026-06-01T12:33:17.193597Z",
@@ -274,10 +274,10 @@
       "sha256": "f0732a2d83a07098b25eaf863e2831ee5df45f06dd4c822d196d920db453c98f"
     },
     "ui_flagship_release_gate": {
-      "generated_at": "2026-06-01T13:05:43.943477Z",
+      "generated_at": "2026-06-01T14:49:23.729716Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json",
-      "sha256": "510e119ee3c0505790c04100779bea240563a84d140bc32420d8ecbd0dc46fe2"
+      "sha256": "0f72211424ebcf3bb6f84b7e58a044de5db11df4a6a90902c0c9fe2ab824de87"
     },
     "ui_kit_local_release_proof": {
       "generated_at": "2026-05-19T08:27:59Z",

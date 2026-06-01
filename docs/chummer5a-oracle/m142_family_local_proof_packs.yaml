@@ -1,6 +1,6 @@
 contract_name: executive_assistant.m142_family_local_proof_packs
 schema_version: 1
-generated_at: '2026-06-01T13:05:46Z'
+generated_at: '2026-06-01T14:49:26Z'
 milestone:
   id: 142
   wave: W22P
@@ -33,17 +33,17 @@ sync_context:
   runtime_handoff_path: /docker/fleet/state/chummer_design_supervisor/shard-9/ACTIVE_RUN_HANDOFF.generated.md
   runtime_handoff_first_output_at: unknown
   readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  readiness_generated_at: '2026-06-01T13:05:44Z'
+  readiness_generated_at: '2026-06-01T14:49:24Z'
   workflow_pack_path: /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
   workflow_pack_generated_at: '2026-05-05 23:16:04+00:00'
   parity_audit_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json
-  parity_audit_generated_at: '2026-06-01T13:05:46.341532Z'
+  parity_audit_generated_at: '2026-06-01T14:49:26.270160Z'
   screenshot_review_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
   screenshot_review_gate_generated_at: '2026-06-01T12:33:17.193597Z'
   desktop_visual_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
   desktop_visual_gate_generated_at: '2026-06-01T12:33:14.978109Z'
   ui_release_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
-  ui_release_gate_generated_at: '2026-06-01T13:05:43.943477Z'
+  ui_release_gate_generated_at: '2026-06-01T14:49:23.729716Z'
   ui_local_release_proof_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json
   ui_local_release_proof_generated_at: '2026-05-29T07:11:43Z'
   section_host_parity_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
@@ -328,12 +328,12 @@ source_inputs:
     sha256: ad4bdf14a2cc60047eb9d5e316710994e7abd4b0a6c1f799bb6ec1cdc9dcc73b
   readiness:
     path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-    generated_at: '2026-06-01T13:05:44Z'
-    sha256: 8f119a1854d4634fbae1ecbf96fddf377a8a19a52aec4d72b1a4e43f2a25bdb5
+    generated_at: '2026-06-01T14:49:24Z'
+    sha256: 88da00b8feb3915e1629e5fa14e5e0e9ceba90b0983ac08a78c626b9a93ce8e3
   workflow_pack:
     path: /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
     sha256: b3b6a126c28164e1537f964b85af956eb2eabea4601250b1303d36f0dd481e42
   parity_audit:
     path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json
-    generated_at: '2026-06-01T13:05:46.341532Z'
-    sha256: 84098d6e4defaf7f5bcc75c12f7f80d9b8aa95494f964ffe310c0fe230009dc9
+    generated_at: '2026-06-01T14:49:26.270160Z'
+    sha256: 57a2a15bc8eeddbcfdf7e419395e4d7050cd6c1f22ddc86a184b44d9f41b63f6
