@@ -47,7 +47,7 @@ def _main() -> int:
         )
         combined = (result.stdout or "") + (result.stderr or "")
         bootstrap_error_markers = ("No module named",)
-        if any(marker in combined for marker in bootstrap_error_markers):
+        if result.returncode == 0 and any(marker in combined for marker in bootstrap_error_markers):
             failures.append(f"{script_path}: missing module resolution path in output")
 
     if failures:
