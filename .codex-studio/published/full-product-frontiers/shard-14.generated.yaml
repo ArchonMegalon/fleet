@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-31T08:50:23Z'
+generated_at: '2026-06-01T12:51:09Z'
 mode: flagship_product
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-14
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-14
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -29,7 +29,7 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - executive-assistant
+  - chummer6-ui
   texts:
   - top flagship grade
   - whole-project frontier
@@ -45,6 +45,8 @@ focus:
   - performance
   - proof shelf
   - fit and finish
+  - fleet and operator loop
+  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -53,54 +55,75 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: desktop executable exit gate proof did not pass
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-31T08:49:26Z'
+  generated_at: '2026-06-01T12:48:14Z'
   proof_status: fail
-  missing_coverage_keys: []
+  missing_coverage_keys:
+  - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1010540573
+- 4042165773
 frontier:
-- id: 1010540573
-  title: Compile organizer packets, event prep, and followthrough from governed operations
-    truth.
+- id: 4042165773
+  title: Surface organizer operations on desktop without confusing GM, player, creator,
+    and operator roles.
   wave: flagship_product
   status: not_started
   owners:
-  - executive-assistant
+  - chummer6-ui
   dependencies: []
   exit_criteria:
-  - Compile organizer packets, event prep, and followthrough from governed operations
-    truth.
-  - 'Own and prove the surface slice(s): organizer_followthrough:ea, event_prep_packets'
-  - 'Keep implementation scoped to the allowed paths: scripts, feedback, docs'
+  - Surface organizer operations on desktop without confusing GM, player, creator,
+    and operator roles.
+  - 'Own and prove the surface slice(s): organizer_ops:desktop, organizer_roles_ui'
+  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
+    Chummer.Tests, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `executive-assistant` (next90-m118-ea-organizer-followthrough).
+    is landed for `chummer6-ui` (next90-m118-ui-organizer-ops).
   eta:
     status: flagship_delivery
-    eta_human: 7h-19h
+    eta_human: 9h-23h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Compile organizer packets, event prep, and followthrough
-      from governed operations truth.'' remains open under the flagship closeout frontier.
-      Outstanding readiness coverage: flagship readiness proof refresh.'
-    predicted_completion_at: '2026-05-31T22:07:11Z'
-    range_low_hours: 7.42
-    range_high_hours: 19.14
+    summary: 'Milestone ''Surface organizer operations on desktop without confusing
+      GM, player, creator, and operator roles.'' remains open under the flagship closeout
+      frontier. Outstanding readiness coverage: desktop_client.'
+    predicted_completion_at: '2026-06-02T04:41:33Z'
+    range_low_hours: 9.0
+    range_high_hours: 22.68
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.65
+    remaining_effort_units: 1.8
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+eta:
+  status: flagship_delivery
+  eta_human: 9h-23h
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: ''
+  summary: 'Milestone ''Surface organizer operations on desktop without confusing
+    GM, player, creator, and operator roles.'' remains open under the flagship closeout
+    frontier. Outstanding readiness coverage: desktop_client.'
+  predicted_completion_at: '2026-06-02T04:41:33Z'
+  range_low_hours: 9.0
+  range_high_hours: 22.68
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 1.8

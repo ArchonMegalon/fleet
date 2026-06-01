@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-31T09:01:06Z'
+generated_at: '2026-06-01T12:49:52Z'
 mode: flagship_product
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-1
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -30,34 +30,26 @@ focus:
   - whole_project_frontier
   owners:
   - fleet
-  - chummer6-design
-  - chummer6-ui
   - executive-assistant
+  - chummer6-design
   - chummer6-hub
   texts:
   - top flagship grade
-  - whole project frontier
-  - feedback
-  - automatic bugfixing
-  - crash
-  - support
-  - accessibility
-  - localization
-  - restore confidence
-  - fit and finish
-  - flagship-readiness
-  - desktop-client
-  - release-proof
-  - grade-bar
-  - materializer
   - whole-project frontier
   - no lowered standards
   - feedback loop
+  - automatic bugfixing
   - crash reporting
   - support routing
   - journey smoothness
+  - restore confidence
+  - accessibility
+  - localization
   - performance
   - proof shelf
+  - fit and finish
+  - fleet and operator loop
+  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -66,14 +58,15 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: linux desktop exit gate did not record a built Linux desktop binary
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-31T08:49:26Z'
+  generated_at: '2026-06-01T12:48:14Z'
   proof_status: fail
-  missing_coverage_keys: []
+  missing_coverage_keys:
+  - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
@@ -105,9 +98,8 @@ frontier:
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
-      the flagship closeout frontier. Outstanding readiness coverage: flagship readiness
-      proof refresh.'
-    predicted_completion_at: '2026-06-01T01:07:06Z'
+      the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
+    predicted_completion_at: '2026-06-02T04:55:52Z'
     range_low_hours: 9.0
     range_high_hours: 23.2
     remaining_open_milestones: 1
@@ -120,3 +112,21 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+eta:
+  status: flagship_delivery
+  eta_human: 9h-23h
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: ''
+  summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
+    the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
+  predicted_completion_at: '2026-06-02T04:55:52Z'
+  range_low_hours: 9.0
+  range_high_hours: 23.2
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 2.0

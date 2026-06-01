@@ -1,14 +1,17 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-05-31T07:43:37Z'
-source_public_status_generated_at: '2026-05-31T07:43:31Z'
+generated_at: '2026-06-01T13:03:14Z'
+source_public_status_generated_at: '2026-06-01T13:03:09Z'
 mission_snapshot:
-  headline: 'Working now: Implement the shared public and authenticated flagship shells,
-    move route-local sub-navigation into the side rail, and split acquisition, help,
-    and capability surfaces by role.. ETA: 51m 23s. Next: Stabilize design-doc parity
-    hygiene loop. Vision: 0s. Capacity: Core 0%, Easy 0%, Jury 0%. Stop risk: none.'
-  current_eta: 51m 23s
-  next_title: Stabilize design-doc parity hygiene loop
+  headline: 'Working now: Finish hardening canonical downloads truth so live manifest,
+    desktop surface refs, install-aware registry, and canonical verifier all converge
+    from one authority at publish time.. ETA: 10m. Next: Add milestone mapping or
+    executable queue work for Moderation and publication projections still need explicit
+    registry-owned read models... Vision: 0s. Capacity: Core 0%, Easy 0%, Jury 0%.
+    Stop risk: none.'
+  current_eta: 10m
+  next_title: Add milestone mapping or executable queue work for Moderation and publication
+    projections still need explicit registry-owned read models..
   vision_eta: 0s
   milestone_title: chummer-vnext
   milestone_eta: 0s
@@ -17,32 +20,33 @@ mission_snapshot:
   - Easy 0%
   - Jury 0%
   stop_risk: none
-  headline_eta: 51m 23s
+  headline_eta: 10m
 queue_forecast:
   now:
     project_id: hub
-    title: Implement the shared public and authenticated flagship shells, move route-local
-      sub-navigation into the side rail, and split acquisition, help, and capability
-      surfaces by role.
+    title: Finish hardening canonical downloads truth so live manifest, desktop surface
+      refs, install-aware registry, and canonical verifier all converge from one authority
+      at publish time.
     lane: easy
     provider: EA
     brain: EA backend / ea-coder-hard-batch
     reason: interactive_or_first_pass
-    elapsed_seconds: 517
-    elapsed_human: 8m 37s
-    remaining_seconds: 3083
-    remaining_human: 51m 23s
+    elapsed_seconds: 101344
+    elapsed_human: 1d 4h
+    remaining_seconds: 600
+    remaining_human: 10m
     total_seconds: 3600
     total_human: 1h
     verify_or_review_ahead: true
     prerequisites: none
   next:
-    project_id: core
-    title: Stabilize design-doc parity hygiene loop
+    project_id: hub-registry
+    title: Add milestone mapping or executable queue work for Moderation and publication
+      projections still need explicit registry-owned read models..
     lane: easy
     provider: not active
     brain: not active
-    reason: the auditor is materializing the next scoped queue from backlog evidence
+    reason: interactive_or_first_pass
     elapsed_seconds: 0
     elapsed_human: 0s
     remaining_seconds: 3600
@@ -50,20 +54,17 @@ queue_forecast:
     total_seconds: 3600
     total_human: 1h
     verify_or_review_ahead: true
-    prerequisites: the current queue materialization is exhausted, but the backlog
-      source still reports open work
-    confidence: volatile
+    prerequisites: configured queue has remaining work and is waiting for scheduler
+      dispatch
+    confidence: likely
   then:
-    project_id: ea
-    title: 'Drive the Chummer6 public guide to hard flagship grade: patch the EA Chummer6
-      guide skill and rerun the guide/media refresh until first-contact copy stops
-      downplaying the product, flagship images tell a short Shadowrun story, and smart
-      AR overlays anticipate the runner''s next useful questions where the scene supports
-      it.'
+    project_id: ui-kit
+    title: Add milestone mapping or executable queue work for Catalog, visual-regression,
+      and release discipline for the shared kit are not yet materialized..
     lane: easy
     provider: not active
     brain: not active
-    reason: the auditor is materializing the next scoped queue from backlog evidence
+    reason: interactive_or_first_pass
     elapsed_seconds: 0
     elapsed_human: 0s
     remaining_seconds: 3600
@@ -71,9 +72,9 @@ queue_forecast:
     total_seconds: 3600
     total_human: 1h
     verify_or_review_ahead: true
-    prerequisites: the current queue materialization is exhausted, but the backlog
-      source still reports open work
-    confidence: volatile
+    prerequisites: configured queue has remaining work and is waiting for scheduler
+      dispatch
+    confidence: likely
 capacity_forecast:
   lanes:
   - lane: easy
@@ -459,7 +460,7 @@ capacity_forecast:
   account_pressure: []
 blocker_forecast:
   now: none
-  next: core is healing
+  next: configured queue has remaining work and is waiting for scheduler dispatch
   vision: blocked unresolved incidents, active workers, and healing runs
 deployment_posture:
   operator_auth_required: true
@@ -572,13 +573,14 @@ readiness_summary:
     package_canonical: 1
     boundary_pure: 5
     publicly_promoted: 3
-  warning_count: 1
-  final_claim_ready: 4
+  warning_count: 3
+  final_claim_ready: 5
   final_claim_ready_project_ids:
   - fleet
   - hub
   - mobile
   - ui
+  - ui-kit
   whole_product_final_claim_status: fail
   whole_product_final_claim_bar: top_flagship_grade
   whole_product_final_claim_whole_project_frontier_required: true
@@ -586,13 +588,16 @@ readiness_summary:
   whole_product_final_claim_accept_lowered_standards: false
   whole_product_final_claim_ready: 0
   whole_product_final_claim_warning_keys:
+  - feedback_loop_ready
   - flagship_ready
-final_claim_ready: 4
+  - recovery_trust_ready
+final_claim_ready: 5
 final_claim_ready_project_ids:
 - fleet
 - hub
 - mobile
 - ui
+- ui-kit
 whole_product_final_claim_status: fail
 whole_product_final_claim_bar: top_flagship_grade
 whole_product_final_claim_whole_project_frontier_required: true
@@ -600,7 +605,9 @@ whole_product_final_claim_feedback_autofix_loop_required: true
 whole_product_final_claim_accept_lowered_standards: false
 whole_product_final_claim_ready: 0
 whole_product_final_claim_warning_keys:
+- feedback_loop_ready
 - flagship_ready
+- recovery_trust_ready
 dispatch_policy:
   participant_dispatch_canary_count: 2
   participant_dispatch_canaries:
@@ -663,33 +670,31 @@ support_summary:
   update_required_misrouted_case_count: 0
   update_required_routed_to_downloads_count: 0
   top_clusters: []
-  generated_at: '2026-05-31T07:32:38Z'
+  generated_at: '2026-06-01T13:00:54Z'
   freshness:
     available: true
-    at: '2026-05-31T07:32:38Z'
-    age_seconds: 659
-    age_human: 10m 59s
+    at: '2026-06-01T13:00:54Z'
+    age_seconds: 139
+    age_human: 2m 19s
     state: fresh
     label: fresh
 publish_readiness:
   state: blocked
-  blocking_reason_count: 4
-  warning_reason_count: 2
+  blocking_reason_count: 3
+  warning_reason_count: 1
   blocking_reasons:
   - status plane is stale.
-  - public guide/progress is stale.
-  - Freeze launch expansion while 1 golden journey(s) remain blocked and journey health
+  - Freeze launch expansion while 6 golden journey(s) remain blocked and journey health
     is blocked.
   - Resolve the blocking golden-journey gaps before widening publish claims.
   warning_reasons:
-  - Live source state is 21h 41m newer than the published campaign OS continuity monitor.
   - Provider-route fallback coverage is still thin for the current release posture.
   recommended_action: Resolve the blocking publish-readiness issues before promoting
     public truth.
   signals:
     runtime_healing_alert_state: healthy
     status_plane_freshness_state: stale
-    progress_report_freshness_state: stale
+    progress_report_freshness_state: fresh
     journey_gates_freshness_state: fresh
     release_channel_freshness_state: fresh
     support_freshness_state: fresh
@@ -698,14 +703,14 @@ publish_readiness:
     weekly_governor_packet_status: blocked
     weekly_governor_launch_action: freeze_launch
     weekly_governor_public_state: freeze_with_rollback_watch
-    campaign_os_monitor_freshness_state: stale
+    campaign_os_monitor_freshness_state: fresh
     journey_gate_state: blocked
     release_channel_status: published
     release_channel_rollout_state: public_stable
     release_channel_supportability_state: gold_supported
     release_channel_proof_status: passed
     release_channel_proof_freshness_state: fresh
-    journey_gate_blocked_count: 1
+    journey_gate_blocked_count: 6
     journey_gate_warning_count: 0
     provider_review_due_count: 0
     provider_fallback_thin_count: 5
@@ -808,7 +813,7 @@ projects:
   deployment_access_posture: public
 - id: hub-registry
   lifecycle: dispatchable
-  runtime_status: running
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
@@ -848,11 +853,11 @@ projects:
   deployment_access_posture: public
 - id: ui-kit
   lifecycle: scaffold
-  runtime_status: running
+  runtime_status: dispatch_pending
   readiness_stage: boundary_pure
   readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: false
-  readiness_warning_count: 1
+  readiness_final_claim_allowed: true
+  readiness_warning_count: 0
   deployment_status: undeclared
   deployment_promotion_stage: undeclared
   deployment_access_posture: ''

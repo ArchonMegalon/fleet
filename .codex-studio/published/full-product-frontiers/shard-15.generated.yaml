@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-31T08:50:33Z'
+generated_at: '2026-06-01T12:51:24Z'
 mode: flagship_product
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-15
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-15
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -29,7 +29,7 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-design
+  - executive-assistant
   texts:
   - top flagship grade
   - whole-project frontier
@@ -45,6 +45,8 @@ focus:
   - performance
   - proof shelf
   - fit and finish
+  - fleet and operator loop
+  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -53,43 +55,46 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: desktop executable exit gate proof did not pass
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-31T08:49:26Z'
+  generated_at: '2026-06-01T12:48:14Z'
   proof_status: fail
-  missing_coverage_keys: []
+  missing_coverage_keys:
+  - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1853204192
+- 1010540573
 frontier:
-- id: 1853204192
-  title: Define role and audit boundaries for community-scale operations.
+- id: 1010540573
+  title: Compile organizer packets, event prep, and followthrough from governed operations
+    truth.
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-design
+  - executive-assistant
   dependencies: []
   exit_criteria:
-  - Define role and audit boundaries for community-scale operations.
-  - 'Own and prove the surface slice(s): organizer_roles_policy, community_scale_audit_boundaries'
-  - 'Keep implementation scoped to the allowed paths: products, scripts, feedback'
+  - Compile organizer packets, event prep, and followthrough from governed operations
+    truth.
+  - 'Own and prove the surface slice(s): organizer_followthrough:ea, event_prep_packets'
+  - 'Keep implementation scoped to the allowed paths: scripts, feedback, docs'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-design` (next90-m118-design-organizer-boundaries).
+    is landed for `executive-assistant` (next90-m118-ea-organizer-followthrough).
   eta:
     status: flagship_delivery
     eta_human: 7h-19h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Define role and audit boundaries for community-scale operations.''
-      remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      flagship readiness proof refresh.'
-    predicted_completion_at: '2026-05-31T22:07:21Z'
+    summary: 'Milestone ''Compile organizer packets, event prep, and followthrough
+      from governed operations truth.'' remains open under the flagship closeout frontier.
+      Outstanding readiness coverage: desktop_client.'
+    predicted_completion_at: '2026-06-02T02:08:12Z'
     range_low_hours: 7.42
     range_high_hours: 19.14
     remaining_open_milestones: 1
@@ -102,3 +107,22 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+eta:
+  status: flagship_delivery
+  eta_human: 7h-19h
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: ''
+  summary: 'Milestone ''Compile organizer packets, event prep, and followthrough from
+    governed operations truth.'' remains open under the flagship closeout frontier.
+    Outstanding readiness coverage: desktop_client.'
+  predicted_completion_at: '2026-06-02T02:08:12Z'
+  range_low_hours: 7.42
+  range_high_hours: 19.14
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 1.65

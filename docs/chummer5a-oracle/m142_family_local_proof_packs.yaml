@@ -1,6 +1,6 @@
 contract_name: executive_assistant.m142_family_local_proof_packs
 schema_version: 1
-generated_at: '2026-05-31T08:49:19Z'
+generated_at: '2026-06-01T13:05:46Z'
 milestone:
   id: 142
   wave: W22P
@@ -9,42 +9,41 @@ milestone:
   owned_surfaces:
   - compile_family_local_screenshot_and_interaction_packs_fo:ea
 sync_context:
-  task_local_telemetry_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-1/runs/20260531T083144Z-shard-1/TASK_LOCAL_TELEMETRY.generated.json
+  task_local_telemetry_path: /docker/fleet/state/chummer_design_supervisor/shard-3/runs/20260531T090114Z-shard-3/TASK_LOCAL_TELEMETRY.generated.json
   task_local_telemetry_snapshot:
     mode: implementation_only
     scope_label: Full Chummer5A parity and flagship proof closeout
-    slice_summary: 'Milestone ''Fleet and operator loop flagship finish'' remains
-      open under the flagship closeout frontier. Outstanding readiness coverage: flagship
-      readiness proof refresh.'
+    slice_summary: 'Milestone ''Publish install-aware artifact identities and channel
+      rationale for concierge bundles'' remains open under the flagship closeout frontier.
+      Outstanding readiness coverage: flagship readiness proof refresh.'
     status_query_supported: false
     polling_disabled: true
     remaining_open_milestones: 1
     remaining_not_started_milestones: 1
     missing_flagship_coverage: none
     frontier_briefs:
-    - '3109832007 [flagship_product] Fleet and operator loop flagship finish (status:
-      not_started; owners: fleet, executive-assistant, chummer6-design, chummer6-hub;
-      deps: none; exit: Keep the product-governor, support, signal, and operator loop
-      durable enough to steer the full multi-repo product, not just the current milestone
-      wave, with trustworthy proofs, traces, ETAs, handoffs, and fail-closed anti-false-complete
-      posture.; Ensure the loop can keep decomposing full-product work across shards
-      until flagship readiness proof is current and trusted, and that actionable feedback,
-      crash, and support signals can auto-materialize into routed bugfix work without
-      operator babysitting.)'
-  runtime_handoff_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-1/ACTIVE_RUN_HANDOFF.generated.md
-  runtime_handoff_first_output_at: not yet
+    - '2642013094 [flagship_product] Publish install-aware artifact identities and
+      channel rationale for concierge bundles (status: not_started; owners: chummer6-media-factory;
+      deps: none; exit: Render install-aware release, support, and public concierge
+      companions with captions, previews, and bounded sibling notes.; Own and prove
+      the surface slice(s): release_explainer_artifacts, support_closure_artifacts,
+      public_concierge_companions; Keep implementation scoped to the allowed paths:
+      src, tests, docs, scripts; Refresh flagship proof and close out the queue slice
+      honestly when this package is landed for `chummer6-media-factory` (next90-m111-media-factory-concierge-bundles).)'
+  runtime_handoff_path: /docker/fleet/state/chummer_design_supervisor/shard-9/ACTIVE_RUN_HANDOFF.generated.md
+  runtime_handoff_first_output_at: unknown
   readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  readiness_generated_at: '2026-05-31T08:49:16Z'
+  readiness_generated_at: '2026-06-01T13:05:44Z'
   workflow_pack_path: /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
   workflow_pack_generated_at: '2026-05-05 23:16:04+00:00'
   parity_audit_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json
-  parity_audit_generated_at: '2026-05-31T08:49:19.507110Z'
+  parity_audit_generated_at: '2026-06-01T13:05:46.341532Z'
   screenshot_review_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
-  screenshot_review_gate_generated_at: '2026-05-31T08:49:07.558161Z'
+  screenshot_review_gate_generated_at: '2026-06-01T12:33:17.193597Z'
   desktop_visual_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
-  desktop_visual_gate_generated_at: '2026-05-31T08:48:58.649701Z'
+  desktop_visual_gate_generated_at: '2026-06-01T12:33:14.978109Z'
   ui_release_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
-  ui_release_gate_generated_at: '2026-05-31T08:48:57.778224Z'
+  ui_release_gate_generated_at: '2026-06-01T13:05:43.943477Z'
   ui_local_release_proof_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json
   ui_local_release_proof_generated_at: '2026-05-29T07:11:43Z'
   section_host_parity_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
@@ -54,9 +53,9 @@ sync_context:
   gm_runboard_route_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json
   gm_runboard_route_generated_at: '2026-05-28T18:32:52Z'
   veteran_task_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
-  veteran_task_gate_generated_at: '2026-05-31T08:49:07.293430Z'
+  veteran_task_gate_generated_at: '2026-06-01T07:05:07.742177Z'
   classic_dense_gate_path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json
-  classic_dense_gate_generated_at: '2026-05-31T08:49:07.131788Z'
+  classic_dense_gate_generated_at: '2026-06-01T07:05:07.701067Z'
   core_dense_receipts_path: /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md
 worker_run_guard:
   implementation_only: true
@@ -143,11 +142,16 @@ family_local_proof_packets:
   evidence_paths:
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json
-  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json
   - /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
 - family_id: dice_initiative_and_table_utilities
   parity_audit_row_id: family:dice_initiative_and_table_utilities
@@ -219,8 +223,11 @@ family_local_proof_packets:
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json
-  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
   - /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
 - family_id: identity_contacts_lifestyles_history
   parity_audit_row_id: family:identity_contacts_lifestyles_history
@@ -286,20 +293,25 @@ family_local_proof_packets:
   evidence_paths:
   - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
-  - /docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
   - /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json
+  - /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json
   - /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
 whole_product_frontier_coverage:
   readiness_status: fail
   package_relevant_coverage_keys:
   - desktop_client
   - fleet_and_operator_loop
-  desktop_client_status: ready
+  desktop_client_status: missing
   fleet_and_operator_loop_status: ready
-  missing_keys: []
-  summary: 'flagship product readiness proof is not green: fail; readiness plane gaps:
-    flagship_ready'
+  missing_keys:
+  - desktop_client
+  summary: 'flagship product readiness proof is not green: fail; missing coverage:
+    desktop_client; readiness plane gaps: flagship_ready, veteran_deep_workflow_ready,
+    dense_workbench_ready, public_shelf_ready, recovery_trust_ready'
 packet_summary:
   status: fail
   family_count: 3
@@ -308,20 +320,20 @@ packet_summary:
   - dice_initiative_and_table_utilities
 source_inputs:
   task_local_telemetry:
-    path: /var/lib/codex-fleet/chummer_design_supervisor/shard-1/runs/20260531T083144Z-shard-1/TASK_LOCAL_TELEMETRY.generated.json
+    path: /docker/fleet/state/chummer_design_supervisor/shard-3/runs/20260531T090114Z-shard-3/TASK_LOCAL_TELEMETRY.generated.json
     generated_at: null
-    sha256: 717511049c8f67cfbb765cf39a978610f272e6ba09bfd0fd49d49c6f715cd2d2
+    sha256: 072e808349c6037b3e3cf352e3c5454f6c6937b6a4e3f84dd04f9b69077d1309
   runtime_handoff:
-    path: /var/lib/codex-fleet/chummer_design_supervisor/shard-1/ACTIVE_RUN_HANDOFF.generated.md
-    sha256: bf2855866d86aef43c5b09580064be5f67b992681679cd8d4825f63dd9cca2f7
+    path: /docker/fleet/state/chummer_design_supervisor/shard-9/ACTIVE_RUN_HANDOFF.generated.md
+    sha256: ad4bdf14a2cc60047eb9d5e316710994e7abd4b0a6c1f799bb6ec1cdc9dcc73b
   readiness:
     path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-    generated_at: '2026-05-31T08:49:16Z'
-    sha256: 60534d9935c67355db0c59e8f0ece567f0a674935bbe25ae8ee44dafda845f8c
+    generated_at: '2026-06-01T13:05:44Z'
+    sha256: 8f119a1854d4634fbae1ecbf96fddf377a8a19a52aec4d72b1a4e43f2a25bdb5
   workflow_pack:
     path: /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
     sha256: b3b6a126c28164e1537f964b85af956eb2eabea4601250b1303d36f0dd481e42
   parity_audit:
     path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json
-    generated_at: '2026-05-31T08:49:19.507110Z'
-    sha256: 54e790907de39b01b1f69f0ec52c1a1a8d94d99e2a8c30d995d406ec4ff3c27c
+    generated_at: '2026-06-01T13:05:46.341532Z'
+    sha256: 84098d6e4defaf7f5bcc75c12f7f80d9b8aa95494f964ffe310c0fe230009dc9

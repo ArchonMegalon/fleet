@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-31T08:49:33Z'
+generated_at: '2026-06-01T13:05:55Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -56,13 +56,14 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: desktop executable exit gate proof did not pass
 full_product_audit:
-  status: fail
-  reason: 'flagship product readiness proof is not green: fail'
+  status: pass
+  reason: flagship product readiness proof is current across desktop, rules, hub,
+    mobile, horizons, and operator lanes
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-31T08:49:26Z'
-  proof_status: fail
+  generated_at: '2026-06-01T13:05:50Z'
+  proof_status: pass
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
@@ -97,7 +98,7 @@ frontier:
     summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
       the flagship closeout frontier. Outstanding readiness coverage: flagship readiness
       proof refresh.'
-    predicted_completion_at: '2026-06-01T00:55:33Z'
+    predicted_completion_at: '2026-06-02T05:11:55Z'
     range_low_hours: 9.0
     range_high_hours: 23.2
     remaining_open_milestones: 1

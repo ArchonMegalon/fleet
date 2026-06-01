@@ -9,54 +9,45 @@
     "campaign_adoption_flow": {
       "checks": {
         "public_promise": true,
-        "required_output": false,
+        "required_output": true,
         "start_from_today": true
       },
-      "issues": [
-        "CAMPAIGN_ADOPTION_START_FROM_TODAY_FLOW canon missing required marker: required_output"
-      ],
-      "state": "fail"
+      "issues": [],
+      "state": "pass"
     },
     "community_hub_public_guide": {
       "checks": {
-        "desktop_boundary": false,
-        "discord_boundary": false,
+        "desktop_boundary": true,
+        "discord_boundary": true,
         "future_stage": true
       },
-      "issues": [
-        "COMMUNITY HUB public guide canon missing required marker: desktop_boundary",
-        "COMMUNITY HUB public guide canon missing required marker: discord_boundary"
-      ],
-      "state": "fail"
+      "issues": [],
+      "state": "pass"
     },
     "faq_markdown": {
       "checks": {
-        "vtt_answer": false,
+        "vtt_answer": true,
         "vtt_question": true,
         "windows_answer": true,
         "windows_question": true
       },
-      "issues": [
-        "FAQ markdown canon missing required marker: vtt_answer"
-      ],
-      "state": "fail"
+      "issues": [],
+      "state": "pass"
     },
     "faq_registry": {
-      "issues": [
-        "PUBLIC_FAQ_REGISTRY `Is Chummer trying to replace Discord or VTTs?` answer is missing: Chummer owns rules, applications, scheduling records, and world consequences."
-      ],
+      "issues": [],
       "monitored_entries": [
         {
           "answer_length": 226,
           "question": "Would I need a Windows PC to join a run?"
         },
         {
-          "answer_length": 179,
+          "answer_length": 180,
           "question": "Is Chummer trying to replace Discord or VTTs?"
         }
       ],
       "monitored_entry_count": 2,
-      "state": "fail"
+      "state": "pass"
     },
     "foundry_first_handoff": {
       "checks": {
@@ -90,12 +81,10 @@
         "acceptance_rule": true,
         "desktop_boundary": true,
         "hero_path": true,
-        "required_capability": false
+        "required_capability": true
       },
-      "issues": [
-        "PUBLIC_ONBOARDING_PATHS_FOR_NO_DESKTOP_USERS canon missing required marker: required_capability"
-      ],
-      "state": "fail"
+      "issues": [],
+      "state": "pass"
     },
     "queue_alignment": {
       "issues": [],
@@ -126,15 +115,13 @@
     },
     "ready_for_tonight_mode": {
       "checks": {
-        "cta": false,
+        "cta": true,
         "not_dashboard": true,
         "organizer_view": true,
         "output_contract": true
       },
-      "issues": [
-        "READY_FOR_TONIGHT_MODE canon missing required marker: cta"
-      ],
-      "state": "fail"
+      "issues": [],
+      "state": "pass"
     },
     "roadmap": {
       "checks": {
@@ -201,49 +188,37 @@
   },
   "contract_name": "fleet.next90_m138_hero_path_closeout_gates",
   "frontier_id": 4764536356,
-  "generated_at": "2026-05-31T08:49:25Z",
+  "generated_at": "2026-06-01T13:05:49Z",
   "milestone_id": 138,
   "monitor_summary": {
     "bounded_faq_count": 2,
-    "hero_path_closeout_status": "blocked",
+    "hero_path_closeout_status": "pass",
     "projection_runtime_blocker_count": 0,
-    "runtime_blocker_count": 1,
-    "runtime_blockers": [
-      "public_posture: COMMUNITY HUB public guide no longer labels no-desktop participation as a core goal."
-    ],
+    "runtime_blocker_count": 0,
+    "runtime_blockers": [],
     "warning_count": 0
   },
   "owned_surfaces": [
     "fail_closeout_when_the_90_second_newcomer_path_ready_for:fleet"
   ],
   "package_closeout": {
-    "blockers": [
-      "ready_for_tonight_mode: READY_FOR_TONIGHT_MODE canon missing required marker: cta",
-      "public_onboarding_paths: PUBLIC_ONBOARDING_PATHS_FOR_NO_DESKTOP_USERS canon missing required marker: required_capability",
-      "campaign_adoption_flow: CAMPAIGN_ADOPTION_START_FROM_TODAY_FLOW canon missing required marker: required_output",
-      "faq_markdown: FAQ markdown canon missing required marker: vtt_answer",
-      "faq_registry: PUBLIC_FAQ_REGISTRY `Is Chummer trying to replace Discord or VTTs?` answer is missing: Chummer owns rules, applications, scheduling records, and world consequences.",
-      "community_hub_public_guide: COMMUNITY HUB public guide canon missing required marker: desktop_boundary",
-      "community_hub_public_guide: COMMUNITY HUB public guide canon missing required marker: discord_boundary"
-    ],
-    "state": "blocked",
-    "warnings": [
-      "public_posture: COMMUNITY HUB public guide no longer labels no-desktop participation as a core goal."
-    ]
+    "blockers": [],
+    "state": "pass",
+    "warnings": []
   },
   "package_id": "next90-m138-fleet-fail-closeout-when-the-90-second-newcomer-path-ready-for-tonight-verdi",
   "queue_title": "Fail closeout when the 90-second newcomer path, Ready for Tonight verdicts, adoption-confidence receipts, or Foundry-first handoff receipts are stale, missing, or contradicted by public posture.",
   "runtime_monitors": {
     "flagship_readiness_alignment": {
-      "flagship_ready_status": "warning",
-      "generated_at": "2026-05-31T08:49:16Z",
+      "flagship_ready_status": "missing",
+      "generated_at": "2026-06-01T13:05:44Z",
       "issues": [],
       "runtime_blockers": [],
       "state": "pass"
     },
     "hero_path_projections": {
       "age_hours": 0.0,
-      "generated_at": "2026-05-31T08:49:24Z",
+      "generated_at": "2026-06-01T13:05:48Z",
       "issues": [],
       "projection_statuses": {
         "adoption_confidence": "pass",
@@ -259,18 +234,16 @@
       "bounded_faq_count": 2,
       "issues": [],
       "live_claiming_public_card_count": 0,
-      "runtime_blockers": [
-        "COMMUNITY HUB public guide no longer labels no-desktop participation as a core goal."
-      ],
+      "runtime_blockers": [],
       "state": "pass",
       "warnings": []
     }
   },
   "source_inputs": {
     "campaign_adoption_flow": {
-      "generated_at": "2026-05-21T17:35:58Z",
+      "generated_at": "2026-06-01T12:58:02Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/CAMPAIGN_ADOPTION_START_FROM_TODAY_FLOW.md",
-      "sha256": "78e59daf7092dd20f97a75523087e04675092555b0c08ca7bedb3cff2d72f00e"
+      "sha256": "7c44667d1d0d3eccc774caab94fff80487fb904664ce96b2beaca088ae68cccf"
     },
     "design_queue_staging": {
       "generated_at": "2026-05-29T06:21:39Z",
@@ -278,9 +251,9 @@
       "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
     },
     "flagship_readiness": {
-      "generated_at": "2026-05-31T08:49:16Z",
+      "generated_at": "2026-06-01T13:05:44Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "60534d9935c67355db0c59e8f0ece567f0a674935bbe25ae8ee44dafda845f8c"
+      "sha256": "8f119a1854d4634fbae1ecbf96fddf377a8a19a52aec4d72b1a4e43f2a25bdb5"
     },
     "fleet_queue_staging": {
       "generated_at": "2026-05-30T09:58:41Z",
@@ -293,9 +266,9 @@
       "sha256": "9640961e364d41667dc92a42a8ceecf0f36086158da05036e1811734c9bf833b"
     },
     "hero_path_projections": {
-      "generated_at": "2026-05-31T08:49:24Z",
+      "generated_at": "2026-06-01T13:05:48Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT90_M138_FLEET_HERO_PATH_PROJECTIONS.generated.json",
-      "sha256": "7dcda633f8141bdf163bfcf72a3ff8f565a7fa816470401534268c11d1a06fa2"
+      "sha256": "26ceefa6eafb26ffb856dbdaf670867be3aa9f32d03fb68994e5b8e9942a972a"
     },
     "next90_guide": {
       "generated_at": "2026-05-30T09:55:17Z",
@@ -308,34 +281,34 @@
       "sha256": "6cf83e63cf56f9fb35e2ed30744fa20100f323eeb21b040e30d32093070f252d"
     },
     "public_faq": {
-      "generated_at": "2026-05-30T20:48:51Z",
+      "generated_at": "2026-06-01T12:58:11Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/FAQ.md",
-      "sha256": "61e07c3b996aac2017bad685620f1826d10a75d2833362bb4f19f47604378aa1"
+      "sha256": "7095cd70643a9651409469702ef26ac9d8612f572ab1f33bcb6a6db1974a60c3"
     },
     "public_faq_registry": {
-      "generated_at": "2026-05-21T17:35:58Z",
+      "generated_at": "2026-06-01T12:58:08Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FAQ_REGISTRY.yaml",
-      "sha256": "9153a5c96ce30be85593ac2122299a51ee153e9995e5ff8d8d485152462f38cd"
+      "sha256": "0831f31790254d843c4f8f408f184e26a6d59b24710ba9f4b156ed58c4fdc81a"
     },
     "public_feature_registry": {
-      "generated_at": "2026-05-30T16:12:40Z",
+      "generated_at": "2026-05-31T13:51:37Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FEATURE_REGISTRY.yaml",
-      "sha256": "84fc6bf4a96ee68a29957b562704dc5f6ec151c5bcf1de36d3b0baa2287cf0c1"
+      "sha256": "cf07663a479a6b115e786fc8dbaa525d00be34ac15daed0d0b0eb9b02bccb6fd"
     },
     "public_guide_community_hub": {
-      "generated_at": "2026-05-30T20:48:51Z",
+      "generated_at": "2026-06-01T12:58:15Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/HORIZONS/community-hub.md",
-      "sha256": "d6b1ef23c0a7e4d31166943e121d530ebee8b0fcca8730705b7509ca064e4562"
+      "sha256": "76bee0b83ff3490466c00446d0a49a96286360a6729d84e67c85da41c782c670"
     },
     "public_landing_manifest": {
-      "generated_at": "2026-05-31T04:28:44Z",
+      "generated_at": "2026-05-31T13:59:33Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_LANDING_MANIFEST.yaml",
-      "sha256": "0ae89a7896af448b38669ed92706435f666fae814cc187782eb7e5688697c2d9"
+      "sha256": "1e71f43fabb72ddd9edad5d9ce465b55be3cd576b855f27845e449b07830111b"
     },
     "public_onboarding_paths": {
-      "generated_at": "2026-05-21T17:35:58Z",
+      "generated_at": "2026-06-01T12:58:00Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_ONBOARDING_PATHS_FOR_NO_DESKTOP_USERS.md",
-      "sha256": "efab0edb209dfd71cccf650f12f1d76d43d44c26a6217b42ff4e22cb5ba55024"
+      "sha256": "a342bc4615cb892256ae7ac88fe9b6768ff4ca4ede4311cad5c608218ee8bee7"
     },
     "ready_for_tonight_gates": {
       "generated_at": "2026-04-30T21:57:57Z",
@@ -343,9 +316,9 @@
       "sha256": "7c611a6b772a04106f8826e3d3f4292478057a63ece9d2eee46316cebb7d0f69"
     },
     "ready_for_tonight_mode": {
-      "generated_at": "2026-05-21T17:35:58Z",
+      "generated_at": "2026-06-01T12:58:36Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/READY_FOR_TONIGHT_MODE.md",
-      "sha256": "f74708d47c371f6aa8757752ee1d0d60c15eb6422323a5b4d313ef35a3533400"
+      "sha256": "ff7dc16990bc13534f6db4219feeac945c1b5e30cf9ae8f5058d7a4b9b7de72c"
     },
     "roadmap": {
       "generated_at": "2026-05-24T19:46:48Z",
@@ -368,9 +341,9 @@
       "sha256": "fa14b7cd799cf32abe812a4d037c9952dcd632e78967a65932b9ebad077e8e0a"
     },
     "successor_registry": {
-      "generated_at": "2026-05-30T19:53:14Z",
+      "generated_at": "2026-06-01T13:02:27Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "206cf309c2d86f727901bc03ea61d844af789711174330bf17c24b16b65ea483"
+      "sha256": "b2dccf307eeda27826d9d62bc9a7f92305fae4a2fa2e70fecf83cde849a7b66c"
     },
     "vtt_export_target_acceptance": {
       "generated_at": "2026-04-30T21:57:57Z",
@@ -378,7 +351,7 @@
       "sha256": "d6051c2bcf50eda707e5fa56b5c78f18d06465ae1a9af9f542a03d3c8bfbbbff"
     }
   },
-  "status": "blocked",
+  "status": "pass",
   "wave": "W25",
   "work_task_id": "138.9"
 }

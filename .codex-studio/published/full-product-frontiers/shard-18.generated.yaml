@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-31T08:51:01Z'
+generated_at: '2026-06-01T12:52:13Z'
 mode: flagship_product
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-18
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-18
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -29,7 +29,7 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-ui
+  - chummer6-media-factory
   texts:
   - top flagship grade
   - whole-project frontier
@@ -45,6 +45,8 @@ focus:
   - performance
   - proof shelf
   - fit and finish
+  - fleet and operator loop
+  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -53,53 +55,73 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: desktop executable exit gate proof did not pass
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-31T08:49:26Z'
+  generated_at: '2026-06-01T12:48:14Z'
   proof_status: fail
-  missing_coverage_keys: []
+  missing_coverage_keys:
+  - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 5216487641
+- 1933800485
 frontier:
-- id: 5216487641
-  title: Add first playable session flow to desktop home and campaign entry points
+- id: 1933800485
+  title: Render starter primer and first-session companion artifacts
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-ui
+  - chummer6-media-factory
   dependencies: []
   exit_criteria:
-  - Add first playable session flow to desktop home and campaign entry points.
-  - 'Own and prove the surface slice(s): first_playable_session:desktop, campaign_entry:first_session'
-  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
-    Chummer.Tests, scripts'
+  - Produce localized starter primers, first-session briefings, and support-safe onboarding
+    artifacts from approved source packs.
+  - 'Own and prove the surface slice(s): starter_primer_artifacts, first_session_briefing_artifacts'
+  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-ui` (next90-m119-ui-first-session-flow).
+    is landed for `chummer6-media-factory` (next90-m119-media-factory-starter-artifacts).
   eta:
     status: flagship_delivery
-    eta_human: 9h-23h
+    eta_human: 8h-20h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Add first playable session flow to desktop home and campaign
-      entry points'' remains open under the flagship closeout frontier. Outstanding
-      readiness coverage: flagship readiness proof refresh.'
-    predicted_completion_at: '2026-06-01T00:41:25Z'
-    range_low_hours: 9.0
-    range_high_hours: 22.68
+    summary: 'Milestone ''Render starter primer and first-session companion artifacts''
+      remains open under the flagship closeout frontier. Outstanding readiness coverage:
+      desktop_client.'
+    predicted_completion_at: '2026-06-02T02:33:19Z'
+    range_low_hours: 7.65
+    range_high_hours: 19.72
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.8
+    remaining_effort_units: 1.7
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+eta:
+  status: flagship_delivery
+  eta_human: 8h-20h
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: ''
+  summary: 'Milestone ''Render starter primer and first-session companion artifacts''
+    remains open under the flagship closeout frontier. Outstanding readiness coverage:
+    desktop_client.'
+  predicted_completion_at: '2026-06-02T02:33:19Z'
+  range_low_hours: 7.65
+  range_high_hours: 19.72
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 1.7

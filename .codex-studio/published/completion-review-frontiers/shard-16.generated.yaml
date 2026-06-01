@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-05-31T11:39:53Z'
+generated_at: '2026-06-01T13:03:30Z'
 mode: completion_review
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-16
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -31,7 +31,7 @@ focus:
   texts: []
 completion_audit:
   status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  reason: linux desktop exit gate did not record a built Linux desktop binary
 receipt_audit:
   status: fail
   reason: no supervisor run history recorded; explicit completion review is required
@@ -43,16 +43,15 @@ journey_gate_audit:
   blocked_journey_count: 0
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
-  status: pass
-  reason: linux desktop binary build/start/test proof is ready on current repo-local
-    evidence
+  status: fail
+  reason: linux desktop exit gate did not record a built Linux desktop binary
   path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-  generated_at: '2026-05-30T21:17:36Z'
+  generated_at: '2026-06-01T11:53:21Z'
 weekly_pulse_audit:
   status: fail
   reason: weekly product pulse reports release health as needs_attention
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-05-31T11:39:40Z'
+  generated_at: '2026-06-01T13:03:17Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -60,12 +59,29 @@ repo_backlog_audit:
   open_project_count: 0
   open_items: []
 blocking_audits:
+- component: linux_desktop_exit_gate
+  title: Linux desktop exit-gate gaps
+  reason: linux desktop exit gate did not record a built Linux desktop binary
 - component: weekly_pulse
   title: Weekly product pulse gaps
   reason: weekly product pulse reports release health as needs_attention
 - component: trusted_completion_receipt
   title: Trusted completion receipt
   reason: no supervisor run history recorded; explicit completion review is required
-frontier_count: 0
-frontier_ids: []
-frontier: []
+frontier_count: 1
+frontier_ids:
+- 1239074135
+frontier:
+- id: 1239074135
+  title: 'Completion gate: Linux desktop exit gate'
+  wave: completion_review
+  status: review_required
+  owners:
+  - chummer6-ui
+  - fleet
+  dependencies: []
+  exit_criteria:
+  - linux desktop exit gate did not record a built Linux desktop binary
+  - Build the Linux desktop binary, package the primary .deb plus fallback archive,
+    run startup smoke on both packaged outputs, run desktop runtime unit tests, and
+    refresh UI_LINUX_DESKTOP_EXIT_GATE.generated.json.
