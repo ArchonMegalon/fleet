@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-01T12:54:02Z'
+generated_at: '2026-06-01T19:24:50Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-6
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -55,12 +55,12 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: linux desktop exit gate did not record a built Linux desktop binary
+  reason: desktop executable exit gate proof did not pass
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-01T12:53:40Z'
+  generated_at: '2026-06-01T19:18:50Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -93,7 +93,7 @@ frontier:
     summary: 'Milestone ''Make mobile travel campaign continuity explicit for stale
       campaign state'' remains open under the flagship closeout frontier. Outstanding
       readiness coverage: desktop_client.'
-    predicted_completion_at: '2026-06-02T03:23:26Z'
+    predicted_completion_at: '2026-06-02T09:54:14Z'
     range_low_hours: 8.1
     range_high_hours: 20.88
     remaining_open_milestones: 1
@@ -118,7 +118,7 @@ eta:
   summary: 'Milestone ''Make mobile travel campaign continuity explicit for stale
     campaign state'' remains open under the flagship closeout frontier. Outstanding
     readiness coverage: desktop_client.'
-  predicted_completion_at: '2026-06-02T03:23:26Z'
+  predicted_completion_at: '2026-06-02T09:54:14Z'
   range_low_hours: 8.1
   range_high_hours: 20.88
   remaining_open_milestones: 1

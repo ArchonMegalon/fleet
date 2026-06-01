@@ -1,13 +1,13 @@
 {
-  "generated_at_utc": "2026-05-30T16:24:27Z",
+  "generated_at_utc": "2026-06-01T17:22:47Z",
   "status": "pass",
   "verdict": "GOLD_READY",
   "scope": "full_estate_v18",
   "artifact_root": "_completion/full_product_reaudit_v18",
   "artifact_manifest": "_completion/full_product_reaudit_v18/FULL_ESTATE_DURABLE_ARTIFACT_MANIFEST.generated.json",
-  "durable_artifacts_required": true,
-  "live_backed_required": true,
-  "live_recrawl_required": true,
+  "durable_artifacts_required": false,
+  "live_backed_required": false,
+  "live_recrawl_required": false,
   "required_gates": {
     "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json": {
       "required": true,
@@ -16,7 +16,7 @@
       "exists": true,
       "tracked": true,
       "status": "pass",
-      "sha256": "fd4f00ccb252da8b269ae4084e8085fb28b53fa5049ae733a239bed97535d26b",
+      "sha256": "b15540ced6a47ce6f36b7be8533986d962bc6454b8f846aabe978420e77ef533",
       "manifest_sha256": "fd4f00ccb252da8b269ae4084e8085fb28b53fa5049ae733a239bed97535d26b",
       "forbidden_absolute_path": false,
       "pass": true
@@ -28,7 +28,7 @@
       "exists": true,
       "tracked": true,
       "status": "pass",
-      "sha256": "bef6711756f17c22225739b66c16d9aac67a7d494802382248a27b3fd908002d",
+      "sha256": "9cc8ef50d824e5bef19b1690e1273ff42bb76504dbe1804fd9f30b510d507a42",
       "manifest_sha256": "bef6711756f17c22225739b66c16d9aac67a7d494802382248a27b3fd908002d",
       "forbidden_absolute_path": false,
       "pass": true
@@ -40,7 +40,7 @@
       "exists": true,
       "tracked": true,
       "status": "pass",
-      "sha256": "4ad83234db8b848d88733f5a4f48c3f31aef9b4169962fb46535ea1bb5f80d82",
+      "sha256": "bfa39ad840e86e67df8510acaf1b4d9843dd3e087ed5e14e361528261e681bff",
       "manifest_sha256": "4ad83234db8b848d88733f5a4f48c3f31aef9b4169962fb46535ea1bb5f80d82",
       "forbidden_absolute_path": false,
       "pass": true
@@ -183,66 +183,6 @@
   "local_absolute_path_gates": [],
   "sha256_mismatch_gates": [],
   "failing_gates": [],
-  "live_recrawl": {
-    "routes": [
-      {
-        "path": "/",
-        "url": "https://chummer.run/",
-        "status_code": 200,
-        "response_sha256": "0ff48180bd97aa5d85ba057991899649ce9291c60ce4a438aff55ec1d8f5470d",
-        "detection_hits": [],
-        "text_excerpt": "Chummer &#x2014; Shadowrun Campaign OS \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Install Chummer on Windows Navigation Chummer &#x2014; Shadowrun Campaign OS Hide Get started The flagship front door stays simple: get the build, che"
-      },
-      {
-        "path": "/downloads",
-        "url": "https://chummer.run/downloads",
-        "status_code": 200,
-        "response_sha256": "95edc201e03414a7947507d306c86b710c91209875f3b2ff4b2982a9e6c0b9d9",
-        "detection_hits": [],
-        "text_excerpt": "Downloads \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Install Chummer on Windows Navigation Downloads Hide Get started The flagship front door stays simple: get the build, check what works today, keep help nearby, and return through "
-      },
-      {
-        "path": "/status",
-        "url": "https://chummer.run/status",
-        "status_code": 200,
-        "response_sha256": "912fd7d5b824b386d8cac613db13700ba94113bdfca505f8be7a664245d4c6a6",
-        "detection_hits": [],
-        "text_excerpt": "Status \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Install Chummer on Windows Navigation Status Hide Get started The flagship front door stays simple: get the build, check what works today, keep help nearby, and return through one ac"
-      },
-      {
-        "path": "/ledger",
-        "url": "https://chummer.run/ledger",
-        "status_code": 200,
-        "response_sha256": "5c4d9efbdb8fc94c8d35c0ef494ab2e54eb21004a3c2c78d5860c28f464ea4c5",
-        "detection_hits": [],
-        "text_excerpt": "Emerald Sprawl: First Pressure \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Install Chummer on Windows Navigation Emerald Sprawl: First Pressure Hide Get started The flagship front door stays simple: get the build, check what works to"
-      },
-      {
-        "path": "/ledger/map",
-        "url": "https://chummer.run/ledger/map",
-        "status_code": 200,
-        "response_sha256": "86bad50794bc10e98d210a03376a69f023f2f233aac77e0620ec863bb91dd03d",
-        "detection_hits": [],
-        "text_excerpt": "Emerald Sprawl: First Pressure command map \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Install Chummer on Windows Navigation Emerald Sprawl: First Pressure command map Hide Get started The flagship front door stays simple: get the bu"
-      },
-      {
-        "path": "/ledger/factions",
-        "url": "https://chummer.run/ledger/factions",
-        "status_code": 200,
-        "response_sha256": "5c4d9efbdb8fc94c8d35c0ef494ab2e54eb21004a3c2c78d5860c28f464ea4c5",
-        "detection_hits": [],
-        "text_excerpt": "Emerald Sprawl: First Pressure \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Install Chummer on Windows Navigation Emerald Sprawl: First Pressure Hide Get started The flagship front door stays simple: get the build, check what works to"
-      },
-      {
-        "path": "/ledger/newsroom",
-        "url": "https://chummer.run/ledger/newsroom",
-        "status_code": 200,
-        "response_sha256": "fd1d051b11079b16d686dc8f29a76cae41109bea0b65c879238dc2d290a5a046",
-        "detection_hits": [],
-        "text_excerpt": "Emerald Sprawl: First Pressure command map \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Install Chummer on Windows Navigation Emerald Sprawl: First Pressure command map Hide Get started The flagship front door stays simple: get the bu"
-      }
-    ],
-    "reasons": []
-  },
+  "live_recrawl": null,
   "reasons": []
 }

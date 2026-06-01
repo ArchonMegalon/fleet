@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-01T12:51:57Z'
+generated_at: '2026-06-01T19:22:41Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-17
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -60,7 +60,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-01T12:48:14Z'
+  generated_at: '2026-06-01T19:18:50Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -92,7 +92,7 @@ frontier:
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Orchestrate guided first-playable-session onboarding'' remains
       open under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
-    predicted_completion_at: '2026-06-02T04:01:51Z'
+    predicted_completion_at: '2026-06-02T10:32:35Z'
     range_low_hours: 8.55
     range_high_hours: 21.78
     remaining_open_milestones: 1
@@ -116,7 +116,7 @@ eta:
   blocking_reason: ''
   summary: 'Milestone ''Orchestrate guided first-playable-session onboarding'' remains
     open under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
-  predicted_completion_at: '2026-06-02T04:01:51Z'
+  predicted_completion_at: '2026-06-02T10:32:35Z'
   range_low_hours: 8.55
   range_high_hours: 21.78
   remaining_open_milestones: 1

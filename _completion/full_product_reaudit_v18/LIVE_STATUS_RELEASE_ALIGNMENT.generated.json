@@ -1,11 +1,12 @@
 {
-  "generated_at_utc": "2026-05-30T16:24:02Z",
+  "generated_at_utc": "2026-06-01T17:22:53Z",
   "status": "pass",
   "public_host": "chummer.run",
   "status_url": "https://chummer.run/status",
   "downloads_url": "https://chummer.run/downloads",
   "contains_stale_or_not_gold_language": false,
   "contains_demo_runner_language": false,
-  "build_id": "run-20260518-220935",
-  "reasons": []
+  "build_id": "run-20260601-070650",
+  "status_text_sample": "Status \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Install Chummer on Windows Navigation Status Hide Get started The flagship front door stays simple: get the build, check what works today, keep help nearby, and return through one account path. Get Chummer What Works Today Help Account Worlds Worlds home Dispatches Karma Forge Anarchy Flagship routes Home Get Chummer What works today Worlds Account Help Signals and horizons Feedback Changelog Trust and support Help FAQ Privacy Terms Contact Account and quick actions Sign in Install Chummer on Windows Current status What works now, what needs caution, and where to go next Use this page for the short customer-facing summary. It should point you to install, live proof, support, or the deeper repo",
+  "downloads_text_sample": "Downloads \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Install Chummer on Windows Navigation Downloads Hide Get started The flagship front door stays simple: get the build, check what works today, keep help nearby, and return through one account path. Get Chummer What Works Today Help Account Worlds Worlds home Dispatches Karma Forge Anarchy Flagship routes Home Get Chummer What works today Worlds Account Help Signals and horizons Feedback Changelog Trust and support Help FAQ Privacy Terms Contact Account and quick actions Sign in Install Chummer on Windows Downloads Install Chummer This browser looks like this device. Start with the recommended build for that platform. Public downloads are available now on Windows, macOS, and Linux. Create an "
 }

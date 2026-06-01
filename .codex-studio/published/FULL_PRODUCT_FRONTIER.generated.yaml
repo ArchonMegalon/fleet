@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-01T15:07:35Z'
+generated_at: '2026-06-01T19:20:14Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -28,22 +28,34 @@ focus:
   profiles:
   - top_flagship_grade
   - whole_project_frontier
-  owners: []
+  owners:
+  - chummer6-core
+  - chummer6-design
+  - chummer6-hub
+  - chummer6-hub-registry
+  - chummer6-media-factory
+  - chummer6-mobile
+  - chummer6-ui
+  - chummer6-ui-kit
+  - executive-assistant
+  - fleet
   texts:
-  - top flagship grade
-  - whole-project frontier
-  - no lowered standards
-  - feedback loop
+  - accessibility
   - automatic bugfixing
   - crash reporting
-  - support routing
+  - desktop client
+  - feedback loop
+  - fit and finish
+  - fleet and operator loop
   - journey smoothness
-  - restore confidence
-  - accessibility
   - localization
+  - no lowered standards
   - performance
   - proof shelf
-  - fit and finish
+  - restore confidence
+  - support routing
+  - top flagship grade
+  - whole-project frontier
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -51,20 +63,114 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: trusted completion receipt plus whole-product release proof and Linux desktop
-    exit gate are ready
+  status: fail
+  reason: linux desktop exit gate did not record a built Linux desktop binary
 full_product_audit:
-  status: pass
-  reason: flagship product readiness proof is current across desktop, rules, hub,
-    mobile, horizons, and operator lanes
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-01T15:07:31Z'
-  proof_status: pass
-  missing_coverage_keys: []
+  generated_at: '2026-06-01T19:18:50Z'
+  proof_status: fail
+  missing_coverage_keys:
+  - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 0
-frontier_ids: []
-frontier: []
+frontier_count: 2
+frontier_ids:
+- 4066417069
+- 3109832007
+frontier:
+- id: 4066417069
+  title: Flagship desktop client and workbench finish
+  wave: flagship_product
+  status: not_started
+  owners:
+  - chummer6-ui
+  - chummer6-core
+  - chummer6-ui-kit
+  dependencies: []
+  exit_criteria:
+  - Ship the flagship workbench/browser/desktop surface described in `projects/ui.md`
+    and `BUILD_LAB_PRODUCT_MODEL.md`, including builder, compare, explain, grouped
+    inspection, conditional toggles, desktop packaging, updater, and in-app support
+    polish.
+  - Keep the flagship desktop head centered on Avalonia with release-grade startup,
+    packaging, and support evidence rather than treating Linux exit-gate closure as
+    the whole product.
+  eta:
+    status: flagship_delivery
+    eta_human: 11h-1.1d
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Flagship desktop client and workbench finish'' remains open
+      under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
+    predicted_completion_at: '2026-06-02T14:05:32Z'
+    range_low_hours: 10.86
+    range_high_hours: 26.65
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 2.05
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
+- id: 3109832007
+  title: Fleet and operator loop flagship finish
+  wave: flagship_product
+  status: not_started
+  owners:
+  - fleet
+  - executive-assistant
+  - chummer6-design
+  - chummer6-hub
+  dependencies: []
+  exit_criteria:
+  - Keep the product-governor, support, signal, and operator loop durable enough to
+    steer the full multi-repo product, not just the current milestone wave, with trustworthy
+    proofs, traces, ETAs, handoffs, and fail-closed anti-false-complete posture.
+  - Ensure the loop can keep decomposing full-product work across shards until flagship
+    readiness proof is current and trusted, and that actionable feedback, crash, and
+    support signals can auto-materialize into routed bugfix work without operator
+    babysitting.
+  eta:
+    status: flagship_delivery
+    eta_human: 9h-23h
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
+      the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
+    predicted_completion_at: '2026-06-02T11:26:14Z'
+    range_low_hours: 9.0
+    range_high_hours: 23.2
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 2.0
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
+eta:
+  status: flagship_delivery
+  eta_human: 16h-1.7d
+  eta_confidence: low
+  basis: full_product_frontier_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: ''
+  summary: 'Current closeout gates are green, but flagship product work still remains
+    across 2 synthetic slices. Outstanding readiness coverage: desktop_client.'
+  predicted_completion_at: '2026-06-02T23:41:14Z'
+  range_low_hours: 16.2
+  range_high_hours: 40.5
+  remaining_open_milestones: 2
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 2
+  remaining_effort_units: 4.05

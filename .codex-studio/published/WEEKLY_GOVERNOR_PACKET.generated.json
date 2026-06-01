@@ -188,7 +188,7 @@
       }
     ]
   },
-  "generated_at": "2026-06-01T15:07:33Z",
+  "generated_at": "2026-06-01T19:34:06Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -224,9 +224,9 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-06-01T15:07:33Z",
+    "generated_at": "2026-06-01T19:34:06Z",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-06-08T15:07:33Z",
+    "next_packet_due_at": "2026-06-08T19:34:06Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -889,7 +889,7 @@
       "incomplete_actions": [],
       "launch_gate_blocking_names": [],
       "missing_actions": [],
-      "next_review_due_at": "2026-06-08T15:07:33Z",
+      "next_review_due_at": "2026-06-08T19:34:06Z",
       "required_actions": [
         "launch_expand",
         "freeze_launch",
@@ -931,7 +931,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "All measured launch gates are green.",
-          "next_review_due_at": "2026-06-08T15:07:33Z",
+          "next_review_due_at": "2026-06-08T19:34:06Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "promote_measured_launch_expansion",
           "receipt_id": "m106-launch_expand-16e298f80f85949d",
@@ -948,7 +948,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Launch expansion is approved for the next bounded window while canaries and support closure remain clear.",
-          "next_review_due_at": "2026-06-08T15:07:33Z",
+          "next_review_due_at": "2026-06-08T19:34:06Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "leave_freeze_available",
           "receipt_id": "m106-freeze_launch-65253d4d25b49f81",
@@ -965,7 +965,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Canary green on all active lanes",
-          "next_review_due_at": "2026-06-08T15:07:33Z",
+          "next_review_due_at": "2026-06-08T19:34:06Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_canary_ready",
           "receipt_id": "m106-canary-afc3d2be95960739",
@@ -985,7 +985,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "next_review_due_at": "2026-06-08T15:07:33Z",
+          "next_review_due_at": "2026-06-08T19:34:06Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_rollback_armed",
           "receipt_id": "m106-rollback-fcedde06369bab3d",
@@ -1002,7 +1002,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
-          "next_review_due_at": "2026-06-08T15:07:33Z",
+          "next_review_due_at": "2026-06-08T19:34:06Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "route_remaining_work_to_dependency_or_sibling_packages",
           "receipt_id": "m106-focus_shift-9e0a36a10f3ebf57",
@@ -1972,7 +1972,7 @@
     "freshness_policy": "refresh_before_public_status_or_operator_action_if_packet_is_overdue",
     "headline": "Measured launch expansion is allowed.",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-06-08T15:07:33Z",
+    "next_packet_due_at": "2026-06-08T19:34:06Z",
     "schedule_ref": "governor_packet_schedule.next_packet_due_at",
     "state": "launch_expand_allowed"
   },
@@ -2629,18 +2629,18 @@
         "products/chummer/PROGRESS_REPORT.generated.json",
         "products/chummer/RELEASE_EVIDENCE_PACK.md"
       ],
-      "summary": "The current longest pole is Core Engine, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product."
+      "summary": "The current longest pole is No active release pole, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product."
     }
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "f29ec2a0d2fcadef70ab329686420aedc082b8bb58c21b19a507e44617d0e331",
+    "combined_source_sha256": "2a2bfc1c48813b04dd9c43ef77a9abe6fc5b979847961a8b4e060ea32e28a857",
     "missing_inputs": [],
     "rows": [
       {
         "name": "successor_registry",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "b2dccf307eeda27826d9d62bc9a7f92305fae4a2fa2e70fecf83cde849a7b66c"
+        "source_sha256": "bc7190c20a0358e09cdef0ca63d7a09ff20a1a9011e2b433efd0866fd24f75c4"
       },
       {
         "name": "closed_flagship_registry",
@@ -2650,22 +2650,22 @@
       {
         "name": "design_queue_staging",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
+        "source_sha256": "f6c30d70ae0dc97068dc37587a63b330a4dfc8212f610af7907734cbcae69656"
       },
       {
         "name": "queue_staging",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
+        "source_sha256": "f6c30d70ae0dc97068dc37587a63b330a4dfc8212f610af7907734cbcae69656"
       },
       {
         "name": "weekly_pulse",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "f8fb162b3c8b47e045157d43fe80afe12ca5ddec965eafdb19bda5ee4c8da036"
+        "source_sha256": "a04303b5b1325263e83f632f164fe38e77432ca9eae99b6a32f0b081e0fca9d3"
       },
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "77f30d53866d08e74d790778f331c6a3e2a03815483dddf553c4d6784fffe093"
+        "source_sha256": "b4120098b82f99521f7b3cc3a69143161dc44f7f3c752992e8555d14648676b5"
       },
       {
         "name": "journey_gates",
@@ -2704,15 +2704,15 @@
       "design_queue_staging": {
         "required_key": "items",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4",
+        "source_sha256": "f6c30d70ae0dc97068dc37587a63b330a4dfc8212f610af7907734cbcae69656",
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-06-01T15:07:31Z",
+        "generated_at": "2026-06-01T19:34:05Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "77f30d53866d08e74d790778f331c6a3e2a03815483dddf553c4d6784fffe093",
+        "source_sha256": "b4120098b82f99521f7b3cc3a69143161dc44f7f3c752992e8555d14648676b5",
         "state": "present"
       },
       "journey_gates": {
@@ -2744,7 +2744,7 @@
       "queue_staging": {
         "required_key": "items",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4",
+        "source_sha256": "f6c30d70ae0dc97068dc37587a63b330a4dfc8212f610af7907734cbcae69656",
         "state": "present"
       },
       "source_path_authority": {
@@ -2912,7 +2912,7 @@
       "successor_registry": {
         "required_key": "program_wave",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "b2dccf307eeda27826d9d62bc9a7f92305fae4a2fa2e70fecf83cde849a7b66c",
+        "source_sha256": "bc7190c20a0358e09cdef0ca63d7a09ff20a1a9011e2b433efd0866fd24f75c4",
         "state": "present"
       },
       "support_packets": {
@@ -2925,10 +2925,10 @@
         "successor_package_verification_status": "pass"
       },
       "weekly_pulse": {
-        "generated_at": "2026-06-01T15:07:32Z",
+        "generated_at": "2026-06-01T19:34:05Z",
         "required_key": "contract_name",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "f8fb162b3c8b47e045157d43fe80afe12ca5ddec965eafdb19bda5ee4c8da036",
+        "source_sha256": "a04303b5b1325263e83f632f164fe38e77432ca9eae99b6a32f0b081e0fca9d3",
         "state": "present"
       }
     },
@@ -3163,7 +3163,7 @@
   },
   "wave_id": "W8",
   "weekly_input_health": {
-    "generated_at": "2026-06-01T15:07:32Z",
+    "generated_at": "2026-06-01T19:34:05Z",
     "issues": [],
     "max_age_seconds": 691200,
     "required_launch_signals": [

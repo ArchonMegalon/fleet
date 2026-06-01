@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-01T12:49:52Z'
+generated_at: '2026-06-01T19:20:31Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -63,7 +63,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-01T12:48:14Z'
+  generated_at: '2026-06-01T19:18:50Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -99,7 +99,7 @@ frontier:
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
       the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
-    predicted_completion_at: '2026-06-02T04:55:52Z'
+    predicted_completion_at: '2026-06-02T11:26:31Z'
     range_low_hours: 9.0
     range_high_hours: 23.2
     remaining_open_milestones: 1
@@ -123,7 +123,7 @@ eta:
   blocking_reason: ''
   summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
     the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
-  predicted_completion_at: '2026-06-02T04:55:52Z'
+  predicted_completion_at: '2026-06-02T11:26:31Z'
   range_low_hours: 9.0
   range_high_hours: 23.2
   remaining_open_milestones: 1
