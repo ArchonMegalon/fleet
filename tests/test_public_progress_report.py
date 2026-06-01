@@ -13,7 +13,7 @@ from unittest import mock
 import yaml
 
 
-MODULE_PATH = Path("/docker/fleet/admin/public_progress.py")
+MODULE_PATH = Path(__file__).resolve().parents[1] / "admin" / "public_progress.py"
 UTC = dt.timezone.utc
 
 
@@ -1328,7 +1328,7 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertEqual(status, "active")
 
     def test_published_progress_report_matches_generated_contract(self) -> None:
-        repo_root = Path("/docker/fleet")
+        repo_root = MODULE_PATH.parents[1]
         published = repo_root / ".codex-studio" / "published"
         actual_report = json.loads((published / "PROGRESS_REPORT.generated.json").read_text(encoding="utf-8"))
         actual_history = json.loads((published / "PROGRESS_HISTORY.generated.json").read_text(encoding="utf-8"))
