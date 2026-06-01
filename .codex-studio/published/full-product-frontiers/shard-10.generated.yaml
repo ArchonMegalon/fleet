@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-21T17:10:38Z'
+generated_at: '2026-05-31T08:49:50Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-10
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -29,17 +29,8 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-core
-  - chummer6-hub
-  - chummer6-hub-registry
-  - chummer6-ui
-  - chummer6-media-factory
+  - chummer6-design
   texts:
-  - dossier
-  - exchange
-  - replay
-  - recap
-  - export
   - top flagship grade
   - whole-project frontier
   - no lowered standards
@@ -54,7 +45,6 @@ focus:
   - performance
   - proof shelf
   - fit and finish
-  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -63,73 +53,54 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-21T17:06:29Z'
+  generated_at: '2026-05-31T08:49:26Z'
   proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1137972326
+- 4031815028
 frontier:
-- id: 1137972326
-  title: Render opposition and GM prep packets from governed source packs
+- id: 4031815028
+  title: Tighten rules and explain canon so media companions can cite but never replace
+    engine truth
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-media-factory
+  - chummer6-design
   dependencies: []
   exit_criteria:
-  - Produce packet, preview, and optional briefing artifacts for opposition, scenes,
-    and prep-library entries.
-  - 'Own and prove the surface slice(s): gm_prep_packets, opposition_packet_artifacts'
-  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
+  - Tighten rules and explain canon so media companions can cite but never replace
+    engine truth.
+  - 'Own and prove the surface slice(s): rule_environment_truth, explain_policy:grounded_media'
+  - 'Keep implementation scoped to the allowed paths: products, scripts, feedback'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-media-factory` (next90-m113-media-factory-gm-prep-packets).
+    is landed for `chummer6-design` (next90-m114-design-rule-environment-policy).
   eta:
     status: flagship_delivery
-    eta_human: 8h-20h
+    eta_human: 9h-21h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Render opposition and GM prep packets from governed source
-      packs'' remains open under the flagship closeout frontier. Outstanding readiness
-      coverage: desktop_client.'
-    predicted_completion_at: '2026-05-22T06:51:44Z'
-    range_low_hours: 7.65
-    range_high_hours: 19.72
+    summary: 'Milestone ''Tighten rules and explain canon so media companions can
+      cite but never replace engine truth'' remains open under the flagship closeout
+      frontier. Outstanding readiness coverage: flagship readiness proof refresh.'
+    predicted_completion_at: '2026-05-31T23:55:32Z'
+    range_low_hours: 8.74
+    range_high_hours: 21.45
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.7
+    remaining_effort_units: 1.65
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-eta:
-  status: flagship_delivery
-  eta_human: 8h-20h
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Render opposition and GM prep packets from governed source
-    packs'' remains open under the flagship closeout frontier. Outstanding readiness
-    coverage: desktop_client.'
-  predicted_completion_at: '2026-05-22T06:51:44Z'
-  range_low_hours: 7.65
-  range_high_hours: 19.72
-  remaining_open_milestones: 1
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 1
-  remaining_effort_units: 1.7

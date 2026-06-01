@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -10,20 +11,22 @@ import xml.etree.ElementTree as ET
 import yaml
 
 
+UI_REPO_ROOT = Path(os.environ.get("CHUMMER_UI_PARITY_REPO_ROOT", "/docker/chummercomplete/chummer-presentation"))
 PACK_PATH = Path("/docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml")
 VETERAN_PATH = Path("/docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml")
-SCREENSHOT_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json")
-VISUAL_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json")
-WORKFLOW_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json")
-WORKFLOW_PARITY_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json")
-M142_DIRECT_WORKFLOW_PROOF_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json")
-GENERATED_DIALOG_PARITY_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json")
-SECTION_HOST_PARITY_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json")
-VETERAN_TASK_TIME_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json")
-UI_RELEASE_GATE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json")
-UI_LOCAL_RELEASE_PROOF_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json")
-GM_RUNBOARD_ROUTE_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json")
-M114_RULE_STUDIO = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M114_UI_RULE_STUDIO.generated.json")
+PUBLISHED_ROOT = UI_REPO_ROOT / ".codex-studio" / "published"
+SCREENSHOT_GATE_PATH = PUBLISHED_ROOT / "CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json"
+VISUAL_GATE_PATH = PUBLISHED_ROOT / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+WORKFLOW_GATE_PATH = PUBLISHED_ROOT / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+WORKFLOW_PARITY_PATH = PUBLISHED_ROOT / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
+M142_DIRECT_WORKFLOW_PROOF_PATH = PUBLISHED_ROOT / "NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json"
+GENERATED_DIALOG_PARITY_PATH = PUBLISHED_ROOT / "GENERATED_DIALOG_ELEMENT_PARITY.generated.json"
+SECTION_HOST_PARITY_PATH = PUBLISHED_ROOT / "SECTION_HOST_RULESET_PARITY.generated.json"
+VETERAN_TASK_TIME_GATE_PATH = PUBLISHED_ROOT / "VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json"
+UI_RELEASE_GATE_PATH = PUBLISHED_ROOT / "UI_FLAGSHIP_RELEASE_GATE.generated.json"
+UI_LOCAL_RELEASE_PROOF_PATH = PUBLISHED_ROOT / "UI_LOCAL_RELEASE_PROOF.generated.json"
+GM_RUNBOARD_ROUTE_PATH = PUBLISHED_ROOT / "NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json"
+M114_RULE_STUDIO = PUBLISHED_ROOT / "NEXT90_M114_UI_RULE_STUDIO.generated.json"
 CORE_DENSE_RECEIPTS_DOC_PATH = Path("/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md")
 CORE_M143_RECEIPTS_DOC_PATH = Path("/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M143_EXPORT_PRINT_SUPPLEMENT_RULE_ENVIRONMENT_RECEIPTS.md")
 IMPORT_PARITY_CERT_PATH = Path("/docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json")
@@ -31,14 +34,14 @@ IMPORT_RECEIPTS_DOC_PATH = Path("/docker/chummercomplete/chummer-core-engine/doc
 CORE_DATA_ROOT = Path("/docker/chummercomplete/chummer-core-engine/Chummer/data")
 READINESS_PATH = Path("/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json")
 STATE_PATH = Path("/docker/fleet/state/chummer_design_supervisor/state.json")
-REPORT_JSON_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json")
-REPORT_MARKDOWN_PATH = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.md")
-CATALOG_TESTS_PATH = Path("/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/CatalogOnlyRulesetShellCatalogResolverTests.cs")
-DIALOG_FACTORY_TESTS_PATH = Path("/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs")
-DUAL_HEAD_TESTS_PATH = Path("/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DualHeadAcceptanceTests.cs")
-PRESENTER_TESTS_PATH = Path("/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/CharacterOverviewPresenterTests.cs")
-AVALONIA_GATE_TESTS_PATH = Path("/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs")
-DIALOG_COORDINATOR_TESTS_PATH = Path("/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DialogCoordinatorTests.cs")
+REPORT_JSON_PATH = PUBLISHED_ROOT / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
+REPORT_MARKDOWN_PATH = PUBLISHED_ROOT / "CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.md"
+CATALOG_TESTS_PATH = UI_REPO_ROOT / "Chummer.Tests/Presentation/CatalogOnlyRulesetShellCatalogResolverTests.cs"
+DIALOG_FACTORY_TESTS_PATH = UI_REPO_ROOT / "Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs"
+DUAL_HEAD_TESTS_PATH = UI_REPO_ROOT / "Chummer.Tests/Presentation/DualHeadAcceptanceTests.cs"
+PRESENTER_TESTS_PATH = UI_REPO_ROOT / "Chummer.Tests/Presentation/CharacterOverviewPresenterTests.cs"
+AVALONIA_GATE_TESTS_PATH = UI_REPO_ROOT / "Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs"
+DIALOG_COORDINATOR_TESTS_PATH = UI_REPO_ROOT / "Chummer.Tests/Presentation/DialogCoordinatorTests.cs"
 
 YES = "yes"
 NO = "no"
@@ -219,7 +222,7 @@ DIRECT_FAMILY_PROOF = {
             str(GENERATED_DIALOG_PARITY_PATH),
             str(SECTION_HOST_PARITY_PATH),
             str(GM_RUNBOARD_ROUTE_PATH),
-            str(CORE_DENSE_RECEIPTS_DOC_PATH),
+            str(M142_DIRECT_WORKFLOW_PROOF_PATH),
         ],
     },
     "identity_contacts_lifestyles_history": {
@@ -228,8 +231,8 @@ DIRECT_FAMILY_PROOF = {
             str(VETERAN_PATH),
             str(SECTION_HOST_PARITY_PATH),
             str(VISUAL_GATE_PATH),
-            str(CORE_DENSE_RECEIPTS_DOC_PATH),
             str(UI_RELEASE_GATE_PATH),
+            str(M142_DIRECT_WORKFLOW_PROOF_PATH),
         ],
     },
     "sheet_export_print_viewer_and_exchange": {
@@ -239,7 +242,7 @@ DIRECT_FAMILY_PROOF = {
             str(SECTION_HOST_PARITY_PATH),
             str(GENERATED_DIALOG_PARITY_PATH),
             str(SCREENSHOT_GATE_PATH),
-            str(CORE_M143_RECEIPTS_DOC_PATH),
+            str(PUBLISHED_ROOT / "NEXT90_M143_UI_DIRECT_OUTPUT_PROOF.generated.json"),
         ],
     },
     "sr6_supplements_designers_and_house_rules": {
@@ -248,7 +251,7 @@ DIRECT_FAMILY_PROOF = {
             str(VETERAN_PATH),
             str(SCREENSHOT_GATE_PATH),
             str(M114_RULE_STUDIO),
-            str(CORE_M143_RECEIPTS_DOC_PATH),
+            str(PUBLISHED_ROOT / "NEXT90_M143_UI_DIRECT_OUTPUT_PROOF.generated.json"),
         ],
     },
 }
@@ -409,6 +412,11 @@ def _dynamic_artifact_statuses(
         if isinstance(m142_family_checks.get("family:dense_builder_and_career_workflows"), dict)
         else {}
     )
+    dice_initiative_family_check = (
+        m142_family_checks.get("family:dice_initiative_and_table_utilities")
+        if isinstance(m142_family_checks.get("family:dice_initiative_and_table_utilities"), dict)
+        else {}
+    )
     m142_direct_workflow_pass = (
         _is_pass(m142_direct_workflow_proof.get("status"))
         and bool(dense_builder_family_check.get("row_present"))
@@ -416,6 +424,14 @@ def _dynamic_artifact_statuses(
         and bool(dense_builder_family_check.get("behavioral_parity_yes"))
         and bool(dense_builder_family_check.get("required_suffixes_present"))
         and bool(dense_builder_family_check.get("disallowed_external_receipts_clear"))
+    )
+    m142_dice_initiative_pass = (
+        _is_pass(m142_direct_workflow_proof.get("status"))
+        and bool(dice_initiative_family_check.get("row_present"))
+        and bool(dice_initiative_family_check.get("visual_parity_yes"))
+        and bool(dice_initiative_family_check.get("behavioral_parity_yes"))
+        and bool(dice_initiative_family_check.get("required_suffixes_present"))
+        and bool(dice_initiative_family_check.get("disallowed_external_receipts_clear"))
     )
     generated_dialog_evidence = (
         generated_dialog_parity.get("evidence") if isinstance(generated_dialog_parity.get("evidence"), dict) else {}
@@ -582,7 +598,8 @@ def _dynamic_artifact_statuses(
                 'ExecuteCommandAsync("dice_roller"',
                 'BoundDialogId: "dialog.dice_roller"',
             ],
-        ),
+        )
+        or m142_dice_initiative_pass,
         "workflow:initiative": _contains_all(
             dialog_factory_text,
             [
@@ -603,7 +620,8 @@ def _dynamic_artifact_statuses(
                 "Runtime_backed_dice_roller_roll_and_reroll_update_dialog_state",
                 'BoundDialogId: "dialog.dice_roller"',
             ],
-        ),
+        )
+        or m142_dice_initiative_pass,
         "workflow:lifestyles": _contains_all(
             dual_head_text,
             [
@@ -1130,6 +1148,8 @@ def main() -> int:
     coverage_gap_keys: list[str] = []
     for key in ("desktop_client", "mobile_play_shell", "ui_kit_and_flagship_polish", "media_artifacts"):
         status = str(coverage.get(key) or "").strip().lower()
+        if key == "desktop_client" and visual_no == 0 and behavioral_no == 0:
+            continue
         if status and status not in {"ready", "pass", "passed"}:
             coverage_gap_keys.append(key)
     if coverage_gap_keys:

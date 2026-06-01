@@ -10,8 +10,11 @@
       "state": "pass"
     },
     "queue_alignment": {
-      "issues": [],
-      "state": "pass",
+      "issues": [
+        "Canonical registry work task status must be complete before M142 can close.",
+        "Canonical registry work task evidence drifted from the M142 Fleet closeout proof set."
+      ],
+      "state": "fail",
       "warnings": []
     },
     "workflow_pack_contract": {
@@ -21,26 +24,34 @@
   },
   "contract_name": "fleet.next90_m142_route_local_proof_closeout_gates",
   "frontier_id": 7414599441,
-  "generated_at": "2026-05-19T15:26:59Z",
+  "generated_at": "2026-05-31T08:49:20Z",
   "milestone_id": 142,
   "monitor_summary": {
-    "canonical_issue_count": 0,
-    "route_local_proof_closeout_status": "pass",
-    "runtime_blocker_count": 0,
-    "runtime_blockers": [],
+    "canonical_issue_count": 2,
+    "route_local_proof_closeout_status": "blocked",
+    "runtime_blocker_count": 2,
+    "runtime_blockers": [
+      "family:dice_initiative_and_table_utilities: row evidence is missing required route-local proof artifacts: NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
+      "family:identity_contacts_lifestyles_history: row evidence is missing required route-local proof artifacts: NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md"
+    ],
     "warning_count": 2,
     "warnings": [
-      "family:dice_initiative_and_table_utilities: UI direct workflow proof is authoritative and current; Fleet accepted it while the parity audit row catches up.",
-      "family:identity_contacts_lifestyles_history: UI direct workflow proof is authoritative and current; Fleet accepted it while the parity audit row catches up."
+      "family:dice_initiative_and_table_utilities: parity audit row still needs direct route-local evidence cleanup; Fleet projected the required runtime/task-speed receipts for comparison only.",
+      "family:identity_contacts_lifestyles_history: parity audit row still needs direct route-local evidence cleanup; Fleet projected the required runtime/task-speed receipts for comparison only."
     ]
   },
   "package_closeout": {
-    "ready": true,
-    "reasons": [],
-    "status": "pass",
+    "ready": false,
+    "reasons": [
+      "Canonical registry work task status must be complete before M142 can close.",
+      "Canonical registry work task evidence drifted from the M142 Fleet closeout proof set.",
+      "family:dice_initiative_and_table_utilities: row evidence is missing required route-local proof artifacts: NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
+      "family:identity_contacts_lifestyles_history: row evidence is missing required route-local proof artifacts: NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md"
+    ],
+    "status": "blocked",
     "warnings": [
-      "family:dice_initiative_and_table_utilities: UI direct workflow proof is authoritative and current; Fleet accepted it while the parity audit row catches up.",
-      "family:identity_contacts_lifestyles_history: UI direct workflow proof is authoritative and current; Fleet accepted it while the parity audit row catches up."
+      "family:dice_initiative_and_table_utilities: parity audit row still needs direct route-local evidence cleanup; Fleet projected the required runtime/task-speed receipts for comparison only.",
+      "family:identity_contacts_lifestyles_history: parity audit row still needs direct route-local evidence cleanup; Fleet projected the required runtime/task-speed receipts for comparison only."
     ]
   },
   "package_id": "next90-m142-fleet-fail-closeout-when-any-route-in-this-milestone-closes-on-family-prose",
@@ -129,24 +140,25 @@
             "/docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json",
             "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json",
             "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json",
-            "/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
-            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json"
+            "/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md"
           ],
           "id": "family:dice_initiative_and_table_utilities",
-          "issues": [],
+          "issues": [
+            "row evidence is missing required route-local proof artifacts: NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md"
+          ],
           "label": "Dice, initiative, and table utilities",
           "present_in_chummer5a": "yes",
           "present_in_chummer6": "yes",
-          "reason": "Fleet accepted the current UI M142 direct workflow proof receipt while the parity audit row still lags the route-local evidence refresh.",
+          "reason": "Route-local dice and initiative proof cites the generated dice dialog parity, runboard initiative route, and deterministic core receipts directly.",
           "removable_if_not_in_chummer5a": "no",
           "source_evidence": [
             "/docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml",
-            "/docker/chummercomplete/chummer6-ui/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json",
-            "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json",
-            "/docker/chummercomplete/chummer6-ui/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json",
-            "/docker/chummercomplete/chummer6-ui/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json"
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json"
           ],
-          "source_reason": "Route-local dice and initiative proof cites the generated dice dialog parity, runboard initiative route, and closed-package direct workflow receipts directly.",
+          "source_reason": "Route-local dice and initiative proof cites the generated dice dialog parity, runboard initiative route, and deterministic core receipts directly.",
           "visual_parity": "yes"
         },
         {
@@ -159,125 +171,129 @@
           "evidence": [
             "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json",
             "/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
-            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json",
-            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json"
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json"
           ],
           "id": "family:identity_contacts_lifestyles_history",
-          "issues": [],
+          "issues": [
+            "row evidence is missing required route-local proof artifacts: NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md"
+          ],
           "label": "Identity, contacts, lifestyles, and history workflows",
           "present_in_chummer5a": "yes",
           "present_in_chummer6": "yes",
-          "reason": "Fleet accepted the current UI M142 direct workflow proof receipt while the parity audit row still lags the route-local evidence refresh.",
+          "reason": "Route-local contacts, lifestyles, and history proof cites section-host parity, current contacts and diary screenshots, and deterministic workflow-state receipts directly.",
           "removable_if_not_in_chummer5a": "no",
           "source_evidence": [
             "/docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml",
-            "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json",
-            "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
-            "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json",
-            "/docker/chummercomplete/chummer6-ui/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json"
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json",
+            "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json"
           ],
-          "source_reason": "Route-local contacts, lifestyles, and history proof cites section-host parity, current contacts and diary screenshots, and closed-package workflow-state receipts directly.",
+          "source_reason": "Route-local contacts, lifestyles, and history proof cites section-host parity, current contacts and diary screenshots, and deterministic workflow-state receipts directly.",
           "visual_parity": "yes"
         }
       ],
-      "runtime_blockers": [],
+      "runtime_blockers": [
+        "family:dice_initiative_and_table_utilities: row evidence is missing required route-local proof artifacts: NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
+        "family:identity_contacts_lifestyles_history: row evidence is missing required route-local proof artifacts: NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md"
+      ],
       "state": "pass",
       "warnings": [
-        "family:dice_initiative_and_table_utilities: UI direct workflow proof is authoritative and current; Fleet accepted it while the parity audit row catches up.",
-        "family:identity_contacts_lifestyles_history: UI direct workflow proof is authoritative and current; Fleet accepted it while the parity audit row catches up."
+        "family:dice_initiative_and_table_utilities: parity audit row still needs direct route-local evidence cleanup; Fleet projected the required runtime/task-speed receipts for comparison only.",
+        "family:identity_contacts_lifestyles_history: parity audit row still needs direct route-local evidence cleanup; Fleet projected the required runtime/task-speed receipts for comparison only."
       ]
     }
   },
   "source_inputs": {
     "classic_dense_workbench_gate": {
-      "generated_at": "2026-05-19T09:36:48.220678Z",
+      "generated_at": "2026-05-31T08:49:07.131788Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json",
-      "sha256": "ec23c88a45c30f02ed6b25fbc1c438e96a03590ec32a98b0a6d0197864f989b6"
+      "sha256": "664fdfe7947b7ef3a4f051aac1e76c390519ae27307e5997c1eef01218ad9b39"
     },
     "core_dense_receipts_doc": {
-      "generated_at": "2026-05-06T19:55:29Z",
+      "generated_at": "2026-05-22T15:24:31Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-core-engine/docs/NEXT90_M142_DENSE_WORKBENCH_RECEIPTS.md",
-      "sha256": "37eda5709e304c7d1c8c270b48bbcf65d8ed9312b20a696ce643ada9ad032764"
+      "sha256": "2cdeee03aba3155c1e98a4a1c0cc6f9d6b0d736e97d50af8fc7a3c207b4f3d1c"
     },
     "design_queue_staging": {
-      "generated_at": "2026-05-17T19:18:13Z",
+      "generated_at": "2026-05-29T06:21:39Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "797a7bf15503da99a3bd4fb767c0e15aca5667b0913de01d2bcd55a9d453f393"
+      "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
     },
     "desktop_visual_familiarity_gate": {
-      "generated_at": "2026-05-19T09:36:42.854180Z",
+      "generated_at": "2026-05-31T08:48:58.649701Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
-      "sha256": "59947e29129ed5e544063201225611b23f1572814896a26e2ddf686a998e8d5a"
+      "sha256": "38d6480e16bd98ebaa2a2921dd13c3dcbec51975a21f4dcfe7fdb14d51d16437"
     },
     "desktop_workflow_execution_gate": {
-      "generated_at": "2026-05-19T09:36:45.594462Z",
+      "generated_at": "2026-05-31T08:49:03.676738Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
-      "sha256": "ec35daa967cd6ab5de3c68431b5d075f613d11ede5d8a91f02147a10059fb90a"
+      "sha256": "450f8db97066424ecce74d107ba136cf3d44f59ba27af7165321bf72e85eef8c"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-05-17T19:18:13Z",
+      "generated_at": "2026-05-30T09:58:41Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "4cd877009355dda3c453d5622786403dbeae36ac664951ec20020054948fdb5e"
+      "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
     },
     "generated_dialog_parity": {
-      "generated_at": "2026-05-19T09:18:43.062538Z",
+      "generated_at": "2026-05-28T18:03:26.291868Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json",
-      "sha256": "ed350c519e28de358f6a41a9e998c45576f0ac9cedd71c01c52a2defa1480eda"
+      "sha256": "0137798daaa0a867c931fb7dcd1a84b76c2f7c93bb2e475d14c32ccdbd2b2cf7"
     },
     "gm_runboard_route": {
-      "generated_at": "2026-05-05T16:28:45Z",
+      "generated_at": "2026-05-28T18:32:52Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json",
-      "sha256": "d3b232f8875fdec7607867302006bde9c2ce4d09c1264600799acfd03d00213d"
+      "sha256": "8047a7b4b4470879940961ab89c60ee9dd51909e16e2f8c6958d6bdfa8ba3604"
     },
     "next90_guide": {
-      "generated_at": "2026-05-05T19:47:04Z",
+      "generated_at": "2026-05-30T09:55:17Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
-      "sha256": "04c99df221abcc4ad5057ca5ae0515848ac93f426094eb5038a4863cdf58f6f7"
+      "sha256": "984957267d7ee1ae4f3b20a7c67446925d356887019a5f910018ce9001cf36a5"
     },
     "parity_audit": {
-      "generated_at": "2026-05-07T23:31:39.358211Z",
+      "generated_at": "2026-05-31T08:49:19.507110Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
-      "sha256": "b9a152dc5ed598b13238dcaf742bfdcc880604bc1b91883ef0743f10cc7f3558"
+      "sha256": "54e790907de39b01b1f69f0ec52c1a1a8d94d99e2a8c30d995d406ec4ff3c27c"
     },
     "screenshot_review_gate": {
-      "generated_at": "2026-05-19T09:36:48.357985Z",
+      "generated_at": "2026-05-31T08:49:07.558161Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
-      "sha256": "23b1b22069be09f23fad6a38c27e45b9b4a92ae9809dc9784e77251077797f8e"
+      "sha256": "87fca78cc09813b43a6e36d7aa253938dd3b3fc39f8f6a92fff8d3bdcd4e4c39"
     },
     "section_host_ruleset_parity": {
-      "generated_at": "2026-05-19T09:20:37.865231Z",
+      "generated_at": "2026-05-28T18:04:02.236919Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json",
-      "sha256": "7f4f0b9266310b5367dd49c8bdc8b9e7c9822302b50e44de56d3b8ff06534263"
+      "sha256": "e12b5657039330079e0925e5e92d9a77334d5e75ea3724367c2cc2ca04fb157c"
     },
     "successor_registry": {
-      "generated_at": "2026-05-17T19:18:13Z",
+      "generated_at": "2026-05-30T19:53:14Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "729540d98a517a298fd38fa9e4448e1f4ca56e72a21726a650edd5c289e44b43"
+      "sha256": "206cf309c2d86f727901bc03ea61d844af789711174330bf17c24b16b65ea483"
     },
     "ui_direct_workflow_proof": {
-      "generated_at": "2026-05-19T09:05:05.680678Z",
+      "generated_at": "2026-05-30T21:16:03.182369Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json",
-      "sha256": "e69f9f1f5214a72e886051cb8b2a30c27a23dcf30ab84d8dc1c68352277bff6e"
+      "sha256": "bcfb8c9d42bc51a18c1aeb544961c4206a28c3222a5e20e5507b9d3dc92f5206"
     },
     "ui_flagship_release_gate": {
-      "generated_at": "2026-05-19T09:36:42.586518Z",
+      "generated_at": "2026-05-31T08:48:57.778224Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json",
-      "sha256": "4d38015cac4f42e6921d5160f28babb6d402bc8b166bf727a467a354dec6828f"
+      "sha256": "4345449fa46ea88c2816614293efc1c6178731c3b59b5b347db00c80c46120ad"
     },
     "ui_kit_local_release_proof": {
       "generated_at": "2026-05-19T08:27:59Z",
@@ -286,16 +302,16 @@
       "sha256": "07220b55b98115103b7b280629c630728c4058cfbbf7222c9460fae1b115190c"
     },
     "ui_local_release_proof": {
-      "generated_at": "2026-05-19T15:02:18Z",
+      "generated_at": "2026-05-29T07:11:43Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
-      "sha256": "f2afd0306351e6b850916f705cfaff005415e109e658496c365d9d410aa6abce"
+      "sha256": "c39e6a47414fca09dd9a80dc60a49335e18aa78a26fb904ef2cb3f1eefa2773b"
     },
     "veteran_task_time_gate": {
-      "generated_at": "2026-05-19T09:36:48.277814Z",
+      "generated_at": "2026-05-31T08:49:07.293430Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json",
-      "sha256": "f4fb611d822137b31b74a9aca655923b2eee85eac4050d433c32d8f815a9d467"
+      "sha256": "141084a3ba29b02bf467cbde0ba846ae5d82b68f33792ec04faf82e2233a031c"
     },
     "workflow_pack": {
       "generated_at": "2026-05-06T20:03:20Z",
@@ -304,7 +320,7 @@
       "sha256": "b3b6a126c28164e1537f964b85af956eb2eabea4601250b1303d36f0dd481e42"
     }
   },
-  "status": "pass",
+  "status": "fail",
   "wave": "W22P",
   "work_task_id": "142.5"
 }
