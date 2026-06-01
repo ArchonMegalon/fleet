@@ -1,0 +1,423 @@
+{
+  "provider": "MagicFit",
+  "rendered_by": "EA MagicFit browser automation",
+  "account_label": "magicfit_gm_session_video_foundry",
+  "lane": "gm_session_video_foundry_samples",
+  "asset_id": "gm_session_video_foundry_samples",
+  "horizon": "GM Session Video Foundry",
+  "scene_id": "gm_sample_02_table_pulse_security_aftermath",
+  "scene_number": 2,
+  "title": "Table Pulse security aftermath",
+  "duration_seconds_requested": 8,
+  "aspect_ratio": "16:9",
+  "resolution": "720p",
+  "model": "Seedance 2.0 Fast",
+  "video_output_url": "https://cdn.pushowl.com/magicfit/1780260885835-cmpu97czr05pjoz1vwlirf52o.mp4",
+  "source_prompt": "In-universe tactical security aftermath clip, metahuman security analyst with visible cybernetic eye studies abstract heat indicators after a tabletop mission, AR overlays show generic breach zones and rising alert levels, urgent but public-safe, Chummer prompt approved before render, no private player data, no official marks. Negative constraints: No official logos, no real brands, no player emails, no exact campaign secrets, no sourcebook art, no direct publishing.",
+  "official_ip_assets_used": false,
+  "direct_publish": false,
+  "generated_at_utc": "2026-05-31T20:54:54.540Z",
+  "page_url_after_submit": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj",
+  "event_tail": [
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj.data",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/realtime-token",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj.data",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/realtime-token",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj.data",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/realtime-token",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj.data",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/realtime-token",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj.data",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/realtime-token",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj.data",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/realtime-token",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj.data",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/realtime-token",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj.data",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/realtime-token",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj.data",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/realtime-token",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj.data",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/realtime-token",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj.data",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/realtime-token",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj.data",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/realtime-token",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpu9c7w205q6oz1vu7bcl6lj.data",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/realtime-token",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/products.data?_routes=routes%2Fproducts%2Fapi",
+      "contentType": "text/x-script; charset=utf-8"
+    },
+    {
+      "status": 200,
+      "url": "https://magicfit.pushowl.com/api/avatars-mentions.data?_routes=routes%2Fapi%2Favatars-mentions",
+      "contentType": "text/x-script; charset=utf-8"
+    }
+  ]
+}
