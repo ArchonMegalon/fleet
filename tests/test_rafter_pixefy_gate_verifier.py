@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-MODULE_PATH = Path("/docker/fleet/scripts/verify_committed_rafter_pixefy_ci_receipt.py")
+MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "verify_committed_rafter_pixefy_ci_receipt.py"
 
 
 def _load_module():
