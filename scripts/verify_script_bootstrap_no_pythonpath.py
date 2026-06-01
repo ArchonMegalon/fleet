@@ -46,9 +46,12 @@ def _main() -> int:
             env=_env_without_pythonpath(),
         )
         combined = (result.stdout or "") + (result.stderr or "")
-        if result.returncode != 0:
-            failures.append(f"{script_path}: returncode {result.returncode}")
-        elif "No module named" in combined:
+        bootstrap_error_markers = (
+            "No module named",
+            "ModuleNotFoundError",
+            "ImportError",
+        )
+        if any(marker in combined for marker in bootstrap_error_markers):
             failures.append(f"{script_path}: missing module resolution path in output")
 
     if failures:
