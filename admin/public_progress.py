@@ -1926,6 +1926,8 @@ def build_progress_report_payload(
     overall_progress_percent = 0
     if total_design_weight > 0:
         overall_progress_percent = int(round(((total_design_weight - total_open_weight) / total_design_weight) * 100))
+    elif repo_backlog_open_item_count <= 0 and supervisor_open_frontier_milestones <= 0:
+        overall_progress_percent = 100
     if repo_backlog_open_item_count > 0 and overall_progress_percent >= 100:
         overall_progress_percent = 99
 
@@ -1946,7 +1948,13 @@ def build_progress_report_payload(
             int(row.get("eta_weeks_low") or 0),
             -int(row.get("progress_percent") or 0),
         ),
-        default={},
+        default={
+            "id": "no-active-release-pole",
+            "short_public_name": "No active release pole",
+            "public_name": "No active release pole",
+            "eta_weeks_low": 0,
+            "eta_weeks_high": 0,
+        },
     )
 
     recent_movement = []

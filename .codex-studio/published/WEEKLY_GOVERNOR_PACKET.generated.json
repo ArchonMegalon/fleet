@@ -188,7 +188,7 @@
       }
     ]
   },
-  "generated_at": "2026-06-01T15:04:01Z",
+  "generated_at": "2026-06-01T15:07:33Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -224,9 +224,9 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-06-01T15:04:01Z",
+    "generated_at": "2026-06-01T15:07:33Z",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-06-08T15:04:01Z",
+    "next_packet_due_at": "2026-06-08T15:07:33Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -889,7 +889,7 @@
       "incomplete_actions": [],
       "launch_gate_blocking_names": [],
       "missing_actions": [],
-      "next_review_due_at": "2026-06-08T15:04:01Z",
+      "next_review_due_at": "2026-06-08T15:07:33Z",
       "required_actions": [
         "launch_expand",
         "freeze_launch",
@@ -931,7 +931,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "All measured launch gates are green.",
-          "next_review_due_at": "2026-06-08T15:04:01Z",
+          "next_review_due_at": "2026-06-08T15:07:33Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "promote_measured_launch_expansion",
           "receipt_id": "m106-launch_expand-16e298f80f85949d",
@@ -948,7 +948,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Launch expansion is approved for the next bounded window while canaries and support closure remain clear.",
-          "next_review_due_at": "2026-06-08T15:04:01Z",
+          "next_review_due_at": "2026-06-08T15:07:33Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "leave_freeze_available",
           "receipt_id": "m106-freeze_launch-65253d4d25b49f81",
@@ -965,7 +965,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Canary green on all active lanes",
-          "next_review_due_at": "2026-06-08T15:04:01Z",
+          "next_review_due_at": "2026-06-08T15:07:33Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_canary_ready",
           "receipt_id": "m106-canary-afc3d2be95960739",
@@ -985,7 +985,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "next_review_due_at": "2026-06-08T15:04:01Z",
+          "next_review_due_at": "2026-06-08T15:07:33Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_rollback_armed",
           "receipt_id": "m106-rollback-fcedde06369bab3d",
@@ -1002,7 +1002,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
-          "next_review_due_at": "2026-06-08T15:04:01Z",
+          "next_review_due_at": "2026-06-08T15:07:33Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "route_remaining_work_to_dependency_or_sibling_packages",
           "receipt_id": "m106-focus_shift-9e0a36a10f3ebf57",
@@ -1972,7 +1972,7 @@
     "freshness_policy": "refresh_before_public_status_or_operator_action_if_packet_is_overdue",
     "headline": "Measured launch expansion is allowed.",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-06-08T15:04:01Z",
+    "next_packet_due_at": "2026-06-08T15:07:33Z",
     "schedule_ref": "governor_packet_schedule.next_packet_due_at",
     "state": "launch_expand_allowed"
   },
@@ -2629,12 +2629,12 @@
         "products/chummer/PROGRESS_REPORT.generated.json",
         "products/chummer/RELEASE_EVIDENCE_PACK.md"
       ],
-      "summary": "The current longest pole is {'id': '', 'label': '', 'eta_weeks_low': 0, 'eta_weeks_high': 0}, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product."
+      "summary": "The current longest pole is Core Engine, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product."
     }
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "fb65f72ab9a3345f328e2ca11330e9dfccc3f2912f4b68eba9bf491432308d1e",
+    "combined_source_sha256": "f29ec2a0d2fcadef70ab329686420aedc082b8bb58c21b19a507e44617d0e331",
     "missing_inputs": [],
     "rows": [
       {
@@ -2660,12 +2660,12 @@
       {
         "name": "weekly_pulse",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "1aba38eabd763d5174e01cee75e10edc51070651fcb17ff2891a43b8e4bc4499"
+        "source_sha256": "f8fb162b3c8b47e045157d43fe80afe12ca5ddec965eafdb19bda5ee4c8da036"
       },
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "8348e4628f53be75ebb5bcb9cd71c31447660378b0f750da176ac4fcb62dcbe8"
+        "source_sha256": "77f30d53866d08e74d790778f331c6a3e2a03815483dddf553c4d6784fffe093"
       },
       {
         "name": "journey_gates",
@@ -2708,11 +2708,11 @@
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-06-01T15:03:57Z",
+        "generated_at": "2026-06-01T15:07:31Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "8348e4628f53be75ebb5bcb9cd71c31447660378b0f750da176ac4fcb62dcbe8",
+        "source_sha256": "77f30d53866d08e74d790778f331c6a3e2a03815483dddf553c4d6784fffe093",
         "state": "present"
       },
       "journey_gates": {
@@ -2925,10 +2925,10 @@
         "successor_package_verification_status": "pass"
       },
       "weekly_pulse": {
-        "generated_at": "2026-06-01T15:03:58Z",
+        "generated_at": "2026-06-01T15:07:32Z",
         "required_key": "contract_name",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "1aba38eabd763d5174e01cee75e10edc51070651fcb17ff2891a43b8e4bc4499",
+        "source_sha256": "f8fb162b3c8b47e045157d43fe80afe12ca5ddec965eafdb19bda5ee4c8da036",
         "state": "present"
       }
     },
@@ -3163,7 +3163,7 @@
   },
   "wave_id": "W8",
   "weekly_input_health": {
-    "generated_at": "2026-06-01T15:03:58Z",
+    "generated_at": "2026-06-01T15:07:32Z",
     "issues": [],
     "max_age_seconds": 691200,
     "required_launch_signals": [

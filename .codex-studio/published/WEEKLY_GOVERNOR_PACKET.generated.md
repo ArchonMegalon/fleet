@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-06-01T15:04:01Z
+Generated: 2026-06-01T15:07:33Z
 As of: 2026-06-01
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -20,7 +20,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Package verification: pass
 - Weekly input health: pass
 - Source input health: pass
-- Source input fingerprint: fb65f72ab9a3345f328e2ca11330e9dfccc3f2912f4b68eba9bf491432308d1e
+- Source input fingerprint: f29ec2a0d2fcadef70ab329686420aedc082b8bb58c21b19a507e44617d0e331
 - Launch cited signal truth alignment: pass
 - Decision alignment: pass
 - Expected launch action: launch_expand
@@ -29,7 +29,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Do not reopen package: True
 - Measured rollout loop: ready
 - Governor packet cadence: weekly
-- Next packet due: 2026-06-08T15:04:01Z
+- Next packet due: 2026-06-08T15:07:33Z
 - Decision action coverage: pass
 - Decision actions covered: 5 / 5
 - Decision source coverage: pass
@@ -117,7 +117,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Derived from: measured_rollout_loop.decision_action_matrix
 - Decision actions: launch_expand, freeze_launch, canary, rollback, focus_shift
 - Schedule ref: governor_packet_schedule.next_packet_due_at
-- Next packet due: 2026-06-08T15:04:01Z
+- Next packet due: 2026-06-08T15:07:33Z
 - Max age seconds: 604800
 - Freshness policy: refresh_before_public_status_or_operator_action_if_packet_is_overdue
 - Headline: Measured launch expansion is allowed.
@@ -197,11 +197,11 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 | Action | State | Route | Operator action | Receipt | Next review due | Next review due ref | Max age seconds | Freshness policy | Blocking gates | Next decision |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| launch_expand | allowed | weekly_governor_packet.launch_expand | promote_measured_launch_expansion | m106-launch_expand-16e298f80f85949d | 2026-06-08T15:04:01Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | All measured launch gates are green. |
-| freeze_launch | available | weekly_governor_packet.freeze_launch | leave_freeze_available | m106-freeze_launch-65253d4d25b49f81 | 2026-06-08T15:04:01Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Launch expansion is approved for the next bounded window while canaries and support closure remain clear. |
-| canary | ready | measured_rollout_loop.canary | keep_canary_ready | m106-canary-afc3d2be95960739 | 2026-06-08T15:04:01Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Canary green on all active lanes |
-| rollback | armed | measured_rollout_loop.rollback | keep_rollback_armed | m106-rollback-fcedde06369bab3d | 2026-06-08T15:04:01Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. |
-| focus_shift | queued_successor_wave | measured_rollout_loop.focus_shift | route_remaining_work_to_dependency_or_sibling_packages | m106-focus_shift-9e0a36a10f3ebf57 | 2026-06-08T15:04:01Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice. |
+| launch_expand | allowed | weekly_governor_packet.launch_expand | promote_measured_launch_expansion | m106-launch_expand-16e298f80f85949d | 2026-06-08T15:07:33Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | All measured launch gates are green. |
+| freeze_launch | available | weekly_governor_packet.freeze_launch | leave_freeze_available | m106-freeze_launch-65253d4d25b49f81 | 2026-06-08T15:07:33Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Launch expansion is approved for the next bounded window while canaries and support closure remain clear. |
+| canary | ready | measured_rollout_loop.canary | keep_canary_ready | m106-canary-afc3d2be95960739 | 2026-06-08T15:07:33Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Canary green on all active lanes |
+| rollback | armed | measured_rollout_loop.rollback | keep_rollback_armed | m106-rollback-fcedde06369bab3d | 2026-06-08T15:07:33Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. |
+| focus_shift | queued_successor_wave | measured_rollout_loop.focus_shift | route_remaining_work_to_dependency_or_sibling_packages | m106-focus_shift-9e0a36a10f3ebf57 | 2026-06-08T15:07:33Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice. |
 
 ## Evidence Requirements
 
@@ -229,7 +229,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 - next12_trust_publication_launch_scale: Next 12 Biggest Wins is the active pressure cluster: finish install-specific trust/support truth, creator publication and shelf posture, pulse-v3 launch governance, and no-step-back utility parity.
 - public_release_follow_through: Downloads, updates, support closure, and channel-aware trust copy now exist as first-party surfaces and must keep moving in lockstep instead of drifting back into separate promises.
-- long_pole_visibility: The current longest pole is {'id': '', 'label': '', 'eta_weeks_low': 0, 'eta_weeks_high': 0}, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product.
+- long_pole_visibility: The current longest pole is Core Engine, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product.
 
 ## Dependency Package Routes
 

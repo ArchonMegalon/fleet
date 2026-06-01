@@ -250,6 +250,40 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertNotIn("average_active_boosters", payload["participation"])
         self.assertNotIn("peak_active_boosters", payload["participation"])
 
+    def test_build_progress_report_payload_treats_empty_closed_scope_as_complete(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            (root / "config" / "public_progress_parts.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "as_of": "2026-06-01",
+                        "brand": "Chummer6",
+                        "phase_labels": [
+                            {"min_progress_percent": 0, "label": "In progress"},
+                            {"min_progress_percent": 100, "label": "Public-fit polish"},
+                        ],
+                        "momentum_labels": [{"min_score": 0, "label": "Closed"}],
+                        "eta_formula": {},
+                        "method": {},
+                        "parts": [],
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            (root / "config" / "program_milestones.yaml").write_text("projects: {}\n", encoding="utf-8")
+            with mock.patch.object(self.progress, "load_progress_history_payload", return_value={"snapshots": []}):
+                payload = self.progress.build_progress_report_payload(
+                    repo_root=root,
+                    now=dt.datetime(2026, 6, 1, 15, 0, tzinfo=UTC),
+                    commit_counter=lambda _repo: 0,
+                )
+
+        self.assertEqual(payload["overall_progress_percent"], 100)
+        self.assertEqual(payload["phase_label"], "Public-fit polish")
+        self.assertEqual(payload["longest_pole"]["label"], "No active release pole")
+
     def test_build_progress_report_payload_does_not_promote_tactical_supervisor_eta_to_full_product_weeks(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
