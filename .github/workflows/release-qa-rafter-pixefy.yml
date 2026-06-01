@@ -21,20 +21,16 @@ jobs:
     needs: verify-ltd-inventory
     steps:
       - uses: actions/checkout@v4
-      - name: Verify Rafter provider
-        run: python3 providers/rafter/verify_rafter_provider.py
-      - name: Run Rafter security gold gate
-        run: python3 providers/rafter/run_rafter_security_gold_gate.py
+      - name: Verify committed Rafter provider and security receipts
+        run: python3 scripts/verify_committed_rafter_pixefy_ci_receipt.py Rafter
 
   pixefy-visual-gate:
     runs-on: ubuntu-latest
     needs: verify-ltd-inventory
     steps:
       - uses: actions/checkout@v4
-      - name: Verify Pixefy provider
-        run: python3 providers/pixefy/verify_pixefy_provider.py
-      - name: Run Pixefy responsive visual QA
-        run: python3 providers/pixefy/run_pixefy_responsive_visual_qa.py
+      - name: Verify committed Pixefy provider and visual QA receipts
+        run: python3 scripts/verify_committed_rafter_pixefy_ci_receipt.py Pixefy
 
   final-rafter-pixefy-verdict:
     runs-on: ubuntu-latest
