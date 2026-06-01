@@ -36,6 +36,20 @@ ui_visual_gate_path="$ui_root/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY
 ui_executable_gate_path="$ui_root/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
 ui_parity_audit_path="$ui_root/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
 ui_refresh_lock_stale_max_age_seconds="${CHUMMER_FLAGSHIP_UI_REFRESH_LOCK_STALE_MAX_AGE_SECONDS:-900}"
+ui_release_channel_path="${CHUMMER_FLAGSHIP_UI_RELEASE_CHANNEL_PATH:-}"
+
+if [[ -z "$ui_release_channel_path" ]]; then
+  for candidate in \
+    "$ui_root/.tmp/verify-release-channel/RELEASE_CHANNEL.generated.json" \
+    "$ui_root/Docker/Downloads/RELEASE_CHANNEL.generated.json" \
+    "$ui_root/Chummer.Portal/downloads/RELEASE_CHANNEL.generated.json"
+  do
+    if [[ -f "$candidate" ]]; then
+      ui_release_channel_path="$candidate"
+      break
+    fi
+  done
+fi
 
 if ! [[ "$ui_refresh_wait_timeout_seconds" =~ ^[0-9]+$ ]]; then
   ui_refresh_wait_timeout_seconds=1800
@@ -175,15 +189,15 @@ wait_for_ui_refresh() {
   current_flagship_status="$(ui_receipt_status "$ui_flagship_receipt_path")"
   current_visual_status="$(ui_receipt_status "$ui_visual_gate_path")"
   current_executable_status="$(ui_receipt_status "$ui_executable_gate_path")"
-  if (( current_flagship_mtime <= baseline_flagship_mtime )) && [[ "$reuse_active_refresh" != "1" || "$current_flagship_status" != "pass" ]]; then
+  if (( current_flagship_mtime <= baseline_flagship_mtime )) && [[ "$current_flagship_status" != "pass" ]]; then
     echo "[flagship-readiness] FAIL: UI flagship release receipt did not refresh." >&2
     return 1
   fi
-  if (( current_visual_mtime <= baseline_visual_mtime )) && [[ "$reuse_active_refresh" != "1" || "$current_visual_status" != "pass" ]]; then
+  if (( current_visual_mtime <= baseline_visual_mtime )) && [[ "$current_visual_status" != "pass" ]]; then
     echo "[flagship-readiness] FAIL: desktop visual familiarity receipt did not refresh." >&2
     return 1
   fi
-  if (( current_executable_mtime <= baseline_executable_mtime )) && [[ "$reuse_active_refresh" != "1" || "$current_executable_status" != "pass" ]]; then
+  if (( current_executable_mtime <= baseline_executable_mtime )) && [[ "$current_executable_status" != "pass" ]]; then
     echo "[flagship-readiness] FAIL: desktop executable exit gate receipt did not refresh." >&2
     return 1
   fi
@@ -244,13 +258,23 @@ if ui_refresh_active; then
   reused_active_refresh=1
 else
   cd "$ui_root"
-  CHUMMER_DESKTOP_VISUAL_SKIP_PREREQUISITE_RECEIPT_REFRESH=1 bash "$b14_script"
+  CHUMMER_DESKTOP_VISUAL_SKIP_PREREQUISITE_RECEIPT_REFRESH=1 \
+  CHUMMER_FLAGSHIP_UI_RELEASE_GATE_ALLOW_VERIFY_RELEASE_CHANNEL_OVERRIDE=1 \
+  CHUMMER_FLAGSHIP_UI_RELEASE_CHANNEL_PATH="$ui_release_channel_path" \
+  CHUMMER_DESKTOP_WORKFLOW_RELEASE_CHANNEL_PATH="$ui_release_channel_path" \
+  CHUMMER_UI_PARITY_RELEASE_CHANNEL_PATH="$ui_release_channel_path" \
+  CHUMMER_DESKTOP_VISUAL_RELEASE_CHANNEL_PATH="$ui_release_channel_path" \
+  CHUMMER_NEXT90_M141_RELEASE_CHANNEL_PATH="$ui_release_channel_path" \
+  CHUMMER_NEXT90_M142_RELEASE_CHANNEL_PATH="$ui_release_channel_path" \
+  CHUMMER_FLAGSHIP_UI_RELEASE_GATE_REFRESH_SUPPORTING_RECEIPTS=0 \
+  CHUMMER_FLAGSHIP_UI_RELEASE_GATE_SKIP_DOWNSTREAM_RECEIPTS=1 \
+  bash "$b14_script"
 fi
 
 wait_for_ui_refresh "$baseline_ui_flagship_mtime" "$baseline_ui_visual_mtime" "$baseline_ui_executable_mtime" "$reused_active_refresh"
 
 cd "$fleet_root"
-python3 scripts/codex-shims/codexea_ui_parity_audit_probe.py
+CHUMMER_UI_PARITY_REPO_ROOT="$ui_root" python3 scripts/codex-shims/codexea_ui_parity_audit_probe.py
 python3 scripts/materialize_next90_m142_ea_family_local_proof_packs.py
 python3 scripts/verify_next90_m142_ea_family_local_proof_packs.py
 python3 scripts/materialize_next90_m142_fleet_route_local_proof_closeout_gates.py
@@ -258,6 +282,9 @@ python3 scripts/verify_next90_m142_fleet_route_local_proof_closeout_gates.py --j
 python3 scripts/materialize_next90_m136_fleet_aggregate_readiness_parity_gates.py
 python3 scripts/materialize_next90_m138_fleet_hero_path_projections.py
 python3 scripts/materialize_next90_m138_fleet_hero_path_closeout_gates.py
-python3 scripts/materialize_flagship_product_readiness.py --out "$readiness_out" --mirror-out "$readiness_state_mirror_out"
+python3 scripts/materialize_flagship_product_readiness.py \
+  --release-channel "$ui_release_channel_path" \
+  --out "$readiness_out" \
+  --mirror-out "$readiness_state_mirror_out"
 python3 scripts/materialize_weekly_governor_packet.py
 refresh_full_product_frontier

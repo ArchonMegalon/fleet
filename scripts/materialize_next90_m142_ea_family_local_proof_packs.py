@@ -13,24 +13,36 @@ import yaml
 
 ROOT = Path("/docker/fleet")
 DOCS_ROOT = ROOT / "docs" / "chummer5a-oracle"
-PRESENTATION_PUBLISHED = Path("/docker/chummercomplete/chummer-presentation/.codex-studio/published")
+UI_ROOT = (
+    Path("/docker/chummercomplete/chummer6-ui")
+    if Path("/docker/chummercomplete/chummer6-ui").exists()
+    else Path("/docker/chummercomplete/chummer-presentation")
+)
+PRESENTATION_PUBLISHED = UI_ROOT / ".codex-studio/published"
 CORE_DOCS = Path("/docker/chummercomplete/chummer-core-engine/docs")
-SUPERVISOR_ROOT = Path("/var/lib/codex-fleet/chummer_design_supervisor")
+SUPERVISOR_ROOTS = [
+    ROOT / "state/chummer_design_supervisor",
+    Path("/var/lib/codex-fleet/chummer_design_supervisor"),
+]
 
 DEFAULT_OUTPUT = DOCS_ROOT / "m142_family_local_proof_packs.yaml"
 DEFAULT_MARKDOWN = DOCS_ROOT / "m142_family_local_proof_packs.md"
 def _latest_existing_path(pattern: str, fallback: Path) -> Path:
-    matches = sorted(SUPERVISOR_ROOT.glob(pattern), key=lambda path: path.stat().st_mtime, reverse=True)
+    matches: list[Path] = []
+    for supervisor_root in SUPERVISOR_ROOTS:
+        if supervisor_root.exists():
+            matches.extend(supervisor_root.glob(pattern))
+    matches = sorted(matches, key=lambda path: path.stat().st_mtime, reverse=True)
     return matches[0] if matches else fallback
 
 
 DEFAULT_TASK_LOCAL_TELEMETRY = _latest_existing_path(
     "shard-*/runs/*/TASK_LOCAL_TELEMETRY.generated.json",
-    SUPERVISOR_ROOT / "TASK_LOCAL_TELEMETRY.generated.json",
+    ROOT / "state/chummer_design_supervisor/TASK_LOCAL_TELEMETRY.generated.json",
 )
 DEFAULT_RUNTIME_HANDOFF = _latest_existing_path(
     "shard-*/ACTIVE_RUN_HANDOFF.generated.md",
-    SUPERVISOR_ROOT / "ACTIVE_RUN_HANDOFF.generated.md",
+    ROOT / "state/chummer_design_supervisor/ACTIVE_RUN_HANDOFF.generated.md",
 )
 DEFAULT_READINESS = ROOT / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 DEFAULT_WORKFLOW_PACK = DOCS_ROOT / "veteran_workflow_packs.yaml"
