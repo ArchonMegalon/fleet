@@ -4,7 +4,39 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from rafter_pixefy_common import COMPLETION, ROOT, now_utc, write_json
+from rafter_pixefy_common import COMPLETION, ROOT, load_optional_json, now_utc, write_json
+
+
+PROOF_BY_SERVICE = {
+    "Rafter": {
+        "provider": COMPLETION / "rafter" / "RAFTER_PROVIDER_VERIFICATION.generated.json",
+        "gate": COMPLETION / "rafter" / "RAFTER_SECURITY_GOLD_GATE.generated.json",
+        "provider_ready_statuses": {"verified"},
+        "gate_ready_statuses": {"pass"},
+    },
+    "Pixefy": {
+        "provider": COMPLETION / "pixefy" / "PIXEFY_PROVIDER_VERIFICATION.generated.json",
+        "gate": COMPLETION / "pixefy" / "PIXEFY_RESPONSIVE_VISUAL_QA.generated.json",
+        "provider_ready_statuses": {"verified"},
+        "gate_ready_statuses": {"pass"},
+    },
+}
+
+
+def _status(payload: dict | None) -> str:
+    if not payload:
+        return ""
+    return str(payload.get("status") or payload.get("gate_status") or payload.get("verification_status") or "").strip().lower()
+
+
+def _service_verified(service: str) -> bool:
+    proof = PROOF_BY_SERVICE[service]
+    provider_status = _status(load_optional_json(proof["provider"]))
+    gate_status = _status(load_optional_json(proof["gate"]))
+    return (
+        provider_status in proof["provider_ready_statuses"]
+        and gate_status in proof["gate_ready_statuses"]
+    )
 
 
 def main() -> int:
@@ -17,12 +49,14 @@ def main() -> int:
         failures.append("pixefy_row_missing")
     if "PixiFy" in text:
         failures.append("pixefy_misspelled_as_pixify")
+    service_verified: dict[str, bool] = {}
     for service in ("Rafter", "Pixefy"):
         marker = f"| `{service}` |"
         row = next((line for line in text.splitlines() if line.startswith(marker)), "")
+        service_verified[service] = _service_verified(service)
         if not row:
             continue
-        if "`Tier 1`" in row or "`Tier 2`" in row:
+        if ("`Tier 1`" in row or "`Tier 2`" in row) and not service_verified[service]:
             failures.append(f"{service.lower()}_promoted_above_tier3_before_provider_verification")
         forbidden_ready = ("runtime-ready", "runtime ready", "release-ready", "gold ready", "wired")
         if any(token in row.lower() for token in forbidden_ready):
@@ -40,8 +74,8 @@ def main() -> int:
         "status": "Owned" if "`Rafter`" in text else "missing",
         "workspace_integration_tier": "Tier 3",
         "runtime_status": "not_wired",
-        "provider_verification_status": "pending",
-        "release_gate_status": "not_ready",
+        "provider_verification_status": "verified" if service_verified.get("Rafter") else "pending",
+        "release_gate_status": "pass" if service_verified.get("Rafter") else "not_ready",
         "source": "user_reported",
         "updated_at_utc": updated,
         "gold_claim_allowed": False,
@@ -55,8 +89,8 @@ def main() -> int:
         "status": "Owned" if "`Pixefy`" in text else "missing",
         "workspace_integration_tier": "Tier 3",
         "runtime_status": "not_wired",
-        "provider_verification_status": "pending",
-        "release_gate_status": "not_ready",
+        "provider_verification_status": "verified" if service_verified.get("Pixefy") else "pending",
+        "release_gate_status": "pass" if service_verified.get("Pixefy") else "not_ready",
         "source": "user_reported",
         "updated_at_utc": updated,
         "gold_claim_allowed": False,

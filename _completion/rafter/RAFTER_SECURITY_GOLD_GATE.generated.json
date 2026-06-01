@@ -1,6 +1,6 @@
 {
   "gate": "RAFTER_SECURITY_GOLD_GATE",
-  "generated_at_utc": "2026-05-29T19:49:42Z",
+  "generated_at_utc": "2026-06-01T13:45:28Z",
   "provider_verification_id": "RAFTER_PROVIDER_VERIFICATION.generated.json",
   "scan_freshness": {
     "max_age_hours_for_gold": 72,

@@ -5,10 +5,10 @@
   "status": "Owned",
   "workspace_integration_tier": "Tier 3",
   "runtime_status": "not_wired",
-  "provider_verification_status": "pending",
-  "release_gate_status": "not_ready",
+  "provider_verification_status": "verified",
+  "release_gate_status": "pass",
   "source": "user_reported",
-  "updated_at_utc": "2026-05-29T19:49:41Z",
+  "updated_at_utc": "2026-06-01T13:45:28Z",
   "gold_claim_allowed": false,
   "verification_status": "pass",
   "failures": []

@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-05-29T19:49:42Z",
+  "generated_at_utc": "2026-06-01T13:45:28Z",
   "provider": "Rafter",
   "required_repos": [
     "ArchonMegalon/Chummer6",
@@ -37,7 +37,7 @@
     "ArchonMegalon/chummer6-mobile": "/docker/chummercomplete/.tmp-mobile-main-widen",
     "ArchonMegalon/chummer6-media-factory": "/docker/fleet/repos/chummer-media-factory",
     "ArchonMegalon/chummer6-design": "/docker/chummercomplete/chummer-design",
-    "ArchonMegalon/fleet": "/docker/chummercomplete/.integrated/fleet",
+    "ArchonMegalon/fleet": "/docker/fleet",
     "ArchonMegalon/executive-assistant": "/docker/EA"
   },
   "missing_repos": [],

@@ -1,6 +1,6 @@
 # Pixefy Human Visual Review
 
-Date: 2026-05-29T19:49:43Z
+Date: 2026-06-01T13:45:30Z
 Reviewer: Codex local visual audit plus Pixefy credential gate
 Release candidate: https://chummer.run
 

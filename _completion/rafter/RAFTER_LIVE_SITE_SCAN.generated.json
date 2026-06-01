@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-05-29T19:49:42Z",
+  "generated_at_utc": "2026-06-01T13:45:28Z",
   "provider": "Rafter",
   "required_live_routes": [
     "https://chummer.run/",
@@ -32,77 +32,77 @@
     {
       "url": "https://chummer.run/",
       "status_code": 200,
-      "body_bytes_sampled": 21660,
+      "body_bytes_sampled": 23111,
       "ok": true,
       "forbidden_public_copy_hits": []
     },
     {
       "url": "https://chummer.run/downloads",
       "status_code": 200,
-      "body_bytes_sampled": 25665,
+      "body_bytes_sampled": 23696,
       "ok": true,
       "forbidden_public_copy_hits": []
     },
     {
       "url": "https://chummer.run/status",
       "status_code": 200,
-      "body_bytes_sampled": 25506,
+      "body_bytes_sampled": 25533,
       "ok": true,
       "forbidden_public_copy_hits": []
     },
     {
       "url": "https://chummer.run/ledger",
       "status_code": 200,
-      "body_bytes_sampled": 48261,
+      "body_bytes_sampled": 48251,
       "ok": true,
       "forbidden_public_copy_hits": []
     },
     {
       "url": "https://chummer.run/ledger/map",
       "status_code": 200,
-      "body_bytes_sampled": 48395,
+      "body_bytes_sampled": 48385,
       "ok": true,
       "forbidden_public_copy_hits": []
     },
     {
       "url": "https://chummer.run/ledger/factions",
       "status_code": 200,
-      "body_bytes_sampled": 48292,
+      "body_bytes_sampled": 48282,
       "ok": true,
       "forbidden_public_copy_hits": []
     },
     {
       "url": "https://chummer.run/ledger/newsroom",
       "status_code": 200,
-      "body_bytes_sampled": 48996,
+      "body_bytes_sampled": 48986,
       "ok": true,
       "forbidden_public_copy_hits": []
     },
     {
       "url": "https://chummer.run/play",
       "status_code": 200,
-      "body_bytes_sampled": 27378,
+      "body_bytes_sampled": 27237,
       "ok": true,
       "forbidden_public_copy_hits": []
     },
     {
       "url": "https://chummer.run/mobile",
       "status_code": 200,
-      "body_bytes_sampled": 27370,
+      "body_bytes_sampled": 27229,
       "ok": true,
       "forbidden_public_copy_hits": []
     },
     {
       "url": "https://chummer.run/help",
       "status_code": 200,
-      "body_bytes_sampled": 28338,
+      "body_bytes_sampled": 28323,
       "ok": true,
       "forbidden_public_copy_hits": []
     },
     {
       "url": "https://chummer.run/feedback",
       "status_code": 200,
-      "body_bytes_sampled": 42330,
+      "body_bytes_sampled": 42310,
       "ok": true,
       "forbidden_public_copy_hits": []
     }
