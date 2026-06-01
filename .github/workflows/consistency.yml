@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - ".gitignore"
+      - ".github/workflows/consistency.yml"
       - "README.md"
       - "FLEET_ADMIN_SPEC.md"
       - "admin/**"
@@ -21,6 +22,7 @@ on:
       - main
     paths:
       - ".gitignore"
+      - ".github/workflows/consistency.yml"
       - "README.md"
       - "FLEET_ADMIN_SPEC.md"
       - "admin/**"
