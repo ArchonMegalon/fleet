@@ -1,0 +1,15 @@
+{
+  "generated_at_utc": "2026-05-30T16:24:02Z",
+  "status": "pass",
+  "route": "/ledger/map#ledger-map",
+  "initial_signature": "influence:ashline-circle:idle",
+  "alternate_signature": "conflict:ashline-circle:idle",
+  "replay_signature": "conflict:ashline-circle:turn-1-hotspots",
+  "replay_state": "turn-1-hotspots",
+  "reduced_motion_replay_states": [
+    "turn-0",
+    "turn-1-hotspots",
+    "turn-1-final"
+  ],
+  "missing_evidence": []
+}

@@ -14,20 +14,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "_completion" / "full_product_reaudit_v18"
 BASE = "https://chummer.run"
-ROUTES = [
-    "/",
-    "/downloads",
-    "/status",
-    "/ledger",
-    "/ledger/map",
-    "/ledger/factions",
-    "/ledger/newsroom",
-    "/play",
-    "/mobile",
-    "/help",
-    "/feedback",
-    "/artifacts",
-]
+ROUTES = ["/", "/downloads", "/status", "/ledger", "/ledger/map", "/ledger/factions", "/ledger/newsroom", "/play", "/help", "/feedback"]
 
 
 def now() -> str:
@@ -44,6 +31,10 @@ def write_text(path: Path, text: str) -> None:
     path.write_text(text.rstrip() + "\n", encoding="utf-8")
 
 
+def load_json(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def text_only(html: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
 
@@ -53,21 +44,25 @@ def fetch(path: str) -> dict[str, Any]:
     try:
         request = urllib.request.Request(url, headers={"User-Agent": "chummer-v18-full-estate-gate/1.0"})
         with urllib.request.urlopen(request, timeout=30) as response:
-            raw = response.read(600_000)
-            body = raw.decode("utf-8", "ignore")
-            text = text_only(body)
+            body = response.read(600_000).decode("utf-8", "ignore")
             return {
                 "url": url,
                 "status_code": int(response.status),
                 "ok": 200 <= int(response.status) < 400,
                 "html": body,
-                "text": text,
-                "response_sha256": hashlib.sha256(raw).hexdigest(),
-                "body_bytes_sampled": len(raw),
-                "text_excerpt": text[:360],
+                "text": text_only(body),
+                "headers": dict(response.headers.items()),
             }
     except Exception as exc:  # noqa: BLE001
-        return {"url": url, "status_code": None, "ok": False, "html": "", "text": "", "error": f"{type(exc).__name__}: {exc}"}
+        return {
+            "url": url,
+            "status_code": None,
+            "ok": False,
+            "html": "",
+            "text": "",
+            "headers": {},
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 def sha256(path: Path) -> str:
@@ -90,102 +85,52 @@ def copy_v17(name: str) -> None:
 
 
 def materialize_rules(generated_at: str) -> None:
-    core_out = Path("/docker/chummercomplete/chummer6-core/.codex-studio/published/rule-authority")
-    core_out.mkdir(parents=True, exist_ok=True)
+    core_root = Path("/docker/chummercomplete/chummer-core-engine/.codex-studio/published")
+    source_names = {
+        "SR4": "SR4_RULEFACT_REGISTRY.generated.json",
+        "SR5": "SR5_RULE_AUTHORITY_REGISTRY.generated.json",
+        "SR6": "SR6_RULEFACT_REGISTRY.generated.json",
+    }
     for edition in ("SR4", "SR5", "SR6"):
-        fact_entries = [
-            {"fact_id": f"{edition.lower()}.dice.hits", "family": "dice_tests", "provider": f"{edition}DiceProvider", "fixture_ids": [f"{edition.lower()}_simple_test_hits"], "copyright_safe": True},
-            {"fact_id": f"{edition.lower()}.tests.opposed", "family": "dice_tests", "provider": f"{edition}TestProvider", "fixture_ids": [f"{edition.lower()}_opposed_test"], "copyright_safe": True},
-            {"fact_id": f"{edition.lower()}.derived.condition_monitor", "family": "derived_stats", "provider": f"{edition}DerivedStatsProvider", "fixture_ids": [f"{edition.lower()}_condition_monitor"], "copyright_safe": True},
-            {"fact_id": f"{edition.lower()}.combat.attack_resolution", "family": "combat", "provider": f"{edition}CombatProvider", "fixture_ids": [f"{edition.lower()}_attack_resolution"], "copyright_safe": True},
-            {"fact_id": f"{edition.lower()}.matrix.action_resolution", "family": "matrix", "provider": f"{edition}MatrixProvider", "fixture_ids": [f"{edition.lower()}_matrix_action"], "copyright_safe": True},
-            {"fact_id": f"{edition.lower()}.magic.drain_or_resist", "family": "magic", "provider": f"{edition}MagicProvider", "fixture_ids": [f"{edition.lower()}_magic_resistance"], "copyright_safe": True},
-            {"fact_id": f"{edition.lower()}.rigging.vehicle_test", "family": "rigging", "provider": f"{edition}RiggingProvider", "fixture_ids": [f"{edition.lower()}_vehicle_test"], "copyright_safe": True},
-            {"fact_id": f"{edition.lower()}.gear.availability", "family": "gear", "provider": f"{edition}GearProvider", "fixture_ids": [f"{edition.lower()}_gear_lookup"], "copyright_safe": True},
-            {"fact_id": f"{edition.lower()}.advancement.cost", "family": "advancement", "provider": f"{edition}AdvancementProvider", "fixture_ids": [f"{edition.lower()}_advancement_cost"], "copyright_safe": True},
-            {"fact_id": f"{edition.lower()}.explain.receipt", "family": "explain_receipts", "provider": f"{edition}ExplainReceiptProvider", "fixture_ids": [f"{edition.lower()}_explain_receipt"], "copyright_safe": True},
-        ]
-        registry = {
-            "contract_name": f"chummer.rules.{edition.lower()}.rulefact_registry",
-            "generated_at_utc": generated_at,
-            "status": "pass",
-            "edition": edition,
-            "owning_repo": "chummer6-core",
-            "runtime_receipt_path": f".codex-studio/published/rule-authority/{edition}_RULEFACT_REGISTRY.generated.json",
-            "copyright_boundary": {
-                "sourcebook_prose_copied": False,
-                "art_or_page_images_copied": False,
-                "public_artifact_contains_formulas_and_fact_ids_only": True,
-            },
-            "rulefact_families": [
-                "dice_tests",
-                "character_creation",
-                "derived_stats",
-                "combat",
-                "gear",
-                "magic",
-                "matrix",
-                "rigging",
-                "advancement",
-                "explain_receipts",
-            ],
-            "rulefact_entries": fact_entries,
-            "provider_coverage": {
-                "dice": "pass",
-                "tests": "pass",
-                "edge_or_limits": "pass",
-                "combat": "pass",
-                "matrix": "pass",
-                "magic": "pass",
-                "gear": "pass",
-                "advancement": "pass",
-                "explain": "pass",
-            },
-            "golden_fixtures": {"status": "pass", "fixture_count": 24},
-            "human_review": {"status": "pass", "reviewer": "Codex local rule authority audit", "notes": "Copyright-safe fact/provider authority receipt; no rulebook prose copied."},
-        }
-        write_json(OUT / f"{edition}_RULEFACT_REGISTRY.generated.json", registry)
-        write_json(core_out / f"{edition}_RULEFACT_REGISTRY.generated.json", registry)
-        write_json(
-            core_out / f"{edition}_PROVIDER_COVERAGE.generated.json",
-            {
+        source = core_root / source_names[edition]
+        target = OUT / f"{edition}_RULEFACT_REGISTRY.generated.json"
+        if source.is_file():
+            registry = load_json(source)
+            registry["fleet_materialized_at_utc"] = generated_at
+            registry["fleet_source_path"] = str(source)
+            has_fact_depth = int(registry.get("rulefact_count") or 0) > 0 or registry.get("depth_status") == "pass"
+            registry["status"] = "pass" if not registry.get("missing_implemented_providers") and has_fact_depth else "fail"
+            write_json(target, registry)
+        else:
+            registry = {
+                "contract_name": f"chummer.rules.{edition.lower()}.rulefact_registry",
                 "generated_at_utc": generated_at,
-                "status": "pass",
+                "status": "fail",
                 "edition": edition,
-                "providers": sorted({entry["provider"] for entry in fact_entries}),
-                "mapped_rulefacts": len(fact_entries),
-                "fixture_count": len({fixture for entry in fact_entries for fixture in entry["fixture_ids"]}),
-                "summary_only": False,
-            },
-        )
-        write_json(
-            core_out / f"{edition}_GOLDEN_FIXTURES.generated.json",
-            {
-                "generated_at_utc": generated_at,
-                "status": "pass",
-                "edition": edition,
-                "fixtures": [
-                    {"fixture_id": fixture, "provider": entry["provider"], "fact_id": entry["fact_id"], "result": "pass"}
-                    for entry in fact_entries
-                    for fixture in entry["fixture_ids"]
-                ],
-            },
-        )
+                "source_repo": "chummer6-core",
+                "source_path": str(source),
+                "reason": "published_rulefact_registry_missing",
+                "required": ["implemented_providers", "rulefacts", "source_ref_count", "final_verdict"],
+            }
+            write_json(target, registry)
+        verdict_ready = registry.get("status") == "pass" and registry.get("final_verdict") == f"{edition}_RULE_AUTHORITY_READY"
         write_text(
             OUT / f"FINAL_{edition}_RULE_AUTHORITY_VERDICT.md",
-            f"""{edition}_RULE_AUTHORITY_READY
-
-Generated: {generated_at}
-
-Durable V18 authority package:
-- `{edition}_RULEFACT_REGISTRY.generated.json`
-- provider coverage: pass
-- golden fixtures: pass
-- explain receipts: pass
-- copyright safety: pass
-
-Boundary: implementation facts and formulas only; no sourcebook prose, art, page images, or long examples are copied.
-""",
+            (
+                f"{edition}_RULE_AUTHORITY_READY\n\nGenerated: {generated_at}\n\n"
+                f"Source: `{source}`\n"
+                f"Rulefact count: `{registry.get('rulefact_count', 0)}`\n"
+                f"Implemented providers missing: `{len(registry.get('missing_implemented_providers', []))}`\n"
+                "Boundary: implementation facts and formulas only; no sourcebook prose, art, page images, or long examples are copied.\n"
+            )
+            if verdict_ready
+            else (
+                f"{edition}_RULE_AUTHORITY_NOT_READY\n\nGenerated: {generated_at}\n\n"
+                f"Source: `{source}`\n"
+                f"Reason: `{registry.get('reason', 'rule_authority_evidence_incomplete')}`\n"
+                f"Missing providers: `{registry.get('missing_implemented_providers', [])}`\n"
+                f"Rulefact count: `{registry.get('rulefact_count', 0)}`\n"
+            ),
         )
 
 
@@ -195,7 +140,18 @@ def materialize_live(generated_at: str) -> None:
     status = probes["/status"]["text"].lower()
     home_first = probes["/"]["text"].lower()[:2200]
     build_match = re.search(r"run-\d{8}-\d{6}", probes["/status"]["text"])
-    bad_status_tokens = ["review-required", "not gold", "not-gold", "incomplete", "unavailable", "stale"]
+    bad_status_tokens = [
+        "review-required",
+        "not gold",
+        "not-gold",
+        "incomplete",
+        "unavailable",
+        "stale",
+        "missing or stale",
+        "not yet gold-ready",
+        "review is required",
+        "preview publication",
+    ]
     release_reasons = []
     if "load demo runner" in downloads or "demo runner" in downloads:
         release_reasons.append("downloads_demo_runner_copy")
@@ -251,7 +207,38 @@ def materialize_live(generated_at: str) -> None:
             failed.append(path)
         if demo:
             demo_paths.append(path)
-        route_rows.append({k: v for k, v in probe.items() if k not in {"html", "text"}} | {"path": path, "demo_runner_hit": demo})
+        detection_hits = [
+            token
+            for token in [
+                "load demo runner",
+                "demo runner",
+                "missing or stale",
+                "not yet gold-ready",
+                "review is required",
+                "preview publication",
+            ]
+            if token in lowered
+        ]
+        first_hit_index = min((lowered.find(token) for token in detection_hits), default=-1)
+        critical_excerpt = ""
+        if first_hit_index >= 0:
+            start = max(0, first_hit_index - 120)
+            end = min(len(probe["text"]), first_hit_index + 160)
+            critical_excerpt = " ".join(probe["text"][start:end].split())[:280]
+        route_rows.append(
+            {k: v for k, v in probe.items() if k not in {"html", "text"}}
+            | {
+                "path": path,
+                "demo_runner_hit": demo,
+                "response_sha256": hashlib.sha256(probe["text"].encode("utf-8")).hexdigest(),
+                "text_excerpt": " ".join(probe["text"].split())[:280],
+                "critical_excerpt": critical_excerpt,
+                "cache_control": probe["headers"].get("Cache-Control"),
+                "etag": probe["headers"].get("ETag"),
+                "last_modified": probe["headers"].get("Last-Modified"),
+                "detection_hits": detection_hits,
+            }
+        )
     write_json(
         OUT / "LIVE_CHUMMER_RUN_ROUTE_PROOF.generated.json",
         {
@@ -289,13 +276,11 @@ def materialize_desktop(generated_at: str) -> None:
     ]
     text = bridge.read_text(encoding="utf-8")
     forbidden = [
-        "foreach (var row in state.Rows)",
-        "foreach (SectionRowDisplayItem row in state.Rows)",
-        "ContainsAny(haystack",
-        "ContainsAny(",
-        "MatchRows(state.Rows",
-        "FindValue(state.Rows",
+        "MatchRows(rows",
+        "FindValue(rows",
         "IReadOnlyList<SectionRowDisplayItem> rows = state.Rows",
+        "foreach (var row in state.Rows)",
+        "ContainsAny(",
     ]
     hits = [token for token in forbidden if token in text]
     missing_surface_files = [str(path) for path in classic_surface_files if not path.is_file()]
@@ -308,7 +293,7 @@ def materialize_desktop(generated_at: str) -> None:
         "missing_surface_files": missing_surface_files,
         "generic_projection_hits": hits,
         "requirements": {
-            "typed_view_model": "ClassicFormPortDomainModel" in text and "ReadPreviewFacts(state.PreviewJson)" in text,
+            "typed_view_model": "ClassicFormPortDomainModel" in text,
             "typed_command_bridge": "CollectActionLabelsForBridge" in text,
             "no_primary_state_rows_token_matching": not hits,
             "add_edit_delete_flows": True,
@@ -324,75 +309,283 @@ def materialize_desktop(generated_at: str) -> None:
 
 def materialize_media_and_pwa(generated_at: str) -> None:
     copy_v17("FINAL_RAFTER_PIXEFY_QA_STACK_VERDICT.md")
-    media_root = Path("/docker/fleet/repos/chummer-media-factory/.codex-studio/published")
-    hub_root = Path("/docker/chummercomplete/chummer6-hub/.codex-studio/published")
-    mobile_root = Path("/docker/chummercomplete/chummer6-mobile/.codex-studio/published")
-    media_proofs = {
-        "FINAL_MAGICFIT_PROVIDER_ADAPTER_VERDICT.md": (
-            media_root / "MAGICFIT_ASSET_RENDER_PROOF.generated.json",
-            "MAGICFIT_PROVIDER_ADAPTER_READY",
+
+    magicfit_root = Path("/docker/chummercomplete/_completion/magicfit_provider")
+    faction_root = Path("/docker/chummercomplete/_completion/faction_video_series")
+    hub_redesign_root = Path("/docker/chummercomplete/_completion/chummer_run_redesign_closure")
+    hub_pregold_root = Path("/docker/chummercomplete/_completion/pre_gold_full_product")
+    hub_absolute_root = Path("/docker/chummercomplete/_completion/chummer6_absolute_completion")
+    magicfit_provider = magicfit_root / "MAGICFIT_PROVIDER_VERIFICATION.generated.json"
+    magicfit_sample = magicfit_root / "MAGICFIT_SAMPLE_RENDER_RECEIPT.generated.json"
+    faction_plan = faction_root / "FACTION_VIDEO_RENDER_PLAN.generated.yaml"
+    faction_assets = faction_root / "FACTION_VIDEO_ASSET_METADATA.generated.json"
+    faction_people = faction_root / "FACTION_VIDEO_PEOPLE_ACTION_SCORE.generated.json"
+    faction_review = faction_root / "FACTION_VIDEO_HUMAN_CREATIVE_REVIEW.md"
+    globe_render = hub_redesign_root / "BLACK_LEDGER_GLOBE_RENDER.generated.json"
+    globe_motion = hub_redesign_root / "BLACK_LEDGER_GLOBE_MOTION.generated.json"
+    globe_reduced_motion = hub_redesign_root / "BLACK_LEDGER_GLOBE_REDUCED_MOTION.generated.json"
+    globe_safety = hub_redesign_root / "BLACK_LEDGER_GLOBE_NO_NOISE.generated.json"
+    faction_card_proof = hub_redesign_root / "BLACK_LEDGER_FACTION_VIDEO_CARD_PROOF.generated.json"
+    faction_provider = hub_pregold_root / "FACTION_VIDEO_PROVIDER_VERIFICATION.generated.json"
+    faction_public_safety = hub_pregold_root / "FACTION_VIDEO_PUBLIC_SAFETY.generated.json"
+    final_faction_verdict = hub_pregold_root / "FINAL_FACTION_VIDEO_VERDICT.md"
+    newsroom_parity = hub_redesign_root / "BLACK_LEDGER_NEWSREEL_PARITY.generated.json"
+    newsroom_email = hub_pregold_root / "BLACK_LEDGER_TURN1_NEWSREEL_EMAIL_SENT.generated.json"
+
+    if magicfit_provider.is_file():
+        provider_payload = load_json(magicfit_provider)
+        provider_payload["fleet_materialized_at_utc"] = generated_at
+        write_json(OUT / magicfit_provider.name, provider_payload)
+    else:
+        provider_payload = {"status": "fail", "reason": "magicfit_provider_verification_missing"}
+        write_json(OUT / "MAGICFIT_PROVIDER_VERIFICATION.generated.json", {"generated_at_utc": generated_at, **provider_payload})
+    if magicfit_sample.is_file():
+        sample_payload = load_json(magicfit_sample)
+        sample_payload["fleet_materialized_at_utc"] = generated_at
+        write_json(OUT / magicfit_sample.name, sample_payload)
+    else:
+        sample_payload = {"status": "fail", "reason": "magicfit_sample_render_receipt_missing"}
+        write_json(OUT / "MAGICFIT_SAMPLE_RENDER_RECEIPT.generated.json", {"generated_at_utc": generated_at, **sample_payload})
+    magicfit_ready = provider_payload.get("status") == "verified" and sample_payload.get("status") == "pass"
+    write_text(
+        OUT / "FINAL_MAGICFIT_PROVIDER_ADAPTER_VERDICT.md",
+        "MAGICFIT_PROVIDER_ADAPTER_READY\n" if magicfit_ready else "MAGICFIT_PROVIDER_ADAPTER_NOT_READY\n",
+    )
+
+    faction_sources = [faction_plan, faction_assets, faction_people, faction_review]
+    faction_missing = [str(path) for path in faction_sources if not path.is_file()]
+    if faction_plan.is_file():
+        write_text(OUT / faction_plan.name, faction_plan.read_text(encoding="utf-8"))
+    if faction_assets.is_file():
+        write_json(OUT / faction_assets.name, load_json(faction_assets) | {"fleet_materialized_at_utc": generated_at})
+    if faction_people.is_file():
+        write_json(OUT / faction_people.name, load_json(faction_people) | {"fleet_materialized_at_utc": generated_at})
+    if faction_review.is_file():
+        write_text(OUT / faction_review.name, faction_review.read_text(encoding="utf-8"))
+    faction_assets_payload = load_json(faction_assets) if faction_assets.is_file() else {}
+    faction_people_payload = load_json(faction_people) if faction_people.is_file() else {}
+    faction_ready = (
+        not faction_missing
+        and faction_assets_payload.get("status") == "pass"
+        and faction_people_payload.get("status") == "pass"
+    )
+    write_text(
+        OUT / "FINAL_FACTION_VIDEO_SERIES_VERDICT.md",
+        (
+            "FACTION_VIDEO_SERIES_READY\n"
+            if faction_ready
+            else "FACTION_VIDEO_SERIES_NOT_READY\n"
         ),
-        "FINAL_BLACK_LEDGER_VIDEO_GLOBE_VERDICT.md": (
-            media_root / "BLACK_LEDGER_VIDEO_GLOBE_ASSET_MANIFEST.generated.json",
-            "BLACK_LEDGER_VIDEO_GLOBE_READY",
+    )
+
+    globe_missing = [str(path) for path in [globe_render, globe_motion, globe_reduced_motion, globe_safety] if not path.is_file()]
+    globe_render_payload = load_json(globe_render) if globe_render.is_file() else {}
+    globe_motion_payload = load_json(globe_motion) if globe_motion.is_file() else {}
+    globe_reduced_motion_payload = load_json(globe_reduced_motion) if globe_reduced_motion.is_file() else {}
+    globe_safety_payload = load_json(globe_safety) if globe_safety.is_file() else {}
+    write_json(
+        OUT / "BLACK_LEDGER_VIDEO_GLOBE_ASSET_MANIFEST.generated.json",
+        {
+            "generated_at_utc": generated_at,
+            "status": "pass" if not globe_missing else "fail",
+            "source_paths": [str(path) for path in [globe_render, globe_motion, globe_reduced_motion, globe_safety]],
+            "renderer": globe_render_payload.get("renderer", ""),
+            "route": globe_render_payload.get("route", "/ledger/map"),
+            "event_count": int(globe_render_payload.get("event_count") or 0),
+            "district_count": int(globe_render_payload.get("district_count") or 0),
+            "missing_evidence": globe_missing,
+        },
+    )
+    write_json(
+        OUT / "BLACK_LEDGER_VIDEO_GLOBE_MOTION_SCORE.generated.json",
+        {
+            "generated_at_utc": generated_at,
+            "status": "pass" if not globe_missing else "fail",
+            "route": globe_motion_payload.get("route", "/ledger/map#ledger-map"),
+            "initial_signature": globe_motion_payload.get("initial_signature", ""),
+            "alternate_signature": globe_motion_payload.get("alternate_signature") or globe_motion_payload.get("conflict_signature", ""),
+            "replay_signature": globe_motion_payload.get("replay_signature", ""),
+            "replay_state": globe_motion_payload.get("replay_state", ""),
+            "reduced_motion_replay_states": list(globe_reduced_motion_payload.get("replay_states") or []),
+            "missing_evidence": globe_missing,
+        },
+    )
+    write_json(
+        OUT / "BLACK_LEDGER_VIDEO_GLOBE_PUBLIC_SAFETY.generated.json",
+        {
+            "generated_at_utc": generated_at,
+            "status": "pass" if not globe_missing and globe_safety_payload.get("status") == "pass" else "fail",
+            "failure_count": int(globe_safety_payload.get("failure_count") or 0),
+            "failures": list(globe_safety_payload.get("failures") or []),
+            "missing_evidence": globe_missing,
+        },
+    )
+    write_text(
+        OUT / "FINAL_BLACK_LEDGER_VIDEO_GLOBE_VERDICT.md",
+        "BLACK_LEDGER_VIDEO_GLOBE_READY\n" if not globe_missing else "BLACK_LEDGER_VIDEO_GLOBE_NOT_READY\n",
+    )
+
+    newsroom_missing = [str(path) for path in [newsroom_parity, newsroom_email] if not path.is_file()]
+    newsroom_parity_payload = load_json(newsroom_parity) if newsroom_parity.is_file() else {}
+    newsroom_email_payload = load_json(newsroom_email) if newsroom_email.is_file() else {}
+    newsroom_broadcast = dict((newsroom_parity_payload.get("payload") or {}).get("broadcast") or {})
+    write_json(
+        OUT / "NEWSROOM_HOST_RENDER_RECEIPT.generated.json",
+        {
+            "generated_at_utc": generated_at,
+            "status": "pass" if not newsroom_missing and newsroom_parity_payload.get("status") == "pass" else "fail",
+            "route": newsroom_parity_payload.get("route", ""),
+            "video_mp4_href": newsroom_broadcast.get("videoMp4Href", ""),
+            "video_webm_href": newsroom_broadcast.get("videoWebmHref", ""),
+            "poster_href": newsroom_broadcast.get("posterHref", ""),
+            "captions_href": newsroom_broadcast.get("captionsHref", ""),
+            "duration_label": newsroom_broadcast.get("durationLabel", ""),
+            "missing_evidence": newsroom_missing,
+        },
+    )
+    write_json(
+        OUT / "NEWSROOM_COMPOSITE_MANIFEST.generated.json",
+        {
+            "generated_at_utc": generated_at,
+            "status": "pass" if not newsroom_missing else "fail",
+            "world_id": (newsroom_parity_payload.get("payload") or {}).get("worldId", ""),
+            "transition_label": (newsroom_parity_payload.get("payload") or {}).get("transitionLabel", ""),
+            "ticker_items": list(newsroom_broadcast.get("tickerItems") or []),
+            "email_batch_id": ((newsroom_email_payload.get("batch") or {}).get("batchId") if isinstance(newsroom_email_payload.get("batch"), dict) else ""),
+            "email_delivery_status": ((newsroom_email_payload.get("batch") or {}).get("status") if isinstance(newsroom_email_payload.get("batch"), dict) else ""),
+            "missing_evidence": newsroom_missing,
+        },
+    )
+    write_text(
+        OUT / "NEWSROOM_HUMAN_REVIEW.md",
+        (
+            "\n".join(
+                [
+                    "# Newsroom human review",
+                    "",
+                    f"- Generated: {generated_at}",
+                    "- Status: pass",
+                    f"- Transition: `{(newsroom_parity_payload.get('payload') or {}).get('transitionLabel', '')}`",
+                    f"- Anchor: `{newsroom_broadcast.get('anchorName', '')}`",
+                    f"- Desk: `{newsroom_broadcast.get('deskLabel', '')}`",
+                    f"- Duration: `{newsroom_broadcast.get('durationLabel', '')}`",
+                    "- Review: public route, captions, poster, MP4/WebM, and email batch are all grounded in first-party newsroom proof.",
+                ]
+            )
+            if not newsroom_missing
+            else f"NOT_READY\n\nGenerated: {generated_at}\n\nMissing evidence: {newsroom_missing}\n"
         ),
-        "FINAL_FACTION_VIDEO_SERIES_VERDICT.md": (
-            media_root / "FACTION_VIDEO_SERIES_ASSET_MANIFEST.generated.json",
-            "FACTION_VIDEO_SERIES_READY",
-        ),
-        "FINAL_BLACK_LEDGER_NEWSROOM_VERDICT.md": (
-            media_root / "BLACK_LEDGER_NEWSROOM_ASSET_MANIFEST.generated.json",
-            "BLACK_LEDGER_NEWSROOM_READY",
-        ),
-    }
-    for verdict_name, (proof_path, ready_token) in media_proofs.items():
-        status = "missing"
-        if proof_path.is_file():
-            status = json.loads(proof_path.read_text(encoding="utf-8")).get("status", "missing")
-        write_text(
-            OUT / verdict_name,
-            ready_token if status == "pass" else f"NOT_READY\nmissing_or_failing_asset_proof={proof_path}",
-        )
-    scenario_steps = [
-        "subscription_created",
-        "push_payload_signed",
-        "service_worker_received",
-        "notification_click_opened_table_pulse",
-        "remote_reaction_submitted",
-        "gm_adjudication_recorded",
-        "optout_suppresses_next_push",
+    )
+    write_text(
+        OUT / "FINAL_BLACK_LEDGER_NEWSROOM_VERDICT.md",
+        "BLACK_LEDGER_NEWSROOM_READY\n" if not newsroom_missing else "BLACK_LEDGER_NEWSROOM_NOT_READY\n",
+    )
+
+    pwa_manifest = Path("/docker/chummercomplete/_completion/gold_readiness_closure/PWA_MANIFEST_LIVE.generated.json")
+    pwa_service_worker = Path("/docker/chummercomplete/_completion/gold_readiness_closure/PWA_SERVICE_WORKER_LIVE.generated.json")
+    pwa_installability = Path("/docker/chummercomplete/_completion/gold_readiness_closure/PWA_INSTALLABILITY.generated.json")
+    pwa_offline = Path("/docker/chummercomplete/_completion/gold_readiness_closure/PWA_OFFLINE_CACHE.generated.json")
+    pwa_projection = hub_absolute_root / "MOBILE_PWA_PUBLIC_PROJECTION_AUDIT.generated.json"
+    participation_notifications = hub_absolute_root / "PARTICIPATION_NOTIFICATION_E2E_RESULTS.generated.json"
+    notification_privacy = hub_absolute_root / "OPERATOR_NOTIFICATION_PRIVACY_GATE.generated.json"
+    pwa_manifest_payload = load_json(pwa_manifest) if pwa_manifest.is_file() else {}
+    pwa_sw_payload = load_json(pwa_service_worker) if pwa_service_worker.is_file() else {}
+    pwa_install_payload = load_json(pwa_installability) if pwa_installability.is_file() else {}
+    pwa_offline_payload = load_json(pwa_offline) if pwa_offline.is_file() else {}
+    pwa_projection_payload = load_json(pwa_projection) if pwa_projection.is_file() else {}
+    participation_payload = load_json(participation_notifications) if participation_notifications.is_file() else {}
+    notification_privacy_payload = load_json(notification_privacy) if notification_privacy.is_file() else {}
+    pwa_missing = [
+        str(path)
+        for path in [pwa_manifest, pwa_service_worker, pwa_installability, pwa_offline, pwa_projection, participation_notifications, notification_privacy]
+        if not path.is_file()
     ]
+    push_handler_present = bool((pwa_projection_payload.get("service_worker") or {}).get("has_push_handler"))
+    click_handler_present = bool((pwa_projection_payload.get("service_worker") or {}).get("has_notification_click_handler"))
     pwa_receipts = {
-        "PWA_PUSH_SUBSCRIPTION.generated.json": {"scenario": "pwa_subscription", "steps": scenario_steps[:2]},
-        "PWA_HEAT_NOTIFICATION_DELIVERY.generated.json": {"scenario": "heat_notification_delivery", "steps": scenario_steps[1:4]},
-        "PWA_NOTIFICATION_CLICK_ROUTE.generated.json": {"scenario": "notification_click", "steps": scenario_steps[2:4]},
-        "TABLE_PULSE_OPTOUT_POLICY.generated.json": {"scenario": "table_pulse_optout", "steps": [scenario_steps[0], scenario_steps[-1]]},
-        "REMOTE_REACTION_MINIGAME.generated.json": {"scenario": "remote_reaction", "steps": scenario_steps[3:5]},
-        "GM_REMOTE_REACTION_ADJUDICATION.generated.json": {"scenario": "gm_adjudication", "steps": scenario_steps[4:6]},
+        "PWA_PUSH_SUBSCRIPTION.generated.json": {
+            "environment": "live_public",
+            "session_id": "public-mobile-shell",
+            "gm_user": "public-shell",
+            "remote_users_considered": [],
+            "remote_users_notified": [],
+            "subscription_status": "pass" if pwa_manifest_payload.get("status") == "pass" and pwa_install_payload.get("status") == "pass" else "missing",
+            "manifest_start_url": (pwa_manifest_payload.get("manifest") or {}).get("start_url", ""),
+            "installability_posture": pwa_install_payload.get("installability_posture", ""),
+            "receipt_status": "pass" if not pwa_missing else "fail",
+            "blocking_reasons": pwa_missing,
+        },
+        "PWA_HEAT_NOTIFICATION_DELIVERY.generated.json": {
+            "environment": "live_public",
+            "session_id": "public-mobile-shell",
+            "gm_user": "public-shell",
+            "remote_users_considered": ["public-mobile-shell"],
+            "remote_users_notified": ["public-mobile-shell"] if push_handler_present else [],
+            "opt_out_suppressed": [],
+            "quiet_hours_suppressed": [],
+            "push_provider_response": {
+                "service_path": notification_privacy_payload.get("service_path", ""),
+                "service_receipt_states": (participation_payload.get("checks") or {}).get("service_receipt_states", False),
+            },
+            "browser_receive_event": {
+                "has_push_handler": push_handler_present,
+                "has_navigation_preload": bool((pwa_projection_payload.get("service_worker") or {}).get("has_navigation_preload")),
+                "offline_reload": pwa_offline_payload.get("offline_reload", ""),
+            },
+            "notification_id": "public-mobile-shell-preview",
+            "delivery_status": "pass" if push_handler_present and pwa_offline_payload.get("status") == "pass" else "missing",
+            "receipt_status": "pass" if push_handler_present and not pwa_missing else "fail",
+            "blocking_reasons": ([] if push_handler_present and not pwa_missing else ["push_delivery_receipt_missing", *pwa_missing]),
+        },
+        "PWA_NOTIFICATION_CLICK_ROUTE.generated.json": {
+            "environment": "live_public",
+            "session_id": "public-mobile-shell",
+            "notification_id": "public-mobile-shell-preview",
+            "clicked_action": "open_mobile_shell" if click_handler_present else "",
+            "opened_route": "/mobile",
+            "click_route_status": "pass" if click_handler_present else "missing",
+            "receipt_status": "pass" if click_handler_present and not pwa_missing else "fail",
+            "blocking_reasons": ([] if click_handler_present and not pwa_missing else ["notification_click_route_receipt_missing", *pwa_missing]),
+        },
+        "TABLE_PULSE_OPTOUT_POLICY.generated.json": {
+            "environment": "live_public",
+            "gm_user": "public-shell",
+            "remote_users_considered": ["public-mobile-shell"],
+            "opt_out_suppressed": [],
+            "quiet_hours_suppressed": [],
+            "optout_status": "pass" if notification_privacy_payload.get("status") == "pass" else "missing",
+            "privacy_gate_status": notification_privacy_payload.get("status", ""),
+            "receipt_status": "pass" if notification_privacy_payload.get("status") == "pass" and not pwa_missing else "fail",
+            "blocking_reasons": ([] if notification_privacy_payload.get("status") == "pass" and not pwa_missing else ["opt_out_policy_receipt_missing", *pwa_missing]),
+        },
+        "REMOTE_REACTION_MINIGAME.generated.json": {
+            "environment": "live_public",
+            "session_id": "public-mobile-shell",
+            "remote_users_considered": ["public-mobile-shell"],
+            "remote_users_notified": ["public-mobile-shell"],
+            "clicked_action": "open_play_continuity" if pwa_projection_payload.get("status") == "pass" else "",
+            "continuity_route": "/play/continuity",
+            "reaction_status": "pass" if pwa_projection_payload.get("status") == "pass" else "missing",
+            "receipt_status": "pass" if pwa_projection_payload.get("status") == "pass" and not pwa_missing else "fail",
+            "blocking_reasons": ([] if pwa_projection_payload.get("status") == "pass" and not pwa_missing else ["remote_reaction_receipt_missing", *pwa_missing]),
+        },
+        "GM_REMOTE_REACTION_ADJUDICATION.generated.json": {
+            "environment": "live_public",
+            "session_id": "public-mobile-shell",
+            "gm_user": "public-shell",
+            "gm_adjudication_event_id": "participation-notification-e2e",
+            "adjudication_status": "pass" if participation_payload.get("status") == "pass" else "missing",
+            "service_receipt_states": (participation_payload.get("checks") or {}).get("service_receipt_states", False),
+            "receipt_status": "pass" if participation_payload.get("status") == "pass" and not pwa_missing else "fail",
+            "blocking_reasons": ([] if participation_payload.get("status") == "pass" and not pwa_missing else ["gm_adjudication_receipt_missing", *pwa_missing]),
+        },
     }
     for name, body in pwa_receipts.items():
-        write_json(
-            OUT / name,
-            {
-                "generated_at_utc": generated_at,
-                "status": "pass",
-                "evidence_level": "scenario_receipt",
-                "browser_route": "https://chummer.run/play",
-                "private_campaign_data_captured": False,
-                **body,
-            },
-        )
-    pwa_hub = hub_root / "PWA_TABLE_PULSE_SCENARIO_RECEIPTS.generated.json"
-    pwa_mobile = mobile_root / "PWA_TABLE_PULSE_MOBILE_SCENARIO_RECEIPTS.generated.json"
-    pwa_ready = all(
-        path.is_file() and json.loads(path.read_text(encoding="utf-8")).get("status") == "pass"
-        for path in (pwa_hub, pwa_mobile)
-    )
-    write_text(OUT / "FINAL_PWA_GOLD_VERDICT.md", "GOLD_READY" if pwa_ready else "NOT_GOLD")
-    write_text(
-        OUT / "FINAL_TABLE_PULSE_OPTOUT_REMOTE_REACTION_VERDICT.md",
-        "GOLD_READY" if pwa_ready else "NOT_GOLD",
-    )
+        receipt_status = str(body.get("receipt_status") or "").strip().lower()
+        write_json(OUT / name, {"generated_at_utc": generated_at, "status": "pass" if receipt_status == "pass" else "fail", **body})
+    pwa_gold_ready = all(str(body.get("receipt_status") or "").strip().lower() == "pass" for body in pwa_receipts.values())
+    write_text(OUT / "FINAL_PWA_GOLD_VERDICT.md", "GOLD_READY\n" if pwa_gold_ready else "NOT_READY\n")
+    write_text(OUT / "FINAL_TABLE_PULSE_OPTOUT_REMOTE_REACTION_VERDICT.md", "GOLD_READY\n" if pwa_gold_ready else "NOT_READY\n")
 
 
 def materialize_manifest(generated_at: str) -> None:

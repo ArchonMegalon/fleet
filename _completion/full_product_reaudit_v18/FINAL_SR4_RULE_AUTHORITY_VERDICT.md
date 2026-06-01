@@ -1,12 +1,8 @@
 SR4_RULE_AUTHORITY_READY
 
-Generated: 2026-05-30T16:23:36Z
+Generated: 2026-05-30T16:24:02Z
 
-Durable V18 authority package:
-- `SR4_RULEFACT_REGISTRY.generated.json`
-- provider coverage: pass
-- golden fixtures: pass
-- explain receipts: pass
-- copyright safety: pass
-
+Source: `/docker/chummercomplete/chummer-core-engine/.codex-studio/published/SR4_RULEFACT_REGISTRY.generated.json`
+Rulefact count: `7`
+Implemented providers missing: `0`
 Boundary: implementation facts and formulas only; no sourcebook prose, art, page images, or long examples are copied.

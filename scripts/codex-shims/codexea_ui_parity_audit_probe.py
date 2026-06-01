@@ -412,6 +412,11 @@ def _dynamic_artifact_statuses(
         if isinstance(m142_family_checks.get("family:dense_builder_and_career_workflows"), dict)
         else {}
     )
+    dice_initiative_family_check = (
+        m142_family_checks.get("family:dice_initiative_and_table_utilities")
+        if isinstance(m142_family_checks.get("family:dice_initiative_and_table_utilities"), dict)
+        else {}
+    )
     m142_direct_workflow_pass = (
         _is_pass(m142_direct_workflow_proof.get("status"))
         and bool(dense_builder_family_check.get("row_present"))
@@ -419,6 +424,14 @@ def _dynamic_artifact_statuses(
         and bool(dense_builder_family_check.get("behavioral_parity_yes"))
         and bool(dense_builder_family_check.get("required_suffixes_present"))
         and bool(dense_builder_family_check.get("disallowed_external_receipts_clear"))
+    )
+    m142_dice_initiative_pass = (
+        _is_pass(m142_direct_workflow_proof.get("status"))
+        and bool(dice_initiative_family_check.get("row_present"))
+        and bool(dice_initiative_family_check.get("visual_parity_yes"))
+        and bool(dice_initiative_family_check.get("behavioral_parity_yes"))
+        and bool(dice_initiative_family_check.get("required_suffixes_present"))
+        and bool(dice_initiative_family_check.get("disallowed_external_receipts_clear"))
     )
     generated_dialog_evidence = (
         generated_dialog_parity.get("evidence") if isinstance(generated_dialog_parity.get("evidence"), dict) else {}
@@ -585,7 +598,8 @@ def _dynamic_artifact_statuses(
                 'ExecuteCommandAsync("dice_roller"',
                 'BoundDialogId: "dialog.dice_roller"',
             ],
-        ),
+        )
+        or m142_dice_initiative_pass,
         "workflow:initiative": _contains_all(
             dialog_factory_text,
             [
@@ -606,7 +620,8 @@ def _dynamic_artifact_statuses(
                 "Runtime_backed_dice_roller_roll_and_reroll_update_dialog_state",
                 'BoundDialogId: "dialog.dice_roller"',
             ],
-        ),
+        )
+        or m142_dice_initiative_pass,
         "workflow:lifestyles": _contains_all(
             dual_head_text,
             [

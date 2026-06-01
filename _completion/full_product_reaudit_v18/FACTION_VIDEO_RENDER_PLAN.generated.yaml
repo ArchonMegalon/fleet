@@ -1,0 +1,133 @@
+generated_at: 2026-05-29T04:53:22Z
+source_package_zip: /home/tibor/jammer6_faction_video_series_magicfit_package_20260528 (1).zip
+provider: MagicFit
+series_title: Choose Your Trouble
+candidate_asset_only: true
+publish_directly: false
+videos:
+  - faction_slug: glass-tower-compact
+    source_file: VIDEO_01_GLASS_TOWER_COMPACT.md
+    target_duration_seconds: 25
+    required_scenes: 5
+    required_exports:
+      - mp4
+      - webm
+      - poster
+      - vtt
+      - 15s_cut
+      - 9x16_cut
+    must_have:
+      - visible metahuman
+      - action
+      - faction identity
+      - Chummer 6 feature
+      - humor beat
+    caption_lines:
+      - "Public Trust. License Polish. Compliance with consequences."
+      - "Join Glass Tower. Become the calm before someone else\u2019s paperwork storm."
+    end_card: "GLASS TOWER COMPACT \u2014 Order is a weapon."
+  - faction_slug: rust-market-syndicate
+    source_file: VIDEO_02_RUST_MARKET_SYNDICATE.md
+    target_duration_seconds: 25
+    required_scenes: 5
+    required_exports:
+      - mp4
+      - webm
+      - poster
+      - vtt
+      - 15s_cut
+      - 9x16_cut
+    must_have:
+      - visible metahuman
+      - action
+      - faction identity
+      - Chummer 6 feature
+      - humor beat
+    caption_lines:
+      - "Debt Heat. Favor Load. The city\u2019s least free market."
+      - "Join Rust Market. Everything is available. Nothing is free."
+    end_card: "RUST MARKET SYNDICATE \u2014 Pay later. Probably."
+  - faction_slug: ashline-circle
+    source_file: VIDEO_03_ASHLINE_CIRCLE.md
+    target_duration_seconds: 25
+    required_scenes: 5
+    required_exports:
+      - mp4
+      - webm
+      - poster
+      - vtt
+      - 15s_cut
+      - 9x16_cut
+    must_have:
+      - visible metahuman
+      - action
+      - faction identity
+      - Chummer 6 feature
+      - humor beat
+    caption_lines:
+      - "MysAd Density. Magic Heat. Source Clarity."
+      - "Join Ashline. Power is easy. Proof is hard."
+    end_card: "ASHLINE CIRCLE \u2014 Please label your spirits."
+  - faction_slug: neon-docks-union
+    source_file: VIDEO_04_NEON_DOCKS_UNION.md
+    target_duration_seconds: 25
+    required_scenes: 5
+    required_exports:
+      - mp4
+      - webm
+      - poster
+      - vtt
+      - 15s_cut
+      - 9x16_cut
+    must_have:
+      - visible metahuman
+      - action
+      - faction identity
+      - Chummer 6 feature
+      - humor beat
+    caption_lines:
+      - "Route Control. Drone Status. Escape windows."
+      - "Join Neon Docks. Keep the city moving."
+    end_card: "NEON DOCKS UNION \u2014 Routes move. Drones complain."
+  - faction_slug: ghostline-network
+    source_file: VIDEO_05_GHOSTLINE_NETWORK.md
+    target_duration_seconds: 25
+    required_scenes: 5
+    required_exports:
+      - mp4
+      - webm
+      - poster
+      - vtt
+      - 15s_cut
+      - 9x16_cut
+    must_have:
+      - visible metahuman
+      - action
+      - faction identity
+      - Chummer 6 feature
+      - humor beat
+    caption_lines:
+      - "Intel Confidence. Rumor Noise. Stay dark."
+      - "Join Ghostline. Verify, redact, survive."
+    end_card: "GHOSTLINE NETWORK \u2014 If you heard it, verify it."
+  - faction_slug: barrens-free-wardens
+    source_file: VIDEO_06_BARRENS_FREE_WARDENS.md
+    target_duration_seconds: 25
+    required_scenes: 5
+    required_exports:
+      - mp4
+      - webm
+      - poster
+      - vtt
+      - 15s_cut
+      - 9x16_cut
+    must_have:
+      - visible metahuman
+      - action
+      - faction identity
+      - Chummer 6 feature
+      - humor beat
+    caption_lines:
+      - "Closeout Witnesses. Recovery Saves. Safehouse routes."
+      - "Join the Free Wardens. Less nuyen. More backbone."
+    end_card: "BARRENS FREE WARDENS \u2014 Somebody has to open the door."

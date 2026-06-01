@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-29T20:25:22Z'
+generated_at: '2026-05-31T09:01:12Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-3
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -57,7 +57,6 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
-  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -66,49 +65,48 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: 'Only external host-proof gaps remain: run the missing macos, windows proof
-    lane for 2 desktop tuple(s), ingest receipts, and then republish release truth.'
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 full_product_audit:
-  status: pass
-  reason: flagship product readiness proof is current across desktop, rules, hub,
-    mobile, horizons, and operator lanes
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-29T20:25:01Z'
-  proof_status: pass
+  generated_at: '2026-05-31T08:49:26Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 2541246989
+- 2642013094
 frontier:
-- id: 2541246989
-  title: Render build explainer video, audio, preview-card, and packet siblings from
-    approved explain packets
+- id: 2642013094
+  title: Publish install-aware artifact identities and channel rationale for concierge
+    bundles
   wave: flagship_product
-  status: blocked_external_host_proof
+  status: not_started
   owners:
   - chummer6-media-factory
   dependencies: []
   exit_criteria:
-  - Render approved Build Lab explain packets into video, audio, preview-card, and
-    packet companions without mutating engine truth.
-  - 'Own and prove the surface slice(s): build_explain_companion_rendering, explain_artifact_receipts'
+  - Render install-aware release, support, and public concierge companions with captions,
+    previews, and bounded sibling notes.
+  - 'Own and prove the surface slice(s): release_explainer_artifacts, support_closure_artifacts,
+    public_concierge_companions'
   - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-media-factory` (next90-m109-media-factory-build-explain-bundles).
+    is landed for `chummer6-media-factory` (next90-m111-media-factory-concierge-bundles).
   eta:
     status: flagship_delivery
-    eta_human: 9h-21h
+    eta_human: 9h-22h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Render build explainer video, audio, preview-card, and packet
-      siblings from approved explain packets'' remains open under the flagship closeout
-      frontier. Outstanding readiness coverage: flagship readiness proof refresh.'
-    predicted_completion_at: '2026-05-30T11:22:58Z'
-    range_low_hours: 8.67
-    range_high_hours: 21.25
+    summary: 'Milestone ''Publish install-aware artifact identities and channel rationale
+      for concierge bundles'' remains open under the flagship closeout frontier. Outstanding
+      readiness coverage: flagship readiness proof refresh.'
+    predicted_completion_at: '2026-06-01T00:34:30Z'
+    range_low_hours: 9.01
+    range_high_hours: 22.1
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
@@ -119,22 +117,3 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-eta:
-  status: flagship_delivery
-  eta_human: 9h-21h
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Render build explainer video, audio, preview-card, and packet
-    siblings from approved explain packets'' remains open under the flagship closeout
-    frontier. Outstanding readiness coverage: desktop_client.'
-  predicted_completion_at: '2026-05-30T11:22:58Z'
-  range_low_hours: 8.67
-  range_high_hours: 21.25
-  remaining_open_milestones: 1
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 1
-  remaining_effort_units: 1.7

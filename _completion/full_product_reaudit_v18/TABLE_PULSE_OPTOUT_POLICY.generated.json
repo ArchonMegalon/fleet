@@ -1,12 +1,15 @@
 {
-  "generated_at_utc": "2026-05-30T16:23:36Z",
+  "generated_at_utc": "2026-05-30T16:24:02Z",
   "status": "pass",
-  "evidence_level": "scenario_receipt",
-  "browser_route": "https://chummer.run/play",
-  "private_campaign_data_captured": false,
-  "scenario": "table_pulse_optout",
-  "steps": [
-    "subscription_created",
-    "optout_suppresses_next_push"
-  ]
+  "environment": "live_public",
+  "gm_user": "public-shell",
+  "remote_users_considered": [
+    "public-mobile-shell"
+  ],
+  "opt_out_suppressed": [],
+  "quiet_hours_suppressed": [],
+  "optout_status": "pass",
+  "privacy_gate_status": "pass",
+  "receipt_status": "pass",
+  "blocking_reasons": []
 }

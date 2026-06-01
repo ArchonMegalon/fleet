@@ -1,9 +1,9 @@
 # NEXT90 M142 EA family-local proof packs
 
-- Generated at: `2026-05-06T04:48:30Z`
+- Generated at: `2026-05-31T08:49:19Z`
 - Package: `next90-m142-ea-compile-family-local-screenshot-and-interaction-packs-for-these-workflows`
 - Frontier: `2668415614`
-- Readiness status: `pass`
+- Readiness status: `fail`
 - Desktop coverage: `ready`
 
 This packet binds each M142 family to exact screenshots, review receipts, and interaction receipts without collapsing the proof into broad family prose.
@@ -20,7 +20,7 @@ This packet binds each M142 family to exact screenshots, review receipts, and in
 
 ## Dice Initiative And Table Utilities
 
-- Status: `pass`
+- Status: `fail`
 - Compare artifacts: `menu:dice_roller`, `workflow:initiative`
 - Screenshots: `02-menu-open-light.png`, `04-loaded-runner-light.png`
 - Screenshot focus: `menu_dice_route_visibility`, `loaded_runner_shell_context`
@@ -40,6 +40,6 @@ This packet binds each M142 family to exact screenshots, review receipts, and in
 
 ## Readiness note
 
-- `Flagship product readiness proof is green.`
+- `flagship product readiness proof is not green: fail; readiness plane gaps: flagship_ready`
 - This packet is evidence for the EA-owned proof slice only. It does not overwrite the live readiness receipt.
 

@@ -1,13 +1,28 @@
 {
-  "generated_at_utc": "2026-05-30T16:23:36Z",
+  "generated_at_utc": "2026-05-30T16:24:02Z",
   "status": "pass",
-  "evidence_level": "scenario_receipt",
-  "browser_route": "https://chummer.run/play",
-  "private_campaign_data_captured": false,
-  "scenario": "heat_notification_delivery",
-  "steps": [
-    "push_payload_signed",
-    "service_worker_received",
-    "notification_click_opened_table_pulse"
-  ]
+  "environment": "live_public",
+  "session_id": "public-mobile-shell",
+  "gm_user": "public-shell",
+  "remote_users_considered": [
+    "public-mobile-shell"
+  ],
+  "remote_users_notified": [
+    "public-mobile-shell"
+  ],
+  "opt_out_suppressed": [],
+  "quiet_hours_suppressed": [],
+  "push_provider_response": {
+    "service_path": "Chummer.Run.Api/Services/Community/ParticipationOperatorNotificationService.cs",
+    "service_receipt_states": true
+  },
+  "browser_receive_event": {
+    "has_push_handler": true,
+    "has_navigation_preload": true,
+    "offline_reload": "pass"
+  },
+  "notification_id": "public-mobile-shell-preview",
+  "delivery_status": "pass",
+  "receipt_status": "pass",
+  "blocking_reasons": []
 }

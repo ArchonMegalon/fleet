@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-21T17:14:22Z'
+generated_at: '2026-05-31T08:51:13Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-19
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -29,15 +29,8 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-hub
-  - chummer6-hub-registry
-  - chummer6-core
+  - chummer6-mobile
   texts:
-  - dossier
-  - exchange
-  - replay
-  - recap
-  - export
   - top flagship grade
   - whole-project frontier
   - no lowered standards
@@ -52,7 +45,6 @@ focus:
   - performance
   - proof shelf
   - fit and finish
-  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -61,48 +53,45 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-21T17:06:29Z'
+  generated_at: '2026-05-31T08:49:26Z'
   proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 4072009588
+- 3316568713
 frontier:
-- id: 4072009588
-  title: Build OpenRun listing, join request, roster, schedule, meeting-handoff, and
-    closeout orchestration.
+- id: 3316568713
+  title: Add travel and mobile starter continuity for primer and briefing artifacts
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-hub
+  - chummer6-mobile
   dependencies: []
   exit_criteria:
-  - Build OpenRun listing, join request, roster, schedule, meeting-handoff, and closeout
-    orchestration.
-  - 'Own and prove the surface slice(s): build_openrun_listing_join_request:hub'
-  - 'Keep implementation scoped to the allowed paths: Chummer.Run.Api, scripts, tests'
+  - Add travel and mobile starter continuity for primer and briefing artifacts.
+  - 'Own and prove the surface slice(s): starter_onboarding:mobile, first_session_briefing:mobile'
+  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-hub` (next90-m123-hub-build-openrun-listing-join-request-roster-schedule-meeti).
+    is landed for `chummer6-mobile` (next90-m119-mobile-onboarding-continuity).
   eta:
     status: flagship_delivery
-    eta_human: 9h-22h
+    eta_human: 8h-21h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Build OpenRun listing, join request, roster, schedule, meeting-handoff,
-      and closeout orchestration.'' remains open under the flagship closeout frontier.
-      Outstanding readiness coverage: desktop_client.'
-    predicted_completion_at: '2026-05-22T08:24:16Z'
-    range_low_hours: 8.55
-    range_high_hours: 21.78
+    summary: 'Milestone ''Add travel and mobile starter continuity for primer and
+      briefing artifacts'' remains open under the flagship closeout frontier. Outstanding
+      readiness coverage: flagship readiness proof refresh.'
+    predicted_completion_at: '2026-05-31T23:20:37Z'
+    range_low_hours: 8.1
+    range_high_hours: 20.88
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
@@ -113,22 +102,3 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-eta:
-  status: flagship_delivery
-  eta_human: 9h-22h
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 'Milestone ''Build OpenRun listing, join request, roster, schedule, meeting-handoff,
-    and closeout orchestration.'' remains open under the flagship closeout frontier.
-    Outstanding readiness coverage: desktop_client.'
-  predicted_completion_at: '2026-05-22T08:24:16Z'
-  range_low_hours: 8.55
-  range_high_hours: 21.78
-  remaining_open_milestones: 1
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 1
-  remaining_effort_units: 1.8

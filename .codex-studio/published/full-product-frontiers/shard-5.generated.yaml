@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-05-24T15:59:23Z'
+generated_at: '2026-05-31T08:52:11Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-5
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -29,38 +29,22 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-core
-  - chummer6-ui
-  - chummer6-design
-  - chummer6-ui-kit
+  - chummer6-mobile
   texts:
   - top flagship grade
-  - whole project frontier
-  - feedback
-  - automatic bugfixing
-  - crash
-  - support
-  - accessibility
-  - localization
-  - restore confidence
-  - fit and finish
-  - import
-  - oracle
-  - chummer5a
-  - hero lab
-  - genesis
   - whole-project frontier
   - no lowered standards
   - feedback loop
+  - automatic bugfixing
   - crash reporting
   - support routing
   - journey smoothness
+  - restore confidence
+  - accessibility
+  - localization
   - performance
   - proof shelf
-  - desktop client
-  - hub and registry
-  - mobile play shell
-  - ui kit and flagship polish
+  - fit and finish
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -74,7 +58,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-05-24T15:39:06Z'
+  generated_at: '2026-05-31T08:49:26Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -82,40 +66,37 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 4066417069
+- 1033794907
 frontier:
-- id: 4066417069
-  title: Flagship desktop client and workbench finish
+- id: 1033794907
+  title: Make mobile travel campaign continuity explicit for stale campaign state
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-ui
-  - chummer6-core
-  - chummer6-ui-kit
+  - chummer6-mobile
   dependencies: []
   exit_criteria:
-  - Ship the flagship workbench/browser/desktop surface described in `projects/ui.md`
-    and `BUILD_LAB_PRODUCT_MODEL.md`, including builder, compare, explain, grouped
-    inspection, conditional toggles, desktop packaging, updater, and in-app support
-    polish.
-  - Keep the flagship desktop head centered on Avalonia with release-grade startup,
-    packaging, and support evidence rather than treating Linux exit-gate closure as
-    the whole product.
+  - Make travel and mobile campaign continuity explicit for stale, cached, and action-required
+    campaign state.
+  - 'Own and prove the surface slice(s): campaign_memory:travel, campaign_state:mobile'
+  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
+  - Refresh flagship proof and close out the queue slice honestly when this package
+    is landed for `chummer6-mobile` (next90-m112-mobile-campaign-continuity).
   eta:
     status: flagship_delivery
-    eta_human: 11h-1.1d
+    eta_human: 8h-21h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Flagship desktop client and workbench finish'' remains open
-      under the flagship closeout frontier. Outstanding readiness coverage: desktop_client,
-      hub_and_registry, mobile_play_shell, ui_kit_and_flagship_polish.'
-    predicted_completion_at: '2026-05-25T10:44:41Z'
-    range_low_hours: 10.86
-    range_high_hours: 26.65
+    summary: 'Milestone ''Make mobile travel campaign continuity explicit for stale
+      campaign state'' remains open under the flagship closeout frontier. Outstanding
+      readiness coverage: flagship readiness proof refresh.'
+    predicted_completion_at: '2026-05-31T23:21:35Z'
+    range_low_hours: 8.1
+    range_high_hours: 20.88
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 2.05
+    remaining_effort_units: 1.8
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''

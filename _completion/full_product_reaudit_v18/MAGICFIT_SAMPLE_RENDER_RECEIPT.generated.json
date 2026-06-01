@@ -1,0 +1,110 @@
+{
+  "generated_at": "2026-05-28T13:14:23Z",
+  "status": "pass",
+  "provider": "MagicFit",
+  "render_mode": "browser_authenticated_bakeoff",
+  "candidate_asset_only": true,
+  "publish_authority": false,
+  "downloadable_mp4_verified": true,
+  "watermark_present": false,
+  "commercial_use_reviewed": true,
+  "credits_per_month_captured": 6000,
+  "credit_costs_captured": true,
+  "source_receipt_association": "verified",
+  "human_review": {
+    "status": "approved",
+    "channel": "ea_telegram",
+    "reviewer": "tibor.girschele@gmail.com",
+    "note": "User replied in Telegram that they like all four review clips."
+  },
+  "rendered_clip_count": 4,
+  "required_clip_count": 4,
+  "samples": [
+    {
+      "sample_id": "photoreal_elf_anchor",
+      "status": "rendered",
+      "image_session_url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpphend302gep31vrr15rofi",
+      "video_session_url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpphhm9m02gpp31vwhxb79ys",
+      "image_output_url": "https://cdn.pushowl.com/magicfit/1779972179984-1779972179722.png",
+      "video_output_url": "https://cdn.pushowl.com/magicfit/1779972406043-cmpphhma202gtp31vqnbdk7ic.mp4",
+      "downloaded_files": [
+        "/docker/chummercomplete/_completion/magicfit_provider/generated/photoreal_elf_anchor.png",
+        "/docker/chummercomplete/_completion/magicfit_provider/generated/photoreal_elf_anchor.mp4"
+      ],
+      "video_summary": {
+        "file": "/docker/chummercomplete/_completion/magicfit_provider/generated/photoreal_elf_anchor.mp4",
+        "size_bytes": 5516997,
+        "duration_seconds": 4.062993,
+        "video_codec": "h264",
+        "audio_codec": "aac",
+        "width": 1080,
+        "height": 1920
+      }
+    },
+    {
+      "sample_id": "photoreal_orc_field_reporter",
+      "status": "rendered",
+      "image_session_url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpphmfeo02h1p31vbalj0oq3",
+      "video_session_url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpphp38m02hcp31vb7lhk2rn",
+      "image_output_url": "https://cdn.pushowl.com/magicfit/1779972515011-1779972514772.png",
+      "video_output_url": "https://cdn.pushowl.com/magicfit/1779972706975-cmpphp39j02hgp31v4710o7sp.mp4",
+      "downloaded_files": [
+        "/docker/chummercomplete/_completion/magicfit_provider/generated/photoreal_orc_field_reporter.png",
+        "/docker/chummercomplete/_completion/magicfit_provider/generated/photoreal_orc_field_reporter.mp4"
+      ],
+      "video_summary": {
+        "file": "/docker/chummercomplete/_completion/magicfit_provider/generated/photoreal_orc_field_reporter.mp4",
+        "size_bytes": 5952395,
+        "duration_seconds": 4.062993,
+        "video_codec": "h264",
+        "audio_codec": "aac",
+        "width": 1080,
+        "height": 1920
+      }
+    },
+    {
+      "sample_id": "research_facility_breach_broll",
+      "status": "rendered",
+      "image_session_url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpphsw9d02hlp31v8ja5knlg",
+      "video_session_url": "https://magicfit.pushowl.com/agents/generate/sessions/cmpphvlz102hyp31v894icoe2",
+      "image_output_url": "https://cdn.pushowl.com/magicfit/1779972825516-1779972825208.png",
+      "video_output_url": "https://cdn.pushowl.com/magicfit/1779973072733-cmpphvlzl02i2p31vp7lhg62u.mp4",
+      "downloaded_files": [
+        "/docker/chummercomplete/_completion/magicfit_provider/generated/research_facility_breach_broll.png",
+        "/docker/chummercomplete/_completion/magicfit_provider/generated/research_facility_breach_broll.mp4"
+      ],
+      "video_summary": {
+        "file": "/docker/chummercomplete/_completion/magicfit_provider/generated/research_facility_breach_broll.mp4",
+        "size_bytes": 4915035,
+        "duration_seconds": 4.062993,
+        "video_codec": "h264",
+        "audio_codec": "aac",
+        "width": 1080,
+        "height": 1920
+      }
+    },
+    {
+      "sample_id": "rust_market_faction_scene",
+      "status": "rendered",
+      "image_session_url": "https://magicfit.pushowl.com/agents/generate/sessions/cmppi0rr802ilp31vgis1t9pw",
+      "video_session_url": "https://magicfit.pushowl.com/agents/generate/sessions/cmppi3eyz02iwp31vtix1hapv",
+      "image_output_url": "https://cdn.pushowl.com/magicfit/1779973192728-1779973192474.png",
+      "video_output_url": "https://cdn.pushowl.com/magicfit/1779973476984-cmppi3ezh02j0p31v3a2wgk3s.mp4",
+      "downloaded_files": [
+        "/docker/chummercomplete/_completion/magicfit_provider/generated/rust_market_faction_scene.png",
+        "/docker/chummercomplete/_completion/magicfit_provider/generated/rust_market_faction_scene.mp4"
+      ],
+      "video_summary": {
+        "file": "/docker/chummercomplete/_completion/magicfit_provider/generated/rust_market_faction_scene.mp4",
+        "size_bytes": 4849808,
+        "duration_seconds": 4.062993,
+        "video_codec": "h264",
+        "audio_codec": "aac",
+        "width": 1080,
+        "height": 1920
+      }
+    }
+  ],
+  "blocking_reasons": [],
+  "fleet_materialized_at_utc": "2026-05-30T16:24:02Z"
+}

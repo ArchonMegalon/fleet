@@ -1,0 +1,342 @@
+{
+  "generated_at": "2026-05-29T04:53:22Z",
+  "status": "pass",
+  "provider": "MagicFit",
+  "series_title": "Choose Your Trouble",
+  "required_video_count": 6,
+  "rendered_video_count": 6,
+  "required_probe_clip_count": 4,
+  "rendered_probe_clip_count": 4,
+  "videos": [
+    {
+      "faction_slug": "glass-tower-compact",
+      "status": "pass",
+      "required_scenes": 5,
+      "rendered_scenes": 5,
+      "required_exports": [
+        "mp4",
+        "webm",
+        "poster",
+        "vtt",
+        "15s_cut",
+        "9x16_cut"
+      ],
+      "completed_exports": [
+        "mp4",
+        "webm",
+        "poster",
+        "vtt",
+        "15s_cut",
+        "9x16_cut"
+      ],
+      "visible_character_minimum_scenes": 4,
+      "action_minimum_scenes": 5,
+      "feature_visible_minimum_scenes": 2,
+      "metatypeSummary": [
+        "ork",
+        "elf",
+        "dwarf",
+        "troll",
+        "human"
+      ],
+      "cyberwareSummary": [
+        "cybereyes",
+        "cyberarm",
+        "cyberarms",
+        "cyberleg",
+        "cyberlegs",
+        "datajack",
+        "datajacks",
+        "rig port",
+        "rig ports",
+        "chrome fingers",
+        "leg chrome"
+      ],
+      "source_file": "VIDEO_01_GLASS_TOWER_COMPACT.md",
+      "master_summary": {
+        "file": "/docker/chummercomplete/_completion/faction_video_series/generated/glass-tower-compact/exports/glass-tower-compact.mp4",
+        "duration_seconds": 26.345459,
+        "size_bytes": 7711784,
+        "width": 1920,
+        "height": 1080,
+        "video_codec": "h264"
+      },
+      "manifest_file": "/docker/chummercomplete/_completion/faction_video_series/generated/glass-tower-compact/video_manifest.generated.json"
+    },
+    {
+      "faction_slug": "rust-market-syndicate",
+      "status": "pass",
+      "required_scenes": 5,
+      "rendered_scenes": 5,
+      "required_exports": [
+        "mp4",
+        "webm",
+        "poster",
+        "vtt",
+        "15s_cut",
+        "9x16_cut"
+      ],
+      "completed_exports": [
+        "mp4",
+        "webm",
+        "poster",
+        "vtt",
+        "15s_cut",
+        "9x16_cut"
+      ],
+      "visible_character_minimum_scenes": 4,
+      "action_minimum_scenes": 5,
+      "feature_visible_minimum_scenes": 2,
+      "metatypeSummary": [
+        "ork",
+        "elf",
+        "dwarf",
+        "troll",
+        "human"
+      ],
+      "cyberwareSummary": [
+        "cybereyes",
+        "cyberarm",
+        "cyberarms",
+        "cyberleg",
+        "cyberlegs",
+        "datajack",
+        "datajacks",
+        "rig port",
+        "rig ports",
+        "chrome fingers",
+        "hand chrome"
+      ],
+      "source_file": "VIDEO_02_RUST_MARKET_SYNDICATE.md",
+      "master_summary": {
+        "file": "/docker/chummercomplete/_completion/faction_video_series/generated/rust-market-syndicate/exports/rust-market-syndicate.mp4",
+        "duration_seconds": 26.345459,
+        "size_bytes": 11798332,
+        "width": 1920,
+        "height": 1080,
+        "video_codec": "h264"
+      },
+      "manifest_file": "/docker/chummercomplete/_completion/faction_video_series/generated/rust-market-syndicate/video_manifest.generated.json"
+    },
+    {
+      "faction_slug": "ashline-circle",
+      "status": "pass",
+      "required_scenes": 5,
+      "rendered_scenes": 5,
+      "required_exports": [
+        "mp4",
+        "webm",
+        "poster",
+        "vtt",
+        "15s_cut",
+        "9x16_cut"
+      ],
+      "completed_exports": [
+        "mp4",
+        "webm",
+        "poster",
+        "vtt",
+        "15s_cut",
+        "9x16_cut"
+      ],
+      "visible_character_minimum_scenes": 4,
+      "action_minimum_scenes": 5,
+      "feature_visible_minimum_scenes": 2,
+      "metatypeSummary": [
+        "ork",
+        "elf",
+        "dwarf",
+        "troll",
+        "human"
+      ],
+      "cyberwareSummary": [
+        "cybereyes",
+        "cyberarm",
+        "cyberarms",
+        "cyberleg",
+        "cyberlegs",
+        "datajack",
+        "datajacks",
+        "rig port",
+        "rig ports",
+        "chrome fingers"
+      ],
+      "source_file": "VIDEO_03_ASHLINE_CIRCLE.md",
+      "master_summary": {
+        "file": "/docker/chummercomplete/_completion/faction_video_series/generated/ashline-circle/exports/ashline-circle.mp4",
+        "duration_seconds": 26.345459,
+        "size_bytes": 6977702,
+        "width": 1920,
+        "height": 1080,
+        "video_codec": "h264"
+      },
+      "manifest_file": "/docker/chummercomplete/_completion/faction_video_series/generated/ashline-circle/video_manifest.generated.json"
+    },
+    {
+      "faction_slug": "neon-docks-union",
+      "status": "pass",
+      "required_scenes": 5,
+      "rendered_scenes": 5,
+      "required_exports": [
+        "mp4",
+        "webm",
+        "poster",
+        "vtt",
+        "15s_cut",
+        "9x16_cut"
+      ],
+      "completed_exports": [
+        "mp4",
+        "webm",
+        "poster",
+        "vtt",
+        "15s_cut",
+        "9x16_cut"
+      ],
+      "visible_character_minimum_scenes": 4,
+      "action_minimum_scenes": 5,
+      "feature_visible_minimum_scenes": 2,
+      "metatypeSummary": [
+        "ork",
+        "elf",
+        "dwarf",
+        "troll",
+        "human"
+      ],
+      "cyberwareSummary": [
+        "cybereyes",
+        "cyberarm",
+        "cyberarms",
+        "cyberleg",
+        "cyberlegs",
+        "datajack",
+        "datajacks",
+        "rig port",
+        "rig ports",
+        "chrome fingers",
+        "leg chrome"
+      ],
+      "source_file": "VIDEO_04_NEON_DOCKS_UNION.md",
+      "master_summary": {
+        "file": "/docker/chummercomplete/_completion/faction_video_series/generated/neon-docks-union/exports/neon-docks-union.mp4",
+        "duration_seconds": 26.345459,
+        "size_bytes": 11281888,
+        "width": 1920,
+        "height": 1080,
+        "video_codec": "h264"
+      },
+      "manifest_file": "/docker/chummercomplete/_completion/faction_video_series/generated/neon-docks-union/video_manifest.generated.json"
+    },
+    {
+      "faction_slug": "ghostline-network",
+      "status": "pass",
+      "required_scenes": 5,
+      "rendered_scenes": 5,
+      "required_exports": [
+        "mp4",
+        "webm",
+        "poster",
+        "vtt",
+        "15s_cut",
+        "9x16_cut"
+      ],
+      "completed_exports": [
+        "mp4",
+        "webm",
+        "poster",
+        "vtt",
+        "15s_cut",
+        "9x16_cut"
+      ],
+      "visible_character_minimum_scenes": 4,
+      "action_minimum_scenes": 5,
+      "feature_visible_minimum_scenes": 2,
+      "metatypeSummary": [
+        "ork",
+        "elf",
+        "dwarf",
+        "troll",
+        "human"
+      ],
+      "cyberwareSummary": [
+        "cybereyes",
+        "cyberarm",
+        "cyberarms",
+        "cyberleg",
+        "cyberlegs",
+        "datajack",
+        "datajacks",
+        "rig port",
+        "rig ports",
+        "chrome fingers"
+      ],
+      "source_file": "VIDEO_05_GHOSTLINE_NETWORK.md",
+      "master_summary": {
+        "file": "/docker/chummercomplete/_completion/faction_video_series/generated/ghostline-network/exports/ghostline-network.mp4",
+        "duration_seconds": 26.345459,
+        "size_bytes": 9636084,
+        "width": 1920,
+        "height": 1080,
+        "video_codec": "h264"
+      },
+      "manifest_file": "/docker/chummercomplete/_completion/faction_video_series/generated/ghostline-network/video_manifest.generated.json"
+    },
+    {
+      "faction_slug": "barrens-free-wardens",
+      "status": "pass",
+      "required_scenes": 5,
+      "rendered_scenes": 5,
+      "required_exports": [
+        "mp4",
+        "webm",
+        "poster",
+        "vtt",
+        "15s_cut",
+        "9x16_cut"
+      ],
+      "completed_exports": [
+        "mp4",
+        "webm",
+        "poster",
+        "vtt",
+        "15s_cut",
+        "9x16_cut"
+      ],
+      "visible_character_minimum_scenes": 4,
+      "action_minimum_scenes": 5,
+      "feature_visible_minimum_scenes": 2,
+      "metatypeSummary": [
+        "ork",
+        "elf",
+        "dwarf",
+        "troll",
+        "human"
+      ],
+      "cyberwareSummary": [
+        "cybereyes",
+        "cyberarm",
+        "cyberarms",
+        "cyberleg",
+        "cyberlegs",
+        "datajack",
+        "datajacks",
+        "rig port",
+        "rig ports",
+        "chrome fingers",
+        "leg chrome"
+      ],
+      "source_file": "VIDEO_06_BARRENS_FREE_WARDENS.md",
+      "master_summary": {
+        "file": "/docker/chummercomplete/_completion/faction_video_series/generated/barrens-free-wardens/exports/barrens-free-wardens.mp4",
+        "duration_seconds": 26.345459,
+        "size_bytes": 9407372,
+        "width": 1920,
+        "height": 1080,
+        "video_codec": "h264"
+      },
+      "manifest_file": "/docker/chummercomplete/_completion/faction_video_series/generated/barrens-free-wardens/video_manifest.generated.json"
+    }
+  ],
+  "blocking_reasons": [],
+  "fleet_materialized_at_utc": "2026-05-30T16:24:02Z"
+}
