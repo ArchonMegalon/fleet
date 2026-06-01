@@ -113,3 +113,49 @@ def test_pixefy_screenshot_verifier_rejects_missing_capture_file(tmp_path: Path,
 
     assert "pixefy_screenshot_index_pair_count_not_110" in failures
     assert "pixefy_screenshot_files_missing_or_empty" in failures
+
+
+def test_route_manifest_rejects_active_release_binding_drift(tmp_path: Path, monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    manifest = tmp_path / "rafter-route-manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "active_release_binding": {
+                    "verification_status": "pass",
+                    "version": "run-older",
+                },
+                "required_live_routes": [
+                    "https://chummer.run/",
+                    "https://chummer.run/downloads",
+                    "https://chummer.run/status",
+                ],
+                "scanned_live_routes": [
+                    "https://chummer.run/",
+                    "https://chummer.run/downloads",
+                    "https://chummer.run/status",
+                ],
+                "missing_live_routes": [],
+                "forbidden_public_copy_routes": [],
+                "route_results": [
+                    {"url": "https://chummer.run/", "ok": True},
+                    {"url": "https://chummer.run/downloads", "ok": True},
+                    {"url": "https://chummer.run/status", "ok": True},
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    failures: list[str] = []
+
+    module.require_public_route_manifest(
+        {"route_manifest_path": manifest},
+        "Rafter",
+        _gate("run-current"),
+        failures,
+    )
+
+    assert "route_manifest_active_release_binding_version_mismatch" in failures

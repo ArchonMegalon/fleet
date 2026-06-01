@@ -3,6 +3,13 @@ name: Release QA - Rafter and Pixefy
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: release-qa-rafter-pixefy-${{ github.ref }}
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
   schedule:
@@ -31,6 +38,7 @@ on:
 jobs:
   verify-ltd-inventory:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
       - name: Verify Rafter/Pixefy LTD entries
@@ -38,6 +46,7 @@ jobs:
 
   verifier-regression-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
       - name: Install test dependencies
@@ -47,6 +56,7 @@ jobs:
 
   rafter-security-gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs:
       - verify-ltd-inventory
       - verifier-regression-tests
@@ -57,6 +67,7 @@ jobs:
 
   pixefy-visual-gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs:
       - verify-ltd-inventory
       - verifier-regression-tests
@@ -67,6 +78,7 @@ jobs:
 
   final-rafter-pixefy-verdict:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs:
       - rafter-security-gate
       - pixefy-visual-gate
@@ -74,3 +86,9 @@ jobs:
       - uses: actions/checkout@v5
       - name: Final Rafter/Pixefy verdict
         run: python3 scripts/final_rafter_pixefy_qa_stack_verdict.py
+      - name: Assert generated Rafter/Pixefy receipts stayed committed
+        run: |
+          git diff --exit-code -- \
+            _completion/ltd_inventory/RAFTER_TIER3_LTDS_ENTRY.generated.json \
+            _completion/ltd_inventory/PIXEFY_TIER3_LTDS_ENTRY.generated.json \
+            _completion/rafter_pixefy/FINAL_RAFTER_PIXEFY_QA_STACK_REASONS.generated.json

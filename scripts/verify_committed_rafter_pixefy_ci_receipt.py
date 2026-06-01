@@ -151,13 +151,19 @@ def require_live_release_alignment(gate: dict[str, Any], failures: list[str]) ->
         failures.append("live_status_page_missing_gold_ready_public_release_phrase")
 
 
-def require_public_route_manifest(spec: dict[str, Any], provider_name: str, failures: list[str]) -> None:
+def require_public_route_manifest(spec: dict[str, Any], provider_name: str, gate: dict[str, Any], failures: list[str]) -> None:
     manifest = load_json(spec["route_manifest_path"])
     if str(manifest.get("status") or "").lower() != "pass":
         failures.append("route_manifest_not_pass")
-    binding = manifest.get("active_release_binding")
-    if provider_name == "Pixefy" and not isinstance(binding, dict):
-        failures.append("pixefy_route_manifest_missing_active_release_binding")
+    manifest_binding = manifest.get("active_release_binding")
+    gate_binding = gate.get("active_release_binding")
+    if not isinstance(manifest_binding, dict):
+        failures.append("route_manifest_missing_active_release_binding")
+    else:
+        if manifest_binding.get("verification_status") != "pass":
+            failures.append("route_manifest_active_release_binding_not_pass")
+        if isinstance(gate_binding, dict) and manifest_binding.get("version") != gate_binding.get("version"):
+            failures.append("route_manifest_active_release_binding_version_mismatch")
 
     if provider_name == "Rafter":
         urls = set(manifest.get("required_live_routes") or []) | set(manifest.get("scanned_live_routes") or [])
@@ -233,7 +239,7 @@ def collect_provider_failures(provider_name: str) -> list[str]:
         failures.append("gate_missing_generation_timestamp")
     require_active_release_binding(gate, failures)
     require_live_release_alignment(gate, failures)
-    require_public_route_manifest(spec, provider_name, failures)
+    require_public_route_manifest(spec, provider_name, gate, failures)
     require_pixefy_screenshots(spec, gate, failures)
     return failures
 
