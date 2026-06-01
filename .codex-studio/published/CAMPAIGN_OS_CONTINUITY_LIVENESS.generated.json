@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.campaign_os_continuity_liveness",
   "schema_version": 1,
-  "generated_at": "2026-06-01T14:56:32Z",
+  "generated_at": "2026-06-01T15:04:02Z",
   "status": "pass",
   "monitor_state": "warming_up",
   "summary": {
@@ -76,7 +76,7 @@
   "evidence": {
     "flagship_product_readiness": {
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "generated_at": "2026-06-01T14:52:43Z",
+      "generated_at": "2026-06-01T15:03:57Z",
       "freshness": "fresh"
     },
     "journey_gates": {
@@ -99,7 +99,7 @@
     },
     "weekly_governor_packet": {
       "path": "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
-      "generated_at": "2026-06-01T14:56:06Z",
+      "generated_at": "2026-06-01T15:04:01Z",
       "freshness": "fresh"
     },
     "completion_review_frontier": {

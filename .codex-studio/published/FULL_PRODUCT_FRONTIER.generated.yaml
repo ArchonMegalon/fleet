@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-01T14:54:43Z'
+generated_at: '2026-06-01T15:04:02Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -59,7 +59,7 @@ full_product_audit:
   reason: flagship product readiness proof is current across desktop, rules, hub,
     mobile, horizons, and operator lanes
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-01T14:52:43Z'
+  generated_at: '2026-06-01T15:03:57Z'
   proof_status: pass
   missing_coverage_keys: []
   parity_excluded_scope:
