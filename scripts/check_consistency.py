@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 
-ROOT = Path("/docker/fleet")
+ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = ROOT / "admin" / "app.py"
 ACCOUNTS_EXAMPLE_PATH = ROOT / "config" / "accounts.yaml.example"
 PROJECTS_DIR = ROOT / "config" / "projects"
