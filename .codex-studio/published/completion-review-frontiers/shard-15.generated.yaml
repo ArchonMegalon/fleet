@@ -1,7 +1,7 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-06-01T19:22:10Z'
-mode: flagship_product
+generated_at: '2026-06-02T14:07:36Z'
+mode: completion_review
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-15
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -31,6 +31,7 @@ focus:
   - whole_project_frontier
   owners:
   - executive-assistant
+  - chummer6-hub
   texts:
   - top flagship grade
   - whole-project frontier
@@ -50,7 +51,7 @@ focus:
   - desktop client
 completion_audit:
   status: fail
-  reason: desktop executable exit gate proof did not pass
+  reason: stage promoted_installer_proof_integrity failed
 receipt_audit:
   status: fail
   reason: no supervisor run history recorded; explicit completion review is required
@@ -62,16 +63,16 @@ journey_gate_audit:
   blocked_journey_count: 0
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
-  status: pass
-  reason: linux desktop binary build/start/test proof is ready on current repo-local
-    evidence
-  path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-  generated_at: '2026-06-01T19:20:09Z'
-weekly_pulse_audit:
   status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  reason: stage promoted_installer_proof_integrity failed
+  path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
+  generated_at: '2026-06-02T14:07:02Z'
+weekly_pulse_audit:
+  status: pass
+  reason: weekly product pulse is fresh and reports no remaining drift or blocker
+    pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-06-01T19:18:50Z'
+  generated_at: '2026-06-02T09:07:51Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -79,27 +80,40 @@ repo_backlog_audit:
   open_project_count: 0
   open_items: []
 blocking_audits:
-- component: desktop_executable_exit_gate
-  title: Desktop executable exit-gate gaps
-  reason: desktop executable exit gate proof did not pass
-- component: weekly_pulse
-  title: Weekly product pulse gaps
-  reason: weekly product pulse reports release health as needs_attention
+- component: linux_desktop_exit_gate
+  title: Linux desktop exit-gate gaps
+  reason: stage promoted_installer_proof_integrity failed
 - component: trusted_completion_receipt
   title: Trusted completion receipt
   reason: no supervisor run history recorded; explicit completion review is required
-frontier_count: 0
-frontier_ids: []
-frontier: []
+frontier_count: 1
+frontier_ids:
+- 1239074135
+frontier:
+- id: 1239074135
+  title: 'Completion gate: Linux desktop exit gate'
+  wave: completion_review
+  status: review_required
+  owners:
+  - chummer6-ui
+  - fleet
+  dependencies: []
+  exit_criteria:
+  - stage promoted_installer_proof_integrity failed
+  - Build the Linux desktop binary, package the primary .deb plus fallback archive,
+    run startup smoke on both packaged outputs, run desktop runtime unit tests, and
+    refresh UI_LINUX_DESKTOP_EXIT_GATE.generated.json.
 eta:
-  status: flagship_delivery
-  eta_human: 7h-19h
-  eta_confidence: low
-  basis: full_product_single_milestone_heuristic
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
+  status: recovery
+  eta_human: 2h-6h
+  eta_confidence: medium
+  basis: completion_review_recovery
+  scope_kind: completion_review_recovery
+  scope_label: Completion review and proof recovery
+  scope_warning: This ETA covers registry trust, proof, and review recovery. It is
+    still narrower than a final flagship parity claim unless full-product readiness
+    is also green.
   blocking_reason: ''
-  summary: 'Milestone ''Compile organizer packets, event prep, and followthrough from
-    governed operations truth.'' remains open under the flagship closeout frontier.
-    Outstanding readiness coverage: desktop_client.'
+  summary: Registry closure is not yet trustworthy; recovery still needs trusted completion
+    receipt, Linux desktop exit gate. Blocked journeys=0, warning journeys=0, review
+    frontier=1, decomposed_frontier=0, backlog_tail=0.

@@ -1080,7 +1080,13 @@ class PublicProgressReportTests(unittest.TestCase):
                         "_support_packets_payload",
                         return_value={
                             "summary": {"open_packet_count": 0, "closure_waiting_on_release_truth": 0},
-                            "source": {"refresh_error": "connection refused"},
+                            "source": {
+                                "refresh_error": (
+                                    "unable to load support-case source "
+                                    "http://host.docker.internal:8091/api/v1/support/cases/triage: "
+                                    "HTTP Error 401: Unauthorized"
+                                )
+                            },
                             "packets": [],
                             "feedback_discovery_plan": {"workflow_ready": True, "ltd_discovery_system_ready": True, "candidate_count": 0},
                         },
@@ -1109,6 +1115,9 @@ class PublicProgressReportTests(unittest.TestCase):
 
         cards = {card["id"]: card for card in payload["public_route_cards"]}
         self.assertEqual(cards["support"]["proof_state"], "public-stable")
+        self.assertIn("operator authentication", cards["support"]["detail"])
+        self.assertNotIn("host.docker.internal", cards["support"]["detail"])
+        self.assertNotIn("/api/v1/support/cases", cards["support"]["detail"])
 
     def test_render_progress_report_html_shows_public_route_proof_badges(self) -> None:
         payload = {

@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-01T19:23:44Z'
+generated_at: '2026-06-02T04:45:34Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-20
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -30,6 +30,7 @@ focus:
   - whole_project_frontier
   owners:
   - chummer6-mobile
+  - chummer6-ui-kit
   texts:
   - top flagship grade
   - whole-project frontier
@@ -60,7 +61,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-01T19:18:50Z'
+  generated_at: '2026-06-02T04:40:36Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -69,42 +70,59 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 3316568713
+- 3560219150
 frontier:
-- id: 3316568713
-  title: Add travel and mobile starter continuity for primer and briefing artifacts
+- id: 3560219150
+  title: Add action-budget bars, condition/effect chips, source-anchor drawers, and
+    Runboard primitives for desktop and mobile consumers.
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-mobile
+  - chummer6-ui-kit
   dependencies: []
   exit_criteria:
-  - Add travel and mobile starter continuity for primer and briefing artifacts.
-  - 'Own and prove the surface slice(s): starter_onboarding:mobile, first_session_briefing:mobile'
+  - Add action-budget bars, condition/effect chips, source-anchor drawers, and Runboard
+    primitives for desktop and mobile consumers.
+  - 'Own and prove the surface slice(s): add_action_budget_bars_condition:ui_kit'
   - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-mobile` (next90-m119-mobile-onboarding-continuity).
+    is landed for `chummer6-ui-kit` (next90-m121-ui-kit-add-action-budget-bars-condition-effect-chips-source-anc).
   eta:
     status: flagship_delivery
     eta_human: 8h-21h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Add travel and mobile starter continuity for primer and
-      briefing artifacts'' remains open under the flagship closeout frontier. Outstanding
-      readiness coverage: desktop_client.'
-    predicted_completion_at: '2026-06-02T09:53:08Z'
-    range_low_hours: 8.1
-    range_high_hours: 20.88
+    summary: 'Milestone ''Add action-budget bars, condition/effect chips, source-anchor
+      drawers, and Runboard primitives for desktop and mobile consumers.'' remains
+      open under the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop,
+      desktop_client.'
+    predicted_completion_at: '2026-06-02T19:43:10Z'
+    range_low_hours: 8.5
+    range_high_hours: 21.42
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.8
+    remaining_effort_units: 1.7
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+source_queue_fingerprint: e350c3be89d2f3ff2b04c700b0b4f43b554b9ad9
+queue_package:
+  repo: chummer6-ui-kit
+  package_id: next90-m121-ui-kit-add-action-budget-bars-condition-effect-chips-source-anc
+  title: Add action-budget bars, condition/effect chips, source-anchor drawers, and
+    Runboard primitives for desktop and mobile consumers.
+  priority: 0
+  owned_surfaces:
+  - add_action_budget_bars_condition:ui_kit
+  allowed_paths:
+  - src
+  - tests
+  - docs
+  - scripts
 eta:
   status: flagship_delivery
   eta_human: 8h-21h
@@ -114,13 +132,14 @@ eta:
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Add travel and mobile starter continuity for primer and briefing
-    artifacts'' remains open under the flagship closeout frontier. Outstanding readiness
-    coverage: desktop_client.'
-  predicted_completion_at: '2026-06-02T09:53:08Z'
-  range_low_hours: 8.1
-  range_high_hours: 20.88
+  summary: 'Milestone ''Add action-budget bars, condition/effect chips, source-anchor
+    drawers, and Runboard primitives for desktop and mobile consumers.'' remains open
+    under the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop,
+    desktop_client.'
+  predicted_completion_at: '2026-06-02T19:43:10Z'
+  range_low_hours: 8.5
+  range_high_hours: 21.42
   remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
   remaining_not_started_milestones: 1
-  remaining_effort_units: 1.8
+  remaining_effort_units: 1.7

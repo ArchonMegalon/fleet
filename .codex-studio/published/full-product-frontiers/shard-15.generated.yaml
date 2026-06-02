@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-01T19:22:08Z'
+generated_at: '2026-06-02T04:43:56Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-15
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -30,6 +30,7 @@ focus:
   - whole_project_frontier
   owners:
   - executive-assistant
+  - chummer6-hub
   texts:
   - top flagship grade
   - whole-project frontier
@@ -60,7 +61,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-01T19:18:50Z'
+  generated_at: '2026-06-02T04:40:36Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -69,60 +70,72 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1010540573
+- 3109932478
 frontier:
-- id: 1010540573
-  title: Compile organizer packets, event prep, and followthrough from governed operations
-    truth.
+- id: 3109932478
+  title: Orchestrate guided first-playable-session onboarding
   wave: flagship_product
   status: not_started
   owners:
-  - executive-assistant
+  - chummer6-hub
   dependencies: []
   exit_criteria:
-  - Compile organizer packets, event prep, and followthrough from governed operations
-    truth.
-  - 'Own and prove the surface slice(s): organizer_followthrough:ea, event_prep_packets'
-  - 'Keep implementation scoped to the allowed paths: scripts, feedback, docs'
+  - Join install, claim, campaign primer, starter build, briefing, and support-safe
+    recovery into a measured first-session lane.
+  - 'Own and prove the surface slice(s): first_playable_session:onboarding, starter_lane:hub'
+  - 'Keep implementation scoped to the allowed paths: Chummer.Run.Api, scripts, tests'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `executive-assistant` (next90-m118-ea-organizer-followthrough).
+    is landed for `chummer6-hub` (next90-m119-hub-first-session-onboarding).
   eta:
     status: flagship_delivery
-    eta_human: 7h-19h
+    eta_human: 9h-22h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Compile organizer packets, event prep, and followthrough
-      from governed operations truth.'' remains open under the flagship closeout frontier.
-      Outstanding readiness coverage: desktop_client.'
-    predicted_completion_at: '2026-06-02T08:38:56Z'
-    range_low_hours: 7.42
-    range_high_hours: 19.14
+    summary: 'Milestone ''Orchestrate guided first-playable-session onboarding'' remains
+      open under the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop,
+      desktop_client.'
+    predicted_completion_at: '2026-06-02T19:53:50Z'
+    range_low_hours: 8.55
+    range_high_hours: 21.78
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.65
+    remaining_effort_units: 1.8
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+source_queue_fingerprint: e350c3be89d2f3ff2b04c700b0b4f43b554b9ad9
+queue_package:
+  repo: chummer6-hub
+  package_id: next90-m119-hub-first-session-onboarding
+  title: Orchestrate guided first-playable-session onboarding
+  priority: 0
+  owned_surfaces:
+  - first_playable_session:onboarding
+  - starter_lane:hub
+  allowed_paths:
+  - Chummer.Run.Api
+  - scripts
+  - tests
 eta:
   status: flagship_delivery
-  eta_human: 7h-19h
+  eta_human: 9h-22h
   eta_confidence: low
   basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Compile organizer packets, event prep, and followthrough from
-    governed operations truth.'' remains open under the flagship closeout frontier.
-    Outstanding readiness coverage: desktop_client.'
-  predicted_completion_at: '2026-06-02T08:38:56Z'
-  range_low_hours: 7.42
-  range_high_hours: 19.14
+  summary: 'Milestone ''Orchestrate guided first-playable-session onboarding'' remains
+    open under the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop,
+    desktop_client.'
+  predicted_completion_at: '2026-06-02T19:53:50Z'
+  range_low_hours: 8.55
+  range_high_hours: 21.78
   remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
   remaining_not_started_milestones: 1
-  remaining_effort_units: 1.65
+  remaining_effort_units: 1.8

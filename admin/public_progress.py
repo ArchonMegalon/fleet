@@ -890,6 +890,27 @@ def _public_proof_badge(state: str) -> Dict[str, str]:
     }
 
 
+def _public_refresh_error_summary(raw: str) -> str:
+    """Keep public progress useful without exposing internal source endpoints."""
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    folded = text.casefold()
+    internal_markers = (
+        "host.docker.internal",
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "/api/v1/support/cases",
+        "support-case source",
+    )
+    if any(marker in folded for marker in internal_markers):
+        if "401" in folded or "unauthorized" in folded or "auth" in folded:
+            return "support source refresh requires operator authentication"
+        return "support source refresh is temporarily unavailable"
+    return text
+
+
 def _public_route_cards(
     *,
     flagship_readiness: Dict[str, Any],
@@ -1031,7 +1052,7 @@ def _public_route_cards(
     )
 
     support_state = "blocked"
-    refresh_error = str(support_source.get("refresh_error") or "").strip()
+    refresh_error = _public_refresh_error_summary(str(support_source.get("refresh_error") or "").strip())
     open_packets = int(support_summary.get("open_packet_count") or 0)
     waiting_release = int(support_summary.get("closure_waiting_on_release_truth") or 0)
     if support_packets or not refresh_error:

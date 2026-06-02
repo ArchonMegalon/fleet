@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-01T19:23:12Z'
+generated_at: '2026-06-02T04:45:01Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-19
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -30,6 +30,7 @@ focus:
   - whole_project_frontier
   owners:
   - chummer6-ui
+  - chummer6-core
   texts:
   - top flagship grade
   - whole-project frontier
@@ -60,7 +61,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-01T19:18:50Z'
+  generated_at: '2026-06-02T04:40:36Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -69,59 +70,76 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 5216487641
+- 3909693086
 frontier:
-- id: 5216487641
-  title: Add first playable session flow to desktop home and campaign entry points
+- id: 3909693086
+  title: Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta, and source-anchor
+    receipts for the first SR6 combat-round proof.
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-ui
+  - chummer6-core
   dependencies: []
   exit_criteria:
-  - Add first playable session flow to desktop home and campaign entry points.
-  - 'Own and prove the surface slice(s): first_playable_session:desktop, campaign_entry:first_session'
-  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
-    Chummer.Tests, scripts'
+  - Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta, and source-anchor
+    receipts for the first SR6 combat-round proof.
+  - 'Own and prove the surface slice(s): implement_actionbudgetresult_actionaffordance_turnledger:core'
+  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-ui` (next90-m119-ui-first-session-flow).
+    is landed for `chummer6-core` (next90-m121-core-implement-actionbudgetresult-actionaffordance-turnledger).
   eta:
     status: flagship_delivery
-    eta_human: 9h-23h
+    eta_human: 8h-20h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Add first playable session flow to desktop home and campaign
-      entry points'' remains open under the flagship closeout frontier. Outstanding
-      readiness coverage: desktop_client.'
-    predicted_completion_at: '2026-06-02T11:13:36Z'
-    range_low_hours: 9.0
-    range_high_hours: 22.68
+    summary: 'Milestone ''Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta,
+      and source-anchor receipts for the first SR6 combat-round proof.'' remains open
+      under the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop,
+      desktop_client.'
+    predicted_completion_at: '2026-06-02T18:26:07Z'
+    range_low_hours: 7.65
+    range_high_hours: 19.72
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.8
+    remaining_effort_units: 1.7
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+source_queue_fingerprint: e350c3be89d2f3ff2b04c700b0b4f43b554b9ad9
+queue_package:
+  repo: chummer6-core
+  package_id: next90-m121-core-implement-actionbudgetresult-actionaffordance-turnledger
+  title: Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta, and source-anchor
+    receipts for the first SR6 combat-round proof.
+  priority: 0
+  owned_surfaces:
+  - implement_actionbudgetresult_actionaffordance_turnledger:core
+  allowed_paths:
+  - src
+  - tests
+  - docs
+  - scripts
 eta:
   status: flagship_delivery
-  eta_human: 9h-23h
+  eta_human: 8h-20h
   eta_confidence: low
   basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Add first playable session flow to desktop home and campaign
-    entry points'' remains open under the flagship closeout frontier. Outstanding
-    readiness coverage: desktop_client.'
-  predicted_completion_at: '2026-06-02T11:13:36Z'
-  range_low_hours: 9.0
-  range_high_hours: 22.68
+  summary: 'Milestone ''Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta,
+    and source-anchor receipts for the first SR6 combat-round proof.'' remains open
+    under the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop,
+    desktop_client.'
+  predicted_completion_at: '2026-06-02T18:26:07Z'
+  range_low_hours: 7.65
+  range_high_hours: 19.72
   remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
   remaining_not_started_milestones: 1
-  remaining_effort_units: 1.8
+  remaining_effort_units: 1.7

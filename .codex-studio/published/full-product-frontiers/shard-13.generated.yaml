@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-01T19:21:37Z'
+generated_at: '2026-06-02T04:43:25Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-13
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -30,6 +30,7 @@ focus:
   - whole_project_frontier
   owners:
   - chummer6-media-factory
+  - executive-assistant
   texts:
   - top flagship grade
   - whole-project frontier
@@ -60,7 +61,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-01T19:18:50Z'
+  generated_at: '2026-06-02T04:40:36Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -69,58 +70,74 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 4624415136
+- 1010540573
 frontier:
-- id: 4624415136
-  title: Render recap, replay, and exchange preview artifacts with receipts and siblings
+- id: 1010540573
+  title: Compile organizer packets, event prep, and followthrough from governed operations
+    truth.
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-media-factory
+  - executive-assistant
   dependencies: []
   exit_criteria:
-  - Render recap, replay, and exchange preview artifacts with receipts and siblings.
-  - 'Own and prove the surface slice(s): recap_preview_artifacts, replay_exchange_preview_artifacts'
-  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
+  - Compile organizer packets, event prep, and followthrough from governed operations
+    truth.
+  - 'Own and prove the surface slice(s): organizer_followthrough:ea, event_prep_packets'
+  - 'Keep implementation scoped to the allowed paths: scripts, feedback, docs'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-media-factory` (next90-m115-media-factory-exchange-previews).
+    is landed for `executive-assistant` (next90-m118-ea-organizer-followthrough).
   eta:
     status: flagship_delivery
-    eta_human: 8h-20h
+    eta_human: 7h-19h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Render recap, replay, and exchange preview artifacts with
-      receipts and siblings'' remains open under the flagship closeout frontier. Outstanding
-      readiness coverage: desktop_client.'
-    predicted_completion_at: '2026-06-02T09:02:43Z'
-    range_low_hours: 7.65
-    range_high_hours: 19.72
+    summary: 'Milestone ''Compile organizer packets, event prep, and followthrough
+      from governed operations truth.'' remains open under the flagship closeout frontier.
+      Outstanding readiness coverage: fleet_and_operator_loop, desktop_client.'
+    predicted_completion_at: '2026-06-02T18:00:13Z'
+    range_low_hours: 7.42
+    range_high_hours: 19.14
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.7
+    remaining_effort_units: 1.65
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+source_queue_fingerprint: e350c3be89d2f3ff2b04c700b0b4f43b554b9ad9
+queue_package:
+  repo: executive-assistant
+  package_id: next90-m118-ea-organizer-followthrough
+  title: Compile organizer packets, event prep, and followthrough from governed operations
+    truth.
+  priority: 0
+  owned_surfaces:
+  - organizer_followthrough:ea
+  - event_prep_packets
+  allowed_paths:
+  - scripts
+  - feedback
+  - docs
 eta:
   status: flagship_delivery
-  eta_human: 8h-20h
+  eta_human: 7h-19h
   eta_confidence: low
   basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Render recap, replay, and exchange preview artifacts with
-    receipts and siblings'' remains open under the flagship closeout frontier. Outstanding
-    readiness coverage: desktop_client.'
-  predicted_completion_at: '2026-06-02T09:02:43Z'
-  range_low_hours: 7.65
-  range_high_hours: 19.72
+  summary: 'Milestone ''Compile organizer packets, event prep, and followthrough from
+    governed operations truth.'' remains open under the flagship closeout frontier.
+    Outstanding readiness coverage: fleet_and_operator_loop, desktop_client.'
+  predicted_completion_at: '2026-06-02T18:00:13Z'
+  range_low_hours: 7.42
+  range_high_hours: 19.14
   remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
   remaining_not_started_milestones: 1
-  remaining_effort_units: 1.7
+  remaining_effort_units: 1.65

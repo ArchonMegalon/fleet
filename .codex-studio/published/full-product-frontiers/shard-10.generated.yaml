@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-01T19:20:47Z'
+generated_at: '2026-06-02T04:42:36Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-10
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -30,6 +30,7 @@ focus:
   - whole_project_frontier
   owners:
   - chummer6-ui
+  - chummer6-hub-registry
   texts:
   - top flagship grade
   - whole-project frontier
@@ -60,7 +61,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-01T19:18:50Z'
+  generated_at: '2026-06-02T04:40:36Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -69,34 +70,34 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1376730769
+- 4074519894
 frontier:
-- id: 1376730769
-  title: Add rule-environment studio entry points to desktop workflows
+- id: 4074519894
+  title: Store lineage and publication refs for exchange artifacts
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-ui
+  - chummer6-hub-registry
   dependencies: []
   exit_criteria:
-  - Surface amend-package lifecycle, before-after diffs, and explain receipts in mechanical
-    desktop workflows.
-  - 'Own and prove the surface slice(s): rule_environment_studio:desktop, explain_receipts:desktop'
-  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
-    Chummer.Tests, scripts'
+  - Normalize provenance, compatibility, bounded-loss, and publication refs for dossier,
+    campaign, replay, recap, and exchange artifacts.
+  - 'Own and prove the surface slice(s): exchange_lineage_registry, portability_truth'
+  - 'Keep implementation scoped to the allowed paths: Chummer.Hub.Registry, scripts,
+    docs'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-ui` (next90-m114-ui-rule-studio).
+    is landed for `chummer6-hub-registry` (next90-m115-registry-exchange-lineage).
   eta:
     status: flagship_delivery
-    eta_human: 10h-23h
+    eta_human: 9h-22h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Add rule-environment studio entry points to desktop workflows''
+    summary: 'Milestone ''Store lineage and publication refs for exchange artifacts''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      desktop_client.'
-    predicted_completion_at: '2026-06-02T11:48:59Z'
-    range_low_hours: 9.54
-    range_high_hours: 23.4
+      fleet_and_operator_loop, desktop_client.'
+    predicted_completion_at: '2026-06-02T19:52:30Z'
+    range_low_hours: 8.55
+    range_high_hours: 21.78
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
@@ -107,21 +108,34 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+source_queue_fingerprint: e350c3be89d2f3ff2b04c700b0b4f43b554b9ad9
+queue_package:
+  repo: chummer6-hub-registry
+  package_id: next90-m115-registry-exchange-lineage
+  title: Store lineage and publication refs for exchange artifacts
+  priority: 0
+  owned_surfaces:
+  - exchange_lineage_registry
+  - portability_truth
+  allowed_paths:
+  - Chummer.Hub.Registry
+  - scripts
+  - docs
 eta:
   status: flagship_delivery
-  eta_human: 10h-23h
+  eta_human: 9h-22h
   eta_confidence: low
   basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Add rule-environment studio entry points to desktop workflows''
+  summary: 'Milestone ''Store lineage and publication refs for exchange artifacts''
     remains open under the flagship closeout frontier. Outstanding readiness coverage:
-    desktop_client.'
-  predicted_completion_at: '2026-06-02T11:48:59Z'
-  range_low_hours: 9.54
-  range_high_hours: 23.4
+    fleet_and_operator_loop, desktop_client.'
+  predicted_completion_at: '2026-06-02T19:52:30Z'
+  range_low_hours: 8.55
+  range_high_hours: 21.78
   remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
   remaining_not_started_milestones: 1
