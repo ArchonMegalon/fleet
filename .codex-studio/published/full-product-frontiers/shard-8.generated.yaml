@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-01T19:25:22Z'
+generated_at: '2026-06-03T00:29:26Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-8
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -30,6 +30,7 @@ focus:
   - whole_project_frontier
   owners:
   - chummer6-ui
+  - chummer6-design
   texts:
   - top flagship grade
   - whole-project frontier
@@ -54,74 +55,88 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: fail
-  reason: desktop executable exit gate proof did not pass
+  status: pass
+  reason: Flagship product readiness proof is green.
 full_product_audit:
-  status: fail
-  reason: 'flagship product readiness proof is not green: fail'
+  status: pass
+  reason: 'Flagship product readiness proof is green.'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-01T19:18:50Z'
-  proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  generated_at: '2026-06-04T14:13:04Z'
+  proof_status: pass
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 3690357017
+- 4031815028
 frontier:
-- id: 3690357017
-  title: Add GM prep and roster movement surfaces to the desktop workspace
+- id: 4031815028
+  title: Tighten rules and explain canon so media companions can cite but never replace
+    engine truth
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-ui
+  - chummer6-design
   dependencies: []
   exit_criteria:
-  - Add GM prep and roster movement surfaces to the primary desktop workspace route.
-  - 'Own and prove the surface slice(s): gm_prep_packets:desktop, roster_movement:desktop'
-  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
-    Chummer.Tests, scripts'
+  - Tighten rules and explain canon so media companions can cite but never replace
+    engine truth.
+  - 'Own and prove the surface slice(s): rule_environment_truth, explain_policy:grounded_media'
+  - 'Keep implementation scoped to the allowed paths: products, scripts, feedback'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-ui` (next90-m113-ui-gm-prep-roster-surface).
+    is landed for `chummer6-design` (next90-m114-design-rule-environment-policy).
   eta:
     status: flagship_delivery
-    eta_human: 9h-23h
+    eta_human: 9h-21h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Add GM prep and roster movement surfaces to the desktop
-      workspace'' remains open under the flagship closeout frontier. Outstanding readiness
-      coverage: desktop_client.'
-    predicted_completion_at: '2026-06-02T11:15:46Z'
-    range_low_hours: 9.0
-    range_high_hours: 22.68
+    summary: 'Milestone ''Tighten rules and explain canon so media companions can
+      cite but never replace engine truth'' remains open under the flagship closeout
+      frontier. Outstanding readiness coverage: fleet_and_operator_loop.'
+    predicted_completion_at: '2026-06-03T15:35:08Z'
+    range_low_hours: 8.74
+    range_high_hours: 21.45
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.8
+    remaining_effort_units: 1.65
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+source_queue_fingerprint: e350c3be89d2f3ff2b04c700b0b4f43b554b9ad9
+queue_package:
+  repo: chummer6-design
+  package_id: next90-m114-design-rule-environment-policy
+  title: Tighten rules and explain canon so media companions can cite but never replace
+    engine truth
+  priority: 0
+  owned_surfaces:
+  - rule_environment_truth
+  - explain_policy:grounded_media
+  allowed_paths:
+  - products
+  - scripts
+  - feedback
 eta:
   status: flagship_delivery
-  eta_human: 9h-23h
+  eta_human: 9h-21h
   eta_confidence: low
   basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Add GM prep and roster movement surfaces to the desktop workspace''
-    remains open under the flagship closeout frontier. Outstanding readiness coverage:
-    desktop_client.'
-  predicted_completion_at: '2026-06-02T11:15:46Z'
-  range_low_hours: 9.0
-  range_high_hours: 22.68
+  summary: 'Milestone ''Tighten rules and explain canon so media companions can cite
+    but never replace engine truth'' remains open under the flagship closeout frontier.
+    Outstanding readiness coverage: fleet_and_operator_loop.'
+  predicted_completion_at: '2026-06-03T15:35:08Z'
+  range_low_hours: 8.74
+  range_high_hours: 21.45
   remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
   remaining_not_started_milestones: 1
-  remaining_effort_units: 1.8
+  remaining_effort_units: 1.65

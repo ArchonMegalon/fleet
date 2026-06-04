@@ -279,7 +279,11 @@ def _ui_repo_gate_run_root_matches_candidate(candidate: Path, artifact_name: str
     run_root_text = str(payload.get("run_root") or "").strip()
     if not run_root_text:
         return 0
-    return int(_path_within(Path(run_root_text), candidate / ".codex-studio" / "out" / output_dir_name))
+    try:
+        Path(run_root_text).resolve().relative_to((candidate / ".codex-studio" / "out" / output_dir_name).resolve())
+        return 1
+    except Exception:
+        return 0
 
 
 def _ui_repo_required_gate_sort_key(candidate: Path) -> tuple[int, int, int, int, float, float]:
@@ -313,9 +317,6 @@ def _preferred_ui_repo_root() -> Path:
     override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
     if override:
         return Path(override)
-    canonical_candidate = _preferred_existing_ui_repo_candidate()
-    if canonical_candidate is not None:
-        return canonical_candidate
     best_candidate: Path | None = None
     best_score: tuple[int, int, int, int, float, float, int, int, float] | None = None
     for candidate in _ui_repo_candidates():
@@ -335,6 +336,9 @@ def _preferred_ui_repo_root() -> Path:
             best_score = candidate_score
     if best_candidate is not None:
         return best_candidate
+    canonical_candidate = _preferred_existing_ui_repo_candidate()
+    if canonical_candidate is not None:
+        return canonical_candidate
     return Path("/docker/chummercomplete/chummer6-ui")
 
 
@@ -353,10 +357,7 @@ def _preferred_mobile_repo_root() -> Path:
 
 PREFERRED_UI_REPO_ROOT = _preferred_ui_repo_root()
 PREFERRED_MOBILE_REPO_ROOT = _preferred_mobile_repo_root()
-UI_REPO_CANONICAL_ALIAS_ROOT = Path("/docker/chummercomplete/chummer6-ui")
-DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT = (
-    UI_REPO_CANONICAL_ALIAS_ROOT if UI_REPO_CANONICAL_ALIAS_ROOT.exists() else PREFERRED_UI_REPO_ROOT
-)
+DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT = PREFERRED_UI_REPO_ROOT
 DEFAULT_UI_LINUX_DESKTOP_EXIT_GATE_PATH = (
     DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
 )

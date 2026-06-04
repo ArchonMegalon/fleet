@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import importlib.util
 import json
+import os
 import sqlite3
 import tempfile
 import types
@@ -42,7 +43,9 @@ class PublicProgressReportTests(unittest.TestCase):
                     "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
                     "UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
                 ):
-                    (published / name).write_text(json.dumps({"status": "pass"}), encoding="utf-8")
+                    artifact = published / name
+                    artifact.write_text(json.dumps({"status": "pass"}), encoding="utf-8")
+                    os.utime(artifact, (1_700_000_000, 1_700_000_000))
 
             with mock.patch.dict("os.environ", {}, clear=False):
                 with mock.patch.object(

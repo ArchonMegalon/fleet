@@ -31,7 +31,10 @@ ENV_KEYS = {
     "ONEMIN_AI_API_KEY_FALLBACK_1",
     "ONEMIN_AI_API_KEY_FALLBACK_2",
     "ONEMIN_AI_API_KEY_FALLBACK_3",
+    "UNMIXR_USERNAME",
+    "UNMIXR_PASSWORD",
     "UNMIXR_API_KEY",
+    "UNMIXR_VOICE_ID",
     "PROMPTING_SYSTEMS_API_KEY",
 }
 
@@ -194,7 +197,7 @@ def main() -> int:
     policy["runtime_overrides"] = runtime_overrides
     write_policy(policy)
 
-    for key in ("TEABLE_API_KEY", "BROWSERACT_USERNAME", "BROWSERACT_PASSWORD", "MARKUPGO_API_KEY", "AI_MAGICX_API_KEY", "PROMPTING_SYSTEMS_API_KEY", "UNMIXR_API_KEY"):
+    for key in ("TEABLE_API_KEY", "BROWSERACT_USERNAME", "BROWSERACT_PASSWORD", "MARKUPGO_API_KEY", "AI_MAGICX_API_KEY", "PROMPTING_SYSTEMS_API_KEY", "UNMIXR_USERNAME", "UNMIXR_PASSWORD", "UNMIXR_API_KEY", "UNMIXR_VOICE_ID"):
         if key in applied:
             ensure_placeholder(EA_ENV_EXAMPLE, key)
             ensure_placeholder(EA_ENV_LOCAL_EXAMPLE, key)

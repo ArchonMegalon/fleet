@@ -1,7 +1,7 @@
 # Weekly Governor Packet
 
-Generated: 2026-06-02T09:07:53Z
-As of: 2026-06-02
+Generated: 2026-06-04T14:13:06Z
+As of: 2026-06-04
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
@@ -20,7 +20,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Package verification: pass
 - Weekly input health: pass
 - Source input health: pass
-- Source input fingerprint: ad6b476ef136963fd910e132b43533891d867a1f381b167a251a293367ba70c9
+- Source input fingerprint: 3fddb7ff2265bc4a978102044e58d18920bbecd818307443048f49ed9af846c9
 - Launch cited signal truth alignment: pass
 - Decision alignment: pass
 - Expected launch action: launch_expand
@@ -29,7 +29,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Do not reopen package: True
 - Measured rollout loop: ready
 - Governor packet cadence: weekly
-- Next packet due: 2026-06-09T09:07:53Z
+- Next packet due: 2026-06-11T14:13:06Z
 - Decision action coverage: pass
 - Decision actions covered: 5 / 5
 - Decision source coverage: pass
@@ -68,7 +68,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Journey gate state: ready
 - Local release proof: passed
 - Weekly adoption state: clear
-- Weekly adoption history snapshots: 36
+- Weekly adoption history snapshots: 38
 - Weekly adoption proven journeys: 5
 - Weekly adoption proven routes: 10
 - Provider canary: Canary green on all active lanes
@@ -117,7 +117,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Derived from: measured_rollout_loop.decision_action_matrix
 - Decision actions: launch_expand, freeze_launch, canary, rollback, focus_shift
 - Schedule ref: governor_packet_schedule.next_packet_due_at
-- Next packet due: 2026-06-09T09:07:53Z
+- Next packet due: 2026-06-11T14:13:06Z
 - Max age seconds: 604800
 - Freshness policy: refresh_before_public_status_or_operator_action_if_packet_is_overdue
 - Headline: Measured launch expansion is allowed.
@@ -139,7 +139,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 | status_plane_final_claim | pass | pass | pass |
 | journey_gates | pass | ready | ready |
 | local_release_proof | pass | passed | passed |
-| weekly_adoption_truth | pass | present with measured history | clear / 36 history snapshots |
+| weekly_adoption_truth | pass | present with measured history | clear / 38 history snapshots |
 | provider_canary | pass | Canary green on all active lanes | Canary green on all active lanes |
 | closure_health | pass | clear | clear |
 | support_packets | pass | 0 open non-external packets | 0 |
@@ -197,11 +197,11 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 | Action | State | Route | Operator action | Receipt | Next review due | Next review due ref | Max age seconds | Freshness policy | Blocking gates | Next decision |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| launch_expand | allowed | weekly_governor_packet.launch_expand | promote_measured_launch_expansion | m106-launch_expand-16e298f80f85949d | 2026-06-09T09:07:53Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | All measured launch gates are green. |
-| freeze_launch | available | weekly_governor_packet.freeze_launch | leave_freeze_available | m106-freeze_launch-65253d4d25b49f81 | 2026-06-09T09:07:53Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Launch expansion is approved for the next bounded window while canaries and support closure remain clear. |
-| canary | ready | measured_rollout_loop.canary | keep_canary_ready | m106-canary-afc3d2be95960739 | 2026-06-09T09:07:53Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Canary green on all active lanes |
-| rollback | armed | measured_rollout_loop.rollback | keep_rollback_armed | m106-rollback-fcedde06369bab3d | 2026-06-09T09:07:53Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. |
-| focus_shift | queued_successor_wave | measured_rollout_loop.focus_shift | route_remaining_work_to_dependency_or_sibling_packages | m106-focus_shift-9e0a36a10f3ebf57 | 2026-06-09T09:07:53Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice. |
+| launch_expand | allowed | weekly_governor_packet.launch_expand | promote_measured_launch_expansion | m106-launch_expand-16e298f80f85949d | 2026-06-11T14:13:06Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | All measured launch gates are green. |
+| freeze_launch | available | weekly_governor_packet.freeze_launch | leave_freeze_available | m106-freeze_launch-65253d4d25b49f81 | 2026-06-11T14:13:06Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Launch expansion is approved for the next bounded window while canaries and support closure remain clear. |
+| canary | ready | measured_rollout_loop.canary | keep_canary_ready | m106-canary-afc3d2be95960739 | 2026-06-11T14:13:06Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Canary green on all active lanes |
+| rollback | armed | measured_rollout_loop.rollback | keep_rollback_armed | m106-rollback-fcedde06369bab3d | 2026-06-11T14:13:06Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. |
+| focus_shift | queued_successor_wave | measured_rollout_loop.focus_shift | route_remaining_work_to_dependency_or_sibling_packages | m106-focus_shift-9e0a36a10f3ebf57 | 2026-06-11T14:13:06Z | governor_packet_schedule.next_packet_due_at | 604800 | refresh_before_operator_action_if_packet_is_overdue | none | Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice. |
 
 ## Evidence Requirements
 
@@ -229,7 +229,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 - next12_trust_publication_launch_scale: Next 12 Biggest Wins is the active pressure cluster: finish install-specific trust/support truth, creator publication and shelf posture, pulse-v3 launch governance, and no-step-back utility parity.
 - public_release_follow_through: Downloads, updates, support closure, and channel-aware trust copy now exist as first-party surfaces and must keep moving in lockstep instead of drifting back into separate promises.
-- long_pole_visibility: The current longest pole is No active release pole, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product.
+- long_pole_visibility: The current longest pole is Core Engine, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product.
 
 ## Dependency Package Routes
 

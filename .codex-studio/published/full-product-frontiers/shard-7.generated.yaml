@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-01T19:25:06Z'
+generated_at: '2026-06-03T00:29:10Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-7
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -30,6 +30,7 @@ focus:
   - whole_project_frontier
   owners:
   - chummer6-core
+  - chummer6-ui
   texts:
   - top flagship grade
   - whole-project frontier
@@ -54,74 +55,88 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: fail
-  reason: desktop executable exit gate proof did not pass
+  status: pass
+  reason: Flagship product readiness proof is green.
 full_product_audit:
-  status: fail
-  reason: 'flagship product readiness proof is not green: fail'
+  status: pass
+  reason: 'Flagship product readiness proof is green.'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-01T19:18:50Z'
-  proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  generated_at: '2026-06-04T14:13:04Z'
+  proof_status: pass
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 3770604205
+- 1376730769
 frontier:
-- id: 3770604205
-  title: Define opposition and scene packet contracts with rules-backed stats
+- id: 1376730769
+  title: Add rule-environment studio entry points to desktop workflows
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-core
+  - chummer6-ui
   dependencies: []
   exit_criteria:
-  - Define opposition and scene packet contracts with rules-backed stats and bounded-loss
-    receipts.
-  - 'Own and prove the surface slice(s): gm_prep_packets, opposition_contracts'
-  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
+  - Surface amend-package lifecycle, before-after diffs, and explain receipts in mechanical
+    desktop workflows.
+  - 'Own and prove the surface slice(s): rule_environment_studio:desktop, explain_receipts:desktop'
+  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
+    Chummer.Tests, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-core` (next90-m113-core-opposition-packet-contracts).
+    is landed for `chummer6-ui` (next90-m114-ui-rule-studio).
   eta:
     status: flagship_delivery
-    eta_human: 9h-22h
+    eta_human: 10h-23h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Define opposition and scene packet contracts with rules-backed
-      stats'' remains open under the flagship closeout frontier. Outstanding readiness
-      coverage: desktop_client.'
-    predicted_completion_at: '2026-06-02T10:58:24Z'
-    range_low_hours: 9.01
-    range_high_hours: 22.1
+    summary: 'Milestone ''Add rule-environment studio entry points to desktop workflows''
+      remains open under the flagship closeout frontier. Outstanding readiness coverage:
+      fleet_and_operator_loop.'
+    predicted_completion_at: '2026-06-03T16:57:22Z'
+    range_low_hours: 9.54
+    range_high_hours: 23.4
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.7
+    remaining_effort_units: 1.8
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+source_queue_fingerprint: e350c3be89d2f3ff2b04c700b0b4f43b554b9ad9
+queue_package:
+  repo: chummer6-ui
+  package_id: next90-m114-ui-rule-studio
+  title: Add rule-environment studio entry points to desktop workflows
+  priority: 0
+  owned_surfaces:
+  - rule_environment_studio:desktop
+  - explain_receipts:desktop
+  allowed_paths:
+  - Chummer.Avalonia
+  - Chummer.Desktop.Runtime
+  - Chummer.Tests
+  - scripts
 eta:
   status: flagship_delivery
-  eta_human: 9h-22h
+  eta_human: 10h-23h
   eta_confidence: low
   basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Define opposition and scene packet contracts with rules-backed
-    stats'' remains open under the flagship closeout frontier. Outstanding readiness
-    coverage: desktop_client.'
-  predicted_completion_at: '2026-06-02T10:58:24Z'
-  range_low_hours: 9.01
-  range_high_hours: 22.1
+  summary: 'Milestone ''Add rule-environment studio entry points to desktop workflows''
+    remains open under the flagship closeout frontier. Outstanding readiness coverage:
+    fleet_and_operator_loop.'
+  predicted_completion_at: '2026-06-03T16:57:22Z'
+  range_low_hours: 9.54
+  range_high_hours: 23.4
   remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
   remaining_not_started_milestones: 1
-  remaining_effort_units: 1.7
+  remaining_effort_units: 1.8

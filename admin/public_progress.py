@@ -77,10 +77,10 @@ def _ui_repo_candidate_score(candidate: pathlib.Path) -> tuple[int, int]:
 
 def _ui_repo_candidates() -> tuple[pathlib.Path, ...]:
     return (
-        pathlib.Path("/docker/chummercomplete/chummer-presentation-clean"),
         pathlib.Path("/docker/chummercomplete/chummer6-ui"),
         pathlib.Path("/docker/chummercomplete/chummer6-ui-finish"),
         pathlib.Path("/docker/chummercomplete/chummer-presentation"),
+        pathlib.Path("/docker/chummercomplete/chummer-presentation-clean"),
     )
 
 
@@ -128,12 +128,6 @@ def _preferred_chummer_ui_root() -> pathlib.Path:
     override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
     if override:
         return pathlib.Path(override)
-    canonical_alias = pathlib.Path("/docker/chummercomplete/chummer6-ui")
-    if canonical_alias.is_dir():
-        return canonical_alias
-    canonical_candidate = _preferred_existing_ui_repo_candidate()
-    if canonical_candidate is not None:
-        return canonical_candidate
     best_candidate: pathlib.Path | None = None
     best_score: tuple[int, float, int, float, int, int, int] | None = None
     for candidate in _ui_repo_candidates():
@@ -151,6 +145,9 @@ def _preferred_chummer_ui_root() -> pathlib.Path:
             best_score = candidate_score
     if best_candidate is not None:
         return best_candidate
+    canonical_candidate = _preferred_existing_ui_repo_candidate()
+    if canonical_candidate is not None:
+        return canonical_candidate
     return pathlib.Path("/docker/chummercomplete/chummer6-ui")
 
 

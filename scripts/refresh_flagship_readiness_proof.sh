@@ -13,17 +13,64 @@ resolve_ui_repo_root() {
     printf '%s\n' "$CHUMMER_UI_REPO_ROOT"
     return 0
   fi
+  local best_candidate=""
+  local best_score=-999999
   local candidate
   for candidate in \
+    /docker/chummercomplete/chummer-presentation-clean \
     /docker/chummercomplete/chummer6-ui \
     /docker/chummercomplete/chummer6-ui-finish \
     /docker/chummercomplete/chummer-presentation
   do
-    if [[ -d "$candidate" ]]; then
-      printf '%s\n' "$candidate"
-      return 0
+    [[ -d "$candidate" ]] || continue
+    local score=0
+    local published="$candidate/.codex-studio/published"
+    for weighted in \
+      "10:DESKTOP_EXECUTABLE_EXIT_GATE.generated.json" \
+      "6:UI_LINUX_DESKTOP_EXIT_GATE.generated.json" \
+      "6:UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json" \
+      "4:DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json" \
+      "4:DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json" \
+      "3:UI_FLAGSHIP_RELEASE_GATE.generated.json"
+    do
+      local weight="${weighted%%:*}"
+      local artifact="${weighted#*:}"
+      local status="missing"
+      if [[ -f "$published/$artifact" ]]; then
+        status="$(
+          python3 - <<'PY' "$published/$artifact"
+import json, sys
+from pathlib import Path
+try:
+    payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8-sig"))
+except Exception:
+    print("invalid")
+    raise SystemExit(0)
+status = str((payload or {}).get("status") or "").strip().lower()
+print(status or "missing")
+PY
+        )"
+      fi
+      case "$status" in
+        pass|passed|ready) score=$((score + 2 * weight)) ;;
+        warning) score=$((score + 1 * weight)) ;;
+        fail|failed|blocked|invalid) score=$((score - 2 * weight)) ;;
+      esac
+    done
+    case "$candidate" in
+      /docker/chummercomplete/chummer6-ui) score=$((score + 3)) ;;
+      /docker/chummercomplete/chummer6-ui-finish) score=$((score + 2)) ;;
+      /docker/chummercomplete/chummer-presentation) score=$((score + 1)) ;;
+    esac
+    if (( score > best_score )); then
+      best_score=$score
+      best_candidate="$candidate"
     fi
   done
+  if [[ -n "$best_candidate" ]]; then
+    printf '%s\n' "$best_candidate"
+    return 0
+  fi
   return 1
 }
 

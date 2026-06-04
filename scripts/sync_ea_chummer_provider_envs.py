@@ -21,6 +21,7 @@ UNMIXR_COMMENT = "# Optional Unmixr key slots (local .env only; keep real keys o
 UNMIXR_EXAMPLE_LINES = [
     UNMIXR_COMMENT,
     "UNMIXR_API_KEY=",
+    "UNMIXR_VOICE_ID=",
 ]
 
 
@@ -100,6 +101,7 @@ def ensure_chummer_provider_example(path: Path) -> None:
     additions = [
         "CHUMMER_PROVIDER_BROWSERACT_API_KEY=",
         "CHUMMER_PROVIDER_UNMIXR_API_KEY=",
+        "CHUMMER_PROVIDER_UNMIXR_VOICE_ID=",
     ]
     if all(entry in text for entry in additions):
         return
@@ -116,7 +118,7 @@ def ensure_chummer_provider_example(path: Path) -> None:
 
 def ensure_compose_provider_passthrough(path: Path) -> None:
     text = read_text(path)
-    for key in ("CHUMMER_PROVIDER_BROWSERACT_API_KEY", "CHUMMER_PROVIDER_UNMIXR_API_KEY"):
+    for key in ("CHUMMER_PROVIDER_BROWSERACT_API_KEY", "CHUMMER_PROVIDER_UNMIXR_API_KEY", "CHUMMER_PROVIDER_UNMIXR_VOICE_ID"):
         if key in text:
             continue
         anchor = '      CHUMMER_AI_1MINAI_FALLBACK_API_KEY: "${CHUMMER_AI_1MINAI_FALLBACK_API_KEY:-}"\n'
@@ -181,6 +183,7 @@ def main() -> int:
             f"CHUMMER_AI_1MINAI_FALLBACK_API_KEY={onemin_fallback}",
             f"CHUMMER_PROVIDER_BROWSERACT_API_KEY={ea_values.get('BROWSERACT_API_KEY', '')}",
             f"CHUMMER_PROVIDER_UNMIXR_API_KEY={ea_values.get('UNMIXR_API_KEY', '')}",
+            f"CHUMMER_PROVIDER_UNMIXR_VOICE_ID={ea_values.get('UNMIXR_VOICE_ID', '')}",
         ]
     )
     write_text(CHUMMER_ENV_PROVIDERS, "\n".join(provider_lines).rstrip() + "\n")
@@ -193,6 +196,7 @@ def main() -> int:
         chummer_env = set_env_value(chummer_env, "CHUMMER_AI_1MINAI_FALLBACK_API_KEY", onemin_fallback)
     chummer_env = set_env_value(chummer_env, "CHUMMER_PROVIDER_BROWSERACT_API_KEY", ea_values.get("BROWSERACT_API_KEY", ""))
     chummer_env = set_env_value(chummer_env, "CHUMMER_PROVIDER_UNMIXR_API_KEY", ea_values.get("UNMIXR_API_KEY", ""))
+    chummer_env = set_env_value(chummer_env, "CHUMMER_PROVIDER_UNMIXR_VOICE_ID", ea_values.get("UNMIXR_VOICE_ID", ""))
     write_text(CHUMMER_ENV, chummer_env)
 
     ensure_gitignore_entry(CHUMMER_GITIGNORE, ".env.providers")

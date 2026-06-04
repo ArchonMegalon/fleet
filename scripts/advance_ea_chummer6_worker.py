@@ -3729,7 +3729,7 @@ STATE_OUT = Path("/docker/fleet/state/chummer6/ea_provider_readiness.json")
 RAW_KEY_NAMES = {
     "pollinations": [],
     "browseract": ["BROWSERACT_API_KEY", "BROWSERACT_API_KEY_FALLBACK_1", "BROWSERACT_API_KEY_FALLBACK_2", "BROWSERACT_API_KEY_FALLBACK_3"],
-    "unmixr": ["UNMIXR_API_KEY"],
+    "unmixr": ["UNMIXR_API_KEY", "UNMIXR_VOICE_ID"],
     "onemin": ["ONEMIN_AI_API_KEY", "ONEMIN_AI_API_KEY_FALLBACK_1", "ONEMIN_AI_API_KEY_FALLBACK_2", "ONEMIN_AI_API_KEY_FALLBACK_3"],
     "magixai": ["MAGIXAI_API_KEY", "AI_MAGICX_API_KEY", "AIMAGICX_API_KEY"],
     "markupgo": ["MARKUPGO_API_KEY"],

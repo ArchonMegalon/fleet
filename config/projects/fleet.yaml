@@ -462,8 +462,8 @@ supervisor_contract:
     completion_review_frontier: /docker/fleet/.codex-studio/published/COMPLETION_REVIEW_FRONTIER.generated.yaml
     external_proof_runbook: /docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md
     proof_orchestration: /docker/fleet/.codex-studio/published/PROOF_ORCHESTRATION.generated.json
-    ui_linux_desktop_exit_gate: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-    ui_desktop_executable_exit_gate: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+    ui_linux_desktop_exit_gate: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
+    ui_desktop_executable_exit_gate: /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
   restart_safe_runtime:
     canonical_config_surface: /docker/fleet/config/projects/fleet.yaml
     documented_at: /docker/fleet/docs/restart-safe-runtime-configuration.md
@@ -696,7 +696,7 @@ supervisor_contract:
     dependencies:
     - flagship_product_readiness
     outputs:
-    - path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
       freshness_window_minutes: 1440
       required: true
       acceptable_statuses:
@@ -715,7 +715,7 @@ supervisor_contract:
     dependencies:
     - flagship_product_readiness
     outputs:
-    - path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+    - path: /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
       freshness_window_minutes: 1440
       required: true
       acceptable_statuses:
