@@ -1,6 +1,6 @@
 SR5_RULE_AUTHORITY_READY
 
-Generated: 2026-05-30T16:24:02Z
+Generated: 2026-06-05T15:29:21Z
 
 Source: `/docker/chummercomplete/chummer-core-engine/.codex-studio/published/SR5_RULE_AUTHORITY_REGISTRY.generated.json`
 Rulefact count: `0`

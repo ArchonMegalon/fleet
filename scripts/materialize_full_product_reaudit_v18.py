@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "_completion" / "full_product_reaudit_v18"
 BASE = "https://chummer.run"
 ROUTES = ["/", "/downloads", "/status", "/ledger", "/ledger/map", "/ledger/factions", "/ledger/newsroom", "/play", "/help", "/feedback"]
+RELEASE_CHANNEL_ROUTE = "/downloads/RELEASE_CHANNEL.generated.json"
+RELEASES_ROUTE = "/downloads/releases.json"
 
 
 def now() -> str:
@@ -136,10 +138,16 @@ def materialize_rules(generated_at: str) -> None:
 
 def materialize_live(generated_at: str) -> None:
     probes = {path: fetch(path) for path in ROUTES}
+    release_channel_probe = fetch(RELEASE_CHANNEL_ROUTE)
+    releases_probe = fetch(RELEASES_ROUTE)
     downloads = probes["/downloads"]["text"].lower()
     status = probes["/status"]["text"].lower()
     home_first = probes["/"]["text"].lower()[:2200]
     build_match = re.search(r"run-\d{8}-\d{6}", probes["/status"]["text"])
+    release_channel = json.loads(release_channel_probe["html"]) if release_channel_probe["ok"] and release_channel_probe["html"] else {}
+    releases = json.loads(releases_probe["html"]) if releases_probe["ok"] and releases_probe["html"] else {}
+    release_channel_version = str(release_channel.get("version") or "").strip()
+    releases_version = str(releases.get("version") or "").strip()
     bad_status_tokens = [
         "review-required",
         "not gold",
@@ -151,17 +159,40 @@ def materialize_live(generated_at: str) -> None:
         "not yet gold-ready",
         "review is required",
         "preview publication",
+        "preview channel",
+        "current preview channel",
+        "preview posture",
+        "public archive preview",
+        "still manual",
     ]
     release_reasons = []
-    if "load demo runner" in downloads or "demo runner" in downloads:
-        release_reasons.append("downloads_demo_runner_copy")
+    downloads_caution_hits = [
+        token for token in ["load demo runner", "demo runner", "preview channel", "public archive preview", "still manual", "archive package"] if token in downloads
+    ]
+    if downloads_caution_hits:
+        release_reasons.append("downloads_caution:" + ",".join(downloads_caution_hits))
     status_hits = [token for token in bad_status_tokens if token in status]
     if status_hits:
         release_reasons.append("status_caution:" + ",".join(status_hits))
+    home_caution_hits = [token for token in ["mobile play shell preview", "preview"] if token in home_first]
+    if home_caution_hits:
+        release_reasons.append("home_caution:" + ",".join(home_caution_hits))
     if "black ledger" not in home_first or "faction" not in home_first:
         release_reasons.append("home_not_black_ledger_first")
     if not build_match:
         release_reasons.append("status_build_id_missing")
+    elif release_channel_version and build_match.group(0) != release_channel_version:
+        release_reasons.append(f"status_build_mismatch:{build_match.group(0)}!={release_channel_version}")
+    if not release_channel_version:
+        release_reasons.append("release_channel_version_missing")
+    if not releases_version:
+        release_reasons.append("releases_version_missing")
+    elif release_channel_version and releases_version != release_channel_version:
+        release_reasons.append(f"downloads_version_mismatch:{releases_version}!={release_channel_version}")
+    if str(release_channel.get("rolloutState") or "").strip() != "public_stable":
+        release_reasons.append("release_channel_not_public_stable")
+    if str(release_channel.get("supportabilityState") or "").strip() != "gold_supported":
+        release_reasons.append("release_channel_not_gold_supported")
 
     write_json(
         OUT / "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json",
@@ -174,8 +205,11 @@ def materialize_live(generated_at: str) -> None:
             "gold_claim_allowed": not release_reasons,
             "release_manifest": {"supportabilityState": "gold_supported" if not release_reasons else "not_gold"},
             "checks": {
-                "downloads_contains_demo_runner": "demo runner" in downloads,
+                "release_channel_version": release_channel_version,
+                "releases_version": releases_version,
+                "downloads_caution_hits": downloads_caution_hits,
                 "status_caution_hits": status_hits,
+                "home_caution_hits": home_caution_hits,
                 "home_black_ledger_first": "black ledger" in home_first and "faction" in home_first,
                 "build_id": build_match.group(0) if build_match else "",
             },
@@ -190,9 +224,14 @@ def materialize_live(generated_at: str) -> None:
             "public_host": "chummer.run",
             "status_url": BASE + "/status",
             "downloads_url": BASE + "/downloads",
+            "release_channel_url": BASE + RELEASE_CHANNEL_ROUTE,
+            "releases_url": BASE + RELEASES_ROUTE,
             "contains_stale_or_not_gold_language": bool(status_hits),
-            "contains_demo_runner_language": "demo runner" in downloads,
+            "contains_downloads_caution_language": bool(downloads_caution_hits),
+            "contains_home_caution_language": bool(home_caution_hits),
             "build_id": build_match.group(0) if build_match else "",
+            "release_channel_version": release_channel_version,
+            "releases_version": releases_version,
             "reasons": release_reasons,
         },
     )

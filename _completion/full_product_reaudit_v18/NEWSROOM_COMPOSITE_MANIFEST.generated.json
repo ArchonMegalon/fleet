@@ -1,14 +1,16 @@
 {
-  "generated_at_utc": "2026-05-30T16:24:02Z",
+  "generated_at_utc": "2026-06-05T15:29:21Z",
   "status": "pass",
   "world_id": "emerald-sprawl-prelude",
   "transition_label": "Turn 0 -> Turn 1",
   "ticker_items": [
     "Emerald Sprawl: First Pressure live",
     "Turn 1 receipt-backed",
+    "Focus Black Ledger Network pressure on the live globe.",
+    "Focus Rust Market runners pressure on the live globe.",
+    "Focus Ashline Circle crews pressure on the live globe.",
     "Rust Bazaar hottest district",
     "Rust Bazaar biggest move",
-    "Public-safe aggregate only",
     "No player identities or private table state"
   ],
   "email_batch_id": "blnewsbatch_bd767f953",

@@ -1,40 +1,56 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-06-05T05:26:52Z",
-  "status": "pass",
-  "scoped_status": "pass",
+  "generated_at": "2026-06-05T15:38:32Z",
+  "status": "fail",
+  "scoped_status": "fail",
   "ready_keys": [
     "desktop_client",
     "rules_engine_and_import",
     "hub_and_registry",
     "mobile_play_shell",
     "ui_kit_and_flagship_polish",
-    "media_artifacts",
+    "media_artifacts"
+  ],
+  "warning_keys": [
     "horizons_and_public_surface",
     "fleet_and_operator_loop"
   ],
-  "warning_keys": [],
   "missing_keys": [],
-  "scoped_warning_keys": [],
+  "scoped_warning_keys": [
+    "horizons_and_public_surface",
+    "fleet_and_operator_loop"
+  ],
   "scoped_missing_keys": [],
   "deferred_warning_keys": [],
   "completion_audit": {
-    "status": "pass",
-    "reason": "Flagship product readiness proof is green.",
+    "status": "fail",
+    "reason": "Flagship product readiness planes are not green: structural_ready, flagship_ready.",
     "external_only": false,
     "unresolved_external_proof_request_count": 0,
     "unresolved_external_proof_request_hosts": [],
     "unresolved_external_proof_request_tuples": []
   },
   "flagship_readiness_audit": {
-    "status": "pass",
-    "reason": "Flagship product readiness proof is green.",
-    "coverage_gap_keys": [],
-    "scoped_coverage_gap_keys": [],
-    "warning_coverage_keys": [],
+    "status": "fail",
+    "reason": "flagship product readiness proof is not green: fail; warning coverage: horizons_and_public_surface, fleet_and_operator_loop; readiness plane gaps: structural_ready, flagship_ready",
+    "coverage_gap_keys": [
+      "horizons_and_public_surface",
+      "fleet_and_operator_loop"
+    ],
+    "scoped_coverage_gap_keys": [
+      "horizons_and_public_surface",
+      "fleet_and_operator_loop"
+    ],
+    "warning_coverage_keys": [
+      "horizons_and_public_surface",
+      "fleet_and_operator_loop"
+    ],
     "missing_coverage_keys": [],
-    "scoped_warning_coverage_keys": [],
+    "scoped_warning_coverage_keys": [
+      "horizons_and_public_surface",
+      "fleet_and_operator_loop"
+    ],
     "scoped_missing_coverage_keys": [],
     "deferred_warning_coverage_keys": []
   },
@@ -57,10 +73,10 @@
     "runbook_sync_reasons": []
   },
   "summary": {
-    "ready_count": 8,
-    "warning_count": 0,
+    "ready_count": 6,
+    "warning_count": 2,
     "missing_count": 0,
-    "scoped_warning_count": 0,
+    "scoped_warning_count": 2,
     "scoped_missing_count": 0,
     "deferred_warning_count": 0,
     "history_snapshot_count": 38
@@ -85,9 +101,11 @@
   },
   "readiness_planes": {
     "structural_ready": {
-      "status": "ready",
-      "summary": "Structural delivery, journey, and control-loop truth are coherent.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Structural delivery truth is still incomplete or stale.",
+      "reasons": [
+        "Supervisor state is not current enough to count as structural truth."
+      ],
       "evidence": {
         "dispatchable_truth_ready": true,
         "dispatchable_truth_ready_raw": true,
@@ -97,15 +115,18 @@
         "journey_overall_routed_local_only": false,
         "journey_overall_desktop_scoped_blocked": false,
         "journey_local_blocker_autofix_routing_ready": true,
-        "supervisor_recent_enough": true,
+        "supervisor_recent_enough": false,
         "runtime_healing_alert_state": "healthy",
         "runtime_healing_override_stale_incident": false
       }
     },
     "flagship_ready": {
-      "status": "ready",
-      "summary": "Flagship replacement truth is fully green.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Flagship replacement truth is still stricter than the current structural closure.",
+      "reasons": [
+        "Whole-product coverage still has open flagship gaps: horizons_and_public_surface, fleet_and_operator_loop.",
+        "Structural readiness plane is not ready."
+      ],
       "evidence": {
         "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml",
         "registry_present": true,
@@ -128,8 +149,11 @@
         "parity_lab_capture_missing_non_negotiable_ids": [],
         "parity_lab_workflow_missing_non_negotiable_ids": [],
         "parity_lab_missing_whole_product_coverage_keys": [],
-        "coverage_gap_keys": [],
-        "structural_ready": true,
+        "coverage_gap_keys": [
+          "horizons_and_public_surface",
+          "fleet_and_operator_loop"
+        ],
+        "structural_ready": false,
         "veteran_ready": true,
         "primary_route_ready": true,
         "dense_workbench_ready": true,
@@ -435,7 +459,7 @@
           "teable"
         ],
         "support_generated_at": "2026-06-05T04:04:24Z",
-        "support_generated_age_seconds": 4948,
+        "support_generated_age_seconds": 41648,
         "support_source_refresh_mode": "source_mirror_fallback",
         "support_source_refresh_mode_recovered_from_external_only_backlog": false,
         "support_source_refresh_mode_recovered_from_fresh_zero_backlog_mirror": true,
@@ -580,11 +604,14 @@
     }
   },
   "readiness_plane_summary": {
-    "ready_count": 16,
-    "warning_count": 0,
+    "ready_count": 14,
+    "warning_count": 2,
     "missing_count": 0
   },
-  "readiness_plane_gap_keys": [],
+  "readiness_plane_gap_keys": [
+    "structural_ready",
+    "flagship_ready"
+  ],
   "source_documents": [
     "FLAGSHIP_PRODUCT_BAR.md",
     "FLAGSHIP_READINESS_PLANES.yaml",
@@ -642,8 +669,8 @@
     "mobile_play_shell": "ready",
     "ui_kit_and_flagship_polish": "ready",
     "media_artifacts": "ready",
-    "horizons_and_public_surface": "ready",
-    "fleet_and_operator_loop": "ready"
+    "horizons_and_public_surface": "warning",
+    "fleet_and_operator_loop": "warning"
   },
   "coverage_details": {
     "desktop_client": {
@@ -668,7 +695,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-06-05T03:15:34.409913Z",
-        "ui_executable_gate_age_seconds": 7877,
+        "ui_executable_gate_age_seconds": 44578,
         "ui_linux_exit_gate_status": "passed",
         "ui_linux_exit_gate_recovered_from_executable_gate": true,
         "ui_linux_exit_gate_effective_ready": true,
@@ -679,7 +706,7 @@
         "ui_windows_exit_gate_sample_marker_present": true,
         "ui_external_host_proof_blockers_status": "ready",
         "ui_external_host_proof_blockers_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_EXTERNAL_HOST_PROOF_BLOCKERS.generated.json",
-        "ui_external_host_proof_blockers_generated_at": "2026-06-05T05:05:06Z",
+        "ui_external_host_proof_blockers_generated_at": "2026-06-05T14:59:34Z",
         "ui_external_host_proof_blockers_unresolved_hosts": [],
         "ui_external_host_proof_blockers_unresolved_tuples": [],
         "ui_external_host_proof_blockers_request_count": 0,
@@ -876,17 +903,17 @@
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-06-05T05:05:03Z",
         "release_channel_effective_generated_at": "2026-06-05T05:05:03Z",
-        "release_channel_effective_age_seconds": 1309,
+        "release_channel_effective_age_seconds": 38009,
         "release_channel_freshness_source": "canonical",
-        "release_channel_age_seconds": 1309,
+        "release_channel_age_seconds": 38009,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_verified_mirror_path": "/docker/chummercomplete/chummer6-ui/.tmp/verify-release-channel/RELEASE_CHANNEL.generated.json",
         "release_channel_verified_mirror_generated_at": "2026-06-05T03:15:12Z",
-        "release_channel_verified_mirror_age_seconds": 7899,
+        "release_channel_verified_mirror_age_seconds": 44599,
         "release_channel_verified_mirror_identity_match": true,
         "release_channel_ui_local_release_proof_generated_at": "2026-06-05T03:15:49Z",
-        "release_channel_ui_local_release_proof_age_seconds": 7863,
+        "release_channel_ui_local_release_proof_age_seconds": 44563,
         "release_channel_ui_local_release_proof_supports_freshness": true,
         "release_channel_id": "public_stable",
         "release_channel_heads": [
@@ -1166,9 +1193,11 @@
       }
     },
     "horizons_and_public_surface": {
-      "status": "ready",
-      "summary": "Horizons posture and public surface proof are aligned with live release truth.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Horizons and public-surface flagship proof is still incomplete.",
+      "reasons": [
+        "Fleet design mirror is missing horizon canon files: anarchy.md, creator-os.md, runner-passport.md."
+      ],
       "evidence": {
         "public_group_deployment_status": "public",
         "progress_report_generated_at": "2026-06-04T14:11:42Z",
@@ -1191,8 +1220,12 @@
         "horizons_overview_mirror_exists": true,
         "required_desktop_canon_missing_names": [],
         "canonical_horizon_doc_count": 21,
-        "mirror_horizon_doc_count": 21,
-        "missing_mirror_horizon_doc_names": [],
+        "mirror_horizon_doc_count": 18,
+        "missing_mirror_horizon_doc_names": [
+          "anarchy.md",
+          "creator-os.md",
+          "runner-passport.md"
+        ],
         "surface_design_review_loop_path": "/docker/fleet/.codex-design/product/SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md",
         "chummer5a_familiarity_bridge_path": "/docker/fleet/.codex-design/product/CHUMMER5A_FAMILIARITY_BRIDGE.md",
         "desktop_executable_exit_gates_path": "/docker/fleet/.codex-design/product/DESKTOP_EXECUTABLE_EXIT_GATES.md",
@@ -1206,9 +1239,13 @@
       }
     },
     "fleet_and_operator_loop": {
-      "status": "ready",
-      "summary": "Fleet control-loop proof is current and steering a ready product surface set.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Fleet and operator-loop flagship proof is still incomplete.",
+      "reasons": [
+        "Supervisor state is not current flagship-pass proof (mode, completion status, or recency check failed).",
+        "Live-backed release truth matrix does not currently allow a gold claim for chummer.run.",
+        "Final gold janitor is not green under durable/live-recrawled rules."
+      ],
       "evidence": {
         "runtime_healing_alert_state": "healthy",
         "runtime_healing_last_event_at": "",
@@ -1231,7 +1268,7 @@
         "journey_local_blocker_unrouted_reason_sample": [],
         "history_snapshot_count": 38,
         "support_packets_generated_at": "2026-06-05T04:04:24Z",
-        "support_packets_generated_age_seconds": 4948,
+        "support_packets_generated_age_seconds": 41648,
         "support_packets_refresh_mode": "source_mirror_fallback",
         "support_open_packet_count": 0,
         "support_open_non_external_packet_count": 0,
@@ -1255,11 +1292,27 @@
         "external_proof_runbook_synced": true,
         "external_proof_runbook_sync_issue_count": 0,
         "dispatchable_truth_ready": true,
+        "v18_final_gold_janitor_path": "/docker/fleet/_completion/full_product_reaudit_v18/FINAL_GOLD_JANITOR.generated.json",
+        "v18_final_gold_janitor_status": "fail",
+        "v18_final_gold_janitor_verdict": "NOT_GOLD",
+        "v18_final_gold_janitor_reasons": [
+          "failing:LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json",
+          "failing:LIVE_STATUS_RELEASE_ALIGNMENT.generated.json",
+          "downloads_caution:public archive preview,archive package",
+          "status_caution:preview channel,current preview channel,preview posture,public archive preview,still manual"
+        ],
+        "v18_live_backed_truth_path": "/docker/fleet/_completion/full_product_reaudit_v18/LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json",
+        "v18_live_backed_truth_status": "fail",
+        "v18_live_backed_gold_claim_allowed": false,
+        "v18_live_backed_truth_reasons": [
+          "downloads_caution:public archive preview,archive package",
+          "status_caution:preview channel,current preview channel,preview posture,public archive preview,still manual"
+        ],
         "active_shards_generated_at": "2026-06-05T04:04:05Z",
         "active_shards_manifest_kind": "configured_shard_topology",
         "active_shards_count": 0,
         "configured_shards_count": 20,
-        "active_shards_recent": true,
+        "active_shards_recent": false,
         "ooda_state_recovered_from_active_shards": false,
         "ooda_state_recovery_source": "",
         "supervisor_mode": "sharded",
@@ -1268,9 +1321,10 @@
         "supervisor_completion_desktop_scoped": false,
         "supervisor_completion_routed_local_only": false,
         "supervisor_successor_wave_steering_ready": false,
-        "supervisor_updated_at": "2026-06-05T04:04:05Z",
-        "supervisor_recent_enough": true,
+        "supervisor_updated_at": "2026-06-04T14:19:13Z",
+        "supervisor_recent_enough": false,
         "supervisor_focus_profiles": [
+          "next_90_day_successor_wave",
           "top_flagship_grade",
           "whole_project_frontier"
         ],
@@ -1278,8 +1332,8 @@
           "top_flagship_grade",
           "whole_project_frontier"
         ],
-        "supervisor_state_recovered_from_active_shards": true,
-        "supervisor_focus_profiles_recovered_from_runtime_env": true,
+        "supervisor_state_recovered_from_active_shards": false,
+        "supervisor_focus_profiles_recovered_from_runtime_env": false,
         "supervisor_hard_flagship_ready": true,
         "supervisor_whole_project_frontier_ready": true,
         "ooda_controller": "up",

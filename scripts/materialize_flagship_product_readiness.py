@@ -109,6 +109,10 @@ DEFAULT_M142_ROUTE_LOCAL_PROOF_CLOSEOUT_GATE = (
 DEFAULT_M143_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATE = (
     ROOT / ".codex-studio" / "published" / "NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.json"
 )
+DEFAULT_V18_FINAL_GOLD_JANITOR = ROOT / "_completion" / "full_product_reaudit_v18" / "FINAL_GOLD_JANITOR.generated.json"
+DEFAULT_V18_LIVE_BACKED_RELEASE_TRUTH_MATRIX = (
+    ROOT / "_completion" / "full_product_reaudit_v18" / "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json"
+)
 DEFAULT_EXTERNAL_PROOF_RUNBOOK = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
 DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR = ROOT / ".codex-studio" / "published" / "external-proof-commands"
 DEFAULT_PARITY_LAB_DOCS_ROOT = ROOT / "docs" / "chummer5a-oracle"
@@ -7687,6 +7691,24 @@ def build_flagship_product_readiness_payload(
         fleet_positives += 1
     else:
         fleet_reasons.append("Fleet compile manifest is not marked dispatchable_truth_ready.")
+    v18_final_gold_janitor = load_json(DEFAULT_V18_FINAL_GOLD_JANITOR)
+    v18_live_backed_truth = load_json(DEFAULT_V18_LIVE_BACKED_RELEASE_TRUTH_MATRIX)
+    v18_gold_ready = (
+        str(v18_final_gold_janitor.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
+        and str(v18_final_gold_janitor.get("verdict") or "").strip() == "GOLD_READY"
+    )
+    v18_live_truth_ready = (
+        str(v18_live_backed_truth.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
+        and bool(v18_live_backed_truth.get("gold_claim_allowed"))
+    )
+    if v18_live_truth_ready:
+        fleet_positives += 1
+    else:
+        fleet_reasons.append("Live-backed release truth matrix does not currently allow a gold claim for chummer.run.")
+    if v18_gold_ready:
+        fleet_positives += 1
+    else:
+        fleet_reasons.append("Final gold janitor is not green under durable/live-recrawled rules.")
     coverage["fleet_and_operator_loop"], details["fleet_and_operator_loop"] = _coverage_entry(
         positives=fleet_positives,
         reasons=fleet_reasons,
@@ -7738,6 +7760,14 @@ def build_flagship_product_readiness_payload(
             "external_proof_runbook_synced": external_runbook_synced,
             "external_proof_runbook_sync_issue_count": len(external_runbook_sync_reasons),
             "dispatchable_truth_ready": bool(compile_manifest.get("dispatchable_truth_ready")),
+            "v18_final_gold_janitor_path": str(DEFAULT_V18_FINAL_GOLD_JANITOR),
+            "v18_final_gold_janitor_status": str(v18_final_gold_janitor.get("status") or "").strip(),
+            "v18_final_gold_janitor_verdict": str(v18_final_gold_janitor.get("verdict") or "").strip(),
+            "v18_final_gold_janitor_reasons": list(v18_final_gold_janitor.get("reasons") or []),
+            "v18_live_backed_truth_path": str(DEFAULT_V18_LIVE_BACKED_RELEASE_TRUTH_MATRIX),
+            "v18_live_backed_truth_status": str(v18_live_backed_truth.get("status") or "").strip(),
+            "v18_live_backed_gold_claim_allowed": bool(v18_live_backed_truth.get("gold_claim_allowed")),
+            "v18_live_backed_truth_reasons": list(v18_live_backed_truth.get("reasons") or []),
             "active_shards_generated_at": active_shards_generated_at,
             "active_shards_manifest_kind": active_shards_manifest_kind,
             "active_shards_count": active_shards_count,

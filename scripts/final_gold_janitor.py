@@ -36,7 +36,27 @@ REQUIRED_GATES = {
 
 LIVE_BASE = "https://chummer.run"
 LIVE_ROUTES = ["/", "/downloads", "/status", "/ledger", "/ledger/map", "/ledger/factions", "/ledger/newsroom"]
-LIVE_BAD_TOKENS = ["missing or stale", "not yet gold-ready", "review is required", "preview publication"]
+RELEASE_CHANNEL_PATH = "/downloads/RELEASE_CHANNEL.generated.json"
+RELEASES_PATH = "/downloads/releases.json"
+LIVE_STATUS_BAD_TOKENS = [
+    "missing or stale",
+    "not yet gold-ready",
+    "review is required",
+    "preview publication",
+    "preview channel",
+    "current preview channel",
+    "preview posture",
+    "public archive preview",
+    "still manual",
+]
+LIVE_DOWNLOADS_BAD_TOKENS = [
+    "load demo runner",
+    "demo runner",
+    "preview channel",
+    "public archive preview",
+    "still manual",
+    "archive package",
+]
 
 
 def rel(path: Path) -> str:
@@ -90,6 +110,9 @@ def text_only(html: str) -> str:
 def recrawl_live() -> dict[str, object]:
     routes: list[dict[str, object]] = []
     reasons: list[str] = []
+    home_text = ""
+    status_text = ""
+    downloads_text = ""
     for path in LIVE_ROUTES:
         url = LIVE_BASE + path
         try:
@@ -97,7 +120,21 @@ def recrawl_live() -> dict[str, object]:
             response.raise_for_status()
             text = text_only(response.text)
             lowered = text.lower()
-            detection_hits = [token for token in ["load demo runner", "demo runner", *LIVE_BAD_TOKENS] if token in lowered]
+            if path == "/":
+                home_text = lowered
+            elif path == "/status":
+                status_text = lowered
+            elif path == "/downloads":
+                downloads_text = lowered
+            detection_hits = [
+                token
+                for token in [
+                    *LIVE_DOWNLOADS_BAD_TOKENS,
+                    *LIVE_STATUS_BAD_TOKENS,
+                    "mobile play shell preview",
+                ]
+                if token in lowered
+            ]
             routes.append(
                 {
                     "path": path,
@@ -108,23 +145,58 @@ def recrawl_live() -> dict[str, object]:
                     "text_excerpt": " ".join(text.split())[:280],
                 }
             )
-            if path == "/downloads" and any(token in lowered for token in ["load demo runner", "demo runner"]):
-                reasons.append("live_downloads_demo_runner_copy")
-            if path == "/status":
-                status_hits = [token for token in LIVE_BAD_TOKENS if token in lowered]
-                if status_hits:
-                    reasons.append("live_status_caution:" + ",".join(status_hits))
         except Exception as exc:  # pragma: no cover - network failure path
             routes.append({"path": path, "url": url, "error": str(exc)})
             reasons.append(f"live_fetch_failed:{path}")
+    if home_text:
+        home_focus = home_text[:2200]
+        home_hits = [token for token in ["mobile play shell preview", "preview"] if token in home_focus]
+        if home_hits:
+            reasons.append("home_caution_hits:" + ",".join(home_hits))
+        if "black ledger" not in home_focus or "faction" not in home_focus:
+            reasons.append("home_not_black_ledger_first")
+    if downloads_text:
+        downloads_hits = [token for token in LIVE_DOWNLOADS_BAD_TOKENS if token in downloads_text]
+        if downloads_hits:
+            reasons.append("downloads_caution:" + ",".join(downloads_hits))
+    if status_text:
+        status_hits = [token for token in LIVE_STATUS_BAD_TOKENS if token in status_text]
+        if status_hits:
+            reasons.append("status_caution:" + ",".join(status_hits))
+        build_match = re.search(r"run-\d{8}-\d{6}", status_text)
+        if not build_match:
+            reasons.append("status_build_id_missing")
+        try:
+            release_channel = requests.get(LIVE_BASE + RELEASE_CHANNEL_PATH, timeout=20).json()
+            releases = requests.get(LIVE_BASE + RELEASES_PATH, timeout=20).json()
+            release_channel_version = str(release_channel.get("version") or "").strip()
+            releases_version = str(releases.get("version") or "").strip()
+            if not release_channel_version:
+                reasons.append("release_channel_version_missing")
+            elif build_match and build_match.group(0) != release_channel_version:
+                reasons.append(f"status_build_mismatch:{build_match.group(0)}!={release_channel_version}")
+            if not releases_version:
+                reasons.append("releases_version_missing")
+            elif release_channel_version and releases_version != release_channel_version:
+                reasons.append(f"downloads_version_mismatch:{releases_version}!={release_channel_version}")
+            if str(release_channel.get("rolloutState") or "").strip() != "public_stable":
+                reasons.append("release_channel_not_public_stable")
+            if str(release_channel.get("supportabilityState") or "").strip() != "gold_supported":
+                reasons.append("release_channel_not_gold_supported")
+        except Exception as exc:  # pragma: no cover - network failure path
+            reasons.append(f"live_release_json_fetch_failed:{type(exc).__name__}")
     return {"routes": routes, "reasons": reasons}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--require-durable-artifacts", action="store_true")
-    parser.add_argument("--live-backed", action="store_true")
-    parser.add_argument("--recrawl-live", action="store_true")
+    parser.set_defaults(require_durable_artifacts=True, live_backed=True, recrawl_live=True)
+    parser.add_argument("--require-durable-artifacts", dest="require_durable_artifacts", action="store_true")
+    parser.add_argument("--live-backed", dest="live_backed", action="store_true")
+    parser.add_argument("--recrawl-live", dest="recrawl_live", action="store_true")
+    parser.add_argument("--allow-non-durable-artifacts", dest="require_durable_artifacts", action="store_false")
+    parser.add_argument("--allow-non-live-backed", dest="live_backed", action="store_false")
+    parser.add_argument("--skip-live-recrawl", dest="recrawl_live", action="store_false")
     parser.add_argument("--allow-local-dry-run", action="store_true")
     args = parser.parse_args()
 

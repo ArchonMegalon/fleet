@@ -1,13 +1,13 @@
 {
-  "generated_at_utc": "2026-06-01T17:22:47Z",
-  "status": "pass",
-  "verdict": "GOLD_READY",
+  "generated_at_utc": "2026-06-05T15:31:59Z",
+  "status": "fail",
+  "verdict": "NOT_GOLD",
   "scope": "full_estate_v18",
   "artifact_root": "_completion/full_product_reaudit_v18",
   "artifact_manifest": "_completion/full_product_reaudit_v18/FULL_ESTATE_DURABLE_ARTIFACT_MANIFEST.generated.json",
-  "durable_artifacts_required": false,
-  "live_backed_required": false,
-  "live_recrawl_required": false,
+  "durable_artifacts_required": true,
+  "live_backed_required": true,
+  "live_recrawl_required": true,
   "required_gates": {
     "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json": {
       "required": true,
@@ -15,11 +15,11 @@
       "expected": "json_pass",
       "exists": true,
       "tracked": true,
-      "status": "pass",
-      "sha256": "b15540ced6a47ce6f36b7be8533986d962bc6454b8f846aabe978420e77ef533",
-      "manifest_sha256": "fd4f00ccb252da8b269ae4084e8085fb28b53fa5049ae733a239bed97535d26b",
+      "status": "fail",
+      "sha256": "ed366ae9c08643f82133dd049b1aab784bbe83ac7b28d8b3ffe474eef72c6d19",
+      "manifest_sha256": "ed366ae9c08643f82133dd049b1aab784bbe83ac7b28d8b3ffe474eef72c6d19",
       "forbidden_absolute_path": false,
-      "pass": true
+      "pass": false
     },
     "LIVE_STATUS_RELEASE_ALIGNMENT.generated.json": {
       "required": true,
@@ -27,11 +27,11 @@
       "expected": "json_pass",
       "exists": true,
       "tracked": true,
-      "status": "pass",
-      "sha256": "9cc8ef50d824e5bef19b1690e1273ff42bb76504dbe1804fd9f30b510d507a42",
-      "manifest_sha256": "bef6711756f17c22225739b66c16d9aac67a7d494802382248a27b3fd908002d",
+      "status": "fail",
+      "sha256": "4e43bc7d8e7d4878a09e797c049a70f3f005d2bf27395295f691b9142c205ec1",
+      "manifest_sha256": "4e43bc7d8e7d4878a09e797c049a70f3f005d2bf27395295f691b9142c205ec1",
       "forbidden_absolute_path": false,
-      "pass": true
+      "pass": false
     },
     "LIVE_CHUMMER_RUN_ROUTE_PROOF.generated.json": {
       "required": true,
@@ -40,8 +40,8 @@
       "exists": true,
       "tracked": true,
       "status": "pass",
-      "sha256": "bfa39ad840e86e67df8510acaf1b4d9843dd3e087ed5e14e361528261e681bff",
-      "manifest_sha256": "4ad83234db8b848d88733f5a4f48c3f31aef9b4169962fb46535ea1bb5f80d82",
+      "sha256": "467f1a72c0d8176a12f5a0336e4f4ffbf819afde35876e039062414800a44582",
+      "manifest_sha256": "467f1a72c0d8176a12f5a0336e4f4ffbf819afde35876e039062414800a44582",
       "forbidden_absolute_path": false,
       "pass": true
     },
@@ -52,8 +52,8 @@
       "exists": true,
       "tracked": true,
       "status": "pass",
-      "sha256": "1deffa55592e8034d4b3188c4e5d243f5c289bb652d3910b05775fe2e5d69a63",
-      "manifest_sha256": "1deffa55592e8034d4b3188c4e5d243f5c289bb652d3910b05775fe2e5d69a63",
+      "sha256": "a91a653cd4c3b5e5a7a8f88d893acbd1afa902db63a9c84082a2b109d0d23d58",
+      "manifest_sha256": "a91a653cd4c3b5e5a7a8f88d893acbd1afa902db63a9c84082a2b109d0d23d58",
       "forbidden_absolute_path": false,
       "pass": true
     },
@@ -64,8 +64,8 @@
       "exists": true,
       "tracked": true,
       "status": "present",
-      "sha256": "4aee72519e65e27f2de32c63c69fa74bc5e42b3ab5192f0e87305ec527291bc4",
-      "manifest_sha256": "4aee72519e65e27f2de32c63c69fa74bc5e42b3ab5192f0e87305ec527291bc4",
+      "sha256": "e077c535ba9a9275ff5453aa14bcade41339c6403eea71a37aaebab2902ccaea",
+      "manifest_sha256": "e077c535ba9a9275ff5453aa14bcade41339c6403eea71a37aaebab2902ccaea",
       "forbidden_absolute_path": false,
       "pass": true
     },
@@ -76,8 +76,8 @@
       "exists": true,
       "tracked": true,
       "status": "present",
-      "sha256": "c99836c1216678c1fc21155e7ff4612d6090a55307c933337bac6f92fdd41f98",
-      "manifest_sha256": "c99836c1216678c1fc21155e7ff4612d6090a55307c933337bac6f92fdd41f98",
+      "sha256": "e1ae135eccd0e2848ace8531879984873369c13564a4c99fb047ccd7a94b362d",
+      "manifest_sha256": "e1ae135eccd0e2848ace8531879984873369c13564a4c99fb047ccd7a94b362d",
       "forbidden_absolute_path": false,
       "pass": true
     },
@@ -88,8 +88,8 @@
       "exists": true,
       "tracked": true,
       "status": "present",
-      "sha256": "dddfe74a175ad4438bbf010a5b912343a2089f8ec1b44da93d9982bf5e9a8cbb",
-      "manifest_sha256": "dddfe74a175ad4438bbf010a5b912343a2089f8ec1b44da93d9982bf5e9a8cbb",
+      "sha256": "a479a1c1a61fd5a55d243c264b72829654827f1557051d1db0f27236c1910bb5",
+      "manifest_sha256": "a479a1c1a61fd5a55d243c264b72829654827f1557051d1db0f27236c1910bb5",
       "forbidden_absolute_path": false,
       "pass": true
     },
@@ -182,7 +182,94 @@
   "untracked_gates": [],
   "local_absolute_path_gates": [],
   "sha256_mismatch_gates": [],
-  "failing_gates": [],
-  "live_recrawl": null,
-  "reasons": []
+  "failing_gates": [
+    "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json",
+    "LIVE_STATUS_RELEASE_ALIGNMENT.generated.json"
+  ],
+  "live_recrawl": {
+    "routes": [
+      {
+        "path": "/",
+        "url": "https://chummer.run/",
+        "status_code": 200,
+        "response_sha256": "afc20c1f48ba5826b49af1d7838f0d0d88b6b4e0ad1c1a4ce6c7d435cd5b0a49",
+        "detection_hits": [
+          "mobile play shell preview"
+        ],
+        "text_excerpt": "Chummer &#x2014; Shadowrun Campaign OS \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Chummer &#x2014; Shadowrun Campaign OS Hide Get started The flagship front door stays simple: get the build, check what work"
+      },
+      {
+        "path": "/downloads",
+        "url": "https://chummer.run/downloads",
+        "status_code": 200,
+        "response_sha256": "842d9116636c1e2d669f76b8bf9fa58ae0f57f845f4ea9aa6a50aed83758f930",
+        "detection_hits": [
+          "public archive preview",
+          "archive package",
+          "public archive preview"
+        ],
+        "text_excerpt": "Downloads \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Downloads Hide Get started The flagship front door stays simple: get the build, check what works today, keep help nearby, and return through one account "
+      },
+      {
+        "path": "/status",
+        "url": "https://chummer.run/status",
+        "status_code": 200,
+        "response_sha256": "6ded0db64374e5fd6860e7a387ffb7ddfe5dce45fc70df7e03a35df026bf2f96",
+        "detection_hits": [
+          "preview channel",
+          "public archive preview",
+          "still manual",
+          "archive package",
+          "preview channel",
+          "current preview channel",
+          "preview posture",
+          "public archive preview",
+          "still manual"
+        ],
+        "text_excerpt": "Status \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Status Hide Get started The flagship front door stays simple: get the build, check what works today, keep help nearby, and return through one account path. "
+      },
+      {
+        "path": "/ledger",
+        "url": "https://chummer.run/ledger",
+        "status_code": 200,
+        "response_sha256": "f935bf13e09ae926be2018cbdde4213443fcee9a7dd449998aa41ac745c175e0",
+        "detection_hits": [],
+        "text_excerpt": "Emerald Sprawl: First Pressure \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Emerald Sprawl: First Pressure Hide Get started The flagship front door stays simple: get the build, check what works today, keep he"
+      },
+      {
+        "path": "/ledger/map",
+        "url": "https://chummer.run/ledger/map",
+        "status_code": 200,
+        "response_sha256": "97980bd85e3bdada84d456e78fdb9fdd0489af880e5382e66e9e8f3658db11e6",
+        "detection_hits": [],
+        "text_excerpt": "Emerald Sprawl: First Pressure command map \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Emerald Sprawl: First Pressure command map Hide Get started The flagship front door stays simple: get the build, check w"
+      },
+      {
+        "path": "/ledger/factions",
+        "url": "https://chummer.run/ledger/factions",
+        "status_code": 200,
+        "response_sha256": "f935bf13e09ae926be2018cbdde4213443fcee9a7dd449998aa41ac745c175e0",
+        "detection_hits": [],
+        "text_excerpt": "Emerald Sprawl: First Pressure \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Emerald Sprawl: First Pressure Hide Get started The flagship front door stays simple: get the build, check what works today, keep he"
+      },
+      {
+        "path": "/ledger/newsroom",
+        "url": "https://chummer.run/ledger/newsroom",
+        "status_code": 200,
+        "response_sha256": "2c1a9daac1680f2ce61b376f4070fed4fe2d8db19668bbc10beb62c2261811fb",
+        "detection_hits": [],
+        "text_excerpt": "Emerald Sprawl: First Pressure command map \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Emerald Sprawl: First Pressure command map Hide Get started The flagship front door stays simple: get the build, check w"
+      }
+    ],
+    "reasons": [
+      "downloads_caution:public archive preview,archive package",
+      "status_caution:preview channel,current preview channel,preview posture,public archive preview,still manual"
+    ]
+  },
+  "reasons": [
+    "failing:LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json",
+    "failing:LIVE_STATUS_RELEASE_ALIGNMENT.generated.json",
+    "downloads_caution:public archive preview,archive package",
+    "status_caution:preview channel,current preview channel,preview posture,public archive preview,still manual"
+  ]
 }
