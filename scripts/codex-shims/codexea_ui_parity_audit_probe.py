@@ -20,6 +20,8 @@ VISUAL_GATE_PATH = PUBLISHED_ROOT / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.genera
 WORKFLOW_GATE_PATH = PUBLISHED_ROOT / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
 WORKFLOW_PARITY_PATH = PUBLISHED_ROOT / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
 M142_DIRECT_WORKFLOW_PROOF_PATH = PUBLISHED_ROOT / "NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json"
+M141_DIRECT_IMPORT_PROOF_PATH = PUBLISHED_ROOT / "NEXT90_M141_UI_DIRECT_IMPORT_ROUTE_PROOF.generated.json"
+M143_DIRECT_OUTPUT_PROOF_PATH = PUBLISHED_ROOT / "NEXT90_M143_UI_DIRECT_OUTPUT_PROOF.generated.json"
 GENERATED_DIALOG_PARITY_PATH = PUBLISHED_ROOT / "GENERATED_DIALOG_ELEMENT_PARITY.generated.json"
 SECTION_HOST_PARITY_PATH = PUBLISHED_ROOT / "SECTION_HOST_RULESET_PARITY.generated.json"
 VETERAN_TASK_TIME_GATE_PATH = PUBLISHED_ROOT / "VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json"
@@ -378,6 +380,8 @@ def _dynamic_artifact_statuses(
     workflow_gate: dict[str, Any],
     workflow_parity: dict[str, Any],
     m142_direct_workflow_proof: dict[str, Any],
+    m141_direct_import_proof: dict[str, Any],
+    m143_direct_output_proof: dict[str, Any],
     generated_dialog_parity: dict[str, Any],
     section_host_parity: dict[str, Any],
     import_parity_cert: dict[str, Any],
@@ -441,6 +445,8 @@ def _dynamic_artifact_statuses(
     )
     generated_dialog_pass = _is_pass(generated_dialog_parity.get("status"))
     section_host_pass = _is_pass(section_host_parity.get("status"))
+    m141_direct_import_pass = _is_pass(m141_direct_import_proof.get("status"))
+    m143_direct_output_pass = _is_pass(m143_direct_output_proof.get("status"))
     generated_dialog_commands = {str(item).strip() for item in generated_dialog_evidence.get("commandIdsFound") or []}
     section_host_commands = {str(item).strip() for item in section_host_evidence.get("commandIdsFound") or []}
     route_runtime_ready = _truthy_passes(visual_evidence, ["runtime_backed_file_menu_routes"])
@@ -567,10 +573,11 @@ def _dynamic_artifact_statuses(
             avalonia_gate_text,
             [
                 "Runtime_backed_translator_xml_editor_and_hero_lab_importer_routes_surface_governed_posture",
-                'harness.SelectCommand("hero_lab_importer")',
+                'harness.Presenter.ExecuteCommandAsync("hero_lab_importer", CancellationToken.None)',
                 '"dialog.hero_lab_importer"',
             ],
-        ),
+        )
+        and m141_direct_import_pass,
         "menu:dice_roller": _contains_all(
             catalog_text,
             ['"dice_roller"', "ExpectedCommandIds"],
@@ -638,8 +645,8 @@ def _dynamic_artifact_statuses(
         and _contains_all(
             avalonia_gate_text,
             [
-                'CollectionAssert.Contains(visibleCommands, "open_for_printing")',
-                'ClickMenuCommand("open_for_printing")',
+                'Assert.IsTrue(IsCommandVisibleInCommandList(harness, "open_for_printing"))',
+                'ExecuteCommandAsync("open_for_printing", CancellationToken.None)',
             ],
         ),
         "menu:open_for_export": route_runtime_ready
@@ -650,8 +657,8 @@ def _dynamic_artifact_statuses(
         and _contains_all(
             avalonia_gate_text,
             [
-                'visibleCommands.Contains("open_for_export", StringComparer.Ordinal)',
-                'ClickMenuCommand("open_for_export")',
+                'Assert.IsTrue(IsCommandVisibleInCommandList(harness, "open_for_export"))',
+                'ExecuteCommandAsync("open_for_export", CancellationToken.None)',
             ],
         ),
         "menu:file_print_multiple": generated_dialog_pass
@@ -676,7 +683,7 @@ def _dynamic_artifact_statuses(
                 '"print_multiple"',
             ],
         ),
-        "workflow:import_oracle": import_oracle_ready,
+        "workflow:import_oracle": import_oracle_ready and m141_direct_import_pass,
         "workflow:sr6_supplements": sr6_supplement_ready,
         "workflow:house_rules": _contains_all(
             dialog_factory_text,
@@ -735,6 +742,8 @@ def main() -> int:
     workflow_gate = _load_json(WORKFLOW_GATE_PATH)
     workflow_parity = _load_json(WORKFLOW_PARITY_PATH)
     m142_direct_workflow_proof = _load_json(M142_DIRECT_WORKFLOW_PROOF_PATH)
+    m141_direct_import_proof = _load_json(M141_DIRECT_IMPORT_PROOF_PATH)
+    m143_direct_output_proof = _load_json(M143_DIRECT_OUTPUT_PROOF_PATH)
     generated_dialog_parity = _load_json(GENERATED_DIALOG_PARITY_PATH)
     section_host_parity = _load_json(SECTION_HOST_PARITY_PATH)
     import_parity_cert = _load_json(IMPORT_PARITY_CERT_PATH)
@@ -749,6 +758,8 @@ def main() -> int:
         workflow_gate,
         workflow_parity,
         m142_direct_workflow_proof,
+        m141_direct_import_proof,
+        m143_direct_output_proof,
         generated_dialog_parity,
         section_host_parity,
         import_parity_cert,
