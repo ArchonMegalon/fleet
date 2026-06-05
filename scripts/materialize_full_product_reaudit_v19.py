@@ -296,6 +296,12 @@ def materialize_black_ledger_live_media_proof() -> dict[str, Any]:
 
     ledger_text = text_only(ledger_html)
     newsroom_text = text_only(newsroom_html)
+    title_match = re.search(r"<title>(.*?)</title>", newsroom_html, re.IGNORECASE | re.DOTALL)
+    page_title_match = re.search(r'<h1 class="page-title">(.*?)</h1>', newsroom_html, re.IGNORECASE | re.DOTALL)
+    eyebrow_match = re.search(r'<p class="eyebrow">(.*?)</p>', newsroom_html, re.IGNORECASE | re.DOTALL)
+    newsroom_title = text_only(title_match.group(1)) if title_match else ""
+    newsroom_page_title = text_only(page_title_match.group(1)) if page_title_match else ""
+    newsroom_eyebrow = text_only(eyebrow_match.group(1)) if eyebrow_match else ""
     reasons: list[str] = []
     if "<video" not in ledger_html.lower():
         reasons.append("ledger_video_tag_missing")
@@ -309,8 +315,12 @@ def materialize_black_ledger_live_media_proof() -> dict[str, Any]:
         reasons.append("faction_mp4_not_live")
     if newsreel_asset_status != 200:
         reasons.append("newsreel_mp4_not_live")
-    if "command map" in newsroom_text.lower():
+    title_reads_command_map = "command map" in newsroom_title.lower() or "command map" in newsroom_page_title.lower()
+    newsroom_identity_present = "newsroom" in newsroom_title.lower() or "newsroom" in newsroom_eyebrow.lower()
+    if title_reads_command_map:
         reasons.append("newsroom_route_still_reads_as_command_map")
+    if not newsroom_identity_present:
+        reasons.append("newsroom_identity_missing")
     if not all(capture_results.values()):
         reasons.append("live_screenshot_capture_incomplete")
 
@@ -339,7 +349,11 @@ def materialize_black_ledger_live_media_proof() -> dict[str, Any]:
             "route": f"{LIVE_BASE}/ledger/newsroom/turn-1-newsreel",
             "asset_url": newsreel_asset_url,
             "asset_status_code": newsreel_asset_status,
-            "title_reads_command_map": "command map" in newsroom_text.lower(),
+            "title_text": newsroom_title,
+            "page_title_text": newsroom_page_title,
+            "eyebrow_text": newsroom_eyebrow,
+            "title_reads_command_map": title_reads_command_map,
+            "newsroom_identity_present": newsroom_identity_present,
             "screenshot_path": str(screenshots["newsroom"]),
             "screenshot_captured": capture_results["newsroom"],
         },
