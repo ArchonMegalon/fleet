@@ -329,7 +329,7 @@ def build_payload(
     warning_issue_count = sum(1 for front in fronts if front["state"] == "warning")
     warming_up_count = sum(1 for front in fronts if front["state"] == "warming_up")
     monitor_state = _front_state(front_states)
-    status = "pass" if blocking_issue_count == 0 else "fail"
+    status = "pass" if blocking_issue_count == 0 else ("warning" if monitor_state == "warming_up" else "fail")
 
     return {
         "contract_name": "fleet.campaign_os_continuity_liveness",

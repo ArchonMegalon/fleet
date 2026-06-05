@@ -21,7 +21,7 @@
   },
   "contract_name": "fleet.next90_m142_route_local_proof_closeout_gates",
   "frontier_id": 7414599441,
-  "generated_at": "2026-06-01T14:49:26Z",
+  "generated_at": "2026-06-05T04:02:19Z",
   "milestone_id": 142,
   "monitor_summary": {
     "canonical_issue_count": 0,
@@ -190,10 +190,10 @@
   },
   "source_inputs": {
     "classic_dense_workbench_gate": {
-      "generated_at": "2026-06-01T07:05:07.701067Z",
+      "generated_at": "2026-06-05T03:13:12.825616Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CLASSIC_DENSE_WORKBENCH_POSTURE_GATE.generated.json",
-      "sha256": "50ca402210e006fdadc0d2f42ec1e675ca2b7dca7956d93792fd05682ffc553f"
+      "sha256": "dd466fc08e57e70de9f94b7bd0076f102b327a739103b8fc72829d50c7041f69"
     },
     "core_dense_receipts_doc": {
       "generated_at": "2026-05-22T15:24:31Z",
@@ -202,40 +202,40 @@
       "sha256": "2cdeee03aba3155c1e98a4a1c0cc6f9d6b0d736e97d50af8fc7a3c207b4f3d1c"
     },
     "design_queue_staging": {
-      "generated_at": "2026-05-29T06:21:39Z",
+      "generated_at": "2026-06-01T20:06:02Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
+      "sha256": "f6c30d70ae0dc97068dc37587a63b330a4dfc8212f610af7907734cbcae69656"
     },
     "desktop_visual_familiarity_gate": {
-      "generated_at": "2026-06-01T12:33:14.978109Z",
+      "generated_at": "2026-06-05T03:13:00.606159Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
-      "sha256": "9ac36219bbf9aa6aea15ef466d2264715381c1ea9d7c2e9478939444004ba5ab"
+      "sha256": "e973f91b5e48c44fc6005a46a945041b9aab02f65466569b41e3a5cea21cab5e"
     },
     "desktop_workflow_execution_gate": {
-      "generated_at": "2026-06-01T12:48:14.196716Z",
+      "generated_at": "2026-06-05T03:13:03.242200Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
-      "sha256": "4dfde0148c70b16517a7de69956f65776641ca8fe9d4962074b4f14245be6ae4"
+      "sha256": "31e477f25b299ed02f6e5fabb043b4fbb6e8e7c0ed1fbab491c1ebeda1af905c"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-05-30T09:58:41Z",
+      "generated_at": "2026-06-01T20:06:02Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
+      "sha256": "f6c30d70ae0dc97068dc37587a63b330a4dfc8212f610af7907734cbcae69656"
     },
     "generated_dialog_parity": {
-      "generated_at": "2026-05-28T18:03:26.291868Z",
+      "generated_at": "2026-06-05T03:08:15.959003Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/GENERATED_DIALOG_ELEMENT_PARITY.generated.json",
-      "sha256": "0137798daaa0a867c931fb7dcd1a84b76c2f7c93bb2e475d14c32ccdbd2b2cf7"
+      "sha256": "bd3487dc08f29e1c90523fa46bddf62e8bff0d05c6d1ab1ce63f3aecce815981"
     },
     "gm_runboard_route": {
-      "generated_at": "2026-05-28T18:32:52Z",
+      "generated_at": "2026-06-05T03:15:49Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M121_UI_GM_RUNBOARD_ROUTE.generated.json",
-      "sha256": "8047a7b4b4470879940961ab89c60ee9dd51909e16e2f8c6958d6bdfa8ba3604"
+      "sha256": "607bed4d9656c347700a1dd8af02287d08206b6cb4451c2f7509039a228ea336"
     },
     "next90_guide": {
       "generated_at": "2026-05-30T09:55:17Z",
@@ -244,40 +244,40 @@
       "sha256": "984957267d7ee1ae4f3b20a7c67446925d356887019a5f910018ce9001cf36a5"
     },
     "parity_audit": {
-      "generated_at": "2026-06-01T14:49:26.270160Z",
+      "generated_at": "2026-06-05T04:02:19.258525Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
-      "sha256": "57a2a15bc8eeddbcfdf7e419395e4d7050cd6c1f22ddc86a184b44d9f41b63f6"
+      "sha256": "b77235d62a04bbee5d80ad9bc81bc42c5db97f5d9d0d2123240ae47be9703fdd"
     },
     "screenshot_review_gate": {
-      "generated_at": "2026-06-01T12:33:17.193597Z",
+      "generated_at": "2026-06-05T03:15:08.967424Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
-      "sha256": "92bf029c106e0cb13bde973065dbf6cab0dab36f7e9e037e70e1f7d7cd6f553c"
+      "sha256": "b22a54e4f8cb4d340a873e0388c3732ab5aa25010d40658c30c1e0f88a4e3cd0"
     },
     "section_host_ruleset_parity": {
-      "generated_at": "2026-05-28T18:04:02.236919Z",
+      "generated_at": "2026-06-05T03:08:48.599333Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SECTION_HOST_RULESET_PARITY.generated.json",
-      "sha256": "e12b5657039330079e0925e5e92d9a77334d5e75ea3724367c2cc2ca04fb157c"
+      "sha256": "314699e605be7743d17a48676e7502c25b48d9ef783497ce5db10b1a520f9588"
     },
     "successor_registry": {
-      "generated_at": "2026-06-01T13:02:27Z",
+      "generated_at": "2026-06-03T01:54:42Z",
       "generated_at_source": "file_mtime",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "b2dccf307eeda27826d9d62bc9a7f92305fae4a2fa2e70fecf83cde849a7b66c"
+      "sha256": "f7a7052667fb62adf4d4556e2e35f28dc9488f41c579d9af0802cdd92f0b0959"
     },
     "ui_direct_workflow_proof": {
-      "generated_at": "2026-06-01T12:48:14.091500Z",
+      "generated_at": "2026-06-05T03:15:09.238381Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json",
-      "sha256": "f0732a2d83a07098b25eaf863e2831ee5df45f06dd4c822d196d920db453c98f"
+      "sha256": "a6700b21005f7de8577a9fea55dc83169b0fc1d3874c4b8d07c8155d645ede6f"
     },
     "ui_flagship_release_gate": {
-      "generated_at": "2026-06-01T14:49:23.729716Z",
+      "generated_at": "2026-06-05T04:02:16.598912Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json",
-      "sha256": "0f72211424ebcf3bb6f84b7e58a044de5db11df4a6a90902c0c9fe2ab824de87"
+      "sha256": "7a05fe94660a0c7c6b855380cf32c1633985dbf1dc4b84f75a5a6c9607713444"
     },
     "ui_kit_local_release_proof": {
       "generated_at": "2026-05-19T08:27:59Z",
@@ -286,16 +286,16 @@
       "sha256": "07220b55b98115103b7b280629c630728c4058cfbbf7222c9460fae1b115190c"
     },
     "ui_local_release_proof": {
-      "generated_at": "2026-05-29T07:11:43Z",
+      "generated_at": "2026-06-05T03:15:49Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
-      "sha256": "c39e6a47414fca09dd9a80dc60a49335e18aa78a26fb904ef2cb3f1eefa2773b"
+      "sha256": "2239df0015d66edc2c87b8cae9c18d85e3a2153555d5f68df04a1fe41c18d19a"
     },
     "veteran_task_time_gate": {
-      "generated_at": "2026-06-01T07:05:07.742177Z",
+      "generated_at": "2026-06-05T03:13:12.863905Z",
       "generated_at_source": "payload",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/VETERAN_TASK_TIME_EVIDENCE_GATE.generated.json",
-      "sha256": "6966e534f0814bf2e1a0b1ab7207e5d9cc43358bc13d8da0d57cca943b9b23e2"
+      "sha256": "95f03eeada6e28d21e5a3d72f8b2fc8eaae8ded81ac2bbbe6c8a81edd8a1ffee"
     },
     "workflow_pack": {
       "generated_at": "2026-05-06T20:03:20Z",

@@ -22,7 +22,7 @@
   },
   "contract_name": "fleet.next90_m138_hero_path_projections",
   "frontier_id": 7914546694,
-  "generated_at": "2026-06-01T14:49:28Z",
+  "generated_at": "2026-06-05T04:02:21Z",
   "milestone_id": 138,
   "owned_surfaces": [
     "bind_ready_for_tonight_gates_role_kit_registry_vtt_expor:fleet"
@@ -157,7 +157,7 @@
   },
   "public_truth_projection": {
     "community_hub_discord_boundary": "unknown",
-    "community_hub_stage": "future_concept",
+    "community_hub_stage": "unknown",
     "faq_entries": {
       "Is Chummer trying to replace Discord or VTTs?": "No. The intended posture is that Chummer owns rules, applications, scheduling records, and world consequences, while Discord, Teams, and VTTs remain play or communication surfaces.",
       "Would I need a Windows PC to join a run?": "No. The intended direction is that browsing runs, applying with a quickstart or approved runner, acknowledging table expectations, and receiving scheduling and handoff details should work without assuming a Windows-only setup."
@@ -174,14 +174,14 @@
       "sha256": "7c44667d1d0d3eccc774caab94fff80487fb904664ce96b2beaca088ae68cccf"
     },
     "design_queue_staging": {
-      "generated_at": "2026-05-29T06:21:39Z",
+      "generated_at": "2026-06-01T20:06:02Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
+      "sha256": "f6c30d70ae0dc97068dc37587a63b330a4dfc8212f610af7907734cbcae69656"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-05-30T09:58:41Z",
+      "generated_at": "2026-06-01T20:06:02Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-      "sha256": "5716c603028375e078586ee2d1ee9bc6c4c530cccd2b327e1294f707dfc31bd4"
+      "sha256": "f6c30d70ae0dc97068dc37587a63b330a4dfc8212f610af7907734cbcae69656"
     },
     "foundry_first_handoff": {
       "generated_at": "2026-04-30T21:57:57Z",
@@ -204,19 +204,19 @@
       "sha256": "0831f31790254d843c4f8f408f184e26a6d59b24710ba9f4b156ed58c4fdc81a"
     },
     "public_feature_registry": {
-      "generated_at": "2026-05-31T13:51:37Z",
+      "generated_at": "2026-06-04T17:30:50Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FEATURE_REGISTRY.yaml",
-      "sha256": "cf07663a479a6b115e786fc8dbaa525d00be34ac15daed0d0b0eb9b02bccb6fd"
+      "sha256": "99bee20cdc7ce867bc1e1201834bcbc2071d133437cc0a2635f097459dc9d1e4"
     },
     "public_guide_community_hub": {
-      "generated_at": "2026-06-01T13:07:35Z",
+      "generated_at": "2026-06-04T22:12:48Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/HORIZONS/community-hub.md",
-      "sha256": "d6b1ef23c0a7e4d31166943e121d530ebee8b0fcca8730705b7509ca064e4562"
+      "sha256": "c09d5e3b94a086266e69143e939b9d3a340d56fb5f49e5e57a6a6ad4069c9e18"
     },
     "public_landing_manifest": {
-      "generated_at": "2026-05-31T13:59:33Z",
+      "generated_at": "2026-06-04T17:30:50Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_LANDING_MANIFEST.yaml",
-      "sha256": "1e71f43fabb72ddd9edad5d9ce465b55be3cd576b855f27845e449b07830111b"
+      "sha256": "d7c8d2137327d713c94800b60ddec00e41c2f7268d5611d83a5ab651f31e526a"
     },
     "public_onboarding_paths": {
       "generated_at": "2026-06-01T12:58:00Z",
@@ -239,9 +239,9 @@
       "sha256": "fa14b7cd799cf32abe812a4d037c9952dcd632e78967a65932b9ebad077e8e0a"
     },
     "successor_registry": {
-      "generated_at": "2026-06-01T13:02:27Z",
+      "generated_at": "2026-06-03T01:54:42Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "b2dccf307eeda27826d9d62bc9a7f92305fae4a2fa2e70fecf83cde849a7b66c"
+      "sha256": "f7a7052667fb62adf4d4556e2e35f28dc9488f41c579d9af0802cdd92f0b0959"
     },
     "vtt_export_target_acceptance": {
       "generated_at": "2026-04-30T21:57:57Z",

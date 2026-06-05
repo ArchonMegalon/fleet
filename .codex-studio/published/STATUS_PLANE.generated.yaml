@@ -1,13 +1,13 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-06-04T14:12:28Z'
-source_public_status_generated_at: '2026-06-04T14:12:27Z'
+generated_at: '2026-06-05T04:12:12Z'
+source_public_status_generated_at: '2026-06-05T04:12:07Z'
 mission_snapshot:
   headline: 'Working now: Finish hardening canonical downloads truth so live manifest,
     desktop surface refs, install-aware registry, and canonical verifier all converge
     from one authority at publish time.. ETA: 10m. Next: Add milestone mapping or
     executable queue work for Moderation and publication projections still need explicit
-    registry-owned read models... Vision: 0s. Capacity: Core 71%, Easy 71%, Jury 71%.
+    registry-owned read models... Vision: 0s. Capacity: Core 0%, Easy 0%, Jury 0%.
     Stop risk: none.'
   current_eta: 10m
   next_title: Add milestone mapping or executable queue work for Moderation and publication
@@ -16,9 +16,9 @@ mission_snapshot:
   milestone_title: chummer-vnext
   milestone_eta: 0s
   lane_capacity_summary:
-  - Core 71%
-  - Easy 71%
-  - Jury 71%
+  - Core 0%
+  - Easy 0%
+  - Jury 0%
   stop_risk: none
   headline_eta: 10m
 queue_forecast:
@@ -31,8 +31,8 @@ queue_forecast:
     provider: EA
     brain: EA backend / ea-coder-hard-batch
     reason: interactive_or_first_pass
-    elapsed_seconds: 364702
-    elapsed_human: 4d 5h
+    elapsed_seconds: 415082
+    elapsed_human: 4d 19h
     remaining_seconds: 600
     remaining_human: 10m
     total_seconds: 3600
@@ -83,58 +83,58 @@ capacity_forecast:
     brain: ea-coder-fast
     backend: onemin
     provider: onemin
-    state: ready
-    remaining_percent: 71.21
-    remaining_text: 71%
+    state: degraded
+    remaining_percent: 0.0
+    remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 71% allowance
+    sustainable_runway: 0% allowance
     native_allowance:
       provider_key: onemin
-      state: ready
-      remaining_percent_of_max: 71.21
+      state: degraded
+      remaining_percent_of_max: 0.0
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 60203905
+      estimated_remaining_credits_total: 61
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 19
-    ready_slots: 6
-    degraded_slots: 13
+    ready_slots: 0
+    degraded_slots: 12
     slot_owners: []
     local_estimated_burn_usd: 2.900591
     local_run_count: 5
-    mission_ready: true
+    mission_ready: false
   - lane: repair
     profile: repair
     model: ea-coder-fast
     brain: ea-coder-fast
     backend: onemin
     provider: onemin
-    state: ready
-    remaining_percent: 71.21
-    remaining_text: 71%
+    state: degraded
+    remaining_percent: 0.0
+    remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 71% allowance
+    sustainable_runway: 0% allowance
     native_allowance:
       provider_key: onemin
-      state: ready
-      remaining_percent_of_max: 71.21
+      state: degraded
+      remaining_percent_of_max: 0.0
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 60203905
+      estimated_remaining_credits_total: 61
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 19
-    ready_slots: 6
-    degraded_slots: 13
+    ready_slots: 0
+    degraded_slots: 12
     slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: true
+    mission_ready: false
   - lane: groundwork
     profile: groundwork
     model: ea-groundwork-gemini
@@ -171,15 +171,15 @@ capacity_forecast:
     backend: browseract
     provider: browseract
     state: ready
-    remaining_percent: 71.21
-    remaining_text: 71%
+    remaining_percent: 0.0
+    remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 71% allowance
+    sustainable_runway: 0% allowance
     native_allowance:
       provider_key: browseract
       state: ready
-      remaining_percent_of_max: 71.21
+      remaining_percent_of_max: 0.0
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
       estimated_remaining_credits_total: null
@@ -199,116 +199,116 @@ capacity_forecast:
     brain: ea-coder-hard
     backend: onemin
     provider: onemin
-    state: ready
-    remaining_percent: 71.21
-    remaining_text: 71%
+    state: degraded
+    remaining_percent: 0.0
+    remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 71% allowance
+    sustainable_runway: 0% allowance
     native_allowance:
       provider_key: onemin
-      state: ready
-      remaining_percent_of_max: 71.21
+      state: degraded
+      remaining_percent_of_max: 0.0
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 60203905
+      estimated_remaining_credits_total: 61
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 19
-    ready_slots: 6
-    degraded_slots: 13
+    ready_slots: 0
+    degraded_slots: 12
     slot_owners: []
     local_estimated_burn_usd: 3.105556
     local_run_count: 14
-    mission_ready: true
+    mission_ready: false
   - lane: core_authority
     profile: core
     model: ea-coder-hard
     brain: ea-coder-hard
     backend: onemin
     provider: onemin
-    state: ready
-    remaining_percent: 71.21
-    remaining_text: 71%
+    state: degraded
+    remaining_percent: 0.0
+    remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 71% allowance
+    sustainable_runway: 0% allowance
     native_allowance:
       provider_key: onemin
-      state: ready
-      remaining_percent_of_max: 71.21
+      state: degraded
+      remaining_percent_of_max: 0.0
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 60203905
+      estimated_remaining_credits_total: 61
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 19
-    ready_slots: 6
-    degraded_slots: 13
+    ready_slots: 0
+    degraded_slots: 12
     slot_owners: []
     local_estimated_burn_usd: 1.126012
     local_run_count: 2
-    mission_ready: true
+    mission_ready: false
   - lane: core_booster
     profile: core
     model: ea-coder-hard
     brain: ea-coder-hard
     backend: onemin
     provider: onemin
-    state: ready
-    remaining_percent: 71.21
-    remaining_text: 71%
+    state: degraded
+    remaining_percent: 0.0
+    remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 71% allowance
+    sustainable_runway: 0% allowance
     native_allowance:
       provider_key: onemin
-      state: ready
-      remaining_percent_of_max: 71.21
+      state: degraded
+      remaining_percent_of_max: 0.0
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 60203905
+      estimated_remaining_credits_total: 61
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 19
-    ready_slots: 6
-    degraded_slots: 13
+    ready_slots: 0
+    degraded_slots: 12
     slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: true
+    mission_ready: false
   - lane: core_rescue
     profile: core
     model: ea-coder-hard
     brain: ea-coder-hard
     backend: onemin
     provider: onemin
-    state: ready
-    remaining_percent: 71.21
-    remaining_text: 71%
+    state: degraded
+    remaining_percent: 0.0
+    remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 71% allowance
+    sustainable_runway: 0% allowance
     native_allowance:
       provider_key: onemin
-      state: ready
-      remaining_percent_of_max: 71.21
+      state: degraded
+      remaining_percent_of_max: 0.0
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 60203905
+      estimated_remaining_credits_total: 61
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
     configured_slots: 19
-    ready_slots: 6
-    degraded_slots: 13
+    ready_slots: 0
+    degraded_slots: 12
     slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
-    mission_ready: true
+    mission_ready: false
   - lane: review_shard
     profile: review_light
     model: ea-review-light
@@ -316,15 +316,15 @@ capacity_forecast:
     backend: browseract
     provider: browseract
     state: ready
-    remaining_percent: 71.21
-    remaining_text: 71%
+    remaining_percent: 0.0
+    remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 71% allowance
+    sustainable_runway: 0% allowance
     native_allowance:
       provider_key: browseract
       state: ready
-      remaining_percent_of_max: 71.21
+      remaining_percent_of_max: 0.0
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
       estimated_remaining_credits_total: null
@@ -345,15 +345,15 @@ capacity_forecast:
     backend: browseract
     provider: browseract
     state: ready
-    remaining_percent: 71.21
-    remaining_text: 71%
+    remaining_percent: 0.0
+    remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 71% allowance
+    sustainable_runway: 0% allowance
     native_allowance:
       provider_key: browseract
       state: ready
-      remaining_percent_of_max: 71.21
+      remaining_percent_of_max: 0.0
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
       estimated_remaining_credits_total: null
@@ -374,15 +374,15 @@ capacity_forecast:
     backend: browseract
     provider: browseract
     state: ready
-    remaining_percent: 71.21
-    remaining_text: 71%
+    remaining_percent: 0.0
+    remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 71% allowance
+    sustainable_runway: 0% allowance
     native_allowance:
       provider_key: browseract
       state: ready
-      remaining_percent_of_max: 71.21
+      remaining_percent_of_max: 0.0
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
       estimated_remaining_credits_total: null
@@ -400,27 +400,27 @@ capacity_forecast:
     profile: survival
     model: ea-coder-survival
     brain: ea-coder-survival
-    backend: onemin
+    backend: gemini_web
     provider: onemin
     state: ready
-    remaining_percent: 71.21
-    remaining_text: 71%
+    remaining_percent: 0.0
+    remaining_text: 0%
     hours_text: unknown
     hot_runway: unknown
-    sustainable_runway: 71% allowance
+    sustainable_runway: 0% allowance
     native_allowance:
       provider_key: onemin
       state: ready
-      remaining_percent_of_max: 71.21
+      remaining_percent_of_max: 0.0
       estimated_hours_remaining_at_current_pace: null
       estimated_burn_credits_per_hour: null
-      estimated_remaining_credits_total: 60203905
+      estimated_remaining_credits_total: 61
       max_requests_per_hour: 120
       max_credits_per_hour: 80000
       max_credits_per_day: 600000
-    configured_slots: 19
-    ready_slots: 6
-    degraded_slots: 13
+    configured_slots: 1
+    ready_slots: 1
+    degraded_slots: 0
     slot_owners: []
     local_estimated_burn_usd: 0.0
     local_run_count: 0
@@ -664,30 +664,31 @@ support_summary:
   update_required_misrouted_case_count: 0
   update_required_routed_to_downloads_count: 0
   top_clusters: []
-  generated_at: '2026-06-04T14:03:08Z'
+  generated_at: '2026-06-05T04:04:24Z'
   freshness:
     available: true
-    at: '2026-06-04T14:03:08Z'
-    age_seconds: 559
-    age_human: 9m 19s
+    at: '2026-06-05T04:04:24Z'
+    age_seconds: 467
+    age_human: 7m 47s
     state: fresh
     label: fresh
 publish_readiness:
   state: blocked
-  blocking_reason_count: 1
-  warning_reason_count: 2
+  blocking_reason_count: 3
+  warning_reason_count: 1
   blocking_reasons:
+  - status plane is stale.
+  - public guide/progress is stale.
   - 'Freeze launch expansion until the whole-product final claim returns to pass (current:
     fail).'
   warning_reasons:
-  - Live source state is 2d 23h newer than the published campaign OS continuity monitor.
   - Provider-route fallback coverage is still thin for the current release posture.
   recommended_action: Resolve the blocking publish-readiness issues before promoting
     public truth.
   signals:
     runtime_healing_alert_state: healthy
-    status_plane_freshness_state: fresh
-    progress_report_freshness_state: fresh
+    status_plane_freshness_state: stale
+    progress_report_freshness_state: stale
     journey_gates_freshness_state: fresh
     release_channel_freshness_state: fresh
     support_freshness_state: fresh
@@ -696,7 +697,7 @@ publish_readiness:
     weekly_governor_packet_status: blocked
     weekly_governor_launch_action: freeze_launch
     weekly_governor_public_state: freeze_launch
-    campaign_os_monitor_freshness_state: stale
+    campaign_os_monitor_freshness_state: fresh
     journey_gate_state: ready
     release_channel_status: published
     release_channel_rollout_state: public_stable

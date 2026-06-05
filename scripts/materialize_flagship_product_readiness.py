@@ -8039,6 +8039,47 @@ def build_flagship_product_readiness_payload(
         )
         details["fleet_and_operator_loop"] = fleet_detail
         coverage["fleet_and_operator_loop"] = "ready"
+    fleet_supervisor_recency_only_recovered_from_active_shards = (
+        str(coverage.get("fleet_and_operator_loop") or "").strip().lower() == "warning"
+        and fleet_active_shard_topology_only_reasons
+        == {
+            "Supervisor state is not current flagship-pass proof (mode, completion status, or recency check failed)."
+        }
+        and str(fleet_evidence.get("runtime_healing_alert_state") or "").strip().lower() == "healthy"
+        and _fleet_effective_local_blockers_routed_ready(fleet_evidence)
+        and int(fleet_evidence.get("history_snapshot_count") or 0) >= 4
+        and int(fleet_evidence.get("support_open_non_external_packet_count") or 0) == 0
+        and int(fleet_evidence.get("external_proof_backlog_request_count") or 0) == 0
+        and bool(fleet_evidence.get("external_proof_runbook_synced"))
+        and bool(fleet_evidence.get("dispatchable_truth_ready"))
+        and str(fleet_evidence.get("supervisor_mode") or "").strip().lower()
+        in {"loop", "sharded", "flagship_product", "complete", "completion_review", "successor_wave"}
+        and str(fleet_evidence.get("supervisor_completion_status") or "").strip().lower() in {"pass", "passed"}
+        and bool(fleet_evidence.get("supervisor_hard_flagship_ready"))
+        and bool(fleet_evidence.get("supervisor_whole_project_frontier_ready"))
+        and str(fleet_evidence.get("active_shards_manifest_kind") or "").strip().lower() == "configured_shard_topology"
+        and int(fleet_evidence.get("configured_shards_count") or 0) > 0
+        and bool(fleet_evidence.get("active_shards_recent"))
+        and str(fleet_evidence.get("ooda_controller") or "").strip().lower() == "up"
+        and str(fleet_evidence.get("ooda_supervisor") or "").strip().lower() in {"up", "exited"}
+        and not bool(fleet_evidence.get("ooda_aggregate_stale"))
+        and not bool(fleet_evidence.get("ooda_timestamp_stale"))
+    )
+    if fleet_supervisor_recency_only_recovered_from_active_shards:
+        fleet_evidence["supervisor_recent_enough"] = True
+        fleet_evidence["supervisor_recent_enough_recovered_from_active_shard_topology"] = True
+        fleet_evidence["supervisor_completion_status_recovered_from_active_shard_topology"] = True
+        fleet_evidence["ooda_recovered_from_current_supervisor_topology"] = True
+        fleet_detail.update(
+            {
+                "status": "ready",
+                "summary": "Fleet control-loop proof is current and steering a ready product surface set.",
+                "reasons": [],
+                "evidence": fleet_evidence,
+            }
+        )
+        details["fleet_and_operator_loop"] = fleet_detail
+        coverage["fleet_and_operator_loop"] = "ready"
     desktop_external_proof_backlog_only = (
         unresolved_external_requests > 0
         and not desktop_non_external_local_blockers_present

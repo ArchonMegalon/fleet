@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-04T14:08:21Z'
+generated_at: '2026-06-05T04:06:19Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -30,13 +30,16 @@ focus:
   - whole_project_frontier
   owners:
   - fleet
-  - executive-assistant
   - chummer6-design
-  - chummer6-hub
-  - chummer6-core
   - chummer6-ui
-  - chummer6-media-factory
+  - executive-assistant
+  - chummer6-hub
   texts:
+  - flagship-readiness
+  - desktop-client
+  - release-proof
+  - grade-bar
+  - materializer
   - top flagship grade
   - whole-project frontier
   - no lowered standards
@@ -51,9 +54,6 @@ focus:
   - performance
   - proof shelf
   - fit and finish
-  - fleet and operator loop
-  - desktop client
-  - horizons and public surface
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -61,54 +61,55 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: Flagship product readiness proof is green.
+  status: fail
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 full_product_audit:
-  status: pass
-  reason: 'Flagship product readiness proof is green.'
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-04T14:13:04Z'
-  proof_status: pass
+  generated_at: '2026-06-05T04:05:53Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 4575045159
+- 3109832007
 frontier:
-- id: 4575045159
-  title: Horizons, public guide, and flagship future-lane posture
+- id: 3109832007
+  title: Fleet and operator loop flagship finish
   wave: flagship_product
   status: not_started
   owners:
+  - fleet
+  - executive-assistant
   - chummer6-design
   - chummer6-hub
-  - chummer6-core
-  - chummer6-ui
-  - chummer6-media-factory
   dependencies: []
   exit_criteria:
-  - Operationalize the canon in `HORIZONS.md`, `HORIZON_REGISTRY.yaml`, and the horizon
-    docs so future-capability lanes have explicit build paths, owner handoff gates,
-    and downstream public-guide alignment.
-  - Keep the public guide, horizons posture, and flagship product surfaces consistent
-    with the lead-designer canon rather than letting storytelling outrun build truth.
+  - Keep the product-governor, support, signal, and operator loop durable enough to
+    steer the full multi-repo product, not just the current milestone wave, with trustworthy
+    proofs, traces, ETAs, handoffs, and fail-closed anti-false-complete posture.
+  - Ensure the loop can keep decomposing full-product work across shards until flagship
+    readiness proof is current and trusted, and that actionable feedback, crash, and
+    support signals can auto-materialize into routed bugfix work without operator
+    babysitting.
   eta:
     status: flagship_delivery
-    eta_human: 11h-1.1d
+    eta_human: 9h-23h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Horizons, public guide, and flagship future-lane posture''
-      remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      horizons_and_public_surface, fleet_and_operator_loop.'
-    predicted_completion_at: '2026-06-05T09:05:39Z'
-    range_low_hours: 10.69
-    range_high_hours: 27.22
+    summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
+      the flagship closeout frontier. Outstanding readiness coverage: flagship readiness
+      proof refresh.'
+    predicted_completion_at: '2026-06-05T20:12:19Z'
+    range_low_hours: 9.0
+    range_high_hours: 23.2
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 2.25
+    remaining_effort_units: 2.0
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
@@ -117,20 +118,20 @@ frontier:
     scope_warning: ''
 eta:
   status: flagship_delivery
-  eta_human: 11h-1.1d
+  eta_human: 9h-23h
   eta_confidence: low
   basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Horizons, public guide, and flagship future-lane posture''
-    remains open under the flagship closeout frontier. Outstanding readiness coverage:
-    horizons_and_public_surface, fleet_and_operator_loop.'
-  predicted_completion_at: '2026-06-05T09:05:39Z'
-  range_low_hours: 10.69
-  range_high_hours: 27.22
+  summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
+    the flagship closeout frontier. Outstanding readiness coverage: flagship readiness
+    proof refresh.'
+  predicted_completion_at: '2026-06-05T20:12:19Z'
+  range_low_hours: 9.0
+  range_high_hours: 23.2
   remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
   remaining_not_started_milestones: 1
-  remaining_effort_units: 2.25
+  remaining_effort_units: 2.0

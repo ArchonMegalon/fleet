@@ -1,7 +1,7 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-04T14:13:12Z'
-mode: complete
+generated_at: '2026-06-05T04:05:58Z'
+mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -40,6 +40,12 @@ focus:
   - executive-assistant
   - fleet
   texts:
+  - Add rule-environment studio entry points to desktop workflows
+  - Publish rule-environment studio contracts and explain receipts
+  - Render recap, replay, and exchange preview artifacts with receipts and siblings
+  - Store lineage and publication refs for exchange artifacts
+  - Tighten rules and explain canon so media companions can cite but never replace
+    engine truth
   - accessibility
   - automatic bugfixing
   - crash reporting
@@ -50,6 +56,11 @@ focus:
   - horizons and public surface
   - journey smoothness
   - localization
+  - next90-m114-core-rule-environment-studio
+  - next90-m114-design-rule-environment-policy
+  - next90-m114-ui-rule-studio
+  - next90-m115-media-factory-exchange-previews
+  - next90-m115-registry-exchange-lineage
   - no lowered standards
   - performance
   - proof shelf
@@ -68,34 +79,74 @@ completion_audit:
   reason: trusted completion receipt plus whole-product release proof and Linux desktop
     exit gate are ready
 full_product_audit:
-  status: pass
-  reason: flagship product readiness proof is current across desktop, rules, hub,
-    mobile, horizons, and operator lanes
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-04T14:13:04Z'
-  proof_status: pass
+  generated_at: '2026-06-05T04:05:53Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 0
-frontier_ids: []
-frontier: []
+frontier_count: 1
+frontier_ids:
+- 3109832007
+frontier:
+- id: 3109832007
+  title: Fleet and operator loop flagship finish
+  wave: flagship_product
+  status: not_started
+  owners:
+  - fleet
+  - executive-assistant
+  - chummer6-design
+  - chummer6-hub
+  dependencies: []
+  exit_criteria:
+  - Keep the product-governor, support, signal, and operator loop durable enough to
+    steer the full multi-repo product, not just the current milestone wave, with trustworthy
+    proofs, traces, ETAs, handoffs, and fail-closed anti-false-complete posture.
+  - Ensure the loop can keep decomposing full-product work across shards until flagship
+    readiness proof is current and trusted, and that actionable feedback, crash, and
+    support signals can auto-materialize into routed bugfix work without operator
+    babysitting.
+  eta:
+    status: flagship_delivery
+    eta_human: 9h-23h
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
+      the flagship closeout frontier. Outstanding readiness coverage: flagship readiness
+      proof refresh.'
+    predicted_completion_at: '2026-06-05T20:11:58Z'
+    range_low_hours: 9.0
+    range_high_hours: 23.2
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 2.0
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
 eta:
-  status: ready
-  eta_human: ready now
-  eta_confidence: high
-  basis: completion_audit_pass
-  scope_kind: repo_local_completion_ready
-  scope_label: Repo-local completion review
-  scope_warning: Repo-local completion evidence is green. External release, flagship,
-    or parity claims still depend on the broader readiness surfaces staying green.
+  status: flagship_delivery
+  eta_human: 9h-23h
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
   blocking_reason: ''
-  summary: Whole-product completion audit is green on current repo-local evidence.
-  predicted_completion_at: '2026-06-04T14:13:12Z'
-  range_low_hours: 0.0
-  range_high_hours: 0.0
-  remaining_open_milestones: 0
+  summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
+    the flagship closeout frontier. Outstanding readiness coverage: flagship readiness
+    proof refresh.'
+  predicted_completion_at: '2026-06-05T20:11:58Z'
+  range_low_hours: 9.0
+  range_high_hours: 23.2
+  remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 0
-  remaining_effort_units: 0.0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 2.0

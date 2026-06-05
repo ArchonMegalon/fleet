@@ -102,7 +102,7 @@ FAQ_MARKERS = {
     "vtt_answer": "No. The intended posture is that Chummer owns rules, applications, scheduling records, and world consequences, while Discord, Teams, and VTTs remain play or communication surfaces.",
 }
 COMMUNITY_HUB_MARKERS = {
-    "future_stage": "- Today: Future concept.",
+    "future_stage": "- Today: shipped mvp.",
     "desktop_boundary": "That is a core goal. Quickstart runners and mobile-first application paths should reduce the Windows-only chokepoint.",
     "discord_boundary": "No. Chummer owns campaign logic. Discord can remain the community and meeting surface.",
 }
@@ -565,8 +565,8 @@ def _public_posture_runtime_monitor(
 
     if "That is a core goal." not in community_hub_text:
         runtime_blockers.append("COMMUNITY HUB public guide no longer labels no-desktop participation as a core goal.")
-    if "- Today: Future concept." not in community_hub_text:
-        runtime_blockers.append("COMMUNITY HUB public guide no longer marks the horizon as future concept.")
+    if "- Today: shipped mvp." not in community_hub_text:
+        runtime_blockers.append("COMMUNITY HUB public guide no longer marks the horizon as shipped mvp.")
 
     live_claiming_cards: List[str] = []
     for row in public_feature_registry.get("cards") or []:

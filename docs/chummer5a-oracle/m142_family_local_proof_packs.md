@@ -1,10 +1,10 @@
 # NEXT90 M142 EA family-local proof packs
 
-- Generated at: `2026-06-01T14:49:26Z`
+- Generated at: `2026-06-05T04:02:19Z`
 - Package: `next90-m142-ea-compile-family-local-screenshot-and-interaction-packs-for-these-workflows`
 - Frontier: `2668415614`
 - Readiness status: `fail`
-- Desktop coverage: `missing`
+- Desktop coverage: `ready`
 
 This packet binds each M142 family to exact screenshots, review receipts, and interaction receipts without collapsing the proof into broad family prose.
 
@@ -40,6 +40,6 @@ This packet binds each M142 family to exact screenshots, review receipts, and in
 
 ## Readiness note
 
-- `flagship product readiness proof is not green: fail; missing coverage: desktop_client; readiness plane gaps: flagship_ready, veteran_deep_workflow_ready, dense_workbench_ready, public_shelf_ready, recovery_trust_ready`
+- `flagship product readiness proof is not green: fail; warning coverage: fleet_and_operator_loop; readiness plane gaps: structural_ready, flagship_ready`
 - This packet is evidence for the EA-owned proof slice only. It does not overwrite the live readiness receipt.
 
