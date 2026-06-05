@@ -1,6 +1,9 @@
 {
   "generated_at_utc": "2026-06-05T16:25:54Z",
+  "historical_snapshot_only": true,
+  "current_authority_scope": "full_product_reaudit_v19",
   "status": "pass",
+  "superseded_by": "/docker/chummercomplete/_completion/full_product_reaudit_v19/FINAL_GOLD_JANITOR_HARD_REQUIREMENTS.generated.json",
   "verdict": "GOLD_READY",
   "scope": "full_estate_v18",
   "artifact_root": "_completion/full_product_reaudit_v18",
