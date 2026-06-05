@@ -1,19 +1,16 @@
 {
-  "generated_at_utc": "2026-06-05T15:29:21Z",
-  "status": "fail",
+  "generated_at_utc": "2026-06-05T16:21:52Z",
+  "status": "pass",
   "public_host": "chummer.run",
   "status_url": "https://chummer.run/status",
   "downloads_url": "https://chummer.run/downloads",
   "release_channel_url": "https://chummer.run/downloads/RELEASE_CHANNEL.generated.json",
   "releases_url": "https://chummer.run/downloads/releases.json",
-  "contains_stale_or_not_gold_language": true,
-  "contains_downloads_caution_language": true,
+  "contains_stale_or_not_gold_language": false,
+  "contains_downloads_caution_language": false,
   "contains_home_caution_language": false,
   "build_id": "run-20260601-070650",
   "release_channel_version": "run-20260601-070650",
   "releases_version": "run-20260601-070650",
-  "reasons": [
-    "downloads_caution:public archive preview,archive package",
-    "status_caution:preview channel,current preview channel,preview posture,public archive preview,still manual"
-  ]
+  "reasons": []
 }

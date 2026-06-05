@@ -1,6 +1,6 @@
 # Newsroom human review
 
-- Generated: 2026-06-05T15:29:21Z
+- Generated: 2026-06-05T16:21:52Z
 - Status: pass
 - Transition: `Turn 0 -> Turn 1`
 - Anchor: `Mara Quill`

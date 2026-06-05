@@ -142,7 +142,7 @@
   "schema": "sr4-rulefact-registry-v1",
   "source_package": "sr4_rule_authority_extraction_package_20260529.zip",
   "source_ref_count": 18,
-  "fleet_materialized_at_utc": "2026-06-05T15:29:21Z",
+  "fleet_materialized_at_utc": "2026-06-05T16:21:52Z",
   "fleet_source_path": "/docker/chummercomplete/chummer-core-engine/.codex-studio/published/SR4_RULEFACT_REGISTRY.generated.json",
   "status": "pass"
 }

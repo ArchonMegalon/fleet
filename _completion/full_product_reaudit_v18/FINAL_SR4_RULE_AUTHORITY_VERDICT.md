@@ -1,6 +1,6 @@
 SR4_RULE_AUTHORITY_READY
 
-Generated: 2026-06-05T15:29:21Z
+Generated: 2026-06-05T16:21:52Z
 
 Source: `/docker/chummercomplete/chummer-core-engine/.codex-studio/published/SR4_RULEFACT_REGISTRY.generated.json`
 Rulefact count: `7`

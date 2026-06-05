@@ -4656,11 +4656,30 @@ def build_flagship_product_readiness_payload(
         or (utc_now() - selected_supervisor_updated_at).total_seconds() > FLAGSHIP_OPERATOR_SUPERVISOR_MAX_AGE_HOURS * 3600
     )
     supervisor_completion_status_before_recovery = _supervisor_completion_status(supervisor_state)
+    runtime_focus_profile_keys = {
+        str(item).strip().lower()
+        for item in runtime_focus_profiles
+        if str(item).strip()
+    }
+    supervisor_focus_profile_keys = {
+        str(item).strip().lower()
+        for item in (supervisor_state.get("focus_profiles") or [])
+        if str(item).strip()
+    }
+    stale_supervisor_hard_focus_topology_ready = (
+        selected_supervisor_stale_or_missing
+        and {"top_flagship_grade", "whole_project_frontier"}.issubset(
+            runtime_focus_profile_keys or supervisor_focus_profile_keys
+        )
+    )
     configured_flagship_topology_ready = (
         active_shards_recent
         and active_shards_manifest_kind == "configured_shard_topology"
         and configured_shards_count > 0
-        and supervisor_completion_status_before_recovery in {"pass", "passed"}
+        and (
+            supervisor_completion_status_before_recovery in {"pass", "passed"}
+            or stale_supervisor_hard_focus_topology_ready
+        )
     )
     if active_shards_recent and (active_shards_count > 0 or configured_flagship_topology_ready) and (
         not selected_supervisor_mode

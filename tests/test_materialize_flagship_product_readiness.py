@@ -11696,6 +11696,59 @@ def test_materialize_flagship_product_readiness_recovers_supervisor_recency_from
     )
 
 
+def test_materialize_flagship_product_readiness_recovers_stale_failed_supervisor_from_fresh_active_shards_when_runtime_profiles_are_hard_flagship(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
+    stale_iso = "2026-01-01T00:00:00Z"
+
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        active_shards_payload={
+            "generated_at": current_iso,
+            "manifest_kind": "configured_shard_topology",
+            "configured_shard_count": 20,
+            "configured_shards": [{"name": "shard-1"}, {"name": "shard-2"}],
+            "active_run_count": 0,
+            "active_shards": [],
+        },
+        supervisor_state_payload={
+            "updated_at": stale_iso,
+            "mode": "sharded",
+            "focus_profiles": ["top_flagship_grade", "whole_project_frontier"],
+            "completion_audit": {"status": "fail"},
+        },
+        ooda_state_payload={
+            "controller": "up",
+            "supervisor": "up",
+            "aggregate_stale": False,
+            "aggregate_timestamp_stale": False,
+        },
+        compile_manifest_payload={"dispatchable_truth_ready": True},
+        support_packets_payload=_base_support_packets_payload(
+            current_iso,
+            summary={
+                "open_packet_count": 0,
+                "unresolved_external_proof_request_count": 0,
+                "closure_waiting_on_release_truth": 0,
+                "update_required_misrouted_case_count": 0,
+                "non_external_needs_human_response": 0,
+                "non_external_packets_without_named_owner": 0,
+                "non_external_packets_without_lane": 0,
+            },
+        ),
+        synced_external_runbook=True,
+    )
+
+    assert payload["coverage"]["fleet_and_operator_loop"] == "ready"
+    assert "fleet_and_operator_loop" not in payload["warning_keys"]
+    evidence = payload["coverage_details"]["fleet_and_operator_loop"]["evidence"]
+    assert evidence["supervisor_recent_enough"] is True
+    assert evidence["supervisor_state_recovered_from_active_shards"] is True
+
+
 def test_materialize_flagship_product_readiness_fail_closes_stale_executable_gate_freshness_evidence(tmp_path: Path) -> None:
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
