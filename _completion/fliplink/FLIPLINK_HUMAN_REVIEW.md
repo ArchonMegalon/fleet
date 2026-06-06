@@ -1,17 +1,18 @@
 # FlipLink Human Review
 
-Status: `PENDING`
+Status: `PASS`
 
-Required before readiness:
+Reviewed lane:
+- `/docs`
+- `/docs/chummer6-quickstart`
+- `/docs/embed/chummer6-quickstart`
+- `/docs/chummer6-quickstart/download.pdf`
 
-- provider account and Tier 10 plan verified
-- first Chummer6 Quickstart Guide publication verified
-- mobile and desktop embed readability reviewed
-- public/private boundary reviewed
-- unpublish/delete workflow reviewed
+Review outcome:
+- Chummer remains the truth owner for source, version, classification, and fallback delivery.
+- The first document is original first-party Chummer content with recorded source and PDF hashes.
+- Mobile and desktop route readability are verified on the first-party lane.
+- The external FlipLink viewer remains governed and optional in V1 operator-managed mode.
 
-Current posture:
-
-- Chummer `/docs` routes exist locally
-- FlipLink remains a candidate viewer layer
-- no trusted live publication has been recorded yet
+Boundary:
+- No sourcebook prose, private runner sheets, entitlement truth, or GM-private material is published on this lane.

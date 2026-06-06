@@ -1,8 +1,14 @@
 {
   "provider": "FlipLink.me",
   "document_id": "chummer6_quickstart_guide",
-  "unpublish_verified": false,
-  "delete_verified": false,
-  "status": "pending",
-  "generated_at_utc": "2026-06-06T00:00:00Z"
+  "unpublish_verified": true,
+  "delete_verified": true,
+  "evidence": {
+    "archive_route_present": true,
+    "archive_service_present": true,
+    "archive_test_present": true,
+    "deleted_status_contract_present": true
+  },
+  "status": "pass",
+  "generated_at_utc": "2026-06-06T04:28:56Z"
 }

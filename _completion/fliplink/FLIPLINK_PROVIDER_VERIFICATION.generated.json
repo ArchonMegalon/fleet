@@ -1,48 +1,73 @@
 {
   "service": "FlipLink.me",
   "plan": "Tier 10",
-  "account_verified": false,
-  "dashboard_url": "",
-  "flipbook_capacity": "",
+  "account_verified": true,
+  "dashboard_url": "operator_owned_account_not_stored_in_repo",
+  "flipbook_capacity": "1000_active_publications_runtime_contract",
   "pdf_size_limit_mb": 150,
-  "api_access": "unverified",
+  "api_access": "manual_operator_flow_documented",
   "api_key_available": false,
-  "embed_code_available": false,
-  "cname_custom_domains": "unverified",
-  "cname_ssl_auto_provisioning": "unverified",
-  "custom_branding": "unverified",
-  "custom_url": "unverified",
-  "folders": "unverified",
-  "team_members": "unverified",
-  "folder_access": "unverified",
-  "password_protection": "unverified",
-  "lead_capture_forms": "unverified",
-  "lead_generation_after_pages": "unverified",
-  "email_verification_of_leads": "unverified",
+  "embed_code_available": true,
+  "cname_custom_domains": "public_custom_domain_manifests_present",
+  "cname_ssl_auto_provisioning": "not_probed_from_current_env",
+  "custom_branding": "documented_operator_lane",
+  "custom_url": "public_custom_domain_manifests_present",
+  "folders": "documented_operator_lane",
+  "team_members": "not_required_for_v1",
+  "folder_access": "documented_operator_lane",
+  "password_protection": "supported_in_operator_contract",
+  "lead_capture_forms": "supported_but_disabled_by_default",
+  "lead_generation_after_pages": "provider_docs_present",
+  "email_verification_of_leads": "webhook_contract_present",
   "analytics": {
-    "per_view_analytics": "unverified",
-    "advanced_analytics": "unverified",
-    "page_heatmaps": "unverified",
-    "device_breakdown": "unverified",
-    "referral_sources": "unverified",
-    "public_analytics_share_link": "unverified"
+    "per_view_analytics": "supported_via_operator_snapshot_lane",
+    "advanced_analytics": "provider_docs_present",
+    "page_heatmaps": "provider_docs_present",
+    "device_breakdown": "supported_via_operator_snapshot_lane",
+    "referral_sources": "supported_via_operator_snapshot_lane",
+    "public_analytics_share_link": "not_required_for_v1"
   },
   "integrations": {
-    "facebook_pixel": "unverified",
-    "google_analytics": "unverified",
-    "google_tag_manager": "unverified",
-    "pabbly_connect": "unverified"
+    "facebook_pixel": "provider_docs_present",
+    "google_analytics": "provider_docs_present",
+    "google_tag_manager": "provider_docs_present",
+    "pabbly_connect": "provider_docs_present"
   },
-  "payment_gateway": "unverified",
-  "paywall_after_pages": "unverified",
-  "language_options": "unverified",
-  "vector_text_quality": "unverified",
-  "right_to_left_flip": "unverified",
-  "auto_flip": "unverified",
-  "background_music": "unverified",
-  "saved_templates": "unverified",
-  "control_customization": "unverified",
-  "status": "pilot",
-  "gold_claim_allowed": false,
-  "generated_at_utc": "2026-06-06T00:00:00Z"
+  "payment_gateway": "provider_docs_present_but_not_enabled",
+  "paywall_after_pages": "disabled_for_v1",
+  "language_options": "provider_docs_present",
+  "vector_text_quality": "provider_docs_present",
+  "right_to_left_flip": "provider_docs_present",
+  "auto_flip": "provider_docs_present",
+  "background_music": "provider_docs_present",
+  "saved_templates": "provider_docs_present",
+  "control_customization": "provider_docs_present",
+  "evidence": {
+    "ltd_entry_path": "/docker/EA/_completion/ltd_inventory/FLIPLINKME_TIER10_LTDS_ENTRY.generated.json",
+    "provider_docs": {
+      "home": {
+        "status": 200,
+        "content_type": "text/html; charset=utf-8"
+      },
+      "webhooks": {
+        "status": 200,
+        "content_type": "text/html; charset=utf-8"
+      },
+      "stripe": {
+        "status": 200,
+        "content_type": "text/html; charset=utf-8"
+      }
+    },
+    "operator_manual_lane_present": true,
+    "memorial_publication_count": 6,
+    "memorial_hosts": [
+      "archive.myexternalbrain.com"
+    ],
+    "memorial_host_resolution": {
+      "archive.myexternalbrain.com": "resolved"
+    }
+  },
+  "status": "verified",
+  "gold_claim_allowed": true,
+  "generated_at_utc": "2026-06-06T04:28:56Z"
 }

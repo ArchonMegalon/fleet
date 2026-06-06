@@ -3,11 +3,13 @@
   "routes": [
     "/docs",
     "/docs/chummer6-quickstart",
-    "/docs/embed/chummer6-quickstart"
+    "/docs/embed/chummer6-quickstart",
+    "/docs/chummer6-quickstart/download.pdf"
   ],
-  "mobile_readability_verified": false,
-  "desktop_readability_verified": false,
+  "mobile_readability_verified": true,
+  "desktop_readability_verified": true,
   "fallback_route_present": true,
-  "status": "pending",
-  "generated_at_utc": "2026-06-06T00:00:00Z"
+  "source_artifact": "/docker/chummercomplete/_completion/chummer_run_redesign_closure/FLIPLINK_DOCS_RESPONSIVE_QA.generated.json",
+  "status": "pass",
+  "generated_at_utc": "2026-06-06T04:28:56Z"
 }
