@@ -1,10 +1,15 @@
 {
   "document_id": "chummer6_quickstart_guide",
   "route": "/docs/chummer6-quickstart",
-  "source_hash": "",
+  "source_repo": "chummer6-design",
+  "source_path": "products/chummer/public-guides/chummer6-quickstart.md",
+  "source_hash": "bc3e035086f81107b27644fbbbc63850bc5b67283bd887f0138e0857b0c1ef4f",
   "pdf_sha256": "",
   "fliplink_url": "",
   "embed_route": "/docs/embed/chummer6-quickstart",
+  "route_receipt_route": "/docs/chummer6-quickstart/receipts/publication.json",
+  "route_receipt_status": "pass",
+  "viewer_posture": "candidate_viewer_only",
   "publication_status": "pending",
   "publication_allowed": false,
   "generated_at_utc": "2026-06-06T00:00:00Z"

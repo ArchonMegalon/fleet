@@ -1,10 +1,15 @@
 {
   "docs_route": "/docs",
   "document_route": "/docs/chummer6-quickstart",
+  "receipt_route": "/docs/chummer6-quickstart/receipts/publication.json",
   "embed_route": "/docs/embed/chummer6-quickstart",
   "category_route": "/docs/category/quickstart",
   "route_contract_present": true,
+  "route_receipt_present": true,
+  "route_receipt_status": "pass",
+  "source_hash_present": true,
+  "viewer_posture": "candidate_viewer_only",
   "live_embed_present": false,
-  "status": "pilot",
+  "status": "pass",
   "generated_at_utc": "2026-06-06T00:00:00Z"
 }
