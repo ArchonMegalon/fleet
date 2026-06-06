@@ -407,6 +407,7 @@ def materialize_external_verdicts() -> dict[str, str]:
         "payfunnels": ROOT / "chummer.run-services" / "scripts" / "final_payfunnels_test_billing_verdict.py",
         "prompt_architects": ROOT / "chummer.run-services" / "scripts" / "final_prompt_architects_integration_verdict.py",
         "gm_session": ROOT / "chummer.run-services" / "scripts" / "final_gm_session_video_foundry_verdict.py",
+        "fliplink": FLEET_ROOT / "scripts" / "materialize_fliplink_document_portal.py",
     }
     for script in scripts.values():
         subprocess.run(["python3", str(script)], cwd=ROOT, check=True)
@@ -415,6 +416,7 @@ def materialize_external_verdicts() -> dict[str, str]:
         "FINAL_PAYFUNNELS_TEST_BILLING_ADAPTER_VERDICT.md": INTEGRATED_FLEET / "payfunnels" / "FINAL_PAYFUNNELS_TEST_BILLING_ADAPTER_VERDICT.md",
         "FINAL_PROMPT_ARCHITECTS_INTEGRATION_VERDICT.md": INTEGRATED_FLEET / "prompt_architects" / "FINAL_PROMPT_ARCHITECTS_INTEGRATION_VERDICT.md",
         "FINAL_GM_SESSION_VIDEO_FOUNDRY_VERDICT.md": INTEGRATED_FLEET / "magicfit_session" / "FINAL_GM_SESSION_VIDEO_FOUNDRY_VERDICT.md",
+        "FINAL_FLIPLINK_DOCUMENT_PORTAL_VERDICT.md": FLEET_ROOT / "_completion" / "fliplink" / "FINAL_FLIPLINK_DOCUMENT_PORTAL_VERDICT.md",
     }
     copied: dict[str, str] = {}
     for name, source in sources.items():
@@ -439,6 +441,7 @@ def materialize_hard_requirements(
         "payfunnels": "PAYFUNNELS_TEST_BILLING_ADAPTER_READY" in (OUT / "FINAL_PAYFUNNELS_TEST_BILLING_ADAPTER_VERDICT.md").read_text(encoding="utf-8"),
         "prompt_architects": "PROMPT_ARCHITECTS_INTEGRATION_READY" in (OUT / "FINAL_PROMPT_ARCHITECTS_INTEGRATION_VERDICT.md").read_text(encoding="utf-8"),
         "gm_session_video_foundry": "GM_SESSION_VIDEO_FOUNDRY_READY" in (OUT / "FINAL_GM_SESSION_VIDEO_FOUNDRY_VERDICT.md").read_text(encoding="utf-8"),
+        "fliplink_document_portal": "FLIPLINK_DOCUMENT_PORTAL_READY" in (OUT / "FINAL_FLIPLINK_DOCUMENT_PORTAL_VERDICT.md").read_text(encoding="utf-8"),
         "black_ledger_live_media_proof": black_ledger.get("status") == "pass",
         "table_pulse_scenario_replay": table_pulse.get("status") == "pass",
     }

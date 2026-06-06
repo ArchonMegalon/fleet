@@ -4,8 +4,8 @@
   "analytics_ingested": true,
   "analytics_enabled": false,
   "collection_mode": "zero_baseline_until_external_viewer_linked",
-  "period_start": "2026-06-06T04:28:56Z",
-  "period_end": "2026-06-06T04:28:56Z",
+  "period_start": "2026-06-06T04:52:43Z",
+  "period_end": "2026-06-06T04:52:43Z",
   "views": 0,
   "unique_visitors": 0,
   "average_time_seconds": 0,
@@ -14,5 +14,5 @@
   "referral_sources": {},
   "engagement_only_boundary": true,
   "status": "pass",
-  "generated_at_utc": "2026-06-06T04:28:56Z"
+  "generated_at_utc": "2026-06-06T04:52:43Z"
 }
