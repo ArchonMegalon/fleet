@@ -1,0 +1,10 @@
+{
+  "docs_route": "/docs",
+  "document_route": "/docs/chummer6-quickstart",
+  "embed_route": "/docs/embed/chummer6-quickstart",
+  "category_route": "/docs/category/quickstart",
+  "route_contract_present": true,
+  "live_embed_present": false,
+  "status": "pilot",
+  "generated_at_utc": "2026-06-06T00:00:00Z"
+}

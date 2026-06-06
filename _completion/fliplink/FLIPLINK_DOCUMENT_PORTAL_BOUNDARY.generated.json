@@ -1,0 +1,26 @@
+{
+  "surface": "Document Portal / Shadowbrief Library",
+  "adapter": "FlipLinkDocumentPortalAdapter",
+  "good_uses": [
+    "Chummer6 Quickstart Guide",
+    "Install Chummer booklet",
+    "Black Ledger player primer",
+    "faction dossiers",
+    "Table Pulse GM guide",
+    "GM Session Video Foundry guide",
+    "Chummer5A-to-Chummer6 transition guide",
+    "convention and launch handouts",
+    "player-safe campaign recap packets"
+  ],
+  "forbidden_roles": [
+    "rules authority",
+    "sourcebook host",
+    "product release truth",
+    "payment or entitlement truth",
+    "private campaign archive by default",
+    "player data warehouse",
+    "GM private face or video library"
+  ],
+  "status": "pass",
+  "generated_at_utc": "2026-06-06T00:00:00Z"
+}

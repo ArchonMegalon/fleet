@@ -1,0 +1,13 @@
+{
+  "surface": "fliplink_document_portal",
+  "routes": [
+    "/docs",
+    "/docs/chummer6-quickstart",
+    "/docs/embed/chummer6-quickstart"
+  ],
+  "mobile_readability_verified": false,
+  "desktop_readability_verified": false,
+  "fallback_route_present": true,
+  "status": "pending",
+  "generated_at_utc": "2026-06-06T00:00:00Z"
+}
