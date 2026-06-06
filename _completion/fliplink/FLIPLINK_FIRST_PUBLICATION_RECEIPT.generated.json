@@ -1,17 +1,21 @@
 {
   "document_id": "chummer6_quickstart_guide",
   "route": "/docs/chummer6-quickstart",
+  "route_publication_status": "published",
+  "external_viewer_publication_status": "unpublished",
+  "external_viewer_required": false,
+  "truth_owner": "chummer",
   "source_repo": "chummer6-design",
   "source_path": "products/chummer/public-guides/chummer6-quickstart.md",
   "source_hash": "bc3e035086f81107b27644fbbbc63850bc5b67283bd887f0138e0857b0c1ef4f",
-  "pdf_sha256": "335fd6a998f84b6c8a9c2e6b03f79cea0d6cf89c5f1a59783a2499a977a825f4",
+  "pdf_sha256": "3ccd83ee5bafa66791bf4b2ac6bdc44b0e1c5838e7673433594abf4f0aec6a16",
   "fliplink_url": "",
   "embed_route": "/docs/embed/chummer6-quickstart",
   "pdf_route": "/docs/chummer6-quickstart/download.pdf",
   "route_receipt_route": "/docs/chummer6-quickstart/receipts/publication.json",
   "route_receipt_status": "pass",
-  "viewer_posture": "candidate_viewer_only",
+  "viewer_posture": "operator_managed_viewer_optional",
   "publication_status": "operator_managed_route_ready",
   "publication_allowed": true,
-  "generated_at_utc": "2026-06-06T04:52:43Z"
+  "generated_at_utc": "2026-06-06T05:21:46Z"
 }

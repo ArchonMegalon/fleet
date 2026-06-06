@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import json
 import socket
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
-
-import requests
 
 
 ROOT = Path("/docker/fleet")
@@ -45,8 +44,9 @@ def write_text(path: Path, payload: str) -> None:
 
 def fetch_status(url: str) -> tuple[int, str]:
     try:
-        response = requests.get(url, timeout=20)
-        return response.status_code, response.headers.get("content-type", "")
+        request = urllib.request.Request(url, headers={"User-Agent": "codex-fliplink-document-portal"})
+        with urllib.request.urlopen(request, timeout=20) as response:
+            return response.status, response.headers.get("content-type", "")
     except Exception as exc:
         return 0, type(exc).__name__
 
@@ -179,6 +179,14 @@ def materialize() -> int:
     first_publication = {
         "document_id": str(document.get("id") or "chummer6_quickstart_guide"),
         "route": str(route_proof.get("guide_route") or "/docs/chummer6-quickstart"),
+        "route_publication_status": str(route_payload.get("routePublicationStatus") or document.get("status") or ""),
+        "external_viewer_publication_status": str(
+            route_payload.get("externalViewerPublicationStatus")
+            or (route_payload.get("publication") or {}).get("publicationStatus")
+            or ""
+        ),
+        "external_viewer_required": bool(route_payload.get("externalViewerRequired") is True),
+        "truth_owner": str(route_payload.get("truthOwner") or "chummer"),
         "source_repo": str(document.get("sourceRepo") or ""),
         "source_path": str(document.get("sourcePath") or ""),
         "source_hash": str(document.get("sourceHash") or ""),
@@ -189,11 +197,28 @@ def materialize() -> int:
         "route_receipt_route": str(route_proof.get("receipt_route") or ""),
         "route_receipt_status": "pass" if publication_receipt_pass else "fail",
         "viewer_posture": str(route_payload.get("viewerPosture") or ""),
-        "publication_status": "operator_managed_route_ready" if publication_receipt_pass else "pending",
+        "publication_status": str(route_payload.get("readinessPosture") or ("operator_managed_route_ready" if publication_receipt_pass else "pending")),
         "publication_allowed": bool(publication_receipt_pass),
         "generated_at_utc": generated_at,
     }
     write_json(OUT / "FLIPLINK_FIRST_PUBLICATION_RECEIPT.generated.json", first_publication)
+
+    embed_proof = {
+        "docs_route": str(route_proof.get("docs_route") or "/docs"),
+        "document_route": first_publication["route"],
+        "receipt_route": first_publication["route_receipt_route"],
+        "embed_route": first_publication["embed_route"],
+        "category_route": "/docs/category/quickstart",
+        "route_contract_present": route_proof.get("status") == "pass",
+        "route_receipt_present": bool(first_publication["route_receipt_route"]),
+        "route_receipt_status": first_publication["route_receipt_status"],
+        "source_hash_present": bool(first_publication["source_hash"]),
+        "viewer_posture": first_publication["viewer_posture"],
+        "live_embed_present": bool(first_publication["fliplink_url"]),
+        "status": "pass" if publication_receipt_pass else "pending",
+        "generated_at_utc": generated_at,
+    }
+    write_json(OUT / "FLIPLINK_EMBED_ROUTE_PROOF.generated.json", embed_proof)
 
     analytics_receipt = {
         "document_id": str(document.get("id") or "chummer6_quickstart_guide"),
