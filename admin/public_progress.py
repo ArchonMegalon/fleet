@@ -586,15 +586,36 @@ def _join_sentences(*parts: Any) -> str:
     return f"{'. '.join(clean_parts)}." if clean_parts else ""
 
 
+def _flagship_summary_text(raw_summary: Any, *, default: str) -> str:
+    if isinstance(raw_summary, dict):
+        ready_count = int(raw_summary.get("ready_count") or 0)
+        warning_count = int(raw_summary.get("warning_count") or 0)
+        missing_count = int(raw_summary.get("missing_count") or 0)
+        if ready_count and warning_count == 0 and missing_count == 0:
+            return f"Published flagship readiness proof is green across {ready_count} checked areas."
+        if ready_count or warning_count or missing_count:
+            return (
+                "Published flagship readiness proof reports "
+                f"{ready_count} ready, {warning_count} warning, and {missing_count} missing area(s)."
+            )
+        return default
+    summary = str(raw_summary or "").strip()
+    return summary or default
+
+
 def _flagship_readiness_truth(*, repo_root: pathlib.Path = FLEET_ROOT) -> Dict[str, Any]:
     flagship_readiness_path = DEFAULT_FLAGSHIP_PRODUCT_READINESS_PATH
     if not _same_path(repo_root, FLEET_ROOT):
         flagship_readiness_path = repo_root / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     flagship_readiness = _load_json(flagship_readiness_path)
     if _status_is_pass_like(flagship_readiness.get("status")):
+        summary = _flagship_summary_text(
+            flagship_readiness.get("summary"),
+            default="Published flagship readiness proof is green.",
+        )
         return {
             "status": "ready",
-            "summary": str(flagship_readiness.get("summary") or "Published flagship readiness proof is green.").strip(),
+            "summary": summary,
             "feature_parity_proven": True,
             "layout_familiarity_proven": True,
             "desktop_executable_gate_status": "pass",

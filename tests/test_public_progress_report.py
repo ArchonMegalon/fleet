@@ -790,6 +790,33 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertIn("desktop visual-familiarity gate is green", payload["parity"]["summary"])
         self.assertTrue(any(risk.get("key") == "flagship_release_truth" for risk in payload["top_risks"]))
 
+    def test_flagship_readiness_truth_humanizes_structured_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            published = root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            (published / "FLAGSHIP_PRODUCT_READINESS.generated.json").write_text(
+                json.dumps(
+                    {
+                        "status": "pass",
+                        "summary": {
+                            "ready_count": 8,
+                            "warning_count": 0,
+                            "missing_count": 0,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            payload = self.progress._flagship_readiness_truth(repo_root=root)
+
+        self.assertEqual(payload["status"], "ready")
+        self.assertEqual(payload["summary"], "Published flagship readiness proof is green across 8 checked areas.")
+        self.assertNotIn("{", payload["summary"])
+        self.assertNotIn("ready_count", payload["summary"])
+
     def test_design_supervisor_state_root_aliases_to_chummer_design_supervisor(self) -> None:
         self.assertEqual(
             self.progress._design_supervisor_state_root(Path("/docker/fleet/state/design-supervisor/state.json")),
@@ -1358,7 +1385,15 @@ class PublicProgressReportTests(unittest.TestCase):
             "frontier_ids": list(actual_full_queue.get("active_frontier_ids") or []),
             "open_milestone_ids": list(actual_full_queue.get("open_milestone_ids") or []),
             "active_runs_count": int(actual_full_queue.get("active_runs_count") or 0),
-            "active_runs": [],
+            "active_runs": [
+                {
+                    "run_id": str((row or {}).get("run_id") or ""),
+                    "_shard": str((row or {}).get("shard") or ""),
+                    "frontier_ids": list((row or {}).get("frontier_ids") or []),
+                }
+                for row in (actual_full_queue.get("active_runs") or [])
+                if isinstance(row, dict)
+            ],
             "eta": {
                 "eta_human": actual_full_queue_eta.get("eta_human"),
                 "scope_kind": actual_full_queue_eta.get("scope_kind"),
