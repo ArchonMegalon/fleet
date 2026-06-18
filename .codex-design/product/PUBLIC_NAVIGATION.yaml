@@ -6,12 +6,8 @@ primary_nav:
     href: /
   - label: Get Chummer
     href: /downloads
-  - label: What works today
-    href: /now
-  - label: Worlds
+  - label: Ledger
     href: /ledger
-  - label: Account
-    href: /signup
   - label: Help
     href: /help
 public_signal_nav:

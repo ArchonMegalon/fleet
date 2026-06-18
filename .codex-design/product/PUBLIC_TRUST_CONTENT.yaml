@@ -31,7 +31,7 @@ trust_pages:
           - "The release page should make the current public download obvious."
           - "Installer language stays off until an installer is actually published."
           - "Create an account when you want tracked support, recovery, or future linked installs."
-          - "Check the release page before assuming another platform is on the public shelf."
+          - "Check the release page before assuming another platform is already on the public downloads page."
       - id: sign-in-recovery
         eyebrow: "Sign-in or account recovery"
         heading: "Keep access and recovery on one calm path"
@@ -185,7 +185,7 @@ faq_pages:
             answer: "Account creation gives you recovery, support history in Account, and a cleaner return path when linked downloads or account-aware preview features are available."
       - title: "Downloads and installs"
         entries:
-          - question: "Do I need an account to download the current preview?"
+          - question: "Do I need an account to download the current release?"
             answer: "No. The current Linux package is open public. Create an account when you want recovery, tracked support, and a cleaner return path when linked downloads are available."
           - question: "Do I get a personalized download?"
             answer: "No. The published package stays the same for everyone. Any account-aware receipt or handoff is separate from the file itself."

@@ -27,6 +27,16 @@ source_documents:
   - MEDIA_ARTIFACT_RECIPE_REGISTRY.yaml
   - LOCALIZATION_AND_LANGUAGE_SYSTEM.md
   - LOCALIZATION_PARITY_MATRIX.yaml
+  - ERROR_TAXONOMY_AND_ESCALATION_MATRIX.yaml
+  - ACCESSIBILITY_AND_COPY_SAFETY_RELEASE_CHECKLIST.md
+  - CAMPAIGN_OPERABILITY_SCORING_RUBRIC.yaml
+  - FAILURE_MODE_JOURNEY_SCRIPTS.md
+  - FLAGSHIP_RESPONSIVENESS_BUDGETS.yaml
+  - KNOWN_ISSUE_AND_FIX_STATUS_LANGUAGE.md
+  - ONBOARDING_AND_EMPTY_STATE_JOURNEY_CONTRACT.md
+  - LONG_RUNNING_ACTION_SAFETY_CONTRACT.md
+  - CAMPAIGN_OS_FLAGSHIP_CLOSEOUT.md
+  - HORIZON_PROMOTION_RULES.md
   - PUBLIC_RELEASE_EXPERIENCE.yaml
   - METRICS_AND_SLOS.yaml
   - WHAT_IS_STILL_BELOW_GOLD.md
@@ -64,7 +74,7 @@ acceptance_axes:
   - id: split_brain_release_truth
     rule: Installer bytes, release-channel truth, public shelf truth, in-app update truth, and support truth must agree or the release is not ready.
   - id: cross_surface_design_authorship
-    rule: Promoted surfaces follow one shared design contract with trustworthy theming, platform-fit layout grammar, explicit state treatment, and screenshot-backed critique evidence.
+    rule: Promoted surfaces follow one shared design contract with trustworthy theming, platform-fit layout grammar, explicit state treatment, screenshot-backed critique evidence, and the accessibility, motor-accessibility, contrast, focus-order, and copy-safety checks published in ACCESSIBILITY_AND_COPY_SAFETY_RELEASE_CHECKLIST.md.
   - id: no_step_back_client_parity
     rule: Every legacy or adjacent client feature family that remains in scope has a first-class Chummer6 equivalent or an explicit bounded replacement story backed by the parity registry.
   - id: flagship_release_parity_truth
@@ -207,6 +217,8 @@ surfaces:
       - The loop keeps decomposing remaining flagship gaps until the product is materially release-ready.
       - Completion, ETA, and closure proofs cite the same acceptance surfaces that the public release posture depends on.
       - Release proof names the companion packet, trigger registry, media recipes, and localization fallback contracts whenever companion surfaces are on the promoted path.
+      - Campaign-operability promotion claims cite CAMPAIGN_OPERABILITY_SCORING_RUBRIC.yaml instead of claiming a clean queue from repo-local green tests alone.
+      - No release or gold summary may bypass CAMPAIGN_OS_FLAGSHIP_CLOSEOUT.md when describing whole-product completion posture.
     evidence_sources:
       - FLAGSHIP_PRODUCT_BAR.md
       - FLAGSHIP_PARITY_REGISTRY.yaml
@@ -219,6 +231,9 @@ surfaces:
       - PRODUCT_HEALTH_SCORECARD.yaml
       - FEEDBACK_LOOP_RELEASE_GATE.yaml
       - FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml
+      - CAMPAIGN_OPERABILITY_SCORING_RUBRIC.yaml
+      - CAMPAIGN_OS_FLAGSHIP_CLOSEOUT.md
+      - HORIZON_PROMOTION_RULES.md
 
 whole_product_release_rules:
   - Public release claims must stay within the surfaces that pass this matrix or carry an explicit, bounded preview explanation.
