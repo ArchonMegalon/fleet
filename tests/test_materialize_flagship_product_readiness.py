@@ -3,9 +3,11 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import struct
 import subprocess
 import sys
 import datetime as dt
+import zlib
 from pathlib import Path
 
 import yaml
@@ -37,6 +39,30 @@ def _load_support_case_packets_module():
         return module
     finally:
         sys.path[:] = previous_sys_path
+
+
+def _write_png_for_test(path: Path, width: int = 64, height: int = 64, color: tuple[int, int, int, int] = (1, 2, 3, 255)) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(chunk_type + data) & 0xFFFFFFFF
+        return len(data).to_bytes(4, "big") + chunk_type + data + crc.to_bytes(4, "big")
+
+    raw_rows = bytearray()
+    pixel = bytes(color)
+    for _ in range(height):
+        raw_rows.append(0)
+        raw_rows.extend(pixel * width)
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    idat = zlib.compress(bytes(raw_rows))
+    png_bytes = b"".join(
+        [
+            b"\x89PNG\r\n\x1a\n",
+            _png_chunk(b"IHDR", ihdr),
+            _png_chunk(b"IDAT", idat),
+            _png_chunk(b"IEND", b""),
+        ]
+    )
+    path.write_bytes(png_bytes)
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -248,15 +274,33 @@ def _base_acceptance() -> dict:
 
 
 def _flagship_parity_registry_payload(*, release_status: str) -> dict:
+    family_ids = _flagship_fixture_family_ids()
     return {
         "families": [
             {
-                "id": "shell_workbench_orientation",
+                "id": family_id,
                 "legacy_parity_status": "covered",
                 "release_status": release_status,
             }
+            for family_id in family_ids
         ]
     }
+
+
+def _flagship_fixture_family_ids() -> list[str]:
+    return [
+        "shell_workbench_orientation",
+        "dense_builder_and_career_workflows",
+        "identity_contacts_lifestyles_history",
+        "sourcebooks_reference_and_master_index",
+        "settings_and_rules_environment_authoring",
+        "custom_data_xml_and_translator_bridge",
+        "dice_initiative_and_table_utilities",
+        "roster_dashboards_and_multi_character_ops",
+        "sheet_export_print_viewer_and_exchange",
+        "sr6_supplements_designers_and_house_rules",
+        "legacy_and_adjacent_import_oracles",
+    ]
 
 
 def _parity_lab_capture_pack_payload(module, *, coverage_key: str = "desktop_client", missing_non_negotiable_ids=()) -> dict:
@@ -281,9 +325,10 @@ def _veteran_compare_pack_payload(
     return {
         "families": [
             {
-                "id": "shell_workbench_orientation",
+                "id": family_id,
                 "readiness_target": readiness_target,
             }
+            for family_id in _flagship_fixture_family_ids()
         ],
         "desktop_non_negotiables_asserted": {item: True for item in required_ids},
         "whole_product_frontier_coverage": {"package_relevant_coverage_keys": coverage_keys},
@@ -301,6 +346,7 @@ def _materialize_flagship_readiness_with_parity_lab(
     missing_workflow_non_negotiable_ids=(),
     whole_product_coverage_keys=None,
     windows_exit_gate_status: str = "passed",
+    windows_exit_gate_checks: dict | None = None,
     active_shards_payload=None,
     ooda_state_payload=None,
     synced_external_runbook: bool = False,
@@ -391,7 +437,10 @@ def _materialize_flagship_readiness_with_parity_lab(
     if workpackages_payload is not None:
         _write_yaml(tmp_path / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml", workpackages_payload)
     supervisor_state = dict(supervisor_state_payload or _base_supervisor_state())
-    supervisor_state.setdefault("updated_at", current_iso)
+    if supervisor_state_payload is None:
+        supervisor_state["updated_at"] = current_iso
+    else:
+        supervisor_state.setdefault("updated_at", current_iso)
     supervisor_state.setdefault("focus_profiles", ["top_flagship_grade", "whole_project_frontier"])
     _write_json(supervisor_state_path, supervisor_state)
     if active_shards_payload is not None:
@@ -409,6 +458,7 @@ def _materialize_flagship_readiness_with_parity_lab(
             "checks": {
                 "embedded_payload_marker_present": True,
                 "embedded_sample_marker_present": True,
+                **(windows_exit_gate_checks or {}),
             },
         },
     )
@@ -443,7 +493,11 @@ def _materialize_flagship_readiness_with_parity_lab(
     )
     _write_json(
         ui_user_journey_tester_audit_path,
-        user_journey_tester_audit_payload or _user_journey_tester_audit_pass_payload(module),
+        user_journey_tester_audit_payload
+        or _user_journey_tester_audit_pass_payload(
+            module,
+            screenshot_root=tmp_path / "ui" / "user-journey-tester-screenshots",
+        ),
     )
     _write_json(
         ui_workflow_parity_path,
@@ -565,6 +619,28 @@ def test_materialize_flagship_product_readiness_recovers_windows_gate_from_aggre
     evidence = payload["coverage_details"]["desktop_client"]["evidence"]
     assert evidence["ui_windows_exit_gate_status"] == "failed"
     assert evidence["ui_windows_exit_gate_recovered_from_executable_gate"] is True
+    assert evidence["ui_windows_exit_gate_effective_ready"] is True
+
+
+def test_materialize_flagship_product_readiness_accepts_appended_windows_payload_marker(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        windows_exit_gate_checks={
+            "embedded_payload_marker_present": False,
+            "appended_payload_marker_present": True,
+            "embedded_sample_marker_present": True,
+        },
+    )
+
+    assert payload["coverage"]["desktop_client"] == "ready"
+    evidence = payload["coverage_details"]["desktop_client"]["evidence"]
+    assert evidence["ui_windows_exit_gate_payload_marker_present"] is False
+    assert evidence["ui_windows_exit_gate_appended_payload_marker_present"] is True
+    assert evidence["ui_windows_exit_gate_sample_marker_present"] is True
     assert evidence["ui_windows_exit_gate_effective_ready"] is True
 
 
@@ -1231,6 +1307,7 @@ def test_materialize_flagship_product_readiness_recovers_stale_ooda_from_current
     )
 
     assert payload["coverage"]["fleet_and_operator_loop"] == "ready"
+    assert "fleet_and_operator_loop" not in payload["warning_keys"]
     fleet_detail = payload["coverage_details"]["fleet_and_operator_loop"]
     assert fleet_detail["reasons"] == []
     evidence = fleet_detail["evidence"]
@@ -1625,8 +1702,18 @@ def _desktop_visual_familiarity_pass_payload(module) -> dict:
     }
 
 
-def _user_journey_tester_audit_pass_payload(module) -> dict:
+def _user_journey_tester_audit_pass_payload(module, *, screenshot_root: Path | None = None) -> dict:
     required_assertions = module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS
+    screenshot_root = screenshot_root or Path("/tmp/chummer_user_journey_tester_audit_screenshots")
+    screenshot_root.mkdir(parents=True, exist_ok=True)
+    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS:
+        before = screenshot_root / f"{workflow_id}-before.png"
+        after = screenshot_root / f"{workflow_id}-after.png"
+        if not before.exists():
+            _write_png_for_test(before)
+        if not after.exists():
+            _write_png_for_test(after)
+
     return {
         "contract_name": "chummer6-ui.user_journey_tester_audit",
         "status": "pass",
@@ -1645,18 +1732,20 @@ def _user_journey_tester_audit_pass_payload(module) -> dict:
                     ],
                     "screenshotReview": [
                         {
-                            "path": f".codex-studio/published/user-journey-tester-screenshots/{workflow_id}-before.png",
+                            "path": str(screenshot_root / f"{workflow_id}-before.png"),
                             "exists": True,
                             "is_png": True,
                             "within_repo_root": True,
                             "size_bytes": 4096,
+                            "sha256": "a" * 64,
                         },
                         {
-                            "path": f".codex-studio/published/user-journey-tester-screenshots/{workflow_id}-after.png",
+                            "path": str(screenshot_root / f"{workflow_id}-after.png"),
                             "exists": True,
                             "is_png": True,
                             "within_repo_root": True,
                             "size_bytes": 4096,
+                            "sha256": "b" * 64,
                         },
                     ],
                     "assertions": {
@@ -2012,10 +2101,53 @@ def test_feedback_loop_readiness_plane_marks_clean_release_truth_backed_closure_
     assert status == "ready"
     assert plane["status"] == "ready"
     assert plane["evidence"]["support_open_non_external_packet_count"] == 0
+    assert plane["evidence"]["support_source_refresh_mode_fallback_warning"] is False
+    assert plane["evidence"]["support_source_refresh_mode_fallback_warning_reason"] == ""
     assert plane["evidence"]["feedback_progress_email_sender"] == "wageslave@chummer.run"
     assert plane["evidence"]["feedback_discovery_gateway_ready"] is True
     assert plane["evidence"]["feedback_discovery_ltd_system_ready"] is True
     assert plane["evidence"]["feedback_discovery_route_counts"] == {"karma_forge_discovery": 1}
+
+
+def test_feedback_loop_readiness_plane_flags_source_mirror_fallback_maintenance_guard() -> None:
+    module = _load_module()
+    status, plane = module._feedback_loop_readiness_plane(
+        feedback_loop_gate=_base_feedback_loop_gate(),
+        gate_path=Path("/tmp/FEEDBACK_LOOP_RELEASE_GATE.yaml"),
+        feedback_progress_email_workflow=_base_feedback_progress_email_workflow(),
+        feedback_progress_email_workflow_path=Path("/tmp/FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml"),
+        support_packets={
+            "generated_at": "2026-04-12T10:00:00Z",
+            "source": {
+                "refresh_mode": "source_mirror_fallback",
+                "refresh_error": "HTTP Error 401: Unauthorized",
+                "source_mirror_generated_at": "2024-01-01T00:00:00Z",
+            },
+            "feedback_discovery_plan": _base_feedback_discovery_plan(),
+        },
+        support_open_packet_count=0,
+        support_open_non_external_packet_count=0,
+        support_generated_at="2026-04-12T10:00:00Z",
+        support_generated_age_seconds=60,
+        support_source_refresh_mode="source_mirror_fallback",
+        support_closure_waiting_on_release_truth=0,
+        support_update_required_misrouted_case_count=0,
+        support_non_external_needs_human_response_count=0,
+        support_non_external_packets_without_named_owner=0,
+        support_non_external_packets_without_lane=0,
+        unresolved_external_requests=0,
+        external_runbook_synced=True,
+    )
+
+    assert status == "ready"
+    assert plane["status"] == "ready"
+    assert plane["reasons"] == []
+    assert plane["evidence"]["support_source_refresh_mode"] == "source_mirror_fallback"
+    assert plane["evidence"]["support_source_refresh_mode_fallback_warning"] is True
+    assert (
+        "source_mirror_fallback" in plane["evidence"]["support_source_refresh_mode_fallback_warning_reason"].lower()
+        or "source mirror" in plane["evidence"]["support_source_refresh_mode_fallback_warning_reason"].lower()
+    )
 
 
 def test_feedback_loop_readiness_plane_flags_release_truth_and_owner_gaps() -> None:
@@ -2223,7 +2355,7 @@ def test_materialize_flagship_product_readiness_fail_closes_ignored_nonlinux_hos
 ) -> None:
     module = _load_module()
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -2435,7 +2567,7 @@ def test_materialize_flagship_product_readiness_recovers_fleet_bucket_when_only_
     module = _load_module()
     current_iso = _now_iso()
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -2667,7 +2799,7 @@ def test_materialize_flagship_product_readiness_uses_effective_install_journey_a
     module = _load_module()
     current_iso = _now_iso()
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -2835,7 +2967,7 @@ def test_materialize_flagship_product_readiness_uses_effective_install_journey_a
 def test_materialize_flagship_product_readiness_marks_real_missing_lanes(tmp_path: Path) -> None:
     module = _load_module()
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -3660,6 +3792,9 @@ def test_materialize_flagship_product_readiness_external_only_requires_no_deskto
     assert payload["coverage"]["horizons_and_public_surface"] == "warning"
     assert payload["coverage"]["fleet_and_operator_loop"] == "warning"
     assert "fleet_and_operator_loop" in payload["warning_keys"]
+    fleet_reasons = payload["coverage_details"]["fleet_and_operator_loop"]["reasons"]
+    assert any("External proof runbook is missing" in reason for reason in fleet_reasons)
+    assert "Fleet compile manifest is not marked dispatchable_truth_ready." in fleet_reasons
     assert "horizons_and_public_surface" in payload["warning_keys"]
     assert payload["missing_keys"] == ["desktop_client"]
 
@@ -8131,8 +8266,45 @@ def test_user_journey_tester_audit_rejects_counter_only_screenshot_claims() -> N
     assert "workflow_assertions_must_prove_visible_user_results" in gaps["missing_execution_discipline"]
 
 
-def test_user_journey_tester_audit_rejects_placeholder_sized_pngs() -> None:
+def test_user_journey_tester_audit_rejects_placeholder_sized_pngs(tmp_path: Path) -> None:
     module = _load_module()
+    screenshot_root = tmp_path / "screenshot_audit"
+    screenshot_root.mkdir(parents=True, exist_ok=True)
+    workflows: list[dict[str, object]] = []
+    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS:
+        before = screenshot_root / f"{workflow_id}-before.png"
+        after = screenshot_root / f"{workflow_id}-after.png"
+        _write_png_for_test(before)
+        _write_png_for_test(after)
+        workflows.append(
+            {
+                "id": workflow_id,
+                "status": "pass",
+                "screenshots": [f"{workflow_id}-before.png", f"{workflow_id}-after.png"],
+                "screenshotReview": [
+                    {
+                        "path": str(before),
+                        "exists": True,
+                        "is_png": True,
+                        "within_repo_root": True,
+                        "size_bytes": 37,
+                        "sha256": "a" * 64,
+                    },
+                    {
+                        "path": str(after),
+                        "exists": True,
+                        "is_png": True,
+                        "within_repo_root": True,
+                        "size_bytes": 49,
+                        "sha256": "b" * 64,
+                    },
+                ],
+                "assertions": {
+                    assertion: True
+                    for assertion in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS[workflow_id]
+                },
+            }
+        )
 
     gaps = module.user_journey_tester_audit_gaps(
         {
@@ -8143,36 +8315,7 @@ def test_user_journey_tester_audit_rejects_placeholder_sized_pngs() -> None:
                 "used_internal_apis": False,
                 "fix_shard_separate": True,
                 "open_blocking_findings_count": 0,
-                "workflows": [
-                    {
-                        "id": workflow_id,
-                        "status": "pass",
-                        "screenshots": [f"{workflow_id}-before.png", f"{workflow_id}-after.png"],
-                        "screenshotReview": [
-                            {
-                                "path": f"{workflow_id}-before.png",
-                                "exists": True,
-                                "is_png": True,
-                                "within_repo_root": True,
-                                "size_bytes": 37,
-                                "sha256": "a" * 64,
-                            },
-                            {
-                                "path": f"{workflow_id}-after.png",
-                                "exists": True,
-                                "is_png": True,
-                                "within_repo_root": True,
-                                "size_bytes": 49,
-                                "sha256": "b" * 64,
-                            },
-                        ],
-                        "assertions": {
-                            assertion: True
-                            for assertion in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS[workflow_id]
-                        },
-                    }
-                    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
-                ],
+                "workflows": workflows,
             },
         }
     )
@@ -8182,8 +8325,45 @@ def test_user_journey_tester_audit_rejects_placeholder_sized_pngs() -> None:
     assert "workflow_screenshot_review_must_prove_existing_pngs" in gaps["missing_execution_discipline"]
 
 
-def test_user_journey_tester_audit_accepts_credible_reviewed_pngs() -> None:
+def test_user_journey_tester_audit_accepts_credible_reviewed_pngs(tmp_path: Path) -> None:
     module = _load_module()
+    screenshot_root = tmp_path / "screenshot_audit"
+    screenshot_root.mkdir(parents=True, exist_ok=True)
+    workflows: list[dict[str, object]] = []
+    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS:
+        before = screenshot_root / f"{workflow_id}-before.png"
+        after = screenshot_root / f"{workflow_id}-after.png"
+        _write_png_for_test(before)
+        _write_png_for_test(after, color=(4, 8, 12, 255))
+        workflows.append(
+            {
+                "id": workflow_id,
+                "status": "pass",
+                "screenshots": [f"{workflow_id}-before.png", f"{workflow_id}-after.png"],
+                "screenshotReview": [
+                    {
+                        "path": str(before),
+                        "exists": True,
+                        "is_png": True,
+                        "within_repo_root": True,
+                        "size_bytes": module.USER_JOURNEY_TESTER_MIN_SCREENSHOT_BYTES,
+                        "sha256": "a" * 64,
+                    },
+                    {
+                        "path": str(after),
+                        "exists": True,
+                        "is_png": True,
+                        "within_repo_root": True,
+                        "size_bytes": module.USER_JOURNEY_TESTER_MIN_SCREENSHOT_BYTES + 512,
+                        "sha256": "b" * 64,
+                    },
+                ],
+                "assertions": {
+                    assertion: True
+                    for assertion in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS[workflow_id]
+                },
+            }
+        )
 
     gaps = module.user_journey_tester_audit_gaps(
         {
@@ -8194,36 +8374,7 @@ def test_user_journey_tester_audit_accepts_credible_reviewed_pngs() -> None:
                 "used_internal_apis": False,
                 "fix_shard_separate": True,
                 "open_blocking_findings_count": 0,
-                "workflows": [
-                    {
-                        "id": workflow_id,
-                        "status": "pass",
-                        "screenshots": [f"{workflow_id}-before.png", f"{workflow_id}-after.png"],
-                        "screenshotReview": [
-                            {
-                                "path": f"{workflow_id}-before.png",
-                                "exists": True,
-                                "is_png": True,
-                                "within_repo_root": True,
-                                "size_bytes": module.USER_JOURNEY_TESTER_MIN_SCREENSHOT_BYTES,
-                                "sha256": "a" * 64,
-                            },
-                            {
-                                "path": f"{workflow_id}-after.png",
-                                "exists": True,
-                                "is_png": True,
-                                "within_repo_root": True,
-                                "size_bytes": module.USER_JOURNEY_TESTER_MIN_SCREENSHOT_BYTES + 512,
-                                "sha256": "b" * 64,
-                            },
-                        ],
-                        "assertions": {
-                            assertion: True
-                            for assertion in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS[workflow_id]
-                        },
-                    }
-                    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
-                ],
+                "workflows": workflows,
             },
         }
     )
@@ -8233,8 +8384,45 @@ def test_user_journey_tester_audit_accepts_credible_reviewed_pngs() -> None:
     assert "workflow_screenshot_review_must_prove_existing_pngs" not in gaps["missing_execution_discipline"]
 
 
-def test_user_journey_tester_audit_rejects_zero_byte_screenshot_reviews() -> None:
+def test_user_journey_tester_audit_rejects_zero_byte_screenshot_reviews(tmp_path: Path) -> None:
     module = _load_module()
+    screenshot_root = tmp_path / "screenshot_audit"
+    screenshot_root.mkdir(parents=True, exist_ok=True)
+    workflows: list[dict[str, object]] = []
+    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS:
+        before = screenshot_root / f"{workflow_id}-before.png"
+        after = screenshot_root / f"{workflow_id}-after.png"
+        _write_png_for_test(before)
+        _write_png_for_test(after, color=(6, 7, 8, 255))
+        workflows.append(
+            {
+                "id": workflow_id,
+                "status": "pass",
+                "screenshots": [f"{workflow_id}-before.png", f"{workflow_id}-after.png"],
+                "screenshotReview": [
+                    {
+                        "path": str(before),
+                        "exists": True,
+                        "is_png": True,
+                        "within_repo_root": True,
+                        "size_bytes": 0,
+                        "sha256": "",
+                    },
+                    {
+                        "path": str(after),
+                        "exists": True,
+                        "is_png": True,
+                        "within_repo_root": True,
+                        "size_bytes": 0,
+                        "sha256": "",
+                    },
+                ],
+                "assertions": {
+                    assertion: True
+                    for assertion in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS[workflow_id]
+                },
+            }
+        )
 
     gaps = module.user_journey_tester_audit_gaps(
         {
@@ -8245,36 +8433,66 @@ def test_user_journey_tester_audit_rejects_zero_byte_screenshot_reviews() -> Non
                 "used_internal_apis": False,
                 "fix_shard_separate": True,
                 "open_blocking_findings_count": 0,
-                "workflows": [
+                "workflows": workflows,
+            },
+        }
+    )
+
+    assert gaps["ready"] is False
+    assert gaps["unverified_screenshot_workflows"] == sorted(module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS)
+    assert "workflow_screenshot_review_must_prove_existing_pngs" in gaps["missing_execution_discipline"]
+
+
+def test_user_journey_tester_audit_rejects_non_png_file_content_with_png_claims(tmp_path: Path) -> None:
+    module = _load_module()
+    screenshot_root = tmp_path / "screenshot_audit"
+    screenshot_root.mkdir(parents=True, exist_ok=True)
+    workflows: list[dict[str, object]] = []
+    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS:
+        before = screenshot_root / f"{workflow_id}-before.bin"
+        after = screenshot_root / f"{workflow_id}-after.bin"
+        before.write_text("not-a-png", encoding="utf-8")
+        after.write_text("also-not-a-png", encoding="utf-8")
+        workflows.append(
+            {
+                "id": workflow_id,
+                "status": "pass",
+                "screenshots": [f"{workflow_id}-before.png", f"{workflow_id}-after.png"],
+                "screenshotReview": [
                     {
-                        "id": workflow_id,
-                        "status": "pass",
-                        "screenshots": [f"{workflow_id}-before.png", f"{workflow_id}-after.png"],
-                        "screenshotReview": [
-                            {
-                                "path": f"{workflow_id}-before.png",
-                                "exists": True,
-                                "is_png": True,
-                                "within_repo_root": True,
-                                "size_bytes": 0,
-                                "sha256": "",
-                            },
-                            {
-                                "path": f"{workflow_id}-after.png",
-                                "exists": True,
-                                "is_png": True,
-                                "within_repo_root": True,
-                                "size_bytes": 0,
-                                "sha256": "",
-                            },
-                        ],
-                        "assertions": {
-                            assertion: True
-                            for assertion in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS[workflow_id]
-                        },
-                    }
-                    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
+                        "path": str(before),
+                        "exists": True,
+                        "is_png": True,
+                        "within_repo_root": True,
+                        "size_bytes": module.USER_JOURNEY_TESTER_MIN_SCREENSHOT_BYTES + 10,
+                        "sha256": "c" * 64,
+                    },
+                    {
+                        "path": str(after),
+                        "exists": True,
+                        "is_png": True,
+                        "within_repo_root": True,
+                        "size_bytes": module.USER_JOURNEY_TESTER_MIN_SCREENSHOT_BYTES + 10,
+                        "sha256": "d" * 64,
+                    },
                 ],
+                "assertions": {
+                    assertion: True
+                    for assertion in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS[workflow_id]
+                },
+            }
+        )
+
+    gaps = module.user_journey_tester_audit_gaps(
+        {
+            "contract_name": "chummer6-ui.user_journey_tester_audit",
+            "status": "pass",
+            "evidence": {
+                "linux_binary_under_test": True,
+                "used_internal_apis": False,
+                "fix_shard_separate": True,
+                "open_blocking_findings_count": 0,
+                "workflows": workflows,
             },
         }
     )
@@ -8286,51 +8504,17 @@ def test_user_journey_tester_audit_rejects_zero_byte_screenshot_reviews() -> Non
 
 def test_user_journey_tester_audit_requires_seeded_starter_attribute_assertions() -> None:
     module = _load_module()
+    payload = _user_journey_tester_audit_pass_payload(module)
+    payload["status"] = "fail"
+    for workflow in payload["evidence"]["workflows"]:
+        if workflow["id"] == "file_new_character_visible_workspace":
+            workflow["assertions"] = {
+                "new_character_action_opened_visible_workspace": True,
+                "visible_workspace_nonblank": True,
+            }
 
     gaps = module.user_journey_tester_audit_gaps(
-        {
-            "contract_name": "chummer6-ui.user_journey_tester_audit",
-            "status": "fail",
-            "evidence": {
-                "linux_binary_under_test": True,
-                "used_internal_apis": False,
-                "fix_shard_separate": True,
-                "open_blocking_findings_count": 0,
-                "workflows": [
-                    {
-                        "id": workflow_id,
-                        "status": "pass",
-                        "screenshots": [f"{workflow_id}-before.png", f"{workflow_id}-after.png"],
-                        "screenshotReview": [
-                            {
-                                "path": f"{workflow_id}-before.png",
-                                "exists": True,
-                                "is_png": True,
-                                "within_repo_root": True,
-                            },
-                            {
-                                "path": f"{workflow_id}-after.png",
-                                "exists": True,
-                                "is_png": True,
-                                "within_repo_root": True,
-                            },
-                        ],
-                        "assertions": (
-                            {
-                                "new_character_action_opened_visible_workspace": True,
-                                "visible_workspace_nonblank": True,
-                            }
-                            if workflow_id == "file_new_character_visible_workspace"
-                            else {
-                                assertion: True
-                                for assertion in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOW_ASSERTIONS[workflow_id]
-                            }
-                        ),
-                    }
-                    for workflow_id in module.USER_JOURNEY_TESTER_REQUIRED_WORKFLOWS
-                ],
-            },
-        }
+        payload
     )
 
     assert gaps["ready"] is False
@@ -8341,6 +8525,7 @@ def test_user_journey_tester_audit_requires_seeded_starter_attribute_assertions(
         ]
     }
     assert "workflow_assertions_must_prove_visible_user_results" in gaps["missing_execution_discipline"]
+    assert "workflow_screenshot_review_must_prove_existing_pngs" not in gaps["missing_execution_discipline"]
 
 
 def test_materialize_flagship_product_readiness_requires_user_journey_tester_audit(tmp_path: Path) -> None:
@@ -8513,7 +8698,7 @@ def test_materialize_flagship_product_readiness_requires_windows_payload_integri
     assert result.returncode == 0, result.stderr
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["coverage"]["desktop_client"] in {"warning", "missing"}
-    assert "Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof." in " ".join(
+    assert "Windows desktop exit gate proof is missing, not passed, or lacks payload/sample integrity proof." in " ".join(
         payload["coverage_details"]["desktop_client"]["reasons"]
     )
 
@@ -9246,7 +9431,7 @@ def test_materialize_flagship_product_readiness_requires_desktop_canon_in_design
     published = repo_root / ".codex-studio" / "published"
     product_dir = repo_root / ".codex-design" / "product"
     out_path = published / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = product_dir / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = repo_root / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = product_dir / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     parity_registry_path = product_dir / "LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml"
 
@@ -9345,7 +9530,7 @@ def test_materialize_flagship_product_readiness_keeps_required_desktop_canon_com
     published = repo_root / ".codex-studio" / "published"
     product_dir = repo_root / ".codex-design" / "product"
     out_path = published / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = product_dir / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = repo_root / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = product_dir / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     parity_registry_path = product_dir / "LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml"
 
@@ -9447,7 +9632,7 @@ def test_materialize_flagship_product_readiness_keeps_required_desktop_canon_com
 
 def test_materialize_flagship_product_readiness_uses_canonical_acceptance_fallback(tmp_path: Path) -> None:
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     missing_acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -9780,7 +9965,7 @@ def test_materialize_flagship_product_readiness_keeps_rules_explainability_block
 
 def test_materialize_flagship_product_readiness_accepts_complete_supervisor_mode(tmp_path: Path) -> None:
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -9888,7 +10073,7 @@ def test_materialize_flagship_product_readiness_accepts_hard_focus_successor_wav
     module = _load_module()
     current_iso = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -10021,7 +10206,7 @@ def test_materialize_flagship_product_readiness_accepts_hard_focus_successor_wav
 
 def test_materialize_flagship_product_readiness_does_not_crash_without_executable_gate_receipt(tmp_path: Path) -> None:
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -10123,7 +10308,7 @@ def test_materialize_flagship_product_readiness_does_not_crash_without_executabl
 
 def test_materialize_flagship_product_readiness_prefers_best_shard_supervisor_state(tmp_path: Path) -> None:
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -10346,7 +10531,7 @@ def test_materialize_flagship_product_readiness_recovers_supervisor_from_active_
     module = _load_module()
     current_iso = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -10505,7 +10690,7 @@ def test_materialize_flagship_product_readiness_accepts_current_successor_wave_s
     module = _load_module()
     current_iso = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -10644,7 +10829,7 @@ def test_materialize_flagship_product_readiness_accepts_current_completion_revie
     current_iso = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     module = _load_module()
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -10785,7 +10970,7 @@ def test_materialize_flagship_product_readiness_accepts_live_ooda_progress_when_
     module = _load_module()
     current_iso = _now_iso()
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -10942,7 +11127,7 @@ def test_materialize_flagship_product_readiness_accepts_live_ooda_progress_when_
 
 def test_materialize_flagship_product_readiness_accepts_loop_mode_with_last_run_pass_proxy(tmp_path: Path) -> None:
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
     progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -11292,7 +11477,8 @@ def test_materialize_flagship_product_readiness_recovers_stale_ooda_from_configu
         },
     )
 
-    assert payload["coverage"]["fleet_and_operator_loop"] == "warning"
+    assert payload["coverage"]["fleet_and_operator_loop"] == "ready"
+    assert "fleet_and_operator_loop" not in payload["warning_keys"]
     evidence = payload["coverage_details"]["fleet_and_operator_loop"]["evidence"]
     assert evidence["ooda_state_recovered_from_active_shards"] is True
     assert evidence["ooda_state_recovery_source"] == "configured_shard_topology"
@@ -14715,7 +14901,9 @@ def test_flagship_product_readiness_does_not_treat_unbound_parity_lab_docs_as_ve
     assert "Parity-lab capture pack no longer binds its non-negotiable map to desktop_client coverage." in veteran_plane["reasons"]
 
 
-def test_flagship_product_readiness_recovers_fleet_truth_from_local_autoheal_and_bound_workpackages(tmp_path: Path) -> None:
+def test_flagship_product_readiness_does_not_recover_fleet_truth_from_local_autoheal_and_bound_workpackages(
+    tmp_path: Path,
+) -> None:
     module = _load_module()
     current_iso = _now_iso()
     payload = _materialize_flagship_readiness_with_parity_lab(
@@ -14752,10 +14940,11 @@ def test_flagship_product_readiness_recovers_fleet_truth_from_local_autoheal_and
         ],
     )
 
-    assert payload["coverage"]["fleet_and_operator_loop"] == "ready"
+    assert payload["coverage"]["fleet_and_operator_loop"] == "warning"
     evidence = payload["coverage_details"]["fleet_and_operator_loop"]["evidence"]
     assert evidence["runtime_healing_alert_state"] == "healthy"
-    assert evidence["dispatchable_truth_ready"] is True
+    assert evidence["dispatchable_truth_ready"] is False
+    assert "Fleet compile manifest is not marked dispatchable_truth_ready." in payload["coverage_details"]["fleet_and_operator_loop"]["reasons"]
 
 
 def test_flagship_product_readiness_publishes_extended_release_health_planes(tmp_path: Path) -> None:
@@ -14848,6 +15037,46 @@ def test_flagship_product_readiness_treats_fresh_zero_backlog_support_mirror_as_
     )
     recovery_plane = payload["readiness_planes"]["recovery_trust_ready"]
     assert recovery_plane["status"] == "ready"
+
+
+def test_flagship_product_readiness_treats_source_mirror_fallback_with_auth_error_as_non_blocking_feedback_loop_alert(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        support_packets_payload={
+            **_base_support_packets_payload(
+                current_iso,
+                summary={
+                    "open_packet_count": 0,
+                    "unresolved_external_proof_request_count": 0,
+                    "closure_waiting_on_release_truth": 0,
+                    "update_required_misrouted_case_count": 0,
+                    "non_external_needs_human_response": 0,
+                    "non_external_packets_without_named_owner": 0,
+                    "non_external_packets_without_lane": 0,
+                },
+            ),
+            "source": {
+                "refresh_mode": "source_mirror_fallback",
+                "refresh_error": "HTTP Error 401: Unauthorized",
+                "source_mirror_generated_at": "2024-01-01T00:00:00Z",
+            },
+        },
+    )
+
+    feedback_plane = payload["readiness_planes"]["feedback_loop_ready"]
+    assert feedback_plane["status"] == "ready"
+    assert feedback_plane["reasons"] == []
+    assert (
+        feedback_plane["evidence"]["support_source_refresh_mode_fallback_warning"] is True
+    )
+    assert "source_mirror_fallback" in (
+        feedback_plane["evidence"]["support_source_refresh_mode_fallback_warning_reason"] or ""
+    ).lower()
 
 
 def test_flagship_product_readiness_preserves_explicit_dispatchable_truth_from_manifest(tmp_path: Path) -> None:

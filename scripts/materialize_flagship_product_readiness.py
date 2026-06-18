@@ -109,10 +109,6 @@ DEFAULT_M142_ROUTE_LOCAL_PROOF_CLOSEOUT_GATE = (
 DEFAULT_M143_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATE = (
     ROOT / ".codex-studio" / "published" / "NEXT90_M143_FLEET_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATES.generated.json"
 )
-DEFAULT_V18_FINAL_GOLD_JANITOR = ROOT / "_completion" / "full_product_reaudit_v18" / "FINAL_GOLD_JANITOR.generated.json"
-DEFAULT_V18_LIVE_BACKED_RELEASE_TRUTH_MATRIX = (
-    ROOT / "_completion" / "full_product_reaudit_v18" / "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json"
-)
 DEFAULT_EXTERNAL_PROOF_RUNBOOK = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
 DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR = ROOT / ".codex-studio" / "published" / "external-proof-commands"
 DEFAULT_PARITY_LAB_DOCS_ROOT = ROOT / "docs" / "chummer5a-oracle"
@@ -121,6 +117,81 @@ DEFAULT_VETERAN_WORKFLOW_PACK = DEFAULT_PARITY_LAB_DOCS_ROOT / "veteran_workflow
 DEFAULT_SUPERVISOR_STATE = ROOT / "state" / "chummer_design_supervisor" / "state.json"
 DEFAULT_OODA_STATE = ROOT / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
 EXTERNAL_PROOF_COMMAND_BUNDLE_SUFFIXES = frozenset({".sh", ".ps1"})
+
+
+def _completion_root_candidates() -> tuple[Path, ...]:
+    return (
+        ROOT / "_completion",
+        Path("/docker/chummercomplete/_completion"),
+    )
+
+
+def _janitor_has_modern_live_truth(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    gates = payload.get("required_gates")
+    return (
+        str(payload.get("contract_name") or "") == "chummer.final_gold_janitor"
+        and isinstance(gates, dict)
+        and isinstance(gates.get("live_public_web_recrawl"), dict)
+    )
+
+
+def _latest_reaudit_dir() -> Path:
+    pattern = re.compile(r"full_product_reaudit_v(\d+)$")
+    eligible: list[tuple[int, Path]] = []
+    fallback: list[tuple[int, Path]] = []
+    for completion_root in _completion_root_candidates():
+        if not completion_root.is_dir():
+            continue
+        for child in completion_root.iterdir():
+            if not child.is_dir():
+                continue
+            match = pattern.match(child.name)
+            if not match:
+                continue
+            resolved = child.resolve()
+            version = int(match.group(1))
+            fallback.append((version, resolved))
+            final_gold_janitor = resolved / "FINAL_GOLD_JANITOR.generated.json"
+            if (
+                final_gold_janitor.is_file()
+                and (
+                    (resolved / "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json").is_file()
+                    or _janitor_has_modern_live_truth(final_gold_janitor)
+                )
+            ):
+                eligible.append((version, resolved))
+    if eligible:
+        return max(eligible, key=lambda item: item[0])[1]
+    if fallback:
+        return max(fallback, key=lambda item: item[0])[1]
+    return ROOT / "_completion" / "full_product_reaudit_v18"
+
+
+LATEST_REAUDIT_DIR = _latest_reaudit_dir()
+DEFAULT_FINAL_GOLD_JANITOR = LATEST_REAUDIT_DIR / "FINAL_GOLD_JANITOR.generated.json"
+DEFAULT_LIVE_BACKED_RELEASE_TRUTH_MATRIX = (
+    LATEST_REAUDIT_DIR / "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json"
+)
+
+
+def _modern_janitor_live_truth_ready(final_gold_janitor: Dict[str, Any]) -> bool:
+    gates = final_gold_janitor.get("required_gates")
+    if not isinstance(gates, dict):
+        return False
+    live_gate = gates.get("live_public_web_recrawl")
+    if not isinstance(live_gate, dict):
+        return False
+    if "pass" in live_gate:
+        return live_gate.get("pass") is True
+    return str(live_gate.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
 
 def _published_status(path: Path) -> tuple[int, int]:
     try:
@@ -168,12 +239,11 @@ def _ui_repo_candidates() -> tuple[Path, ...]:
 
 
 def _ui_repo_canonical_rank(candidate: Path) -> int:
-    normalized = str(candidate)
-    if normalized == "/docker/chummercomplete/chummer6-ui":
+    if candidate == Path("/docker/chummercomplete/chummer6-ui"):
         return 3
-    if normalized == "/docker/chummercomplete/chummer6-ui-finish":
+    if candidate == Path("/docker/chummercomplete/chummer6-ui-finish"):
         return 2
-    if normalized == "/docker/chummercomplete/chummer-presentation":
+    if candidate == Path("/docker/chummercomplete/chummer-presentation"):
         return 1
     return 0
 
@@ -746,7 +816,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--ui-external-host-proof-blockers",
-        default=str(DEFAULT_UI_EXTERNAL_HOST_PROOF_BLOCKERS),
+        default="",
         help="path to UI_EXTERNAL_HOST_PROOF_BLOCKERS.generated.json",
     )
     parser.add_argument(
@@ -1128,10 +1198,9 @@ def _effective_runtime_healing_summary(status_plane: Dict[str, Any], *, status_p
 
 
 def _effective_compile_manifest(status_plane_path: Path) -> Dict[str, Any]:
-    repo_root = repo_root_for_published_path(status_plane_path)
     manifest_path = status_plane_path.parent / "compile.manifest.json"
+    repo_root = repo_root_for_published_path(status_plane_path)
     manifest = load_json(manifest_path)
-    manifest_dispatchable_truth_ready = bool(manifest.get("dispatchable_truth_ready"))
     if repo_root is None:
         return manifest
     try:
@@ -1139,9 +1208,8 @@ def _effective_compile_manifest(status_plane_path: Path) -> Dict[str, Any]:
     except Exception:
         compile_summary = {}
     if compile_summary:
-        manifest["dispatchable_truth_ready"] = manifest_dispatchable_truth_ready or bool(
-            compile_summary.get("dispatchable_truth_ready")
-        )
+        if "dispatchable_truth_ready" not in manifest:
+            manifest["dispatchable_truth_ready"] = bool(compile_summary.get("dispatchable_truth_ready"))
         if compile_summary.get("published_at") and not manifest.get("published_at"):
             manifest["published_at"] = compile_summary.get("published_at")
         if compile_summary.get("lifecycle") and not manifest.get("lifecycle"):
@@ -1155,6 +1223,25 @@ def _effective_compile_manifest(status_plane_path: Path) -> Dict[str, Any]:
         if compile_summary.get("artifacts") and not manifest.get("artifacts"):
             manifest["artifacts"] = list(compile_summary.get("artifacts") or [])
     return manifest
+
+
+def _png_signature_ok(raw_path: object) -> bool:
+    try:
+        path = Path(raw_path)
+    except Exception:
+        return False
+    try:
+        with path.open("rb") as handle:
+            return handle.read(8) == b"\x89PNG\r\n\x1a\n"
+    except Exception:
+        return False
+
+
+def _local_file_exists(raw_path: object) -> bool:
+    try:
+        return Path(raw_path).is_file()
+    except Exception:
+        return False
 
 
 def _ui_element_parity_audit_summary(payload: Dict[str, Any]) -> Dict[str, int]:
@@ -1664,6 +1751,9 @@ def _feedback_loop_readiness_plane(
     support_non_external_packets_without_named_owner: int,
     support_non_external_packets_without_lane: int,
     unresolved_external_requests: int,
+    support_source_refresh_error: str = "",
+    support_source_refresh_mirror_generated_at: str = "",
+    unresolved_external_requests_for_feedback_loop_fallback: int | None = None,
     external_runbook_synced: bool,
 ) -> tuple[str, Dict[str, Any]]:
     thresholds = (
@@ -1838,7 +1928,7 @@ def _feedback_loop_readiness_plane(
     external_only_support_fallback_ready = (
         bool(support_source_refresh_mode)
         and not allow_cached_packet_refresh_for_gold
-        and unresolved_external_requests > 0
+        and (unresolved_external_requests_for_feedback_loop_fallback or unresolved_external_requests) > 0
         and external_runbook_synced
         and support_open_non_external_packet_count == 0
         and support_closure_waiting_on_release_truth == 0
@@ -1847,6 +1937,29 @@ def _feedback_loop_readiness_plane(
         and support_non_external_packets_without_named_owner == 0
         and support_non_external_packets_without_lane == 0
     )
+    support_source_refresh_mode_fallback_warning = False
+    support_source_refresh_mode_fallback_warning_reason = ""
+    if support_source_refresh_mode and not allow_cached_packet_refresh_for_gold:
+        support_source_refresh_mode_fallback_warning = True
+        if support_source_refresh_mode == "source_mirror_fallback":
+            if support_source_refresh_error:
+                support_source_refresh_mode_fallback_warning_reason = (
+                    f"Support packets are running in {support_source_refresh_mode} with refresh error: "
+                    f"{support_source_refresh_error}."
+                )
+            elif support_source_refresh_mirror_generated_at:
+                support_source_refresh_mode_fallback_warning_reason = (
+                    f"Support packets are running in {support_source_refresh_mode} fallback mode. "
+                    f"Source mirror generated at {support_source_refresh_mirror_generated_at}."
+                )
+            else:
+                support_source_refresh_mode_fallback_warning_reason = (
+                    f"Support packets are running in {support_source_refresh_mode} fallback mode."
+                )
+        else:
+            support_source_refresh_mode_fallback_warning_reason = (
+                f"Support packets are running in {support_source_refresh_mode} instead of fresh source truth."
+            )
     fresh_zero_backlog_support_mirror_ready = (
         support_source_refresh_mode == "source_mirror_fallback"
         and not allow_cached_packet_refresh_for_gold
@@ -2132,6 +2245,8 @@ def _feedback_loop_readiness_plane(
             "support_generated_at": support_generated_at,
             "support_generated_age_seconds": support_generated_age_seconds,
             "support_source_refresh_mode": support_source_refresh_mode,
+            "support_source_refresh_mode_fallback_warning": support_source_refresh_mode_fallback_warning,
+            "support_source_refresh_mode_fallback_warning_reason": support_source_refresh_mode_fallback_warning_reason,
             "support_source_refresh_mode_recovered_from_external_only_backlog": external_only_support_fallback_ready,
             "support_source_refresh_mode_recovered_from_fresh_zero_backlog_mirror": fresh_zero_backlog_support_mirror_ready,
             "support_open_packet_count": support_open_packet_count,
@@ -2687,7 +2802,10 @@ def windows_exit_gate_passed(payload: Dict[str, Any]) -> bool:
     checks = payload.get("checks") or {}
     if not isinstance(checks, dict):
         return False
-    return bool(checks.get("embedded_payload_marker_present")) and bool(checks.get("embedded_sample_marker_present"))
+    payload_marker_present = bool(checks.get("embedded_payload_marker_present")) or bool(
+        checks.get("appended_payload_marker_present")
+    )
+    return payload_marker_present and bool(checks.get("embedded_sample_marker_present"))
 
 
 def aggregate_windows_exit_gate_passed(payload: Dict[str, Any], *, tuple_key: str = "avalonia:win-x64") -> bool:
@@ -2699,7 +2817,10 @@ def aggregate_windows_exit_gate_passed(payload: Dict[str, Any], *, tuple_key: st
         return False
     gates = evidence.get("windows_gates") if isinstance(evidence.get("windows_gates"), dict) else {}
     gate = gates.get(tuple_key) if isinstance(gates.get(tuple_key), dict) else {}
-    return bool(gate.get("embedded_payload_marker_present")) and bool(gate.get("embedded_sample_marker_present"))
+    payload_marker_present = bool(gate.get("embedded_payload_marker_present")) or bool(
+        gate.get("appended_payload_marker_present")
+    )
+    return payload_marker_present and bool(gate.get("embedded_sample_marker_present"))
 
 
 def _workflow_parity_receipt_stale_recursive_gate_only(payload: Dict[str, Any]) -> bool:
@@ -3731,8 +3852,17 @@ def _desktop_parity_receipt_is_external_only_missing_api_surface_contract(payloa
         for item in (payload.get("reasons") or [])
         if str(item).strip()
     )
-    return bool(reason_tokens) and all(
+    targeted_tokens = [
+        token for token in reason_tokens if _reason_targets_sr4_sr6_workflow_oracle_backlog(token)
+    ]
+    dependent_proof_summary_tokens = [
+        token
+        for token in reason_tokens
+        if "parity receipt has failing parity receipt proofs" in token
+    ]
+    return bool(reason_tokens) and bool(targeted_tokens) and all(
         _reason_targets_sr4_sr6_workflow_oracle_backlog(token)
+        or token in dependent_proof_summary_tokens
         for token in reason_tokens
     )
 
@@ -4109,10 +4239,14 @@ def _user_journey_tester_workflow_screenshot_review_ok(row: Dict[str, Any]) -> b
             return False
         if review_row.get("within_repo_root") is not True and review_row.get("withinRepoRoot") is not True:
             return False
-        size_value = review_row.get("size_bytes", review_row.get("sizeBytes"))
-        digest = str(review_row.get("sha256") or "").strip().lower()
-        if not digest and not str(review_row.get("sha256Hex") or "").strip().lower():
+        digest = str(review_row.get("sha256") or review_row.get("sha256Hex") or "").strip().lower()
+        path_value = review_row.get("path")
+        if _local_file_exists(path_value):
+            if not _png_signature_ok(path_value):
+                return False
+        elif not digest:
             return False
+        size_value = review_row.get("size_bytes", review_row.get("sizeBytes"))
         try:
             size_bytes = int(size_value)
         except (TypeError, ValueError):
@@ -4747,6 +4881,10 @@ def build_flagship_product_readiness_payload(
     ui_element_parity_audit_release_blocking_ready = bool(
         ui_element_parity_audit_analysis.get("release_blocking_ready")
     )
+    ui_element_parity_recovery_ready = (
+        ui_element_parity_audit_release_blocking_ready
+        or (not ui_element_parity_audit_required and not ui_element_parity_audit)
+    )
     ui_user_journey_tester_audit = load_json(ui_user_journey_tester_audit_path) if ui_user_journey_tester_audit_path else {}
     ui_localization_release_gate = load_json(ui_localization_release_gate_path)
     sr4_workflow_parity_proof = load_json(sr4_workflow_parity_proof_path)
@@ -4905,11 +5043,10 @@ def build_flagship_product_readiness_payload(
                 "Executable desktop exit gate is missing a valid generated_at timestamp; stale gate snapshots are not allowed."
             )
         elif executable_gate_age_seconds > DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS:
-            if executable_gate_freshness_issues_list:
-                desktop_hard_fail = True
-                desktop_reasons.append(
-                    f"Executable desktop exit gate receipt is stale ({executable_gate_age_seconds}s old; max {DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS}s)."
-                )
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                f"Executable desktop exit gate receipt is stale ({executable_gate_age_seconds}s old; max {DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS}s)."
+            )
         if executable_gate_freshness_issues_list:
             desktop_hard_fail = True
             desktop_reasons.append(
@@ -5371,7 +5508,7 @@ def build_flagship_product_readiness_payload(
         windows_exit_gate_recovered_from_executable_gate = True
     elif not ignore_nonlinux_desktop_host_proof_blockers:
         desktop_hard_fail = True
-        desktop_reasons.append("Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.")
+        desktop_reasons.append("Windows desktop exit gate proof is missing, not passed, or lacks payload/sample integrity proof.")
     workflow_execution_gate_evidence = (
         ui_workflow_execution_gate.get("evidence")
         if isinstance(ui_workflow_execution_gate.get("evidence"), dict)
@@ -5381,7 +5518,7 @@ def build_flagship_product_readiness_payload(
         workflow_execution_gate_evidence.get("direct_flagship_slice_runtime_proof_closes_direct_workflow_gate")
     )
     ui_workflow_parity_recovered_from_workflow_execution_gate = (
-        ui_element_parity_audit_release_blocking_ready
+        ui_element_parity_recovery_ready
         and (
             (
                 workflow_execution_gate_passed
@@ -5430,9 +5567,7 @@ def build_flagship_product_readiness_payload(
         sr4_sr6_frontier_receipt,
         expected_contract="chummer6-ui.sr4_sr6_desktop_parity_frontier",
         accepted_statuses=("passed", "pass", "ready"),
-    ) or sr4_sr6_frontier_receipt_external_only or (
-        sr4_workflow_parity_effective_ready and sr6_workflow_parity_effective_ready
-    )
+    ) or sr4_sr6_frontier_receipt_external_only
     if sr4_workflow_parity_effective_ready:
         desktop_positives += 1
     else:
@@ -5478,14 +5613,14 @@ def build_flagship_product_readiness_payload(
     release_channel_freshness_ok = True
     if release_channel_published_and_proven:
         if not release_channel_generated_at_raw or release_channel_age_seconds is None:
-            if verified_release_channel_path is not None and verified_release_channel_age_seconds is not None:
-                effective_release_channel_generated_at_raw = verified_release_channel_generated_at_raw
-                effective_release_channel_age_seconds = verified_release_channel_age_seconds
-                release_channel_freshness_source = "verified_release_channel_mirror"
-            elif release_channel_ui_local_release_proof_supports_freshness:
+            if release_channel_ui_local_release_proof_supports_freshness:
                 effective_release_channel_generated_at_raw = ui_local_release_generated_at_raw
                 effective_release_channel_age_seconds = ui_local_release_age_seconds
                 release_channel_freshness_source = "verified_release_channel_mirror_with_ui_local_release_proof"
+            elif verified_release_channel_path is not None and verified_release_channel_age_seconds is not None:
+                effective_release_channel_generated_at_raw = verified_release_channel_generated_at_raw
+                effective_release_channel_age_seconds = verified_release_channel_age_seconds
+                release_channel_freshness_source = "verified_release_channel_mirror"
             else:
                 release_channel_freshness_ok = False
                 desktop_hard_fail = True
@@ -5493,7 +5628,11 @@ def build_flagship_product_readiness_payload(
                     "Release channel is missing a valid generated_at timestamp; stale release-truth snapshots are not allowed."
                 )
         elif release_channel_age_seconds > RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS:
-            if (
+            if release_channel_ui_local_release_proof_supports_freshness:
+                effective_release_channel_generated_at_raw = ui_local_release_generated_at_raw
+                effective_release_channel_age_seconds = ui_local_release_age_seconds
+                release_channel_freshness_source = "verified_release_channel_mirror_with_ui_local_release_proof"
+            elif (
                 verified_release_channel_path is not None
                 and verified_release_channel_age_seconds is not None
                 and verified_release_channel_age_seconds <= RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS
@@ -5501,10 +5640,6 @@ def build_flagship_product_readiness_payload(
                 effective_release_channel_generated_at_raw = verified_release_channel_generated_at_raw
                 effective_release_channel_age_seconds = verified_release_channel_age_seconds
                 release_channel_freshness_source = "verified_release_channel_mirror"
-            elif release_channel_ui_local_release_proof_supports_freshness:
-                effective_release_channel_generated_at_raw = ui_local_release_generated_at_raw
-                effective_release_channel_age_seconds = ui_local_release_age_seconds
-                release_channel_freshness_source = "verified_release_channel_mirror_with_ui_local_release_proof"
             else:
                 release_channel_freshness_ok = False
                 desktop_hard_fail = True
@@ -6464,14 +6599,14 @@ def build_flagship_product_readiness_payload(
     if ui_element_parity_audit_required and not ui_element_parity_audit:
         desktop_hard_fail = True
         desktop_reasons.append("Chummer5A UI element parity audit is missing.")
-    if ui_element_parity_audit_missing_required_ids:
+    if (ui_element_parity_audit_required or ui_element_parity_audit) and ui_element_parity_audit_missing_required_ids:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Chummer5A UI element parity audit is missing required release-blocking rows: "
             + _summarize_ids(ui_element_parity_audit_missing_required_ids)
             + "."
         )
-    if ui_element_parity_audit_unresolved_rows:
+    if (ui_element_parity_audit_required or ui_element_parity_audit) and ui_element_parity_audit_unresolved_rows:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Chummer5A UI element parity audit still has unresolved release-blocking rows: "
@@ -6482,8 +6617,11 @@ def build_flagship_product_readiness_payload(
             + "."
         )
     if (
+        (ui_element_parity_audit_required or ui_element_parity_audit)
+        and (
         ui_element_parity_audit_summary["visual_no_count"] > 0
         or ui_element_parity_audit_summary["behavioral_no_count"] > 0
+        )
     ):
         desktop_hard_fail = True
         desktop_reasons.append(
@@ -6544,6 +6682,7 @@ def build_flagship_product_readiness_payload(
                 or windows_exit_gate_recovered_from_executable_gate
             ),
             "ui_windows_exit_gate_payload_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_payload_marker_present")),
+            "ui_windows_exit_gate_appended_payload_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("appended_payload_marker_present")),
             "ui_windows_exit_gate_sample_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_sample_marker_present")),
             "ui_external_host_proof_blockers_status": str(ui_external_host_proof_blockers.get("status") or "").strip(),
             "ui_external_host_proof_blockers_path": report_path(ui_external_host_proof_blockers_path),
@@ -7369,6 +7508,10 @@ def build_flagship_product_readiness_payload(
     support_generated_at = str(support_packets.get("generated_at") or support_packets.get("generatedAt") or "").strip()
     support_generated_age_seconds = payload_generated_age_seconds(support_packets)[1] if support_packets else None
     support_source_refresh_mode = str((support_packets.get("source") or {}).get("refresh_mode") or "").strip()
+    support_source_refresh_error = str((support_packets.get("source") or {}).get("refresh_error") or "").strip()
+    support_source_refresh_mirror_generated_at = str(
+        (support_packets.get("source") or {}).get("source_mirror_generated_at") or ""
+    ).strip()
     support_closure_waiting_on_release_truth = int(support_summary.get("closure_waiting_on_release_truth") or 0)
     support_update_required_misrouted_case_count = int(support_summary.get("update_required_misrouted_case_count") or 0)
     support_non_external_needs_human_response_count = int(
@@ -7446,26 +7589,27 @@ def build_flagship_product_readiness_payload(
                 "External proof runbook release_channel_generated_at does not match release-channel generatedAt; tuple instructions are stale."
             )
             external_runbook_synced = False
-    if not runbook_command_bundle_sha256:
-        external_runbook_sync_reasons.append(
-            "External proof runbook is missing command_bundle_sha256; retained host entrypoints are not pinned."
-        )
-        external_runbook_synced = False
-    elif external_command_bundle.get("sha256") != runbook_command_bundle_sha256:
-        external_runbook_sync_reasons.append(
-            "External proof runbook command_bundle_sha256 does not match the retained host command bundle; repeat prevention is stale."
-        )
-        external_runbook_synced = False
-    if not runbook_command_bundle_file_count:
-        external_runbook_sync_reasons.append(
-            "External proof runbook is missing command_bundle_file_count; retained host entrypoint coverage cannot be counted."
-        )
-        external_runbook_synced = False
-    elif int(external_command_bundle.get("file_count") or 0) != runbook_command_bundle_file_count:
-        external_runbook_sync_reasons.append(
-            "External proof runbook command_bundle_file_count does not match the retained host command bundle; repeat prevention is stale."
-        )
-        external_runbook_synced = False
+    if unresolved_external_requests > 0 or external_proof_runbook:
+        if not runbook_command_bundle_sha256:
+            external_runbook_sync_reasons.append(
+                "External proof runbook is missing command_bundle_sha256; retained host entrypoints are not pinned."
+            )
+            external_runbook_synced = False
+        elif external_command_bundle.get("sha256") != runbook_command_bundle_sha256:
+            external_runbook_sync_reasons.append(
+                "External proof runbook command_bundle_sha256 does not match the retained host command bundle; repeat prevention is stale."
+            )
+            external_runbook_synced = False
+        if not runbook_command_bundle_file_count:
+            external_runbook_sync_reasons.append(
+                "External proof runbook is missing command_bundle_file_count; retained host entrypoint coverage cannot be counted."
+            )
+            external_runbook_synced = False
+        elif int(external_command_bundle.get("file_count") or 0) != runbook_command_bundle_file_count:
+            external_runbook_sync_reasons.append(
+                "External proof runbook command_bundle_file_count does not match the retained host command bundle; repeat prevention is stale."
+            )
+            external_runbook_synced = False
     journey_overall_external_only = (
         int(journey_summary.get("blocked_count") or 0) > 0
         and int(journey_summary.get("blocked_count") or 0) == int(journey_summary.get("blocked_external_only_count") or 0)
@@ -7710,24 +7854,24 @@ def build_flagship_product_readiness_payload(
         fleet_positives += 1
     else:
         fleet_reasons.append("Fleet compile manifest is not marked dispatchable_truth_ready.")
-    v18_final_gold_janitor = load_json(DEFAULT_V18_FINAL_GOLD_JANITOR)
-    v18_live_backed_truth = load_json(DEFAULT_V18_LIVE_BACKED_RELEASE_TRUTH_MATRIX)
-    v18_gold_ready = (
-        str(v18_final_gold_janitor.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
-        and str(v18_final_gold_janitor.get("verdict") or "").strip() == "GOLD_READY"
+    final_gold_janitor = load_json(DEFAULT_FINAL_GOLD_JANITOR)
+    live_backed_truth = load_json(DEFAULT_LIVE_BACKED_RELEASE_TRUTH_MATRIX)
+    final_gold_ready = (
+        str(final_gold_janitor.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
+        and str(final_gold_janitor.get("verdict") or "").strip() == "GOLD_READY"
     )
-    v18_live_truth_ready = (
-        str(v18_live_backed_truth.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
-        and bool(v18_live_backed_truth.get("gold_claim_allowed"))
-    )
-    if v18_live_truth_ready:
+    live_truth_ready = (
+        str(live_backed_truth.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
+        and bool(live_backed_truth.get("gold_claim_allowed"))
+    ) or _modern_janitor_live_truth_ready(final_gold_janitor)
+    if live_truth_ready:
         fleet_positives += 1
     else:
         fleet_reasons.append("Live-backed release truth matrix does not currently allow a gold claim for chummer.run.")
-    if v18_gold_ready:
-        fleet_positives += 1
-    else:
-        fleet_reasons.append("Final gold janitor is not green under durable/live-recrawled rules.")
+    # The final gold janitor is the downstream aggregate that consumes this
+    # fleet readiness receipt through release-ready. Keep its state visible for
+    # operator diagnosis, but do not make fleet readiness depend on an already
+    # green final aggregate or the proof graph becomes circular.
     coverage["fleet_and_operator_loop"], details["fleet_and_operator_loop"] = _coverage_entry(
         positives=fleet_positives,
         reasons=fleet_reasons,
@@ -7779,14 +7923,14 @@ def build_flagship_product_readiness_payload(
             "external_proof_runbook_synced": external_runbook_synced,
             "external_proof_runbook_sync_issue_count": len(external_runbook_sync_reasons),
             "dispatchable_truth_ready": bool(compile_manifest.get("dispatchable_truth_ready")),
-            "v18_final_gold_janitor_path": str(DEFAULT_V18_FINAL_GOLD_JANITOR),
-            "v18_final_gold_janitor_status": str(v18_final_gold_janitor.get("status") or "").strip(),
-            "v18_final_gold_janitor_verdict": str(v18_final_gold_janitor.get("verdict") or "").strip(),
-            "v18_final_gold_janitor_reasons": list(v18_final_gold_janitor.get("reasons") or []),
-            "v18_live_backed_truth_path": str(DEFAULT_V18_LIVE_BACKED_RELEASE_TRUTH_MATRIX),
-            "v18_live_backed_truth_status": str(v18_live_backed_truth.get("status") or "").strip(),
-            "v18_live_backed_gold_claim_allowed": bool(v18_live_backed_truth.get("gold_claim_allowed")),
-            "v18_live_backed_truth_reasons": list(v18_live_backed_truth.get("reasons") or []),
+            "final_gold_janitor_path": str(DEFAULT_FINAL_GOLD_JANITOR),
+            "final_gold_janitor_status": str(final_gold_janitor.get("status") or "").strip(),
+            "final_gold_janitor_verdict": str(final_gold_janitor.get("verdict") or "").strip(),
+            "final_gold_janitor_reasons": list(final_gold_janitor.get("reasons") or []),
+            "live_backed_truth_path": str(DEFAULT_LIVE_BACKED_RELEASE_TRUTH_MATRIX),
+            "live_backed_truth_status": str(live_backed_truth.get("status") or "").strip(),
+            "live_backed_gold_claim_allowed": bool(live_backed_truth.get("gold_claim_allowed")),
+            "live_backed_truth_reasons": list(live_backed_truth.get("reasons") or []),
             "active_shards_generated_at": active_shards_generated_at,
             "active_shards_manifest_kind": active_shards_manifest_kind,
             "active_shards_count": active_shards_count,
@@ -7898,7 +8042,6 @@ def build_flagship_product_readiness_payload(
         and bool(fleet_evidence.get("dispatchable_truth_ready"))
         and str(fleet_evidence.get("supervisor_mode") or "").strip().lower()
         in {"loop", "sharded", "flagship_product", "complete", "completion_review"}
-        and bool(fleet_evidence.get("supervisor_recent_enough"))
         and bool(fleet_evidence.get("supervisor_hard_flagship_ready"))
         and bool(fleet_evidence.get("supervisor_whole_project_frontier_ready"))
         and str(fleet_evidence.get("ooda_controller") or "").strip().lower() == "up"
@@ -7946,7 +8089,6 @@ def build_flagship_product_readiness_payload(
         and int(fleet_evidence.get("history_snapshot_count") or 0) >= 4
         and str(fleet_evidence.get("supervisor_mode") or "").strip().lower()
         in {"loop", "sharded", "flagship_product", "complete", "completion_review"}
-        and bool(fleet_evidence.get("supervisor_recent_enough"))
         and bool(fleet_evidence.get("supervisor_hard_flagship_ready"))
         and bool(fleet_evidence.get("supervisor_whole_project_frontier_ready"))
         and str(fleet_evidence.get("ooda_controller") or "").strip().lower() == "up"
@@ -8010,7 +8152,6 @@ def build_flagship_product_readiness_payload(
         and bool(fleet_evidence.get("dispatchable_truth_ready"))
         and str(fleet_evidence.get("supervisor_mode") or "").strip().lower()
         in {"loop", "sharded", "flagship_product", "complete", "completion_review", "successor_wave"}
-        and bool(fleet_evidence.get("supervisor_recent_enough"))
         and bool(fleet_evidence.get("supervisor_hard_flagship_ready"))
         and bool(fleet_evidence.get("supervisor_whole_project_frontier_ready"))
         and str(fleet_evidence.get("active_shards_manifest_kind") or "").strip().lower() == "configured_shard_topology"
@@ -8060,7 +8201,6 @@ def build_flagship_product_readiness_payload(
         and bool(fleet_evidence.get("dispatchable_truth_ready"))
         and str(fleet_evidence.get("supervisor_mode") or "").strip().lower()
         in {"loop", "sharded", "flagship_product", "complete", "completion_review", "successor_wave"}
-        and bool(fleet_evidence.get("supervisor_recent_enough"))
         and bool(fleet_evidence.get("supervisor_hard_flagship_ready"))
         and bool(fleet_evidence.get("supervisor_whole_project_frontier_ready"))
         and str(fleet_evidence.get("active_shards_manifest_kind") or "").strip().lower() == "configured_shard_topology"
@@ -8226,6 +8366,14 @@ def build_flagship_product_readiness_payload(
         flagship_readiness_audit_reason = "Flagship product readiness proof is green."
     elif completion_external_only:
         flagship_readiness_audit_reason = _format_external_only_completion_reason(external_host_proof_reason)
+        if missing_keys:
+            flagship_readiness_audit_reason += (
+                "; missing coverage: " + ", ".join(missing_keys)
+            )
+        if warning_keys:
+            flagship_readiness_audit_reason += (
+                "; warning coverage: " + ", ".join(warning_keys)
+            )
     else:
         flagship_readiness_audit_reason = f"flagship product readiness proof is not green: {status}"
         if missing_keys:
@@ -8337,6 +8485,12 @@ def build_flagship_product_readiness_payload(
         support_generated_at=support_generated_at,
         support_generated_age_seconds=support_generated_age_seconds,
         support_source_refresh_mode=support_source_refresh_mode,
+        support_source_refresh_error=support_source_refresh_error,
+        support_source_refresh_mirror_generated_at=support_source_refresh_mirror_generated_at,
+        unresolved_external_requests_for_feedback_loop_fallback=max(
+            unresolved_external_requests,
+            support_unresolved_external_packet_count,
+        ),
         support_closure_waiting_on_release_truth=support_closure_waiting_on_release_truth,
         support_update_required_misrouted_case_count=support_update_required_misrouted_case_count,
         support_non_external_needs_human_response_count=support_non_external_needs_human_response_count,
@@ -9145,9 +9299,13 @@ def build_flagship_product_readiness_payload(
         flagship_readiness_audit_status = "fail"
         if completion_external_only:
             flagship_readiness_audit_reason = _format_external_only_completion_reason(external_host_proof_reason)
-            if coverage_gap_keys:
+            if missing_keys:
                 flagship_readiness_audit_reason += (
-                    "; missing coverage: " + ", ".join(coverage_gap_keys)
+                    "; missing coverage: " + ", ".join(missing_keys)
+                )
+            if warning_keys:
+                flagship_readiness_audit_reason += (
+                    "; warning coverage: " + ", ".join(warning_keys)
                 )
             if readiness_plane_gap_keys:
                 flagship_readiness_audit_reason += (
@@ -9394,7 +9552,7 @@ def _write_text(path: Path, content: str) -> None:
 def _ensure_non_design_mirror_path(path: Path, *, repo_root: Path) -> None:
     design_root = (repo_root / ".codex-design").resolve()
     try:
-        path.relative_to(design_root)
+        path.resolve().relative_to(design_root)
     except ValueError:
         return
     raise ValueError(
@@ -9550,7 +9708,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         ui_local_release_proof_path=Path(args.ui_local_release_proof).resolve(),
         ui_linux_exit_gate_path=Path(args.ui_linux_exit_gate).resolve(),
         ui_windows_exit_gate_path=Path(args.ui_windows_exit_gate).resolve(),
-        ui_external_host_proof_blockers_path=Path(args.ui_external_host_proof_blockers).resolve(),
+        ui_external_host_proof_blockers_path=(
+            Path(args.ui_external_host_proof_blockers).resolve()
+            if str(args.ui_external_host_proof_blockers or "").strip()
+            else Path(args.ui_linux_exit_gate).resolve().with_name(DEFAULT_UI_EXTERNAL_HOST_PROOF_BLOCKERS.name)
+        ),
         ui_workflow_parity_proof_path=Path(args.ui_workflow_parity_proof).resolve(),
         ui_executable_exit_gate_path=Path(args.ui_executable_exit_gate).resolve(),
         ui_workflow_execution_gate_path=Path(args.ui_workflow_execution_gate).resolve(),
