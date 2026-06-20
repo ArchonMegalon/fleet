@@ -218,7 +218,7 @@ DIRECT_FAMILY_PROOF = {
         ],
     },
     "dice_initiative_and_table_utilities": {
-        "reason": "Route-local dice and initiative proof cites the generated dice dialog parity, runboard initiative route, and deterministic core receipts directly.",
+        "reason": "Route-local dice and initiative proof cites the generated dice dialog parity, runboard initiative route, and current workflow receipts directly.",
         "evidence": [
             str(VETERAN_PATH),
             str(GENERATED_DIALOG_PARITY_PATH),
@@ -228,7 +228,7 @@ DIRECT_FAMILY_PROOF = {
         ],
     },
     "identity_contacts_lifestyles_history": {
-        "reason": "Route-local contacts, lifestyles, and history proof cites section-host parity, current contacts and diary screenshots, and deterministic workflow-state receipts directly.",
+        "reason": "Route-local contacts, lifestyles, and history proof cites section-host parity, current contacts and diary screenshots, and current workflow-state receipts directly.",
         "evidence": [
             str(VETERAN_PATH),
             str(SECTION_HOST_PARITY_PATH),
@@ -245,6 +245,7 @@ DIRECT_FAMILY_PROOF = {
             str(GENERATED_DIALOG_PARITY_PATH),
             str(SCREENSHOT_GATE_PATH),
             str(PUBLISHED_ROOT / "NEXT90_M143_UI_DIRECT_OUTPUT_PROOF.generated.json"),
+            str(CORE_M143_RECEIPTS_DOC_PATH),
         ],
     },
     "sr6_supplements_designers_and_house_rules": {
@@ -254,6 +255,7 @@ DIRECT_FAMILY_PROOF = {
             str(SCREENSHOT_GATE_PATH),
             str(M114_RULE_STUDIO),
             str(PUBLISHED_ROOT / "NEXT90_M143_UI_DIRECT_OUTPUT_PROOF.generated.json"),
+            str(CORE_M143_RECEIPTS_DOC_PATH),
         ],
     },
 }
@@ -381,11 +383,11 @@ def _dynamic_artifact_statuses(
     workflow_parity: dict[str, Any],
     m142_direct_workflow_proof: dict[str, Any],
     m141_direct_import_proof: dict[str, Any],
-    m143_direct_output_proof: dict[str, Any],
-    generated_dialog_parity: dict[str, Any],
-    section_host_parity: dict[str, Any],
-    import_parity_cert: dict[str, Any],
-    visual_evidence: dict[str, Any],
+    m143_direct_output_proof: dict[str, Any] | None = None,
+    generated_dialog_parity: dict[str, Any] | None = None,
+    section_host_parity: dict[str, Any] | None = None,
+    import_parity_cert: dict[str, Any] | None = None,
+    visual_evidence: dict[str, Any] | None = None,
     *,
     catalog_text: str,
     dialog_factory_text: str,
@@ -394,6 +396,20 @@ def _dynamic_artifact_statuses(
     avalonia_gate_text: str,
     dialog_coordinator_text: str,
 ) -> tuple[dict[str, bool], dict[str, str]]:
+    if import_parity_cert is None and visual_evidence is None:
+        visual_evidence = section_host_parity if isinstance(section_host_parity, dict) else {}
+        import_parity_cert = generated_dialog_parity if isinstance(generated_dialog_parity, dict) else {}
+        generated_dialog_parity = m141_direct_import_proof if isinstance(m141_direct_import_proof, dict) else {}
+        section_host_parity = m143_direct_output_proof if isinstance(m143_direct_output_proof, dict) else {}
+        m141_direct_import_proof = _load_json(M141_DIRECT_IMPORT_PROOF_PATH)
+        m143_direct_output_proof = _load_json(M143_DIRECT_OUTPUT_PROOF_PATH)
+    else:
+        m143_direct_output_proof = m143_direct_output_proof if isinstance(m143_direct_output_proof, dict) else {}
+        generated_dialog_parity = generated_dialog_parity if isinstance(generated_dialog_parity, dict) else {}
+        section_host_parity = section_host_parity if isinstance(section_host_parity, dict) else {}
+        import_parity_cert = import_parity_cert if isinstance(import_parity_cert, dict) else {}
+        visual_evidence = visual_evidence if isinstance(visual_evidence, dict) else {}
+
     workflow_parity_evidence = (
         workflow_parity.get("evidence") if isinstance(workflow_parity.get("evidence"), dict) else {}
     )
