@@ -421,18 +421,20 @@ def _support_crash_runtime_monitor(
         if support_value != weekly_value:
             runtime_blockers.append(f"Weekly pulse closure_health {label} drifted from support packets ({weekly_value} != {support_value}).")
 
+    refresh_mode = _normalize_text(support_source.get("refresh_mode")) or _normalize_text(feedback_evidence.get("support_source_refresh_mode"))
+    refresh_error = _normalize_text(support_source.get("refresh_error"))
+    source_mirror_generated_at = _normalize_text(support_source.get("source_mirror_generated_at"))
     threshold_hours = int(((feedback_evidence.get("thresholds") or {}).get("max_support_packet_age_hours")) or 24)
     support_age_seconds = _age_seconds(support_generated_at, now=now)
     if support_age_seconds is None:
         issues.append("Support packets generated_at is missing or invalid.")
     elif support_age_seconds > threshold_hours * 3600:
-        runtime_blockers.append(
-            f"Support packet freshness exceeded threshold ({support_age_seconds}s > {threshold_hours * 3600}s)."
-        )
+        message = f"Support packet freshness exceeded threshold ({support_age_seconds}s > {threshold_hours * 3600}s)."
+        if refresh_mode == "source_mirror_fallback":
+            warnings.append(message)
+        else:
+            runtime_blockers.append(message)
 
-    refresh_mode = _normalize_text(support_source.get("refresh_mode")) or _normalize_text(feedback_evidence.get("support_source_refresh_mode"))
-    refresh_error = _normalize_text(support_source.get("refresh_error"))
-    source_mirror_generated_at = _normalize_text(support_source.get("source_mirror_generated_at"))
     if refresh_mode == "source_mirror_fallback":
         warning = "Support packets are running on source_mirror_fallback."
         if source_mirror_generated_at:

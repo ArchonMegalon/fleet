@@ -1,0 +1,22 @@
+product: chummer
+artifact: vtt_export_target_acceptance
+version: 1
+last_reviewed: 2026-04-30
+primary_target:
+  id: foundry_first
+  kind: structured_projection
+  required_proofs:
+    - runner_export
+    - opposition_packet_export
+    - player_safe_handout_export
+    - visible_export_receipt_or_failure
+  authority_rule:
+    chummer_is_truth: true
+    target_is_projection_only: true
+secondary_targets:
+  - id: roll20_follow_on
+    posture: later_wave
+  - id: pdf_handoff
+    posture: supportive_lane
+  - id: discord_summary_packet
+    posture: supportive_lane

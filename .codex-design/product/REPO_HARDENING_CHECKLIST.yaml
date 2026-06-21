@@ -1,0 +1,151 @@
+product: chummer
+version: 1
+last_reviewed: 2026-04-22
+purpose: Prioritized implementation checklist for repo hygiene, release-truth hardening, and automation-safety work across the public Chummer estate.
+status: active
+
+ordering_rule:
+  - Harden public repo hygiene and secret posture first.
+  - Make release truth mechanically provable second.
+  - Enforce Fleet blast-radius limits before granting more automation authority.
+  - Replace brittle verifier policy with shared declarative boundary lint.
+  - Keep boring user loops ahead of feature-surface expansion.
+
+initiatives:
+  - id: RH-001
+    title: Fleet hygiene and secret scrub
+    priority: 1
+    owners:
+      - fleet
+      - chummer6-design
+    status: proposed
+    accepts_when:
+      - Public repos reject runtime databases, non-example env files, logs, tmp trees, and local caches in CI.
+      - Generic logs or logs/telemetry paths are forbidden unless they are explicitly redacted fixtures or published evidence shelves.
+      - Any plausibly exposed operator or signing secret is rotated.
+      - Deliberate fixtures are explicit and scrubbed.
+
+  - id: RH-002
+    title: Signed release-manifest chain
+    priority: 2
+    owners:
+      - chummer6-hub-registry
+      - fleet
+      - chummer6-ui
+      - chummer6-core
+      - chummer6-design
+    status: proposed
+    accepts_when:
+      - One canonical manifest binds repo commits, artifact digests, signatures, runtime-bundle fingerprint, and registry receipt.
+      - Registry publishes promoted channel truth from that manifest.
+      - Updater feeds, downloads, and public guide projections compile from the same manifest.
+      - GitHub may reference source, evidence, or chummer.run, but must not host public client binaries as download authority.
+
+  - id: RH-003
+    title: Fleet blast-radius limits
+    priority: 3
+    owners:
+      - fleet
+      - chummer6-design
+    status: proposed
+    accepts_when:
+      - Fleet enforces per-repo PR, file, line, and parallelism caps in code.
+      - Protected paths require human approval.
+      - Self-review and release without non-writer evidence are blocked.
+
+  - id: RH-004
+    title: Shared declarative boundary lint
+    priority: 4
+    owners:
+      - chummer6-design
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-mobile
+      - chummer6-hub-registry
+      - chummer6-media-factory
+      - fleet
+      - executive-assistant
+    status: proposed
+    accepts_when:
+      - Boundary policy lives in per-repo data files instead of giant grep-only verify scripts.
+      - Thin repo-local verify wrappers remain for smoke/build/test entrypoints.
+      - Alias drift and forbidden imports fail with named-rule diagnostics.
+
+  - id: RH-005
+    title: Workflow and action hardening
+    priority: 5
+    owners:
+      - chummer6-core
+      - chummer6-ui
+      - fleet
+      - executive-assistant
+    status: proposed
+    accepts_when:
+      - Third-party GitHub Actions are pinned by commit or removed.
+      - Security workflows target main and use current supported checkout actions.
+      - Default workflow permissions are least-privilege.
+      - Boundary lint, dependency review, secret scan, build/test, and manifest verification are promotion gates.
+
+  - id: RH-006
+    title: Chummer boring-user-loop proof
+    priority: 6
+    owners:
+      - chummer6-ui
+      - chummer6-hub
+      - chummer6-hub-registry
+      - chummer6-core
+      - fleet
+      - chummer6-design
+    status: proposed
+    accepts_when:
+      - Install, import/create, explain, update, and support flow are release-gated on Windows, macOS, and Linux.
+      - Support evidence resolves back to exact release-manifest truth.
+
+  - id: RH-007
+    title: Executive Assistant boring-product-loop proof
+    priority: 7
+    owners:
+      - executive-assistant
+      - chummer6-design
+    status: proposed
+    accepts_when:
+      - One acceptance test proves memo to decision to action to commitment to audit trail.
+      - Product docs and runtime docs are split cleanly.
+
+  - id: RH-008
+    title: Canonical repo graph manifest
+    priority: 8
+    owners:
+      - chummer6-design
+      - fleet
+    status: proposed
+    accepts_when:
+      - One machine-readable repo graph binds slugs, aliases, ownership, forbidden surfaces, package outputs, and release roles.
+      - Downstream lint, README generation, and Fleet tooling consume it.
+
+  - id: RH-009
+    title: README and docs split
+    priority: 9
+    owners:
+      - chummer6-design
+      - executive-assistant
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-hub
+    status: proposed
+    accepts_when:
+      - READMEs use the short purpose/ownership/quickstart/verify/release-status shape.
+      - Runtime and operator detail moves under docs/.
+
+  - id: RH-010
+    title: Public feedback and support lanes
+    priority: 10
+    owners:
+      - chummer6-hub
+      - chummer6-ui
+      - chummer6-design
+    status: proposed
+    accepts_when:
+      - Public issue and support templates exist for bug, rules-math, installer/update, and support/export problems.
+      - SECURITY, SUPPORT, and CONTRIBUTING surfaces are explicit.
+      - Support intake captures platform, version, installer type, release truth, and explain context where relevant.

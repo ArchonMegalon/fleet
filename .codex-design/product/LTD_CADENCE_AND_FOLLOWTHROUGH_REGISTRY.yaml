@@ -1,0 +1,55 @@
+product: chummer
+artifact: ltd_cadence_and_followthrough_registry
+version: 1
+last_reviewed: 2026-05-01
+loops:
+  - id: weekly_world_dispatch
+    tools:
+      - Signitic
+      - Emailit
+      - vidBoard
+      - Taja
+    source_truth:
+      - ResolutionReport
+      - WorldTick
+      - NewsItem
+  - id: open_run_recruitment_and_reminder
+    tools:
+      - Signitic
+      - Emailit
+      - FacePop
+      - Lunacal
+    source_truth:
+      - OpenRun
+      - MeetingHandoff
+  - id: beginner_and_gm_clinic_followthrough
+    tools:
+      - Lunacal
+      - Deftform
+      - ProductLift
+      - Emailit
+    source_truth:
+      - CommunityRuleEnvironment
+      - SupportPacket
+  - id: creator_publication_followthrough
+    tools:
+      - Emailit
+      - ProductLift
+      - vidBoard
+      - Taja
+    source_truth:
+      - CreatorPublication
+      - PublicationAnalytics
+  - id: blocker_reactivation_and_recovery
+    tools:
+      - Emailit
+      - ProductLift
+      - Teable
+      - NextStep
+    source_truth:
+      - ReadyForTonightVerdict
+      - SupportCase
+      - RecoveryReceipt
+boundary_rules:
+  - ltds_do_not_own_rules_campaign_release_or_moderation_truth
+  - every_loop_must_mirror_back_into_chummer_owned_receipts

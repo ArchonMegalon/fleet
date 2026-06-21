@@ -11,7 +11,7 @@ RUN_OODA_LOOP = Path("/docker/fleet/scripts/run_ooda_design_supervisor.sh")
 RUN_FLEET_OODA_CODEX_TIMER = Path("/docker/fleet/scripts/run_fleet_ooda_codex_timer.sh")
 RUNTIME_ENV_EXAMPLE = Path("/docker/fleet/runtime.env.example")
 README = Path("/docker/fleet/README.md")
-INTERNAL_AFFAIRS_WATCHDOG = Path("/home/tibor/codexea-internal-affairs-watchdog.sh")
+INTERNAL_AFFAIRS_WATCHDOG = Path("/docker/fleet/scripts/codexea-internal-affairs-watchdog.sh")
 
 
 class RuntimeAutoHealContractTests(unittest.TestCase):

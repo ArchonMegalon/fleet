@@ -1,0 +1,33 @@
+version: 1
+templates:
+  - id: turn_dispatch
+    title_template: "Turn {turn} — The city is moving"
+    body_shape:
+      - headline
+      - summary
+      - public consequence
+      - receipt footer
+  - id: faction_dispatch
+    title_template: "{faction} — {pressure_label}"
+    body_shape:
+      - source fact
+      - faction pressure vignette
+      - receipt footer
+  - id: district_dispatch
+    title_template: "{district} — {pressure_label}"
+    body_shape:
+      - source fact
+      - district pressure vignette
+      - receipt footer
+  - id: package_pressure_dispatch
+    title_template: "{package_name} — Candidate heat rising"
+    body_shape:
+      - source fact
+      - package pressure explanation
+      - receipt footer
+  - id: closeout_dispatch
+    title_template: "{faction} — Rumor lane suppressed"
+    body_shape:
+      - source fact
+      - closeout witness explanation
+      - receipt footer

@@ -1,0 +1,150 @@
+version: chummer6-public-guide-new-section-verdict-v1
+sections:
+  - id: table-pulse
+    title: Table Pulse
+    public_guide_verdict: public_safe_horizon_page
+    page_class: horizon_detail_page
+    allowed_public_audience:
+      - players
+      - gms
+      - supporters
+    shipped_claim_allowed: false
+    expected_representation: public_horizon_page_with_receipts_and_future_facing_boundaries
+    required_proof:
+      - horizon_registry_public_guide_enabled
+      - bounded_privacy_and_consent_posture
+    canonical_sources:
+      - products/chummer/HORIZON_REGISTRY.yaml
+      - products/chummer/horizons/table-pulse.md
+      - products/chummer/TABLE_PULSE_HEAT_REACTION_AUDIT_20260523.md
+      - products/chummer/TABLE_PULSE_OPTOUT_REMOTE_REACTION_AUDIT_20260523.md
+      - products/chummer/TABLE_PULSE_LIVING_WORLD_STACK_20260523.md
+    forbidden_claims:
+      - shipped live-session feature
+      - autonomous table mutation
+      - public guide claims of fully shipped table pulse
+    notes: >
+      Table Pulse should appear as a public-safe split horizon page with two explicit rails.
+      Table Pulse Live may explain world heat, remote recipient packets, bounded remote reaction
+      mini-games, and the signed-in command lane that is live today on first-party routes. Table
+      Pulse Aftermath should stay clearly private, GM-facing, and future-facing for coaching,
+      transcript, narrated-summary, and table-dynamics analysis. The generated guide should not
+      collapse world heat and table-dynamics heat into one ambiguous product promise.
+  - id: behuman-gm-sessions
+    title: BeHuman GM Sessions
+    public_guide_verdict: private_operator_surface
+    page_class: event_venue_page
+    allowed_public_audience:
+      - gms
+      - operators
+    shipped_claim_allowed: false
+    expected_representation: omitted_with_receipt_private_by_default
+    required_proof:
+      - provider_verification
+      - manual_link_mode
+    canonical_sources:
+      - products/chummer/BEHUMAN_GM_SESSION_VENUE_SPEC.md
+      - products/chummer/BEHUMAN_EVENT_PROVIDER_BOUNDARY.md
+    forbidden_claims:
+      - public live-room surface
+      - provider-owned session truth
+    notes: >
+      BeHuman may host the room, but Chummer owns the session. The default posture is private and
+      should not be projected as a public reader-facing feature page yet.
+  - id: answerly-support-humanizer
+    title: Answerly Support Assistant
+    public_guide_verdict: help_support_page_content
+    page_class: support_assistant_page
+    allowed_public_audience:
+      - players
+      - supporters
+      - support
+    shipped_claim_allowed: false
+    expected_representation: support_only_with_first_party_fallback
+    required_proof:
+      - support_mode_enabled_or_first_party_fallback
+      - rulesafe_boundary
+    canonical_sources:
+      - products/chummer/ANSWERLY_SUPPORT_AND_HUMANIZER_SPEC.md
+      - products/chummer/ANSWERLY_RULESAFE_BOUNDARY.md
+      - products/chummer/RULES_COACH_ROUTER_SPEC.md
+    forbidden_claims:
+      - rules authority
+      - release truth owner
+      - sourcebook answer engine
+    notes: >
+      Public copy may describe a support assistant, but the generator must keep provider branding,
+      rules authority, and release-truth ownership out of the public guide.
+  - id: signal-deck
+    title: Signal Deck
+    public_guide_verdict: design_canon_only
+    page_class: live_session_feature_page
+    allowed_public_audience:
+      - gms
+      - operators
+    shipped_claim_allowed: false
+    expected_representation: omitted_with_receipt_design_canon_only
+    required_proof:
+      - design_canon_retained
+      - public_guide_omission_receipt
+      - no_public_route_claim
+    canonical_sources:
+      - products/chummer/SIGNAL_DECK_SPEC.md
+      - products/chummer/horizons/table-pulse.md
+      - products/chummer/TABLE_PULSE_LIVING_WORLD_STACK_20260523.md
+    forbidden_claims:
+      - universal player scoring
+      - automatic world authority
+      - private transcript export
+    notes: >
+      Signal Deck remains design canon for command posture, but it should not be projected as a
+      standalone public guide page until the product has a clearer human-facing explanation, public
+      route proof, and naming that does not read like internal machine scaffolding.
+  - id: runner-passport
+    title: Runner Passport
+    public_guide_verdict: public_route_live
+    page_class: live_session_feature_page
+    allowed_public_audience:
+      - players
+      - gms
+      - supporters
+    shipped_claim_allowed: true
+    expected_representation: public_route_live_page_with_receipts
+    required_proof:
+      - public_route
+      - live_receipt_rails
+    canonical_sources:
+      - products/chummer/RUNNER_PASSPORT_SPEC.md
+      - products/chummer/RUNNER_PASSPORT_AND_CROSS_COMMUNITY_TRUST.md
+    forbidden_claims:
+      - hidden provider-owned reputation truth
+      - surveillance-first identity lane
+    notes: >
+      Runner Passport is live and public-safe. The generated guide must carry it as a dedicated
+      first-class route with receipt rails instead of leaving it as an omitted-with-receipt stub.
+  - id: living-world-engagement
+    title: Living World Engagement
+    public_guide_verdict: public_route_live
+    page_class: live_session_feature_page
+    allowed_public_audience:
+      - players
+      - gms
+      - supporters
+    shipped_claim_allowed: true
+    expected_representation: public_route_live_page_with_receipts
+    required_proof:
+      - first_party_living_world_route
+      - first_party_living_world_receipts
+      - live_receipt_rails
+    canonical_sources:
+      - products/chummer/LIVING_WORLD_SPEC.md
+      - products/chummer/TABLE_PULSE_LIVING_WORLD_STACK_20260523.md
+      - products/chummer/LIVING_WORLD_ENGAGEMENT_AUDIT_20260523.md
+    forbidden_claims:
+      - autonomous simulation
+      - automatic world authority
+      - shipped persistent world engine
+    notes: >
+      Public guide may now claim a first-party Living World route and receipt rails, but it must keep
+      the boundary explicit: this is governed between-session continuity, not an autonomous always-on
+      simulation or a detached persistent-world engine.

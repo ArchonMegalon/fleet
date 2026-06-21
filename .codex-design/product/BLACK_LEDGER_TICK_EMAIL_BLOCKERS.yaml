@@ -1,0 +1,43 @@
+verdict: STRUCTURALLY_PRESENT_BUT_NOT_OPERATIONALLY_PROVEN
+date: '2026-05-14'
+summary: Tick-news email code now exists, but live delivery did not happen and is
+  not proven.
+closed_since_last:
+- BlackLedgerTickNewsNotificationService exists.
+- BlackLedgerNewsRecipientResolver exists.
+- BlackLedgerNewsDeliveryReceipt exists.
+- CommunityStore persists BlackLedgerNewsDeliveryReceipts.
+- LedgerController exposes tick-news send endpoint.
+- black_ledger_send_tick_news.py exists.
+remaining_blockers:
+- id: TICKMAIL-P0-001
+  title: Live catch-up script token bug
+  severity: P0
+  evidence: Script uses LOCAL_INTERNAL_TOKEN for remote --base-url calls.
+  verification: FLEET_INTERNAL_API_TOKEN=$REAL_TOKEN python3 scripts/black_ledger_send_tick_news.py
+    --base-url https://chummer.run --world emerald-sprawl-prelude --turn 1 --dry-run
+- id: TICKMAIL-P0-002
+  title: Email config not proven
+  severity: P0
+  evidence: Service defaults to disabled unless CHUMMER_BLACK_LEDGER_NEWS_EMAIL_ENABLED=true
+    and policy/EA configs are present.
+  verification: python3 scripts/black_ledger_tick_news_config_check.py --base-url
+    https://chummer.run
+- id: TICKMAIL-P0-003
+  title: EA payload contract mismatch risk
+  severity: P0
+  evidence: Tick-news service uses different request shape than ParticipationOperatorNotificationService.
+  verification: dotnet test Chummer.Run.Api.Tests --filter BlackLedgerTickNews_EA
+- id: TICKMAIL-P0-004
+  title: No live dry-run/send proof
+  severity: P0
+  evidence: No generated live dry-run/send result found and Gmail search found no
+    message.
+  verification: python3 scripts/black_ledger_send_tick_news.py --base-url https://chummer.run
+    --world emerald-sprawl-prelude --turn 1 --send
+- id: TICKMAIL-P0-005
+  title: Preseeded Turn 1 auto-send path ambiguous
+  severity: P0
+  evidence: Worker sends stored WorldTicks+PlayerSafeNews; static seeded Turn 1 may
+    require explicit catch-up.
+  verification: python3 scripts/black_ledger_world_tick_e2e.py --world emerald-sprawl-prelude

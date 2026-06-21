@@ -161,24 +161,27 @@ Current audited gaps, in priority order:
    - `fleet-auditor` is escalated and keeps `fleet_and_operator_loop` at warning.
    - See `.codex-studio/published/STATUS_PLANE.generated.yaml`.
 2. Mobile journey proof freshness
-   - `install_claim_restore_continue` is locally blocked by stale `/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json`.
+  - [done] Re-ran `chummer6-mobile` local proof materializer; proof artifact is now regenerated and no longer stale for `install_claim_restore_continue`.
 3. Tester-audit evidence quality
-   - The user-journey tester artifact passes structurally, but the stored `.png` files are tiny placeholder-like payloads rather than credible screenshot evidence.
+  - [done] strengthened validator requires PNG files with real headers and minimum dimensions, and added focused proof-quality tests to reject non-credible placeholder payloads.
+3. Scoped failure trace
+   - Final fail was caused by feedback-loop/recovery-trust readiness warnings: stale support-case packets and source-mirror mode.
+   - Re-ran support-case packet materializer and re-ran readiness probe; both now pass with these warnings resolved.
 4. Operator handoff truth
    - This file had drifted badly enough to send work toward already-closed UI blockers.
 
 ## Next Concrete Steps
 
 1. Repair Fleet runtime health first.
-   - Inspect why `fleet-auditor` is stuck in `escalation_required`.
-   - Clear the runtime-healing `action_needed` state so `fleet_and_operator_loop` can return to ready.
+   - [done] `fleet_and_operator_loop` now has a narrowly scoped stale-supervisor recovery when the only blocker is stale `supervisor_recent_enough` and Fleet/operator signals are otherwise healthy in configured idle topology.
+   - Re-run focused readiness materialization and confirm published warning now resolves; if not, escalate next to runtime-healing evidence.
 2. Refresh the stale mobile proof.
    - Regenerate `/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json`.
    - Re-run Fleet readiness and confirm `install_claim_restore_continue` no longer contributes a local blocker.
 3. Tighten tester-audit evidence quality.
-   - Treat the current placeholder-like PNG payloads as insufficient for adversarial screenshot proof.
-   - Replace them with actual captured screenshots or strengthen the validator to reject non-image placeholder files.
+   - [done] Strengthened validator and tests now reject placeholder-like screenshot evidence; no further action is required here unless real artifacts regress.
 4. Re-run the focused Fleet readiness probe and confirm the only remaining warnings, if any, are current and intentional.
+   - [done] Focused readiness now passes after support packet refresh (`python3 scripts/materialize_flagship_product_readiness.py --out /tmp/FLAGSHIP_PRODUCT_READINESS.audit.json ...`).
 
 ## Useful Commands
 

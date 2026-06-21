@@ -1,0 +1,26 @@
+version: global-flagship-audit-20260514-v4-closeout
+gates:
+  - id: GF-001
+    title: Live root redesigned
+    command: curl -fsSL https://chummer.run/ | grep -F 'Build the runner. Run the table. Keep the ledger honest.'
+  - id: GF-002
+    title: Feedback public string scrub
+    command: python3 scripts/public_forbidden_string_scan.py --base-url https://chummer.run
+  - id: GF-003
+    title: Feedback operator leak scan
+    command: python3 scripts/public_operator_leak_scan.py --base-url https://chummer.run
+  - id: GF-004
+    title: Strict route proof
+    command: python3 scripts/verify_public_routes_from_manifest.py --strict-positive --seed-receipts --base-url https://chummer.run
+  - id: GF-005
+    title: Feedback closeout E2E
+    command: python3 scripts/feedback_loop_e2e.py --stub-delivery --with-impact-receipt
+  - id: GF-006
+    title: Black Ledger world tick E2E
+    command: python3 scripts/black_ledger_world_tick_e2e.py --world emerald-sprawl-prelude --base-url https://chummer.run
+  - id: GF-007
+    title: Ruleset readiness classifier
+    command: python3 scripts/classify_ruleset_readiness.py
+  - id: GF-008
+    title: Final janitor
+    command: python3 scripts/run_gold_janitor.py --final --include-live https://chummer.run

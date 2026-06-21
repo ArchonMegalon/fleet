@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-04T14:09:44Z'
+generated_at: '2026-06-08T07:39:32Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-14
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -29,10 +29,17 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-ui
+  - fleet
   - chummer6-design
+  - chummer6-ui
   - chummer6-hub
   texts:
+  - user-journey-tester-audit
+  - dedicated-tester
+  - flagship-readiness
+  - desktop-client
+  - release-proof
+  - materializer
   - top flagship grade
   - whole-project frontier
   - no lowered standards
@@ -47,9 +54,6 @@ focus:
   - performance
   - proof shelf
   - fit and finish
-  - fleet and operator loop
-  - desktop client
-  - horizons and public surface
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -57,50 +61,51 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: Flagship product readiness proof is green.
+  status: fail
+  reason: golden journey proof is stale (271726s old)
 full_product_audit:
-  status: pass
-  reason: 'Flagship product readiness proof is green.'
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-04T14:13:04Z'
-  proof_status: pass
+  generated_at: '2026-06-08T06:32:46Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1853204192
+- 3109932478
 frontier:
-- id: 1853204192
-  title: Define role and audit boundaries for community-scale operations.
+- id: 3109932478
+  title: Orchestrate guided first-playable-session onboarding
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-design
+  - chummer6-hub
   dependencies: []
   exit_criteria:
-  - Define role and audit boundaries for community-scale operations.
-  - 'Own and prove the surface slice(s): organizer_roles_policy, community_scale_audit_boundaries'
-  - 'Keep implementation scoped to the allowed paths: products, scripts, feedback'
+  - Join install, claim, campaign primer, starter build, briefing, and support-safe
+    recovery into a measured first-session lane.
+  - 'Own and prove the surface slice(s): first_playable_session:onboarding, starter_lane:hub'
+  - 'Keep implementation scoped to the allowed paths: Chummer.Run.Api, scripts, tests'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-design` (next90-m118-design-organizer-boundaries).
+    is landed for `chummer6-hub` (next90-m119-hub-first-session-onboarding).
   eta:
     status: flagship_delivery
-    eta_human: 7h-19h
+    eta_human: 9h-22h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Define role and audit boundaries for community-scale operations.''
-      remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      horizons_and_public_surface.'
-    predicted_completion_at: '2026-06-05T03:26:32Z'
-    range_low_hours: 7.42
-    range_high_hours: 19.14
+    summary: 'Milestone ''Orchestrate guided first-playable-session onboarding'' remains
+      open under the flagship closeout frontier. Outstanding readiness coverage: flagship
+      readiness proof refresh.'
+    predicted_completion_at: '2026-06-08T22:49:26Z'
+    range_low_hours: 8.55
+    range_high_hours: 21.78
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.65
+    remaining_effort_units: 1.8
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
@@ -109,20 +114,20 @@ frontier:
     scope_warning: ''
 eta:
   status: flagship_delivery
-  eta_human: 7h-19h
+  eta_human: 9h-22h
   eta_confidence: low
   basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Define role and audit boundaries for community-scale operations.''
-    remains open under the flagship closeout frontier. Outstanding readiness coverage:
-    horizons_and_public_surface.'
-  predicted_completion_at: '2026-06-05T03:26:32Z'
-  range_low_hours: 7.42
-  range_high_hours: 19.14
+  summary: 'Milestone ''Orchestrate guided first-playable-session onboarding'' remains
+    open under the flagship closeout frontier. Outstanding readiness coverage: flagship
+    readiness proof refresh.'
+  predicted_completion_at: '2026-06-08T22:49:26Z'
+  range_low_hours: 8.55
+  range_high_hours: 21.78
   remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
   remaining_not_started_milestones: 1
-  remaining_effort_units: 1.65
+  remaining_effort_units: 1.8

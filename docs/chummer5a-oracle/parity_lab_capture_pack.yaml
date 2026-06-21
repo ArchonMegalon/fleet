@@ -1,30 +1,29 @@
 contract_name: executive_assistant.parity_lab_capture_pack
 schema_version: 1
-generated_at: 2026-05-05 19:49:40+00:00
+generated_at: '2026-06-19T01:09:18Z'
 milestone:
   id: 103
   package_id: next90-m103-ea-parity-lab
   owned_surfaces:
   - parity_lab:capture
 sync_context:
-  task_local_telemetry_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-3/runs/20260505T194421Z-shard-3/TASK_LOCAL_TELEMETRY.generated.json
+  task_local_telemetry_path: /docker/fleet/state/chummer_design_supervisor/shard-3/runs/20260613T163026Z-shard-3/TASK_LOCAL_TELEMETRY.generated.json
   task_local_telemetry_snapshot:
     mode: implementation_only
-    scope_label: Full Chummer5A parity and flagship proof closeout
-    slice_summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open
-      under the flagship closeout frontier. Outstanding readiness coverage: flagship
-      readiness proof refresh.'
+    scope_label: completion review recovery
+    slice_summary: 'linux desktop exit gate proof is stale (92258s old); repo backlog
+      pass: 0 open item(s)'
     status_query_supported: false
     polling_disabled: true
     package_id: ''
-    frontier_id: 1300044932
+    frontier_id: 1239074135
     milestone_id: 0
     owned_surfaces: []
     allowed_paths: []
   readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  readiness_generated_at: '2026-05-05T19:49:40Z'
-  runtime_handoff_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-3/ACTIVE_RUN_HANDOFF.generated.md
-  runtime_handoff_first_output_at: '2026-05-05T19:49:01Z'
+  readiness_generated_at: '2026-06-19T01:09:18Z'
+  runtime_handoff_path: /docker/fleet/state/chummer_design_supervisor/shard-3/ACTIVE_RUN_HANDOFF.generated.md
+  runtime_handoff_first_output_at: '2026-06-13T17:15:36Z'
 worker_run_guard:
   implementation_only: true
   polling_disabled: true
@@ -121,7 +120,7 @@ screenshot_baselines:
   - profile_and_notes_visible
 screenshot_artifact_baselines:
   visual_receipt_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
-  screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
+  screenshot_dir: /docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots
   required_receipt_key: visual_familiarity.required_screenshots_normalized
   baseline_to_screenshot:
   - baseline_id: first_launch_workbench_or_restore

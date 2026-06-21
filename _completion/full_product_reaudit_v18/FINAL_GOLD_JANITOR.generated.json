@@ -1,16 +1,17 @@
 {
-  "generated_at_utc": "2026-06-05T16:25:54Z",
+  "generated_at_utc": "2026-06-17T18:16:47Z",
   "historical_snapshot_only": true,
-  "current_authority_scope": "full_product_reaudit_v19",
-  "status": "pass",
-  "superseded_by": "/docker/chummercomplete/_completion/full_product_reaudit_v19/FINAL_GOLD_JANITOR_HARD_REQUIREMENTS.generated.json",
-  "verdict": "GOLD_READY",
+  "current_authority_scope": "full_product_reaudit_v20",
+  "superseded_by": "_completion/full_product_reaudit_v20/FINAL_GOLD_JANITOR.generated.json",
+  "status": "superseded",
+  "verdict": "SUPERSEDED",
+  "gold_claim_allowed": false,
   "scope": "full_estate_v18",
   "artifact_root": "_completion/full_product_reaudit_v18",
   "artifact_manifest": "_completion/full_product_reaudit_v18/FULL_ESTATE_DURABLE_ARTIFACT_MANIFEST.generated.json",
   "durable_artifacts_required": true,
   "live_backed_required": true,
-  "live_recrawl_required": true,
+  "live_recrawl_required": false,
   "required_gates": {
     "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json": {
       "required": true,
@@ -67,8 +68,8 @@
       "exists": true,
       "tracked": true,
       "status": "present",
-      "sha256": "48588d9a8bdcabbaf4792093509cd312fc53a1f06dd9ffc41411c711cbd86354",
-      "manifest_sha256": "48588d9a8bdcabbaf4792093509cd312fc53a1f06dd9ffc41411c711cbd86354",
+      "sha256": "95f2485cd05654c04b5c02da33c253cf85272afbfd7f6061791f0beade7f2a7b",
+      "manifest_sha256": "95f2485cd05654c04b5c02da33c253cf85272afbfd7f6061791f0beade7f2a7b",
       "forbidden_absolute_path": false,
       "pass": true
     },
@@ -79,8 +80,8 @@
       "exists": true,
       "tracked": true,
       "status": "present",
-      "sha256": "106d2fee367894ca785c508cf701e18bfabc2ad71c7b8b25a92ca74a74cea30c",
-      "manifest_sha256": "106d2fee367894ca785c508cf701e18bfabc2ad71c7b8b25a92ca74a74cea30c",
+      "sha256": "2f0b8387c7792c678b889325f9f6f03f849a4013fdd2b63840ff9f0aa69b9319",
+      "manifest_sha256": "2f0b8387c7792c678b889325f9f6f03f849a4013fdd2b63840ff9f0aa69b9319",
       "forbidden_absolute_path": false,
       "pass": true
     },
@@ -91,8 +92,8 @@
       "exists": true,
       "tracked": true,
       "status": "present",
-      "sha256": "dd53b10e8dcdd39cee5e42094ea6c6cc0c61df43ea632635a8131f3971242870",
-      "manifest_sha256": "dd53b10e8dcdd39cee5e42094ea6c6cc0c61df43ea632635a8131f3971242870",
+      "sha256": "437e28afbf9c82c6fb1568880291554195fbfe64ef641b8794f5298795c93e3d",
+      "manifest_sha256": "437e28afbf9c82c6fb1568880291554195fbfe64ef641b8794f5298795c93e3d",
       "forbidden_absolute_path": false,
       "pass": true
     },
@@ -186,66 +187,8 @@
   "local_absolute_path_gates": [],
   "sha256_mismatch_gates": [],
   "failing_gates": [],
-  "live_recrawl": {
-    "routes": [
-      {
-        "path": "/",
-        "url": "https://chummer.run/",
-        "status_code": 200,
-        "response_sha256": "ed879599dab54d26f497e36ce2b18d6200f1e9ec3dfbdb8110c4e1b713a80b8a",
-        "detection_hits": [],
-        "text_excerpt": "Chummer &#x2014; Shadowrun Campaign OS \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Chummer &#x2014; Shadowrun Campaign OS Hide Get started The flagship front door stays simple: get the build, check what work"
-      },
-      {
-        "path": "/downloads",
-        "url": "https://chummer.run/downloads",
-        "status_code": 200,
-        "response_sha256": "19f24966435c876fa3697550b2796d6a9b70713479efce32883136b3101142f4",
-        "detection_hits": [],
-        "text_excerpt": "Downloads \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Downloads Hide Get started The flagship front door stays simple: get the build, check what works today, keep help nearby, and return through one account "
-      },
-      {
-        "path": "/status",
-        "url": "https://chummer.run/status",
-        "status_code": 200,
-        "response_sha256": "0a3096d790115e0af2d36026c3f0c619863f4662e44486866d55bee1bdf5b636",
-        "detection_hits": [],
-        "text_excerpt": "Status \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Status Hide Get started The flagship front door stays simple: get the build, check what works today, keep help nearby, and return through one account path. "
-      },
-      {
-        "path": "/ledger",
-        "url": "https://chummer.run/ledger",
-        "status_code": 200,
-        "response_sha256": "f935bf13e09ae926be2018cbdde4213443fcee9a7dd449998aa41ac745c175e0",
-        "detection_hits": [],
-        "text_excerpt": "Emerald Sprawl: First Pressure \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Emerald Sprawl: First Pressure Hide Get started The flagship front door stays simple: get the build, check what works today, keep he"
-      },
-      {
-        "path": "/ledger/map",
-        "url": "https://chummer.run/ledger/map",
-        "status_code": 200,
-        "response_sha256": "97980bd85e3bdada84d456e78fdb9fdd0489af880e5382e66e9e8f3658db11e6",
-        "detection_hits": [],
-        "text_excerpt": "Emerald Sprawl: First Pressure command map \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Emerald Sprawl: First Pressure command map Hide Get started The flagship front door stays simple: get the build, check w"
-      },
-      {
-        "path": "/ledger/factions",
-        "url": "https://chummer.run/ledger/factions",
-        "status_code": 200,
-        "response_sha256": "f935bf13e09ae926be2018cbdde4213443fcee9a7dd449998aa41ac745c175e0",
-        "detection_hits": [],
-        "text_excerpt": "Emerald Sprawl: First Pressure \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Emerald Sprawl: First Pressure Hide Get started The flagship front door stays simple: get the build, check what works today, keep he"
-      },
-      {
-        "path": "/ledger/newsroom",
-        "url": "https://chummer.run/ledger/newsroom",
-        "status_code": 200,
-        "response_sha256": "2c1a9daac1680f2ce61b376f4070fed4fe2d8db19668bbc10beb62c2261811fb",
-        "detection_hits": [],
-        "text_excerpt": "Emerald Sprawl: First Pressure command map \u00b7 Chummer Skip to content CHUMMER Shadowrun character and campaign companion Panel Sign in Open downloads Navigation Emerald Sprawl: First Pressure command map Hide Get started The flagship front door stays simple: get the build, check w"
-      }
-    ],
-    "reasons": []
-  },
-  "reasons": []
+  "live_recrawl": null,
+  "reasons": [
+    "archival_snapshot_superseded_by_full_product_reaudit_v20"
+  ]
 }

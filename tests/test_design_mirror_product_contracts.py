@@ -58,7 +58,8 @@ def test_design_mirror_includes_governor_feedback_and_public_install_policy_docs
 
     assert "Product governor" in governor
     assert "Hub owns the raw inbox" in feedback_loop
-    assert "Get preview build" in downloads
+    assert "Nightly" in downloads
+    assert "Stable" in downloads
     assert "Registry owns promoted desktop head" in auto_update
 
 
@@ -198,6 +199,7 @@ def test_design_mirror_journey_files_live_under_journeys_directory() -> None:
         "build-and-inspect-a-character.md",
         "claim-install-and-close-a-support-case.md",
         "continue-on-a-second-claimed-device.md",
+        "find-and-join-an-open-run.md",
         "install-and-update.md",
         "organize-a-community-and-close-the-loop.md",
         "publish-a-grounded-artifact.md",

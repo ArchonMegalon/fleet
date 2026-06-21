@@ -337,7 +337,7 @@ def _args(root: Path) -> Namespace:
         focus_text=[],
         dry_run=False,
         worker_timeout_seconds=0.0,
-        ea_provider_health_url="http://127.0.0.1:8090/v1/responses/_provider_health",
+        ea_provider_health_url="disabled",
         ea_provider_health_timeout_seconds=4.0,
         operating_profile="standard",
         memory_dispatch_reserve_gib=0.0,
@@ -347,6 +347,10 @@ def _args(root: Path) -> Namespace:
         memory_dispatch_warning_swap_used_percent=101.0,
         memory_dispatch_critical_swap_used_percent=101.0,
     )
+
+
+def _use_fake_provider_health(args: Namespace) -> None:
+    args.ea_provider_health_url = "http://provider-health.test/v1/responses/_provider_health"
 
 
 def _write_ea_provider_health_cache(
@@ -11001,6 +11005,7 @@ def test_direct_worker_lane_health_snapshot_flags_unroutable_repair_profile(monk
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         args = _args(root)
+        _use_fake_provider_health(args)
         args.worker_bin = "codexea"
         args.worker_lane = "core"
         monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE", "core_batch")
@@ -11079,6 +11084,7 @@ def test_direct_worker_lane_health_snapshot_keeps_degraded_core_routable_with_ab
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         args = _args(root)
+        _use_fake_provider_health(args)
         args.worker_bin = "codexea"
         args.worker_lane = "core"
         monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE", "core_batch")
@@ -11145,6 +11151,7 @@ def test_direct_worker_lane_health_snapshot_keeps_degraded_jury_routable_with_li
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         args = _args(root)
+        _use_fake_provider_health(args)
         args.worker_bin = "codexea"
         args.worker_lane = "jury"
 
@@ -11233,6 +11240,7 @@ def test_direct_worker_lane_health_snapshot_cools_recent_backend_failure(monkeyp
         shard_root = aggregate_root / "shard-1"
         shard_root.mkdir(parents=True, exist_ok=True)
         args = _args(root)
+        _use_fake_provider_health(args)
         args.worker_bin = "codexea"
         args.worker_lane = "survival"
         args.state_root = str(shard_root)
@@ -11303,6 +11311,7 @@ def test_direct_worker_lane_health_snapshot_uses_actual_balance_override_for_qua
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         args = _args(root)
+        _use_fake_provider_health(args)
         args.worker_bin = "codexea"
         args.worker_lane = "core_rescue"
 
@@ -12134,6 +12143,7 @@ def test_direct_worker_lane_health_snapshot_sends_runtime_ea_auth_headers(monkey
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         args = _args(root)
+        _use_fake_provider_health(args)
         args.worker_bin = "codexea"
         args.worker_lane = "core"
         monkeypatch.setenv("EA_MCP_API_TOKEN", "test-token")
@@ -13755,7 +13765,7 @@ def test_desktop_executable_exit_gate_audit_accepts_stale_wrapper_only_when_embe
         assert audit["freshness_source"] == "embedded_proof_ages_plus_receipt_age"
         assert audit["age_seconds"] > 23 * 3600
         assert audit["age_seconds"] <= module.DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS
-        assert audit["aggregate_generated_at_age_seconds"] > module.DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS
+        assert audit["aggregate_generated_at_age_seconds"] > module.DESKTOP_EXECUTABLE_EXIT_GATE_WRAPPER_MAX_AGE_SECONDS
 
 
 def test_desktop_executable_exit_gate_audit_rejects_external_only_contract_with_local_findings() -> None:
@@ -28088,6 +28098,7 @@ def test_direct_worker_lane_health_snapshot_prefers_lane_detail_and_live_credit_
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         args = _args(root)
+        _use_fake_provider_health(args)
         args.worker_bin = "codexea"
         args.worker_lane = "survival"
 

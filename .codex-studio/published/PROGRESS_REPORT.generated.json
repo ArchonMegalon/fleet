@@ -1,8 +1,8 @@
 {
   "contract_name": "fleet.public_progress_report",
   "contract_version": "2026-03-23",
-  "generated_at": "2026-06-18T23:44:20Z",
-  "as_of": "2026-06-18",
+  "generated_at": "2026-06-19T03:53:26Z",
+  "as_of": "2026-06-19",
   "history_snapshot_count": 42,
   "brand": "Chummer6",
   "active_wave": "Next 12 Biggest Wins",
@@ -68,14 +68,14 @@
       "route": "/downloads",
       "title": "Downloads and install truth",
       "semantic_family": "supportable_install",
-      "proof_state": "implemented",
+      "proof_state": "preview-bounded",
       "proof_badge": {
-        "state": "implemented",
-        "label": "Implemented",
-        "tone": "implemented"
+        "state": "preview-bounded",
+        "label": "Preview bounded",
+        "tone": "preview"
       },
       "summary": "Package compatibility, install, update, rollback, and revoke claims are published from the current release shelf instead of helper folklore.",
-      "detail": "2 compatible installer tuple(s) are published. Rollout state is stable, support posture is gold_supported, and rollback stays armed.",
+      "detail": "0 compatible installer tuple(s) are published. Rollout state is coverage_incomplete, support posture is review_required, and rollback stays armed.",
       "evidence": [
         "Release channel: published",
         "Release proof: passed",
@@ -83,13 +83,13 @@
         "Fix availability: Only send fixed notices after the affected install can receive the published channel artifact now on the shelf."
       ],
       "package_claims": {
-        "compatible_installer_count": 2,
-        "published_installer_count": 2,
-        "rollout_state": "stable",
-        "supportability_state": "gold_supported",
+        "compatible_installer_count": 0,
+        "published_installer_count": 0,
+        "rollout_state": "coverage_incomplete",
+        "supportability_state": "review_required",
         "rollback_state": "armed",
         "revoke_state": "not_revoked",
-        "known_issue_summary": "Current release checks are clear, and the downloads page has recent install, account return, release updates, community wrap-up, bounded offline prefetch, and current support follow-up coverage.",
+        "known_issue_summary": "Known issue: required desktop tuple coverage is incomplete (platforms: linux, windows; heads: avalonia; pairs: avalonia:linux, avalonia:windows; tuples: avalonia:linux-x64:linux, avalonia:win-x64:windows).",
         "supportability_summary": "Current public release is supported on the promoted routes. Recent checks cover install guidance, session recovery, account return, release updates, community wrap-up, bounded offline prefetch, and current support follow-up."
       }
     },
@@ -342,7 +342,7 @@
           "body": "Complete desktop/browser workbench with accessibility, localization, and polished shared components."
         }
       ],
-      "recent_commit_count_7d": 116,
+      "recent_commit_count_7d": 118,
       "remaining_open_weight": 0,
       "remaining_open_milestones": 0,
       "uncovered_scope_count": 0,
@@ -375,13 +375,13 @@
           "repo_slug": "chummer6-ui",
           "path": "/docker/chummercomplete/chummer6-ui",
           "lifecycle": "live",
-          "recent_commit_count_7d": 114,
+          "recent_commit_count_7d": 116,
           "design_total_weight": 56,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-06-18T23:10:00.485230Z",
+            "published_at": "2026-06-19T01:31:04.463021Z",
             "stages": {
               "capacity_compile": true,
               "design_compile": true,
@@ -607,7 +607,7 @@
           "body": "A cohesive hosted community and publication stack ready for real public participation."
         }
       ],
-      "recent_commit_count_7d": 180,
+      "recent_commit_count_7d": 186,
       "remaining_open_weight": 0,
       "remaining_open_milestones": 0,
       "uncovered_scope_count": 0,
@@ -640,7 +640,7 @@
           "repo_slug": "chummer6-hub",
           "path": "/docker/chummercomplete/chummer6-hub",
           "lifecycle": "live",
-          "recent_commit_count_7d": 143,
+          "recent_commit_count_7d": 147,
           "design_total_weight": 60,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
@@ -710,13 +710,13 @@
           "repo_slug": "chummer6-hub-registry",
           "path": "/docker/chummercomplete/chummer-hub-registry",
           "lifecycle": "dispatchable",
-          "recent_commit_count_7d": 32,
+          "recent_commit_count_7d": 34,
           "design_total_weight": 44,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-06-18T23:10:01.802224Z",
+            "published_at": "2026-06-19T03:44:17.691319Z",
             "stages": {
               "capacity_compile": true,
               "design_compile": true,
@@ -794,7 +794,7 @@
           "body": "One authoritative public story, compiled cleanly into every downstream surface."
         }
       ],
-      "recent_commit_count_7d": 64,
+      "recent_commit_count_7d": 66,
       "remaining_open_weight": 0,
       "remaining_open_milestones": 0,
       "uncovered_scope_count": 0,
@@ -827,7 +827,7 @@
           "repo_slug": "chummer6-design",
           "path": "/docker/chummercomplete/chummer-design",
           "lifecycle": "dispatchable",
-          "recent_commit_count_7d": 39,
+          "recent_commit_count_7d": 41,
           "design_total_weight": 44,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
@@ -926,7 +926,7 @@
   "eta_scope": "full_product_queue_unestimated",
   "full_product_queue": {
     "mode": "sharded",
-    "active_runs_count": 3,
+    "active_runs_count": 2,
     "active_frontier_ids": [
       1239074135
     ],
@@ -936,8 +936,8 @@
     "open_frontier_milestones": 1,
     "open_milestone_ids_count": 1,
     "eta": {
-      "eta_human": "2h-4h",
-      "eta_status": "tracked",
+      "eta_human": "2h-6h after unblock",
+      "eta_status": "blocked",
       "scope_kind": "completion_review_recovery",
       "scope_label": "Completion review and proof recovery",
       "scope_warning": "This ETA covers registry trust, proof, and review recovery. It is still narrower than a final flagship parity claim unless full-product readiness is also green.",

@@ -280,7 +280,7 @@ if [[ -n "$project_contract_defaults" ]]; then
 fi
 
 state_root_base="${CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT:-}"
-parallel_shards_raw="$(runtime_env_file_first_value CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS "${CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS:-1}")"
+parallel_shards_raw="${CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS:-$(runtime_env_file_first_value CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS 1)}"
 background_mode="$(printf '%s' "${CHUMMER_DESIGN_SUPERVISOR_BACKGROUND_MODE:-0}" | tr '[:upper:]' '[:lower:]')"
 shard_owner_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS:-${shard_owner_groups_raw:-}}"
 shard_focus_profile_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_PROFILE_GROUPS:-${shard_focus_profile_groups_raw:-}}"
@@ -679,20 +679,18 @@ resolve_active_shard_indexes() {
   local -n dest="$2"
   local primary_index=0
   local idx=0
-  local effective_worker_bin=""
   dest=()
   if (( configured <= 0 )); then
     configured="$parallel_shards"
   fi
-  if (( parallel_shards < configured )) && ! is_truthy_value "${CHUMMER_DESIGN_SUPERVISOR_PREFER_FULL_EA_LANES:-0}"; then
+  if (( parallel_shards < configured )) && audit_priority_selection_enabled; then
     primary_index="$(primary_probe_shard_index)"
     append_unique_shard_index "$2" "$primary_index" "$configured"
     for ((idx = 1; idx <= configured; idx++)); do
       if (( primary_index <= 0 || idx != primary_index )) && is_deferred_shard_index "$idx"; then
         continue
       fi
-      effective_worker_bin="${shard_worker_bins[$((idx - 1))]:-${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-codex}}"
-      if ! worker_bin_uses_codexea "$effective_worker_bin"; then
+      if shard_index_is_audit_priority "$idx"; then
         append_unique_shard_index "$2" "$idx" "$configured"
         if (( ${#dest[@]} >= parallel_shards )); then
           return 0
@@ -786,6 +784,22 @@ worker_bin_uses_codexea() {
   local token=""
   token="$(basename "$worker_bin" | tr '[:upper:]' '[:lower:]')"
   [[ "$token" == "codexea" ]]
+}
+
+shard_index_is_audit_priority() {
+  local index="${1:-}"
+  local worker_bin=""
+  local worker_lane=""
+  [[ "$index" =~ ^[0-9]+$ ]] || return 1
+  worker_bin="${shard_worker_bins[$((index - 1))]:-${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-codex}}"
+  worker_lane="${shard_worker_lanes[$((index - 1))]:-${CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE:-}}"
+  [[ "$worker_lane" == "audit_shard" ]] || ! worker_bin_uses_codexea "$worker_bin"
+}
+
+audit_priority_selection_enabled() {
+  local configured_root="${project_contract_state_root:-}"
+  [[ -n "$state_root_base" && -n "$configured_root" ]] || return 1
+  [[ "${state_root_base%/}" == "${configured_root%/}" ]]
 }
 
 fill_sparse_group_from_defaults shard_worker_bins project_contract_shard_worker_bins

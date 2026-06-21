@@ -1,0 +1,14 @@
+version: black-ledger-faction-membership-v1
+entities:
+  BlackLedgerAccountFactionAllegiance:
+    one_active_faction_per_account: true
+    applies_to_all_current_runners: true
+    applies_to_all_future_runners: true
+    runner_split_in_mvp: false
+    switch_cooldown_days: 30
+    public_projection_allowed: false
+  FactionMembershipReceipt:
+    applies_to_all_runners: true
+    future_runners_inherit: true
+    privacy_result: passed
+    public_projection_allowed: false

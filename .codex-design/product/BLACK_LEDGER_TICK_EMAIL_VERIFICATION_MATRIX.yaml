@@ -1,0 +1,24 @@
+version: tick-news-email-reaudit-20260514
+gates:
+- id: TE2-001
+  title: Config check
+  command: python3 scripts/black_ledger_tick_news_config_check.py --base-url https://chummer.run
+- id: TE2-002
+  title: Live dry-run
+  command: FLEET_INTERNAL_API_TOKEN=$REAL_TOKEN python3 scripts/black_ledger_send_tick_news.py
+    --base-url https://chummer.run --world emerald-sprawl-prelude --turn 1 --policy
+    subscribed_or_only_user_preview_fallback --dry-run
+- id: TE2-003
+  title: Live send
+  command: FLEET_INTERNAL_API_TOKEN=$REAL_TOKEN python3 scripts/black_ledger_send_tick_news.py
+    --base-url https://chummer.run --world emerald-sprawl-prelude --turn 1 --policy
+    subscribed_or_only_user_preview_fallback --send
+- id: TE2-004
+  title: Unit tests
+  command: dotnet test Chummer.Run.Api.Tests --filter BlackLedgerTickNews
+- id: TE2-005
+  title: EA payload tests
+  command: pytest tests/test_black_ledger_tick_news_delivery.py
+- id: TE2-006
+  title: Gmail/manual receipt check
+  command: Search mailbox for '[Chummer] Black Ledger turn 1' after send reports sent.

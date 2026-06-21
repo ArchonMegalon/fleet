@@ -209,6 +209,7 @@ REBUILDER_AUTOHEAL_STATE_DIR = REBUILDER_STATE_DIR / "autoheal"
 RUNTIME_HEALING_EVENTS_PATH = REBUILDER_AUTOHEAL_STATE_DIR / "events.jsonl"
 REBUILDER_EXTERNAL_PROOF_AUTOINGEST_STATE_DIR = REBUILDER_STATE_DIR / "external-proof-autoingest"
 EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH = REBUILDER_EXTERNAL_PROOF_AUTOINGEST_STATE_DIR / "status.json"
+EXTERNAL_PROOF_RUNBOOK_PATH = FLEET_MOUNT_ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
 CODEX_HOME_ROOT = _default_codex_home_root(STATE_ROOT, DB_PATH)
 GROUP_ROOT = _default_group_root(STATE_ROOT, DB_PATH)
 AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
@@ -13092,6 +13093,10 @@ def external_proof_autoingest_payload() -> Dict[str, Any]:
         alert_state = "healthy"
         alert_reason = "The latest returned host proof bundle has already been ingested."
         recommended_action = "No action required until a newer host proof bundle arrives."
+    elif current_state == "no_pending_requests":
+        alert_state = "healthy"
+        alert_reason = last_detail or "No external host proof bundle is currently required."
+        recommended_action = "No action required until an external host proof bundle is requested."
     elif current_state == "ingesting":
         alert_reason = "A returned host proof bundle is being finalized now."
         recommended_action = "Wait for the rebuilder to finish the finalize-external-host-proof.sh flow."

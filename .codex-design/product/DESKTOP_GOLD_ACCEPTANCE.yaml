@@ -1,0 +1,43 @@
+schema_version: 1
+product: chummer6
+desktop_gold:
+  allowed_release_labels:
+    - desktop_gold
+    - public_stable
+  primary_head: avalonia
+  promoted_platforms:
+    - windows
+    - linux
+  freshness:
+    gold_critical_max_age_seconds: 172800
+  required_proof_artifacts:
+    - DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+    - DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json
+    - DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+    - USER_JOURNEY_TESTER_AUDIT.generated.json
+    - NEXT90_M144_UI_STARTUP_SMOKE_AND_EXECUTABLE_GATE.generated.json
+    - UI_FLAGSHIP_RELEASE_GATE.generated.json
+  required_screenshots:
+    - 01-initial-shell-light.png
+    - 04-loaded-runner-light.png
+    - 05-dense-section-light.png
+    - 06-dense-section-dark.png
+    - 16-master-index-dialog-light.png
+    - 17-character-roster-dialog-light.png
+    - 19-workflow-file-menu-loaded-light.png
+    - 36-workflow-new-character-dialog-light.png
+    - validation_or_export_smoke-before.png
+    - validation_or_export_smoke-after.png
+  screenshot_thresholds:
+    minimum_bytes: 10000
+    minimum_width: 200
+    minimum_height: 120
+  required_first_minute_workflows:
+    - master_index_search_focus_stability
+    - file_new_character_visible_workspace
+    - minimal_character_build_save_reload
+    - major_navigation_sanity
+    - validation_or_export_smoke
+  required_registry_states:
+    rollback_state: primary_reinstall_available
+    revoke_state: not_revoked

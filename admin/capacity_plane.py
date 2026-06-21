@@ -593,7 +593,7 @@ def build_capacity_plan_payload(
     )
     review_cap = max(0, review_capacity_budget - max(0, queued_jury_jobs + blocked_on_jury - review_capacity_budget))
     review_cap = min(review_cap or review_capacity_budget, _safe_int(plane_caps.get("review_shard_cap"), review_capacity_budget or 1))
-    review_constraints_active = bool(queued_jury_jobs > 0 or blocked_on_jury > 0 or active_review_workers > 0)
+    review_constraints_active = bool(queued_jury_jobs > 0 or blocked_on_jury > 0 or active_review_workers > 0 or review_lane_observed)
 
     audit_lane_name = str(audit_fabric.get("lane") or "audit_shard").strip() or "audit_shard"
     audit_lane_row = capacity_by_lane.get(audit_lane_name) or {}
@@ -649,7 +649,7 @@ def build_capacity_plan_payload(
         )
     else:
         audit_cap = min(effective_audit_workers, audit_plane_cap)
-    audit_constraints_active = bool(open_incidents > 0 or active_audit_workers > 0 or pre_audit_equivalent_workers > 0)
+    audit_constraints_active = bool(open_incidents > 0 or active_audit_workers > 0 or pre_audit_equivalent_workers > 0 or audit_lane_observed)
     audit_lane_target = max(0, min(audit_plane_cap, active_audit_workers))
 
     project_safety_cap = 0

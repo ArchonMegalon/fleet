@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import subprocess
@@ -26,6 +27,14 @@ def _write_json(path: Path, payload: dict) -> None:
 def _write_yaml(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+
+def _fresh_commit_timestamp() -> str:
+    return (
+        dt.datetime.now(dt.timezone.utc)
+        .replace(microsecond=0)
+        - dt.timedelta(hours=1)
+    ).isoformat()
 
 
 def _write_generated_queue_overlay(path: Path, item: dict) -> None:
@@ -224,7 +233,7 @@ def _fixture_tree(
     _write_text(signal_pipeline_path, _signal_pipeline())
     _write_text(katteb_lane_path, _katteb_lane())
     _guide_verify_stub(guide_verify_script, success=guide_verify_success)
-    _init_git_repo(guide_repo_root, committed_at="2026-05-05T10:00:00+00:00")
+    _init_git_repo(guide_repo_root, committed_at=_fresh_commit_timestamp())
     _flagship_queue_stub(
         flagship_queue_script,
         guide_root=guide_repo_root,

@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-03T00:28:54Z'
+generated_at: '2026-06-08T07:43:14Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-6
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -29,9 +29,15 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-mobile
+  - chummer6-hub
+  - chummer6-ui
   - chummer6-core
   texts:
+  - campaign
+  - diary
+  - contacts
+  - downtime
+  - aftermath
   - top flagship grade
   - whole-project frontier
   - no lowered standards
@@ -46,8 +52,6 @@ focus:
   - performance
   - proof shelf
   - fit and finish
-  - fleet and operator loop
-  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -55,14 +59,14 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: Flagship product readiness proof is green.
+  status: fail
+  reason: golden journey proof is stale (271947s old)
 full_product_audit:
-  status: pass
-  reason: 'Flagship product readiness proof is green.'
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-04T14:13:04Z'
-  proof_status: pass
+  generated_at: '2026-06-08T06:32:46Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
@@ -92,8 +96,8 @@ frontier:
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Publish rule-environment studio contracts and explain receipts''
       remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      fleet_and_operator_loop.'
-    predicted_completion_at: '2026-06-03T16:02:12Z'
+      flagship readiness proof refresh.'
+    predicted_completion_at: '2026-06-08T23:16:32Z'
     range_low_hours: 9.01
     range_high_hours: 22.1
     remaining_open_milestones: 1
@@ -106,20 +110,6 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-source_queue_fingerprint: e350c3be89d2f3ff2b04c700b0b4f43b554b9ad9
-queue_package:
-  repo: chummer6-core
-  package_id: next90-m114-core-rule-environment-studio
-  title: Publish rule-environment studio contracts and explain receipts
-  priority: 0
-  owned_surfaces:
-  - rule_environment_studio
-  - explain_receipts:engine
-  allowed_paths:
-  - src
-  - tests
-  - docs
-  - scripts
 eta:
   status: flagship_delivery
   eta_human: 9h-22h
@@ -131,8 +121,8 @@ eta:
   blocking_reason: ''
   summary: 'Milestone ''Publish rule-environment studio contracts and explain receipts''
     remains open under the flagship closeout frontier. Outstanding readiness coverage:
-    fleet_and_operator_loop.'
-  predicted_completion_at: '2026-06-03T16:02:12Z'
+    flagship readiness proof refresh.'
+  predicted_completion_at: '2026-06-08T23:16:32Z'
   range_low_hours: 9.01
   range_high_hours: 22.1
   remaining_open_milestones: 1

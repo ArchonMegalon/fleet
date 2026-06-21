@@ -546,7 +546,7 @@ def _configured_project_queue_for_repo(repo_root: pathlib.Path) -> Optional[List
             for source_cfg in payload.get("queue_sources") or []:
                 if isinstance(source_cfg, dict):
                     queue = _apply_queue_source(payload, queue, source_cfg)
-            return queue
+            return [item for item in queue if _queue_entry_active(item)]
     return None
 
 

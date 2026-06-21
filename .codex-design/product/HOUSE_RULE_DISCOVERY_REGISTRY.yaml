@@ -1,0 +1,145 @@
+version: 1
+owner: chummer6-design
+status: proposal
+purpose: >
+  Machine-readable discovery tracks for LTD-assisted product validation.
+  External tools may recruit, interview, route, schedule, or project.
+  Chummer-owned packets, receipts, and governor decisions remain canonical truth.
+
+tools:
+  icanpreneur:
+    role: discovery_interview_and_synthesis
+    vendor_tier: tier_3
+    workspace_class: discovery_lane
+    owner_repo: chummer6-design
+    synthesis_repo: executive-assistant
+    forbidden:
+      - direct_rule_truth_mutation
+      - direct_implementation_priority
+      - canonical_backlog_ownership
+      - copyrighted_book_text_capture
+  facepop:
+    role: public_concierge_and_recruitment
+    vendor_tier: tier_5
+    owner_repo: chummer6-hub
+    allowed_surfaces:
+      - public_pages
+      - public_invites
+      - public_artifact_pages
+    forbidden_surfaces:
+      - desktop_runtime
+      - mobile_runtime
+      - signed_in_workspace
+      - support_case_truth
+  deftform:
+    role: structured_prescreen_and_intake
+    owner_repo: chummer6-hub
+  lunacal:
+    role: followup_booking_and_human_escalation
+    owner_repo: chummer6-hub
+  nextstep:
+    role: operator_process_execution
+    vendor_tier: tier_5
+    owner_repo: fleet
+    truth_posture: projection_only
+  signitic:
+    role: passive_outreach_projection
+    vendor_tier: tier_4
+    owner_repo: chummer6-hub
+    truth_posture: projection_only
+  taja:
+    role: approved_media_repurposing
+    vendor_tier: tier_4
+    owner_repo: chummer6-media-factory
+    truth_posture: projection_only
+  metasurvey:
+    role: quantitative_followup
+    owner_repo: chummer6-hub
+    truth_posture: advisory_only
+  vidboard:
+    role: structured_presenter_video
+    vendor_tier: tier_5
+    owner_repo: chummer6-media-factory
+    truth_posture: projection_only
+
+tracks:
+  - key: karma_forge_house_rule_discovery
+    status: active_proposed
+    public_entry: FacePop_or_Hub
+    prescreen: Deftform
+    interview: Icanpreneur
+    followup_booking: Lunacal
+    quant_followup: MetaSurvey
+    process_runner: NextStep
+    outreach: Signitic
+    synthesis: executive-assistant
+    decision_owner: product_governor
+    canonical_outputs:
+      - HouseRuleDemandPacket
+      - KarmaForgeCandidate
+      - RuleEnvironmentImpactHypothesis
+    forbidden_outputs:
+      - direct_amend_package_generation
+      - direct_rules_truth_mutation
+      - unpublished_book_text_capture
+  - key: gm_companion_persona_validation
+    status: proposed
+    public_entry: FacePop_or_Hub
+    prescreen: Deftform
+    interview: Icanpreneur
+    synthesis: executive-assistant
+    decision_owner: product_governor
+    canonical_outputs:
+      - CompanionPersonaFinding
+      - TriggerTolerabilityFinding
+      - VoiceModeConsentFinding
+  - key: black_ledger_validation
+    status: proposed
+    public_entry: FacePop_or_Hub
+    prescreen: Deftform
+    interview: Icanpreneur
+    process_runner: NextStep
+    synthesis: executive-assistant
+    decision_owner: product_governor
+    canonical_outputs:
+      - WorldGameDemandPacket
+      - FactionSeatRiskFinding
+      - JobBoardDemandFinding
+  - key: table_pulse_validation
+    status: proposed
+    public_entry: FacePop_or_Hub
+    prescreen: Deftform
+    interview: Icanpreneur
+    quant_followup: MetaSurvey
+    synthesis: executive-assistant
+    decision_owner: product_governor
+    canonical_outputs:
+      - TablePulseTrustFinding
+      - CoachingTolerabilityFinding
+      - SessionReflectionDemandPacket
+  - key: creator_publication_validation
+    status: proposed
+    public_entry: FacePop_or_Hub
+    prescreen: Deftform
+    interview: Icanpreneur
+    followup_booking: Lunacal
+    outreach: Signitic
+    synthesis: executive-assistant
+    decision_owner: product_governor
+    canonical_outputs:
+      - CreatorWorkflowDemandPacket
+      - PublicationTrustFinding
+      - ArtifactProductionDemandFinding
+  - key: public_launch_and_onboarding_validation
+    status: proposed
+    public_entry: FacePop_or_Hub
+    prescreen: Deftform
+    interview: Icanpreneur
+    quant_followup: MetaSurvey
+    outreach: Signitic
+    synthesis: executive-assistant
+    decision_owner: product_governor
+    canonical_outputs:
+      - LaunchMessageFinding
+      - OnboardingTrustFinding
+      - PublicConciergeDemandPacket

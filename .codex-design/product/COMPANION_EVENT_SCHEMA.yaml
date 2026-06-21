@@ -1,0 +1,257 @@
+product: chummer
+surface: companion
+version: 1
+canonical_identity:
+  id: switch
+  display_name: Switch
+  principle: one_companion_many_masks
+  tone_modes:
+    - id: muted
+      description: Minimal personality, direct operational phrasing.
+    - id: practical
+      description: Calm, friendly, lightly styled.
+    - id: playful
+      description: Dry wit, more overtly Shadowrun-flavored, still bounded by product truth.
+  masks:
+    - id: concierge
+      description: First run, install, update, downloads, and support guidance.
+    - id: analyst
+      description: Build Lab, compare, explain packets, and trap-choice warnings.
+    - id: handler
+      description: Campaign workspace, runboard, and "what changed for me?" moments.
+    - id: echo
+      description: Recap, debrief, closure, celebration, and publication handoff.
+global_rules:
+  truth_owner: chummer_owned_state
+  llm_may_phrase_only: true
+  default_voice_mode: text_only
+  microphone_opt_in_required: true
+  background_listening_default: false
+  hidden_cross_app_observation_forbidden: true
+  public_widget_runtime_allowed: false
+  public_widget_lane: FacePop
+  desktop_mobile_runtime_widget_allowed: false
+  captions_required_for_cinematic_media: true
+  critical_information_requires_text_fallback: true
+allowed_signal_families:
+  - install_bootstrap_route
+  - claim_install_linking_state
+  - update_availability
+  - update_safety_posture
+  - build_lab_compare_result
+  - build_lab_trap_warning
+  - rule_environment_drift
+  - amend_package_activation
+  - compatibility_warning
+  - dossier_freshness
+  - campaign_workspace_change
+  - runboard_blocker
+  - artifact_ready
+  - publication_ready
+  - support_case_state
+  - release_channel_confirmation
+  - fix_closure_state
+  - restore_conflict_state
+  - explicit_user_action
+  - explicit_user_text_or_upload
+  - explicit_voice_input_after_opt_in
+  - explicit_table_pulse_packet
+forbidden_signal_families:
+  - terminal_history_without_explicit_handoff
+  - hidden_clipboard_monitoring
+  - screen_scraping_other_apps
+  - accessibility_inspection_other_apps
+  - background_microphone_capture_before_consent
+  - webcam_capture
+  - os_wide_behavior_inference
+  - browser_history_without_import_or_share
+  - ambient_room_listening_by_default
+  - undeclared_hidden_telemetry
+event_packet:
+  required_fields:
+    - event_id
+    - event_type
+    - owning_domain
+    - severity
+    - urgency
+    - locale
+    - truth_refs
+    - allowed_actions
+    - mask_hint
+    - device_role
+    - install_role
+    - voice_available
+    - cinematic_media_allowed
+  field_schema:
+    event_id: opaque_stable_identifier
+    event_type:
+      enum:
+        - first_run_greeting
+        - install_linking_state
+        - update_ready
+        - build_trap_warning
+        - build_role_mismatch
+        - build_compare_explainer
+        - rule_environment_drift
+        - campaign_drift_alert
+        - dossier_stale_alert
+        - runboard_blocker
+        - artifact_ready
+        - publication_ready
+        - support_case_received
+        - support_missing_info
+        - fix_closure
+        - restore_conflict
+        - mission_cold_open
+        - campaign_primer_prompt
+        - player_safe_recap_prompt
+        - gm_private_debrief_prompt
+    owning_domain:
+      enum:
+        - install
+        - update
+        - build_lab
+        - campaign_workspace
+        - runboard
+        - support
+        - restore
+        - publication
+        - public_hub
+        - table_pulse
+    severity:
+      enum:
+        - info
+        - celebration
+        - caution
+        - blocking
+    urgency:
+      enum:
+        - ambient
+        - suggested
+        - interrupting
+        - critical
+    locale: bcp47_locale
+    truth_refs:
+      description: Inspectable first-party references that explain why the event fired.
+    allowed_actions:
+      description: Zero to three user-visible next actions; each action must route into a first-party flow.
+    allowed_humor_level:
+      enum:
+        - none
+        - light
+        - medium
+    mask_hint:
+      enum:
+        - concierge
+        - analyst
+        - handler
+        - echo
+    device_role:
+      enum:
+        - desktop_primary
+        - desktop_secondary
+        - mobile_play
+        - mobile_observer
+        - public_web
+    install_role:
+      enum:
+        - claimed_primary
+        - claimed_secondary
+        - preview_scout
+        - anonymous_public
+    voice_available: boolean
+    cinematic_media_allowed: boolean
+script:
+  required_fields:
+    - script_id
+    - event_type
+    - authored_base_line
+    - tone_variants
+    - forbidden_claims
+    - action_labels
+  field_schema:
+    script_id: opaque_stable_identifier
+    event_type: must_match_event_packet.event_type
+    authored_base_line: canonical_authored_copy
+    tone_variants:
+      required_keys:
+        - muted
+        - practical
+        - playful
+    forbidden_claims:
+      description: Claims the runtime or LLM may not improvise.
+    optional_joke_line: bounded_optional_style_line
+    action_labels:
+      description: Labels matching the allowed_actions emitted in the event packet.
+    explain_link_text: optional_link_to_visible_receipt_or_diff
+    media_cue_rules:
+      description: Optional pointers to allowed media-cue families for this script.
+media_cue:
+  required_fields:
+    - cue_id
+    - locale
+    - autoplay_policy
+  field_schema:
+    cue_id: opaque_stable_identifier
+    avatar_pack_id: optional_pack_reference
+    animation_id: optional_animation_reference
+    voice_pack_id: optional_voice_pack_reference
+    video_asset_ref: optional_registry_reference
+    locale: bcp47_locale
+    locale_fallback: default_en_us_or_explicit_pack_fallback
+    autoplay_policy:
+      enum:
+        - never
+        - click_to_play
+        - allowed_for_high_trust_transition
+interaction_receipt:
+  required_fields:
+    - receipt_id
+    - event_id
+    - shown_at
+    - shown_surface
+    - tone_mode
+    - mask_id
+  field_schema:
+    receipt_id: opaque_stable_identifier
+    event_id: must_match_event_packet.event_id
+    shown_at: utc_timestamp
+    shown_surface: first_party_surface_identifier
+    tone_mode:
+      enum:
+        - muted
+        - practical
+        - playful
+    mask_id:
+      enum:
+        - concierge
+        - analyst
+        - handler
+        - echo
+    user_action:
+      enum:
+        - dismissed
+        - muted_future_like_this
+        - clicked_primary_action
+        - clicked_secondary_action
+        - clicked_tertiary_action
+        - enabled_voice_mode
+        - kept_text_only
+        - opened_explainer
+        - no_action
+    delight_signal: optional_boolean_or_score
+    annoyance_signal: optional_boolean_or_score
+desktop_release_proof:
+  required_event_types:
+    - first_run_greeting
+    - build_trap_warning
+    - campaign_drift_alert
+    - fix_closure
+  required_capabilities:
+    - dismissability
+    - locale_fallback
+    - text_only_default
+    - voice_opt_in
+    - no_hidden_permissions
+    - no_cross_app_observation
+    - llm_unavailable_fallback

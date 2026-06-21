@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import datetime as dt
 from pathlib import Path
 
 import yaml
@@ -62,6 +63,18 @@ def _write_split_queue_yaml(path: Path, item: dict) -> None:
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _fresh_timestamp(*, hours_ago: int = 1) -> str:
+    return (
+        dt.datetime.now(dt.timezone.utc)
+        .replace(microsecond=0)
+        - dt.timedelta(hours=hours_ago)
+    ).isoformat().replace("+00:00", "Z")
+
+
+def _timestamp_seconds(value: str) -> float:
+    return dt.datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
 
 
 def _registry() -> dict:
@@ -250,7 +263,7 @@ def _fixture_tree(
     _write_yaml(design_queue_path, {"items": [_design_queue_item()]})
     _write_text(guide_path, _guide())
     _write_yaml(parity_matrix_path, _parity_matrix())
-    _write_json(flagship_path, _flagship_readiness(generated_at="2026-05-05T12:00:00Z", status=flagship_status))
+    _write_json(flagship_path, _flagship_readiness(generated_at=parity_audit_generated_at, status=flagship_status))
     _write_json(
         continuity_path,
         _continuity(generated_at=continuity_generated_at, status=continuity_status),
@@ -376,16 +389,17 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
     def test_green_runtime_can_pass_cleanly(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
+            generated_at = _fresh_timestamp()
             fixture = _fixture_tree(
                 tmp_path,
                 include_fleet_queue_row=True,
-                parity_audit_generated_at="2026-05-13T12:00:00Z",
-                screenshot_review_generated_at="2026-05-13T12:00:00Z",
-                visual_gate_generated_at="2026-05-13T12:00:00Z",
+                parity_audit_generated_at=generated_at,
+                screenshot_review_generated_at=generated_at,
+                visual_gate_generated_at=generated_at,
                 visual_gate_status="pass",
                 continuity_status="pass",
-                continuity_generated_at="2026-05-13T12:00:00Z",
-                journey_generated_at="2026-05-13T12:00:00Z",
+                continuity_generated_at=generated_at,
+                journey_generated_at=generated_at,
                 flagship_status="pass",
             )
             artifact = tmp_path / "artifact.json"
@@ -423,16 +437,17 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
     def test_missing_generated_at_uses_file_mtime_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
+            generated_at = _fresh_timestamp()
             fixture = _fixture_tree(
                 tmp_path,
                 include_fleet_queue_row=True,
-                parity_audit_generated_at="2026-05-05T12:00:00Z",
-                screenshot_review_generated_at="2026-05-05T12:00:00Z",
-                visual_gate_generated_at="2026-05-05T12:00:00Z",
+                parity_audit_generated_at=generated_at,
+                screenshot_review_generated_at=generated_at,
+                visual_gate_generated_at=generated_at,
                 visual_gate_status="pass",
                 continuity_status="pass",
-                continuity_generated_at="2026-05-05T12:00:00Z",
-                journey_generated_at="2026-05-05T12:00:00Z",
+                continuity_generated_at=generated_at,
+                journey_generated_at=generated_at,
                 flagship_status="pass",
             )
             screenshot_payload = json.loads(fixture["screenshot"].read_text(encoding="utf-8"))
@@ -441,7 +456,7 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
             visual_payload = json.loads(fixture["visual"].read_text(encoding="utf-8"))
             visual_payload.pop("generated_at", None)
             _write_json(fixture["visual"], visual_payload)
-            recent_timestamp = 1777982400  # 2026-05-05T12:00:00Z
+            recent_timestamp = _timestamp_seconds(generated_at)
             os.utime(fixture["screenshot"], (recent_timestamp, recent_timestamp))
             os.utime(fixture["visual"], (recent_timestamp, recent_timestamp))
 
@@ -454,7 +469,7 @@ class MaterializeNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestC
         )
         self.assertEqual(
             payload["source_inputs"]["screenshot_review_gate"]["generated_at"],
-            "2026-05-05T12:00:00Z",
+            generated_at,
         )
 
     def test_ui_direct_workflow_proof_can_override_stale_dense_family_row(self) -> None:

@@ -1,0 +1,17 @@
+publish_on:
+- approved_design_change
+mirror_paths:
+- .codex-design/product
+- .codex-design/repo
+- .codex-design/review
+review_guidance_source: products/chummer/review
+enforce_local_mirror_before_review: true
+canonical_first: true
+publish_subset_only: true
+publisher_script: scripts/ai/publish_local_mirrors.py
+prune_stale_product_files: true
+required_sequence:
+- update_canonical_design
+- approve_in_design_repo
+- publish_affected_subset
+- verify_repo_local_mirror

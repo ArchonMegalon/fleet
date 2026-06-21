@@ -1,0 +1,19 @@
+version: black-ledger-faction-charter-points-v1
+major:
+  charter_points: 100
+  action_points_per_tick: 3
+  required_flaws: 2
+  max_perks: 5
+  max_attribute_rating: 5
+  home_district_claim: true
+challenger:
+  charter_points: 65
+  action_points_per_tick: 2
+  required_flaws: 3
+  max_perks: 3
+  max_attribute_rating: 4
+  home_district_claim: false
+  warning: This faction starts weaker and must challenge larger factions to grow.
+major_charter_slots_total: 10
+major_charter_slots_seeded_used: 6
+major_charter_slots_available_at_seed: 4

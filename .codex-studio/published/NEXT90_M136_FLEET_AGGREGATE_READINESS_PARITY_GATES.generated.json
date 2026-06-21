@@ -103,7 +103,7 @@
   },
   "contract_name": "fleet.next90_m136_aggregate_readiness_parity_gates",
   "frontier_id": 2277811964,
-  "generated_at": "2026-06-05T04:11:10Z",
+  "generated_at": "2026-06-12T15:25:24Z",
   "milestone_id": 136,
   "monitor_summary": {
     "aggregate_readiness_status": "pass",
@@ -124,34 +124,34 @@
   "queue_title": "Fail closed on aggregate readiness when family-level parity proof, sub-dialog screenshot packs, dialog-level element inventories, or continuity journey receipts are stale or missing.",
   "runtime_monitors": {
     "aggregate_readiness": {
-      "age_hours": 0.03,
-      "generated_at": "2026-06-05T04:09:27Z",
+      "age_hours": 0.0,
+      "generated_at": "2026-06-12T15:25:14Z",
       "issues": [],
       "runtime_blockers": [],
       "state": "pass",
-      "status": "fail",
+      "status": "pass",
       "warnings": []
     },
     "continuity_receipts": {
-      "campaign_continuity_front_state": "warning",
+      "campaign_continuity_front_state": "healthy",
       "continuity_age_hours": 0.0,
-      "continuity_generated_at": "2026-06-05T04:11:09Z",
-      "continuity_status": "fail",
+      "continuity_generated_at": "2026-06-12T15:25:24Z",
+      "continuity_status": "pass",
       "issues": [],
-      "journey_age_hours": 0.01,
-      "journey_generated_at": "2026-06-05T04:10:40Z",
+      "journey_age_hours": 0.16,
+      "journey_generated_at": "2026-06-12T15:15:43Z",
       "journey_overall_state": "ready",
       "runtime_blockers": [],
       "state": "pass",
       "warnings": []
     },
     "parity_family_proof": {
-      "age_hours": 0.15,
+      "age_hours": 0.08,
       "behavioral_no_count": 0,
       "effective_behavioral_no_count": 0,
       "effective_visual_no_count": 0,
       "element_count": 84,
-      "generated_at": "2026-06-05T04:02:19.258525Z",
+      "generated_at": "2026-06-12T15:20:45.880463Z",
       "issues": [],
       "missing_family_proofs": [],
       "overridden_family_proofs": [],
@@ -174,15 +174,15 @@
       "issues": [],
       "runtime_blockers": [],
       "screenshot_review_gate": {
-        "age_hours": 0.93,
-        "generated_at": "2026-06-05T03:15:08.967424Z",
+        "age_hours": 0.45,
+        "generated_at": "2026-06-12T14:58:30.534149Z",
         "runtime_blockers": [],
         "status": "pass"
       },
       "state": "pass",
       "visual_familiarity_gate": {
-        "age_hours": 0.97,
-        "generated_at": "2026-06-05T03:13:00.606159Z",
+        "age_hours": 0.45,
+        "generated_at": "2026-06-12T14:58:24.076412Z",
         "runtime_blockers": [],
         "status": "pass"
       },
@@ -191,39 +191,39 @@
   },
   "source_inputs": {
     "campaign_continuity_liveness": {
-      "generated_at": "2026-06-05T04:11:09Z",
+      "generated_at": "2026-06-12T15:25:24Z",
       "path": "/docker/fleet/.codex-studio/published/CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json",
-      "sha256": "6116b6096d4695eef520228707db454826d183847252b9f9d34fcf2f77a036e7"
+      "sha256": "a1bb53c46e030dd35e869e659847ea4df15cfa1353f45d1b13a8e04f23fb6745"
     },
     "design_queue_staging": {
-      "generated_at": "2026-06-01T20:06:02Z",
+      "generated_at": "2026-06-12T10:57:36Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
       "sha256": "f6c30d70ae0dc97068dc37587a63b330a4dfc8212f610af7907734cbcae69656"
     },
     "flagship_product_readiness": {
-      "generated_at": "2026-06-05T04:09:27Z",
+      "generated_at": "2026-06-12T15:25:14Z",
       "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-      "sha256": "a2b3cfd65ef381c739d5901acd77f9c9e50bc8779cbb99f8c730c9719e25b9d2"
+      "sha256": "7a1a6d56140ecc293406012c0960582c8c331cfe8844ba74474ad1f81e42d433"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-06-01T20:06:02Z",
+      "generated_at": "2026-06-12T10:57:36Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
       "sha256": "f6c30d70ae0dc97068dc37587a63b330a4dfc8212f610af7907734cbcae69656"
     },
     "journey_gates": {
-      "generated_at": "2026-06-05T04:10:40Z",
+      "generated_at": "2026-06-12T15:15:43Z",
       "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-      "sha256": "38ae02dda64461cb50cda87c5e62c1f7d86ff55a24c5a8c8c6f8659a3b1d6bf6"
+      "sha256": "96b5ec3485ac767eb9001273ab65ad10ec79ec5d7bec23deb3d728998b65b38f"
     },
     "next90_guide": {
       "generated_at": "",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
-      "sha256": "984957267d7ee1ae4f3b20a7c67446925d356887019a5f910018ce9001cf36a5"
+      "sha256": "80e49aaec0bea8e679500174b8a8c0a1f80c9eab28eb5bc60ddc164c7a3cb07b"
     },
     "parity_audit": {
-      "generated_at": "2026-06-05T04:02:19.258525Z",
+      "generated_at": "2026-06-12T15:20:45.880463Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json",
-      "sha256": "b77235d62a04bbee5d80ad9bc81bc42c5db97f5d9d0d2123240ae47be9703fdd"
+      "sha256": "6f16561998c77993bdf21bca65ce814adb3b459266300698ffd84c2dbdf0b231"
     },
     "parity_matrix": {
       "generated_at": "2026-04-30T15:40:33Z",
@@ -231,24 +231,24 @@
       "sha256": "03459b1bfd51868a99ef7399a279c0a9ca9f4b1514a893638553d8c678b7d2ae"
     },
     "screenshot_review_gate": {
-      "generated_at": "2026-06-05T03:15:08.967424Z",
+      "generated_at": "2026-06-12T14:58:30.534149Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_SCREENSHOT_REVIEW_GATE.generated.json",
-      "sha256": "b22a54e4f8cb4d340a873e0388c3732ab5aa25010d40658c30c1e0f88a4e3cd0"
+      "sha256": "ca4ffa8dfee428b9f77efcc73bd3b1cb84473e086ea294c837c92e6dda765d05"
     },
     "successor_registry": {
-      "generated_at": "2026-06-03T01:54:42Z",
+      "generated_at": "2026-06-12T10:57:36Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "f7a7052667fb62adf4d4556e2e35f28dc9488f41c579d9af0802cdd92f0b0959"
+      "sha256": "c016ad635628164eabbb9cb814155439e7846f55fe8f65f4e4dbae68979bc3d7"
     },
     "ui_direct_workflow_proof": {
-      "generated_at": "2026-06-05T03:15:09.238381Z",
+      "generated_at": "2026-06-11T04:08:50.500055Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/NEXT90_M142_UI_DIRECT_WORKFLOW_PROOF.generated.json",
-      "sha256": "a6700b21005f7de8577a9fea55dc83169b0fc1d3874c4b8d07c8155d645ede6f"
+      "sha256": "3ad32a89a8f6aed977d71b68bafe4fd905887dabd9cc7e6d7268715e872a4968"
     },
     "visual_familiarity_gate": {
-      "generated_at": "2026-06-05T03:13:00.606159Z",
+      "generated_at": "2026-06-12T14:58:24.076412Z",
       "path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
-      "sha256": "e973f91b5e48c44fc6005a46a945041b9aab02f65466569b41e3a5cea21cab5e"
+      "sha256": "59c697dc9010d64782e7df073b8c38a854709e5ffd17b209544a308618cc2b03"
     }
   },
   "status": "pass",

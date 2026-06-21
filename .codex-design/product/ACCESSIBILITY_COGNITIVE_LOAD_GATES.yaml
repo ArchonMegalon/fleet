@@ -1,0 +1,31 @@
+product: chummer
+artifact: accessibility_cognitive_load_gates
+version: 1
+last_reviewed: 2026-04-30
+gates:
+  - id: keyboard_first_expert_workflow
+    required_surfaces:
+      - flagship_desktop_workbench
+      - dense_builder
+      - ready_for_tonight
+  - id: warning_and_legality_clarity
+    required_surfaces:
+      - build_lab
+      - explain_drawer
+      - run_application_preflight
+  - id: reduced_motion_safe_critical_flows
+    required_surfaces:
+      - install_and_first_run
+      - recovery_and_restore
+      - recap_and_return_moment
+  - id: screen_reader_safe_trust_surfaces
+    required_surfaces:
+      - install_help
+      - explain
+      - recovery
+      - support
+  - id: mobile_glanceability
+    required_surfaces:
+      - recap
+      - ready_for_tonight
+      - consequence_feed

@@ -613,7 +613,21 @@ class QuartermasterOodaE2ETests(unittest.TestCase):
                                     self.assertEqual(second_snapshot["remaining_by_lane"]["core_booster"], 2)
                                     self.assertEqual(second_launched, ["alpha", "beta"])
 
-                                    await asyncio.wait_for(second_wave_started.wait(), timeout=1.0)
+                                    try:
+                                        await asyncio.wait_for(second_wave_started.wait(), timeout=1.0)
+                                    except TimeoutError as exc:
+                                        with self.controller.db() as conn:
+                                            debug_rows = [
+                                                dict(row)
+                                                for row in conn.execute(
+                                                    "SELECT id, status, queue_index, current_slice FROM projects ORDER BY id"
+                                                ).fetchall()
+                                            ]
+                                        self.fail(
+                                            "second booster wave did not start; "
+                                            f"started={started!r} completed={completed!r} "
+                                            f"task_keys={list(self.controller.state.tasks)!r} rows={debug_rows!r}"
+                                        )
                                     self.controller._QUARTERMASTER_RECONCILE_CACHE = {"fetched_at": 0.0, "plan_generated_at": "", "payload": {}}
                                     second_inflight = self.controller.quartermaster_capacity_reconcile(config, plan=second_plan)
                                     self.assertEqual(second_inflight["usage_by_lane"]["core_booster"], 2)

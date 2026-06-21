@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-04T14:10:33Z'
+generated_at: '2026-06-08T07:40:43Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-17
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -29,10 +29,16 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
+  - chummer6-ui
   - chummer6-hub
-  - chummer6-mobile
+  - chummer6-core
   - chummer6-design
   texts:
+  - build lab
+  - explain
+  - crew-fit
+  - rule-environment
+  - advancement
   - top flagship grade
   - whole-project frontier
   - no lowered standards
@@ -47,9 +53,6 @@ focus:
   - performance
   - proof shelf
   - fit and finish
-  - fleet and operator loop
-  - desktop client
-  - horizons and public surface
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -57,50 +60,50 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: Flagship product readiness proof is green.
+  status: fail
+  reason: golden journey proof is stale (271794s old)
 full_product_audit:
-  status: pass
-  reason: 'Flagship product readiness proof is green.'
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-04T14:13:04Z'
-  proof_status: pass
+  generated_at: '2026-06-08T06:32:46Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 3316568713
+- 2268788196
 frontier:
-- id: 3316568713
-  title: Add travel and mobile starter continuity for primer and briefing artifacts
+- id: 2268788196
+  title: Define first-playable-session success metrics and bounded onboarding claims
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-mobile
+  - chummer6-design
   dependencies: []
   exit_criteria:
-  - Add travel and mobile starter continuity for primer and briefing artifacts.
-  - 'Own and prove the surface slice(s): starter_onboarding:mobile, first_session_briefing:mobile'
-  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
+  - Define first-playable-session success metrics and bounded onboarding claims.
+  - 'Own and prove the surface slice(s): onboarding_metrics, onboarding_claims'
+  - 'Keep implementation scoped to the allowed paths: products, scripts, feedback'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-mobile` (next90-m119-mobile-onboarding-continuity).
+    is landed for `chummer6-design` (next90-m119-design-onboarding-metrics).
   eta:
     status: flagship_delivery
-    eta_human: 8h-21h
+    eta_human: 7h-19h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Add travel and mobile starter continuity for primer and
-      briefing artifacts'' remains open under the flagship closeout frontier. Outstanding
-      readiness coverage: horizons_and_public_surface.'
-    predicted_completion_at: '2026-06-05T04:39:57Z'
-    range_low_hours: 8.1
-    range_high_hours: 20.88
+    summary: 'Milestone ''Define first-playable-session success metrics and bounded
+      onboarding claims'' remains open under the flagship closeout frontier. Outstanding
+      readiness coverage: flagship readiness proof refresh.'
+    predicted_completion_at: '2026-06-08T20:57:31Z'
+    range_low_hours: 7.42
+    range_high_hours: 19.14
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.8
+    remaining_effort_units: 1.65
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
@@ -109,20 +112,20 @@ frontier:
     scope_warning: ''
 eta:
   status: flagship_delivery
-  eta_human: 8h-21h
+  eta_human: 7h-19h
   eta_confidence: low
   basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Add travel and mobile starter continuity for primer and briefing
-    artifacts'' remains open under the flagship closeout frontier. Outstanding readiness
-    coverage: horizons_and_public_surface.'
-  predicted_completion_at: '2026-06-05T04:39:57Z'
-  range_low_hours: 8.1
-  range_high_hours: 20.88
+  summary: 'Milestone ''Define first-playable-session success metrics and bounded
+    onboarding claims'' remains open under the flagship closeout frontier. Outstanding
+    readiness coverage: flagship readiness proof refresh.'
+  predicted_completion_at: '2026-06-08T20:57:31Z'
+  range_low_hours: 7.42
+  range_high_hours: 19.14
   remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
   remaining_not_started_milestones: 1
-  remaining_effort_units: 1.8
+  remaining_effort_units: 1.65

@@ -1,0 +1,82 @@
+version: 1
+horizons:
+  - id: ready_for_tonight
+    state: shipped_mvp
+    route: /ready
+    proof: READY_FOR_TONIGHT_E2E.generated.json
+  - id: nexus_pan
+    state: shipped_mvp
+    route: /play/continuity
+    proof: NEXUS_PAN_CONTINUITY_E2E.generated.json
+  - id: alice
+    state: shipped_mvp
+    route: /alice
+    proof: ALICE_BUILD_GHOST_ROUTE_PROOF.generated.json
+  - id: knowledge_fabric
+    state: shipped_mvp
+    route: /rules
+    proof: KNOWLEDGE_FABRIC_SOURCE_SAFE_E2E.generated.json
+  - id: jackpoint
+    state: shipped_mvp
+    route: /jackpoint
+    proof: JACKPOINT_ROUTE_PROOF.generated.json
+  - id: runsite
+    state: shipped_mvp
+    route: /runsites
+    proof: RUNSITE_ROUTE_PROOF.generated.json
+  - id: run_control
+    state: shipped_mvp
+    route: /run-control
+    proof: RUN_CONTROL_ROUTE_PROOF.generated.json
+  - id: onramp
+    state: shipped_mvp
+    route: /onramp
+    proof: ONRAMP_ROUTE_PROOF.generated.json
+  - id: edition_studio
+    state: shipped_mvp
+    route: /edition-studio
+    proof: EDITION_STUDIO_ROUTE_PROOF.generated.json
+  - id: local_co_processor
+    state: shipped_mvp
+    route: /local-co-processor
+    proof: LOCAL_CO_PROCESSOR_ROUTE_PROOF.generated.json
+  - id: runbook_press
+    state: shipped_mvp
+    route: /runbook
+    proof: RUNBOOK_PRESS_PRIMER_E2E.generated.json
+  - id: table_pulse
+    state: shipped_mvp
+    route: /table-pulse
+    proof: TABLE_PULSE_PUBLIC_ROUTE_PROOF.generated.json
+  - id: community_hub
+    state: shipped_mvp
+    route: /community
+    proof: COMMUNITY_HUB_ROUTE_PROOF.generated.json
+  - id: creator_os
+    state: shipped_mvp
+    route: /creator
+    proof: CREATOR_OS_PUBLICATION_E2E.generated.json
+  - id: runner_passport
+    state: shipped_mvp
+    route: /passport
+    proof: RUNNER_PASSPORT_E2E.generated.json
+  - id: quicksilver
+    state: shipped_mvp
+    route: /quicksilver
+    proof: QUICKSILVER_ROUTE_PROOF.generated.json
+  - id: ghostwire
+    state: shipped_mvp
+    route: /ghostwire
+    proof: GHOSTWIRE_AFTER_ACTION_E2E.generated.json
+  - id: anarchy
+    state: shipped_mvp
+    route: /anarchy
+    proof: ANARCHY_RULESET_PREVIEW_E2E.generated.json
+  - id: karma_forge
+    state: shipped_mvp
+    route: /participate/karma-forge
+    proof: KARMA_FORGE_PACKAGE_PIPELINE_E2E.generated.json
+  - id: black_ledger
+    state: shipped_mvp
+    route: /ledger
+    proof: BLACK_LEDGER_COMMAND_MAP_PUBLISHED

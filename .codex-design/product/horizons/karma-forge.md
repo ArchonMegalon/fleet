@@ -1,23 +1,27 @@
 # KARMA FORGE — house rules without table chaos
 
+## Explanation video
+
+[Watch the KARMA FORGE 90-second deep dive](https://chummer.run/media/horizons/karma-forge-90s-deepdive.mp4). [Captions](https://chummer.run/media/horizons/karma-forge-90s-deepdive.vtt).
+
 KARMA FORGE is Chummer’s governed house-rule and custom-rules layer: a way for GMs, players, creators, organizers, and living communities to change the rules of their table without turning every campaign into an incompatible private fork.
 
 Every Shadowrun table has house rules.
 
-Some tables change chargen.  
-Some ban gear.  
-Some simplify Matrix play.  
-Some tune Edge.  
-Some change advancement pacing.  
-Some run street-level campaigns with restricted availability.  
-Some communities maintain entire custom rule packets.  
+Some tables change chargen.
+Some ban gear.
+Some simplify Matrix play.
+Some tune Edge.
+Some change advancement pacing.
+Some run street-level campaigns with restricted availability.
+Some communities maintain entire custom rule packets.
 Some Chummer5a veterans have years of amend files and custom data they do not want to lose.
 
 KARMA FORGE is where those changes become visible, portable, explainable, safe.
 
-Not hidden folder magic.  
-Not “just trust the GM.”  
-Not mystery XML.  
+Not hidden folder magic.
+Not “just trust the GM.”
+Not mystery XML.
 Not a private spreadsheet nobody remembers to check.
 
 A real rule environment.
@@ -30,15 +34,15 @@ A real rule environment.
 
 KARMA FORGE lets a campaign say:
 
-> “These are the rules we play with.  
-> This is what changed.  
-> This is why your runner is legal, blocked, or different.  
-> This is what happens if you join this campaign.  
+> “These are the rules we play with.
+> This is what changed.
+> This is why your runner is legal, blocked, or different.
+> This is what happens if you join this campaign.
 > This is what happens if the package changes later.”
 
-The player does not have to guess.  
-The GM does not have to police everything manually.  
-The creator does not have to ship fragile house-rule notes.  
+The player does not have to guess.
+The GM does not have to police everything manually.
+The creator does not have to ship fragile house-rule notes.
 The organizer does not have to maintain twelve conflicting Discord pins.
 
 Chummer shows the rule environment, the active packages, the impact, the compatibility, and the next safe action.
@@ -222,8 +226,8 @@ The player can click:
 - Use a quickstart runner
 - Decline this campaign
 
-No surprises.  
-No silent rule drift.  
+No surprises.
+No silent rule drift.
 No “I thought that was allowed.”
 
 ---
@@ -353,8 +357,8 @@ The important part:
 
 > BLACK LEDGER can create pressure and opportunity, but KARMA FORGE makes the rule impact explicit.
 
-No invisible world-state mutation.  
-No surprise rule changes.  
+No invisible world-state mutation.
+No surprise rule changes.
 No faction manager secretly changing character legality.
 
 Everything is packaged, scoped, explained, and approved.
@@ -590,8 +594,8 @@ Next safe action:
 Download package, switch environment, or open in read-only mode.
 ```
 
-No mystery drift.  
-No wrong compute.  
+No mystery drift.
+No wrong compute.
 No silent mismatch.
 
 ---

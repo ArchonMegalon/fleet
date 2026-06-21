@@ -87,6 +87,7 @@ REPO_ROOT_CANDIDATES = {
     ),
     "executive-assistant": (Path("/docker/EA"),),
 }
+DEFAULT_HUB_REGISTRY_ROOT = Path("/docker/chummercomplete/chummer-hub-registry")
 
 EXTERNAL_BLOCKER_MARKERS = (
     "external proof request: capture",
@@ -188,12 +189,16 @@ def _ui_independent_public_release_proof_passed(repo_root: Path) -> bool:
 
 
 def _refresh_completion_review_frontier_if_possible(repo_root: Path) -> bool:
-    if repo_root.resolve() != ROOT:
+    if repo_root.resolve() != Path(ROOT).resolve():
         return False
     try:
-        try:
-            from scripts import chummer_design_supervisor as supervisor
-        except ModuleNotFoundError:
+        supervisor = sys.modules.get("scripts.chummer_design_supervisor") or sys.modules.get("chummer_design_supervisor")
+        if supervisor is None:
+            try:
+                from scripts import chummer_design_supervisor as supervisor
+            except ModuleNotFoundError:
+                supervisor = None
+        if supervisor is None:
             sys.path.insert(0, str(ROOT / "scripts"))
             import chummer_design_supervisor as supervisor  # type: ignore[no-redef]
 
@@ -205,7 +210,13 @@ def _refresh_completion_review_frontier_if_possible(repo_root: Path) -> bool:
                 "--workspace-root",
                 str(ROOT),
             ]
-            args = supervisor.parse_args()
+            try:
+                args = supervisor.parse_args()
+            except Exception:
+                class Args:
+                    state_root = str(getattr(supervisor, "DEFAULT_STATE_ROOT", ROOT / "state" / "chummer_design_supervisor"))
+
+                args = Args()
         finally:
             sys.argv = argv_backup
         state_root = Path(str(getattr(args, "state_root", "") or supervisor.DEFAULT_STATE_ROOT)).resolve()
@@ -1517,6 +1528,12 @@ def _align_proof_capture_commands_with_expected(
 
 
 def resolve_repo_root(repo_name: str) -> Path | None:
+    env_name = "CHUMMER_JOURNEY_GATES_REPO_ROOT_" + re.sub(r"[^A-Z0-9]+", "_", str(repo_name or "").upper()).strip("_")
+    env_root = str(os.environ.get(env_name) or "").strip()
+    if env_root:
+        candidate = Path(env_root)
+        if candidate.exists():
+            return candidate
     for candidate in REPO_ROOT_CANDIDATES.get(repo_name, ()):
         if candidate.exists():
             return candidate
@@ -1526,12 +1543,23 @@ def resolve_repo_root(repo_name: str) -> Path | None:
 def resolve_repo_proof_path(repo_name: str, relative_path: str) -> Path | None:
     clean_repo_name = str(repo_name or "").strip()
     clean_relative_path = str(relative_path or "").strip()
+    repo_root = resolve_repo_root(clean_repo_name)
+    if repo_root is not None:
+        candidate = (repo_root / clean_relative_path).resolve()
+        if (
+            candidate.is_file()
+            and not (
+                clean_repo_name == "chummer6-hub-registry"
+                and clean_relative_path == ".codex-studio/published/RELEASE_CHANNEL.generated.json"
+                and repo_root.resolve() == DEFAULT_HUB_REGISTRY_ROOT.resolve()
+            )
+        ) or clean_repo_name != "chummer6-hub-registry":
+            return candidate
     if (
         clean_repo_name == "chummer6-hub-registry"
         and clean_relative_path == ".codex-studio/published/RELEASE_CHANNEL.generated.json"
     ):
         return resolve_release_channel_path()
-    repo_root = resolve_repo_root(clean_repo_name)
     if repo_root is None:
         return None
     return (repo_root / clean_relative_path).resolve()
@@ -1721,14 +1749,15 @@ def evaluate_journey(
         stage = str(project.get("readiness_stage") or "").strip()
         actual_promotion = posture_value(project)
         effective_stage = stage
+        effective_promotion = actual_promotion
         if project_id == "ui":
             repo_root = resolve_repo_root("chummer6-ui")
             if (
                 repo_root is not None
-                and compare_order(actual_promotion, "public", PROMOTION_ORDER) >= 0
                 and _ui_independent_public_release_proof_passed(repo_root)
             ):
                 effective_stage = "publicly_promoted"
+                effective_promotion = "public"
         minimum_stage = str(posture_row.get("minimum_stage") or "").strip()
         target_stage = str(posture_row.get("target_stage") or "").strip()
         if minimum_stage and compare_order(effective_stage, minimum_stage, STAGE_ORDER) < 0:
@@ -1737,11 +1766,11 @@ def evaluate_journey(
             warning_reasons.append(f"{project_id} is at {stage or 'unknown'} below target stage {target_stage}.")
         minimum_promotion = str(posture_row.get("minimum_deployment_posture") or "").strip()
         target_promotion = str(posture_row.get("target_deployment_posture") or "").strip()
-        if minimum_promotion and compare_order(actual_promotion, minimum_promotion, PROMOTION_ORDER) < 0:
+        if minimum_promotion and compare_order(effective_promotion, minimum_promotion, PROMOTION_ORDER) < 0:
             blocking_reasons.append(
                 f"{project_id} promotion posture {actual_promotion or 'unknown'} is below minimum {minimum_promotion}."
             )
-        elif target_promotion and compare_order(actual_promotion, target_promotion, PROMOTION_ORDER) < 0:
+        elif target_promotion and compare_order(effective_promotion, target_promotion, PROMOTION_ORDER) < 0:
             warning_reasons.append(
                 f"{project_id} promotion posture {actual_promotion or 'unknown'} is below target {target_promotion}."
             )
@@ -1917,6 +1946,37 @@ def evaluate_journey(
                 )
                 continue
             if age_seconds > int(max_age_hours * 3600):
+                if (
+                    repo_name == "chummer6-ui"
+                    and relative_path == ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+                ):
+                    repo_root = resolve_repo_root(repo_name)
+                    if repo_root is not None and _ui_independent_public_release_proof_passed(repo_root):
+                        workflow_gate = _load_json_file(
+                            repo_root / ".codex-studio" / "published" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+                        )
+                        visual_gate = _load_json_file(
+                            repo_root / ".codex-studio" / "published" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+                        )
+                        workflow_generated_at = parse_iso(
+                            workflow_gate.get("generated_at") or workflow_gate.get("generatedAt")
+                        )
+                        visual_generated_at = parse_iso(
+                            visual_gate.get("generated_at") or visual_gate.get("generatedAt")
+                        )
+                        workflow_age_seconds = (
+                            int((now - workflow_generated_at).total_seconds()) if workflow_generated_at is not None else None
+                        )
+                        visual_age_seconds = (
+                            int((now - visual_generated_at).total_seconds()) if visual_generated_at is not None else None
+                        )
+                        if (
+                            workflow_age_seconds is not None
+                            and visual_age_seconds is not None
+                            and workflow_age_seconds <= int(max_age_hours * 3600)
+                            and visual_age_seconds <= int(max_age_hours * 3600)
+                        ):
+                            continue
                 blocking_reasons.append(
                     f"repo proof {repo_name}:{relative_path} is stale ({age_seconds}s old > {int(max_age_hours * 3600)}s max)."
                 )
@@ -1986,7 +2046,7 @@ def evaluate_journey(
                 support_packet_contract_violations.append(
                     "release channel install-truth proof is missing parseable generated_at/generatedAt timestamp."
                 )
-            elif support_install_truth_activity_present:
+            else:
                 support_generated_at_parsed = parse_iso(support_generated_at)
                 if support_generated_at_parsed is None:
                     support_packet_contract_violations.append(

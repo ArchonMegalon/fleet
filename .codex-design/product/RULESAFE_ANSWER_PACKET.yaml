@@ -1,0 +1,25 @@
+version: rulesafe-answer-packet-v1
+packet:
+  account_scope: anonymous|authenticated_redacted|private_forbidden
+  ruleset_id: sr4|sr5|sr6|anarchy|unknown
+  answer_type: support|rules_calculation_question|unsupported_question
+  authority: chummer6-core|chummer-public-docs|unsupported
+  must_include:
+    - safe_summary
+    - receipt_ids
+    - confidence
+  forbidden_to_answerly:
+    - sourcebook_text
+    - sourcebook_tables
+    - private_campaign_state
+    - gm_only_state
+    - account_email
+    - support_case_body
+    - secrets
+output_gate:
+  blocks:
+    - provider_names
+    - sourcebook_quotes
+    - copied_tables
+    - private_data
+    - unsupported_mechanics

@@ -1,0 +1,20 @@
+provider: answerly
+public_name_allowed: false
+allowed_statuses:
+  - verified_full_adapter
+  - verified_widget_only
+  - unverified
+  - rejected
+required_checks:
+  - account_tier_verified
+  - widget_or_api_reviewed
+  - export_delete_reviewed
+  - branding_controls_reviewed
+  - retention_reviewed
+  - training_controls_reviewed
+  - fallback_off_switch_present
+not_ready_if:
+  - sourcebook_training_without_license_receipt
+  - provider_is_rules_truth
+  - provider_decides_character_legality
+  - public_provider_leak

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from datetime import datetime, timezone
 from argparse import Namespace
 from pathlib import Path
 
@@ -112,7 +113,7 @@ def _build_fixture_roots(tmp_path: Path) -> Namespace:
         mobile_root / ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
         {
             "status": "passed",
-            "generated_at": "2026-05-30T00:00:00Z",
+            "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         },
     )
 

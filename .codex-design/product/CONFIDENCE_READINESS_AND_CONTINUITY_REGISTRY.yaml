@@ -1,0 +1,279 @@
+product: chummer
+version: 1
+last_reviewed: 2026-04-22
+status: active
+goal: Make Chummer6 feel confident, ready, and remembered before broadening the platform story further.
+
+promises:
+  - confidence
+  - readiness
+  - continuity
+
+surfaces:
+  - build
+  - play
+  - campaign
+  - exchange
+
+bets:
+  - id: CRC-001
+    title: Universal Explain Drawer
+    priority: 1
+    owners:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-ui-kit
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Every important number, legality result, and state change can show value, formula, contributors, warnings, and source receipts.
+      - Users can copy, share, or dispute explanations without leaving the product surface.
+
+  - id: CRC-002
+    title: Manual Intake Mode
+    priority: 2
+    owners:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Existing runners can be entered from current truth without recreating full historical build steps.
+      - Unknown provenance is preserved as explicit review state rather than silent loss.
+
+  - id: CRC-003
+    title: Migration Confidence queue
+    priority: 3
+    owners:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Every import or manual adoption emits confidence, warnings, safe-to-play posture, and follow-up review tasks.
+      - Legacy and adjacent-client intake can land with bounded-loss receipts instead of silent ambiguity.
+
+  - id: CRC-004
+    title: Quickbuild on top of the expert workbench
+    priority: 4
+    owners:
+      - chummer6-ui
+      - chummer6-core
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - New players can produce a playable runner through guided defaults.
+      - Expert users can drop into dense controls without losing the same provenance and legality model.
+
+  - id: CRC-005
+    title: Mobile Table Sheet MVP
+    priority: 5
+    owners:
+      - chummer6-mobile
+      - chummer6-core
+      - chummer6-hub
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Mobile covers current sheet, condition, edge, active effects, quick explain, and rejoin/resume.
+      - The mobile-first lane is clearly at-table value, not a shrunken builder imitation.
+
+  - id: CRC-006
+    title: GM Next Session cockpit
+    priority: 6
+    owners:
+      - chummer6-hub
+      - chummer6-ui
+      - chummer6-core
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - One GM surface shows recap, hooks, rewards, disputes, contacts, heat, and next-scene readiness together.
+      - GM prep becomes a product lane, not a pile of notes.
+
+  - id: CRC-007
+    title: Rule Environment Studio
+    priority: 7
+    owners:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-hub
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Campaign rule environments expose sources, bans, caps, house rules, custom data, and rulings.
+      - Validation results always name the active rule environment and reason for failure or success.
+
+  - id: CRC-008
+    title: Run Recap Cards
+    priority: 8
+    owners:
+      - chummer6-hub
+      - chummer6-ui
+      - chummer6-mobile
+      - chummer6-media-factory
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Runs can emit editable recap cards with player-safe and GM-private variants.
+      - Recaps attach to campaign memory and consequence truth instead of becoming disposable notes.
+
+  - id: CRC-009
+    title: Public proof shelf
+    priority: 9
+    owners:
+      - chummer6-hub-registry
+      - chummer6-hub
+      - chummer6-ui
+      - fleet
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Release, checksum, smoke, known-issue, migration, and support proof surfaces are visible together to users.
+      - Public trust content compiles from registry-backed release truth.
+
+  - id: CRC-010
+    title: First ecosystem bridge
+    priority: 10
+    owners:
+      - chummer6-core
+      - chummer6-hub
+      - chummer6-ui
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - One serious external exchange target is supported as first-class portable truth.
+      - Export or import carries provenance and compatibility receipts, not just payload bytes.
+
+  - id: CRC-011
+    title: Campaign adoption mode
+    priority: 11
+    owners:
+      - chummer6-hub
+      - chummer6-ui
+      - chummer6-core
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Existing tables can adopt current runners, rules, debts, and jobs into one governed campaign ledger.
+      - The table can continue from today even when older provenance is incomplete.
+
+  - id: CRC-012
+    title: Career and continuity loops
+    priority: 12
+    owners:
+      - chummer6-ui
+      - chummer6-mobile
+      - chummer6-hub
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Runner career timeline, karma forecast, nuyen envelopes, and contact continuity are real product loops rather than roadmap folklore.
+      - The repeat-use value is continuity and anticipation, not manipulative engagement mechanics.
+
+  - id: CRC-013
+    title: Live SR6 action economy and turn assist
+    priority: 13
+    owners:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-mobile
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Players and GMs can complete one SR6 combat round with explicit major/minor action budgets and between-turn affordances.
+      - Action-economy state remains explainable with cited receipts instead of table folklore.
+
+  - id: CRC-014
+    title: Source anchors and local rulebook binding
+    priority: 14
+    owners:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-mobile
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Explain drawers can cite stable source anchors.
+      - Bound local rulebooks can open to the cited page without cloud PDF hosting.
+
+  - id: CRC-015
+    title: GM Runboard
+    priority: 15
+    owners:
+      - chummer6-ui
+      - chummer6-mobile
+      - chummer6-core
+      - chummer6-hub
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - One surface keeps initiative, action budgets, condition state, objectives, and quick closeout visible together.
+      - The live-play lane is distinct from the long-lived campaign workspace.
+
+  - id: CRC-016
+    title: Prep Packet Factory
+    priority: 16
+    owners:
+      - chummer6-hub
+      - chummer6-ui
+      - chummer6-core
+      - chummer6-media-factory
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - A GM can create one playable job packet with legwork, opposition, complication, and reward posture.
+      - Procedural generation produces playable prep instead of generic content.
+
+  - id: CRC-017
+    title: BLACK LEDGER MVP 001
+    priority: 17
+    owners:
+      - chummer6-hub
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-media-factory
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - One approved `ResolutionReport` can generate one `WorldTick`.
+      - One `WorldTick` can generate one player-safe news item and next-session consequence.
+
+  - id: CRC-018
+    title: Crew and mission fit
+    priority: 18
+    owners:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-hub
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Tables can inspect strengths, gaps, and suggestions before a job without blocking play.
+      - Open-run and prep flows can reuse one governed capability model.
+
+  - id: CRC-019
+    title: Support packet and calculation-report UX
+    priority: 19
+    owners:
+      - chummer6-ui
+      - chummer6-core
+      - chummer6-hub
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Explain drawers can launch a useful calculation-report packet without making the user reconstruct the math by hand.
+      - Support packets default to clear, redacted, reproducible truth instead of mystery attachments.
+
+  - id: CRC-020
+    title: Switch as contextual emotional glue
+    priority: 20
+    owners:
+      - chummer6-ui
+      - chummer6-mobile
+      - chummer6-hub
+      - chummer6-design
+    status: proposed
+    exits_when:
+      - Switch surfaces action help, adoption guidance, world consequence, and support packet readiness in sparse, grounded moments.
+      - The companion feels like a handler around Chummer-owned truth rather than a generic chatbot.

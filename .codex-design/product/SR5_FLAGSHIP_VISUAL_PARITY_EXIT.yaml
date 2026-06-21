@@ -1,0 +1,71 @@
+product: chummer
+version: 1
+last_reviewed: 2026-05-04
+purpose: Release-blocking SR5 visual parity exit for the promoted desktop head so shell polish cannot masquerade as Chummer5a familiarity.
+release_blocking: true
+scope:
+  ruleset: SR5
+  heads:
+    - Chummer.Avalonia
+head_policy:
+  promoted_head_must_pass_directly: true
+  secondary_head_must_also_pass_for_gold_claims: true
+  fallback_head_cannot_borrow_visual_trust: true
+source_contracts:
+  - CHUMMER5A_FAMILIARITY_BRIDGE.md
+  - DENSE_WORKBENCH_BUDGET.yaml
+  - VETERAN_FIRST_MINUTE_GATE.yaml
+  - SR5_FIRST_MINUTE_TASKS.yaml
+  - SR5_SCREENSHOT_ORACLE_REGISTRY.yaml
+  - DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.md
+required_shell_landmarks:
+  - Real top menu
+  - Immediate toolstrip under the menu
+  - Visible major-section rhythm
+  - Visible current-section rhythm
+  - Visible workspace context strip
+  - Compact bottom status strip
+  - Visible loaded-runner or active-workspace posture
+  - Center workbench dominates the screen
+blocking_workflows:
+  - id: new_character_opening
+    reason: First-contact orientation must read like Chummer instead of a generic dashboard shell.
+  - id: attributes
+    reason: Core builder density and browse-edit rhythm must be familiar immediately.
+  - id: skills
+    reason: Dense list posture and section re-findability must survive in a common veteran workflow.
+  - id: cyberware_add_edit
+    reason: A high-friction builder flow must prove deep visual familiarity before broader parity claims are trusted.
+review_dimensions:
+  - shell_landmarks
+  - chrome_height_budget
+  - center_pane_dominance
+  - dense_row_visibility
+  - bottom_strip_posture
+  - workflow_memory
+  - task_discoverability
+  - veteran_first_minute_orientation
+required_generated_receipts:
+  - SR5_FLAGSHIP_VISUAL_PARITY_EXIT.generated.json
+  - SR5_FIRST_MINUTE_TASKS.generated.json
+pass_rule:
+  - Every blocking workflow in SR5_SCREENSHOT_ORACLE_REGISTRY.yaml must publish same-stage Chummer5a oracle comparison evidence.
+  - SR5_FIRST_MINUTE_TASKS.generated.json must pass for the promoted head before SR5 flagship truth can move above task_proven.
+  - The promoted head must clear the dense-workbench budget at 1366x768, 1440x900, and 1920x1080.
+  - Default flagship screenshots must show the required shell landmarks without overflow-only, hover-only, or inspector-only discovery.
+forbidden_patterns:
+  - Visible debug, payload, or internal inspector panels on default flagship workflows.
+  - Oversized summary bands that replace dense editable controls.
+  - Menu and toolstrip chrome that exceed the dense-workbench height budget.
+  - Dashboard, landing, or tile posture inside default SR5 builder workflows.
+  - Oversized badges, pills, or chrome clusters that crowd out the builder.
+  - Missing or non-compact bottom status posture.
+  - Center pane losing dominance to surrounding chrome.
+  - Visible row counts below the dense-workbench minimums.
+  - Generic web-shell feel instead of Chummer workbench feel.
+failure_conditions:
+  - Any blocking workflow lacks same-stage Chummer5a oracle screenshots.
+  - Any blocking workflow clears task execution but still fails shell-landmark, density, or orientation review.
+  - The promoted head routes first contact through dashboard or landing chrome before the real workbench.
+  - Veteran users cannot identify save/open, settings, or current rules/workspace posture inside the first-minute task pack.
+  - Review notes classify any blocking workflow as shell-parity-adjacent instead of visually familiar enough for veteran trust.

@@ -1,0 +1,23 @@
+product: chummer
+artifact: runner_passport_acceptance
+version: 1
+last_reviewed: 2026-05-01
+required_fields:
+  - runner_identity_ref
+  - rule_environment_fingerprint
+  - approval_state
+  - review_timestamp
+  - reviewer_role
+  - unresolved_warning_refs
+  - dossier_posture
+  - export_eligibility
+  - validity_window
+usage_lanes:
+  - open_run_application_preflight
+  - community_rule_environment
+  - no_desktop_participation
+  - campaign_adoption
+  - organizer_review
+boundary_rules:
+  - not_a_social_score
+  - scoped_to_governed_trust_and_compatibility

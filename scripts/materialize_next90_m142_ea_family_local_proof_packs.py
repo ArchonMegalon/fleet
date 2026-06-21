@@ -20,8 +20,9 @@ UI_ROOT = (
 )
 PRESENTATION_PUBLISHED = UI_ROOT / ".codex-studio/published"
 CORE_DOCS = Path("/docker/chummercomplete/chummer-core-engine/docs")
+SUPERVISOR_ROOT = ROOT / "state/chummer_design_supervisor"
 SUPERVISOR_ROOTS = [
-    ROOT / "state/chummer_design_supervisor",
+    SUPERVISOR_ROOT,
     Path("/var/lib/codex-fleet/chummer_design_supervisor"),
 ]
 
@@ -29,7 +30,11 @@ DEFAULT_OUTPUT = DOCS_ROOT / "m142_family_local_proof_packs.yaml"
 DEFAULT_MARKDOWN = DOCS_ROOT / "m142_family_local_proof_packs.md"
 def _latest_existing_path(pattern: str, fallback: Path) -> Path:
     matches: list[Path] = []
-    for supervisor_root in SUPERVISOR_ROOTS:
+    if Path(SUPERVISOR_ROOT) != SUPERVISOR_ROOTS[0]:
+        supervisor_roots = [Path(SUPERVISOR_ROOT)]
+    else:
+        supervisor_roots = [Path(SUPERVISOR_ROOT), *[Path(root) for root in SUPERVISOR_ROOTS if Path(root) != Path(SUPERVISOR_ROOT)]]
+    for supervisor_root in supervisor_roots:
         if supervisor_root.exists():
             matches.extend(supervisor_root.glob(pattern))
     matches = sorted(matches, key=lambda path: path.stat().st_mtime, reverse=True)

@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-04T14:12:10Z'
+generated_at: '2026-06-12T15:23:01Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-4
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -29,10 +29,15 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-media-factory
-  - chummer6-mobile
+  - chummer6-ui
   - chummer6-core
+  - chummer6-design
   texts:
+  - sourcebook
+  - settings
+  - custom-data
+  - xml
+  - translator
   - top flagship grade
   - whole-project frontier
   - no lowered standards
@@ -48,8 +53,6 @@ focus:
   - proof shelf
   - fit and finish
   - fleet and operator loop
-  - desktop client
-  - horizons and public surface
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -58,72 +61,87 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: pass
-  reason: Flagship product readiness proof is green.
+  reason: trusted completion receipt plus whole-product release proof and Linux desktop
+    exit gate are ready
 full_product_audit:
-  status: pass
-  reason: 'Flagship product readiness proof is green.'
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-04T14:13:04Z'
-  proof_status: pass
+  generated_at: '2026-06-12T15:20:51Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 1033794907
+- 3770604205
 frontier:
-- id: 1033794907
-  title: Make mobile travel campaign continuity explicit for stale campaign state
+- id: 3770604205
+  title: Define opposition and scene packet contracts with rules-backed stats
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-mobile
+  - chummer6-core
   dependencies: []
   exit_criteria:
-  - Make travel and mobile campaign continuity explicit for stale, cached, and action-required
-    campaign state.
-  - 'Own and prove the surface slice(s): campaign_memory:travel, campaign_state:mobile'
+  - Define opposition and scene packet contracts with rules-backed stats and bounded-loss
+    receipts.
+  - 'Own and prove the surface slice(s): gm_prep_packets, opposition_contracts'
   - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-mobile` (next90-m112-mobile-campaign-continuity).
+    is landed for `chummer6-core` (next90-m113-core-opposition-packet-contracts).
   eta:
     status: flagship_delivery
-    eta_human: 8h-21h
+    eta_human: 9h-22h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Make mobile travel campaign continuity explicit for stale
-      campaign state'' remains open under the flagship closeout frontier. Outstanding
-      readiness coverage: horizons_and_public_surface.'
-    predicted_completion_at: '2026-06-05T04:41:34Z'
-    range_low_hours: 8.1
-    range_high_hours: 20.88
+    summary: 'Milestone ''Define opposition and scene packet contracts with rules-backed
+      stats'' remains open under the flagship closeout frontier. Outstanding readiness
+      coverage: fleet_and_operator_loop.'
+    predicted_completion_at: '2026-06-13T06:56:19Z'
+    range_low_hours: 9.01
+    range_high_hours: 22.1
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.8
+    remaining_effort_units: 1.7
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
+source_queue_fingerprint: e350c3be89d2f3ff2b04c700b0b4f43b554b9ad9
+queue_package:
+  repo: chummer6-core
+  package_id: next90-m113-core-opposition-packet-contracts
+  title: Define opposition and scene packet contracts with rules-backed stats
+  priority: 0
+  owned_surfaces:
+  - gm_prep_packets
+  - opposition_contracts
+  allowed_paths:
+  - src
+  - tests
+  - docs
+  - scripts
 eta:
   status: flagship_delivery
-  eta_human: 8h-21h
+  eta_human: 9h-22h
   eta_confidence: low
   basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Make mobile travel campaign continuity explicit for stale
-    campaign state'' remains open under the flagship closeout frontier. Outstanding
-    readiness coverage: horizons_and_public_surface.'
-  predicted_completion_at: '2026-06-05T04:41:34Z'
-  range_low_hours: 8.1
-  range_high_hours: 20.88
+  summary: 'Milestone ''Define opposition and scene packet contracts with rules-backed
+    stats'' remains open under the flagship closeout frontier. Outstanding readiness
+    coverage: fleet_and_operator_loop.'
+  predicted_completion_at: '2026-06-13T06:56:18Z'
+  range_low_hours: 9.01
+  range_high_hours: 22.1
   remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
   remaining_not_started_milestones: 1
-  remaining_effort_units: 1.8
+  remaining_effort_units: 1.7

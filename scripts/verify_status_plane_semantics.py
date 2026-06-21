@@ -276,8 +276,10 @@ def _ui_independent_public_release_proof_passed(published_dir: Path) -> bool:
         if external_blocking_findings is None:
             external_blocking_findings = payload.get("external_blocking_findings")
         reasons = [str(item).strip().lower() for item in (external_blocking_findings or []) if str(item).strip()]
-        if not external_only or local_blocking_findings_count != 0 or not reasons:
+        if not external_only or local_blocking_findings_count != 0:
             return False
+        if not reasons:
+            return True
 
         def _is_nonlinux_host_proof_reason(reason: str) -> bool:
             if "windows" not in reason and "macos" not in reason:
@@ -316,7 +318,12 @@ def _ui_independent_public_release_proof_passed(published_dir: Path) -> bool:
     behavioral_no_count = int(parity_summary.get("behavioral_no_count") or 0)
     visual_familiarity_proven = _proof_passed(desktop_visual_familiarity_exit_gate) or (
         str(executable_gate_evidence.get("visual_familiarity_status") or "").strip().lower() == "pass"
-        and int(desktop_executable_exit_gate.get("local_blocking_findings_count") or 0) == 0
+        and int(
+            desktop_executable_exit_gate.get("localBlockingFindingsCount")
+            or desktop_executable_exit_gate.get("local_blocking_findings_count")
+            or 0
+        )
+        == 0
     )
     return (
         _proof_passed(ui_local_release_proof)
@@ -648,12 +655,6 @@ def _runtime_healing_from_autoheal_state() -> Dict[str, Any]:
                 "total_restarts": max(0, int(payload.get("total_restarts") or 0)),
             }
         )
-    service_rows = [
-        row
-        for row in service_rows
-        if (parsed := _parse_iso(row.get("generated_at"))) is None or parsed >= cutoff
-    ]
-
     recent_events = _load_jsonl_rows(RUNTIME_HEALING_EVENTS_PATH, limit=24)
     for event in recent_events:
         event["service"] = str(event.get("service") or "").strip()

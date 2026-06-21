@@ -1,5 +1,5 @@
 {
-  "as_of": "2026-06-19",
+  "as_of": "2026-06-20",
   "contract_name": "fleet.weekly_governor_packet",
   "decision_alignment": {
     "actual_action": "freeze_launch",
@@ -14,22 +14,22 @@
       "state": "ready"
     },
     "current_launch_action": "freeze_launch",
-    "current_launch_reason": "Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
+    "current_launch_reason": "Freeze launch expansion until published flagship readiness proof returns to ready posture.",
     "focus_shift": {
       "reason": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
       "state": "queued_successor_wave"
     },
     "freeze_launch": {
-      "reason": "Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
+      "reason": "Freeze launch expansion until published flagship readiness proof returns to ready posture.",
       "state": "active"
     },
     "launch_expand": {
-      "reason": "Weekly pulse holds launch expansion: Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
+      "reason": "Weekly pulse holds launch expansion: Freeze launch expansion until published flagship readiness proof returns to ready posture.",
       "state": "blocked"
     },
     "rollback": {
       "reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-      "state": "armed"
+      "state": "watch"
     }
   },
   "decision_gate_ledger": {
@@ -96,9 +96,9 @@
       },
       {
         "name": "flagship_readiness",
-        "observed": "pass",
+        "observed": "fail",
         "required": "pass",
-        "state": "pass"
+        "state": "blocked"
       },
       {
         "name": "flagship_parity",
@@ -132,7 +132,7 @@
       },
       {
         "name": "weekly_adoption_truth",
-        "observed": "clear / 41 history snapshots",
+        "observed": "clear / 42 history snapshots",
         "required": "present with measured history",
         "state": "pass"
       },
@@ -182,24 +182,24 @@
       },
       {
         "name": "release_health",
-        "observed": "green_or_explained",
+        "observed": "needs_attention",
         "required": "green, green_or_explained, or ready",
-        "state": "clear"
+        "state": "watch"
       }
     ]
   },
-  "generated_at": "2026-06-18T23:34:45Z",
+  "generated_at": "2026-06-20T21:50:24Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
       "gate_count": 17,
-      "reason": "Weekly pulse holds launch expansion: Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
+      "reason": "Weekly pulse holds launch expansion: Freeze launch expansion until published flagship readiness proof returns to ready posture.",
       "state": "blocked"
     },
     {
       "action": "freeze_launch",
       "gate_count": 1,
-      "reason": "Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
+      "reason": "Freeze launch expansion until published flagship readiness proof returns to ready posture.",
       "state": "active"
     },
     {
@@ -212,7 +212,7 @@
       "action": "rollback",
       "gate_count": 4,
       "reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-      "state": "armed"
+      "state": "watch"
     },
     {
       "action": "focus_shift",
@@ -224,9 +224,9 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-06-18T23:34:45Z",
+    "generated_at": "2026-06-20T21:50:24Z",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-06-25T23:34:45Z",
+    "next_packet_due_at": "2026-06-27T21:50:24Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -322,11 +322,11 @@
       },
       {
         "action": "rollback",
-        "board_state": "armed",
+        "board_state": "watch",
         "complete": true,
         "gate_count_consistent": true,
         "governor_gate_count": 4,
-        "governor_state": "armed",
+        "governor_state": "watch",
         "ledger_gate_count": 4,
         "state_consistent": true
       },
@@ -354,9 +354,10 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 2,
+          "blocking_gate_count": 3,
           "blocking_gates": [
             "weekly_launch_decision",
+            "flagship_readiness",
             "status_plane_final_claim"
           ],
           "cadence": "weekly",
@@ -366,7 +367,7 @@
             "decision_alignment": "pass",
             "flagship_parity": "pass",
             "flagship_quality": "pass",
-            "flagship_readiness": "pass",
+            "flagship_readiness": "blocked",
             "journey_gates": "pass",
             "local_release_proof": "pass",
             "package_authority": "pass",
@@ -381,13 +382,13 @@
             "weekly_launch_decision": "blocked"
           },
           "max_age_seconds": 604800,
-          "next_decision": "Weekly pulse holds launch expansion: Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
+          "next_decision": "Weekly pulse holds launch expansion: Freeze launch expansion until published flagship readiness proof returns to ready posture.",
           "operator_action": "do_not_expand_launch",
           "operator_action_when_blocked": "do_not_expand_launch",
           "operator_action_when_clear": "promote_measured_launch_expansion",
           "owner": "fleet",
           "ready_for_operator_packet": true,
-          "reason": "Weekly pulse holds launch expansion: Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
+          "reason": "Weekly pulse holds launch expansion: Freeze launch expansion until published flagship readiness proof returns to ready posture.",
           "route": "weekly_governor_packet.launch_expand",
           "route_blocked": true,
           "state": "blocked",
@@ -406,13 +407,13 @@
             "fail_closed_default": "active"
           },
           "max_age_seconds": 604800,
-          "next_decision": "Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
+          "next_decision": "Freeze launch expansion until published flagship readiness proof returns to ready posture.",
           "operator_action": "keep_launch_frozen",
           "operator_action_when_blocked": "keep_launch_frozen",
           "operator_action_when_clear": "leave_freeze_available",
           "owner": "fleet",
           "ready_for_operator_packet": true,
-          "reason": "Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
+          "reason": "Freeze launch expansion until published flagship readiness proof returns to ready posture.",
           "route": "weekly_governor_packet.freeze_launch",
           "route_blocked": true,
           "state": "active",
@@ -444,27 +445,29 @@
         },
         {
           "action": "rollback",
-          "blocking_gate_count": 0,
-          "blocking_gates": [],
+          "blocking_gate_count": 1,
+          "blocking_gates": [
+            "release_health"
+          ],
           "cadence": "weekly",
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
             "closure_waiting_on_release_truth": "clear",
-            "release_health": "clear",
+            "release_health": "watch",
             "support_followthrough_receipt_blockers": "clear",
             "update_required_misrouted_cases": "clear"
           },
           "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "operator_action": "keep_rollback_armed",
+          "operator_action": "prepare_rollback_or_revoke",
           "operator_action_when_blocked": "prepare_rollback_or_revoke",
           "operator_action_when_clear": "keep_rollback_armed",
           "owner": "fleet",
           "ready_for_operator_packet": true,
           "reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
           "route": "measured_rollout_loop.rollback",
-          "route_blocked": false,
-          "state": "armed",
+          "route_blocked": true,
+          "state": "watch",
           "trigger_gate": "release_health",
           "unblock_condition": "release and support followthrough gates are clear"
         },
@@ -507,9 +510,10 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 2,
+          "blocking_gate_count": 3,
           "blocking_gates": [
             "weekly_launch_decision",
+            "flagship_readiness",
             "status_plane_final_claim"
           ],
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
@@ -518,7 +522,7 @@
             "decision_alignment": "pass",
             "flagship_parity": "pass",
             "flagship_quality": "pass",
-            "flagship_readiness": "pass",
+            "flagship_readiness": "blocked",
             "journey_gates": "pass",
             "local_release_proof": "pass",
             "package_authority": "pass",
@@ -536,12 +540,12 @@
           "ledger_gate_count": 17,
           "matrix_complete": true,
           "max_age_seconds": 604800,
-          "next_decision": "Weekly pulse holds launch expansion: Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
+          "next_decision": "Weekly pulse holds launch expansion: Freeze launch expansion until published flagship readiness proof returns to ready posture.",
           "operator_action": "do_not_expand_launch",
           "ready_for_operator_packet": true,
-          "reason": "Weekly pulse holds launch expansion: Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
-          "receipt_id": "m106-launch_expand-d7a333e8c476d72b",
-          "receipt_sha256": "d7a333e8c476d72b2f4a3a5637aaa0097a27ddb773251c96e1fe1669512ff8c0",
+          "reason": "Weekly pulse holds launch expansion: Freeze launch expansion until published flagship readiness proof returns to ready posture.",
+          "receipt_id": "m106-launch_expand-b87ad07e41d48f19",
+          "receipt_sha256": "b87ad07e41d48f19e0dd60482aff947628c89cb381380d9e545570e7fc6d735a",
           "route": "weekly_governor_packet.launch_expand",
           "state": "blocked"
         },
@@ -559,12 +563,12 @@
           "ledger_gate_count": 1,
           "matrix_complete": true,
           "max_age_seconds": 604800,
-          "next_decision": "Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
+          "next_decision": "Freeze launch expansion until published flagship readiness proof returns to ready posture.",
           "operator_action": "keep_launch_frozen",
           "ready_for_operator_packet": true,
-          "reason": "Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
-          "receipt_id": "m106-freeze_launch-4d8f9584c21721ea",
-          "receipt_sha256": "4d8f9584c21721eaa089b09495defb2aff8b13ef80936fe75a7299221deeb0e8",
+          "reason": "Freeze launch expansion until published flagship readiness proof returns to ready posture.",
+          "receipt_id": "m106-freeze_launch-401096cf7729f2a2",
+          "receipt_sha256": "401096cf7729f2a2e18c92bf9f371b694432ed0d49e895f93a47143fefeae1fe",
           "route": "weekly_governor_packet.freeze_launch",
           "state": "active"
         },
@@ -591,12 +595,14 @@
         },
         {
           "action": "rollback",
-          "blocking_gate_count": 0,
-          "blocking_gates": [],
+          "blocking_gate_count": 1,
+          "blocking_gates": [
+            "release_health"
+          ],
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
             "closure_waiting_on_release_truth": "clear",
-            "release_health": "clear",
+            "release_health": "watch",
             "support_followthrough_receipt_blockers": "clear",
             "update_required_misrouted_cases": "clear"
           },
@@ -605,13 +611,13 @@
           "matrix_complete": true,
           "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "operator_action": "keep_rollback_armed",
+          "operator_action": "prepare_rollback_or_revoke",
           "ready_for_operator_packet": true,
           "reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "receipt_id": "m106-rollback-fcedde06369bab3d",
-          "receipt_sha256": "fcedde06369bab3d9743f33b9ab677d50249e9d19b4d611b7089e3afa8d29452",
+          "receipt_id": "m106-rollback-54b25698c3bf1ddd",
+          "receipt_sha256": "54b25698c3bf1ddde2b3404c4af376081295e46a1f8091e5f22d97701433f9d1",
           "route": "measured_rollout_loop.rollback",
-          "state": "armed"
+          "state": "watch"
         },
         {
           "action": "focus_shift",
@@ -875,14 +881,15 @@
     "launch_gate_summary": {
       "accumulating_count": 0,
       "all_green": false,
-      "blocked_count": 2,
+      "blocked_count": 3,
       "blocking_gate_names": [
         "weekly_launch_decision",
+        "flagship_readiness",
         "status_plane_final_claim"
       ],
       "fail_count": 0,
       "gate_count": 17,
-      "pass_count": 15,
+      "pass_count": 14,
       "unknown_count": 0,
       "watch_count": 0
     },
@@ -895,17 +902,18 @@
       "rollback",
       "focus_shift"
     ],
-    "rollback_watch": false,
+    "rollback_watch": true,
     "weekly_operator_handoff": {
       "action_count": 5,
       "cadence": "weekly",
       "incomplete_actions": [],
       "launch_gate_blocking_names": [
         "weekly_launch_decision",
+        "flagship_readiness",
         "status_plane_final_claim"
       ],
       "missing_actions": [],
-      "next_review_due_at": "2026-06-25T23:34:45Z",
+      "next_review_due_at": "2026-06-27T21:50:24Z",
       "required_actions": [
         "launch_expand",
         "freeze_launch",
@@ -923,9 +931,10 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 2,
+          "blocking_gate_count": 3,
           "blocking_gates": [
             "weekly_launch_decision",
+            "flagship_readiness",
             "status_plane_final_claim"
           ],
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
@@ -934,7 +943,7 @@
             "decision_alignment": "pass",
             "flagship_parity": "pass",
             "flagship_quality": "pass",
-            "flagship_readiness": "pass",
+            "flagship_readiness": "blocked",
             "journey_gates": "pass",
             "local_release_proof": "pass",
             "package_authority": "pass",
@@ -949,11 +958,11 @@
             "weekly_launch_decision": "blocked"
           },
           "max_age_seconds": 604800,
-          "next_decision": "Weekly pulse holds launch expansion: Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
-          "next_review_due_at": "2026-06-25T23:34:45Z",
+          "next_decision": "Weekly pulse holds launch expansion: Freeze launch expansion until published flagship readiness proof returns to ready posture.",
+          "next_review_due_at": "2026-06-27T21:50:24Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "do_not_expand_launch",
-          "receipt_id": "m106-launch_expand-d7a333e8c476d72b",
+          "receipt_id": "m106-launch_expand-b87ad07e41d48f19",
           "route": "weekly_governor_packet.launch_expand",
           "state": "blocked"
         },
@@ -968,11 +977,11 @@
             "fail_closed_default": "active"
           },
           "max_age_seconds": 604800,
-          "next_decision": "Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
-          "next_review_due_at": "2026-06-25T23:34:45Z",
+          "next_decision": "Freeze launch expansion until published flagship readiness proof returns to ready posture.",
+          "next_review_due_at": "2026-06-27T21:50:24Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_launch_frozen",
-          "receipt_id": "m106-freeze_launch-4d8f9584c21721ea",
+          "receipt_id": "m106-freeze_launch-401096cf7729f2a2",
           "route": "weekly_governor_packet.freeze_launch",
           "state": "active"
         },
@@ -986,7 +995,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Canary green on all active lanes",
-          "next_review_due_at": "2026-06-25T23:34:45Z",
+          "next_review_due_at": "2026-06-27T21:50:24Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "keep_canary_ready",
           "receipt_id": "m106-canary-afc3d2be95960739",
@@ -995,23 +1004,25 @@
         },
         {
           "action": "rollback",
-          "blocking_gate_count": 0,
-          "blocking_gates": [],
+          "blocking_gate_count": 1,
+          "blocking_gates": [
+            "release_health"
+          ],
           "freshness_policy": "refresh_before_operator_action_if_packet_is_overdue",
           "gate_states": {
             "closure_waiting_on_release_truth": "clear",
-            "release_health": "clear",
+            "release_health": "watch",
             "support_followthrough_receipt_blockers": "clear",
             "update_required_misrouted_cases": "clear"
           },
           "max_age_seconds": 604800,
           "next_decision": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-          "next_review_due_at": "2026-06-25T23:34:45Z",
+          "next_review_due_at": "2026-06-27T21:50:24Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
-          "operator_action": "keep_rollback_armed",
-          "receipt_id": "m106-rollback-fcedde06369bab3d",
+          "operator_action": "prepare_rollback_or_revoke",
+          "receipt_id": "m106-rollback-54b25698c3bf1ddd",
           "route": "measured_rollout_loop.rollback",
-          "state": "armed"
+          "state": "watch"
         },
         {
           "action": "focus_shift",
@@ -1023,7 +1034,7 @@
           },
           "max_age_seconds": 604800,
           "next_decision": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
-          "next_review_due_at": "2026-06-25T23:34:45Z",
+          "next_review_due_at": "2026-06-27T21:50:24Z",
           "next_review_due_ref": "governor_packet_schedule.next_packet_due_at",
           "operator_action": "route_remaining_work_to_dependency_or_sibling_packages",
           "receipt_id": "m106-focus_shift-9e0a36a10f3ebf57",
@@ -1981,7 +1992,7 @@
   },
   "program_wave": "next_90_day_product_advance",
   "public_status_copy": {
-    "body": "Freeze launch expansion until the whole-product final claim returns to pass (current: fail).",
+    "body": "Freeze launch expansion until published flagship readiness proof returns to ready posture.",
     "decision_actions": [
       "launch_expand",
       "freeze_launch",
@@ -1991,11 +2002,11 @@
     ],
     "derived_from": "measured_rollout_loop.decision_action_matrix",
     "freshness_policy": "refresh_before_public_status_or_operator_action_if_packet_is_overdue",
-    "headline": "Launch expansion remains frozen.",
+    "headline": "Launch expansion is frozen with rollback watch active.",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-06-25T23:34:45Z",
+    "next_packet_due_at": "2026-06-27T21:50:24Z",
     "schedule_ref": "governor_packet_schedule.next_packet_due_at",
-    "state": "freeze_launch"
+    "state": "freeze_with_rollback_watch"
   },
   "repeat_prevention": {
     "allowed_paths": [
@@ -2655,7 +2666,7 @@
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "c07cf9f9f6e46b1a0d4ca4dc44fdd08953359932c7d9a4ea2fe46a7f5a0dcf24",
+    "combined_source_sha256": "3f8dc9b55421d77019369fd2f785be500f14735c001f7cfb29bff433e084739e",
     "missing_inputs": [],
     "rows": [
       {
@@ -2681,12 +2692,12 @@
       {
         "name": "weekly_pulse",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "6f51cd72d36497658dfbd4c27ce6993dc346b959b6a3d5ae4eeffb3c1d26f780"
+        "source_sha256": "198ed87ca286e2c37f3e3b3d0875fec37762cdbfa7b7bf5de45247b22ff5088d"
       },
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "00aa5470d63112a4f6f11c6cd92706388f071099c56143f86011e2c503f37b0b"
+        "source_sha256": "69906d47db43f5dacf230dc812d3542dfbb8e1e185883311c0fac23c3f06442c"
       },
       {
         "name": "journey_gates",
@@ -2729,11 +2740,11 @@
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-06-18T23:34:43Z",
+        "generated_at": "2026-06-20T21:50:22Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "00aa5470d63112a4f6f11c6cd92706388f071099c56143f86011e2c503f37b0b",
+        "source_sha256": "69906d47db43f5dacf230dc812d3542dfbb8e1e185883311c0fac23c3f06442c",
         "state": "present"
       },
       "journey_gates": {
@@ -2946,10 +2957,10 @@
         "successor_package_verification_status": "pass"
       },
       "weekly_pulse": {
-        "generated_at": "2026-06-18T23:34:44Z",
+        "generated_at": "2026-06-20T21:50:23Z",
         "required_key": "contract_name",
         "source_path": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json",
-        "source_sha256": "6f51cd72d36497658dfbd4c27ce6993dc346b959b6a3d5ae4eeffb3c1d26f780",
+        "source_sha256": "198ed87ca286e2c37f3e3b3d0875fec37762cdbfa7b7bf5de45247b22ff5088d",
         "state": "present"
       }
     },
@@ -2973,12 +2984,12 @@
   ],
   "truth_inputs": {
     "adoption_health": {
-      "history_snapshot_count": 41,
+      "history_snapshot_count": 42,
       "local_release_proof_status": "passed",
       "proven_journey_count": 5,
       "proven_route_count": 10,
       "state": "clear",
-      "summary": "Current local edge proof passed. 5 journey proofs and 10 trust routes are on record. 41 weekly snapshots are on record for the current public trust posture."
+      "summary": "Current local edge proof passed. 5 journey proofs and 10 trust routes are on record. 42 weekly snapshots are on record for the current public trust posture."
     },
     "closed_flagship_registry_status": "complete",
     "closure_health_state": "clear",
@@ -2986,7 +2997,7 @@
       "families_below_gold_ready": [],
       "families_below_task_proven": [],
       "families_below_veteran_approved": [],
-      "readiness_plane_status": "ready",
+      "readiness_plane_status": "missing",
       "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml",
       "registry_present": true,
       "release_truth_status": "gold_ready",
@@ -3019,7 +3030,7 @@
       "ui_kit_and_flagship_polish_status": "ready",
       "untranslated_locale_count": 0
     },
-    "flagship_readiness_status": "pass",
+    "flagship_readiness_status": "fail",
     "journey_gate_state": "ready",
     "local_release_proof_status": "passed",
     "provider_canary_status": "Canary green on all active lanes",
@@ -3184,7 +3195,7 @@
   },
   "wave_id": "W8",
   "weekly_input_health": {
-    "generated_at": "2026-06-18T23:34:44Z",
+    "generated_at": "2026-06-20T21:50:23Z",
     "issues": [],
     "max_age_seconds": 691200,
     "required_launch_signals": [

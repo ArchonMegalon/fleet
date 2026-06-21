@@ -1,13 +1,18 @@
 # BLACK LEDGER — the city keeps scheming
 
+## Explanation videos
+
+* [Watch the BLACK LEDGER 90-second deep dive](https://chummer.run/media/horizons/black-ledger-90s-deepdive.mp4). [Captions](https://chummer.run/media/horizons/black-ledger-90s-deepdive.vtt).
+* [Watch the BLACK LEDGER epic reel](https://chummer.run/media/horizons/black-ledger-epic-90s.mp4). [Captions](https://chummer.run/media/horizons/black-ledger-epic-90s.vtt).
+
 **BLACK LEDGER is Chummer’s living-world layer: a persistent Shadowrun power struggle where megacorps, factions, GMs, players, runners, organizers, creators, and community organizers all push on the same city — and the city pushes back.**
 
 Chummer already helps you build runners, explain rules, manage campaigns, and publish artifacts. BLACK LEDGER goes one level higher:
 
-> **What if the world between runs was alive?**  
-> What if every completed run changed the map?  
-> What if player-submitted intel became future mission hooks?  
-> What if megacorps had goals, budgets, rivalries, secrets, and propaganda?  
+> **What if the world between runs was alive?**
+> What if every completed run changed the map?
+> What if player-submitted intel became future mission hooks?
+> What if megacorps had goals, budgets, rivalries, secrets, and propaganda?
 > What if GMs could open the job board and see runs that emerged from real faction pressure?
 
 BLACK LEDGER is where that happens.

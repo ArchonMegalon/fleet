@@ -1,0 +1,55 @@
+version: black-ledger-newsroom-quality-gates-v1
+final_verdict_required: BLACK_LEDGER_PHOTOREAL_NEWSROOM_READY
+flagship_requirements:
+  - host
+  - broll
+  - lower_thirds
+  - captions
+  - audio
+  - visual_qa
+  - public_safety_receipts
+  - source_receipt_links
+  - human_creative_review
+automated_gates:
+  - id: asset_metadata
+    command: python3 scripts/verify_newsroom_asset_metadata.py
+  - id: motion_score
+    command: python3 scripts/verify_newsroom_motion_score.py
+  - id: host_presence
+    command: python3 scripts/verify_newsroom_host_presence.py
+  - id: lip_action
+    command: python3 scripts/verify_newsroom_lip_action_score.py
+  - id: broll_completeness
+    command: python3 scripts/verify_newsroom_broll_completeness.py
+  - id: public_safety
+    command: python3 scripts/verify_newsroom_public_safety.py
+human_review:
+  required_file: NEWSROOM_HUMAN_CREATIVE_REVIEW.md
+must_pass:
+  - newsroom_canon_exists
+  - anchor_bible_exists
+  - hub_owns_editorial_episode_truth
+  - media_factory_renders_from_approved_packets_only
+  - at_least_one_sample_episode_renders_as_mp4_webm
+  - believable_host_visible_for_minimum_seconds
+  - host_shows_facial_body_motion
+  - episode_includes_broll_cutaways
+  - episode_includes_lower_thirds_and_ticker
+  - episode_includes_captions
+  - episode_includes_audio_or_approved_audio_plan
+  - public_safety_scan_passes
+  - source_receipts_are_linked
+  - human_creative_review_passes
+  - no_media_output_is_used_as_product_behavior_proof
+not_ready_if:
+  - video_is_svg_only
+  - video_is_static_poster_or_card_slideshow
+  - no_believable_host_appears
+  - host_is_frozen_or_lip_sync_absent
+  - no_broll
+  - no_captions
+  - provider_watermark_visible
+  - private_campaign_data_appears
+  - sourcebook_text_appears
+  - episode_claims_product_behavior_without_receipts
+  - human_creative_review_missing

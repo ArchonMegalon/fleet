@@ -2817,13 +2817,14 @@ def apply_generated_work_package_policy(
 def compiled_scope_claims_for_package(package: Dict[str, Any]) -> List[Dict[str, str]]:
     package_id = str(package.get("package_id") or "").strip()
     project_id = str(package.get("project_id") or "").strip()
+    namespace_allowed_paths = bool(package.get("namespace_allowed_paths", True))
     claims: List[Dict[str, str]] = []
     allowed_paths = [normalize_scope_path(item) for item in package.get("allowed_paths") or [] if normalize_scope_path(item)]
     owned_surfaces = [str(item).strip() for item in package.get("owned_surfaces") or [] if str(item).strip()]
     horizon_surface = horizon_lock_surface_value(package.get("package_kind"), package.get("horizon_family"))
     if allowed_paths:
         for path in allowed_paths:
-            namespaced_path = f"{project_id}/{path}" if project_id else path
+            namespaced_path = f"{project_id}/{path}" if namespace_allowed_paths and project_id else path
             claims.append(
                 {
                     "package_id": package_id,
@@ -3076,6 +3077,7 @@ def compile_project_work_packages(project_cfg: Dict[str, Any], *, lanes: Optiona
             "priority": int(task_meta.get("priority") or raw_item.get("priority") or index),
             "ttl_seconds": int(task_meta.get("ttl_seconds") or raw_item.get("ttl_seconds") or 0),
             "declared_status": declared_status,
+            "namespace_allowed_paths": not explicit_packages,
         }
         compiled.append(package)
         if package_kind != PACKAGE_COMPILE_PACKAGE_KIND:
@@ -3465,10 +3467,10 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         if is_live and latest_run_id:
             active_latest_run_ids.add(latest_run_id)
     live_runtime_package_ids = {
-        str(item["package_id"] or "").strip()
+        runtime_task_work_package_id(dict(item), clean)
         for item in runtime_task_rows
-        if str(item["package_id"] or "").strip()
-        and persisted_runtime_task_active(str(item["package_id"] or "").strip(), dict(item))
+        if runtime_task_work_package_id(dict(item), clean)
+        and persisted_runtime_task_active(runtime_task_work_package_id(dict(item), clean), dict(item))
     }
     package_runtime_overrides: dict[str, str] = {}
     runtime_state_priority = {
@@ -3479,7 +3481,7 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         "starting": 1,
     }
     for item in runtime_task_rows:
-        package_id = str(item["package_id"] or "").strip()
+        package_id = runtime_task_work_package_id(dict(item), clean)
         task_state = str(item["task_state"] or "").strip().lower()
         if not package_id or task_state not in runtime_state_priority:
             continue
@@ -3502,7 +3504,7 @@ def sync_project_progress_from_packages(project_id: str) -> None:
         for item in runtime_task_rows
         if (
             str(item["task_kind"] or "").strip().lower() == "local_review"
-            or not str(item["package_id"] or "").strip()
+            or not runtime_task_work_package_id(dict(item), clean)
         )
         and persisted_runtime_task_active(clean, dict(item))
     ]
@@ -5078,6 +5080,14 @@ def runtime_task_rows_for_project(project_id: str) -> List[Dict[str, Any]]:
     return items
 
 
+def runtime_task_work_package_id(task_row: Dict[str, Any], project_id: str = "") -> str:
+    package_id = str((task_row or {}).get("package_id") or "").strip()
+    clean_project = str(project_id or (task_row or {}).get("project_id") or "").strip()
+    if package_id and clean_project and package_id == clean_project:
+        return ""
+    return package_id
+
+
 def live_runtime_task_handle(project_or_package_id: str) -> Optional[Any]:
     clean = str(project_or_package_id or "").strip()
     if not clean:
@@ -5351,6 +5361,7 @@ def interrupt_project_runtime(project_id: str, *, reason: Optional[str] = None) 
         spider_tier=row["spider_tier"],
         spider_model=row["spider_model"],
         spider_reason=row["spider_reason"],
+        skip_live_runtime_guard=True,
     )
     return {
         "ok": True,
@@ -13118,6 +13129,7 @@ def complete_project_slice_after_review(project_cfg: Dict[str, Any], finished_at
         cooldown_until=utc_now() + dt.timedelta(seconds=1),
         last_run_at=finished_at,
         last_error=None,
+        skip_live_runtime_guard=True,
     )
 
 
@@ -13894,6 +13906,7 @@ def heal_pending_pull_request_reviews(config: Dict[str, Any]) -> None:
                 spider_tier=row["spider_tier"],
                 spider_model=row["spider_model"],
                 spider_reason=row["spider_reason"],
+                skip_live_runtime_guard=True,
             )
         except Exception as exc:
             message = str(exc)
@@ -15826,6 +15839,29 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
     runtime_status = str(row["status"] or "").strip() or READY_STATUS
     active_run_id = row["active_run_id"]
     is_active_runtime = bool(active_run_id) or runtime_status in {"starting", "running", "verifying"}
+    if is_active_runtime:
+        normalized_active_run_id = int(active_run_id or 0) or None
+        if not project_has_runtime_task(project_id) and not project_has_live_runtime_commitment(
+            project_id,
+            normalized_active_run_id,
+        ):
+            runtime_status = READY_STATUS
+            active_run_id = None
+            is_active_runtime = False
+            update_project_status(
+                project_id,
+                status=runtime_status,
+                current_slice=normalize_slice_text(queue[queue_index]),
+                active_run_id=None,
+                cooldown_until=parse_iso(row["cooldown_until"]),
+                last_run_at=parse_iso(row["last_run_at"]),
+                last_error=None,
+                consecutive_failures=0,
+                spider_tier=row["spider_tier"],
+                spider_model=row["spider_model"],
+                spider_reason=row["spider_reason"],
+                skip_live_runtime_guard=True,
+            )
     dispatchability_state = str(task_meta.get("dispatchability_state") or "dispatchable").strip().lower() or "dispatchable"
     if not is_active_runtime and dispatchability_state != "dispatchable":
         status_reason = (
@@ -16865,15 +16901,6 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
     blockers: List[str] = []
     if group_is_signed_off(meta):
         blockers.append("group signed off")
-    incident_rows = group.get("incidents")
-    if incident_rows is None:
-        incident_rows = group_open_incidents(group, group_projects)
-    incident_rows = [item for item in (incident_rows or []) if incident_requires_operator_attention(item)]
-    if incident_rows:
-        top = incident_rows[0]
-        blockers.append(
-            f"incident: {short_question_detail(top.get('title') or top.get('summary') or 'operator attention required', limit=140)}"
-        )
     participant_projects = [project for project in group_projects if project_dispatch_participates(project)]
     contract_blockers = text_items(meta.get("contract_blockers"))
     contract_phase_allowed = bool(contract_blockers) and bool(participant_projects) and all(
@@ -16938,6 +16965,15 @@ def group_dispatch_state(group: Dict[str, Any], meta: Dict[str, Any], group_proj
             blocker = project_dispatch_blocker(project)
             if blocker:
                 blockers.append(blocker)
+    incident_rows = group.get("incidents")
+    if incident_rows is None:
+        incident_rows = group_open_incidents(group, group_projects)
+    incident_rows = [item for item in (incident_rows or []) if incident_requires_operator_attention(item)]
+    if incident_rows:
+        top = incident_rows[0]
+        blockers.append(
+            f"incident: {short_question_detail(top.get('title') or top.get('summary') or 'operator attention required', limit=140)}"
+        )
 
     ready = not blockers
     if ready:
@@ -16988,6 +17024,10 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
     milestone_items = remaining_milestone_items(meta)
     if text_items(meta.get("contract_blockers")):
         return "contract_blocked"
+    if any(status in {WAITING_CAPACITY_STATUS, "awaiting_account"} for status in member_statuses):
+        return WAITING_CAPACITY_STATUS
+    if any(status == HEALING_STATUS for status in member_statuses):
+        return HEALING_STATUS
     incident_rows = group.get("incidents")
     if incident_rows is None:
         incident_rows = group_open_incidents(group, group_projects)
@@ -16997,10 +17037,6 @@ def effective_group_status(group: Dict[str, Any], meta: Dict[str, Any], group_pr
         return "lockstep_active" if mode == "lockstep" else "active"
     if any(int(project.get("approved_audit_task_count") or 0) > 0 or int(project.get("open_audit_task_count") or 0) > 0 for project in operational_projects):
         return "proposed_tasks"
-    if any(status in {WAITING_CAPACITY_STATUS, "awaiting_account"} for status in member_statuses):
-        return WAITING_CAPACITY_STATUS
-    if any(status == HEALING_STATUS for status in member_statuses):
-        return HEALING_STATUS
     if any(bool(project.get("needs_refill")) for project in operational_projects):
         return "audit_requested" if audit_requested else "audit_required"
     if actionable_group_uncovered_scope:
@@ -19296,8 +19332,16 @@ def update_project_status(
             and requested_status not in ACTIVE_RUN_STATUSES
             and project_has_live_runtime_commitment(project_id, current_active_run_id)
         ):
-            sync_project_progress_from_packages(project_id)
-            return
+            package_runtime_active = any(
+                runtime_task_work_package_id(task_row, project_id)
+                for task_row in runtime_task_rows_for_project(project_id)
+            ) or any(
+                str(package.get("runtime_state") or "").strip().lower() in ACTIVE_WORK_PACKAGE_RUNTIME_STATES
+                for package in work_package_rows(project_id=project_id)
+            )
+            if package_runtime_active:
+                sync_project_progress_from_packages(project_id)
+                return
         conn.execute(
             """
             UPDATE projects
@@ -22774,6 +22818,7 @@ async def execute_project_slice(
             spider_tier=decision["tier"],
             spider_model=selected_model,
             spider_reason=decision_reason,
+            skip_live_runtime_guard=True,
         )
         raise
     finally:
@@ -23405,6 +23450,7 @@ async def execute_local_review_fallback(
                     spider_tier="inspect",
                     spider_model=selected_model,
                     spider_reason=decision_reason,
+                    skip_live_runtime_guard=True,
                 )
                 pending_followup_local_review_reason = (
                     f"{reviewer_lane} accepted round {review_round}; request {final_reviewer_lane} final signoff"
@@ -23541,6 +23587,7 @@ async def execute_local_review_fallback(
                         spider_tier="inspect",
                         spider_model=selected_model,
                         spider_reason=decision_reason,
+                        skip_live_runtime_guard=True,
                     )
                     return
             with db() as conn:
@@ -23738,6 +23785,7 @@ async def execute_local_review_fallback(
             spider_tier="inspect",
             spider_model=selected_model,
             spider_reason=decision_reason,
+            skip_live_runtime_guard=True,
         )
     except asyncio.CancelledError:
         finished_at = utc_now()
@@ -23778,6 +23826,7 @@ async def execute_local_review_fallback(
             spider_tier="inspect",
             spider_model=selected_model,
             spider_reason=decision_reason,
+            skip_live_runtime_guard=True,
         )
         raise
     finally:

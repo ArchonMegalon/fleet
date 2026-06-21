@@ -1,0 +1,119 @@
+product: chummer
+surface: community_scale_operations
+version: 1
+packet_type: CommunityScaleAuditPacket
+truth_sources:
+  community_state: chummer6-hub
+  publication_state: chummer6-hub-registry
+  support_state: chummer6-hub_and_fleet
+  packet_projection: fleet_and_executive_assistant
+
+operation_families:
+  - id: membership_policy
+    primary_writer: organizer
+    packet_required: true
+  - id: event_lifecycle
+    primary_writer: organizer
+    packet_required: true
+  - id: roster_decision
+    primary_writer: gm
+    packet_required: true
+  - id: publication_action
+    primary_writer: organizer_plus_registry
+    packet_required: true
+  - id: moderation_action
+    primary_writer: organizer_or_community_steward
+    packet_required: true
+  - id: support_escalation
+    primary_writer: organizer_or_gm
+    packet_required: true
+  - id: season_decision
+    primary_writer: season_operator
+    packet_required: true
+
+roles:
+  - id: organizer
+    grant_scope:
+      - community_roles
+      - event_visibility
+      - season_shell
+      - publication_request
+      - support_escalation_request
+    cannot_do:
+      - support_case_closure
+      - gm_run_resolution_override
+      - hidden_publication
+  - id: gm
+    grant_scope:
+      - roster_acceptance
+      - run_resolution
+      - session_consequence
+    cannot_do:
+      - organizer_role_grants_without_owner_policy
+  - id: community_steward
+    grant_scope:
+      - membership_review
+      - temporary_safety_action
+      - channel_or_artifact_moderation
+    cannot_do:
+      - support_case_closure
+      - release_truth_override
+  - id: season_operator
+    grant_scope:
+      - season_cadence
+      - standings_window
+      - honors_publication_request
+    cannot_do:
+      - campaign_continuity_override
+      - support_case_closure
+  - id: world_operator
+    grant_scope:
+      - world_packet_seed
+      - shared_city_pressure
+    cannot_do:
+      - campaign_truth_override
+      - roster_acceptance_override
+
+required_fields:
+  - id: packet_id
+    truth_source: packet_runtime
+  - id: emitted_at
+    truth_source: packet_runtime
+  - id: actor_identity_ref
+    truth_source: identity_plane
+  - id: actor_role
+    truth_source: community_state
+  - id: operation_family
+    truth_source: community_state
+  - id: action_verb
+    truth_source: community_state
+  - id: community_context_refs
+    truth_source: community_state
+  - id: before_after_summary
+    truth_source: community_state
+  - id: evidence_refs
+    truth_source: community_state
+  - id: publication_posture
+    truth_source: publication_state
+  - id: retention_posture
+    truth_source: publication_state
+  - id: audience_scope
+    truth_source: publication_state
+  - id: support_case_ref
+    truth_source: support_state
+  - id: projection_recipients
+    truth_source: packet_runtime
+
+projection_consumers:
+  - fleet_governor_packets
+  - executive_assistant_followthrough
+  - registry_publication_readiness
+  - external_calendar_or_chat_mirrors
+
+claim_guards:
+  - organizer_actions_must_not_close_support_cases_without_support_truth
+  - gm_run_truth_must_not_be_overwritten_by_organizer_policy_packets
+  - external_calendar_or_chat_links_must_not_become_canonical_event_truth
+  - publication_actions_must_not_hide_audience_retention_or_locale_posture
+  - fleet_or_ea_packets_must_link_back_to_source_packet_ids
+  - season_scores_and_honors_must_derive_from_typed_source_events

@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 
+ROOT = Path(__file__).resolve().parents[1]
 DESIGN_ROOT = Path("/docker/chummercomplete/chummer-design")
 PRODUCT_ROOT = DESIGN_ROOT / "products" / "chummer"
+MIRROR_PRODUCT_ROOT = ROOT / ".codex-design" / "product"
 
 REPO_NAME_MAP = [
     ("chummer.run-services", "chummer6-hub"),
@@ -25,11 +28,6 @@ PATH_REPLACEMENTS = [
 
 def target_files() -> list[Path]:
     files: list[Path] = []
-    for root in [DESIGN_ROOT]:
-        for rel in ["README.md", "WORKLIST.md"]:
-            candidate = root / rel
-            if candidate.exists():
-                files.append(candidate)
     for pattern in ("**/*.md", "**/*.yaml", "**/*.yml"):
         for candidate in PRODUCT_ROOT.glob(pattern):
             if "feedback" in candidate.parts:
@@ -56,12 +54,26 @@ def rewrite(text: str) -> str:
 
 def main() -> int:
     changed: list[str] = []
+    expected_relative_paths: set[Path] = set()
     for path in target_files():
         original = path.read_text(encoding="utf-8")
         updated = rewrite(original)
-        if updated != original:
-            path.write_text(updated, encoding="utf-8")
-            changed.append(str(path))
+        relative_path = path.relative_to(PRODUCT_ROOT)
+        expected_relative_paths.add(relative_path)
+        target = MIRROR_PRODUCT_ROOT / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.exists() or target.read_text(encoding="utf-8") != updated:
+            target.write_text(updated, encoding="utf-8")
+            changed.append(str(target))
+        shutil.copystat(path, target)
+    for target in MIRROR_PRODUCT_ROOT.glob("**/*"):
+        if not target.is_file() or target.suffix.lower() not in {".md", ".yaml", ".yml"}:
+            continue
+        relative_path = target.relative_to(MIRROR_PRODUCT_ROOT)
+        if relative_path in expected_relative_paths:
+            continue
+        target.unlink()
+        changed.append(str(target))
     for item in changed:
         print(item)
     print(f"changed_files={len(changed)}")

@@ -317,6 +317,9 @@ def _preferred_ui_repo_root() -> Path:
     override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
     if override:
         return Path(override)
+    canonical_candidate = _preferred_existing_ui_repo_candidate()
+    if canonical_candidate is not None:
+        return canonical_candidate
     best_candidate: Path | None = None
     best_score: tuple[int, int, int, int, float, float, int, int, float] | None = None
     for candidate in _ui_repo_candidates():
@@ -336,9 +339,6 @@ def _preferred_ui_repo_root() -> Path:
             best_score = candidate_score
     if best_candidate is not None:
         return best_candidate
-    canonical_candidate = _preferred_existing_ui_repo_candidate()
-    if canonical_candidate is not None:
-        return canonical_candidate
     return Path("/docker/chummercomplete/chummer6-ui")
 
 
@@ -569,6 +569,7 @@ SUPERVISOR_CONTAINER_NAME = "fleet-design-supervisor"
 COMPLETION_AUDIT_HISTORY_LIMIT = 10
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 3600
 LINUX_DESKTOP_EXIT_GATE_MAX_AGE_SECONDS = 24 * 3600
+DESKTOP_EXECUTABLE_EXIT_GATE_WRAPPER_MAX_AGE_SECONDS = 12 * 3600
 DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS = 24 * 3600
 DESKTOP_EXECUTABLE_EXIT_GATE_REQUIRED_PROOF_AGE_KEYS = (
     "flagship UI release gate proof_age_seconds",
@@ -3278,12 +3279,20 @@ def _codexea_profile_for_lane(worker_lane: str, *, workspace_root: Optional[Path
 
 
 def _ea_provider_health_url(args: argparse.Namespace) -> str:
-    return str(
-        getattr(args, "ea_provider_health_url", "")
-        or os.environ.get("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_URL", "")
-        or _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_URL", "")
-        or DEFAULT_EA_PROVIDER_HEALTH_URL
-    ).strip()
+    for candidate in (
+        getattr(args, "ea_provider_health_url", None),
+        os.environ.get("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_URL"),
+        _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_URL", ""),
+        DEFAULT_EA_PROVIDER_HEALTH_URL,
+    ):
+        if candidate is None:
+            continue
+        clean = str(candidate or "").strip()
+        if clean.lower() in {"0", "false", "no", "off", "disabled", "none"}:
+            return ""
+        if clean:
+            return clean
+    return ""
 
 
 def _ea_provider_health_api_token(args: argparse.Namespace) -> str:
@@ -5772,10 +5781,6 @@ def _runtime_configured_shard_entries(aggregate_root: Path) -> List[Dict[str, An
                 merged_entry.update(dict(project_entry))
                 merged.append(merged_entry)
                 seen_names.add(name)
-            for manifest_entry in manifest_entries:
-                name = str(manifest_entry.get("name") or "").strip()
-                if name.startswith("shard-") and name not in seen_names:
-                    merged.append(dict(manifest_entry))
             return merged
         return [dict(entry) for entry in manifest_entries]
     if project_entries and project_config_is_source:
@@ -7228,7 +7233,22 @@ def _flagship_focus_repo_paths(focus_owners: Sequence[str]) -> List[Path]:
 def _completion_audit_requires_full_product_operator_slice(completion_audit: Optional[Dict[str, Any]]) -> bool:
     if not isinstance(completion_audit, dict):
         return False
-    return str(completion_audit.get("status") or "").strip().lower() not in {"", "pass", "passed", "ready"}
+    if str(completion_audit.get("status") or "").strip().lower() in {"", "pass", "passed", "ready"}:
+        return False
+    reason = " ".join(str(completion_audit.get("reason") or "").split()).strip().lower()
+    if not reason:
+        return False
+    return any(
+        token in reason
+        for token in (
+            "stale",
+            "external host-proof",
+            "external proof",
+            "repo backlog",
+            "completion receipt",
+            "trusted completion receipt",
+        )
+    )
 
 
 def _default_full_product_frontier(
@@ -7293,6 +7313,20 @@ def _default_full_product_frontier(
     return frontier
 
 
+def _call_default_full_product_frontier(
+    args: argparse.Namespace,
+    audit: Dict[str, Any],
+    *,
+    completion_audit: Optional[Dict[str, Any]] = None,
+) -> List[Milestone]:
+    try:
+        return _default_full_product_frontier(args, audit, completion_audit=completion_audit)
+    except TypeError as exc:
+        if "unexpected keyword argument 'completion_audit'" not in str(exc):
+            raise
+    return _default_full_product_frontier(args, audit)
+
+
 def _all_full_product_spec_frontier() -> List[Milestone]:
     rows = [row for row in FULL_PRODUCT_FRONTIER_SPECS if isinstance(row, dict)]
     return [
@@ -7310,7 +7344,7 @@ def _all_full_product_spec_frontier() -> List[Milestone]:
 def _full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
     audit = _full_product_readiness_audit(args)
     completion_audit = _design_completion_audit(args, ())
-    frontier = _default_full_product_frontier(args, audit, completion_audit=completion_audit)
+    frontier = _call_default_full_product_frontier(args, audit, completion_audit=completion_audit)
     queue_frontier = _queue_driven_full_product_frontier(args, frontier)
     if queue_frontier:
         return queue_frontier
@@ -7340,7 +7374,7 @@ def _reconcile_materialized_full_product_frontier(
             return []
         candidate_sources: List[Sequence[Milestone]] = [
             list(frontier),
-            _default_full_product_frontier(args, full_product_audit, completion_audit=completion_audit),
+            _call_default_full_product_frontier(args, full_product_audit, completion_audit=completion_audit),
             _all_full_product_spec_frontier(),
         ]
         try:
@@ -12718,12 +12752,14 @@ def _run_worker_attempt(
     codexea_lane = str(command[1] if worker_uses_codexea and len(command) > 1 else "").strip().lower()
     if worker_uses_codexea and codexea_lane in _direct_codexea_stream_lanes():
         # Direct CodexEA lanes can spend a while emitting only upstream-wait traces
-        # before the first meaningful model output arrives. Honor the longer CodexEA
-        # wait budget instead of shrinking it to the generic model-output stall.
-        model_output_stall_seconds = max(
-            model_output_stall_seconds,
-            _codexea_wait_stall_seconds(workspace_root, timeout_seconds),
-        )
+        # before the first meaningful model output arrives. Widen only the
+        # default/generic budget; an explicitly shorter local watchdog must
+        # stay short so tests and operator canaries fail fast.
+        if model_output_stall_seconds >= DEFAULT_MODEL_OUTPUT_STALL_SECONDS:
+            model_output_stall_seconds = max(
+                model_output_stall_seconds,
+                _codexea_wait_stall_seconds(workspace_root, timeout_seconds),
+            )
     watchdog_max_silent_seconds = _worker_watchdog_max_silent_seconds(workspace_root, timeout_seconds)
     watchdog_startup_grace_seconds = _worker_watchdog_startup_grace_seconds(workspace_root, timeout_seconds)
     liz_transport_reconnect_stall_seconds = (
@@ -14643,6 +14679,7 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
     elif (
         not idle_reason
         and not str(updated.get("active_run_id") or "").strip()
+        and isinstance(shards, list)
         and not has_local_completion_frontier_slice
         and not shard_claims_frontier
         and list(updated.get("frontier_ids") or [])
@@ -19827,12 +19864,18 @@ def _resolve_routed_worker_account_plan(
     routed_account_model_candidates = [
         str(candidate or "").strip() for candidate in (route_model_candidates or []) if str(candidate or "").strip()
     ]
-    if explicit_account_targets and explicit_non_ea_targets:
+    if explicit_account_targets and explicit_non_ea_targets and _worker_bin_uses_codexliz(worker_bin=worker_bin):
         routed_account_model_candidates = _preferred_openai_escape_model_candidates(
             args,
             state_root,
             account_runtime,
         )
+    elif explicit_account_targets and explicit_non_ea_targets:
+        # Explicit ChatGPT account launches are operator-directed work, not
+        # automatic escape-hatch routing. Honor the requested model set so an
+        # account pinned to gpt-5.3-codex does not become unrunnable merely
+        # because the global escape preference currently starts with gpt-5.4.
+        routed_account_model_candidates = _worker_model_candidates(args)
     elif not routed_account_model_candidates:
         if not (explicit_account_targets and explicit_non_ea_targets):
             routed_account_model_candidates = _preferred_ea_core_model_candidates(
@@ -19850,7 +19893,13 @@ def _resolve_routed_worker_account_plan(
     restore_probe_account_aliases: Set[str] = set()
     has_routed_ea_accounts = any(account.auth_kind == "ea" for account in account_candidates)
     routed_account_required = bool(
-        (explicit_account_targets and account_candidates)
+        (
+            explicit_account_targets
+            and (
+                _worker_bin_uses_codexliz(worker_bin=worker_bin)
+                or (has_routed_ea_accounts and _worker_bin_uses_codexea(worker_bin))
+            )
+        )
         or (
             direct_worker_lane
             and not explicit_account_targets
@@ -24765,7 +24814,7 @@ def _desktop_executable_exit_gate_audit(args: argparse.Namespace) -> Dict[str, A
     audit["embedded_proof_age_issue_count"] = len(embedded_proof_age_issues)
     if embedded_proof_age_issues:
         audit["embedded_proof_age_issues"] = list(embedded_proof_age_issues)
-    if aggregate_age_seconds > DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS:
+    if aggregate_age_seconds > DESKTOP_EXECUTABLE_EXIT_GATE_WRAPPER_MAX_AGE_SECONDS:
         effective_embedded_proof_ages = {
             key: aggregate_age_seconds + age_value for key, age_value in embedded_proof_ages.items()
         }

@@ -22,7 +22,7 @@
   },
   "contract_name": "fleet.next90_m138_hero_path_projections",
   "frontier_id": 7914546694,
-  "generated_at": "2026-06-05T04:02:21Z",
+  "generated_at": "2026-06-12T15:20:48Z",
   "milestone_id": 138,
   "owned_surfaces": [
     "bind_ready_for_tonight_gates_role_kit_registry_vtt_expor:fleet"
@@ -36,7 +36,7 @@
   "projection_summary": {
     "faq_question_count": 18,
     "hero_path_public_card_count": 0,
-    "hero_path_public_route_count": 0,
+    "hero_path_public_route_count": 1,
     "projection_count": 4,
     "warning_count": 0
   },
@@ -156,14 +156,16 @@
     }
   },
   "public_truth_projection": {
-    "community_hub_discord_boundary": "unknown",
+    "community_hub_discord_boundary": "chummer_truth_discord_projection",
     "community_hub_stage": "unknown",
     "faq_entries": {
       "Is Chummer trying to replace Discord or VTTs?": "No. The intended posture is that Chummer owns rules, applications, scheduling records, and world consequences, while Discord, Teams, and VTTs remain play or communication surfaces.",
       "Would I need a Windows PC to join a run?": "No. The intended direction is that browsing runs, applying with a quickstart or approved runner, acknowledging table expectations, and receiving scheduling and handoff details should work without assuming a Windows-only setup."
     },
     "feature_registry_hero_path_cards": [],
-    "landing_manifest_hero_path_routes": [],
+    "landing_manifest_hero_path_routes": [
+      "/docs/chummer6-quickstart"
+    ],
     "open_run_mobile_boundary": "mobile_first_no_windows_requirement"
   },
   "queue_title": "Bind READY_FOR_TONIGHT_GATES, ROLE_KIT_REGISTRY, VTT_EXPORT_TARGET_ACCEPTANCE, and related newcomer-path proof into machine-readable readiness and public-truth projections.",
@@ -174,12 +176,12 @@
       "sha256": "7c44667d1d0d3eccc774caab94fff80487fb904664ce96b2beaca088ae68cccf"
     },
     "design_queue_staging": {
-      "generated_at": "2026-06-01T20:06:02Z",
+      "generated_at": "2026-06-12T10:57:36Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
       "sha256": "f6c30d70ae0dc97068dc37587a63b330a4dfc8212f610af7907734cbcae69656"
     },
     "fleet_queue_staging": {
-      "generated_at": "2026-06-01T20:06:02Z",
+      "generated_at": "2026-06-12T10:57:36Z",
       "path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
       "sha256": "f6c30d70ae0dc97068dc37587a63b330a4dfc8212f610af7907734cbcae69656"
     },
@@ -189,9 +191,9 @@
       "sha256": "9640961e364d41667dc92a42a8ceecf0f36086158da05036e1811734c9bf833b"
     },
     "next90_guide": {
-      "generated_at": "2026-05-30T09:55:17Z",
+      "generated_at": "2026-06-09T17:45:51Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md",
-      "sha256": "984957267d7ee1ae4f3b20a7c67446925d356887019a5f910018ce9001cf36a5"
+      "sha256": "80e49aaec0bea8e679500174b8a8c0a1f80c9eab28eb5bc60ddc164c7a3cb07b"
     },
     "open_run_journey": {
       "generated_at": "2026-04-22T09:27:06Z",
@@ -204,19 +206,19 @@
       "sha256": "0831f31790254d843c4f8f408f184e26a6d59b24710ba9f4b156ed58c4fdc81a"
     },
     "public_feature_registry": {
-      "generated_at": "2026-06-04T17:30:50Z",
+      "generated_at": "2026-06-09T18:03:21Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_FEATURE_REGISTRY.yaml",
-      "sha256": "99bee20cdc7ce867bc1e1201834bcbc2071d133437cc0a2635f097459dc9d1e4"
+      "sha256": "5ef3eb2a0cd7130441ab1a4ab2771dd505f2dcc12c54d635b71c7159880bbcc8"
     },
     "public_guide_community_hub": {
-      "generated_at": "2026-06-04T22:12:48Z",
+      "generated_at": "2026-06-12T15:11:33Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/public-guide/HORIZONS/community-hub.md",
-      "sha256": "c09d5e3b94a086266e69143e939b9d3a340d56fb5f49e5e57a6a6ad4069c9e18"
+      "sha256": "24786890ff9690e0b8ce1ca6f7d03c30f126f39fb9dc3d54185edcac52505802"
     },
     "public_landing_manifest": {
-      "generated_at": "2026-06-04T17:30:50Z",
+      "generated_at": "2026-06-12T15:11:33Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/PUBLIC_LANDING_MANIFEST.yaml",
-      "sha256": "d7c8d2137327d713c94800b60ddec00e41c2f7268d5611d83a5ab651f31e526a"
+      "sha256": "6c4da2b2f12ea367a1c896d920bc2dcc02df9a312e99d24b8c3ecf732ecd3170"
     },
     "public_onboarding_paths": {
       "generated_at": "2026-06-01T12:58:00Z",
@@ -239,9 +241,9 @@
       "sha256": "fa14b7cd799cf32abe812a4d037c9952dcd632e78967a65932b9ebad077e8e0a"
     },
     "successor_registry": {
-      "generated_at": "2026-06-03T01:54:42Z",
+      "generated_at": "2026-06-12T10:57:36Z",
       "path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-      "sha256": "f7a7052667fb62adf4d4556e2e35f28dc9488f41c579d9af0802cdd92f0b0959"
+      "sha256": "c016ad635628164eabbb9cb814155439e7846f55fe8f65f4e4dbae68979bc3d7"
     },
     "vtt_export_target_acceptance": {
       "generated_at": "2026-04-30T21:57:57Z",

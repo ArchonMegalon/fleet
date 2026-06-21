@@ -1,0 +1,55 @@
+product: chummer
+version: 1
+last_reviewed: 2026-05-12
+purpose: Review matrix for user-facing copy risk, localization safety, and emergency fallback phrasing.
+
+locales:
+  - en-US
+  - de-DE
+  - fr-FR
+  - ja-JP
+  - pt-BR
+  - zh-CN
+
+surface_families:
+  - id: install_update_support
+    owner: chummer6-hub
+    risks:
+      - route authority drift
+      - ambiguous recovery verbs
+      - incorrect fixed or blocked status
+  - id: desktop_workbench_and_dialogs
+    owner: chummer6-ui
+    risks:
+      - dense expert copy overflow
+      - hidden negation on warnings
+      - inconsistent rule-environment wording
+  - id: live_play_and_mobile
+    owner: chummer6-mobile
+    risks:
+      - stale_live_conflict ambiguity
+      - touch_target_and_label truncation
+      - reconnect posture ambiguity
+  - id: publication_and_artifacts
+    owner: chummer6-media-factory
+    risks:
+      - provenance wording drift
+      - privacy or visibility misread
+      - publish success ambiguity
+
+required_review_dimensions:
+  - terminology_consistency
+  - overflow_and_truncation
+  - emergency_guidance_clarity
+  - locale_safe_status_words
+  - accessibility_safe_fallback_phrasing
+
+emergency_guidance_contract:
+  must_cover:
+    - blocked_route_guidance
+    - retry_later_guidance
+    - support_handoff_guidance
+    - read_only_or_do_not_trust_yet_guidance
+
+promotion_rule:
+  - A release candidate may not promote while any shipping locale lacks reviewed emergency guidance for install/update/support and live recovery surfaces.

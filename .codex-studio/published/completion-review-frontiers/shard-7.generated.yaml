@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-06-05T04:11:07Z'
+generated_at: '2026-06-20T21:00:17Z'
 mode: completion_review
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-7
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -11,7 +11,7 @@ project_supervisor_contract:
   schema_version: 1
   source: /docker/fleet/config/projects/fleet.yaml
   shard_topology:
-    configured_shard_count: 20
+    configured_shard_count: 14
     primary_probe_shard: shard-1
   proof_paths:
     status_plane: /docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml
@@ -26,33 +26,43 @@ project_supervisor_contract:
     ui_linux_desktop_exit_gate: /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
     ui_desktop_executable_exit_gate: /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
 focus:
-  profiles: []
-  owners: []
-  texts: []
+  profiles:
+  - top_flagship_grade
+  - whole_project_frontier
+  owners:
+  - chummer6-hub
+  - chummer6-ui
+  - executive-assistant
+  texts:
+  - gm
+  - opposition
+  - roster
+  - prep
+  - event
 completion_audit:
   status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  reason: golden journey proof is stale (268858s old)
 receipt_audit:
   status: fail
   reason: no supervisor run history recorded; explicit completion review is required
   latest_run_id: ''
   latest_run_reason: ''
 journey_gate_audit:
-  status: pass
-  reason: golden journey proof is ready
+  status: fail
+  reason: golden journey proof is stale (268858s old)
   blocked_journey_count: 0
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
-  status: pass
-  reason: linux desktop binary build/start/test proof is ready on current repo-local
-    evidence
-  path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
-  generated_at: '2026-06-04T14:07:58Z'
-weekly_pulse_audit:
   status: fail
-  reason: weekly product pulse reports release health as needs_attention
+  reason: linux desktop exit gate primary .deb install/remove verification is invalid
+  path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
+  generated_at: '2026-06-20T20:59:53Z'
+weekly_pulse_audit:
+  status: pass
+  reason: weekly product pulse is fresh and reports no remaining drift or blocker
+    pressure
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-06-05T04:10:40Z'
+  generated_at: '2026-06-20T01:27:06Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local backlog remains outside the closed design registry
@@ -60,12 +70,46 @@ repo_backlog_audit:
   open_project_count: 0
   open_items: []
 blocking_audits:
-- component: weekly_pulse
-  title: Weekly product pulse gaps
-  reason: weekly product pulse reports release health as needs_attention
+- component: journey_gate
+  title: Golden journey release-proof gaps
+  reason: golden journey proof is stale (268858s old)
+- component: linux_desktop_exit_gate
+  title: Linux desktop exit-gate gaps
+  reason: linux desktop exit gate primary .deb install/remove verification is invalid
+- component: desktop_executable_exit_gate
+  title: Desktop executable exit-gate gaps
+  reason: desktop executable exit gate proof is stale (157859s old)
 - component: trusted_completion_receipt
   title: Trusted completion receipt
   reason: no supervisor run history recorded; explicit completion review is required
-frontier_count: 0
-frontier_ids: []
-frontier: []
+frontier_count: 1
+frontier_ids:
+- 1239074135
+frontier:
+- id: 1239074135
+  title: 'Completion gate: Linux desktop exit gate'
+  wave: completion_review
+  status: review_required
+  owners:
+  - chummer6-ui
+  - fleet
+  dependencies: []
+  exit_criteria:
+  - linux desktop exit gate primary .deb install/remove verification is invalid
+  - Build the Linux desktop binary, package the primary .deb plus fallback archive,
+    run startup smoke on both packaged outputs, run desktop runtime unit tests, and
+    refresh UI_LINUX_DESKTOP_EXIT_GATE.generated.json.
+eta:
+  status: recovery
+  eta_human: 3h-8h
+  eta_confidence: low
+  basis: completion_review_recovery
+  scope_kind: completion_review_recovery
+  scope_label: Completion review and proof recovery
+  scope_warning: This ETA covers registry trust, proof, and review recovery. It is
+    still narrower than a final flagship parity claim unless full-product readiness
+    is also green.
+  blocking_reason: ''
+  summary: Registry closure is not yet trustworthy; recovery still needs trusted completion
+    receipt, golden journey proof, Linux desktop exit gate. Blocked journeys=0, warning
+    journeys=0, review frontier=1, decomposed_frontier=0, backlog_tail=0.

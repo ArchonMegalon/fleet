@@ -255,24 +255,28 @@ EXPECTED_COMMAND_PATHS = [
     "host-proof-bundles",
     "republish-after-host-proof.sh",
     "finalize-external-host-proof.sh",
+    "prepare-linux-proof-command-pack.sh",
     "preflight-linux-proof.sh",
     "capture-linux-proof.sh",
     "validate-linux-proof.sh",
     "bundle-linux-proof.sh",
     "ingest-linux-proof-bundle.sh",
     "run-linux-proof-lane.sh",
+    "prepare-macos-proof-command-pack.sh",
     "preflight-macos-proof.sh",
     "capture-macos-proof.sh",
     "validate-macos-proof.sh",
     "bundle-macos-proof.sh",
     "ingest-macos-proof-bundle.sh",
     "run-macos-proof-lane.sh",
+    "prepare-windows-proof-command-pack.sh",
     "preflight-windows-proof.sh",
     "capture-windows-proof.sh",
     "validate-windows-proof.sh",
     "bundle-windows-proof.sh",
     "ingest-windows-proof-bundle.sh",
     "run-windows-proof-lane.sh",
+    "prepare-windows-proof-command-pack.ps1",
     "preflight-windows-proof.ps1",
     "capture-windows-proof.ps1",
     "validate-windows-proof.ps1",
@@ -290,6 +294,14 @@ REQUIRED_ZERO_BACKLOG_BUNDLE_TOKENS = (
     'tar -czf "$BUNDLE_ARCHIVE" -C "$BUNDLE_ROOT" .',
     'echo "Wrote $BUNDLE_ARCHIVE"',
 )
+
+
+def _expected_command_script_paths() -> list[str]:
+    return [
+        path
+        for path in EXPECTED_COMMAND_PATHS
+        if Path(path).suffix.lower() in COMMAND_BUNDLE_SUFFIXES
+    ]
 REQUIRED_ZERO_BACKLOG_INGEST_TOKENS = (
     'BUNDLE_ARCHIVE="$SCRIPT_DIR/{host}-proof-bundle.tgz"',
     'BUNDLE_DIR="$SCRIPT_DIR/host-proof-bundles/{host}"',
@@ -1050,7 +1062,7 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
         "external proof retained command bundle fingerprint is empty",
     )
     _require(
-        command_bundle_file_count == len(EXPECTED_COMMAND_PATHS) - 1,
+        command_bundle_file_count == len(_expected_command_script_paths()),
         issues,
         "external proof retained command bundle file count drifted from expected script inventory",
     )

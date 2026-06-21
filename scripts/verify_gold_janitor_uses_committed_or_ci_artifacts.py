@@ -12,6 +12,7 @@ FORBIDDEN = (
     "WORKSPACE = Path",
     'Path("/docker/',
     "Path('/docker/",
+    "full_product_reaudit_v18",
 )
 
 
@@ -21,8 +22,17 @@ def main() -> int:
     if hits:
         print("gold janitor still uses local-only gate roots: " + ", ".join(hits))
         return 1
-    if 'ROOT / "_completion" / "full_product_reaudit_v18"' not in text:
-        print("gold janitor does not use repo-relative V18 artifact root")
+    for required in (
+        "CHUMMER_COMPLETION_ROOT",
+        "CHUMMER_FINAL_GOLD_ARTIFACT_ROOT",
+        "full_product_reaudit_v20",
+        "_latest_reaudit_dir",
+    ):
+        if required not in text:
+            print(f"gold janitor does not expose current proof-root discovery: {required}")
+            return 1
+    if 'ROOT / "_completion" / DEFAULT_REAUDIT_ROOT_NAME' not in text:
+        print("gold janitor does not fail closed to the current configured proof root")
         return 1
     if '"ls-files"' not in text or "--error-unmatch" not in text:
         print("gold janitor does not verify git-tracked durable artifacts")

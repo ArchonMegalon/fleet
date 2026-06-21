@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
 import subprocess
 import sys
@@ -26,6 +27,14 @@ def _write_json(path: Path, payload: dict) -> None:
 def _write_yaml(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+
+def _fresh_timestamp(*, hours_ago: int = 1) -> str:
+    return (
+        dt.datetime.now(dt.timezone.utc)
+        .replace(microsecond=0)
+        - dt.timedelta(hours=hours_ago)
+    ).isoformat().replace("+00:00", "Z")
 
 
 def _write_generated_queue_overlay(path: Path, item: dict) -> None:
@@ -290,19 +299,20 @@ def _fixture_tree(
     _write_text(privacy, _privacy())
     _write_text(crash_reporting, _crash_reporting())
     _write_text(support_status, _support_status())
+    support_generated_at = _fresh_timestamp()
     _write_json(
         flagship,
         _flagship_readiness(
             runtime_locales=runtime_locales,
             feedback_status=feedback_status,
-            support_generated_at="2026-05-05T12:00:00Z",
+            support_generated_at=support_generated_at,
             open_packet_count=open_packet_count,
         ),
     )
     _write_json(
         support_packets,
         _support_packets(
-            generated_at="2026-05-05T12:00:00Z",
+            generated_at=support_generated_at,
             refresh_mode=refresh_mode,
             refresh_error=refresh_error,
             open_packet_count=open_packet_count,

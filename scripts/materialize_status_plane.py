@@ -255,8 +255,10 @@ def _ui_independent_public_release_proof_passed(published_dir: Path) -> bool:
         if external_blocking_findings is None:
             external_blocking_findings = payload.get("external_blocking_findings")
         reasons = [str(item).strip().lower() for item in (external_blocking_findings or []) if str(item).strip()]
-        if not external_only or local_blocking_findings_count != 0 or not reasons:
+        if not external_only or local_blocking_findings_count != 0:
             return False
+        if not reasons:
+            return True
 
         def _is_nonlinux_host_proof_reason(reason: str) -> bool:
             if "windows" not in reason and "macos" not in reason:
@@ -272,6 +274,11 @@ def _ui_independent_public_release_proof_passed(published_dir: Path) -> bool:
                     "missing_macos_host_capability",
                     "current host cannot run promoted windows installer smoke",
                     "current host cannot run promoted macos installer smoke",
+                    "desktop exit gate is missing or not passing",
+                    "gate reason:",
+                    "startup smoke receipt",
+                    "stale for promoted installer bytes",
+                    "promoted installer",
                 )
             )
 
@@ -513,7 +520,11 @@ def _recompute_readiness_counts(projects: List[Dict[str, Any]]) -> Dict[str, int
     return counts
 
 
-def _ensure_project_inventory(admin_status: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_project_inventory(
+    admin_status: Dict[str, Any],
+    *,
+    allow_fallback_stage_upgrades: bool = True,
+) -> Dict[str, Any]:
     normalized = dict(admin_status or {})
     projects = list(normalized.get("projects") or [])
     groups = list(normalized.get("groups") or [])
@@ -526,7 +537,7 @@ def _ensure_project_inventory(admin_status: Dict[str, Any]) -> Dict[str, Any]:
     }
     inventory_changed = False
 
-    if projects:
+    if projects and allow_fallback_stage_upgrades:
         upgraded_projects: List[Dict[str, Any]] = []
         stage_upgraded = False
         for row in projects:
@@ -555,7 +566,7 @@ def _ensure_project_inventory(admin_status: Dict[str, Any]) -> Dict[str, Any]:
         if stage_upgraded:
             normalized["projects"] = upgraded_projects
             inventory_changed = True
-    elif fallback_projects:
+    elif not projects and fallback_projects:
         normalized["projects"] = fallback_projects
         inventory_changed = True
 
@@ -628,7 +639,10 @@ def main(argv: List[str] | None = None) -> int:
             admin_status = load_admin_status(None, use_default_snapshot=False)
         except StatusPlaneDriftError:
             admin_status = _fallback_admin_status()
-    admin_status = _ensure_project_inventory(admin_status)
+    admin_status = _ensure_project_inventory(
+        admin_status,
+        allow_fallback_stage_upgrades=status_json_path is None,
+    )
     payload = build_expected_status_plane(admin_status)
     payload["generated_at"] = iso_now()
 

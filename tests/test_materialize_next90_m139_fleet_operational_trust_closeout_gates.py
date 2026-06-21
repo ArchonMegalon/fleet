@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
 import subprocess
 import sys
@@ -28,6 +29,14 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _fresh_timestamp(*, hours_ago: int = 1) -> str:
+    return (
+        dt.datetime.now(dt.timezone.utc)
+        .replace(microsecond=0)
+        - dt.timedelta(hours=hours_ago)
+    ).isoformat().replace("+00:00", "Z")
+
+
 def _registry() -> dict:
     return {"milestones": [{"id": 139, "work_tasks": [{"id": "139.9", "owner": "fleet"}]}]}
 
@@ -47,10 +56,10 @@ def _queue_item() -> dict:
     }
 
 
-def _projection_artifact() -> dict:
+def _projection_artifact(*, generated_at: str) -> dict:
     return {
         "contract_name": "fleet.next90_m139_release_health_public_trust_projections",
-        "generated_at": "2026-05-05T12:00:00Z",
+        "generated_at": generated_at,
         "status": "pass",
         "projections": {
             "tonight_pack": {"status": "pass", "truth_sources": ["prep_packet_factory.first_proof"]},
@@ -80,6 +89,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
     landing = tmp_path / "landing.yaml"
     flagship = tmp_path / "flagship.json"
     projections = tmp_path / "projections.json"
+    generated_at = _fresh_timestamp()
 
     _write_yaml(registry, _registry())
     _write_yaml(fleet_queue, {"items": [_queue_item()]})
@@ -147,12 +157,12 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
     _write_json(
         flagship,
         {
-            "generated_at": "2026-05-05T12:00:00Z",
+            "generated_at": generated_at,
             "status": "pass",
             "readiness_planes": {"flagship_ready": {"status": "ready"}},
         },
     )
-    _write_json(projections, _projection_artifact())
+    _write_json(projections, _projection_artifact(generated_at=generated_at))
     return {
         "published": published,
         "registry": registry,

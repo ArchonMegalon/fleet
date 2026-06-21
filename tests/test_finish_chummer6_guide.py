@@ -42,8 +42,8 @@ def test_horizon_pages_carry_design_public_body_and_readable_foundations() -> No
     black_ledger = finish.horizon_page("black-ledger", finish.HORIZONS["black-ledger"])
     karma_forge = finish.horizon_page("karma-forge", finish.HORIZONS["karma-forge"])
 
-    assert "## Mission Market" in black_ledger
-    assert "## Rule Environment" in karma_forge
+    assert "## The Mission Market" in black_ledger
+    assert "## The rule environment" in karma_forge
     assert "## Canon Links" not in black_ledger
     assert "## Canon Links" not in karma_forge
     assert "products/chummer/" not in black_ledger
@@ -99,7 +99,7 @@ def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch:
             elif rel == "DOWNLOAD.md":
                 path.write_text("## Current build matrix\nSHA256\nGitHub releases\n", encoding="utf-8")
             elif rel == "HOW_CAN_I_HELP.md":
-                path.write_text("booster\nhttps://chummer.run/participate\ncheap baseline\nreview\nfree later\n", encoding="utf-8")
+                path.write_text("booster\nhttps://chummer.run/participate\nreview\nfree later\n", encoding="utf-8")
             elif rel == "FAQ.md":
                 path.write_text("### Can I actually use this now?\n\nplaceholder\n", encoding="utf-8")
             else:

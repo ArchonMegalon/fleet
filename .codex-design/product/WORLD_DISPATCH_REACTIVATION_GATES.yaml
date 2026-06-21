@@ -1,0 +1,17 @@
+product: chummer
+artifact: world_dispatch_reactivation_gates
+version: 1
+last_reviewed: 2026-05-01
+required_outputs:
+  - city_or_campaign_ticker
+  - faction_or_world_spin_item
+  - gm_only_digest
+  - player_safe_what_changed_card
+  - optional_recruitment_or_return_prompt
+required_provenance:
+  - ResolutionReport
+  - WorldTick
+  - NewsItem
+reactivation_rules:
+  - dispatch_must_point_to_next_useful_action
+  - public_safe_outputs_must_not_leak_private_campaign_truth

@@ -206,6 +206,7 @@ REQUIRED_PROJECTION_KEYS = {
     "adoption_confidence",
     "foundry_first_handoff",
 }
+HERO_PATH_CLOSEOUT_PROOF_BINDING = "fleet.next90_m138_hero_path_closeout_gates"
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
@@ -602,10 +603,14 @@ def _public_posture_runtime_monitor(
         path = _normalize_text(route.get("path")).lower()
         if path in {"/faq", "/roadmap/community-hub"}:
             continue
+        proof_binding = _normalize_text(
+            route.get("closeout_proof_binding") or route.get("hero_path_closeout_proof_binding")
+        )
         if any(term.replace(" ", "-") in path for term in HERO_PATH_TERMS):
-            runtime_blockers.append(
-                f"PUBLIC_LANDING_MANIFEST exposes hero-path route `{_normalize_text(route.get('path'))}` without closeout proof binding."
-            )
+            if proof_binding != HERO_PATH_CLOSEOUT_PROOF_BINDING:
+                runtime_blockers.append(
+                    f"PUBLIC_LANDING_MANIFEST exposes hero-path route `{_normalize_text(route.get('path'))}` without closeout proof binding."
+                )
 
     if "Would I need a Windows PC to join a run?" not in faq_text:
         warnings.append("FAQ.md did not surface the Windows join-path question in markdown form.")

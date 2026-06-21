@@ -177,7 +177,7 @@ BLACK_LEDGER_GENERATOR_BRIEF = (
     "briefings publish fallout, then the next tick starts from the new reality.\\n"
     "- Regeneration is explicit: every cycle renders current state plus candidate futures, branching outcomes, and alternate "
     "counter-move branches that can become candidate missions.\\n"
-    "- Product surfaces: source-aware world map, Mission Market, Open Runs and runner community rails, Lunacal "
+    "- Product surfaces: source-aware world map, Mission Market, Open Runs and the Shadowcasters Network, runner community rails, Lunacal "
     "scheduling handoff, result reporting, intel review, faction and megacorp engines, faction-manager operation "
     "intents, heat model, newsreels, city tickers, faction newsletters, Table Pulse or GOD Observer debrief assistance, "
     "seasonal honors, creator packets, and organizer seasons.\\n"

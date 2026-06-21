@@ -1,0 +1,21 @@
+version: black-ledger-dispatch-v1
+providers:
+  executive_assistant:
+    role: draft_adapter
+    publication_authority: false
+  syllabbles:
+    role: optional_draft_adapter
+    publication_authority: false
+  one_min_ai:
+    role: optional_draft_adapter
+    publication_authority: false
+  first_book_ai:
+    role: optional_draft_adapter_after_approval
+    publication_authority: false
+  katteb:
+    role: optional_draft_adapter_after_approval
+    publication_authority: false
+policy:
+  fact_authority: chummer_owned_only
+  publication_authority: chummer_hub_only
+  external_tools: draft_only

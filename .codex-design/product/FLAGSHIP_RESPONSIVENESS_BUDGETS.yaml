@@ -1,0 +1,41 @@
+product: chummer
+version: 1
+last_reviewed: 2026-05-12
+purpose: Numeric responsiveness budgets and downgrade language for promoted flagship surfaces.
+
+budgets:
+  - id: desktop_launch_to_workbench
+    surface: desktop
+    target_seconds: 8
+    degrade_at_seconds: 15
+    fallback_message: Starting slower than expected. Wait for workbench recovery or use support if this repeats.
+  - id: claimed_restore_to_safe_choice
+    surface: desktop_and_hub
+    target_seconds: 10
+    degrade_at_seconds: 20
+    fallback_message: Restore is taking longer than normal. Review the restore choices before trusting the reopened workspace.
+  - id: explain_response_for_promoted_values
+    surface: desktop_mobile_hub
+    target_seconds: 2
+    degrade_at_seconds: 5
+    fallback_message: Explain is delayed. The value may still be valid, but wait for the grounded trace before trusting the change.
+  - id: reconnect_or_replay_recovery
+    surface: mobile_and_live_play
+    target_seconds: 5
+    degrade_at_seconds: 12
+    fallback_message: Session truth is still reconnecting. Stay in read-only or retry posture until live state returns.
+  - id: publish_preview_or_commit_feedback
+    surface: publication
+    target_seconds: 12
+    degrade_at_seconds: 25
+    fallback_message: Publishing is taking longer than normal. Keep the draft and preview open until confirmation appears.
+  - id: support_case_submission_feedback
+    surface: hub_and_desktop
+    target_seconds: 4
+    degrade_at_seconds: 10
+    fallback_message: We are still receiving your report. Keep the draft until the receipt or fallback guidance appears.
+
+rules:
+  - When a route exceeds `degrade_at_seconds`, the product must expose bounded progress and a next safe action instead of spinner-only suspense.
+  - A degraded route may still be preview-safe, but it is not flagship-ready.
+  - Metrics and release notes must not present performance as healthy when the downgrade messaging threshold is crossed on promoted paths.

@@ -518,6 +518,79 @@ def int_or_zero(value: Any) -> int:
         return 0
 
 
+ACTIVE_RUN_RUNTIME_FIELDS = {
+    "active_run_count",
+    "active_runs_count",
+    "productive_active_runs_count",
+    "waiting_active_runs_count",
+    "nonproductive_active_runs_count",
+    "progress_evidence_counts",
+    "active_runs",
+    "active_shards",
+    "shards",
+}
+
+
+PROVIDER_CAPACITY_FIELDS = (
+    "allowed_active_shards",
+    "provider_ready_slots",
+    "provider_hard_max_active_requests",
+    "dispatch_reason",
+    "provider_capacity_summary",
+    "host_memory_pressure",
+    "provider_health_snapshot_status",
+)
+
+
+def without_active_run_runtime_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {key: value for key, value in dict(payload or {}).items() if key not in ACTIVE_RUN_RUNTIME_FIELDS}
+
+
+def apply_persisted_provider_capacity_truth(payload: Dict[str, Any], persisted_state: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(persisted_state, dict) or not persisted_state:
+        return dict(payload or {})
+    merged = dict(payload or {})
+    persisted_allowed_active_shards = int_or_zero(persisted_state.get("allowed_active_shards"))
+    payload_allowed_active_shards = int_or_zero(merged.get("allowed_active_shards"))
+    persisted_dispatch_reason = str(persisted_state.get("dispatch_reason") or "").strip().lower()
+    payload_dispatch_reason = str(merged.get("dispatch_reason") or "").strip().lower()
+    persisted_provider_status = str(persisted_state.get("provider_health_snapshot_status") or "").strip().lower()
+    payload_provider_status = str(merged.get("provider_health_snapshot_status") or "").strip().lower()
+
+    use_persisted = False
+    if persisted_allowed_active_shards > payload_allowed_active_shards:
+        use_persisted = True
+    elif persisted_allowed_active_shards > 0 and persisted_allowed_active_shards == payload_allowed_active_shards:
+        persisted_provider_ready_slots = int_or_zero(persisted_state.get("provider_ready_slots"))
+        payload_provider_ready_slots = int_or_zero(merged.get("provider_ready_slots"))
+        persisted_provider_hard_cap = int_or_zero(persisted_state.get("provider_hard_max_active_requests"))
+        payload_provider_hard_cap = int_or_zero(merged.get("provider_hard_max_active_requests"))
+        use_persisted = (
+            persisted_provider_ready_slots > payload_provider_ready_slots
+            or persisted_provider_hard_cap > payload_provider_hard_cap
+        )
+    elif (
+        persisted_allowed_active_shards > 0
+        and payload_allowed_active_shards > persisted_allowed_active_shards
+        and (
+            "provider capacity caps shard dispatch" in persisted_dispatch_reason
+            or persisted_provider_status == "local_override"
+        )
+        and (
+            not payload_provider_status
+            or payload_provider_status == "local_override"
+            or "host memory headroom is healthy" in payload_dispatch_reason
+        )
+    ):
+        use_persisted = True
+
+    if use_persisted:
+        for key in PROVIDER_CAPACITY_FIELDS:
+            if key in persisted_state:
+                merged[key] = persisted_state.get(key)
+    return merged
+
+
 def merge_richer_runtime_fields(payload: Dict[str, Any], candidate: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(candidate, dict) or not candidate:
         return dict(payload or {})
@@ -733,6 +806,7 @@ def refresh_materialized_status_snapshot(
 ) -> None:
     generated_at = iso_now()
     materialized_shards = materialized_shards_with_manifest_evidence(observed_shards, active_shards_payload)
+    manifest_active_runs = active_shards_from_payload(active_shards_payload)
     active_runs = materialized_active_runs_from_observed_shards(materialized_shards)
     productive_active_runs_count, waiting_active_runs_count, nonproductive_active_runs_count = materialized_progress_run_counts(
         materialized_shards
@@ -775,58 +849,7 @@ def refresh_materialized_status_snapshot(
             persisted_state = dict(persisted_raw)
     except Exception:
         persisted_state = {}
-    persisted_allowed_active_shards = int_or_zero(persisted_state.get("allowed_active_shards"))
-    payload_allowed_active_shards = int_or_zero(payload.get("allowed_active_shards"))
-    persisted_dispatch_reason = str(persisted_state.get("dispatch_reason") or "").strip().lower()
-    payload_dispatch_reason = str(payload.get("dispatch_reason") or "").strip().lower()
-    if persisted_allowed_active_shards > payload_allowed_active_shards:
-        for key in (
-            "allowed_active_shards",
-            "provider_ready_slots",
-            "provider_hard_max_active_requests",
-            "dispatch_reason",
-            "provider_capacity_summary",
-                "host_memory_pressure",
-            ):
-                if key in persisted_state:
-                    payload[key] = persisted_state.get(key)
-    elif persisted_allowed_active_shards > 0 and persisted_allowed_active_shards == payload_allowed_active_shards:
-        persisted_provider_ready_slots = int_or_zero(persisted_state.get("provider_ready_slots"))
-        payload_provider_ready_slots = int_or_zero(payload.get("provider_ready_slots"))
-        persisted_provider_hard_cap = int_or_zero(persisted_state.get("provider_hard_max_active_requests"))
-        payload_provider_hard_cap = int_or_zero(payload.get("provider_hard_max_active_requests"))
-        if (
-            persisted_provider_ready_slots > payload_provider_ready_slots
-            or persisted_provider_hard_cap > payload_provider_hard_cap
-        ):
-            for key in (
-                "provider_ready_slots",
-                "provider_hard_max_active_requests",
-                "dispatch_reason",
-                "provider_capacity_summary",
-                "host_memory_pressure",
-            ):
-                if key in persisted_state:
-                    payload[key] = persisted_state.get(key)
-    elif (
-        persisted_allowed_active_shards > 0
-        and payload_allowed_active_shards > persisted_allowed_active_shards
-        and "provider capacity caps shard dispatch" in persisted_dispatch_reason
-        and (
-            not str(payload.get("provider_health_snapshot_status") or "").strip()
-            or "host memory headroom is healthy" in payload_dispatch_reason
-        )
-    ):
-        for key in (
-            "allowed_active_shards",
-            "provider_ready_slots",
-            "provider_hard_max_active_requests",
-            "dispatch_reason",
-            "provider_capacity_summary",
-            "host_memory_pressure",
-        ):
-            if key in persisted_state:
-                payload[key] = persisted_state.get(key)
+    payload = apply_persisted_provider_capacity_truth(payload, persisted_state)
     persisted_remaining_open = remaining_open_milestones_from_state(
         persisted_state,
         eta_payload_from_state(persisted_state),
@@ -874,7 +897,12 @@ def refresh_materialized_status_snapshot(
         }
     )
     if state_payload:
-        payload = merge_richer_runtime_fields(payload, state_payload)
+        state_payload_for_merge = (
+            without_active_run_runtime_fields(state_payload)
+            if manifest_active_runs
+            else state_payload
+        )
+        payload = merge_richer_runtime_fields(payload, state_payload_for_merge)
     if not active_runs and int_or_zero(persisted_state.get("active_runs_count")) > 0:
         for key in (
             "active_run_count",
@@ -890,6 +918,20 @@ def refresh_materialized_status_snapshot(
                 payload[key] = persisted_state.get(key)
     if existing_materialized:
         payload = merge_richer_runtime_fields(payload, existing_materialized)
+    payload = apply_persisted_provider_capacity_truth(payload, persisted_state)
+    if manifest_active_runs:
+        payload.update(
+            {
+                "active_run_count": len(active_runs),
+                "active_runs_count": len(active_runs),
+                "productive_active_runs_count": productive_active_runs_count,
+                "waiting_active_runs_count": waiting_active_runs_count,
+                "nonproductive_active_runs_count": nonproductive_active_runs_count,
+                "progress_evidence_counts": progress_evidence_counts,
+                "active_runs": active_runs,
+                "shards": materialized_shards,
+            }
+        )
     eta_payload = eta_payload_from_state(payload)
     remaining_open = remaining_open_milestones_from_state(payload, eta_payload)
     if remaining_open > 0:
@@ -1214,6 +1256,7 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
     state_payload = read_json(state_root / "state.json")
     active_shards_payload = read_active_shards_payload(state_root)
     active_shards = active_shards_from_payload(active_shards_payload)
+    manifest_active_runs_present = bool(active_shards)
     account_runtime = read_json(state_root / "account_runtime.json")
     eta_payload = eta_payload_from_state(state_payload)
     eta_status = str(eta_payload.get("status") or state_payload.get("eta_status") or "").strip()
@@ -1326,12 +1369,23 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
     )
     materialized_payload = read_json(materialized_status_path(state_root))
     if materialized_payload:
-        state_payload = merge_richer_runtime_fields(state_payload, materialized_payload)
-        active_runs_count = max(
-            active_runs_count,
-            int_or_zero(state_payload.get("active_runs_count")),
-        )
-        active_shards_count = max(active_shards_count, active_runs_count)
+        if manifest_active_runs_present:
+            state_payload = merge_richer_runtime_fields(
+                state_payload,
+                without_active_run_runtime_fields(materialized_payload),
+            )
+            for key in ACTIVE_RUN_RUNTIME_FIELDS:
+                if key in materialized_payload:
+                    state_payload[key] = materialized_payload.get(key)
+            active_runs_count = int_or_zero(materialized_payload.get("active_runs_count"))
+            active_shards_count = active_runs_count
+        else:
+            state_payload = merge_richer_runtime_fields(state_payload, materialized_payload)
+            active_runs_count = max(
+                active_runs_count,
+                int_or_zero(state_payload.get("active_runs_count")),
+            )
+            active_shards_count = max(active_shards_count, active_runs_count)
         allowed_active_shards = int_or_zero(
             state_payload.get("allowed_active_shards")
             if state_payload.get("allowed_active_shards") not in (None, "")

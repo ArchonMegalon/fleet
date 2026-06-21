@@ -1669,6 +1669,13 @@ has_action = any(term in lowered for term in ACTION_TERMS)
 has_infra_scope = any(term in lowered for term in INFRA_TERMS)
 has_parity_build_language = any(term in lowered for term in PARITY_BUILD_TERMS)
 has_readiness_remedy = (not has_parity_build_language) and any(term in lowered for term in READINESS_REMEDY_TERMS)
+has_explicit_readiness_remedy_target = has_readiness_remedy and (
+    "/docker/chummercomplete/" in lowered
+    or "/docker/fleet/" in lowered
+    or "run these exact commands first:" in lowered
+    or "user_journey_tester_audit.generated.json" in lowered
+    or "user_journey_tester_trace.generated.json" in lowered
+)
 has_unblock_specific = any(term in lowered for term in UNBLOCK_SPECIFIC_TERMS)
 has_fleet_unblock = "fleet" in lowered and has_unblock_specific and has_infra_scope
 has_operator_diagnostic = any(term in lowered for term in DIAGNOSTIC_TERMS)
@@ -1724,7 +1731,7 @@ elif has_fleet_unblock or (
     guard_mode = "unblock"
 elif has_backlog_audit:
     guard_mode = "backlog_audit"
-elif has_readiness_remedy:
+elif has_explicit_readiness_remedy_target:
     guard_mode = "readiness_remedy"
 if not guard_mode:
     raise SystemExit(10)
@@ -2136,6 +2143,8 @@ else:
         "- Never replace that captured bootstrap with supervisor status, ETA, or other operator telemetry helpers.\n"
         "- The first supervisor status or ETA probe will be redirected to the task-local telemetry file; repeated probes will hard-fail this operator run.\n"
         "- Start at diagnosis or patching inside the allowed scope using the prepared context below; verify with a real codexea fleet-facing attempt and continue until routing/execution is unblocked or the remaining blocker is proven external.\n\n"
+        "Original operator ask:\n"
+        f"{prompt_text}\n\n"
         "Prepared repo context:\n"
         f"{prepared_context}\n\n"
         "Live shard execution context:\n"

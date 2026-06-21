@@ -1,0 +1,80 @@
+version: black-ledger-anchor-bible-v1
+anchors:
+  - id: mara_voss
+    display_name: Mara Voss
+    metatype: elf
+    role: primary anchor
+    visual_mode: photoreal
+    age_range: late 30s
+    appearance:
+      face: sharp cheekbones, natural skin texture, subtle pointed ears, calm alert eyes
+      hair: dark silver bob, controlled but not plastic
+      wardrobe: dark tailored broadcast jacket with subtle cyan lapel line
+      makeup: broadcast-natural, realistic skin, no plastic glamor
+      signature_detail: thin transparent ear-mounted studio monitor
+    voice:
+      delivery: calm, dry, precise, credible
+      pace: medium-slow for headlines, faster for bulletin detail
+      accent: neutral international English
+      do_not:
+        - hype-bro
+        - cartoon villain
+        - AI assistant voice
+    camera_setups:
+      - desk_medium_shot
+      - standing_map_side_angle
+      - breaking_news_closeup
+    approved_emotions:
+      - controlled concern
+      - dry amusement
+      - sharp focus
+      - measured urgency
+    forbidden:
+      - goofy expressions
+      - overacting
+      - fantasy cosplay
+      - unreal plastic skin
+  - id: brack_kade
+    display_name: Brack Kade
+    metatype: orc
+    role: field / security correspondent
+    visual_mode: photoreal
+    age_range: 40s
+    appearance:
+      face: broad face, realistic small tusks, weathered skin, heavy brow, human-level expressiveness
+      hair: short cropped black hair with gray at temples
+      wardrobe: field jacket with broadcast mic, not military costume
+      makeup: natural, practical field lighting
+      signature_detail: scratched press badge and compact shoulder camera
+    voice:
+      delivery: grounded, laconic, observant
+      pace: steady
+      accent: low urban broadcast tone
+      do_not:
+        - comic monster voice
+        - roaring
+        - caricature
+    camera_setups:
+      - field_report_midshot
+      - rainy_street_two_point
+      - side_monitor_report
+    approved_emotions:
+      - skepticism
+      - dry humor
+      - calm danger awareness
+    forbidden:
+      - brutish_caricature
+      - aggression_as_personality
+      - static_mugshot
+continuity_requirements:
+  same_anchor_identity_across_episodes: true
+  no_random_face_drift: true
+  no_real_person_likeness: true
+  no_sourcebook_character_likeness: true
+  anchor_reference_pack_required: true
+  human_review_required: true
+fallback:
+  mode: prestige_comic_broadcast
+  allowed_if: photoreal_provider_fails_quality_gates
+  must_label_internal: true
+  not_flagship_unless_human_review_approves: true

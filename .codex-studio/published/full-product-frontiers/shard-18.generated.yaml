@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-04T14:10:49Z'
+generated_at: '2026-06-08T07:41:11Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-18
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -29,27 +29,28 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-media-factory
+  - fleet
   - chummer6-design
+  - chummer6-ui
   - chummer6-core
   texts:
+  - flagship-readiness
+  - accessibility
+  - materializer
+  - quality
+  - automatic bugfixing
   - top flagship grade
   - whole-project frontier
   - no lowered standards
   - feedback loop
-  - automatic bugfixing
   - crash reporting
   - support routing
   - journey smoothness
   - restore confidence
-  - accessibility
   - localization
   - performance
   - proof shelf
   - fit and finish
-  - fleet and operator loop
-  - desktop client
-  - horizons and public surface
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -57,50 +58,53 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: Flagship product readiness proof is green.
+  status: fail
+  reason: golden journey proof is stale (271819s old)
 full_product_audit:
-  status: pass
-  reason: 'Flagship product readiness proof is green.'
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-04T14:13:04Z'
-  proof_status: pass
+  generated_at: '2026-06-08T06:32:46Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 2268788196
+- 3909693086
 frontier:
-- id: 2268788196
-  title: Define first-playable-session success metrics and bounded onboarding claims
+- id: 3909693086
+  title: Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta, and source-anchor
+    receipts for the first SR6 combat-round proof.
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-design
+  - chummer6-core
   dependencies: []
   exit_criteria:
-  - Define first-playable-session success metrics and bounded onboarding claims.
-  - 'Own and prove the surface slice(s): onboarding_metrics, onboarding_claims'
-  - 'Keep implementation scoped to the allowed paths: products, scripts, feedback'
+  - Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta, and source-anchor
+    receipts for the first SR6 combat-round proof.
+  - 'Own and prove the surface slice(s): implement_actionbudgetresult_actionaffordance_turnledger:core'
+  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-design` (next90-m119-design-onboarding-metrics).
+    is landed for `chummer6-core` (next90-m121-core-implement-actionbudgetresult-actionaffordance-turnledger).
   eta:
     status: flagship_delivery
-    eta_human: 7h-19h
+    eta_human: 8h-20h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Define first-playable-session success metrics and bounded
-      onboarding claims'' remains open under the flagship closeout frontier. Outstanding
-      readiness coverage: horizons_and_public_surface.'
-    predicted_completion_at: '2026-06-05T03:27:37Z'
-    range_low_hours: 7.42
-    range_high_hours: 19.14
+    summary: 'Milestone ''Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta,
+      and source-anchor receipts for the first SR6 combat-round proof.'' remains open
+      under the flagship closeout frontier. Outstanding readiness coverage: flagship
+      readiness proof refresh.'
+    predicted_completion_at: '2026-06-08T21:22:17Z'
+    range_low_hours: 7.65
+    range_high_hours: 19.72
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.65
+    remaining_effort_units: 1.7
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
@@ -109,20 +113,21 @@ frontier:
     scope_warning: ''
 eta:
   status: flagship_delivery
-  eta_human: 7h-19h
+  eta_human: 8h-20h
   eta_confidence: low
   basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Define first-playable-session success metrics and bounded
-    onboarding claims'' remains open under the flagship closeout frontier. Outstanding
-    readiness coverage: horizons_and_public_surface.'
-  predicted_completion_at: '2026-06-05T03:27:37Z'
-  range_low_hours: 7.42
-  range_high_hours: 19.14
+  summary: 'Milestone ''Implement ActionBudgetResult, ActionAffordance, TurnLedgerDelta,
+    and source-anchor receipts for the first SR6 combat-round proof.'' remains open
+    under the flagship closeout frontier. Outstanding readiness coverage: flagship
+    readiness proof refresh.'
+  predicted_completion_at: '2026-06-08T21:22:17Z'
+  range_low_hours: 7.65
+  range_high_hours: 19.72
   remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
   remaining_not_started_milestones: 1
-  remaining_effort_units: 1.65
+  remaining_effort_units: 1.7

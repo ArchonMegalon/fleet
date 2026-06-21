@@ -1,0 +1,24 @@
+version: behuman-gm-session-venue-v1
+receipts:
+  VenueLinkReceipt:
+    contains:
+      - venue_id
+      - campaign_id_hash
+      - session_id_hash
+      - provider
+      - mode
+      - link_validated
+      - privacy_status
+  VenueCreatedReceipt:
+    contains:
+      - provider_event_id
+      - provider_event_url_hash
+      - adapter_mode
+      - capacity
+      - privacy_status
+  SessionVenueCloseoutReceipt:
+    contains:
+      - attendance_sync_status
+      - attendee_count
+      - recap_status
+      - linked_black_ledger_receipt_id

@@ -1,5 +1,9 @@
 # COMMUNITY HUB
 
+## Explanation video
+
+[Watch the COMMUNITY HUB 90-second deep dive](https://chummer.run/media/horizons/community-hub-90s-deepdive.mp4). [Captions](https://chummer.run/media/horizons/community-hub-90s-deepdive.vtt).
+
 ## The problem
 
 Finding a table still means juggling community rules, approvals, chats, calendars, meeting links, roster notes, and after-session follow-up just to get the right people to the table and close the loop afterward.
@@ -30,9 +34,8 @@ The public fantasy is:
 
 COMMUNITY HUB is the product name for that lane.
 
-The public route is live at `https://chummer.run/community`.
-The named signed-in command lane now ships at `https://chummer.run/account/community`.
-Those lanes currently carry governed open-run board posture, venue handoff, join review, scheduling, and community closeout without pretending the whole long-range community roadmap is done.
+The signed-in command lane is already live at `https://chummer.run/community`.
+That lane currently carries governed open-run packets, venue handoff, and community closeout without pretending the whole long-range community roadmap is done.
 
 ## Likely owners
 

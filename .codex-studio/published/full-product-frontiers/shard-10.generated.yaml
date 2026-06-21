@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-04T14:08:37Z'
+generated_at: '2026-06-08T07:38:23Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-10
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -29,10 +29,17 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-ui
+  - chummer6-core
+  - chummer6-hub
   - chummer6-hub-registry
+  - chummer6-ui
   - chummer6-media-factory
   texts:
+  - dossier
+  - exchange
+  - replay
+  - recap
+  - export
   - top flagship grade
   - whole-project frontier
   - no lowered standards
@@ -47,9 +54,6 @@ focus:
   - performance
   - proof shelf
   - fit and finish
-  - fleet and operator loop
-  - desktop client
-  - horizons and public surface
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -57,87 +61,72 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: Flagship product readiness proof is green.
+  status: fail
+  reason: golden journey proof is stale (271655s old)
 full_product_audit:
-  status: pass
-  reason: 'Flagship product readiness proof is green.'
+  status: fail
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-04T14:13:04Z'
-  proof_status: pass
+  generated_at: '2026-06-08T06:32:46Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 4074519894
+- 4624415136
 frontier:
-- id: 4074519894
-  title: Store lineage and publication refs for exchange artifacts
+- id: 4624415136
+  title: Render recap, replay, and exchange preview artifacts with receipts and siblings
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-hub-registry
+  - chummer6-media-factory
   dependencies: []
   exit_criteria:
-  - Normalize provenance, compatibility, bounded-loss, and publication refs for dossier,
-    campaign, replay, recap, and exchange artifacts.
-  - 'Own and prove the surface slice(s): exchange_lineage_registry, portability_truth'
-  - 'Keep implementation scoped to the allowed paths: Chummer.Hub.Registry, scripts,
-    docs'
+  - Render recap, replay, and exchange preview artifacts with receipts and siblings.
+  - 'Own and prove the surface slice(s): recap_preview_artifacts, replay_exchange_preview_artifacts'
+  - 'Keep implementation scoped to the allowed paths: src, tests, docs, scripts'
   - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-hub-registry` (next90-m115-registry-exchange-lineage).
+    is landed for `chummer6-media-factory` (next90-m115-media-factory-exchange-previews).
   eta:
     status: flagship_delivery
-    eta_human: 9h-22h
+    eta_human: 8h-20h
     eta_confidence: low
     basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Store lineage and publication refs for exchange artifacts''
-      remains open under the flagship closeout frontier. Outstanding readiness coverage:
-      horizons_and_public_surface, fleet_and_operator_loop.'
-    predicted_completion_at: '2026-06-05T05:18:31Z'
-    range_low_hours: 8.55
-    range_high_hours: 21.78
+    summary: 'Milestone ''Render recap, replay, and exchange preview artifacts with
+      receipts and siblings'' remains open under the flagship closeout frontier. Outstanding
+      readiness coverage: flagship readiness proof refresh.'
+    predicted_completion_at: '2026-06-08T21:19:29Z'
+    range_low_hours: 7.65
+    range_high_hours: 19.72
     remaining_open_milestones: 1
     remaining_in_progress_milestones: 0
     remaining_not_started_milestones: 1
-    remaining_effort_units: 1.8
+    remaining_effort_units: 1.7
     history_sample_count: 0
     observed_burn_milestones_per_day: 0.0
     blocking_reason: ''
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-source_queue_fingerprint: e350c3be89d2f3ff2b04c700b0b4f43b554b9ad9
-queue_package:
-  repo: chummer6-hub-registry
-  package_id: next90-m115-registry-exchange-lineage
-  title: Store lineage and publication refs for exchange artifacts
-  priority: 0
-  owned_surfaces:
-  - exchange_lineage_registry
-  - portability_truth
-  allowed_paths:
-  - Chummer.Hub.Registry
-  - scripts
-  - docs
 eta:
   status: flagship_delivery
-  eta_human: 9h-22h
+  eta_human: 8h-20h
   eta_confidence: low
   basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Store lineage and publication refs for exchange artifacts''
-    remains open under the flagship closeout frontier. Outstanding readiness coverage:
-    horizons_and_public_surface, fleet_and_operator_loop.'
-  predicted_completion_at: '2026-06-05T05:18:31Z'
-  range_low_hours: 8.55
-  range_high_hours: 21.78
+  summary: 'Milestone ''Render recap, replay, and exchange preview artifacts with
+    receipts and siblings'' remains open under the flagship closeout frontier. Outstanding
+    readiness coverage: flagship readiness proof refresh.'
+  predicted_completion_at: '2026-06-08T21:19:29Z'
+  range_low_hours: 7.65
+  range_high_hours: 19.72
   remaining_open_milestones: 1
   remaining_in_progress_milestones: 0
   remaining_not_started_milestones: 1
-  remaining_effort_units: 1.8
+  remaining_effort_units: 1.7

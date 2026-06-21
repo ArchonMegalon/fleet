@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
 import subprocess
 import sys
@@ -15,6 +16,14 @@ except ModuleNotFoundError:
 
 MATERIALIZER = Path("/docker/fleet/scripts/materialize_next90_m136_fleet_aggregate_readiness_parity_gates.py")
 VERIFIER = Path("/docker/fleet/scripts/verify_next90_m136_fleet_aggregate_readiness_parity_gates.py")
+
+
+def _fresh_timestamp(*, hours_ago: int = 1) -> str:
+    return (
+        dt.datetime.now(dt.timezone.utc)
+        .replace(microsecond=0)
+        - dt.timedelta(hours=hours_ago)
+    ).isoformat().replace("+00:00", "Z")
 
 
 class VerifyNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestCase):
@@ -88,16 +97,17 @@ class VerifyNext90M136FleetAggregateReadinessParityGatesTest(unittest.TestCase):
     def test_verifier_rejects_monitor_summary_drift(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
+            generated_at = _fresh_timestamp()
             fixture = _fixture_tree(
                 tmp_path,
                 include_fleet_queue_row=True,
-                parity_audit_generated_at="2026-05-05T12:00:00Z",
-                screenshot_review_generated_at="2026-05-05T12:00:00Z",
-                visual_gate_generated_at="2026-05-05T12:00:00Z",
+                parity_audit_generated_at=generated_at,
+                screenshot_review_generated_at=generated_at,
+                visual_gate_generated_at=generated_at,
                 visual_gate_status="pass",
                 continuity_status="pass",
-                continuity_generated_at="2026-05-05T12:00:00Z",
-                journey_generated_at="2026-05-05T12:00:00Z",
+                continuity_generated_at=generated_at,
+                journey_generated_at=generated_at,
                 flagship_status="fail",
             )
             artifact = tmp_path / "artifact.json"

@@ -1,0 +1,47 @@
+product: chummer
+artifact: role_kit_registry
+version: 1
+last_reviewed: 2026-04-30
+role_kits:
+  - id: street_sam_starter
+    audience: beginner_or_returning_player
+    must_answer:
+      - why_this_role
+      - why_this_loadout
+      - what_is_missing_for_tonight
+      - what_changes_under_rule_environment
+  - id: face_starter
+    audience: beginner_or_returning_player
+    must_answer:
+      - why_this_role
+      - why_this_loadout
+      - what_is_missing_for_tonight
+      - what_changes_under_rule_environment
+  - id: mage_starter
+    audience: beginner_or_returning_player
+    must_answer:
+      - why_this_role
+      - why_this_loadout
+      - what_is_missing_for_tonight
+      - what_changes_under_rule_environment
+  - id: decker_starter
+    audience: beginner_or_returning_player
+    must_answer:
+      - why_this_role
+      - why_this_loadout
+      - what_is_missing_for_tonight
+      - what_changes_under_rule_environment
+  - id: rigger_starter
+    audience: beginner_or_returning_player
+    must_answer:
+      - why_this_role
+      - why_this_loadout
+      - what_is_missing_for_tonight
+      - what_changes_under_rule_environment
+  - id: general_survivor_starter
+    audience: beginner_or_returning_player
+    must_answer:
+      - why_this_role
+      - why_this_loadout
+      - what_is_missing_for_tonight
+      - what_changes_under_rule_environment

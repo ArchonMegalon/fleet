@@ -1,0 +1,227 @@
+product: chummer
+version: 1
+status: canonical
+purpose: Canonical product spine for keeping Chummer6 organized around lived campaign work instead of parallel feature/proof islands.
+
+design_rule:
+  summary: Build clearly, run reliably, remember consequences, explain truth, and publish only as a projection.
+  non_negotiables:
+    - Rules, character, campaign, and world truth stay Chummer-owned.
+    - Providers are projection adapters only; they never own product truth.
+    - Horizons are capability lanes on the spine, not independent products or shipment promises.
+    - Gold proof must be journey-backed and live-bound, not only receipt-backed.
+    - Desktop flagship UX remains dense, classic, and Chummer5A-familiar.
+
+core_loops:
+  - id: build_correctly
+    label: Build correctly
+    promise: A runner can create, inspect, validate, save, reopen, and explain a character under every supported ruleset and build method.
+    primary_surfaces:
+      - runner_workbench
+      - admin_proof
+    truth_domains:
+      - rules_truth
+      - character_truth
+    journey_gate_refs:
+      - build_explain_publish
+    blocking_gate_shape:
+      - simulated_user_character_build_matrix
+      - rule_authority_fixture_matrix
+      - dense_form_scroll_and_label_visibility
+
+  - id: run_reliably
+    label: Run reliably
+    promise: A table can start, reconnect, resolve conflicts, continue a session, and preserve trust under device churn.
+    primary_surfaces:
+      - gm_cockpit
+      - runner_workbench
+      - admin_proof
+    truth_domains:
+      - campaign_truth
+      - character_truth
+    journey_gate_refs:
+      - install_claim_restore_continue
+      - recover_from_sync_conflict
+      - campaign_session_recover_recap
+    blocking_gate_shape:
+      - reconnect_replay_proof
+      - workspace_restore_proof
+      - session_handoff_proof
+
+  - id: remember_campaign
+    label: Remember the campaign
+    promise: Run outcomes, consequences, factions, places, and open jobs become durable campaign memory without inventing facts.
+    primary_surfaces:
+      - campaign_memory
+      - living_city
+      - gm_cockpit
+    truth_domains:
+      - campaign_truth
+      - world_state_truth
+    journey_gate_refs:
+      - campaign_session_recover_recap
+      - organize_community_and_close_loop
+    blocking_gate_shape:
+      - run_closeout_to_world_tick
+      - player_safe_newsroom_projection
+      - faction_state_change_receipt
+
+  - id: explain_everything
+    label: Explain everything
+    promise: Every mechanics answer, character delta, campaign change, generated brief, and public claim can point back to source truth.
+    primary_surfaces:
+      - runner_workbench
+      - gm_cockpit
+      - admin_proof
+    truth_domains:
+      - rules_truth
+      - character_truth
+      - campaign_truth
+      - world_state_truth
+    journey_gate_refs:
+      - build_explain_publish
+      - report_cluster_release_notify
+    blocking_gate_shape:
+      - explain_drawer_source_path
+      - release_truth_alignment
+      - public_route_claim_audit
+
+  - id: publish_projections
+    label: Publish projections
+    promise: Dossiers, videos, guides, books, public pages, and newsroom output are Chummer-approved projections of owned truth.
+    primary_surfaces:
+      - publishing_studio
+      - living_city
+      - admin_proof
+    truth_domains:
+      - media_projection_truth
+      - campaign_truth
+      - world_state_truth
+    journey_gate_refs:
+      - build_explain_publish
+      - organize_community_and_close_loop
+      - report_cluster_release_notify
+    blocking_gate_shape:
+      - prompt_preview_approval
+      - tenant_isolated_face_vault
+      - human_public_safety_review
+      - no_direct_provider_publish
+
+surfaces:
+  - id: runner_workbench
+    role: Player and build operator work surface.
+    posture: Dense desktop-first workbench with visible labels, stable form controls, scroll-safe panels, and classic Chummer familiarity.
+  - id: gm_cockpit
+    role: Session preparation, live operation, closeout, and recovery surface.
+    posture: Operational cockpit, not a marketing dashboard.
+  - id: campaign_memory
+    role: Living dossier, recap, consequence, and provenance surface.
+    posture: Quiet archive with fast comparison, source paths, and share-safe views.
+  - id: living_city
+    role: Black Ledger map, factions, newsroom, open jobs, and world tick surface.
+    posture: Cinematic only where backed by campaign/world receipts.
+  - id: publishing_studio
+    role: Dossiers, runbooks, videos, public routes, and export workflows.
+    posture: Approval-first projection studio with provider isolation and no direct publishing.
+  - id: admin_proof
+    role: Release truth, gold graph, provider gates, journey proofs, and operator receipts.
+    posture: Boring, auditable, live-bound proof layer.
+
+truth_domains:
+  - id: rules_truth
+    owner: chummer6-core
+    source_policy: Deterministic rules authority, fixtures, source anchors, and explain receipts.
+  - id: character_truth
+    owner: chummer6-ui
+    source_policy: User-owned runner state with round-trip save/open/import/export proof.
+  - id: campaign_truth
+    owner: chummer6-hub
+    source_policy: Campaign workspaces, sessions, recaps, consent, roles, and closeout receipts.
+  - id: world_state_truth
+    owner: chummer6-hub
+    source_policy: Black Ledger consequences, factions, places, news items, and open jobs generated from campaign facts.
+  - id: media_projection_truth
+    owner: chummer6-media-factory
+    source_policy: Prompt drafts, approvals, provider receipts, human review, publication decisions, and usage ledgers.
+
+horizon_lanes:
+  - id: nexus-pan
+    capability: Session sync, reconnect, and presence.
+    loop_refs:
+      - run_reliably
+  - id: alice
+    capability: Build mentor and grounded what-if comparison.
+    loop_refs:
+      - build_correctly
+      - explain_everything
+  - id: karma-forge
+    capability: Governed rule and house-rule package evolution.
+    loop_refs:
+      - build_correctly
+      - explain_everything
+  - id: jackpoint
+    capability: Dossiers, briefings, and recaps from campaign truth.
+    loop_refs:
+      - remember_campaign
+      - publish_projections
+  - id: runsite
+    capability: Mission-space preparation and share-safe location views.
+    loop_refs:
+      - run_reliably
+      - remember_campaign
+  - id: runbook-press
+    capability: Campaign book and primer export.
+    loop_refs:
+      - remember_campaign
+      - publish_projections
+  - id: table-pulse
+    capability: Live pressure, reactions, and private aftermath packets.
+    loop_refs:
+      - run_reliably
+      - remember_campaign
+  - id: black-ledger
+    capability: Living city map, faction pressure, newsroom, and job seeds.
+    loop_refs:
+      - remember_campaign
+      - publish_projections
+  - id: community-hub
+    capability: Open runs, roster, scheduling, preflight, and closeout loop.
+    loop_refs:
+      - run_reliably
+      - remember_campaign
+
+projection_adapters:
+  - id: rafter
+    role: Provider verification, route/security projection, and public-surface adapter.
+    ownership: projection_adapter_only
+    must_never:
+      - own_release_truth
+      - replace_live_status
+      - convert_route_existence_into_quality_claim
+  - id: pixefy
+    role: Visual QA and screenshot projection adapter.
+    ownership: projection_adapter_only
+    must_never:
+      - replace_human_visual_review
+      - convert_screenshot_existence_into_layout_quality
+      - ignore_chummer5a_familiarity
+  - id: magicfit
+    role: Approved cinematic media render adapter.
+    ownership: projection_adapter_only
+    must_never:
+      - publish_directly
+      - render_without_prompt_approval
+      - cross_tenant_reuse_faces
+      - burn_render_units_for_prompt_only_regeneration
+
+gold_graph_policy:
+  canonical_artifact: products/chummer/FINAL_GOLD_GRAPH.generated.json
+  required_inputs:
+    - products/chummer/PRODUCT_SPINE.yaml
+    - products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml
+    - products/chummer/HORIZON_REGISTRY.yaml
+    - /docker/chummercomplete/_completion/full_product_reaudit_v20/FINAL_GOLD_VERDICT.md
+    - /docker/chummercomplete/_completion/full_product_reaudit_v20/FINAL_GOLD_JANITOR.generated.json
+    - https://chummer.run/status
+    - https://chummer.run/downloads/releases.json
+  principle: One current graph may reference many receipts, but no isolated receipt may claim whole-product gold by itself.

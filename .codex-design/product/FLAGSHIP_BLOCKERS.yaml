@@ -1,0 +1,33 @@
+packet: chummer_global_flagship_audit_20260514_v4
+date: '2026-05-14'
+post_packet_status:
+  public_flagship_front: closed
+  public_feedback_safety: closed
+  feedback_loop_public_posture: closed
+  black_ledger_governed_preview: closed
+  ruleset_readiness_classifier: closed
+  final_janitor_and_rehearsal: closed
+remaining_product_boundary:
+  id: desktop_release_proof_freshness
+  title: Desktop runtime proof freshness still governs full global release posture
+  status: open
+  owner_repos:
+    - chummer6-ui
+    - chummer6-hub-registry
+    - fleet
+  evidence: Full-product release cannot be claimed if promoted desktop runtime receipts are stale.
+closed_blockers:
+  - id: P0-001
+    title: Live root redesigned
+  - id: P0-002
+    title: Public feedback scrubbed
+  - id: P0-003
+    title: Feedback closeout public posture bounded
+  - id: P0-005
+    title: Platform and acquisition public posture aligned
+  - id: P0-006
+    title: Black Ledger governed preview implemented
+  - id: P0-007
+    title: Ruleset readiness classifier implemented
+  - id: P0-008
+    title: Final janitor and release rehearsal present

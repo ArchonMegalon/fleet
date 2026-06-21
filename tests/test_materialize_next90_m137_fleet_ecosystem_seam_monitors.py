@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
 import subprocess
 import sys
@@ -25,6 +26,14 @@ def _write_json(path: Path, payload: dict) -> None:
 def _write_yaml(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+
+def _fresh_timestamp(*, hours_ago: int = 1) -> str:
+    return (
+        dt.datetime.now(dt.timezone.utc)
+        .replace(microsecond=0)
+        - dt.timedelta(hours=hours_ago)
+    ).isoformat().replace("+00:00", "Z")
 
 
 def _write_generated_queue_overlay(path: Path, item: dict) -> None:
@@ -376,17 +385,17 @@ def _artifact_payload(*, status: str, generated_at: str = "2026-05-05T12:00:00Z"
     return {"status": status, "generated_at": generated_at}
 
 
-def _flagship_readiness() -> dict:
+def _flagship_readiness(*, generated_at: str) -> dict:
     return {
         "status": "pass",
-        "generated_at": "2026-05-05T12:00:00Z",
+        "generated_at": generated_at,
         "readiness_planes": {"flagship_ready": {"status": "ready"}},
     }
 
 
-def _journey_gates() -> dict:
+def _journey_gates(*, generated_at: str) -> dict:
     return {
-        "generated_at": "2026-05-05T12:00:00Z",
+        "generated_at": generated_at,
         "journeys": [
             {"id": "campaign_session_recover_recap", "state": "ready", "blocking_reasons": [], "warning_reasons": []},
             {"id": "organize_community_and_close_loop", "state": "ready", "blocking_reasons": [], "warning_reasons": []},
@@ -417,6 +426,7 @@ def _fixture_tree(tmp_path: Path, *, blocked_runtime: bool) -> dict[str, Path]:
     m131 = tmp_path / "m131.json"
     flagship = tmp_path / "flagship.json"
     journeys = tmp_path / "journeys.json"
+    generated_at = _fresh_timestamp()
 
     _write_yaml(registry, _registry())
     _write_yaml(fleet_queue, {"items": [_queue_item()]})
@@ -435,10 +445,10 @@ def _fixture_tree(tmp_path: Path, *, blocked_runtime: bool) -> dict[str, Path]:
     _write_yaml(landing_manifest, _public_landing_manifest())
     _write_text(release_experience, _public_release_experience())
     _write_public_guides(public_guide_root)
-    _write_json(m133, _artifact_payload(status="blocked" if blocked_runtime else "pass"))
-    _write_json(m131, _artifact_payload(status="pass"))
-    _write_json(flagship, _flagship_readiness())
-    _write_json(journeys, _journey_gates())
+    _write_json(m133, _artifact_payload(status="blocked" if blocked_runtime else "pass", generated_at=generated_at))
+    _write_json(m131, _artifact_payload(status="pass", generated_at=generated_at))
+    _write_json(flagship, _flagship_readiness(generated_at=generated_at))
+    _write_json(journeys, _journey_gates(generated_at=generated_at))
     return {
         "registry": registry,
         "fleet_queue": fleet_queue,

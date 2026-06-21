@@ -1,0 +1,50 @@
+product: chummer
+artifact: ready_for_tonight_gates
+version: 1
+last_reviewed: 2026-04-30
+gates:
+  - id: player_readiness_verdict
+    owner: chummer6-ui
+    question: Can a player see whether their runner is ready for tonight and fix one blocker immediately?
+    required_inputs:
+      - runner_dossier
+      - rule_environment
+      - session_context
+      - join_handoff
+    required_outputs:
+      - status
+      - blocking_reasons
+      - fix_now_actions
+      - changed_since_last_session
+      - next_best_screen
+  - id: gm_readiness_verdict
+    owner: chummer6-hub
+    question: Can a GM see whether tonight's run is operationally ready without leaving governed truth?
+    required_inputs:
+      - open_run
+      - roster
+      - prep_packet
+      - opposition_packet
+      - resolution_backlog
+    required_outputs:
+      - status
+      - blocking_reasons
+      - unresolved_rewards
+      - unresolved_disputes
+      - export_readiness
+      - next_best_screen
+  - id: organizer_publishability_verdict
+    owner: chummer6-hub
+    question: Can an organizer know whether a public or beginner run is safe to publish?
+    required_inputs:
+      - open_run_policy
+      - community_rule_environment
+      - table_contract
+      - safety_posture
+      - meeting_handoff
+    required_outputs:
+      - status
+      - publish_blockers
+      - moderation_risk
+      - participation_bridge_ready
+      - proof_receipts

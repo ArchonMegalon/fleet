@@ -1,0 +1,394 @@
+product: chummer
+canonical_source_repo: chummer6-design
+local_repo_base_candidates:
+  - ..
+  - ../..
+  - ../../fleet/repos
+repo_root_aliases:
+  chummer6-core:
+    - chummer6-core
+    - chummer6-core
+  chummer6-ui:
+    - chummer6-ui
+    - chummer6-ui
+  chummer6-hub:
+    - chummer6-hub
+    - chummer6-hub
+  chummer6-mobile:
+    - chummer6-mobile
+    - chummer6-mobile
+  chummer6-ui-kit:
+    - chummer6-ui-kit
+    - chummer6-ui-kit
+  chummer6-hub-registry:
+  - chummer6-hub-registry
+  - chummer6-hub-registry
+  chummer6-media-factory:
+  - chummer6-media-factory
+  - chummer6-media-factory
+  fleet:
+    - fleet
+  executive-assistant:
+    - executive-assistant
+    - EA
+    - ea
+product_source_groups:
+  base_governance:
+    - products/chummer/README.md
+    - products/chummer/START_HERE.md
+    - products/chummer/GLOSSARY.md
+    - products/chummer/VISION.md
+    - products/chummer/ARCHITECTURE.md
+    - products/chummer/LEAD_DESIGNER_OPERATING_MODEL.md
+    - products/chummer/PRODUCT_CONTROL_AND_GOVERNOR_LOOP.md
+    - products/chummer/PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md
+    - products/chummer/PRODUCT_HEALTH_SCORECARD.yaml
+    - products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
+    - products/chummer/METRICS_AND_SLOS.yaml
+    - products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml
+    - products/chummer/PRODUCT_USAGE_TELEMETRY_MODEL.md
+    - products/chummer/PRODUCT_USAGE_TELEMETRY_EVENT_SCHEMA.md
+    - products/chummer/CAMPAIGN_AUTHORITY_AND_PERMISSIONS.md
+    - products/chummer/PRIVACY_AND_RETENTION_BOUNDARIES.md
+    - products/chummer/EXPERIENCE_SUCCESS_METRICS.md
+    - products/chummer/USER_JOURNEYS.md
+    - products/chummer/BUILD_LAB_PRODUCT_MODEL.md
+    - products/chummer/EXPLAIN_EVERY_VALUE_AND_GROUNDED_FOLLOW_UP.md
+    - products/chummer/INTEROP_AND_PORTABILITY_MODEL.md
+    - products/chummer/NEXT_WAVE_ACCOUNT_AWARE_FRONT_DOOR.md
+    - products/chummer/ACCOUNT_AWARE_FRONT_DOOR_CLOSEOUT.md
+    - products/chummer/NEXT_15_BIG_WINS_EXECUTION_PLAN.md
+    - products/chummer/NEXT_20_BIG_WINS_EXECUTION_PLAN.md
+    - products/chummer/NEXT_20_BIG_WINS_REGISTRY.yaml
+    - products/chummer/POST_AUDIT_NEXT_20_BIG_WINS_GUIDE.md
+    - products/chummer/POST_AUDIT_NEXT_20_BIG_WINS_REGISTRY.yaml
+    - products/chummer/POST_AUDIT_NEXT_20_BIG_WINS_CLOSEOUT.md
+    - products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_GUIDE.md
+    - products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml
+    - products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md
+    - products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml
+    - products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml
+    - products/chummer/CAMPAIGN_OS_GAP_AND_CHANGE_GUIDE.md
+    - products/chummer/PROGRAM_MILESTONES.yaml
+    - products/chummer/CONTRACT_SETS.yaml
+    - products/chummer/GROUP_BLOCKERS.md
+    - products/chummer/OWNERSHIP_MATRIX.md
+  product_middle:
+    - products/chummer/BUILD_GHOST_MVP_001.md
+    - products/chummer/CAMPAIGN_SPINE_AND_CREW_MODEL.md
+    - products/chummer/CHARACTER_LIFECYCLE_AND_LIVING_DOSSIER.md
+    - products/chummer/ROAMING_WORKSPACE_AND_ENTITLEMENT_SYNC.md
+    - products/chummer/CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md
+  world_state:
+    - products/chummer/WORLD_STATE_AND_MISSION_MARKET_MODEL.md
+    - products/chummer/WORLD_MAP_AND_INTEL_ECONOMY_MODEL.md
+    - products/chummer/WORLD_CONTRACTS_RESERVED.md
+    - products/chummer/INTEL_REPORTING_AND_LORE_CONTRIBUTION_POLICY.md
+    - products/chummer/WORLD_INTEL_CONTRIBUTION_AND_REVIEW_POLICY.md
+    - products/chummer/WORLD_TICK_OPERATOR_PROCESS.md
+    - products/chummer/NEWSREEL_AND_CITY_TICKER_MODEL.md
+    - products/chummer/BLACK_LEDGER_MAP_AND_NEWSREEL_WORKFLOWS.yaml
+    - products/chummer/BLACK_LEDGER_ADMIN_WORKBENCH_MODEL.md
+    - products/chummer/BLACK_LEDGER_SEASON_OPERATOR_PLAYBOOK.md
+    - products/chummer/WORLD_TICK_AND_OPEN_RUN_CLOSEOUT_SOPS.yaml
+    - products/chummer/OPEN_RUNS_AND_COMMUNITY_HUB.md
+    - products/chummer/COMMUNITY_HUB_OPERATIONS_MODEL.md
+    - products/chummer/COMMUNITY_RULE_ENVIRONMENTS_AND_APPROVAL.md
+    - products/chummer/RUN_APPLICATION_PREFLIGHT_MODEL.md
+    - products/chummer/QUICKSTART_RUNNER_AND_PREGEN_FLOW.md
+    - products/chummer/GM_OPPOSITION_LIBRARY_AND_PACKET_MODEL.md
+    - products/chummer/VTT_HANDOFF_AND_PLAY_SURFACE_EXPORTS.md
+    - products/chummer/SESSION_ZERO_AND_TABLE_CONTRACT_MODEL.md
+    - products/chummer/BEGINNER_GM_AUTOPILOT.md
+    - products/chummer/SEATTLE_OPEN_RUN_001_VERTICAL_SLICE.md
+    - products/chummer/NETWORK_REPUTATION_AND_LEADERBOARDS_MODEL.md
+    - products/chummer/SEASONAL_HONORS_AND_REPUTATION_MODEL.md
+    - products/chummer/REPUTATION_EVENT_LEDGER_MODEL.md
+    - products/chummer/SEASONAL_HONORS_REGISTRY.yaml
+    - products/chummer/OPEN_RUNS_REPUTATION_AND_SEASONAL_HONORS.yaml
+    - products/chummer/OPEN_RUN_POLICY_PRESETS.yaml
+    - products/chummer/COMMUNITY_RULE_ENVIRONMENT_REGISTRY.yaml
+    - products/chummer/RUN_APPLICATION_PREFLIGHT_CHECKS.yaml
+    - products/chummer/OPPOSITION_PACKET_REGISTRY.yaml
+    - products/chummer/VTT_EXPORT_TARGETS.yaml
+    - products/chummer/INTEL_REPORT_REVIEW_STATES.yaml
+    - products/chummer/USER_CONTRIBUTION_PRIVACY_AND_IP_POLICY.md
+    - products/chummer/USER_CONTRIBUTION_VISIBILITY_REGISTRY.yaml
+  horizons:
+    - products/chummer/HORIZONS.md
+    - products/chummer/HORIZON_REGISTRY.yaml
+    - products/chummer/horizons/README.md
+    - products/chummer/horizons/FOUNDATIONS.md
+    - products/chummer/horizons/edition-studio.md
+    - products/chummer/horizons/nexus-pan.md
+    - products/chummer/horizons/alice.md
+    - products/chummer/horizons/black-ledger.md
+    - products/chummer/horizons/community-hub.md
+    - products/chummer/horizons/karma-forge.md
+    - products/chummer/horizons/knowledge-fabric.md
+    - products/chummer/horizons/jackpoint.md
+    - products/chummer/horizons/quicksilver.md
+    - products/chummer/horizons/run-control.md
+    - products/chummer/horizons/runsite.md
+    - products/chummer/horizons/runbook-press.md
+    - products/chummer/horizons/ghostwire.md
+    - products/chummer/horizons/table-pulse.md
+    - products/chummer/horizons/local-co-processor.md
+  journey_workbench:
+    - products/chummer/journeys/README.md
+    - products/chummer/journeys/build-and-inspect-a-character.md
+  journey_continuity:
+    - products/chummer/journeys/README.md
+    - products/chummer/journeys/rejoin-after-disconnect.md
+    - products/chummer/journeys/recover-from-sync-conflict.md
+    - products/chummer/journeys/run-a-campaign-and-return.md
+  journey_roaming:
+    - products/chummer/journeys/README.md
+    - products/chummer/journeys/continue-on-a-second-claimed-device.md
+  journey_release:
+    - products/chummer/journeys/README.md
+    - products/chummer/journeys/install-and-update.md
+    - products/chummer/journeys/claim-install-and-close-a-support-case.md
+  journey_publication:
+    - products/chummer/journeys/README.md
+    - products/chummer/journeys/publish-a-grounded-artifact.md
+  journey_community:
+    - products/chummer/journeys/README.md
+    - products/chummer/journeys/find-and-join-an-open-run.md
+    - products/chummer/journeys/organize-a-community-and-close-the-loop.md
+  public_surface:
+    - products/chummer/PUBLIC_LANDING_POLICY.md
+    - products/chummer/PUBLIC_DOWNLOADS_POLICY.md
+    - products/chummer/PUBLIC_TRUST_CONTENT.yaml
+    - products/chummer/PUBLIC_LANDING_MANIFEST.yaml
+    - products/chummer/PUBLIC_FEATURE_REGISTRY.yaml
+    - products/chummer/PUBLIC_CAMPAIGN_IMAGE_MANIFEST.yaml
+    - products/chummer/PUBLIC_USER_MODEL.md
+    - products/chummer/PUBLIC_AUTH_FLOW.md
+    - products/chummer/IDENTITY_AND_CHANNEL_LINKING_MODEL.md
+    - products/chummer/PUBLIC_MEDIA_BRIEFS.yaml
+    - products/chummer/PUBLIC_VIDEO_BRIEFS.yaml
+    - products/chummer/MEDIA_ARTIFACT_RECIPE_REGISTRY.yaml
+    - products/chummer/ARTIFACT_FACTORY_PIPELINE_MODEL.md
+    - products/chummer/MEDIA_RECIPE_EXECUTION_AND_CLOSEOUT.yaml
+    - products/chummer/PUBLIC_GROWTH_AND_VISIBILITY_STACK.md
+    - products/chummer/PUBLIC_CONCIERGE_AND_TRUST_WIDGET_MODEL.md
+    - products/chummer/PUBLIC_CONCIERGE_WORKFLOWS.yaml
+    - products/chummer/PUBLIC_GUIDE_POLICY.md
+    - products/chummer/PUBLIC_GUIDE_PAGE_REGISTRY.yaml
+    - products/chummer/PUBLIC_PART_REGISTRY.yaml
+    - products/chummer/PUBLIC_FAQ_REGISTRY.yaml
+    - products/chummer/PUBLIC_HELP_COPY.md
+    - products/chummer/PUBLIC_GUIDE_EXPORT_MANIFEST.yaml
+    - products/chummer/HORIZON_SIGNAL_POLICY.md
+    - products/chummer/PUBLIC_MEDIA_AND_GUIDE_ASSET_POLICY.md
+    - products/chummer/PRODUCT_ANALYTICS_AND_JOURNEY_PROOF_MODEL.md
+    - products/chummer/JOURNEY_PROOF_EVENTS.yaml
+  hub_public_runtime:
+    - products/chummer/PUBLIC_LANDING_ASSET_REGISTRY.yaml
+    - products/chummer/PUBLIC_NAVIGATION.yaml
+    - products/chummer/PUBLIC_PROGRESS_PARTS.yaml
+    - products/chummer/PROGRESS_REPORT.generated.json
+    - products/chummer/PROGRESS_REPORT.generated.html
+    - products/chummer/PROGRESS_REPORT_POSTER.svg
+    - products/chummer/PROGRESS_HISTORY.generated.json
+  participation:
+    - products/chummer/PARTICIPATION_AND_BOOSTER_WORKFLOW.md
+    - products/chummer/COMMUNITY_SPONSORSHIP_BACKLOG.md
+  release:
+    - products/chummer/RELEASE_PIPELINE.md
+    - products/chummer/DESKTOP_AUTO_UPDATE_SYSTEM.md
+    - products/chummer/PUBLIC_AUTO_UPDATE_POLICY.md
+    - products/chummer/PUBLIC_RELEASE_EXPERIENCE.yaml
+  flagship_desktop_canon:
+    - products/chummer/FLAGSHIP_PRODUCT_BAR.md
+    - products/chummer/SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md
+    - products/chummer/CHUMMER5A_FAMILIARITY_BRIDGE.md
+    - products/chummer/DESKTOP_EXECUTABLE_EXIT_GATES.md
+    - products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md
+    - products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml
+    - products/chummer/FLAGSHIP_RELEASE_ACCEPTANCE.yaml
+  desktop_delivery:
+    - products/chummer/DESKTOP_CLIENT_PRODUCT_CUT.md
+    - products/chummer/DESKTOP_PLATFORM_ACCEPTANCE_MATRIX.yaml
+    - products/chummer/LOCALIZATION_AND_LANGUAGE_SYSTEM.md
+    - products/chummer/LOCALIZATION_PARITY_MATRIX.yaml
+  support_plane:
+    - products/chummer/SUPPORT_AND_SIGNAL_OODA_LOOP.md
+    - products/chummer/FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md
+    - products/chummer/FEEDBACK_AND_SIGNAL_OODA_LOOP.md
+    - products/chummer/FEEDBACK_AND_CRASH_AUTOMATION.md
+    - products/chummer/FEEDBACK_AND_CRASH_STATUS_MODEL.md
+    - products/chummer/FEEDBACK_LOOP_RELEASE_GATE.yaml
+    - products/chummer/FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml
+  external_tools:
+    - products/chummer/EXTERNAL_TOOLS_PLANE.md
+    - products/chummer/EXTERNAL_TOOLS_BLOCKING_POLICY_REWORK.md
+    - products/chummer/PROVIDER_AND_ROUTE_STEWARDSHIP.md
+    - products/chummer/LTD_CAPABILITY_MAP.md
+    - products/chummer/LTD_STACK_WOW_FACTOR_CHANGE_GUIDE.md
+    - products/chummer/LTD_RUNTIME_AND_PROJECTION_REGISTRY.yaml
+    - products/chummer/TEABLE_ADMIN_PROJECTION_AND_INTENT_LAYER.md
+    - products/chummer/ADMIN_INTENT_AND_PROJECTION_RECEIPTS.yaml
+    - products/chummer/EMAILIT_OUTBOUND_DELIVERY_PROVIDER.md
+    - products/chummer/EMAIL_DELIVERY_RECEIPT_MODEL.md
+    - products/chummer/OUTBOUND_NOTIFICATION_TEMPLATE_REGISTRY.yaml
+    - products/chummer/KARMA_FORGE_DISCOVERY_LAB_WORKFLOWS.yaml
+    - products/chummer/TABLE_PULSE_DEBRIEF_STUDIO_WORKFLOWS.yaml
+    - products/chummer/COMPANION_LINE_PACK_AND_TRIGGER_OPERATIONS.md
+    - products/chummer/COMPANION_LINE_PACK_REGISTRY.yaml
+    - products/chummer/PREMIUM_AND_COMMUNITY_PACKAGING_MODEL.md
+    - products/chummer/PREMIUM_CAPABILITY_REGISTRY.yaml
+mirrors:
+- repo: chummer6-core
+  product_target: .codex-design/product
+  product_groups:
+    - base_governance
+    - release
+    - horizons
+    - journey_workbench
+    - journey_continuity
+  repo_target: .codex-design/repo/IMPLEMENTATION_SCOPE.md
+  repo_source: products/chummer/projects/core.md
+  review_target: .codex-design/review/REVIEW_CONTEXT.md
+  review_source: products/chummer/review/core.AGENTS.template.md
+- repo: chummer6-ui
+  product_target: .codex-design/product
+  product_groups:
+    - base_governance
+    - release
+    - desktop_delivery
+    - product_middle
+    - world_state
+    - support_plane
+    - journey_workbench
+    - journey_roaming
+    - journey_release
+  repo_target: .codex-design/repo/IMPLEMENTATION_SCOPE.md
+  repo_source: products/chummer/projects/ui.md
+  review_target: .codex-design/review/REVIEW_CONTEXT.md
+  review_source: products/chummer/review/ui.AGENTS.template.md
+- repo: chummer6-hub
+  product_target: .codex-design/product
+  product_groups:
+    - base_governance
+    - product_middle
+    - world_state
+    - public_surface
+    - hub_public_runtime
+    - participation
+    - release
+    - desktop_delivery
+    - support_plane
+    - external_tools
+    - horizons
+    - journey_continuity
+    - journey_roaming
+    - journey_release
+    - journey_publication
+    - journey_community
+  repo_target: .codex-design/repo/IMPLEMENTATION_SCOPE.md
+  repo_source: products/chummer/projects/hub.md
+  review_target: .codex-design/review/REVIEW_CONTEXT.md
+  review_source: products/chummer/review/hub.AGENTS.template.md
+- repo: chummer6-mobile
+  product_target: .codex-design/product
+  product_groups:
+    - base_governance
+    - product_middle
+    - world_state
+    - horizons
+    - journey_continuity
+    - journey_roaming
+  repo_target: .codex-design/repo/IMPLEMENTATION_SCOPE.md
+  repo_source: products/chummer/projects/mobile.md
+  review_target: .codex-design/review/REVIEW_CONTEXT.md
+  review_source: products/chummer/review/mobile.AGENTS.template.md
+- repo: chummer6-ui-kit
+  product_target: .codex-design/product
+  product_groups:
+    - base_governance
+    - journey_workbench
+    - journey_continuity
+  repo_target: .codex-design/repo/IMPLEMENTATION_SCOPE.md
+  repo_source: products/chummer/projects/ui-kit.md
+  review_target: .codex-design/review/REVIEW_CONTEXT.md
+  review_source: products/chummer/review/ui-kit.AGENTS.template.md
+- repo: chummer6-hub-registry
+  product_target: .codex-design/product
+  product_groups:
+    - base_governance
+    - world_state
+    - public_surface
+    - release
+    - desktop_delivery
+    - horizons
+    - journey_roaming
+    - journey_release
+    - journey_publication
+  repo_target: .codex-design/repo/IMPLEMENTATION_SCOPE.md
+  repo_source: products/chummer/projects/hub-registry.md
+  review_target: .codex-design/review/REVIEW_CONTEXT.md
+  review_source: products/chummer/review/hub-registry.AGENTS.template.md
+- repo: chummer6-media-factory
+  product_target: .codex-design/product
+  product_groups:
+    - base_governance
+    - public_surface
+    - external_tools
+    - product_middle
+    - world_state
+    - horizons
+    - journey_publication
+  repo_target: .codex-design/repo/IMPLEMENTATION_SCOPE.md
+  repo_source: products/chummer/projects/media-factory.md
+  review_target: .codex-design/review/REVIEW_CONTEXT.md
+  review_source: products/chummer/review/media-factory.AGENTS.template.md
+- repo: fleet
+  product_target: .codex-design/product
+  product_groups:
+    - base_governance
+    - product_middle
+    - world_state
+    - public_surface
+    - hub_public_runtime
+    - participation
+    - release
+    - flagship_desktop_canon
+    - desktop_delivery
+    - support_plane
+    - external_tools
+    - horizons
+    - journey_workbench
+    - journey_continuity
+    - journey_roaming
+    - journey_release
+    - journey_publication
+    - journey_community
+  repo_target: .codex-design/repo/IMPLEMENTATION_SCOPE.md
+  repo_source: products/chummer/projects/fleet.md
+  review_target: .codex-design/review/REVIEW_CONTEXT.md
+  review_source: products/chummer/review/fleet.AGENTS.template.md
+- repo: executive-assistant
+  product_target: .codex-design/product
+  product_groups:
+    - base_governance
+    - product_middle
+    - world_state
+    - public_surface
+    - participation
+    - release
+    - support_plane
+    - external_tools
+    - horizons
+    - journey_roaming
+    - journey_community
+  repo_target: .codex-design/repo/IMPLEMENTATION_SCOPE.md
+  repo_source: products/chummer/projects/executive-assistant.md
+  review_target: .codex-design/review/REVIEW_CONTEXT.md
+  review_source: products/chummer/review/executive-assistant.AGENTS.template.md
+validation_rules:
+- Every active worker-driven or governed adjacent runtime repo must appear in mirrors.
+- Missing .codex-design mirror coverage is a blocker.
+- Repo-specific implementation scopes must exist for every mirrored repo.
+- Review context must be mirrored alongside product canon.

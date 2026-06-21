@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,28 @@ LOOP_PATTERN = "python3 scripts/chummer_design_supervisor.py loop"
 SUPERVISOR_SERVICE = "fleet-design-supervisor"
 DEFAULT_WATCHDOG_SHARD = "shard-1"
 DEFAULT_WATCHDOG_MAX_SILENT_SECONDS = 900
+
+
+@dataclass(frozen=True)
+class LoopProcessStatus:
+    ok: bool
+    reason: str
+    startup_age_seconds: float | None = None
+
+    def __iter__(self):
+        yield self.ok
+        yield self.reason
+
+
+def _normalize_loop_process_status(value: Any) -> tuple[bool, str, float | None]:
+    if isinstance(value, LoopProcessStatus):
+        return value.ok, value.reason, value.startup_age_seconds
+    if isinstance(value, tuple):
+        if len(value) >= 3:
+            return bool(value[0]), str(value[1]), value[2]
+        if len(value) >= 2:
+            return bool(value[0]), str(value[1]), None
+    return False, "loop_process_invalid_status", None
 
 
 def _parse_iso(text: str) -> datetime | None:
@@ -345,7 +368,7 @@ def _loop_process_oldest_age_seconds(pids: list[str]) -> float | None:
     return oldest_age_seconds
 
 
-def _loop_process_running() -> tuple[bool, str, float | None]:
+def _loop_process_running() -> LoopProcessStatus:
     try:
         completed = subprocess.run(
             ["pgrep", "-f", LOOP_PATTERN],
@@ -355,16 +378,16 @@ def _loop_process_running() -> tuple[bool, str, float | None]:
             timeout=8,
         )
     except Exception as exc:  # pragma: no cover
-        return False, f"pgrep_error={exc}", None
+        return LoopProcessStatus(False, f"pgrep_error={exc}")
 
     pids = [line.strip() for line in str(completed.stdout or "").splitlines() if line.strip()]
     if completed.returncode != 0 or not pids:
         return _container_loop_process_running()
     oldest_age_seconds = _loop_process_oldest_age_seconds(pids)
-    return True, f"loop_pids={','.join(pids[:4])}", oldest_age_seconds
+    return LoopProcessStatus(True, f"loop_pids={','.join(pids[:4])}", oldest_age_seconds)
 
 
-def _container_loop_process_running() -> tuple[bool, str, float | None]:
+def _container_loop_process_running() -> LoopProcessStatus:
     try:
         completed = subprocess.run(
             ["docker", "compose", "exec", "-T", SUPERVISOR_SERVICE, "pgrep", "-f", LOOP_PATTERN],
@@ -375,19 +398,19 @@ def _container_loop_process_running() -> tuple[bool, str, float | None]:
             timeout=12,
         )
     except FileNotFoundError:
-        return False, "loop_process_missing", None
+        return LoopProcessStatus(False, "loop_process_missing")
     except subprocess.TimeoutExpired:
-        return False, "loop_process_missing container_probe_timeout", None
+        return LoopProcessStatus(False, "loop_process_missing container_probe_timeout")
     except Exception as exc:  # pragma: no cover
-        return False, f"loop_process_missing container_probe_error={exc}", None
+        return LoopProcessStatus(False, f"loop_process_missing container_probe_error={exc}")
 
     pids = [line.strip() for line in str(completed.stdout or "").splitlines() if line.strip()]
     if completed.returncode != 0 or not pids:
         stderr = str(completed.stderr or "").strip().splitlines()
         suffix = f" container_probe_stderr={stderr[-1][:180]}" if stderr else ""
-        return False, f"loop_process_missing{suffix}", None
+        return LoopProcessStatus(False, f"loop_process_missing{suffix}")
     oldest_age_seconds = _loop_process_oldest_age_seconds(pids)
-    return True, f"loop_container_pids={','.join(pids[:4])}", oldest_age_seconds
+    return LoopProcessStatus(True, f"loop_container_pids={','.join(pids[:4])}", oldest_age_seconds)
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -421,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
             watchdog_max_silent_seconds,
         )
 
-    loop_ok, loop_reason, loop_startup_age_seconds = _loop_process_running()
+    loop_ok, loop_reason, loop_startup_age_seconds = _normalize_loop_process_status(_loop_process_running())
     state_ok, state_reason = _fresh_state_ok(
         state_root,
         max_age_seconds,

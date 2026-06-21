@@ -4,8 +4,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -14,8 +16,94 @@ from rafter_pixefy_common import COMPLETION, now_utc, write_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
-V18 = ROOT / "_completion" / "full_product_reaudit_v18"
-MANIFEST = V18 / "FULL_ESTATE_DURABLE_ARTIFACT_MANIFEST.generated.json"
+CONTRACT_NAME = "chummer.final_gold_janitor"
+JANITOR_ARTIFACT_NAME = "FINAL_GOLD_JANITOR.generated.json"
+DEFAULT_REAUDIT_ROOT_NAME = os.environ.get("CHUMMER_FINAL_GOLD_ARTIFACT_ROOT", "full_product_reaudit_v20")
+
+
+def _dedupe_paths(paths: list[Path]) -> tuple[Path, ...]:
+    seen: set[Path] = set()
+    result: list[Path] = []
+    for path in paths:
+        resolved = path.expanduser().resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        result.append(resolved)
+    return tuple(result)
+
+
+def _completion_root_candidates() -> tuple[Path, ...]:
+    configured = os.environ.get("CHUMMER_COMPLETION_ROOT")
+    candidates: list[Path] = []
+    if configured:
+        candidates.append(Path(configured))
+    candidates.append(ROOT / "_completion")
+    return _dedupe_paths(candidates)
+
+
+def _read_selection_json_payload(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _is_modern_selection_janitor_payload(payload: dict[str, object]) -> bool:
+    gates = payload.get("required_gates")
+    return (
+        str(payload.get("contract_name") or "") == CONTRACT_NAME
+        and isinstance(gates, dict)
+        and bool(gates)
+    )
+
+
+def _latest_reaudit_dir() -> Path:
+    pattern = re.compile(r"full_product_reaudit_v(\d+)$")
+    eligible: list[tuple[int, int, int, int, float, int, Path]] = []
+    fallback: list[tuple[int, float, int, Path]] = []
+    for root_index, completion_root in enumerate(_completion_root_candidates()):
+        if not completion_root.is_dir():
+            continue
+        for child in completion_root.iterdir():
+            if not child.is_dir():
+                continue
+            match = pattern.match(child.name)
+            if not match:
+                continue
+            resolved = child.resolve()
+            version = int(match.group(1))
+            try:
+                mtime = max(
+                    (candidate.stat().st_mtime for candidate in resolved.iterdir() if candidate.is_file()),
+                    default=0.0,
+                )
+            except OSError:
+                mtime = 0.0
+            fallback.append((version, mtime, -root_index, resolved))
+            janitor_payload = _read_selection_json_payload(resolved / JANITOR_ARTIFACT_NAME)
+            gates = janitor_payload.get("required_gates")
+            gate_count = len(gates) if isinstance(gates, dict) else 0
+            modern_contract = int(_is_modern_selection_janitor_payload(janitor_payload))
+            has_manifest = int((resolved / "FULL_ESTATE_DURABLE_ARTIFACT_MANIFEST.generated.json").is_file())
+            if (
+                (resolved / "FULL_ESTATE_DURABLE_ARTIFACT_MANIFEST.generated.json").is_file()
+                or (resolved / JANITOR_ARTIFACT_NAME).is_file()
+            ):
+                eligible.append((version, modern_contract, has_manifest, gate_count, mtime, -root_index, resolved))
+    if eligible:
+        return max(eligible, key=lambda item: item[:-1])[-1]
+    if fallback:
+        return max(fallback, key=lambda item: item[:-1])[-1]
+    return ROOT / "_completion" / DEFAULT_REAUDIT_ROOT_NAME
+
+
+REAUDIT = _latest_reaudit_dir()
+MANIFEST = REAUDIT / "FULL_ESTATE_DURABLE_ARTIFACT_MANIFEST.generated.json"
+SOURCE_JANITOR = REAUDIT / JANITOR_ARTIFACT_NAME
 
 REQUIRED_GATES = {
     "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json": "json_pass",
@@ -60,12 +148,173 @@ LIVE_DOWNLOADS_BAD_TOKENS = [
 
 
 def rel(path: Path) -> str:
-    return str(path.resolve().relative_to(ROOT.resolve()))
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(ROOT.resolve()))
+    except ValueError:
+        return str(resolved)
 
 
 def has_forbidden_absolute_root(path_text: str) -> bool:
     forbidden = ("/docker/", "/tmp/", "/mnt/", "/home/", "C:\\")
     return path_text.startswith(forbidden)
+
+
+def read_json_payload(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def reaudit_version(path: Path) -> int | None:
+    match = re.match(r"full_product_reaudit_v(\d+)$", path.name)
+    return int(match.group(1)) if match else None
+
+
+def reaudit_is_local() -> bool:
+    try:
+        REAUDIT.resolve().relative_to(ROOT.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def is_modern_janitor_payload(payload: dict[str, object]) -> bool:
+    gates = payload.get("required_gates")
+    return (
+        str(payload.get("contract_name") or "") == CONTRACT_NAME
+        and isinstance(gates, dict)
+        and bool(gates)
+    )
+
+
+def parse_utc(value: object) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def utc_now() -> datetime:
+    parsed = parse_utc(now_utc())
+    return parsed or datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def age_hours(generated_at_utc: object, *, now: datetime | None = None) -> float | None:
+    generated = parse_utc(generated_at_utc)
+    if generated is None:
+        return None
+    reference = now or utc_now()
+    return max(0.0, (reference - generated).total_seconds() / 3600.0)
+
+
+def modern_gate_pass(gate: object) -> bool:
+    if not isinstance(gate, dict):
+        return False
+    if "pass" in gate:
+        return gate.get("pass") is True
+    return str(gate.get("status") or "").strip().lower() == "pass"
+
+
+def modern_janitor_reasons(payload: dict[str, object], args: argparse.Namespace) -> list[str]:
+    reasons: list[str] = []
+    max_hours = payload.get("recrawl_max_age_hours")
+    reference_now = utc_now()
+    if str(payload.get("status") or "").strip().lower() != "pass":
+        reasons.append("source_janitor_status_not_pass")
+    if str(payload.get("verdict") or "").strip() != "GOLD_READY":
+        reasons.append("source_janitor_not_gold_ready")
+    if args.live_backed and args.recrawl_live and isinstance(max_hours, (int, float)):
+        source_age = age_hours(payload.get("generated_at_utc"), now=reference_now)
+        if source_age is None:
+            reasons.append("source_janitor_generated_at_missing")
+        elif source_age > float(max_hours):
+            reasons.append("source_janitor_stale")
+    gates = payload.get("required_gates")
+    if not isinstance(gates, dict) or not gates:
+        reasons.append("source_janitor_required_gates_missing")
+        return reasons
+    for name, gate in gates.items():
+        if not modern_gate_pass(gate):
+            reasons.append(f"failing:{name}")
+    if args.require_durable_artifacts and payload.get("durable_artifacts_required") is not True:
+        reasons.append("source_janitor_not_durable")
+    if args.live_backed and payload.get("live_backed_required") is not True:
+        reasons.append("source_janitor_not_live_backed")
+    if args.live_backed and args.recrawl_live and payload.get("live_recrawl_required") is not True:
+        reasons.append("source_janitor_not_live_recrawled")
+    if args.live_backed and args.recrawl_live:
+        live_gate = gates.get("live_public_web_recrawl")
+        if not modern_gate_pass(live_gate):
+            reasons.append("source_live_recrawl_not_pass")
+        elif isinstance(live_gate, dict):
+            fresh_hours = live_gate.get("fresh_within_hours")
+            if isinstance(fresh_hours, (int, float)) and isinstance(max_hours, (int, float)):
+                if fresh_hours > max_hours:
+                    reasons.append("source_live_recrawl_stale")
+            live_age = age_hours(live_gate.get("generated_at_utc"), now=reference_now)
+            if live_age is None:
+                reasons.append("source_live_recrawl_generated_at_missing")
+            elif isinstance(max_hours, (int, float)) and live_age > float(max_hours):
+                reasons.append("source_live_recrawl_generated_at_stale")
+    return reasons
+
+
+def modern_janitor_output(
+    payload: dict[str, object],
+    args: argparse.Namespace,
+) -> tuple[dict[str, object], str]:
+    reasons = modern_janitor_reasons(payload, args)
+    final = "GOLD_READY" if not reasons else "NOT_GOLD"
+    if args.allow_local_dry_run and final == "GOLD_READY":
+        reasons.append("local_dry_run_cannot_write_gold")
+        final = "NOT_GOLD"
+    output = {
+        "contract_name": CONTRACT_NAME,
+        "generated_at_utc": now_utc(),
+        "status": "pass" if final == "GOLD_READY" else "fail",
+        "verdict": final,
+        "scope": str(payload.get("scope") or f"full_estate_v{reaudit_version(REAUDIT) or 'current'}"),
+        "artifact_root": str(payload.get("artifact_root") or rel(REAUDIT)),
+        "artifact_manifest": rel(MANIFEST) if MANIFEST.is_file() else "",
+        "source_artifact": rel(SOURCE_JANITOR),
+        "modern_contract_source": True,
+        "legacy_manifest_required": False,
+        "durable_artifacts_required": bool(args.require_durable_artifacts),
+        "live_backed_required": bool(args.live_backed),
+        "live_recrawl_required": bool(args.live_backed and args.recrawl_live),
+        "recrawl_max_age_hours": payload.get("recrawl_max_age_hours"),
+        "required_gates": payload.get("required_gates") if isinstance(payload.get("required_gates"), dict) else {},
+        "missing_gates": [],
+        "untracked_gates": [],
+        "local_absolute_path_gates": [],
+        "sha256_mismatch_gates": [],
+        "failing_gates": [reason.removeprefix("failing:") for reason in reasons if reason.startswith("failing:")],
+        "live_recrawl": (
+            dict(payload.get("required_gates", {}).get("live_public_web_recrawl") or {})
+            if isinstance(payload.get("required_gates"), dict)
+            else None
+        ),
+        "reasons": reasons,
+    }
+    return output, final
+
+
+def write_final_janitor(output: dict[str, object], final: str) -> None:
+    write_json(COMPLETION / JANITOR_ARTIFACT_NAME, output)
+    if reaudit_is_local():
+        write_json(SOURCE_JANITOR, output)
+        (REAUDIT / "FINAL_GOLD_VERDICT.md").write_text(final + "\n", encoding="utf-8")
 
 
 def sha256(path: Path) -> str:
@@ -93,8 +342,13 @@ def gate_pass(path: Path, expected: str) -> bool:
 
 
 def git_tracked(path: Path) -> bool:
+    resolved = path.resolve()
+    try:
+        rel_path = str(resolved.relative_to(ROOT.resolve()))
+    except ValueError:
+        return False
     result = subprocess.run(
-        ["git", "ls-files", "--error-unmatch", rel(path)],
+        ["git", "ls-files", "--error-unmatch", rel_path],
         cwd=ROOT,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -200,6 +454,13 @@ def main() -> int:
     parser.add_argument("--allow-local-dry-run", action="store_true")
     args = parser.parse_args()
 
+    source_janitor_payload = read_json_payload(SOURCE_JANITOR)
+    if is_modern_janitor_payload(source_janitor_payload):
+        output, final = modern_janitor_output(source_janitor_payload, args)
+        write_final_janitor(output, final)
+        print(final)
+        return 0 if final == "GOLD_READY" else 1
+
     manifest_payload: dict[str, object] = {}
     if MANIFEST.is_file():
         manifest_payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
@@ -211,7 +472,7 @@ def main() -> int:
 
     gate_results: dict[str, dict[str, object]] = {}
     for name, expected in REQUIRED_GATES.items():
-        path = V18 / name
+        path = REAUDIT / name
         manifest_item = manifest_by_name.get(name, {})
         path_text = str(manifest_item.get("path") or rel(path))
         path_forbidden = has_forbidden_absolute_root(path_text)
@@ -257,8 +518,8 @@ def main() -> int:
     if args.live_backed and args.recrawl_live:
         live_recrawl = recrawl_live()
         reasons.extend(str(reason) for reason in live_recrawl["reasons"])
-        matrix_path = V18 / "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json"
-        route_path = V18 / "LIVE_CHUMMER_RUN_ROUTE_PROOF.generated.json"
+        matrix_path = REAUDIT / "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json"
+        route_path = REAUDIT / "LIVE_CHUMMER_RUN_ROUTE_PROOF.generated.json"
         if matrix_path.is_file():
             matrix_payload = json.loads(matrix_path.read_text(encoding="utf-8"))
             generated_reasons = {str(reason) for reason in matrix_payload.get("reasons", [])}
@@ -290,8 +551,8 @@ def main() -> int:
         "generated_at_utc": now_utc(),
         "status": "pass" if final == "GOLD_READY" else "fail",
         "verdict": final,
-        "scope": "full_estate_v18",
-        "artifact_root": rel(V18),
+        "scope": f"full_estate_v{reaudit_version(REAUDIT) or 'legacy'}",
+        "artifact_root": rel(REAUDIT),
         "artifact_manifest": rel(MANIFEST),
         "durable_artifacts_required": bool(args.require_durable_artifacts),
         "live_backed_required": bool(args.live_backed),
@@ -305,9 +566,7 @@ def main() -> int:
         "live_recrawl": live_recrawl,
         "reasons": reasons,
     }
-    write_json(COMPLETION / "FINAL_GOLD_JANITOR.generated.json", output)
-    write_json(V18 / "FINAL_GOLD_JANITOR.generated.json", output)
-    (V18 / "FINAL_GOLD_VERDICT.md").write_text(final + "\n", encoding="utf-8")
+    write_final_janitor(output, final)
     print(final)
     return 0 if final == "GOLD_READY" else 1
 

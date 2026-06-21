@@ -1,0 +1,30 @@
+ruleset_id: shadowrun_anarchy
+status: playable_preview
+model:
+  runner_id: string
+  handle: string
+  concept: string
+  metatype_or_identity_tag: string
+  archetype_tags:
+    - string
+  narrative_cues:
+    - string
+  capabilities:
+    - string
+  shadow_amps:
+    - string
+  gear_tags:
+    - string
+  contacts:
+    - string
+  complications:
+    - string
+  faction_links:
+    - string
+  debt_heat: string
+  ledger_flags:
+    - string
+  notes: string
+  source_receipt_id: string
+  generated_by: string
+  created_at_utc: string

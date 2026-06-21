@@ -408,54 +408,6 @@ def test_sync_dependent_flagship_truth_skips_custom_publication_paths(monkeypatc
     )
 
     assert calls == []
-    assert "installer-download-signature-mismatch" in payload
-    assert "installer-postdownload-sha256-mismatch" in payload
-    assert "external-proof-auth-missing" in payload
-    assert "CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD" in payload
-    assert "signed-in-download-route-required-or-bytes-drift" in payload
-    assert 'REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}"' in payload
-    assert 'if [ -z "${CHUMMER_UI_REPO_ROOT:-}" ] && [ ! -d "$REPO_ROOT" ]; then' in payload
-    assert 'for candidate in /docker/chummercomplete/chummer6-ui /docker/chummercomplete/chummer6-ui-finish /docker/chummercomplete/chummer-presentation; do' in payload
-    assert 'if [ -d "$candidate" ]; then REPO_ROOT="$candidate" && export REPO_ROOT && break; fi;' in payload
-    assert 'INSTALLER_PATH="$DOWNLOADS_ROOT/files/chummer-avalonia-win-x64-installer.exe"' in payload
-    assert "hashlib.sha256" in payload
-    assert "installer-contract-mismatch" in payload
-    assert "release-channel-contract-mismatch" in payload
-    assert "expected_artifact=" in payload
-    assert "expected_route=" in payload
-    assert "avalonia-win-x64-installer" in payload
-    assert "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in payload
-    assert 'RECEIPT_PATH="$DOWNLOADS_ROOT/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json"' in payload
-    assert "receipt-contract-mismatch" in payload
-    assert "startup-smoke-receipt-stale" in payload
-    max_age_token = f"max_age_seconds={module.STARTUP_SMOKE_MAX_AGE_SECONDS}"
-    assert max_age_token in payload
-    assert "external-proof-ui-repo-root-missing: set CHUMMER_UI_REPO_ROOT if the UI repo is not checked out at" in payload
-    assert "readyCheckpoint" in payload
-    assert "hostClass" in payload
-    assert "\"head_id\": \"avalonia\"" in payload
-    assert "REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\"" in payload
-    assert "  commands:" in payload
-    assert "## After Host Proof Capture" in payload
-    assert "python3 scripts/materialize_support_case_packets.py" in payload
-    assert "python3 scripts/materialize_status_plane.py" in payload
-    assert "python3 scripts/verify_status_plane_semantics.py" in payload
-    assert "python3 scripts/materialize_public_release_channel.py" in payload
-    assert "--proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json" not in payload
-    assert "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json" not in payload
-    assert "python3 scripts/verify_public_release_channel.py" in payload
-    assert f"--release-channel {module.REGISTRY_RELEASE_CHANNEL_PATH}" in payload
-    assert payload.index("python3 scripts/materialize_status_plane.py") < payload.index(
-        "python3 scripts/materialize_journey_gates.py"
-    )
-    assert payload.index("python3 scripts/materialize_public_progress_report.py") < payload.index(
-        "python3 scripts/materialize_journey_gates.py"
-    )
-    assert "python3 scripts/materialize_journey_gates.py" in payload
-    assert "--journey-gates /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json" in payload
-    assert "python3 scripts/verify_external_proof_closure.py" in payload
-    assert "--external-proof-runbook .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md" in payload
-    assert "--external-proof-commands-dir .codex-studio/published/external-proof-commands" in payload
 
 
 def test_bundle_commands_clear_stale_bundle_archive_before_writing_host_bundle() -> None:

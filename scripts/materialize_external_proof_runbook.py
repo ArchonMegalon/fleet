@@ -120,8 +120,25 @@ def _ui_repo_root_setup_command() -> str:
     return _ui_repo_root_discovery_shell_fragment()
 
 
+def _ui_repo_root_discovery_tail_command() -> str:
+    candidates = " ".join(shlex.quote(str(candidate)) for candidate in UI_REPO_ROOT_DISCOVERY_CANDIDATES)
+    return (
+        'if [ -z "${CHUMMER_UI_REPO_ROOT:-}" ] && [ ! -d "$REPO_ROOT" ]; then'
+        + f' for candidate in {candidates}; do'
+        + ' if [ -d "$candidate" ]; then REPO_ROOT="$candidate" && export REPO_ROOT && break; fi;'
+        + ' done;'
+        + " fi"
+    )
+
+
 def _ui_downloads_root_setup_command() -> str:
-    return _ui_repo_root_setup_command() + ' && DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads" && export DOWNLOADS_ROOT'
+    return (
+        f'REPO_ROOT="{UI_REPO_ROOT_ENV_EXPR}" && export REPO_ROOT'
+        + ' && DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads" && export DOWNLOADS_ROOT'
+        + " && "
+        + _ui_repo_root_discovery_tail_command()
+        + ' && DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads" && export DOWNLOADS_ROOT'
+    )
 
 
 def _ui_downloads_path_expr(relative_path: str) -> str:
@@ -130,9 +147,15 @@ def _ui_downloads_path_expr(relative_path: str) -> str:
 
 
 def _ui_repo_download_path_setup_command(relative_path: str, env_var: str) -> str:
+    path_expr = _ui_downloads_path_expr(relative_path)
     return (
-        _ui_downloads_root_setup_command()
-        + f' && {env_var}="{_ui_downloads_path_expr(relative_path)}" && export {env_var}'
+        f'REPO_ROOT="{UI_REPO_ROOT_ENV_EXPR}" && export REPO_ROOT'
+        + ' && DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads" && export DOWNLOADS_ROOT'
+        + f' && {env_var}="{path_expr}" && export {env_var}'
+        + " && "
+        + _ui_repo_root_discovery_tail_command()
+        + ' && DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads" && export DOWNLOADS_ROOT'
+        + f' && {env_var}="{path_expr}" && export {env_var}'
     )
 
 def _post_capture_republish_commands(
@@ -2507,6 +2530,35 @@ def _materialize_command_files(
         ),
         executable=True,
     )
+    for host_file_row in host_files:
+        host = _normalize_text(host_file_row.get("host")).lower()
+        if not host:
+            continue
+        host_token = _normalize_host_token(host)
+        command_pack_path = Path(_normalize_text(host_file_row.get("command_pack_path")))
+        extra_relative_paths: list[str] = []
+        if host == "windows":
+            for key in (
+                "preflight_powershell",
+                "capture_powershell",
+                "validation_powershell",
+                "bundle_powershell",
+                "ingest_powershell",
+                "host_lane_powershell",
+                "prepare_command_pack_powershell",
+            ):
+                value = _normalize_text(host_file_row.get(key))
+                if value:
+                    extra_relative_paths.append(Path(value).name)
+        command_pack_sha256_path, command_pack_sha256 = _materialize_host_command_pack(
+            command_pack_archive=command_pack_path,
+            commands_dir=commands_dir,
+            host_token=host_token,
+            host=host,
+            extra_relative_paths=extra_relative_paths,
+        )
+        host_file_row["command_pack_sha256_path"] = str(command_pack_sha256_path)
+        host_file_row["command_pack_sha256"] = command_pack_sha256
     command_bundle_fingerprint = _command_bundle_fingerprint(commands_dir)
     return {
         "commands_dir": str(commands_dir),
@@ -2719,6 +2771,10 @@ def materialize_markdown(
                     for command in host_lane_wrappers:
                         lines.append(command)
                     lines.append("```")
+                    lines.append("")
+                    lines.append(
+                        "Set `$env:CHUMMER_EXTERNAL_PROOF_AUTO_FINALIZE = '1'` before the PowerShell host lane to trigger the same shared-workspace finalize path."
+                    )
             lines.append("")
         lines.append("## After Host Proof Capture")
         lines.append("")

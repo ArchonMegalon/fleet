@@ -17,6 +17,18 @@ def _write_json(path: Path, generated_at: str) -> None:
     path.write_text(json.dumps({"generated_at": generated_at}) + "\n", encoding="utf-8")
 
 
+def _without_volatile_age_minutes(value):
+    if isinstance(value, dict):
+        return {
+            key: _without_volatile_age_minutes(item)
+            for key, item in value.items()
+            if key != "age_minutes"
+        }
+    if isinstance(value, list):
+        return [_without_volatile_age_minutes(item) for item in value]
+    return value
+
+
 def test_materialize_proof_orchestration_orders_dependencies_and_freshness(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     queue = repo / ".codex-studio" / "published" / "QUEUE.generated.yaml"
@@ -226,6 +238,6 @@ def test_published_proof_orchestration_matches_generated_payload(tmp_path: Path)
     actual_generated_at = str(actual.pop("generated_at") or "")
     expected.pop("generated_at", None)
 
-    assert actual == expected
+    assert _without_volatile_age_minutes(actual) == _without_volatile_age_minutes(expected)
     assert actual_generated_at.endswith("Z")
     dt.datetime.fromisoformat(actual_generated_at.replace("Z", "+00:00"))

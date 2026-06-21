@@ -120,10 +120,25 @@ EXTERNAL_PROOF_COMMAND_BUNDLE_SUFFIXES = frozenset({".sh", ".ps1"})
 
 
 def _completion_root_candidates() -> tuple[Path, ...]:
-    return (
-        ROOT / "_completion",
-        Path("/docker/chummercomplete/_completion"),
+    configured = os.environ.get("CHUMMER_COMPLETION_ROOT")
+    candidates: list[Path] = []
+    if configured:
+        candidates.append(Path(configured))
+    candidates.extend(
+        [
+            ROOT / "_completion",
+            ROOT.parent / "chummercomplete" / "_completion",
+        ]
     )
+    result: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        resolved = candidate.expanduser().resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        result.append(resolved)
+    return tuple(result)
 
 
 def _janitor_has_modern_live_truth(path: Path) -> bool:
@@ -172,7 +187,7 @@ def _latest_reaudit_dir() -> Path:
         return max(eligible, key=lambda item: item[0])[1]
     if fallback:
         return max(fallback, key=lambda item: item[0])[1]
-    return ROOT / "_completion" / "full_product_reaudit_v18"
+    return ROOT / "_completion" / os.environ.get("CHUMMER_FINAL_GOLD_ARTIFACT_ROOT", "full_product_reaudit_v20")
 
 
 LATEST_REAUDIT_DIR = _latest_reaudit_dir()

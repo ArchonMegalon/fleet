@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-06-05T04:05:58Z'
+generated_at: '2026-06-18T20:51:09Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -33,41 +33,47 @@ focus:
   - chummer6-design
   - chummer6-hub
   - chummer6-hub-registry
-  - chummer6-media-factory
-  - chummer6-mobile
   - chummer6-ui
   - chummer6-ui-kit
-  - executive-assistant
   - fleet
+  - executive-assistant
   texts:
-  - Add rule-environment studio entry points to desktop workflows
-  - Publish rule-environment studio contracts and explain receipts
-  - Render recap, replay, and exchange preview artifacts with receipts and siblings
-  - Store lineage and publication refs for exchange artifacts
-  - Tighten rules and explain canon so media companions can cite but never replace
-    engine truth
   - accessibility
   - automatic bugfixing
+  - claim
+  - crash
   - crash reporting
+  - desktop
   - desktop client
+  - desktop-client
+  - feedback
   - feedback loop
   - fit and finish
+  - flagship-readiness
   - fleet and operator loop
+  - grade-bar
   - horizons and public surface
+  - install
   - journey smoothness
   - localization
-  - next90-m114-core-rule-environment-studio
-  - next90-m114-design-rule-environment-policy
-  - next90-m114-ui-rule-studio
-  - next90-m115-media-factory-exchange-previews
-  - next90-m115-registry-exchange-lineage
+  - master index
+  - materializer
   - no lowered standards
   - performance
   - proof shelf
+  - recovery
+  - release truth
+  - release-proof
+  - restore
   - restore confidence
+  - roster
+  - support
   - support routing
   - top flagship grade
+  - update
+  - whole project frontier
   - whole-project frontier
+  - workbench
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -75,14 +81,13 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: trusted completion receipt plus whole-product release proof and Linux desktop
-    exit gate are ready
+  status: fail
+  reason: linux desktop exit gate primary .deb install/remove verification is invalid
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-06-05T04:05:53Z'
+  generated_at: '2026-06-18T20:04:50Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -118,7 +123,7 @@ frontier:
     summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
       the flagship closeout frontier. Outstanding readiness coverage: flagship readiness
       proof refresh.'
-    predicted_completion_at: '2026-06-05T20:11:58Z'
+    predicted_completion_at: '2026-06-19T12:57:09Z'
     range_low_hours: 9.0
     range_high_hours: 23.2
     remaining_open_milestones: 1
@@ -143,7 +148,7 @@ eta:
   summary: 'Milestone ''Fleet and operator loop flagship finish'' remains open under
     the flagship closeout frontier. Outstanding readiness coverage: flagship readiness
     proof refresh.'
-  predicted_completion_at: '2026-06-05T20:11:58Z'
+  predicted_completion_at: '2026-06-19T12:57:09Z'
   range_low_hours: 9.0
   range_high_hours: 23.2
   remaining_open_milestones: 1

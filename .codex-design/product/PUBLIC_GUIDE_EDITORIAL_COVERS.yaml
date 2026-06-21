@@ -1,0 +1,516 @@
+output_root: products/chummer/public-guide-curated-assets
+defaults:
+  width: 1600
+  height: 900
+  title_font: /usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf
+  label_font: /usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf
+  body_font: /usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf
+assets:
+  assets/hero/chummer6-hero.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/hero/chummer6-hero-plate.png
+    series_label: CHUMMER6 PUBLIC GUIDE
+    title: CHUMMER6
+    subtitle: The explainable Shadowrun campaign OS.
+    chips:
+      - BUILD
+      - EXPLAIN
+      - RUN
+    accent: "#79d8ff"
+    accent_secondary: "#f5b04d"
+    focus: [0.56, 0.47]
+    background_focus: [0.57, 0.48]
+    background_zoom: 1.02
+    panel_focus: [0.57, 0.48]
+    panel_zoom: 1.04
+    copy_width: 572
+    background_brightness: 1.12
+    background_saturation: 1.18
+    background_contrast: 1.08
+    background_blur_sigma: 10
+    background_overlay_alpha: 122
+    panel_brightness: 1.24
+    panel_saturation: 1.28
+    panel_contrast: 1.12
+    panel_sharpness: 1.12
+    panel_overlay_alpha: 4
+    editorial_finish_sigma: 0
+    editorial_finish_opacity: 0
+    motif: clinic_ticks
+    scene_labels:
+      - text: NERVE SYNC
+        anchor: [0.48, 0.58]
+        label: [0.55, 0.50]
+      - text: JOINT SEAL
+        anchor: [0.56, 0.64]
+        label: [0.65, 0.58]
+      - text: GRIP TEST
+        anchor: [0.64, 0.74]
+        label: [0.70, 0.78]
+      - text: PAIN WATCH
+        anchor: [0.42, 0.54]
+        label: [0.28, 0.48]
+  assets/horizons/alice.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/horizons/alice.png
+    series_label: CHUMMER6 HORIZON
+    index: "02"
+    title: ALICE
+    subtitle: Compare two builds before the weak one ruins a session.
+    chips:
+      - COMPARE
+      - PRECHECK
+      - RECEIPTS
+    accent: "#f59e0b"
+    accent_secondary: "#4fd1ff"
+    focus: [0.56, 0.46]
+    background_focus: [0.56, 0.46]
+    background_zoom: 1.10
+    panel_focus: [0.57, 0.46]
+    panel_zoom: 1.18
+    copy_width: 486
+    background_brightness: 1.02
+    background_saturation: 1.12
+    background_contrast: 1.14
+    background_overlay_alpha: 96
+    panel_brightness: 1.20
+    panel_saturation: 1.15
+    panel_contrast: 1.16
+    panel_sharpness: 1.12
+    panel_overlay_alpha: 18
+    editorial_finish_sigma: 0
+    editorial_finish_opacity: 0
+    motif: hazard_arcs
+  assets/horizons/origin-dossier.png:
+    kind: feature_cover
+    source: products/chummer/public-guide/assets/horizons/origin-dossier.png
+    series_label: CHUMMER6 FEATURE
+    index: "03"
+    title: ORIGIN DOSSIER
+    subtitle: Give a legal sheet a story the table can use.
+    chips:
+      - STORY
+      - PORTRAIT
+      - VOICE
+    accent: "#c084fc"
+    accent_secondary: "#22d3ee"
+    focus: [0.56, 0.46]
+    background_focus: [0.56, 0.46]
+    background_zoom: 1.08
+    panel_focus: [0.58, 0.47]
+    panel_zoom: 1.14
+    copy_width: 486
+    background_brightness: 1.00
+    background_saturation: 1.08
+    background_contrast: 1.12
+    background_overlay_alpha: 96
+    panel_brightness: 1.18
+    panel_saturation: 1.12
+    panel_contrast: 1.14
+    panel_sharpness: 1.10
+    panel_overlay_alpha: 18
+    editorial_finish_sigma: 0
+    editorial_finish_opacity: 0
+    motif: dossier_pages
+  assets/horizons/nexus-pan.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/horizons/nexus-pan.png
+    series_label: CHUMMER6 HORIZON
+    index: "01"
+    title: NEXUS-PAN
+    subtitle: Shared state survives device churn without the table losing trust.
+    chips:
+      - DEVICE STATE
+      - RECONNECT
+      - TABLE TRUST
+    accent: "#26d0ff"
+    accent_secondary: "#ff6b57"
+    focus: [0.40, 0.42]
+    motif: network_nodes
+  assets/horizons/karma-forge.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/horizons/karma-forge.png
+    series_label: CHUMMER6 HORIZON
+    index: "03"
+    title: KARMA FORGE
+    subtitle: Try house rules without losing track of what changed.
+    chips:
+      - HOUSE RULES
+      - TRACK CHANGES
+      - MIGRATION
+    accent: "#ff5b47"
+    accent_secondary: "#ffd166"
+    focus: [0.58, 0.45]
+    background_focus: [0.58, 0.45]
+    background_zoom: 1.06
+    panel_focus: [0.59, 0.45]
+    panel_zoom: 1.12
+    copy_width: 486
+    background_brightness: 1.00
+    background_saturation: 1.12
+    background_contrast: 1.14
+    background_overlay_alpha: 92
+    panel_brightness: 1.18
+    panel_saturation: 1.14
+    panel_contrast: 1.16
+    panel_sharpness: 1.12
+    panel_overlay_alpha: 10
+    editorial_finish_sigma: 0
+    editorial_finish_opacity: 0
+    motif: forge_lattice
+  assets/horizons/jackpoint.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/horizons/jackpoint.png
+    series_label: CHUMMER6 HORIZON
+    index: "04"
+    title: JACKPOINT
+    subtitle: Grounded dossiers, recaps, and briefings with clear receipts.
+    chips:
+      - DOSSIERS
+      - RECEIPTS
+      - RECAPS
+    accent: "#67e8f9"
+    accent_secondary: "#8bff9e"
+    focus: [0.50, 0.46]
+    motif: dossier_grid
+  assets/horizons/runsite.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/horizons/runsite.png
+    series_label: CHUMMER6 HORIZON
+    index: "05"
+    title: RUNSITE
+    subtitle: Mission spaces become explorable and legible before the action starts.
+    chips:
+      - HOTSPOTS
+      - ROUTES
+      - LEGIBILITY
+    accent: "#ff7a45"
+    accent_secondary: "#6ce7ff"
+    focus: [0.72, 0.43]
+    background_focus: [0.75, 0.43]
+    background_zoom: 1.09
+    background_overlay_alpha: 112
+    background_darken_regions: []
+    background_darken_factor: 0.18
+    panel_focus: [0.74, 0.43]
+    panel_zoom: 1.18
+    panel_overlay_alpha: 48
+    panel_darken_regions: []
+    panel_darken_factor: 0.24
+    motif: route_grid
+  assets/horizons/runbook-press.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/horizons/runbook-press.png
+    series_label: CHUMMER6 HORIZON
+    index: "06"
+    title: RUNBOOK PRESS
+    subtitle: Governed long-form publishing that feels finished instead of duct-taped.
+    chips:
+      - PRIMERS
+      - PUBLISHING
+      - REUSE
+    accent: "#ffd166"
+    accent_secondary: "#ff7b54"
+    focus: [0.56, 0.48]
+    motif: print_columns
+  assets/horizons/table-pulse.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/horizons/table-pulse.png
+    series_label: CHUMMER6 HORIZON
+    index: "07"
+    title: TABLE PULSE
+    subtitle: Live world heat and private aftermath coaching on separate rails.
+    chips:
+      - LIVE HEAT
+      - GM CONTROL
+      - AFTERMATH
+    accent: "#ff5c7a"
+    accent_secondary: "#49d6ff"
+    focus: [0.58, 0.45]
+    motif: pulse_bands
+  assets/horizons/black-ledger.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/horizons/black-ledger.png
+    series_label: CHUMMER6 HORIZON
+    index: "08"
+    title: BLACK LEDGER
+    subtitle: A living world map where pressure, jobs, and outcomes keep moving between sessions.
+    chips:
+      - WORLD MAP
+      - MISSION MARKET
+      - CITY MEMORY
+    accent: "#ff8a4c"
+    accent_secondary: "#5ce1e6"
+    focus: [0.70, 0.44]
+    background_focus: [0.70, 0.44]
+    background_zoom: 1.16
+    panel_focus: [0.78, 0.41]
+    panel_zoom: 1.42
+    background_brightness: 0.92
+    background_saturation: 1.12
+    background_contrast: 1.10
+    background_overlay_alpha: 112
+    panel_brightness: 1.35
+    panel_saturation: 1.22
+    panel_contrast: 1.38
+    panel_sharpness: 1.25
+    motif: network_nodes
+    scene_labels:
+      - text: WORLD TICK
+        anchor: [0.29, 0.48]
+        label: [0.22, 0.25]
+      - text: HEAT +2
+        anchor: [0.66, 0.32]
+        label: [0.72, 0.19]
+      - text: OPEN JOB
+        anchor: [0.79, 0.48]
+        label: [0.73, 0.43]
+      - text: RUN RESOLVED
+        anchor: [0.46, 0.58]
+        label: [0.33, 0.68]
+      - text: INTEL PENDING
+        anchor: [0.63, 0.73]
+        label: [0.67, 0.70]
+    panel_overlay_alpha: 0
+    motif: route_grid
+  assets/horizons/community-hub.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/horizons/community-hub.png
+    series_label: CHUMMER6 HORIZON
+    index: "09"
+    title: COMMUNITY HUB
+    subtitle: Open runs, player join requests, scheduling, and closeout on one governed lane.
+    chips:
+      - OPEN RUNS
+      - TABLE FINDING
+      - CLOSEOUT
+    accent: "#6bd4ff"
+    accent_secondary: "#ffcc66"
+    focus: [0.76, 0.40]
+    background_focus: [0.76, 0.40]
+    background_zoom: 1.18
+    panel_focus: [0.80, 0.38]
+    panel_zoom: 1.55
+    background_brightness: 0.98
+    background_saturation: 1.10
+    background_contrast: 1.10
+    background_overlay_alpha: 100
+    panel_brightness: 1.28
+    panel_saturation: 1.18
+    panel_contrast: 1.34
+    panel_sharpness: 1.32
+    panel_overlay_alpha: 0
+    motif: network_nodes
+  assets/pages/horizons-index.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/pages/horizons-index.png
+    series_label: CHUMMER6 FUTURES
+    title: HORIZONS
+    subtitle: Big ideas for what Chummer could do next after the core app is solid.
+    chips:
+      - NEXT IDEAS
+      - TABLE NEEDS
+      - CONTINUITY
+    accent: "#4fd1ff"
+    accent_secondary: "#ff7a45"
+    focus: [0.60, 0.54]
+    background_focus: [0.60, 0.54]
+    background_zoom: 1.12
+    background_brightness: 0.96
+    background_saturation: 1.10
+    background_contrast: 1.06
+    background_overlay_alpha: 102
+    panel_focus: [0.61, 0.54]
+    panel_zoom: 1.20
+    panel_brightness: 1.16
+    panel_saturation: 1.10
+    panel_contrast: 1.08
+    panel_sharpness: 1.00
+    panel_overlay_alpha: 14
+    editorial_finish_sigma: 0
+    editorial_finish_opacity: 0
+    copy_width: 474
+    motif: route_grid
+  assets/parts/design.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/parts/design.png
+    series_label: CHUMMER6 PART
+    index: "01"
+    title: DESIGN
+    subtitle: The long-range product map and decision filter.
+    chips:
+      - STRATEGY
+      - ROADMAP
+      - DECISIONS
+    accent: "#82cfff"
+    accent_secondary: "#f6d365"
+    focus: [0.60, 0.52]
+    panel_brightness: 1.06
+    panel_saturation: 1.18
+    panel_contrast: 1.12
+    panel_sharpness: 1.30
+    motif: dossier_grid
+  assets/parts/core.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/parts/core.png
+    series_label: CHUMMER6 PART
+    index: "02"
+    title: CORE
+    subtitle: The deterministic rules engine.
+    chips:
+      - RULES
+      - RECEIPTS
+      - ENGINE
+    accent: "#f7b267"
+    accent_secondary: "#5ad1ff"
+    focus: [0.52, 0.54]
+    panel_brightness: 1.04
+    panel_saturation: 1.16
+    panel_contrast: 1.10
+    panel_sharpness: 1.28
+    motif: ledger_grid
+  assets/parts/ui.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/parts/ui.png
+    series_label: CHUMMER6 PART
+    index: "03"
+    title: UI
+    subtitle: The workbench, receipts, and inspect-everything surface.
+    chips:
+      - WORKBENCH
+      - INSPECT
+      - EXPLAIN
+    accent: "#5ad1ff"
+    accent_secondary: "#f7b267"
+    focus: [0.34, 0.50]
+    background_focus: [0.34, 0.50]
+    background_zoom: 1.12
+    panel_focus: [0.32, 0.52]
+    panel_zoom: 1.08
+    motif: ledger_grid
+  assets/parts/mobile.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/parts/mobile.png
+    series_label: CHUMMER6 PART
+    index: "04"
+    title: MOBILE
+    subtitle: The table-side companion you feel during play.
+    chips:
+      - TABLESIDE
+      - AT TABLE
+      - RECOVERY
+    accent: "#57c7ff"
+    accent_secondary: "#7cffcb"
+    focus: [0.58, 0.50]
+    motif: route_grid
+  assets/parts/hub.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/parts/hub.png
+    series_label: CHUMMER6 PART
+    index: "05"
+    title: HUB
+    subtitle: The online side that keeps sign-in, sync, and community features boring.
+    chips:
+      - ACCOUNTS
+      - SYNC
+      - COMMUNITY
+    accent: "#4fd1ff"
+    accent_secondary: "#8bff9e"
+    focus: [0.62, 0.44]
+    panel_focus: [0.64, 0.44]
+    panel_zoom: 1.06
+    motif: network_nodes
+  assets/parts/ui-kit.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/parts/ui-kit.png
+    series_label: CHUMMER6 PART
+    index: "06"
+    title: UI KIT
+    subtitle: The shared visual vocabulary.
+    chips:
+      - TOKENS
+      - COMPONENTS
+      - CONSISTENCY
+    accent: "#ffd166"
+    accent_secondary: "#82cfff"
+    focus: [0.58, 0.52]
+    panel_saturation: 1.16
+    panel_contrast: 1.08
+    motif: swatch_grid
+  assets/parts/hub-registry.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/parts/hub-registry.png
+    series_label: CHUMMER6 PART
+    index: "07"
+    title: HUB REGISTRY
+    subtitle: The release shelf, install record, and compatibility record.
+    chips:
+      - FILES
+      - COMPATIBILITY
+      - RELEASES
+    accent: "#f7b267"
+    accent_secondary: "#82cfff"
+    focus: [0.68, 0.46]
+    panel_focus: [0.70, 0.46]
+    panel_zoom: 1.05
+    motif: shelf_brackets
+  assets/parts/media-factory.png:
+    kind: feature_cover
+    source: products/chummer/public-guide-curated-assets/source-plates/parts/media-factory.png
+    series_label: CHUMMER6 PART
+    index: "08"
+    title: MEDIA FACTORY
+    subtitle: The dedicated media studio.
+    chips:
+      - TEASERS
+      - DOSSIERS
+      - SHOWCASES
+    accent: "#ff5c7a"
+    accent_secondary: "#ffd166"
+    focus: [0.50, 0.42]
+    background_focus: [0.50, 0.42]
+    background_zoom: 1.08
+    panel_focus: [0.48, 0.38]
+    panel_zoom: 1.18
+    motif: print_columns
+  assets/pages/parts-index.png:
+    kind: mosaic_cover
+    layout: editorial_cluster
+    series_label: CHUMMER6 TOUR
+    title: PARTS
+    subtitle: The app, phone companion, updater, and support tools that make Shadowrun rules usable at the table.
+    chips:
+      - APP TOUR
+      - PHONE + TABLE
+      - HOW IT SHIPS
+    accent: "#ff7a45"
+    accent_secondary: "#57c7ff"
+    motif: network_nodes
+    copy_width: 492
+    lead_width_ratio: 0.56
+    top_height_ratio: 0.50
+    tile_brightness_lead: 1.04
+    tile_brightness: 1.00
+    tile_saturation: 1.12
+    tile_contrast: 1.10
+    tile_overlay_alpha_lead: 8
+    tile_overlay_alpha: 10
+    tile_sources:
+      - source: products/chummer/public-guide-curated-assets/source-plates/parts/core.png
+        focus: [0.51, 0.48]
+        zoom: 1.10
+      - source: products/chummer/public-guide-curated-assets/source-plates/parts/ui-kit.png
+        focus: [0.58, 0.58]
+        zoom: 1.16
+      - source: products/chummer/public-guide-curated-assets/source-plates/parts/media-factory.png
+        focus: [0.40, 0.44]
+        zoom: 1.10
+      - source: products/chummer/public-guide-curated-assets/source-plates/parts/design.png
+        focus: [0.56, 0.52]
+        zoom: 1.08
+      - source: products/chummer/public-guide-curated-assets/source-plates/parts/ui.png
+        focus: [0.52, 0.50]
+        zoom: 1.18
+      - source: products/chummer/public-guide-curated-assets/source-plates/parts/hub-registry.png
+        focus: [0.66, 0.44]
+        zoom: 1.22

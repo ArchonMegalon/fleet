@@ -76,8 +76,8 @@ Chummer adds a governed world-state plane that can:
 
 The public-facing fantasy is:
 
-> The city keeps moving between sessions.  
-> Megacorps, syndicates, cults, and other power blocs spend resources, launch projects, create pressure, and generate jobs.  
+> The city keeps moving between sessions.
+> Megacorps, syndicates, cults, and other power blocs spend resources, launch projects, create pressure, and generate jobs.
 > GMs do not have to invent all tension from a blank page anymore — they curate it.
 
 The loop should now be considered explicit:
@@ -594,7 +594,7 @@ The board must help, not railroad.
 
 The rule is:
 
-> The world engine creates tension.  
+> The world engine creates tension.
 > The GM still curates the actual story entry point.
 
 ## Organizer and manager-player modes

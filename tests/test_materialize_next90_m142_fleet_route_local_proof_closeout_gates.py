@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
 import subprocess
 import sys
@@ -42,6 +43,10 @@ def _write_yaml(path: Path, payload: dict) -> None:
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _fresh_generated_at() -> str:
+    return (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _workflow_pack_payload() -> dict:
@@ -267,6 +272,7 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     gm_runboard = tmp_path / "gm_runboard.json"
     core_doc = tmp_path / "core_doc.md"
     direct_workflow_proof = tmp_path / "direct_workflow_proof.json"
+    generated_at = _fresh_generated_at()
 
     _write_yaml(registry, _registry(closeout_complete=closeout_complete))
     _write_yaml(fleet_queue, {"items": [_queue_item(closeout_complete=closeout_complete)]})
@@ -279,11 +285,11 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     )
     _write_yaml(workflow_pack, _workflow_pack_payload())
     rows = _parity_rows(direct=direct)
-    _write_json(parity_audit, {"generated_at": "2026-05-05T12:00:00Z", "rows": rows, "elements": rows})
+    _write_json(parity_audit, {"generated_at": generated_at, "rows": rows, "elements": rows})
     _write_json(
         visual_gate,
         {
-            "generated_at": "2026-05-05T12:00:00Z",
+            "generated_at": generated_at,
             "status": "pass",
             "screenshots": ["05-dense-section-light.png", "06-dense-section-dark.png", "10-contacts-section-light.png", "11-diary-dialog-light.png"],
             "evidence": {"legacy_dense_builder_rhythm": "pass", "legacy_contacts_workflow_rhythm": "pass"},
@@ -293,7 +299,7 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     _write_json(
         workflow_gate,
         {
-            "generated_at": "2026-05-05T12:00:00Z",
+            "generated_at": generated_at,
             "status": "pass",
             "workflowFamilyIds": ["qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources"],
         },
@@ -301,7 +307,7 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     _write_json(
         screenshot_gate,
         {
-            "generated_at": "2026-05-05T12:00:00Z",
+            "generated_at": generated_at,
             "status": "pass",
             "reviewJobs": {"dense_builder": {"screenshots": ["05-dense-section-light.png", "06-dense-section-dark.png"], "evidenceKeys": ["legacy_dense_builder_rhythm"]}},
         },
@@ -309,7 +315,7 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     _write_json(
         dense_gate,
         {
-            "generated_at": "2026-05-05T12:00:00Z",
+            "generated_at": generated_at,
             "status": "pass",
             "evidence": {"tests": ["Character_creation_preserves_familiar_dense_builder_rhythm", "Runtime_backed_toolstrip_preserves_flat_classic_toolbar_posture"]},
         },
@@ -317,7 +323,7 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     _write_json(
         veteran_gate,
         {
-            "generated_at": "2026-05-05T12:00:00Z",
+            "generated_at": generated_at,
             "status": "pass",
             "taskTimeEvidence": {"save": {"tests": ["save"]}},
         },
@@ -325,7 +331,7 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     _write_json(
         ui_release,
         {
-            "generated_at": "2026-05-05T12:00:00Z",
+            "generated_at": generated_at,
             "status": "pass",
             "proofs": {"dense": {"tokens": ["workflow:build_explain_publish"] if direct else []}},
             "screenshots": ["10-contacts-section-light.png", "11-diary-dialog-light.png"],
@@ -334,7 +340,7 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     _write_json(
         ui_local_release,
         {
-            "generated_at": "2026-05-05T12:00:00Z",
+            "generated_at": generated_at,
             "status": "passed",
             "journeys_passed": ["build_explain_publish"] if direct else [],
         },
@@ -342,7 +348,7 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     _write_json(
         direct_workflow_proof,
         {
-            "generatedAt": "2026-05-05T12:00:00Z",
+            "generatedAt": generated_at,
             "status": "pass",
             "evidence": {
                 "familyChecks": {
@@ -374,7 +380,7 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     _write_json(
         ui_kit_local_release,
         {
-            "generated_at": "2026-05-05T12:00:00Z",
+            "generated_at": generated_at,
             "status": "passed",
             "evidence": {
                 "m142_classic_dense_workbench_evidence_path": "/tmp/docs/m142-classic-dense-workbench-evidence.md",
@@ -385,7 +391,7 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     _write_json(
         dialog_parity,
         {
-            "generated_at": "2026-05-05T12:00:00Z",
+            "generated_at": generated_at,
             "status": "pass",
             "evidence": {"rebuildableDialogIdsFound": ["dialog.dice_roller"], "commandIdsFound": ["dice_roller"]},
         },
@@ -393,7 +399,7 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     _write_json(
         section_host,
         {
-            "generated_at": "2026-05-05T12:00:00Z",
+            "generated_at": generated_at,
             "status": "pass",
             "evidence": {
                 "expectedTabIds": ["tab-info", "tab-skills", "tab-qualities", "tab-combat", "tab-gear", "tab-contacts", "tab-notes"],
@@ -404,7 +410,7 @@ def _fixture_tree(tmp_path: Path, *, direct: bool, closeout_complete: bool = Tru
     _write_json(
         gm_runboard,
         {
-            "generatedAt": "2026-05-05T12:00:00Z",
+            "generatedAt": generated_at,
             "status": "pass",
             "evidence": {"surface": "gm_runboard", "summary": ["Initiative lane:", "ResolveRunboardInitiativeSummary"]},
         },
@@ -535,7 +541,7 @@ class MaterializeNext90M142FleetRouteLocalProofCloseoutGatesTest(unittest.TestCa
             )
 
             payload = json.loads(artifact.read_text(encoding="utf-8"))
-            assert payload["monitor_summary"]["route_local_proof_closeout_status"] == "warning"
+            assert payload["monitor_summary"]["route_local_proof_closeout_status"] == "pass"
             assert payload["package_closeout"]["ready"] is True
             assert any(
                 "UI direct workflow proof is authoritative and current" in item
@@ -640,7 +646,7 @@ class MaterializeNext90M142FleetRouteLocalProofCloseoutGatesTest(unittest.TestCa
             )
 
             payload = json.loads(artifact.read_text(encoding="utf-8"))
-            assert payload["monitor_summary"]["route_local_proof_closeout_status"] == "warning"
+            assert payload["monitor_summary"]["route_local_proof_closeout_status"] == "pass"
             assert payload["package_closeout"]["ready"] is True
             dense_row = next(row for row in payload["runtime_monitors"]["target_rows"]["rows"] if row["id"] == "family:dense_builder_and_career_workflows")
             assert dense_row["source_reason"].startswith("All declared compare artifacts")

@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-06-05T04:10:40Z",
+  "generated_at": "2026-06-17T18:19:18Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "ready",
@@ -21,37 +21,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-06-05T04:09:28Z",
+      "at": "2026-06-17T18:16:49Z",
       "state": "fresh",
-      "age_seconds": 72
+      "age_seconds": 149
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-06-05T04:05:14Z",
+      "at": "2026-06-17T17:30:04Z",
       "state": "fresh",
-      "age_seconds": 326
+      "age_seconds": 2954
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
-      "at": "2026-06-04T14:11:42Z",
+      "at": "2026-06-17T18:08:53Z",
       "state": "fresh",
-      "age_seconds": 50338
+      "age_seconds": 625
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
-      "at": "2026-06-04T14:11:41Z",
+      "at": "2026-06-17T18:08:53Z",
       "state": "fresh",
-      "age_seconds": 50339
+      "age_seconds": 625
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-06-05T04:04:24Z",
+      "at": "2026-06-17T17:29:37Z",
       "state": "fresh",
-      "age_seconds": 376
+      "age_seconds": 2981
     }
   },
   "journeys": [
@@ -310,8 +310,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 38,
-        "support_packets_generated_at": "2026-06-05T04:04:24Z",
+        "history_snapshot_count": 40,
+        "support_packets_generated_at": "2026-06-17T17:29:37Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -699,8 +699,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 38,
-        "support_packets_generated_at": "2026-06-05T04:04:24Z",
+        "history_snapshot_count": 40,
+        "support_packets_generated_at": "2026-06-17T17:29:37Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1143,8 +1143,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 38,
-        "support_packets_generated_at": "2026-06-05T04:04:24Z",
+        "history_snapshot_count": 40,
+        "support_packets_generated_at": "2026-06-17T17:29:37Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1256,8 +1256,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 38,
-        "support_packets_generated_at": "2026-06-05T04:04:24Z",
+        "history_snapshot_count": 40,
+        "support_packets_generated_at": "2026-06-17T17:29:37Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1308,8 +1308,7 @@
         "executive-assistant"
       ],
       "canonical_journeys": [
-        "journeys/claim-install-and-close-a-support-case.md",
-        "journeys/install-and-update.md"
+        "journeys/claim-install-and-close-a-support-case.md"
       ],
       "scorecard_refs": {
         "slos": [
@@ -1471,16 +1470,15 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 38,
-        "support_packets_generated_at": "2026-06-05T04:04:24Z",
+        "history_snapshot_count": 40,
+        "support_packets_generated_at": "2026-06-17T17:29:37Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
           "support_packets"
         ],
         "canonical_journeys": [
-          "journeys/claim-install-and-close-a-support-case.md",
-          "journeys/install-and-update.md"
+          "journeys/claim-install-and-close-a-support-case.md"
         ],
         "external_proof_requests": []
       },
@@ -1523,8 +1521,7 @@
         "chummer6-design"
       ],
       "canonical_journeys": [
-        "journeys/organize-a-community-and-close-the-loop.md",
-        "journeys/claim-install-and-close-a-support-case.md"
+        "journeys/organize-a-community-and-close-the-loop.md"
       ],
       "scorecard_refs": {
         "slos": [
@@ -1637,16 +1634,15 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 38,
-        "support_packets_generated_at": "2026-06-05T04:04:24Z",
+        "history_snapshot_count": 40,
+        "support_packets_generated_at": "2026-06-17T17:29:37Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
           "support_packets"
         ],
         "canonical_journeys": [
-          "journeys/organize-a-community-and-close-the-loop.md",
-          "journeys/claim-install-and-close-a-support-case.md"
+          "journeys/organize-a-community-and-close-the-loop.md"
         ],
         "external_proof_requests": []
       },

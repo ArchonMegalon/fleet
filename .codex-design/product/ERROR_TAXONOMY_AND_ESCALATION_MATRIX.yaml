@@ -1,0 +1,126 @@
+product: chummer
+version: 1
+last_reviewed: 2026-05-12
+purpose: Canonical error taxonomy for flagship campaign, release, support, and media failures.
+
+severity_levels:
+  - id: s0
+    label: release_blocking
+    meaning: Promotion or continued public recommendation must stop now.
+  - id: s1
+    label: critical_trust_break
+    meaning: A user may lose trust, lose continuity, or be misled without immediate bounded guidance.
+  - id: s2
+    label: major_workflow_break
+    meaning: A key route is degraded, but a bounded safe path still exists.
+  - id: s3
+    label: minor_or_cosmetic
+    meaning: The route is still trustworthy and recoverable; quality is degraded but not deceptive.
+
+error_classes:
+  - id: release_truth_split
+    severity: s0
+    owner_plane:
+      - chummer6-hub
+      - chummer6-hub-registry
+      - fleet
+    user_visible_outcome: Public shelf, status, updater, or support truth disagree.
+    escalation:
+      - Product governor review required.
+      - Release freeze or bounded route revocation required.
+  - id: data_loss_or_non_reversible_migration
+    severity: s0
+    owner_plane:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-hub
+    user_visible_outcome: Character, campaign, restore, import, or export truth may be lost.
+    escalation:
+      - Immediate rollback or promotion block.
+      - Recovery guidance and support packet path required.
+  - id: startup_install_or_update_failure
+    severity: s1
+    owner_plane:
+      - chummer6-ui
+      - chummer6-hub-registry
+      - chummer6-hub
+    user_visible_outcome: User cannot enter the promised desktop route or cannot trust repair posture.
+    escalation:
+      - Route-specific workaround or block label required.
+      - Support and public shelf language must update together.
+  - id: rules_or_explain_divergence
+    severity: s1
+    owner_plane:
+      - chummer6-core
+      - chummer6-ui
+    user_visible_outcome: Numbers, legality, or explain outcomes are wrong or ungrounded.
+    escalation:
+      - Calculation-report lane or explicit bounded gap required.
+      - Promotion block when on promoted route.
+  - id: live_continuity_conflict
+    severity: s1
+    owner_plane:
+      - chummer6-mobile
+      - chummer6-hub
+      - chummer6-core
+    user_visible_outcome: Rejoin, replay, sync, or claimed-device continuity becomes unsafe.
+    escalation:
+      - Visible stale/conflict posture required.
+      - Silent merge/discard forbidden.
+  - id: publication_or_provenance_failure
+    severity: s2
+    owner_plane:
+      - chummer6-media-factory
+      - chummer6-hub-registry
+    user_visible_outcome: Publish route or artifact trust breaks, but draft or preview may still exist.
+    escalation:
+      - Preview/draft-preserving fallback required.
+      - Publication route must not pretend success.
+  - id: accessibility_or_copy_safety_break
+    severity: s2
+    owner_plane:
+      - chummer6-ui
+      - chummer6-hub
+      - chummer6-mobile
+      - chummer6-media-factory
+    user_visible_outcome: A user cannot safely navigate, read, or understand the next action.
+    escalation:
+      - Accessibility and copy-safety review required before closure.
+  - id: performance_budget_breach
+    severity: s2
+    owner_plane:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-mobile
+      - chummer6-hub
+    user_visible_outcome: The route still exists but no longer feels operationally safe or calm.
+    escalation:
+      - Degrade copy and fallback behavior must be explicit.
+  - id: known_issue_language_drift
+    severity: s2
+    owner_plane:
+      - chummer6-hub
+      - chummer6-ui
+      - chummer6-mobile
+    user_visible_outcome: Users see contradictory status words such as fixed, in progress, or blocked.
+    escalation:
+      - Language contract in `KNOWN_ISSUE_AND_FIX_STATUS_LANGUAGE.md` must be applied before closure.
+
+owner_routing_rules:
+  - Errors involving release truth, public shelf posture, or promoted desktop tuples must route through `fleet` and the product governor.
+  - Errors involving support closure wording must route through `chummer6-hub` even when the code fix lands elsewhere.
+  - Errors involving media render or artifact publication must not invent parallel registry truth outside `chummer6-hub-registry`.
+
+support_mapping:
+  s0:
+    support_case_status: accepted
+    public_posture: blocked_or_revoked
+  s1:
+    support_case_status: accepted
+    public_posture: known_issue_or_bounded_preview
+  s2:
+    support_case_status: accepted_or_deferred
+    public_posture: bounded_guidance
+  s3:
+    support_case_status: accepted_deferred_or_rejected
+    public_posture: optional

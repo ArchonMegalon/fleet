@@ -64,6 +64,7 @@ The promoted desktop path must behave like one coherent Chummer experience:
 * guided product installer path first
 * installer or in-app claim and recovery handling
 * no browser ritual to copy or paste a claim code by hand
+* `Claim your copy` as the user-facing account relationship action
 * first launch opens the real workbench or restore continuation flow
 
 ### 1a. Desktop head authority is explicit

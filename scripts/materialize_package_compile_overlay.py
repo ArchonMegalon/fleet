@@ -151,7 +151,7 @@ def resolve_project_queue(repo_root: Path, projects_dir: Path) -> List[Any]:
         for source_cfg in payload.get("queue_sources") or []:
             if isinstance(source_cfg, dict):
                 resolved_queue = apply_queue_source(payload, resolved_queue, source_cfg)
-        return resolved_queue
+        return [item for item in resolved_queue if _queue_entry_active(item)]
     return []
 
 

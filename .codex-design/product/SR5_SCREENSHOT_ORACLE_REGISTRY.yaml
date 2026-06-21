@@ -1,0 +1,76 @@
+product: chummer
+version: 1
+last_reviewed: 2026-05-04
+purpose: Screenshot-oracle registry for SR5 flagship visual parity reviews against Chummer5a.
+release_blocking: true
+default_legacy_oracle: Chummer5a
+comparison_policy:
+  same_task_stage_required: true
+  same_ruleset_required: true
+  current_build_must_publish_oracle_pair: true
+  review_dimensions:
+    - shell_landmarks
+    - chrome_budget
+    - center_pane_dominance
+    - dense_workbench_rhythm
+    - bottom_status_posture
+    - veteran_re_findability
+capture_requirements:
+  shell_capture_min_resolution: 1280x800
+  dialog_capture_min_resolution: 900x700
+  deterministic_filenames_required: true
+  before_after_pair_required: true
+  current_build_label_required: true
+blocking_pack:
+  - id: new_character_opening
+    oracle_surface: Chummer5a fresh-character opening posture
+    route_goal: A new SR5 character opens directly into a real workbench.
+    required_landmarks:
+      - top menu
+      - immediate toolstrip
+      - visible section rhythm
+      - workspace context strip
+      - compact bottom status strip
+      - center-dominant workbench
+  - id: attributes
+    oracle_surface: Chummer5a attributes section
+    route_goal: Attribute editing shows dense rows, obvious section state, and strong center-pane focus.
+    required_landmarks:
+      - visible current section
+      - dense editable rows
+      - stable summary posture
+      - bottom status strip
+  - id: skills
+    oracle_surface: Chummer5a skills section
+    route_goal: Skills workbench preserves browse, inspect, and re-find rhythm under dense list posture.
+    required_landmarks:
+      - dense list posture
+      - visible section selection
+      - visible edit focus
+      - compact bottom status strip
+  - id: cyberware_add_edit
+    oracle_surface: Chummer5a cyberware add or edit flow
+    route_goal: A deep add-edit workflow preserves obvious browse, detail, and confirm posture.
+    required_landmarks:
+      - list or browse posture
+      - detail pane
+      - visible confirm and cancel
+      - cost or essence summary
+expansion_pack:
+  - qualities
+  - armor_and_mods
+  - contacts_lifestyles_notes
+  - settings
+  - import_open_save
+  - roster
+  - print_export
+forbidden_patterns:
+  - Debug or payload panels visible by default in the capture.
+  - Decorative landing or dashboard chrome replacing the builder.
+  - Summary cards or banners crowding out dense editable controls.
+  - Missing bottom status posture.
+  - Screenshot pairs that compare different task stages.
+failure_conditions:
+  - Any blocking pack workflow is missing the Chummer5a oracle capture.
+  - Any screenshot pair is too small, cropped, corrupt, or visually ambiguous.
+  - Any blocking workflow pair shows shell chrome but not the actual builder state that a veteran must judge.

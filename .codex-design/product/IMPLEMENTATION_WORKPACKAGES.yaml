@@ -1,0 +1,36 @@
+version: black-ledger-dispatch-v1
+workpackages:
+- id: BLD-P0-001
+  title: Create dispatch authority design canon
+  priority: P0
+  owner_repos:
+  - chummer6-design
+- id: BLD-P0-002
+  title: Implement BlackLedgerDispatch model and storage
+  priority: P0
+  owner_repos:
+  - chummer6-hub
+  - chummer6-hub-registry
+- id: BLD-P0-003
+  title: Add dispatch safety gate
+  priority: P0
+  owner_repos:
+  - chummer6-hub
+  - fleet
+- id: BLD-P0-004
+  title: Add public dispatch routes
+  priority: P0
+  owner_repos:
+  - chummer6-hub
+- id: BLD-P1-005
+  title: Add EA dispatch draft lane with optional Syllabbles pilot
+  priority: P1
+  owner_repos:
+  - executive-assistant
+  - fleet
+- id: BLD-P1-006
+  title: Integrate dispatch email digest
+  priority: P1
+  owner_repos:
+  - chummer6-hub
+  - executive-assistant

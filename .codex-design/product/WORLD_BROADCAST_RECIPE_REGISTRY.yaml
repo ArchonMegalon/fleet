@@ -1,0 +1,25 @@
+product: chummer
+artifact: world_broadcast_recipe_registry
+version: 1
+last_reviewed: 2026-04-30
+recipes:
+  - id: weekly_city_ticker
+    source_objects:
+      - WorldTick
+      - NewsItem
+  - id: faction_spin_card
+    source_objects:
+      - ResolutionReport
+      - WorldTick
+  - id: gm_job_digest
+    source_objects:
+      - JobPacket
+      - IntelReport
+  - id: public_safe_media_card
+    source_objects:
+      - NewsItem
+      - WorldTick
+  - id: recruitment_or_announcement_packet
+    source_objects:
+      - OpenRun
+      - NewsItem

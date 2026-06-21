@@ -167,7 +167,7 @@
     {
       "name": "FINAL_SR4_RULE_AUTHORITY_VERDICT.md",
       "path": "_completion/full_product_reaudit_v18/FINAL_SR4_RULE_AUTHORITY_VERDICT.md",
-      "sha256": "48588d9a8bdcabbaf4792093509cd312fc53a1f06dd9ffc41411c711cbd86354",
+      "sha256": "95f2485cd05654c04b5c02da33c253cf85272afbfd7f6061791f0beade7f2a7b",
       "generated_at_utc": "2026-06-05T16:21:52Z",
       "producer_workflow": "scripts/materialize_full_product_reaudit_v18.py",
       "input_commit_sha": "cc4545044ffbd651f1c77b7c2b65233ceb55229d",
@@ -177,7 +177,7 @@
     {
       "name": "FINAL_SR5_RULE_AUTHORITY_VERDICT.md",
       "path": "_completion/full_product_reaudit_v18/FINAL_SR5_RULE_AUTHORITY_VERDICT.md",
-      "sha256": "106d2fee367894ca785c508cf701e18bfabc2ad71c7b8b25a92ca74a74cea30c",
+      "sha256": "2f0b8387c7792c678b889325f9f6f03f849a4013fdd2b63840ff9f0aa69b9319",
       "generated_at_utc": "2026-06-05T16:21:52Z",
       "producer_workflow": "scripts/materialize_full_product_reaudit_v18.py",
       "input_commit_sha": "cc4545044ffbd651f1c77b7c2b65233ceb55229d",
@@ -187,7 +187,7 @@
     {
       "name": "FINAL_SR6_RULE_AUTHORITY_VERDICT.md",
       "path": "_completion/full_product_reaudit_v18/FINAL_SR6_RULE_AUTHORITY_VERDICT.md",
-      "sha256": "dd53b10e8dcdd39cee5e42094ea6c6cc0c61df43ea632635a8131f3971242870",
+      "sha256": "437e28afbf9c82c6fb1568880291554195fbfe64ef641b8794f5298795c93e3d",
       "generated_at_utc": "2026-06-05T16:21:52Z",
       "producer_workflow": "scripts/materialize_full_product_reaudit_v18.py",
       "input_commit_sha": "cc4545044ffbd651f1c77b7c2b65233ceb55229d",

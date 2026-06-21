@@ -1,0 +1,102 @@
+version: 1
+workspace:
+  key: chummer-product
+  root_path: /docker/chummercomplete/chummer-product
+  purpose: Primary product integration workspace for Chummer.
+  doctrine_path: PRODUCT_BACKBONE_WORKSPACE.md
+delivery_doctrine:
+  flagship_head: Chummer.Avalonia
+  fallback_head: Chummer.Blazor.Desktop
+  public_surfaces_mode: generated_from_product_and_release_manifests
+  ai_media_role: adjunct_only
+  control_plane_rule: fleet_and_ea_consume_workspace_truth_without_forking_the_architecture
+modules:
+  - key: engine
+    canonical_repos:
+      - chummer6-core
+      - chummer6-core
+  - key: dossier-campaign
+    canonical_repos:
+      - chummer6-core
+      - chummer6-hub
+      - chummer6-hub
+  - key: rules-environment
+    canonical_repos:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-mobile
+  - key: workspace-sync
+    canonical_repos:
+      - chummer6-hub
+      - chummer6-mobile
+      - chummer6-ui
+  - key: registry-update
+    canonical_repos:
+      - chummer6-hub-registry
+      - chummer6-hub
+      - chummer6-ui
+  - key: support-trust
+    canonical_repos:
+      - chummer6-hub
+      - chummer6-ui
+      - chummer6-hub
+    design_sources:
+      - INSTANT_HELP_MAINTENANCE_MODEL.md
+      - FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md
+  - key: desktop-flagship
+    canonical_repos:
+      - chummer6-ui
+      - chummer6-ui-kit
+      - chummer6-design
+  - key: desktop-fallback
+    canonical_repos:
+      - chummer6-ui
+      - chummer6-ui-kit
+  - key: mobile
+    canonical_repos:
+      - chummer6-mobile
+      - chummer6-ui-kit
+  - key: media-ai-adjuncts
+    canonical_repos:
+      - chummer6-media-factory
+      - executive-assistant
+      - fleet
+release_gates:
+  - parity_lab
+  - flagship_parity_registry
+  - classic_dense_workbench
+  - dense_workbench_budget
+  - veteran_first_minute_gate
+  - primary_route_registry
+  - desktop_native_registry_update_flow
+  - generated_public_surfaces
+first_wave:
+  - id: WB-001
+    title: Establish chummer-product workspace backbone
+    owners:
+      - chummer6-design
+      - fleet
+  - id: WB-002
+    title: Build parity lab from Chummer5a oracle inputs
+    owners:
+      - chummer6-design
+      - chummer6-ui
+      - executive-assistant
+      - fleet
+  - id: WB-003
+    title: Ship classic dense workbench as the default flagship posture
+    owners:
+      - chummer6-ui
+      - chummer6-ui-kit
+  - id: WB-004
+    title: Make claim, update, rollback, and Instant Help flows desktop-native
+    owners:
+      - chummer6-hub
+      - chummer6-hub-registry
+      - chummer6-ui
+  - id: WB-005
+    title: Compile public docs and trust copy from workspace and release truth
+    owners:
+      - chummer6-design
+      - fleet
+      - executive-assistant

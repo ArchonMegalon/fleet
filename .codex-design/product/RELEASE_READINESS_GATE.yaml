@@ -1,0 +1,47 @@
+gate_id: chummer_release_readiness
+owner: chummer6-design
+release_labels:
+  - internal
+  - preview
+  - protected_preview
+  - public_release_review_required
+  - public_release
+  - desktop_gold
+  - public_stable
+  - blocked
+  - revoked
+subgates:
+  - verify_design_release_policy
+  - verify_package_boundaries
+  - verify_core_release_receipts
+  - verify_desktop_release_matrix
+  - verify_release_channel
+  - verify_public_projection
+  - verify_mobile_release_proof
+  - verify_ui_kit_package_release
+  - verify_media_claims
+  - verify_proof_freshness
+  - verify_no_public_internal_dependencies
+  - verify_public_truth_convergence
+  - verify_guide_convergence
+  - verify_repo_release_posture
+  - verify_platform_matrix
+verdicts:
+  ready: RELEASE READY
+  failed: NOT RELEASE READY
+stable_requirements:
+  release_proof_status: pass
+  desktop_exit_gate_status: pass
+  mobile_release_proof_status: pass
+  core_receipts_status: pass
+  support_packets_status: pass
+  registry_release_channel_verifier: pass
+  guide_convergence: pass
+  public_truth_convergence: pass
+  package_boundaries: pass
+  platform_matrix: pass
+  no_public_internal_dependencies: pass
+  repo_release_posture: pass
+  ui_kit_package_release: pass
+  media_claims: pass
+  public_projection: pass

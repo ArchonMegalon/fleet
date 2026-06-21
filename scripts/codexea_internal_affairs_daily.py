@@ -15,7 +15,14 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 
-WATCHDOG_SCRIPT = Path("/home/tibor/codexea-internal-affairs-watchdog.sh")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+WATCHDOG_SCRIPT = Path(
+    os.environ.get(
+        "CODEXEA_INTERNAL_AFFAIRS_WATCHDOG_SCRIPT",
+        str(REPO_ROOT / "scripts" / "codexea-internal-affairs-watchdog.sh"),
+    )
+)
+WATCHDOG_WORKDIR = Path(os.environ.get("CODEXEA_INTERNAL_AFFAIRS_WATCHDOG_WORKDIR", str(REPO_ROOT)))
 WATCHDOG_UNIT = "codexea-internal-affairs-watchdog.service"
 WATCH_ROOT = Path("/tmp/codexea-internal-affairs-watch")
 RUNS_DIR = WATCH_ROOT / "runs"
@@ -173,7 +180,7 @@ def start_watchdog(*, dry_run: bool) -> str:
                 "--user",
                 "--unit=codexea-internal-affairs-watchdog",
                 "--collect",
-                "--property=WorkingDirectory=/home/tibor",
+                f"--property=WorkingDirectory={WATCHDOG_WORKDIR}",
                 str(WATCHDOG_SCRIPT),
             ],
             stdout=subprocess.DEVNULL,

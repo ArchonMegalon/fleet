@@ -1,0 +1,28 @@
+product: chummer
+artifact: community_safety_event_and_appeal_states
+version: 1
+last_reviewed: 2026-04-30
+event_families:
+  - no_show
+  - unsafe_content
+  - harassment
+  - spoiler_leak
+  - application_dispute
+  - gm_or_organizer_escalation
+  - faction_or_leaderboard_gaming
+  - observer_consent_violation
+states:
+  - reported
+  - triaged
+  - evidence_requested
+  - temporary_action
+  - resolved
+  - appealed
+  - closed
+required_fields:
+  - reporter_visibility
+  - subject_visibility
+  - evidence_posture
+  - retention_posture
+  - publication_posture
+  - appeal_deadline

@@ -1,0 +1,62 @@
+version: black-ledger-dispatch-v1
+authority:
+  fact_authority:
+  - WorldTickReceipt
+  - PlayerSafeNewsProjection
+  - PackagePressureReceipt
+  - CloseoutReceipt
+  policy_authority: chummer6-design
+  publication_authority: chummer6-hub
+  seed_authority: chummer6-hub-registry
+  drafting_authority: executive-assistant
+  orchestration_authority: fleet
+  external_tools_authority: draft_only
+routes:
+- path: /ledger/dispatches
+  method: GET
+  audience: public
+- path: /ledger/dispatches/{dispatchId}
+  method: GET
+  audience: public
+- path: /ledger/turns/{turn}/dispatches
+  method: GET
+  audience: public
+- path: /ledger/factions/{factionId}/dispatches
+  method: GET
+  audience: public
+entities:
+  BlackLedgerDispatch:
+    dispatch_id: string
+    world_id: string
+    turn: integer
+    dispatch_type: enum
+    source_receipt_ids: string[]
+    status: draft|gated|approved|published|suppressed|archived
+    title: string
+    summary: string
+    body_markdown: string
+    highlights: string[]
+    involved_factions: string[]
+    involved_districts: string[]
+    package_pressure_links: string[]
+    privacy_status: passed|failed|needs_review
+    ip_status: passed|failed|needs_review
+    fact_consistency_status: passed|failed|needs_review
+    generated_by: object
+    human_review_status: string
+    published_at_utc: datetime?
+  DispatchDraft:
+    draft_id: string
+    source_receipt_ids: string[]
+    provider: string
+    draft_body: string
+    status: draft_only
+  DispatchGateReceipt:
+    receipt_id: string
+    dispatch_id: string
+    source_receipt_ids: string[]
+    privacy_result: object
+    ip_result: object
+    provider_leak_result: object
+    fact_consistency_result: object
+    tone_result: object

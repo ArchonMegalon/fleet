@@ -1,0 +1,247 @@
+product: chummer
+surface: chummer5a_remaining_hard_parity
+version: 1
+last_reviewed: 2026-04-30
+purpose: Machine-readable release-blocking matrix for the remaining hard Chummer5A human-parity families so gates and milestone tracking do not collapse them into generic desktop readiness.
+
+audit_required_fields:
+  - family_id
+  - surface_id
+  - dialog_id
+  - element_id
+  - element_label
+  - present_in_chummer5a
+  - present_in_chummer6
+  - visual_parity
+  - behavioral_parity
+  - removable_if_not_in_chummer5a
+  - reason
+
+field_rules:
+  present_in_chummer5a:
+    allowed_values: [yes, no]
+  present_in_chummer6:
+    allowed_values: [yes, no]
+  visual_parity:
+    allowed_values: [yes, no]
+  behavioral_parity:
+    allowed_values: [yes, no]
+  removable_if_not_in_chummer5a:
+    allowed_values: [yes, no]
+
+default_tester_policy:
+  parity_default_for_real_legacy_job: yes
+  modernization_allowed_if:
+    - improves_density_without_hiding_state
+    - improves_readability_without_adding_indirection
+    - improves_continuity_without_slower_primary_route
+    - preserves_trusted_completion_of_the_same_user_job
+  modernization_fails_if:
+    - buries_first_class_dialog_behind_dashboard_indirection
+    - turns_dense_work_into_slower_ritual
+    - hides_actionable_state_behind_review_or_overview_framing
+    - makes_source_import_or_export_truth_harder_to_inspect
+    - converts_direct_utility_into_sidecar_or_post_hoc_explain_only_surface
+  chummer6_only_control_may_stay_if:
+    - shortens_path_to_legacy_user_job
+    - increases_trust_without_adding_indirection
+    - improves_install_live_play_recap_or_return_continuity
+
+families:
+  - id: translator_xml_bridge
+    release_blocking: true
+    milestone_task_id: "136.21"
+    required_screenshots:
+      - translator_route_with_live_language_inventory
+      - translator_route_with_selected_language_or_overlay_state
+      - xml_amendment_route_with_editable_target
+      - custom_data_bridge_with_enabled_overlay_posture
+    surfaces:
+      - id: translator_dialog
+        must_remain_first_class:
+          - translator_title
+          - language_inventory
+          - overlay_or_corpus_posture
+          - search_or_filter
+          - direct_bridge_handoff
+      - id: xml_amendment_editor
+        must_remain_first_class:
+          - amendment_scope
+          - file_or_overlay_target
+          - change_visibility
+          - save_apply_posture
+      - id: custom_data_bridge
+        must_remain_first_class:
+          - explicit_custom_data_route
+          - enabled_overlay_visibility
+          - governed_or_stale_posture
+          - translator_or_amendment_handoff
+
+  - id: dense_builder_and_career
+    release_blocking: true
+    milestone_task_id: "136.22"
+    required_screenshots:
+      - new_character_attributes_workspace
+      - live_career_skills_workspace
+      - qualities_management_surface
+      - gear_or_augment_dense_management_surface
+      - one_ruleset_specific_specialist_tab
+    surfaces:
+      - id: attributes_workspace
+        must_remain_first_class:
+          - direct_attribute_editing
+          - current_totals
+          - spend_or_consequence_visibility
+      - id: skills_workspace
+        must_remain_first_class:
+          - searchable_skill_list
+          - rating_state
+          - category_grouping
+          - direct_edit_posture
+      - id: qualities_workspace
+        must_remain_first_class:
+          - add_remove_flow
+          - active_quality_list
+          - validation_posture
+          - source_anchor_visibility
+      - id: gear_and_augment_workspace
+        must_remain_first_class:
+          - dense_list
+          - affordability_or_legality_posture
+          - equip_manage_flow
+          - direct_compare_posture
+      - id: magic_matrix_vehicle_tabs
+        must_remain_first_class:
+          - ruleset_specific_dense_work_surface
+          - direct_state_editing
+
+  - id: dice_initiative_and_table_utilities
+    release_blocking: true
+    milestone_task_id: "136.23"
+    required_screenshots:
+      - dice_roller_with_result_state
+      - initiative_utility_with_roster_context
+      - quick_utility_entry_point_from_flagship_desktop_shell
+    surfaces:
+      - id: dice_roller
+        must_remain_first_class:
+          - direct_dice_input
+          - result_visibility
+          - repeatable_roll_posture
+      - id: initiative_utility
+        must_remain_first_class:
+          - initiative_calculation
+          - pass_or_order_preview
+          - roster_context
+      - id: table_utility_surface
+        must_remain_first_class:
+          - quick_utility_access_without_campaign_detour
+
+  - id: identity_contacts_lifestyles_history
+    release_blocking: true
+    milestone_task_id: "136.24"
+    required_screenshots:
+      - identities_and_licenses_route
+      - contacts_dialog
+      - lifestyles_dialog
+      - history_or_journal_continuity_route
+    surfaces:
+      - id: identity_and_licenses
+        must_remain_first_class:
+          - sin_posture
+          - license_posture
+          - identity_editability
+      - id: contacts_dialog
+        must_remain_first_class:
+          - contacts_list
+          - relationship_or_role_fields
+          - direct_add_edit_posture
+      - id: lifestyles_dialog
+        must_remain_first_class:
+          - lifestyle_entries
+          - costs_or_durations
+          - direct_edit_posture
+      - id: history_or_journal
+        must_remain_first_class:
+          - visible_change_history
+          - continuity_memory
+          - direct_review_posture
+
+  - id: legacy_and_adjacent_import_oracles
+    release_blocking: true
+    milestone_task_id: "136.25"
+    required_screenshots:
+      - hero_lab_import_route
+      - legacy_import_oracles_matrix
+      - migration_confidence_review_with_bounded_loss_or_provenance
+    surfaces:
+      - id: hero_lab_import
+        must_remain_first_class:
+          - direct_import_entry_point
+          - file_or_bundle_target
+          - import_verdict_visibility
+      - id: legacy_import_matrix
+        must_remain_first_class:
+          - explicit_chummer4_oracle_posture
+          - explicit_chummer5a_oracle_posture
+          - explicit_adjacent_sr6_oracle_posture
+      - id: migration_confidence_review
+        must_remain_first_class:
+          - bounded_loss_visibility
+          - manual_review_visibility
+          - provenance_visibility
+
+  - id: sheet_export_print_viewer_exchange
+    release_blocking: true
+    milestone_task_id: "136.26"
+    required_screenshots:
+      - sheet_viewer
+      - multi_runner_print_route
+      - export_exchange_route_with_multiple_targets
+    surfaces:
+      - id: sheet_viewer
+        must_remain_first_class:
+          - visible_sheet_preview_route
+          - chosen_sheet_posture
+          - first_class_review_surface
+      - id: print_multiple
+        must_remain_first_class:
+          - multi_runner_print_posture
+          - target_selection
+          - print_readiness
+      - id: export_exchange
+        must_remain_first_class:
+          - explicit_pdf_target
+          - explicit_json_target
+          - explicit_foundry_target
+          - explicit_exchange_posture
+
+  - id: sr6_supplements_designers_house_rules
+    release_blocking: true
+    milestone_task_id: "136.27"
+    required_screenshots:
+      - supplement_posture_visible
+      - designer_tools_catalog_visible
+      - house_rule_overlay_posture_visible
+    surfaces:
+      - id: supplement_posture
+        must_remain_first_class:
+          - supplement_coverage_visibility
+          - selection_posture
+      - id: designer_tools_catalog
+        must_remain_first_class:
+          - explicit_designer_tool_posture
+          - tool_family_visibility
+      - id: house_rule_overlay
+        must_remain_first_class:
+          - visible_house_rule_posture
+          - overlay_counts
+          - activation_truth
+
+gate_requirements:
+  fail_closed_when_missing:
+    - required_screenshots
+    - runtime_receipt_for_opening_route
+    - dialog_level_element_inventory_rows
+    - explicit_reason_for_visual_or_behavioral_no
+    - explicit_reason_for_non_removable_chummer6_only_control

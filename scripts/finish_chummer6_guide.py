@@ -3430,17 +3430,26 @@ def part_page(name: str, item: dict[str, object]) -> str:
 
 
 def horizon_page(slug: str, item: dict[str, object]) -> str:
+    def public_reader_text(value: object) -> str:
+        return (
+            str(value or "")
+            .replace("source trails", "source references")
+            .replace("source trail", "source references")
+            .replace("Source trails", "Source references")
+            .replace("Source trail", "Source references")
+        )
+
     fallback = HORIZON_FALLBACK_COPY.get(slug, {})
     title = str(item["title"])
-    foundations = "\n".join(f"- {line}" for line in item["foundations"])
-    problem = str(item.get("problem") or item.get("brutal_truth") or fallback.get("problem") or "").strip()
+    foundations = "\n".join(f"- {public_reader_text(line)}" for line in item["foundations"])
+    problem = public_reader_text(item.get("problem") or item.get("brutal_truth") or fallback.get("problem") or "").strip()
     scene = format_dialogue_markdown(
-        str(item.get("table_scene") or item.get("scene") or fallback.get("table_scene") or item.get("use_case") or "").strip()
+        public_reader_text(item.get("table_scene") or item.get("scene") or fallback.get("table_scene") or item.get("use_case") or "").strip()
     )
-    meanwhile = str(item.get("meanwhile") or fallback.get("meanwhile") or "").strip()
-    why_great = str(item.get("why_great") or fallback.get("why_great") or item.get("brutal_truth") or item.get("hook") or "").strip()
-    why_waits = str(item.get("why_waits") or item.get("not_now") or "It stays parked until the current product can prove the basics well enough.").strip()
-    pitch_line = str(
+    meanwhile = public_reader_text(item.get("meanwhile") or fallback.get("meanwhile") or "").strip()
+    why_great = public_reader_text(item.get("why_great") or fallback.get("why_great") or item.get("brutal_truth") or item.get("hook") or "").strip()
+    why_waits = public_reader_text(item.get("why_waits") or item.get("not_now") or "It stays parked until the current product can prove the basics well enough.").strip()
+    pitch_line = public_reader_text(
         item.get("pitch_line")
         or fallback.get("pitch_line")
         or "If your table pain is different, head back to the [Horizons index](README.md) and look for the closest future idea."
@@ -3456,7 +3465,7 @@ def horizon_page(slug: str, item: dict[str, object]) -> str:
         f'<img src="../assets/horizons/details/{slug}-scene.png" alt="{title} dialogue scene still" width="420">'
         "</p>\n\n"
     )
-    public_body = str(item.get("public_body") or "").strip()
+    public_body = public_reader_text(item.get("public_body") or "").strip()
     if public_body:
         body = (
             f"{image_banner(f'{title} banner', f'../assets/horizons/{slug}.png')}\n\n"
@@ -3645,7 +3654,7 @@ def write_guide_repo() -> None:
 
                 The short version: public bugs and feature ideas still go through the [Chummer6 issue tracker](https://github.com/ArchonMegalon/Chummer6/issues), and the new **booster** lane is for people who explicitly want to lend temporary premium coding capacity through Hub.
 
-                A booster is an opt-in temporary help lane on top of the cheap baseline. It does not replace the cheap-first loop, and it still lands through review.
+                A booster is opt-in temporary help. It does not replace the normal public issue flow, and every change still goes through review.
 
                 - [Open the public participation page]({participate_url})
 
@@ -4340,7 +4349,7 @@ def audit_generated_repo() -> None:
         if needle not in download_page:
             raise ValueError(f"DOWNLOAD.md is missing required release shelf detail: {needle}")
     support_page = (GUIDE_REPO / "HOW_CAN_I_HELP.md").read_text(encoding="utf-8").lower()
-    for needle in ["booster", "https://chummer.run/participate", "cheap baseline", "review", "free later"]:
+    for needle in ["booster", "https://chummer.run/participate", "review", "free later"]:
         if needle not in support_page:
             raise ValueError(f"HOW_CAN_I_HELP.md is missing required support token: {needle}")
     faq_page = (GUIDE_REPO / "FAQ.md").read_text(encoding="utf-8")

@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -272,7 +273,7 @@ def _faq_registry() -> dict:
 def _community_hub() -> str:
     return """# COMMUNITY HUB
 
-- Today: Future concept.
+- Today: shipped mvp.
 That is a core goal. Quickstart runners and mobile-first application paths should reduce the Windows-only chokepoint.
 No. Chummer owns campaign logic. Discord can remain the community and meeting surface.
 """
@@ -310,13 +311,16 @@ def _public_feature_registry(*, overclaim: bool) -> dict:
     return {"cards": cards}
 
 
-def _public_landing_manifest(*, overclaim: bool) -> dict:
+def _public_landing_manifest(*, overclaim: bool, bound_hero_route: bool = False) -> dict:
     public_routes = [
         {"path": "/faq", "purpose": "support_entry", "must_exist": True},
         {"path": "/roadmap/community-hub", "purpose": "roadmap_detail", "must_exist": True},
     ]
     if overclaim:
-        public_routes.append({"path": "/ready-for-tonight", "purpose": "artifact_detail", "must_exist": True})
+        route = {"path": "/ready-for-tonight", "purpose": "artifact_detail", "must_exist": True}
+        if bound_hero_route:
+            route["closeout_proof_binding"] = "fleet.next90_m138_hero_path_closeout_gates"
+        public_routes.append(route)
     return {"public_routes": public_routes, "auth_routes": [], "registered_routes": []}
 
 
@@ -332,7 +336,7 @@ def _hero_path_projections() -> dict:
     return {
         "contract_name": "fleet.next90_m138_hero_path_projections",
         "status": "pass",
-        "generated_at": "2026-05-05T12:00:00Z",
+        "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "projections": {
             "newcomer_path": {"status": "pass", "truth_sources": ["journey.find_and_join_open_run", "public_faq.no_windows_needed"]},
             "ready_for_tonight": {"status": "pass", "truth_sources": ["ready_for_tonight_gates.player_readiness_verdict"]},
@@ -342,7 +346,14 @@ def _hero_path_projections() -> dict:
     }
 
 
-def _fixture_tree(tmp_path: Path, *, projection_present: bool, overclaim_public: bool, flagship_ready: bool) -> dict[str, Path]:
+def _fixture_tree(
+    tmp_path: Path,
+    *,
+    projection_present: bool,
+    overclaim_public: bool,
+    flagship_ready: bool,
+    bound_hero_route: bool = False,
+) -> dict[str, Path]:
     registry = tmp_path / "registry.yaml"
     fleet_queue = tmp_path / "fleet_queue.yaml"
     design_queue = tmp_path / "design_queue.yaml"
@@ -385,7 +396,7 @@ def _fixture_tree(tmp_path: Path, *, projection_present: bool, overclaim_public:
     _write_text(community_hub, _community_hub())
     _write_text(open_run_journey, _open_run_journey())
     _write_yaml(public_feature_registry, _public_feature_registry(overclaim=overclaim_public))
-    _write_yaml(public_landing_manifest, _public_landing_manifest(overclaim=overclaim_public))
+    _write_yaml(public_landing_manifest, _public_landing_manifest(overclaim=overclaim_public, bound_hero_route=bound_hero_route))
     _write_json(flagship, _flagship_readiness(ready=flagship_ready))
     if projection_present:
         _write_json(hero_path_projections, _hero_path_projections())
@@ -521,6 +532,24 @@ class MaterializeNext90M138FleetHeroPathCloseoutGatesTest(unittest.TestCase):
         self.assertEqual(payload["status"], "pass")
         self.assertEqual(payload["canonical_monitors"]["queue_alignment"]["state"], "pass")
         self.assertEqual(payload["package_closeout"]["state"], "pass")
+
+    def test_public_hero_route_passes_when_closeout_proof_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fixture = _fixture_tree(
+                tmp_path,
+                projection_present=True,
+                overclaim_public=True,
+                flagship_ready=True,
+                bound_hero_route=True,
+            )
+            _write_yaml(fixture["public_feature_registry"], _public_feature_registry(overclaim=False))
+            artifact = tmp_path / "artifact.json"
+            markdown = tmp_path / "artifact.md"
+            payload = self._run_materializer(fixture, artifact, markdown)
+
+        self.assertEqual(payload["monitor_summary"]["hero_path_closeout_status"], "pass")
+        self.assertEqual(payload["monitor_summary"]["runtime_blocker_count"], 0)
 
 
 if __name__ == "__main__":

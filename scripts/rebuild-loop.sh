@@ -27,6 +27,7 @@ autoheal_timeout_seconds="${FLEET_AUTOHEAL_TIMEOUT_SECONDS:-120}"
 autoheal_escalate_after_restarts="${FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS:-3}"
 autoheal_escalate_window_seconds="${FLEET_AUTOHEAL_ESCALATE_WINDOW_SECONDS:-1800}"
 external_proof_autoingest_enabled="$(printf '%s' "${FLEET_EXTERNAL_PROOF_AUTOINGEST_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')"
+external_proof_runbook_path_was_explicit="${FLEET_EXTERNAL_PROOF_RUNBOOK_PATH+x}"
 external_proof_commands_dir="${FLEET_EXTERNAL_PROOF_COMMANDS_DIR:-$workspace_root/.codex-studio/published/external-proof-commands}"
 external_proof_runbook_path="${FLEET_EXTERNAL_PROOF_RUNBOOK_PATH:-$workspace_root/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md}"
 external_proof_autoingest_cooldown_seconds="${FLEET_EXTERNAL_PROOF_AUTOINGEST_COOLDOWN_SECONDS:-120}"
@@ -424,6 +425,13 @@ external_proof_unresolved_request_count() {
   esac
 }
 
+external_proof_runbook_is_authoritative_for_ingest() {
+  if [ -n "$external_proof_runbook_path_was_explicit" ]; then
+    return 0
+  fi
+  [ "${external_proof_commands_dir%/}" = "${workspace_root%/}/.codex-studio/published/external-proof-commands" ]
+}
+
 write_external_proof_status() {
   current_state="$1"
   detail="$2"
@@ -686,7 +694,7 @@ monitor_external_proof_autoingest() {
     return 0
   fi
   unresolved_request_count="$(external_proof_unresolved_request_count)"
-  if [ "$unresolved_request_count" = "0" ]; then
+  if [ "$unresolved_request_count" = "0" ] && external_proof_runbook_is_authoritative_for_ingest; then
     write_text_file "$external_proof_autoingest_last_result_file" "no_pending_requests"
     write_text_file "$external_proof_autoingest_last_detail_file" "no external host proof bundle is currently required"
     write_external_proof_status "no_pending_requests" "no external host proof bundle is currently required" "" 0

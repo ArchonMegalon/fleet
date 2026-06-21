@@ -1,0 +1,108 @@
+product: chummer
+version: 1
+last_reviewed: 2026-04-22
+status: active_overlay
+goal: Materialize the living-world and campaign-memory direction into small release-gated loops instead of broad horizon prose.
+
+loops:
+  - id: LCL-001
+    title: Live action economy and turn assist
+    priority: 1
+    docs:
+      - LIVE_ACTION_ECONOMY_AND_TURN_ASSIST.md
+      - GM_RUNBOARD_LIVE_OPERATIONS.md
+    owners:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-mobile
+      - chummer6-design
+    golden_journey: player_completes_sr6_combat_round_with_action_budget
+
+  - id: LCL-002
+    title: Source anchors and local rulebook binding
+    priority: 2
+    docs:
+      - SOURCE_ANCHOR_AND_LOCAL_RULEBOOK_BINDING.md
+    owners:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-mobile
+      - chummer6-design
+    golden_journey: user_opens_local_rulebook_from_explain_drawer
+
+  - id: LCL-003
+    title: Campaign adoption wizard
+    priority: 3
+    docs:
+      - CAMPAIGN_ADOPTION_WIZARD.md
+    owners:
+      - chummer6-hub
+      - chummer6-ui
+      - chummer6-core
+      - chummer6-design
+    golden_journey: existing_campaign_adopted_without_rebuilding_full_history
+
+  - id: LCL-004
+    title: Runner resume and goal pins
+    priority: 4
+    docs:
+      - RUNNER_RESUME_AND_GOAL_PINS.md
+    owners:
+      - chummer6-ui
+      - chummer6-mobile
+      - chummer6-hub
+      - chummer6-design
+    golden_journey: player_pins_upgrade_and_tracks_progress_after_reward
+
+  - id: LCL-005
+    title: GM Runboard
+    priority: 5
+    docs:
+      - GM_RUNBOARD_LIVE_OPERATIONS.md
+    owners:
+      - chummer6-ui
+      - chummer6-mobile
+      - chummer6-core
+      - chummer6-hub
+      - chummer6-design
+    golden_journey: player_completes_sr6_combat_round_with_action_budget
+
+  - id: LCL-006
+    title: Prep Packet Factory
+    priority: 6
+    docs:
+      - PREP_PACKET_FACTORY_AND_PROCEDURAL_TABLES.md
+    owners:
+      - chummer6-hub
+      - chummer6-ui
+      - chummer6-core
+      - chummer6-media-factory
+      - chummer6-design
+    golden_journey: gm_creates_a_playable_prep_packet
+
+  - id: LCL-007
+    title: BLACK LEDGER MVP 001
+    priority: 7
+    docs:
+      - BLACK_LEDGER_MVP_001.md
+    owners:
+      - chummer6-hub
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-media-factory
+      - chummer6-design
+    golden_journeys:
+      - gm_closes_run_and_generates_resolution_report
+      - resolution_report_creates_world_tick_and_player_safe_news_item
+
+  - id: LCL-008
+    title: Crew and mission fit
+    priority: 8
+    docs:
+      - CREW_AND_MISSION_FIT_MODEL.md
+    owners:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-hub
+      - chummer6-design
+    golden_journey: gm_creates_a_playable_prep_packet

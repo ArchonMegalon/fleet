@@ -1,0 +1,62 @@
+product: chummer
+version: 1
+last_reviewed: 2026-04-22
+status: proposed
+goal: Turn the strongest living-campaign ideas into eight release-gated proofs instead of broad future-simulation promises.
+
+gates:
+  - id: LPM-001
+    title: Live SR6 combat round
+    release_gate: player_completes_sr6_combat_round_with_action_budget
+    docs:
+      - LIVE_ACTION_ECONOMY_AND_TURN_ASSIST.md
+      - GM_RUNBOARD_LIVE_OPERATIONS.md
+
+  - id: LPM-002
+    title: Local source page opens from explain drawer
+    release_gate: user_opens_local_rulebook_from_explain_drawer
+    docs:
+      - SOURCE_ANCHOR_AND_LOCAL_RULEBOOK_BINDING.md
+
+  - id: LPM-003
+    title: Existing campaign adoption
+    release_gate: existing_campaign_adopted_without_rebuilding_full_history
+    docs:
+      - CAMPAIGN_ADOPTION_WIZARD.md
+
+  - id: LPM-004
+    title: Runner pins an upgrade
+    release_gate: player_pins_upgrade_and_tracks_progress_after_reward
+    docs:
+      - RUNNER_RESUME_AND_GOAL_PINS.md
+
+  - id: LPM-005
+    title: GM creates a prep packet
+    release_gate: gm_creates_a_playable_prep_packet
+    docs:
+      - PREP_PACKET_FACTORY_AND_PROCEDURAL_TABLES.md
+      - CREW_AND_MISSION_FIT_MODEL.md
+
+  - id: LPM-006
+    title: GM closes a run
+    release_gate: gm_closes_run_and_generates_resolution_report
+    docs:
+      - BLACK_LEDGER_MVP_001.md
+      - OPEN_RUNS_AND_COMMUNITY_HUB.md
+
+  - id: LPM-007
+    title: BLACK LEDGER talks back
+    release_gate: resolution_report_creates_world_tick_and_player_safe_news_item
+    docs:
+      - BLACK_LEDGER_MVP_001.md
+      - NEWSREEL_AND_CITY_TICKER_MODEL.md
+
+  - id: LPM-008
+    title: Safe seasonal recognition
+    release_gate: approved_run_resolution_updates_safe_seasonal_honors
+    docs:
+      - NETWORK_REPUTATION_AND_LEADERBOARDS_MODEL.md
+      - SEASONAL_HONORS_AND_REPUTATION_MODEL.md
+
+adjacent_trust_lane:
+  - SUPPORT_PACKET_AND_CALCULATION_REPORT_UX.md
