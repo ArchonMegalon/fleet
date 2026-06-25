@@ -5,6 +5,21 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workspace_root="$(cd "${script_dir}/.." && pwd)"
 cd "$workspace_root"
 
+if [[ "${CHUMMER_DESIGN_SUPERVISOR_RESOURCE_LIMIT_APPLIED:-0}" != "1" ]]; then
+  CHUMMER_DESIGN_SUPERVISOR_RESOURCE_LIMIT_APPLIED=1
+  export CHUMMER_DESIGN_SUPERVISOR_RESOURCE_LIMIT_APPLIED
+  supervisor_nice="${CHUMMER_DESIGN_SUPERVISOR_NICE:-15}"
+  supervisor_ionice_class="${CHUMMER_DESIGN_SUPERVISOR_IONICE_CLASS:-2}"
+  supervisor_ionice_level="${CHUMMER_DESIGN_SUPERVISOR_IONICE_LEVEL:-7}"
+  if [[ "$supervisor_nice" =~ ^-?[0-9]+$ && "$supervisor_ionice_class" =~ ^[0-9]+$ && "$supervisor_ionice_level" =~ ^[0-9]+$ ]]; then
+    if command -v ionice >/dev/null 2>&1; then
+      exec nice -n "$supervisor_nice" ionice -c "$supervisor_ionice_class" -n "$supervisor_ionice_level" "$0" "$@"
+    fi
+    exec nice -n "$supervisor_nice" "$0" "$@"
+  fi
+  printf 'run_chummer_design_supervisor: invalid resource limits; continuing without nice/ionice (%s/%s/%s).\n' "$supervisor_nice" "$supervisor_ionice_class" "$supervisor_ionice_level" >&2
+fi
+
 if [[ -n "${CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS:-}" ]]; then
   : "${CODEXEA_STREAM_IDLE_TIMEOUT_MS:=${CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS}}"
   export CODEXEA_STREAM_IDLE_TIMEOUT_MS

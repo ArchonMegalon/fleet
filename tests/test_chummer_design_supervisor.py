@@ -17201,6 +17201,16 @@ def test_normalized_blocker_text_ignores_clear_receipt_phrasing() -> None:
     )
 
 
+def test_run_supervisor_launcher_applies_low_priority_resource_defaults() -> None:
+    launcher = Path("/docker/fleet/scripts/run_chummer_design_supervisor.sh").read_text(encoding="utf-8")
+
+    assert "CHUMMER_DESIGN_SUPERVISOR_RESOURCE_LIMIT_APPLIED" in launcher
+    assert 'supervisor_nice="${CHUMMER_DESIGN_SUPERVISOR_NICE:-15}"' in launcher
+    assert 'supervisor_ionice_class="${CHUMMER_DESIGN_SUPERVISOR_IONICE_CLASS:-2}"' in launcher
+    assert 'supervisor_ionice_level="${CHUMMER_DESIGN_SUPERVISOR_IONICE_LEVEL:-7}"' in launcher
+    assert 'exec nice -n "$supervisor_nice" ionice -c "$supervisor_ionice_class" -n "$supervisor_ionice_level" "$0" "$@"' in launcher
+
+
 def test_run_supervisor_launcher_falls_back_to_focus_only_identity_when_frontier_probe_fails() -> None:
     launcher = Path("/docker/fleet/scripts/run_chummer_design_supervisor.sh")
     with tempfile.TemporaryDirectory() as tmp:
