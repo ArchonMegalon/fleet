@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import importlib.util
+import hashlib
 import json
 import os
 import re
@@ -8,6 +11,7 @@ import struct
 import subprocess
 import sys
 import datetime as dt
+import traceback
 import zlib
 from pathlib import Path
 
@@ -52,8 +56,100 @@ def _assert_repo_authority(value: object, *, repository: str, relative_path: str
 
 
 @pytest.fixture(autouse=True)
-def _reviewed_source_commit(monkeypatch) -> None:
+def _reviewed_source_commit(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv(SOURCE_COMMIT_ENV, _source_head())
+    authority_module = _load_module()
+    repository_rows: set[tuple[str, str]] = {
+        ("ArchonMegalon/fleet", _source_head())
+    }
+    for candidate in (*authority_module.EVIDENCE_REPOSITORY_ROOT_CANDIDATES, REPO_ROOT):
+        if not candidate.exists():
+            continue
+        raw_root = subprocess.run(
+            ["git", "-C", str(candidate), "rev-parse", "--show-toplevel"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if raw_root.returncode != 0:
+            continue
+        checkout_root = Path(raw_root.stdout.strip())
+        commit = subprocess.check_output(
+            ["git", "-C", str(checkout_root), "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        remote = subprocess.check_output(
+            ["git", "-C", str(checkout_root), "config", "--get", "remote.origin.url"],
+            text=True,
+        ).strip()
+        repository_rows.add(
+            (authority_module._canonical_repository_from_remote(remote), commit)
+        )
+    authority_content = (
+        json.dumps(
+            {
+                "contract": "chummer.release-repository-authority/v1",
+                "repositories": [
+                    {
+                        "repository": repository,
+                        "commit": commit,
+                    }
+                    for repository, commit in sorted(repository_rows)
+                ],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode("utf-8")
+    authority_path = tmp_path / "release-repository-authority.json"
+    authority_path.write_bytes(authority_content)
+    monkeypatch.setenv(
+        "CHUMMER_RELEASE_REPOSITORY_AUTHORITY",
+        str(authority_path),
+    )
+    monkeypatch.setenv(
+        "CHUMMER_RELEASE_REPOSITORY_AUTHORITY_SHA256",
+        hashlib.sha256(authority_content).hexdigest(),
+    )
+    real_run = subprocess.run
+
+    def run_with_remote_authority_fixture(command, *args, **kwargs):
+        raw_command = list(command) if isinstance(command, (list, tuple)) else []
+        if (
+            len(raw_command) >= 2
+            and Path(str(raw_command[1])).resolve(strict=False) == SCRIPT.resolve()
+        ):
+            module = _load_module()
+            module._remote_commit_reachable = lambda _repository, _commit: True
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            returncode = 0
+            try:
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    returncode = int(module.main([str(item) for item in raw_command[2:]]))
+            except SystemExit as exc:
+                returncode = int(exc.code or 0)
+            except BaseException:
+                traceback.print_exc(file=stderr)
+                returncode = 1
+            completed = subprocess.CompletedProcess(
+                raw_command,
+                returncode,
+                stdout.getvalue(),
+                stderr.getvalue(),
+            )
+            if kwargs.get("check") and returncode:
+                raise subprocess.CalledProcessError(
+                    returncode,
+                    raw_command,
+                    output=completed.stdout,
+                    stderr=completed.stderr,
+                )
+            return completed
+        return real_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", run_with_remote_authority_fixture)
 
 
 def _load_module():
@@ -3444,6 +3540,7 @@ def test_materialize_flagship_product_readiness_uses_release_proof_journey_overr
     )
     _write_json(releases_json_path, {"status": "published"})
 
+    module._remote_commit_reachable = lambda _repository, _commit: True
     module.materialize_flagship_product_readiness(
         out_path=out_path,
         mirror_path=None,
@@ -3618,6 +3715,7 @@ def test_materialize_flagship_product_readiness_recovers_fleet_loop_when_only_ro
     )
     _write_json(releases_json_path, {"status": "published"})
 
+    module._remote_commit_reachable = lambda _repository, _commit: True
     module.materialize_flagship_product_readiness(
         out_path=out_path,
         mirror_path=None,
@@ -3790,6 +3888,7 @@ def test_materialize_flagship_product_readiness_external_only_requires_no_deskto
     )
     _write_json(releases_json_path, {"status": "published"})
 
+    module._remote_commit_reachable = lambda _repository, _commit: True
     module.materialize_flagship_product_readiness(
         out_path=out_path,
         mirror_path=None,
@@ -4071,6 +4170,7 @@ def test_materialize_flagship_product_readiness_recovers_fleet_when_only_blocked
     _write_json(releases_json_path, {"status": "published"})
 
     module = _load_module()
+    module._remote_commit_reachable = lambda _repository, _commit: True
     module.materialize_flagship_product_readiness(
         out_path=out_path,
         mirror_path=None,
@@ -4366,6 +4466,7 @@ def test_materialize_flagship_product_readiness_recovers_fleet_when_only_externa
     )
     _write_json(releases_json_path, {"status": "published"})
 
+    module._remote_commit_reachable = lambda _repository, _commit: True
     module.materialize_flagship_product_readiness(
         out_path=out_path,
         mirror_path=None,
@@ -4565,6 +4666,7 @@ def test_materialize_flagship_product_readiness_prefers_support_execution_plan_a
     )
     _write_json(releases_json_path, {"status": "published"})
 
+    module._remote_commit_reachable = lambda _repository, _commit: True
     module.materialize_flagship_product_readiness(
         out_path=out_path,
         mirror_path=None,
@@ -4845,6 +4947,7 @@ def test_materialize_flagship_product_readiness_allows_ooda_supervisor_fallback_
     _write_json(releases_json_path, {"status": "published"})
 
     module = _load_module()
+    module._remote_commit_reachable = lambda _repository, _commit: True
     module.materialize_flagship_product_readiness(
         out_path=out_path,
         mirror_path=None,

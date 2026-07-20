@@ -6,6 +6,7 @@ import inspect
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 from urllib.parse import unquote, urlsplit
 
 import pytest
@@ -108,12 +109,48 @@ def _resolver(
     runtime_roots: tuple[Path, ...] = (),
     runtime_commit: str = "a" * 40,
 ):
+    checkouts = []
+    for repository_root in repositories:
+        remote = subprocess.check_output(
+            ["git", "-C", str(repository_root), "config", "--get", "remote.origin.url"],
+            text=True,
+        ).strip()
+        checkouts.append(
+            module.RepositoryCheckout(
+                root=repository_root.resolve(),
+                repository=module._canonical_repository_from_remote(remote),
+                commit=_git_head(repository_root),
+            )
+        )
     return module.EvidenceAuthorityResolver(
-        checkouts=module._repository_checkouts(repositories),
+        checkouts=tuple(checkouts),
         runtime_roots=runtime_roots,
         runtime_repository="ArchonMegalon/fleet",
         runtime_commit=runtime_commit,
+        artifact_store_root=Path(tempfile.mkdtemp(prefix="fleet-readiness-cas-test-")),
     )
+
+
+def _write_release_authority(
+    path: Path,
+    repositories: tuple[tuple[str, str], ...],
+) -> tuple[Path, str]:
+    content = (
+        json.dumps(
+            {
+                "contract": "chummer.release-repository-authority/v1",
+                "repositories": [
+                    {"repository": repository, "commit": commit}
+                    for repository, commit in repositories
+                ],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode("utf-8")
+    path.write_bytes(content)
+    return path, hashlib.sha256(content).hexdigest()
 
 
 def test_reviewed_source_commit_requires_exact_checked_out_full_sha(tmp_path: Path) -> None:
@@ -154,7 +191,12 @@ def test_reviewed_source_commit_rejects_untracked_source_file(tmp_path: Path) ->
 
 def test_materializer_emits_agreeing_reviewed_source_commit_aliases(tmp_path: Path, monkeypatch) -> None:
     module = _load_module()
+    monkeypatch.setattr(module, "_remote_commit_reachable", lambda _repository, _commit: True)
     source_repo, head = _create_source_repo(tmp_path)
+    authority_path, authority_sha256 = _write_release_authority(
+        tmp_path / "repository-authority.json",
+        (("ArchonMegalon/fleet", head),),
+    )
     monkeypatch.setattr(
         module,
         "build_flagship_product_readiness_payload",
@@ -169,6 +211,8 @@ def test_materializer_emits_agreeing_reviewed_source_commit_aliases(tmp_path: Pa
     kwargs.update(
         source_commit=head,
         source_repo_root=source_repo,
+        release_repository_authority_path=authority_path,
+        release_repository_authority_sha256=authority_sha256,
         out_path=out_path,
         mirror_path=None,
         external_proof_runbook_path=None,
@@ -178,11 +222,14 @@ def test_materializer_emits_agreeing_reviewed_source_commit_aliases(tmp_path: Pa
 
     assert payload["sourceCommit"] == head
     assert payload["source_commit"] == head
-    assert out_path.read_text(encoding="utf-8").count(head) == 2
+    assert payload["portableEvidenceAuthority"]["repositoryAuthority"]["repositories"] == [
+        {"repository": "ArchonMegalon/fleet", "commit": head}
+    ]
 
 
 def test_materializer_emits_portable_evidence_references(tmp_path: Path, monkeypatch) -> None:
     module = _load_module()
+    monkeypatch.setattr(module, "_remote_commit_reachable", lambda _repository, _commit: True)
     source_repo, _head = _create_source_repo(tmp_path)
     fleet_proof = source_repo / ".codex-studio" / "published" / "proof.json"
     fleet_proof.parent.mkdir(parents=True)
@@ -203,6 +250,13 @@ def test_materializer_emits_portable_evidence_references(tmp_path: Path, monkeyp
     ui_gate.write_text(
         json.dumps({"evidence": {"trusted_local_roots": trusted_roots}}) + "\n",
         encoding="utf-8",
+    )
+    authority_path, authority_sha256 = _write_release_authority(
+        tmp_path / "repository-authority.json",
+        (
+            ("ArchonMegalon/fleet", head),
+            ("ArchonMegalon/chummer6-ui", ui_head),
+        ),
     )
     monkeypatch.setattr(
         module,
@@ -234,6 +288,8 @@ def test_materializer_emits_portable_evidence_references(tmp_path: Path, monkeyp
     kwargs.update(
         source_commit=head,
         source_repo_root=source_repo,
+        release_repository_authority_path=authority_path,
+        release_repository_authority_sha256=authority_sha256,
         out_path=out_path,
         mirror_path=None,
         external_proof_runbook_path=None,
@@ -345,6 +401,154 @@ def test_portable_receipt_uses_verified_repo_commit_or_artifact_digest(tmp_path:
     }
 
 
+def test_repo_reference_rejects_worktree_executable_mode_drift(tmp_path: Path) -> None:
+    module = _load_module()
+    repo, head = _create_allowed_repo(
+        tmp_path,
+        directory_name="ui",
+        repository="ArchonMegalon/chummer6-ui",
+        tracked_files={"proofs/tracked.json": "tracked\n"},
+    )
+    tracked = repo / "proofs" / "tracked.json"
+    tracked.chmod(tracked.stat().st_mode | 0o111)
+    resolver = _resolver(module, repositories=(repo,), runtime_commit=head)
+
+    portable = module._portable_public_receipt_value(
+        {"tracked": str(tracked)},
+        resolver=resolver,
+    )
+
+    assert portable["tracked"].startswith(
+        f"artifact://ArchonMegalon/chummer6-ui@{head}/sha256/"
+    )
+    assert portable["tracked"] != (
+        f"repo://ArchonMegalon/chummer6-ui@{head}/proofs/tracked.json"
+    )
+
+
+def test_repo_reference_preserves_final_symlink_identity_and_bytes(tmp_path: Path) -> None:
+    module = _load_module()
+    repo, _head = _create_allowed_repo(
+        tmp_path,
+        directory_name="ui",
+        repository="ArchonMegalon/chummer6-ui",
+        tracked_files={"proofs/target-a.json": "target a\n", "proofs/target-b.json": "target b\n"},
+    )
+    link = repo / "proofs" / "current.json"
+    link.symlink_to("target-a.json")
+    subprocess.run(["git", "-C", str(repo), "add", "proofs/current.json"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "add evidence link"], check=True)
+    head = _git_head(repo)
+    resolver = _resolver(module, repositories=(repo,), runtime_commit=head)
+
+    # Target drift must not change the authority of the committed link itself.
+    (repo / "proofs" / "target-a.json").write_text("unreviewed target bytes\n", encoding="utf-8")
+    assert module._portable_public_receipt_value(
+        {"link": str(link)},
+        resolver=resolver,
+    ) == {
+        "link": f"repo://ArchonMegalon/chummer6-ui@{head}/proofs/current.json"
+    }
+
+    link.unlink()
+    link.symlink_to("target-b.json")
+    resolver = _resolver(module, repositories=(repo,), runtime_commit=head)
+    assert module._portable_public_receipt_value(
+        {"link": str(link)},
+        resolver=resolver,
+    ) == {"link": None}
+
+
+def test_repository_checkout_rejects_authority_for_fabricated_local_commit(tmp_path: Path) -> None:
+    module = _load_module()
+    repo, remotely_reachable_head = _create_allowed_repo(
+        tmp_path,
+        directory_name="ui",
+        repository="ArchonMegalon/chummer6-ui",
+    )
+    (repo / "local-only.txt").write_text("fabricated local commit\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "local-only.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "local only"], check=True)
+    fabricated_head = _git_head(repo)
+    authority_path, authority_sha256 = _write_release_authority(
+        tmp_path / "repository-authority.json",
+        (("ArchonMegalon/chummer6-ui", fabricated_head),),
+    )
+    authority = module._load_release_repository_authority(
+        authority_path,
+        authority_sha256,
+    )
+
+    with pytest.raises(ValueError, match="not remotely reachable"):
+        module._repository_checkouts(
+            (repo,),
+            authority=authority,
+            remote_probe=lambda _repository, commit: commit == remotely_reachable_head,
+            required_paths=(repo,),
+        )
+
+
+def test_repository_checkout_uses_pinned_authority_not_mutable_origin_config(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    repo, head = _create_allowed_repo(
+        tmp_path,
+        directory_name="ui",
+        repository="ArchonMegalon/chummer6-ui",
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "remote",
+            "set-url",
+            "origin",
+            "https://github.com/ArchonMegalon/fleet.git",
+        ],
+        check=True,
+    )
+    authority_path, authority_sha256 = _write_release_authority(
+        tmp_path / "repository-authority.json",
+        (("ArchonMegalon/chummer6-ui", head),),
+    )
+    authority = module._load_release_repository_authority(
+        authority_path,
+        authority_sha256,
+    )
+
+    assert module._repository_checkouts(
+        (repo,),
+        authority=authority,
+        remote_probe=lambda repository, commit: (
+            repository == "ArchonMegalon/chummer6-ui" and commit == head
+        ),
+        required_paths=(repo,),
+    ) == (
+        module.RepositoryCheckout(
+            root=repo.resolve(),
+            repository="ArchonMegalon/chummer6-ui",
+            commit=head,
+        ),
+    )
+
+
+def test_release_repository_authority_digest_pins_exact_input_bytes(tmp_path: Path) -> None:
+    module = _load_module()
+    authority_path, authority_sha256 = _write_release_authority(
+        tmp_path / "repository-authority.json",
+        (("ArchonMegalon/fleet", "a" * 40),),
+    )
+    authority_path.write_bytes(authority_path.read_bytes() + b" ")
+
+    with pytest.raises(ValueError, match="digest does not match reviewed bytes"):
+        module._load_release_repository_authority(
+            authority_path,
+            authority_sha256,
+        )
+
+
 def test_portable_receipt_digest_binds_directory_with_untracked_bytes(tmp_path: Path) -> None:
     module = _load_module()
     repo, head = _create_allowed_repo(
@@ -375,6 +579,61 @@ def test_portable_receipt_digest_binds_directory_with_untracked_bytes(tmp_path: 
             f"artifact://ArchonMegalon/fleet@{head}/sha256/{digest}"
         )
     }
+
+
+def test_artifact_json_pointer_remains_valid_after_source_mutation_and_deletion(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    repo, head = _create_allowed_repo(
+        tmp_path,
+        directory_name="ui",
+        repository="ArchonMegalon/chummer6-ui",
+    )
+    source = repo / "runtime-proof.json"
+    original = b'{"evidence":{"routes":["/status","/downloads"]}}\n'
+    source.write_bytes(original)
+    resolver = _resolver(module, repositories=(repo,), runtime_commit=head)
+
+    base, staged_payload = resolver.stage_json_artifact(source)
+    assert staged_payload["evidence"]["routes"][0] == "/status"
+    pointer = resolver.register_reference(
+        base + "#%2Fevidence%2Froutes%2F0"
+    )
+    source.write_text('{"evidence":{"routes":["/wrong"]}}\n', encoding="utf-8")
+    source.unlink()
+
+    module._validate_portable_public_receipt(
+        {"routeAuthority": pointer},
+        resolver=resolver,
+    )
+    inventory = resolver.artifact_locator_inventory()
+    assert inventory["artifacts"] == [
+        {
+            "authority": base,
+            "sha256": hashlib.sha256(original).hexdigest(),
+            "kind": "file",
+            "size": len(original),
+            "locator": (
+                "artifact-cas/sha256/"
+                + hashlib.sha256(original).hexdigest()[:2]
+                + "/"
+                + hashlib.sha256(original).hexdigest()
+                + ".blob"
+            ),
+        }
+    ]
+
+
+def test_public_routes_are_not_misclassified_as_machine_local_paths() -> None:
+    module = _load_module()
+    resolver = _resolver(module)
+    routes = ["/status", "/downloads", "/api/releases/current", "/healthz"]
+
+    assert module._portable_public_receipt_value(
+        {"routes": routes},
+        resolver=resolver,
+    ) == {"routes": routes}
 
 
 def test_portable_receipt_does_not_claim_missing_committed_path(tmp_path: Path) -> None:

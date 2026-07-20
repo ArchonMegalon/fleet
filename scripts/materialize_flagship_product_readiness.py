@@ -11,8 +11,9 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, NamedTuple, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Mapping, NamedTuple, Optional, Sequence
 from urllib.parse import quote, unquote, urlsplit
 
 import yaml
@@ -47,6 +48,14 @@ ROOT = Path("/docker/fleet")
 SOURCE_REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_COMMIT_ENV = "CHUMMER_FLAGSHIP_PRODUCT_READINESS_SOURCE_COMMIT"
 SOURCE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+RELEASE_REPOSITORY_AUTHORITY_ENV = "CHUMMER_RELEASE_REPOSITORY_AUTHORITY"
+RELEASE_REPOSITORY_AUTHORITY_SHA256_ENV = (
+    "CHUMMER_RELEASE_REPOSITORY_AUTHORITY_SHA256"
+)
+RELEASE_REPOSITORY_AUTHORITY_CONTRACT = (
+    "chummer.release-repository-authority/v1"
+)
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 ALLOWED_GITHUB_REPOSITORIES = {
     repository.casefold(): repository
     for repository in (
@@ -79,6 +88,23 @@ NON_FILE_URI_TOKEN_PATTERN = re.compile(
 )
 PORTABLE_AUTHORITY_TOKEN_PATTERN = re.compile(
     r"(?P<uri>(?:repo|artifact)://[^\s<>\"'`]+)"
+)
+ARTIFACT_AUTHORITY_PATTERN = re.compile(
+    r"^artifact://(?P<repository>[^@#]+)@(?P<commit>[0-9a-f]{40})/"
+    r"sha256/(?P<digest>[0-9a-f]{64})(?:#(?P<fragment>.*))?$"
+)
+# These are public HTTP route identifiers, not host filesystem paths. Keep this
+# list explicit so a generic absolute path never becomes portable by accident.
+PUBLIC_ROUTE_TOKENS = frozenset(
+    {
+        "/",
+        "/api/releases/current",
+        "/downloads",
+        "/healthz",
+        "/help",
+        "/now",
+        "/status",
+    }
 )
 MACHINE_LOCAL_PATH_TOKEN_PATTERN = re.compile(
     r"(?P<file_uri>(?i:file://)[^\s<>\"'`]+)|"
@@ -843,6 +869,24 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help=(
             "externally reviewed full Fleet commit used to generate this authority receipt; "
             f"defaults to {SOURCE_COMMIT_ENV}"
+        ),
+    )
+    parser.add_argument(
+        "--release-repository-authority",
+        default=str(os.environ.get(RELEASE_REPOSITORY_AUTHORITY_ENV) or "").strip(),
+        help=(
+            "path to the immutable repository/commit authority snapshot; "
+            f"defaults to {RELEASE_REPOSITORY_AUTHORITY_ENV}"
+        ),
+    )
+    parser.add_argument(
+        "--release-repository-authority-sha256",
+        default=str(
+            os.environ.get(RELEASE_REPOSITORY_AUTHORITY_SHA256_ENV) or ""
+        ).strip(),
+        help=(
+            "reviewed SHA-256 of the exact repository authority bytes; "
+            f"defaults to {RELEASE_REPOSITORY_AUTHORITY_SHA256_ENV}"
         ),
     )
     parser.add_argument("--out", default=str(DEFAULT_OUT), help="output path for FLAGSHIP_PRODUCT_READINESS.generated.json")
@@ -9638,6 +9682,16 @@ def _fleet_repo_root_from_acceptance_path(path: Path) -> Path | None:
     return design_root.parent
 
 
+class RepositoryAuthorityEntry(NamedTuple):
+    repository: str
+    commit: str
+
+
+class ReleaseRepositoryAuthority(NamedTuple):
+    sha256: str
+    entries: tuple[RepositoryAuthorityEntry, ...]
+
+
 class RepositoryCheckout(NamedTuple):
     root: Path
     repository: str
@@ -9650,6 +9704,132 @@ class MachineLocalPathToken(NamedTuple):
     raw: str
     path_text: str
     trailing: str
+
+
+class CasArtifactRecord(NamedTuple):
+    authority: str
+    digest: str
+    kind: str
+    locator: str
+    size: int
+
+
+def _canonical_path_preserving_final_component(path: Path) -> Path:
+    """Resolve parent aliases while retaining the final lstat identity."""
+
+    expanded = path.expanduser()
+    if expanded == Path("/"):
+        return expanded
+    return expanded.parent.resolve(strict=False) / expanded.name
+
+
+def _read_regular_file_snapshot(path: Path) -> bytes:
+    """Read one stable regular-file generation without following its final link."""
+
+    canonical = _canonical_path_preserving_final_component(path)
+    try:
+        before = os.lstat(canonical)
+    except OSError as exc:
+        raise ValueError(f"evidence file is unavailable: {canonical}") from exc
+    if not stat.S_ISREG(before.st_mode):
+        raise ValueError("evidence authority requires a regular file")
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(canonical, flags)
+    except OSError as exc:
+        raise ValueError(f"evidence file could not be opened: {canonical}") from exc
+    try:
+        opened = os.fstat(descriptor)
+        if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+            raise ValueError("evidence file identity changed before it was read")
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        after_read = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    try:
+        after_path = os.lstat(canonical)
+    except OSError as exc:
+        raise ValueError("evidence file disappeared while it was read") from exc
+    stable_fields = (
+        "st_dev",
+        "st_ino",
+        "st_mode",
+        "st_size",
+        "st_mtime_ns",
+        "st_ctime_ns",
+    )
+    if any(
+        getattr(before, field) != getattr(after_read, field)
+        or getattr(before, field) != getattr(after_path, field)
+        for field in stable_fields
+    ):
+        raise ValueError("evidence file changed while it was read")
+    content = b"".join(chunks)
+    if len(content) != before.st_size:
+        raise ValueError("evidence file size changed while it was read")
+    return content
+
+
+def _load_release_repository_authority(
+    path: Path | None,
+    expected_sha256: str | None,
+) -> ReleaseRepositoryAuthority:
+    raw_expected = str(expected_sha256 or "").strip().lower()
+    if SHA256_PATTERN.fullmatch(raw_expected) is None:
+        raise ValueError(
+            "flagship readiness requires a reviewed release repository authority SHA-256"
+        )
+    if path is None or not str(path).strip():
+        raise ValueError(
+            "flagship readiness requires an immutable release repository authority"
+        )
+    content = _read_regular_file_snapshot(path)
+    actual_sha256 = hashlib.sha256(content).hexdigest()
+    if actual_sha256 != raw_expected:
+        raise ValueError("release repository authority digest does not match reviewed bytes")
+    try:
+        payload = json.loads(content.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("release repository authority is not valid UTF-8 JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("release repository authority must be a JSON object")
+    if payload.get("contract") != RELEASE_REPOSITORY_AUTHORITY_CONTRACT:
+        raise ValueError("release repository authority contract is not supported")
+    raw_entries = payload.get("repositories")
+    if not isinstance(raw_entries, list) or not raw_entries:
+        raise ValueError("release repository authority requires repository rows")
+    entries: list[RepositoryAuthorityEntry] = []
+    identities_seen: set[tuple[str, str]] = set()
+    for raw_entry in raw_entries:
+        if not isinstance(raw_entry, dict):
+            raise ValueError("release repository authority contains a malformed row")
+        raw_repository = str(raw_entry.get("repository") or "").strip()
+        repository = ALLOWED_GITHUB_REPOSITORIES.get(raw_repository.casefold())
+        commit = str(raw_entry.get("commit") or "").strip().lower()
+        if repository is None:
+            raise ValueError(
+                f"release repository authority repository is not approved: {raw_repository}"
+            )
+        if SOURCE_COMMIT_PATTERN.fullmatch(commit) is None:
+            raise ValueError("release repository authority requires exact commit SHAs")
+        identity = (repository.casefold(), commit)
+        if identity in identities_seen:
+            raise ValueError(
+                "release repository authority contains duplicate repository commits"
+            )
+        identities_seen.add(identity)
+        entries.append(RepositoryAuthorityEntry(repository, commit))
+    return ReleaseRepositoryAuthority(
+        sha256=actual_sha256,
+        entries=tuple(sorted(entries)),
+    )
 
 
 def _git_output(repo_root: Path, *args: str, allow_failure: bool = False) -> str | None:
@@ -9689,18 +9869,95 @@ def _canonical_repository_from_remote(raw_remote: str) -> str:
 
 
 def _existing_path_probe(path: Path) -> Path | None:
-    probe = path.expanduser()
-    while not probe.exists():
+    probe = _canonical_path_preserving_final_component(path)
+    while not os.path.lexists(probe):
         parent = probe.parent
         if parent == probe:
             return None
         probe = parent
-    if probe.is_file():
+    try:
+        mode = os.lstat(probe).st_mode
+    except OSError:
+        return None
+    if stat.S_ISLNK(mode):
+        try:
+            linked = probe.resolve(strict=True)
+        except OSError:
+            return probe.parent
+        if linked.is_dir():
+            return linked
+    if not stat.S_ISDIR(mode):
         return probe.parent
     return probe
 
 
-def _discover_repository_checkout(path: Path) -> RepositoryCheckout | None:
+def _remote_commit_reachable(repository: str, commit: str) -> bool:
+    """Prove the exact commit can be fetched from the canonical GitHub authority."""
+
+    canonical = ALLOWED_GITHUB_REPOSITORIES.get(repository.casefold())
+    if canonical is None or SOURCE_COMMIT_PATTERN.fullmatch(commit) is None:
+        return False
+    remote = f"https://github.com/{canonical}.git"
+    try:
+        with tempfile.TemporaryDirectory(prefix="chummer-remote-authority-") as raw_dir:
+            bare = Path(raw_dir) / "authority.git"
+            initialized = subprocess.run(
+                ["git", "init", "--bare", "-q", str(bare)],
+                check=False,
+                capture_output=True,
+                timeout=15,
+            )
+            if initialized.returncode != 0:
+                return False
+            fetched = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(bare),
+                    "fetch",
+                    "--quiet",
+                    "--no-tags",
+                    "--depth=1",
+                    remote,
+                    commit,
+                ],
+                check=False,
+                capture_output=True,
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+                timeout=60,
+            )
+            if fetched.returncode != 0:
+                return False
+            fetched_commit = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(bare),
+                    "rev-parse",
+                    "--verify",
+                    "FETCH_HEAD^{commit}",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return (
+        fetched_commit.returncode == 0
+        and fetched_commit.stdout.strip().lower() == commit
+    )
+
+
+def _discover_repository_checkout(
+    path: Path,
+    *,
+    authority: ReleaseRepositoryAuthority,
+    require_authority: bool,
+    remote_probe: Callable[[str, str], bool],
+    verified_remote_commits: set[tuple[str, str]],
+) -> RepositoryCheckout | None:
     probe = _existing_path_probe(path)
     if probe is None:
         return None
@@ -9720,18 +9977,52 @@ def _discover_repository_checkout(path: Path) -> RepositoryCheckout | None:
     ).lower()
     if SOURCE_COMMIT_PATTERN.fullmatch(commit) is None:
         return None
-    remote = _git_output(root, "config", "--get", "remote.origin.url") or ""
-    repository = _canonical_repository_from_remote(remote)
+    matches = tuple(entry for entry in authority.entries if entry.commit == commit)
+    if not matches:
+        if require_authority:
+            raise ValueError(
+                f"evidence checkout commit is absent from release authority: {root}"
+            )
+        return None
+    if len(matches) != 1:
+        raise ValueError(
+            "release repository authority is ambiguous for an evidence checkout commit"
+        )
+    repository = matches[0].repository
+    remote_identity = (repository, commit)
+    if remote_identity not in verified_remote_commits:
+        if not remote_probe(repository, commit):
+            raise ValueError(
+                f"release repository authority commit is not remotely reachable: "
+                f"{repository}@{commit}"
+            )
+        verified_remote_commits.add(remote_identity)
     return RepositoryCheckout(root=root, repository=repository, commit=commit)
 
 
-def _repository_checkouts(paths: Sequence[Path]) -> tuple[RepositoryCheckout, ...]:
+def _repository_checkouts(
+    paths: Sequence[Path],
+    *,
+    authority: ReleaseRepositoryAuthority,
+    remote_probe: Callable[[str, str], bool] = _remote_commit_reachable,
+    required_paths: Sequence[Path] = (),
+) -> tuple[RepositoryCheckout, ...]:
     checkouts: dict[Path, RepositoryCheckout] = {}
+    verified_remote_commits: set[tuple[str, str]] = set()
+    required = {str(path.expanduser()) for path in required_paths}
     candidates = tuple(
-        path for path in EVIDENCE_REPOSITORY_ROOT_CANDIDATES if path.exists()
-    ) + tuple(paths)
-    for path in candidates:
-        checkout = _discover_repository_checkout(path)
+        (path, False)
+        for path in EVIDENCE_REPOSITORY_ROOT_CANDIDATES
+        if path.exists()
+    ) + tuple((path, str(path.expanduser()) in required) for path in paths)
+    for path, require_authority in candidates:
+        checkout = _discover_repository_checkout(
+            path,
+            authority=authority,
+            require_authority=require_authority,
+            remote_probe=remote_probe,
+            verified_remote_commits=verified_remote_commits,
+        )
         if checkout is None:
             continue
         previous = checkouts.get(checkout.root)
@@ -9767,6 +10058,8 @@ def _machine_local_path_tokens(value: str) -> list[MachineLocalPathToken]:
         path_text, trailing = _strip_path_trailing_punctuation(raw)
         if not path_text:
             raise ValueError("machine-local path token became empty after canonicalization")
+        if path_text in PUBLIC_ROUTE_TOKENS:
+            continue
         tokens.append(
             MachineLocalPathToken(
                 start=match.start(),
@@ -9817,7 +10110,7 @@ def _canonical_machine_local_path(raw_path: str) -> Path:
         raise ValueError("machine-local path is not an absolute Unix path")
     if value != "/" and value.endswith("/"):
         raise ValueError("machine-local path contains a trailing separator")
-    return Path(value).resolve(strict=False)
+    return _canonical_path_preserving_final_component(Path(value))
 
 
 class EvidenceAuthorityResolver:
@@ -9828,6 +10121,7 @@ class EvidenceAuthorityResolver:
         runtime_roots: Sequence[Path],
         runtime_repository: str,
         runtime_commit: str,
+        artifact_store_root: Path,
     ) -> None:
         canonical_repository = ALLOWED_GITHUB_REPOSITORIES.get(
             runtime_repository.casefold()
@@ -9848,7 +10142,10 @@ class EvidenceAuthorityResolver:
         )
         self.runtime_repository = canonical_repository
         self.runtime_commit = runtime_commit
+        self.artifact_store_root = artifact_store_root.expanduser().resolve(strict=False)
+        self.artifact_store_root.mkdir(parents=True, exist_ok=True)
         self.emitted_references: set[str] = set()
+        self.artifact_records: dict[str, CasArtifactRecord] = {}
 
     def register_reference(self, reference: str) -> str:
         self.emitted_references.add(reference)
@@ -9886,7 +10183,7 @@ class EvidenceAuthorityResolver:
     def _repo_object(
         checkout: RepositoryCheckout,
         relative_path: str,
-    ) -> tuple[str, str] | None:
+    ) -> tuple[str, str, str] | None:
         if not relative_path:
             tree = _git_output(
                 checkout.root,
@@ -9894,25 +10191,84 @@ class EvidenceAuthorityResolver:
                 f"{checkout.commit}^{{tree}}",
                 allow_failure=True,
             )
-            return (str(tree), "tree") if tree else None
-        object_id = _git_output(
-            checkout.root,
-            "rev-parse",
-            f"{checkout.commit}:{relative_path}",
-            allow_failure=True,
-        )
-        if not object_id:
+            return ("040000", str(tree), "tree") if tree else None
+        try:
+            completed = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(checkout.root),
+                    "ls-tree",
+                    "-z",
+                    "--full-tree",
+                    checkout.commit,
+                    "--",
+                    relative_path,
+                ],
+                check=False,
+                capture_output=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired):
             return None
-        object_type = _git_output(
-            checkout.root,
-            "cat-file",
-            "-t",
-            object_id,
-            allow_failure=True,
-        )
-        if object_type not in {"blob", "tree"}:
+        if completed.returncode != 0:
             return None
-        return object_id, object_type
+        rows = [row for row in completed.stdout.split(b"\0") if row]
+        if len(rows) != 1:
+            return None
+        try:
+            raw_header, raw_name = rows[0].split(b"\t", 1)
+            mode, object_type, object_id = raw_header.decode("ascii").split()
+        except (UnicodeDecodeError, ValueError):
+            return None
+        if raw_name != os.fsencode(relative_path):
+            return None
+        if (mode, object_type) not in {
+            ("100644", "blob"),
+            ("100755", "blob"),
+            ("120000", "blob"),
+            ("040000", "tree"),
+        }:
+            return None
+        return mode, object_id, object_type
+
+    @staticmethod
+    def _repo_blob_matches_worktree(
+        path: Path,
+        checkout: RepositoryCheckout,
+        *,
+        mode: str,
+        object_id: str,
+    ) -> bool:
+        try:
+            current_stat = os.lstat(path)
+            if mode == "120000":
+                if not stat.S_ISLNK(current_stat.st_mode):
+                    return False
+                current_bytes = os.fsencode(os.readlink(path))
+            else:
+                if not stat.S_ISREG(current_stat.st_mode):
+                    return False
+                executable = bool(current_stat.st_mode & 0o111)
+                if executable != (mode == "100755"):
+                    return False
+                current_bytes = _read_regular_file_snapshot(path)
+            committed = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(checkout.root),
+                    "cat-file",
+                    "blob",
+                    object_id,
+                ],
+                check=False,
+                capture_output=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired, UnicodeEncodeError, ValueError):
+            return False
+        return committed.returncode == 0 and current_bytes == committed.stdout
 
     def _repo_reference(
         self,
@@ -9923,29 +10279,25 @@ class EvidenceAuthorityResolver:
         repo_object = self._repo_object(checkout, relative_path)
         if repo_object is None:
             return None
-        object_id, object_type = repo_object
-        if not path.exists():
+        mode, object_id, object_type = repo_object
+        try:
+            current_mode = os.lstat(path).st_mode
+        except OSError:
             return None
         if object_type == "tree":
-            if not path.is_dir() or not self._repo_tree_matches_worktree(
+            if not stat.S_ISDIR(current_mode) or not self._repo_tree_matches_worktree(
                 path,
                 checkout,
                 relative_path,
             ):
                 return None
-        else:
-            if not path.is_file():
-                return None
-            worktree_object = _git_output(
-                checkout.root,
-                "hash-object",
-                "--no-filters",
-                "--",
-                relative_path,
-                allow_failure=True,
-            )
-            if worktree_object != object_id:
-                return None
+        elif not self._repo_blob_matches_worktree(
+            path,
+            checkout,
+            mode=mode,
+            object_id=object_id,
+        ):
+            return None
         authority = f"repo://{checkout.repository}@{checkout.commit}"
         if relative_path:
             authority += "/" + quote(relative_path, safe="/-._~")
@@ -10031,12 +10383,12 @@ class EvidenceAuthorityResolver:
                 if mode == "120000":
                     if not current.is_symlink():
                         return False
-                    current_bytes = os.readlink(current).encode("utf-8")
+                    current_bytes = os.fsencode(os.readlink(current))
                 else:
                     if current.is_symlink() or not current.is_file():
                         return False
                     current_bytes = current.read_bytes()
-                    executable = bool(current.stat().st_mode & stat.S_IXUSR)
+                    executable = bool(current.stat().st_mode & 0o111)
                     if executable != (mode == "100755"):
                         return False
                 committed = subprocess.run(
@@ -10059,38 +10411,130 @@ class EvidenceAuthorityResolver:
         return True
 
     @staticmethod
-    def _artifact_sha256(path: Path) -> str:
-        if path.is_file():
-            return hashlib.sha256(path.read_bytes()).hexdigest()
-        if not path.is_dir():
-            raise ValueError("artifact evidence authority requires a regular file or directory")
-        digest = hashlib.sha256(b"chummer.portable-directory-artifact/v1\0")
-        for current_root, raw_dirs, raw_files in os.walk(path):
-            root = Path(current_root)
-            raw_dirs.sort()
-            raw_files.sort()
-            for name in raw_dirs:
-                directory = root / name
-                if directory.is_symlink():
-                    raise ValueError("artifact directory cannot contain symbolic links")
-            for name in raw_files:
-                file_path = root / name
-                if file_path.is_symlink() or not file_path.is_file():
-                    raise ValueError("artifact directory contains a non-regular file")
-                relative = file_path.relative_to(path).as_posix()
-                if any(part in {"", ".", ".."} for part in Path(relative).parts):
-                    raise ValueError("artifact directory contains a non-canonical path")
-                content_digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
-                digest.update(relative.encode("utf-8"))
-                digest.update(b"\0")
-                digest.update(content_digest.encode("ascii"))
-                digest.update(b"\0")
-        return digest.hexdigest()
+    def _artifact_snapshot(path: Path) -> tuple[str, bytes]:
+        canonical = _canonical_path_preserving_final_component(path)
+        try:
+            root_stat = os.lstat(canonical)
+        except OSError as exc:
+            raise ValueError("artifact evidence source is unavailable") from exc
+        if stat.S_ISREG(root_stat.st_mode):
+            return "file", _read_regular_file_snapshot(canonical)
+        if not stat.S_ISDIR(root_stat.st_mode):
+            raise ValueError(
+                "artifact evidence authority requires a regular file or directory"
+            )
 
-    def artifact_reference(self, path: Path) -> str:
-        canonical = path.expanduser().resolve(strict=True)
-        if not canonical.is_file() and not canonical.is_dir():
-            raise ValueError("artifact evidence authority requires a regular file or directory")
+        rows: list[tuple[str, str, int, bytes]] = []
+        try:
+            def raise_walk_error(error: OSError) -> None:
+                raise error
+
+            for current_root, raw_dirs, raw_files in os.walk(
+                canonical,
+                onerror=raise_walk_error,
+            ):
+                root = Path(current_root)
+                raw_dirs.sort()
+                raw_files.sort()
+                for name in raw_dirs:
+                    directory = root / name
+                    directory_stat = os.lstat(directory)
+                    if not stat.S_ISDIR(directory_stat.st_mode):
+                        raise ValueError(
+                            "artifact directory cannot contain symbolic links"
+                        )
+                    relative = directory.relative_to(canonical).as_posix()
+                    rows.append(("directory", relative, 0, b""))
+                for name in raw_files:
+                    file_path = root / name
+                    file_stat = os.lstat(file_path)
+                    if not stat.S_ISREG(file_stat.st_mode):
+                        raise ValueError(
+                            "artifact directory contains a non-regular file"
+                        )
+                    relative = file_path.relative_to(canonical).as_posix()
+                    if any(
+                        part in {"", ".", ".."} for part in Path(relative).parts
+                    ):
+                        raise ValueError(
+                            "artifact directory contains a non-canonical path"
+                        )
+                    rows.append(
+                        (
+                            "file",
+                            relative,
+                            1 if file_stat.st_mode & 0o111 else 0,
+                            _read_regular_file_snapshot(file_path),
+                        )
+                    )
+        except OSError as exc:
+            raise ValueError("artifact directory changed while it was staged") from exc
+
+        bundle = bytearray(b"chummer.portable-directory-artifact/v2\0")
+        for kind, relative, executable, content in sorted(
+            rows, key=lambda row: (row[1], row[0])
+        ):
+            relative_bytes = relative.encode("utf-8")
+            bundle.extend(b"D" if kind == "directory" else b"F")
+            bundle.extend(len(relative_bytes).to_bytes(8, "big"))
+            bundle.extend(relative_bytes)
+            bundle.extend(bytes((executable,)))
+            bundle.extend(len(content).to_bytes(8, "big"))
+            bundle.extend(content)
+        try:
+            after_root = os.lstat(canonical)
+        except OSError as exc:
+            raise ValueError("artifact directory disappeared while it was staged") from exc
+        if (
+            after_root.st_dev,
+            after_root.st_ino,
+            after_root.st_mtime_ns,
+            after_root.st_ctime_ns,
+        ) != (
+            root_stat.st_dev,
+            root_stat.st_ino,
+            root_stat.st_mtime_ns,
+            root_stat.st_ctime_ns,
+        ):
+            raise ValueError("artifact directory changed while it was staged")
+        return "directory-bundle", bytes(bundle)
+
+    @staticmethod
+    def _artifact_sha256(path: Path) -> str:
+        _kind, content = EvidenceAuthorityResolver._artifact_snapshot(path)
+        return hashlib.sha256(content).hexdigest()
+
+    def _store_cas_bytes(self, content: bytes) -> tuple[str, str, Path]:
+        digest = hashlib.sha256(content).hexdigest()
+        relative = Path("artifact-cas") / "sha256" / digest[:2] / f"{digest}.blob"
+        target = self.artifact_store_root / "sha256" / digest[:2] / f"{digest}.blob"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            existing = _read_regular_file_snapshot(target)
+            if existing != content or hashlib.sha256(existing).hexdigest() != digest:
+                raise ValueError("artifact CAS contains conflicting bytes")
+        else:
+            descriptor, raw_temporary = tempfile.mkstemp(
+                prefix=f".{digest}.",
+                suffix=".tmp",
+                dir=target.parent,
+            )
+            temporary = Path(raw_temporary)
+            try:
+                with os.fdopen(descriptor, "wb") as handle:
+                    handle.write(content)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.chmod(temporary, 0o444)
+                os.replace(temporary, target)
+            finally:
+                if temporary.exists():
+                    temporary.unlink()
+        return digest, relative.as_posix(), target
+
+    def _stage_artifact(self, path: Path) -> tuple[CasArtifactRecord, bytes]:
+        canonical = _canonical_path_preserving_final_component(path)
+        kind, content = self._artifact_snapshot(canonical)
         checkout = self._checkout_for_path(canonical)
         if checkout is not None:
             repository = checkout.repository
@@ -10099,17 +10543,153 @@ class EvidenceAuthorityResolver:
             repository = self.runtime_repository
             commit = self.runtime_commit
         else:
-            raise ValueError(f"artifact evidence file is outside approved roots: {canonical}")
-        digest = self._artifact_sha256(canonical)
-        return self.register_reference(
-            f"artifact://{repository}@{commit}/sha256/{digest}"
+            raise ValueError(
+                f"artifact evidence file is outside approved roots: {canonical}"
+            )
+        digest, locator, _stored_path = self._store_cas_bytes(content)
+        authority = f"artifact://{repository}@{commit}/sha256/{digest}"
+        record = CasArtifactRecord(
+            authority=authority,
+            digest=digest,
+            kind=kind,
+            locator=locator,
+            size=len(content),
         )
+        previous = self.artifact_records.get(authority)
+        if previous is not None and previous != record:
+            raise ValueError("artifact authority resolved to conflicting CAS records")
+        self.artifact_records[authority] = record
+        self.register_reference(authority)
+        return record, content
+
+    def artifact_reference(self, path: Path) -> str:
+        record, _content = self._stage_artifact(path)
+        return record.authority
 
     def artifact_reference_for_file(self, path: Path) -> str:
-        canonical = path.expanduser().resolve(strict=True)
-        if not canonical.is_file():
+        canonical = _canonical_path_preserving_final_component(path)
+        try:
+            mode = os.lstat(canonical).st_mode
+        except OSError as exc:
+            raise ValueError("source artifact authority is unavailable") from exc
+        if not stat.S_ISREG(mode):
             raise ValueError("source artifact authority requires a regular file")
         return self.artifact_reference(canonical)
+
+    def stage_json_artifact(self, path: Path) -> tuple[str, Any]:
+        canonical = _canonical_path_preserving_final_component(path)
+        try:
+            mode = os.lstat(canonical).st_mode
+        except OSError as exc:
+            raise ValueError("JSON source artifact is unavailable") from exc
+        if not stat.S_ISREG(mode):
+            raise ValueError("JSON source artifact requires a regular file")
+        record, content = self._stage_artifact(canonical)
+        try:
+            payload = json.loads(content.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("JSON source artifact is not valid UTF-8 JSON") from exc
+        return record.authority, payload
+
+    def artifact_locator_inventory(self) -> Dict[str, Any]:
+        return {
+            "contract": "chummer.portable-artifact-locator-inventory/v1",
+            "base": "receipt-relative:artifact-cas",
+            "artifacts": [
+                {
+                    "authority": record.authority,
+                    "sha256": record.digest,
+                    "kind": record.kind,
+                    "size": record.size,
+                    "locator": record.locator,
+                }
+                for record in sorted(
+                    self.artifact_records.values(), key=lambda item: item.authority
+                )
+            ],
+        }
+
+    def _cas_path_for_record(self, record: CasArtifactRecord) -> Path:
+        expected_locator = (
+            Path("artifact-cas")
+            / "sha256"
+            / record.digest[:2]
+            / f"{record.digest}.blob"
+        ).as_posix()
+        if record.locator != expected_locator:
+            raise ValueError("artifact CAS locator is not canonical")
+        return self.artifact_store_root / "sha256" / record.digest[:2] / (
+            record.digest + ".blob"
+        )
+
+    @staticmethod
+    def _json_pointer_value(payload: Any, pointer: str) -> Any:
+        if pointer == "":
+            return payload
+        if not pointer.startswith("/"):
+            raise ValueError("artifact authority fragment is not a JSON pointer")
+        current = payload
+        for raw_part in pointer[1:].split("/"):
+            part = raw_part.replace("~1", "/").replace("~0", "~")
+            if "~" in part and re.search(r"~(?![01])", raw_part):
+                raise ValueError("artifact authority JSON pointer escape is invalid")
+            if isinstance(current, Mapping):
+                if part not in current:
+                    raise ValueError("artifact authority JSON pointer is missing")
+                current = current[part]
+            elif isinstance(current, list):
+                if not part.isdecimal() or (part != "0" and part.startswith("0")):
+                    raise ValueError("artifact authority JSON array pointer is invalid")
+                index = int(part)
+                if index >= len(current):
+                    raise ValueError("artifact authority JSON pointer is missing")
+                current = current[index]
+            else:
+                raise ValueError("artifact authority JSON pointer is missing")
+        return current
+
+    def validate_reference(self, authority: str) -> None:
+        if authority not in self.emitted_references:
+            raise ValueError("portable authority was not emitted by this resolver")
+        if authority.startswith("repo://"):
+            return
+        match = ARTIFACT_AUTHORITY_PATTERN.fullmatch(authority)
+        if match is None:
+            raise ValueError("artifact authority is malformed")
+        base = authority.split("#", 1)[0]
+        record = self.artifact_records.get(base)
+        if record is None:
+            raise ValueError("artifact authority has no durable CAS locator")
+        stored = _read_regular_file_snapshot(self._cas_path_for_record(record))
+        if len(stored) != record.size or hashlib.sha256(stored).hexdigest() != record.digest:
+            raise ValueError("artifact CAS bytes do not match their authority")
+        raw_fragment = match.group("fragment")
+        if raw_fragment is None:
+            return
+        pointer = unquote(raw_fragment)
+        if quote(pointer, safe="") != raw_fragment:
+            raise ValueError("artifact authority JSON pointer is not canonically encoded")
+        if record.kind != "file":
+            raise ValueError("artifact JSON pointer does not target a file artifact")
+        try:
+            payload = json.loads(stored.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("artifact JSON pointer targets non-JSON CAS bytes") from exc
+        self._json_pointer_value(payload, pointer)
+
+    def copy_artifact_store(self, destination_root: Path) -> None:
+        destination = destination_root.expanduser().resolve(strict=False)
+        for record in self.artifact_records.values():
+            source = self._cas_path_for_record(record)
+            target = destination / "sha256" / record.digest[:2] / (
+                record.digest + ".blob"
+            )
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.exists():
+                if _read_regular_file_snapshot(target) != _read_regular_file_snapshot(source):
+                    raise ValueError("mirror artifact CAS contains conflicting bytes")
+                continue
+            shutil.copy2(source, target)
 
     def reference_for_local_path(self, raw_path: str) -> str | None:
         canonical = _canonical_machine_local_path(raw_path)
@@ -10123,17 +10703,25 @@ class EvidenceAuthorityResolver:
             )
             if repo_reference is not None:
                 return repo_reference
-            if canonical.is_file() or canonical.is_dir():
+            try:
+                current_mode = os.lstat(canonical).st_mode
+            except OSError:
+                return None
+            if stat.S_ISREG(current_mode) or stat.S_ISDIR(current_mode):
                 try:
                     return self.artifact_reference(canonical)
-                except OSError:
+                except ValueError:
                     return None
             return None
         if self._runtime_root_for_path(canonical) is not None:
-            if canonical.is_file() or canonical.is_dir():
+            try:
+                current_mode = os.lstat(canonical).st_mode
+            except OSError:
+                return None
+            if stat.S_ISREG(current_mode) or stat.S_ISDIR(current_mode):
                 try:
                     return self.artifact_reference(canonical)
-                except OSError:
+                except ValueError:
                     return None
             return None
         raise ValueError(f"unmapped machine-local path: {canonical}")
@@ -10152,13 +10740,19 @@ def _trusted_local_root_occurrence_bindings(
     target_rows = desktop_evidence.get("ui_executable_gate_trusted_local_roots") or []
     if not target_rows:
         return {}
-    if not source_artifact_path.is_file():
-        raise ValueError("trusted local roots lack their immutable source artifact")
-    source_payload = load_json(source_artifact_path)
+    try:
+        source_authority, source_payload = resolver.stage_json_artifact(
+            source_artifact_path
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "trusted local roots lack their immutable source artifact"
+        ) from exc
+    if not isinstance(source_payload, dict):
+        raise ValueError("trusted local roots source artifact must be a JSON object")
     source_rows = ((source_payload.get("evidence") or {}).get("trusted_local_roots") or [])
     if not isinstance(source_rows, list) or list(target_rows) != source_rows:
         raise ValueError("trusted local roots do not match their source artifact rows")
-    source_authority = resolver.artifact_reference_for_file(source_artifact_path)
     bindings: dict[tuple[str, ...], str] = {}
     for index, _row in enumerate(source_rows):
         pointer = f"/evidence/trusted_local_roots/{index}"
@@ -10206,16 +10800,20 @@ def _source_artifact_occurrence_binding(
     target_value = _value_at_path(payload, target_path)
     if target_value is None or target_value == "":
         return {}
-    if not source_artifact_path.is_file():
-        raise ValueError("portable source occurrence lacks its immutable source artifact")
-    source_payload = load_json(source_artifact_path)
+    try:
+        source_authority, source_payload = resolver.stage_json_artifact(
+            source_artifact_path
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "portable source occurrence lacks its immutable source artifact"
+        ) from exc
     source_value = _value_at_path(source_payload, source_path)
     if target_value != source_value:
         raise ValueError("portable source occurrence does not match its source artifact")
     pointer = "/" + "/".join(
         part.replace("~", "~0").replace("/", "~1") for part in source_path
     )
-    source_authority = resolver.artifact_reference_for_file(source_artifact_path)
     return {
         target_path: resolver.register_reference(
             f"{source_authority}#{quote(pointer, safe='')}"
@@ -10341,11 +10939,13 @@ def _validate_portable_public_receipt(
             + ".".join(field_path)
         )
     for authority in _portable_authority_tokens(value):
-        if authority not in resolver.emitted_references:
+        try:
+            resolver.validate_reference(authority)
+        except ValueError as exc:
             raise ValueError(
                 "flagship readiness contains an unverified portable authority at "
                 + ".".join(field_path)
-            )
+            ) from exc
 
 
 def _portable_public_receipt_value(
@@ -10432,6 +11032,8 @@ def materialize_flagship_product_readiness(
     *,
     source_commit: str | None = None,
     source_repo_root: Path = SOURCE_REPO_ROOT,
+    release_repository_authority_path: Path | None = None,
+    release_repository_authority_sha256: str | None = None,
     out_path: Path,
     mirror_path: Path | None,
     acceptance_path: Path,
@@ -10472,6 +11074,21 @@ def materialize_flagship_product_readiness(
     m143_route_local_output_closeout_gate_path: Path = DEFAULT_M143_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATE,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
+    authority_path = release_repository_authority_path
+    if authority_path is None:
+        raw_authority_path = str(
+            os.environ.get(RELEASE_REPOSITORY_AUTHORITY_ENV) or ""
+        ).strip()
+        authority_path = Path(raw_authority_path) if raw_authority_path else None
+    authority_sha256 = (
+        release_repository_authority_sha256
+        if release_repository_authority_sha256 is not None
+        else os.environ.get(RELEASE_REPOSITORY_AUTHORITY_SHA256_ENV)
+    )
+    repository_authority = _load_release_repository_authority(
+        authority_path,
+        authority_sha256,
+    )
     reviewed_source_commit = _reviewed_source_commit(
         source_commit if source_commit is not None else os.environ.get(SOURCE_COMMIT_ENV),
         repo_root=source_repo_root,
@@ -10562,7 +11179,12 @@ def materialize_flagship_product_readiness(
         )
         if path is not None
     )
-    checkouts = _repository_checkouts(evidence_paths)
+    checkouts = _repository_checkouts(
+        evidence_paths,
+        authority=repository_authority,
+        remote_probe=_remote_commit_reachable,
+        required_paths=(source_repo_root,),
+    )
     canonical_source_root = source_repo_root.resolve(strict=True)
     source_checkout = next(
         (checkout for checkout in checkouts if checkout.root == canonical_source_root),
@@ -10583,6 +11205,7 @@ def materialize_flagship_product_readiness(
         ),
         runtime_repository=source_checkout.repository,
         runtime_commit=reviewed_source_commit,
+        artifact_store_root=out_path.parent / "artifact-cas",
     )
     trusted_root_bindings = _trusted_local_root_occurrence_bindings(
         payload,
@@ -10645,6 +11268,24 @@ def materialize_flagship_product_readiness(
         resolver=resolver,
         occurrence_bindings=occurrence_bindings,
     )
+    if "portableEvidenceAuthority" in payload:
+        raise ValueError("flagship readiness payload reserved authority field collides")
+    payload["portableEvidenceAuthority"] = {
+        "contract": "chummer.flagship-portable-evidence-authority/v2",
+        "repositoryAuthority": {
+            "contract": RELEASE_REPOSITORY_AUTHORITY_CONTRACT,
+            "sha256": repository_authority.sha256,
+            "repositories": [
+                {
+                    "repository": entry.repository,
+                    "commit": entry.commit,
+                }
+                for entry in repository_authority.entries
+            ],
+        },
+        "artifactLocators": resolver.artifact_locator_inventory(),
+    }
+    _validate_portable_public_receipt(payload, resolver=resolver)
 
     existing_payload = load_json(out_path)
     if existing_payload and _normalized_payload(existing_payload) == _normalized_payload(payload):
@@ -10657,6 +11298,7 @@ def materialize_flagship_product_readiness(
         wrote_out = True
 
     if mirror_path is not None:
+        resolver.copy_artifact_store(mirror_path.parent / "artifact-cas")
         mirror_content = mirror_path.read_text(encoding="utf-8") if mirror_path.is_file() else ""
         if mirror_content != rendered:
             mirror_path.parent.mkdir(parents=True, exist_ok=True)
@@ -10683,6 +11325,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     payload = materialize_flagship_product_readiness(
         source_commit=args.source_commit,
         source_repo_root=SOURCE_REPO_ROOT,
+        release_repository_authority_path=(
+            Path(args.release_repository_authority).resolve()
+            if str(args.release_repository_authority or "").strip()
+            else None
+        ),
+        release_repository_authority_sha256=(
+            args.release_repository_authority_sha256
+        ),
         out_path=Path(args.out).resolve(),
         mirror_path=mirror_path,
         acceptance_path=Path(args.acceptance).resolve(),
