@@ -9891,6 +9891,27 @@ def _existing_path_probe(path: Path) -> Path | None:
     return probe
 
 
+def _isolated_git_authority_environment(root: Path) -> dict[str, str]:
+    """Return a minimal Git environment with no ambient authority rewrites."""
+
+    home = root / "home"
+    xdg_config_home = root / "xdg-config"
+    home.mkdir(mode=0o700)
+    xdg_config_home.mkdir(mode=0o700)
+    return {
+        "PATH": os.defpath,
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(xdg_config_home),
+        "LANG": "C",
+        "LC_ALL": "C",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_SYSTEM": os.devnull,
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_COUNT": "0",
+        "GIT_TERMINAL_PROMPT": "0",
+    }
+
+
 def _remote_commit_reachable(repository: str, commit: str) -> bool:
     """Prove the exact commit can be fetched from the canonical GitHub authority."""
 
@@ -9900,11 +9921,36 @@ def _remote_commit_reachable(repository: str, commit: str) -> bool:
     remote = f"https://github.com/{canonical}.git"
     try:
         with tempfile.TemporaryDirectory(prefix="chummer-remote-authority-") as raw_dir:
-            bare = Path(raw_dir) / "authority.git"
+            isolated_root = Path(raw_dir)
+            bare = isolated_root / "authority.git"
+            template = isolated_root / "empty-template"
+            template.mkdir(mode=0o700)
+            authority_env = _isolated_git_authority_environment(isolated_root)
+            git_authority_options = (
+                "-c",
+                "protocol.allow=never",
+                "-c",
+                "protocol.https.allow=always",
+                "-c",
+                "http.followRedirects=false",
+                "-c",
+                "credential.helper=",
+                "-c",
+                "core.askPass=",
+            )
             initialized = subprocess.run(
-                ["git", "init", "--bare", "-q", str(bare)],
+                [
+                    "git",
+                    *git_authority_options,
+                    "init",
+                    "--bare",
+                    "-q",
+                    f"--template={template}",
+                    str(bare),
+                ],
                 check=False,
                 capture_output=True,
+                env=authority_env,
                 timeout=15,
             )
             if initialized.returncode != 0:
@@ -9912,6 +9958,7 @@ def _remote_commit_reachable(repository: str, commit: str) -> bool:
             fetched = subprocess.run(
                 [
                     "git",
+                    *git_authority_options,
                     "-C",
                     str(bare),
                     "fetch",
@@ -9923,7 +9970,7 @@ def _remote_commit_reachable(repository: str, commit: str) -> bool:
                 ],
                 check=False,
                 capture_output=True,
-                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+                env=authority_env,
                 timeout=60,
             )
             if fetched.returncode != 0:
@@ -9931,6 +9978,7 @@ def _remote_commit_reachable(repository: str, commit: str) -> bool:
             fetched_commit = subprocess.run(
                 [
                     "git",
+                    *git_authority_options,
                     "-C",
                     str(bare),
                     "rev-parse",
@@ -9939,6 +9987,7 @@ def _remote_commit_reachable(repository: str, commit: str) -> bool:
                 ],
                 check=False,
                 capture_output=True,
+                env=authority_env,
                 text=True,
                 timeout=15,
             )

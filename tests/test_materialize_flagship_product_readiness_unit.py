@@ -4,6 +4,7 @@ import importlib.util
 import hashlib
 import inspect
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -486,6 +487,57 @@ def test_repository_checkout_rejects_authority_for_fabricated_local_commit(tmp_p
             remote_probe=lambda _repository, commit: commit == remotely_reachable_head,
             required_paths=(repo,),
         )
+
+
+def test_remote_commit_reachable_rejects_ambient_url_rewrite_for_unpublished_commit(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_module()
+    repo, _head = _create_allowed_repo(
+        tmp_path,
+        directory_name="ui",
+        repository="ArchonMegalon/chummer6-ui",
+    )
+    (repo / "local-only.txt").write_text(
+        "ambient rewrite must not become GitHub authority\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(repo), "add", "local-only.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "local only"], check=True)
+    unpublished_commit = _git_head(repo)
+    canonical_remote = "https://github.com/ArchonMegalon/chummer6-ui.git"
+
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "2")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", f"url.file://{repo}/.insteadOf")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", canonical_remote)
+    monkeypatch.setenv("GIT_CONFIG_KEY_1", "protocol.file.allow")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_1", "always")
+
+    redirected_probe = tmp_path / "ambient-redirect-probe.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(redirected_probe)], check=True)
+    ambient_fetch = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(redirected_probe),
+            "fetch",
+            "--quiet",
+            "--no-tags",
+            "--depth=1",
+            canonical_remote,
+            unpublished_commit,
+        ],
+        check=False,
+        capture_output=True,
+        env=os.environ,
+    )
+    assert ambient_fetch.returncode == 0
+
+    assert not module._remote_commit_reachable(
+        "ArchonMegalon/chummer6-ui",
+        unpublished_commit,
+    )
 
 
 def test_repository_checkout_uses_pinned_authority_not_mutable_origin_config(
