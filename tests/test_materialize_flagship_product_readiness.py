@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -26,6 +27,28 @@ REVIEWED_SOURCE_COMMIT = subprocess.check_output(
 
 def _source_head() -> str:
     return REVIEWED_SOURCE_COMMIT
+
+
+def _assert_artifact_authority(
+    value: object,
+    *,
+    repository: str = "ArchonMegalon/fleet",
+    commit: str | None = None,
+) -> None:
+    match = re.fullmatch(
+        rf"artifact://{re.escape(repository)}@(?P<commit>[0-9a-f]{{40}})/sha256/(?P<digest>[0-9a-f]{{64}})",
+        str(value),
+    )
+    assert match, value
+    if commit is not None:
+        assert match.group("commit") == commit
+
+
+def _assert_repo_authority(value: object, *, repository: str, relative_path: str) -> None:
+    assert re.fullmatch(
+        rf"repo://{re.escape(repository)}@[0-9a-f]{{40}}/{re.escape(relative_path)}",
+        str(value),
+    ), value
 
 
 @pytest.fixture(autouse=True)
@@ -4580,10 +4603,10 @@ def test_materialize_flagship_product_readiness_prefers_support_execution_plan_a
     assert payload["completion_audit"]["status"] == "fail"
     assert payload["flagship_readiness_audit"]["status"] == "fail"
     assert payload["external_host_proof"]["status"] == "fail"
-    assert payload["external_host_proof"]["reason"].startswith(
-        "Only external host-proof gaps remain: windows: transfer "
-        "repo://ArchonMegalon/fleet/.codex-studio/published/"
-        "external-proof-commands/windows-proof-command-pack.tgz"
+    assert re.match(
+        r"^Only external host-proof gaps remain: windows: transfer "
+        r"(?:repo|artifact)://ArchonMegalon/fleet@[0-9a-f]{40}/",
+        payload["external_host_proof"]["reason"],
     )
     assert "capture-windows-proof.sh" in payload["external_host_proof"]["reason"]
 
@@ -5245,12 +5268,14 @@ def test_materialize_flagship_product_readiness_uses_explicit_executable_receipt
     assert payload["coverage"]["desktop_client"] == "missing"
     evidence = payload["coverage_details"]["desktop_client"]["evidence"]
     assert evidence["ui_executable_exit_gate_status"] == "pass"
-    assert evidence["ui_executable_exit_gate_path"] == (
-        "repo://ArchonMegalon/chummer6-ui/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+    _assert_artifact_authority(
+        evidence["ui_executable_exit_gate_path"],
+        commit=REVIEWED_SOURCE_COMMIT,
     )
     assert evidence["ui_workflow_execution_gate_status"] == "pass"
-    assert evidence["ui_workflow_execution_gate_path"] == (
-        "repo://ArchonMegalon/chummer6-ui/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+    _assert_artifact_authority(
+        evidence["ui_workflow_execution_gate_path"],
+        commit=REVIEWED_SOURCE_COMMIT,
     )
     assert evidence["ui_workflow_execution_gate_family_missing_receipt_count"] == 0
     assert evidence["ui_workflow_execution_gate_family_failing_receipt_count"] == 0
@@ -5260,8 +5285,9 @@ def test_materialize_flagship_product_readiness_uses_explicit_executable_receipt
     assert evidence["ui_workflow_execution_gate_unresolved_receipt_count"] == 0
     assert evidence["ui_workflow_execution_gate_unresolved_receipts"] == []
     assert evidence["ui_visual_familiarity_exit_gate_status"] == "pass"
-    assert evidence["ui_visual_familiarity_exit_gate_path"] == (
-        "repo://ArchonMegalon/chummer6-ui/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    _assert_artifact_authority(
+        evidence["ui_visual_familiarity_exit_gate_path"],
+        commit=REVIEWED_SOURCE_COMMIT,
     )
 
 
@@ -6934,10 +6960,7 @@ def test_materialize_flagship_product_readiness_fail_closes_stale_passing_non_pr
     evidence = payload["coverage_details"]["desktop_client"]["evidence"]
     assert evidence["ui_executable_gate_stale_windows_gate_receipts_without_promoted_tuples"] == [
         {
-            "path": (
-                "repo://ArchonMegalon/chummer6-ui/"
-                "UI_WINDOWS_AVALONIA_WIN_ARM64_DESKTOP_EXIT_GATE.generated.json"
-            ),
+            "path": None,
             "tuple": "avalonia:win-arm64",
             "status": "pass",
         }
@@ -7137,10 +7160,7 @@ def test_materialize_flagship_product_readiness_fail_closes_stale_linux_non_prom
     evidence = payload["coverage_details"]["desktop_client"]["evidence"]
     assert evidence["ui_executable_gate_stale_linux_gate_receipts_without_promoted_tuples"] == [
         {
-            "path": (
-                "repo://ArchonMegalon/chummer6-ui/"
-                "UI_LINUX_AVALONIA_LINUX_ARM64_DESKTOP_EXIT_GATE.generated.json"
-            ),
+            "path": None,
             "tuple": "avalonia:linux-arm64",
             "status": "pass",
         }
@@ -9551,16 +9571,15 @@ def test_materialize_flagship_product_readiness_requires_desktop_canon_in_design
     assert "Fleet design mirror is missing SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md." in reasons
     assert evidence["surface_design_review_loop_exists"] is False
     assert "SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md" in evidence["required_desktop_canon_missing_names"]
-    assert evidence["flagship_bar_mirror_path"] == (
-        "repo://ArchonMegalon/fleet/.codex-design/product/FLAGSHIP_PRODUCT_BAR.md"
+    _assert_artifact_authority(
+        evidence["flagship_bar_mirror_path"],
+        commit=REVIEWED_SOURCE_COMMIT,
     )
-    assert evidence["horizons_overview_mirror_path"] == (
-        "repo://ArchonMegalon/fleet/.codex-design/product/HORIZONS.md"
+    _assert_artifact_authority(
+        evidence["horizons_overview_mirror_path"],
+        commit=REVIEWED_SOURCE_COMMIT,
     )
-    assert evidence["surface_design_review_loop_path"] == (
-        "repo://ArchonMegalon/fleet/.codex-design/product/"
-        "SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md"
-    )
+    assert evidence["surface_design_review_loop_path"] is None
 
 
 def test_materialize_flagship_product_readiness_keeps_required_desktop_canon_complete_when_present(tmp_path: Path) -> None:
@@ -9752,8 +9771,10 @@ def test_materialize_flagship_product_readiness_uses_canonical_acceptance_fallba
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(out_path.read_text(encoding="utf-8"))
-    assert payload["evidence_sources"]["acceptance"] == (
-        "repo://ArchonMegalon/chummer6-design/products/chummer/FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+    _assert_repo_authority(
+        payload["evidence_sources"]["acceptance"],
+        repository="ArchonMegalon/chummer6-design",
+        relative_path="products/chummer/FLAGSHIP_RELEASE_ACCEPTANCE.yaml",
     )
     assert payload["source_documents"]
 
@@ -10464,7 +10485,10 @@ def test_materialize_flagship_product_readiness_prefers_best_shard_supervisor_st
     assert result.returncode == 0, result.stderr
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["coverage"]["fleet_and_operator_loop"] in {"ready", "warning"}
-    assert payload["evidence_sources"]["supervisor_state"].endswith("/state.json")
+    _assert_artifact_authority(
+        payload["evidence_sources"]["supervisor_state"],
+        commit=REVIEWED_SOURCE_COMMIT,
+    )
 
 
 def test_select_best_supervisor_state_keeps_aggregate_preferred_path(tmp_path: Path) -> None:
@@ -11290,7 +11314,10 @@ def test_materialize_flagship_product_readiness_accepts_loop_mode_with_last_run_
     assert payload["coverage"]["fleet_and_operator_loop"] in {"ready", "warning"}
     evidence = payload["coverage_details"]["fleet_and_operator_loop"]["evidence"]
     assert evidence["supervisor_completion_status"] == "pass"
-    assert payload["evidence_sources"]["supervisor_state"].endswith("/state.json")
+    _assert_artifact_authority(
+        payload["evidence_sources"]["supervisor_state"],
+        commit=REVIEWED_SOURCE_COMMIT,
+    )
 
 
 def test_materialize_flagship_product_readiness_accepts_steady_complete_quiet_ooda(tmp_path: Path) -> None:
@@ -12759,7 +12786,10 @@ def test_materialize_flagship_product_readiness_accepts_stale_release_channel_ge
     assert payload["coverage"]["desktop_client"] == "ready"
     evidence = payload["coverage_details"]["desktop_client"]["evidence"]
     assert evidence["release_channel_freshness_source"] == "verified_release_channel_mirror"
-    assert str(evidence["release_channel_verified_mirror_path"]).endswith("Docker/Downloads/RELEASE_CHANNEL.generated.json")
+    _assert_artifact_authority(
+        evidence["release_channel_verified_mirror_path"],
+        commit=REVIEWED_SOURCE_COMMIT,
+    )
     assert evidence["release_channel_effective_age_seconds"] <= 86400
 
 
