@@ -4582,7 +4582,8 @@ def test_materialize_flagship_product_readiness_prefers_support_execution_plan_a
     assert payload["external_host_proof"]["status"] == "fail"
     assert payload["external_host_proof"]["reason"].startswith(
         "Only external host-proof gaps remain: windows: transfer "
-        "/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz"
+        "repo://ArchonMegalon/fleet/.codex-studio/published/"
+        "external-proof-commands/windows-proof-command-pack.tgz"
     )
     assert "capture-windows-proof.sh" in payload["external_host_proof"]["reason"]
 
@@ -5244,9 +5245,13 @@ def test_materialize_flagship_product_readiness_uses_explicit_executable_receipt
     assert payload["coverage"]["desktop_client"] == "missing"
     evidence = payload["coverage_details"]["desktop_client"]["evidence"]
     assert evidence["ui_executable_exit_gate_status"] == "pass"
-    assert evidence["ui_executable_exit_gate_path"] == str(explicit_executable_path)
+    assert evidence["ui_executable_exit_gate_path"] == (
+        "repo://ArchonMegalon/chummer6-ui/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+    )
     assert evidence["ui_workflow_execution_gate_status"] == "pass"
-    assert evidence["ui_workflow_execution_gate_path"] == str(explicit_workflow_execution_path)
+    assert evidence["ui_workflow_execution_gate_path"] == (
+        "repo://ArchonMegalon/chummer6-ui/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+    )
     assert evidence["ui_workflow_execution_gate_family_missing_receipt_count"] == 0
     assert evidence["ui_workflow_execution_gate_family_failing_receipt_count"] == 0
     assert evidence["ui_workflow_execution_gate_execution_missing_receipt_count"] == 0
@@ -5255,7 +5260,9 @@ def test_materialize_flagship_product_readiness_uses_explicit_executable_receipt
     assert evidence["ui_workflow_execution_gate_unresolved_receipt_count"] == 0
     assert evidence["ui_workflow_execution_gate_unresolved_receipts"] == []
     assert evidence["ui_visual_familiarity_exit_gate_status"] == "pass"
-    assert evidence["ui_visual_familiarity_exit_gate_path"] == str(explicit_visual_familiarity_path)
+    assert evidence["ui_visual_familiarity_exit_gate_path"] == (
+        "repo://ArchonMegalon/chummer6-ui/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    )
 
 
 def test_materialize_flagship_product_readiness_requires_macos_tuple_proof_when_macos_installer_is_public(tmp_path: Path) -> None:
@@ -6927,7 +6934,10 @@ def test_materialize_flagship_product_readiness_fail_closes_stale_passing_non_pr
     evidence = payload["coverage_details"]["desktop_client"]["evidence"]
     assert evidence["ui_executable_gate_stale_windows_gate_receipts_without_promoted_tuples"] == [
         {
-            "path": str(tmp_path / "ui" / "UI_WINDOWS_AVALONIA_WIN_ARM64_DESKTOP_EXIT_GATE.generated.json"),
+            "path": (
+                "repo://ArchonMegalon/chummer6-ui/"
+                "UI_WINDOWS_AVALONIA_WIN_ARM64_DESKTOP_EXIT_GATE.generated.json"
+            ),
             "tuple": "avalonia:win-arm64",
             "status": "pass",
         }
@@ -7127,7 +7137,10 @@ def test_materialize_flagship_product_readiness_fail_closes_stale_linux_non_prom
     evidence = payload["coverage_details"]["desktop_client"]["evidence"]
     assert evidence["ui_executable_gate_stale_linux_gate_receipts_without_promoted_tuples"] == [
         {
-            "path": str(tmp_path / "ui" / "UI_LINUX_AVALONIA_LINUX_ARM64_DESKTOP_EXIT_GATE.generated.json"),
+            "path": (
+                "repo://ArchonMegalon/chummer6-ui/"
+                "UI_LINUX_AVALONIA_LINUX_ARM64_DESKTOP_EXIT_GATE.generated.json"
+            ),
             "tuple": "avalonia:linux-arm64",
             "status": "pass",
         }
@@ -9538,9 +9551,16 @@ def test_materialize_flagship_product_readiness_requires_desktop_canon_in_design
     assert "Fleet design mirror is missing SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md." in reasons
     assert evidence["surface_design_review_loop_exists"] is False
     assert "SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md" in evidence["required_desktop_canon_missing_names"]
-    assert evidence["flagship_bar_mirror_path"] == str(product_dir / "FLAGSHIP_PRODUCT_BAR.md")
-    assert evidence["horizons_overview_mirror_path"] == str(product_dir / "HORIZONS.md")
-    assert evidence["surface_design_review_loop_path"] == str(product_dir / "SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md")
+    assert evidence["flagship_bar_mirror_path"] == (
+        "repo://ArchonMegalon/fleet/.codex-design/product/FLAGSHIP_PRODUCT_BAR.md"
+    )
+    assert evidence["horizons_overview_mirror_path"] == (
+        "repo://ArchonMegalon/fleet/.codex-design/product/HORIZONS.md"
+    )
+    assert evidence["surface_design_review_loop_path"] == (
+        "repo://ArchonMegalon/fleet/.codex-design/product/"
+        "SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md"
+    )
 
 
 def test_materialize_flagship_product_readiness_keeps_required_desktop_canon_complete_when_present(tmp_path: Path) -> None:
@@ -9732,7 +9752,9 @@ def test_materialize_flagship_product_readiness_uses_canonical_acceptance_fallba
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(out_path.read_text(encoding="utf-8"))
-    assert payload["evidence_sources"]["acceptance"] == str(canonical_acceptance)
+    assert payload["evidence_sources"]["acceptance"] == (
+        "repo://ArchonMegalon/chummer6-design/products/chummer/FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+    )
     assert payload["source_documents"]
 
 

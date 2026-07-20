@@ -95,6 +95,146 @@ def test_materializer_emits_agreeing_reviewed_source_commit_aliases(tmp_path: Pa
     assert out_path.read_text(encoding="utf-8").count(head) == 2
 
 
+def test_materializer_emits_portable_evidence_references(tmp_path: Path, monkeypatch) -> None:
+    module = _load_module()
+    source_repo, head = _create_source_repo(tmp_path)
+    monkeypatch.setattr(
+        module,
+        "build_flagship_product_readiness_payload",
+        lambda **_kwargs: {
+            "generated_at": "2026-07-20T00:00:00Z",
+            "status": "fail",
+            "evidence_sources": {
+                "fleet": str(source_repo / ".codex-studio" / "published" / "proof.json"),
+                "ui": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/proof.json",
+                "route": "/status",
+            },
+            "coverage_details": {
+                "desktop_client": {
+                    "evidence": {
+                        "ui_executable_gate_trusted_local_roots": [
+                            "/tmp/chummer-presentation-main-push",
+                        ]
+                    }
+                }
+            },
+        },
+    )
+    out_path = tmp_path / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    kwargs = {
+        name: tmp_path / name
+        for name, parameter in inspect.signature(module.materialize_flagship_product_readiness).parameters.items()
+        if parameter.default is inspect.Parameter.empty
+    }
+    kwargs.update(
+        source_commit=head,
+        source_repo_root=source_repo,
+        out_path=out_path,
+        mirror_path=None,
+        external_proof_runbook_path=None,
+    )
+
+    payload = module.materialize_flagship_product_readiness(**kwargs)
+
+    assert payload["evidence_sources"] == {
+        "fleet": "repo://ArchonMegalon/fleet/.codex-studio/published/proof.json",
+        "ui": "repo://ArchonMegalon/chummer6-ui/.codex-studio/published/proof.json",
+        "route": "/status",
+    }
+    assert payload["coverage_details"]["desktop_client"]["evidence"][
+        "ui_executable_gate_trusted_local_roots"
+    ] == ["repo://ArchonMegalon/chummer6-ui"]
+
+
+def test_portable_receipt_rejects_unmapped_machine_local_path() -> None:
+    module = _load_module()
+
+    with pytest.raises(ValueError, match="unmapped machine-local path at evidence.unknown"):
+        module._portable_public_receipt_value(
+            {"evidence": {"unknown": "/Users/operator/private/proof.json"}},
+            fleet_repo_roots=(),
+        )
+    with pytest.raises(ValueError, match="unmapped machine-local path at evidence.message"):
+        module._portable_public_receipt_value(
+            {"evidence": {"message": "receipt copied from /private/tmp/proof.json"}},
+            fleet_repo_roots=(),
+        )
+
+
+def test_portable_receipt_rewrites_embedded_known_path_without_changing_message() -> None:
+    module = _load_module()
+
+    assert module._portable_public_receipt_value(
+        {"reason": "receipt copied from /docker/fleet/.codex-studio/published/proof.json."},
+        fleet_repo_roots=(),
+    ) == {
+        "reason": (
+            "receipt copied from "
+            "repo://ArchonMegalon/fleet/.codex-studio/published/proof.json."
+        )
+    }
+
+
+def test_fleet_repo_root_is_derived_only_from_fleet_mirror_acceptance_path(tmp_path: Path) -> None:
+    module = _load_module()
+
+    assert module._fleet_repo_root_from_acceptance_path(
+        tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+    ) == tmp_path
+    assert module._fleet_repo_root_from_acceptance_path(
+        tmp_path / "products" / "chummer" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+    ) is None
+
+
+def test_portable_receipt_binds_ltd_registry_to_fleet_authority() -> None:
+    module = _load_module()
+
+    assert module._portable_public_receipt_value(
+        {
+            "readiness_planes": {
+                "feedback_loop_ready": {
+                    "evidence": {
+                        "feedback_discovery_ltd_registry_path": (
+                            "/tmp/LTD_RUNTIME_AND_PROJECTION_REGISTRY.yaml"
+                        )
+                    }
+                }
+            }
+        },
+        fleet_repo_roots=(),
+    )["readiness_planes"]["feedback_loop_ready"]["evidence"][
+        "feedback_discovery_ltd_registry_path"
+    ] == (
+        "repo://ArchonMegalon/fleet/.codex-design/product/"
+        "LTD_RUNTIME_AND_PROJECTION_REGISTRY.yaml"
+    )
+
+
+def test_portable_receipt_resolves_fixture_owner_from_list_field_and_path(tmp_path: Path) -> None:
+    module = _load_module()
+
+    assert module._portable_public_receipt_value(
+        {
+            "platform_tuple_receipts": [
+                str(tmp_path / "ui-b" / ".codex-studio" / "published" / "proof.json")
+            ],
+            "reason": (
+                "selected "
+                + str(tmp_path / "ui-b" / ".codex-studio" / "published" / "proof.json")
+            ),
+        },
+        fleet_repo_roots=(tmp_path,),
+    ) == {
+        "platform_tuple_receipts": [
+            "repo://ArchonMegalon/chummer6-ui/.codex-studio/published/proof.json"
+        ],
+        "reason": (
+            "selected "
+            "repo://ArchonMegalon/chummer6-ui/.codex-studio/published/proof.json"
+        ),
+    }
+
+
 def test_executable_gate_freshness_issues_allows_stale_flagged_subproofs() -> None:
     module = _load_module()
 

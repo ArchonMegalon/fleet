@@ -50,6 +50,33 @@ SOURCE_AUTHORITY_PATHS = (
     "scripts/chummer_design_supervisor.py",
     "scripts/refresh_flagship_readiness_proof.sh",
 )
+FLEET_REPOSITORY_AUTHORITY = "repo://ArchonMegalon/fleet"
+UI_REPOSITORY_AUTHORITY = "repo://ArchonMegalon/chummer6-ui"
+CORE_REPOSITORY_AUTHORITY = "repo://ArchonMegalon/chummer6-core"
+HUB_REPOSITORY_AUTHORITY = "repo://ArchonMegalon/chummer6-hub"
+REGISTRY_REPOSITORY_AUTHORITY = "repo://ArchonMegalon/chummer6-hub-registry"
+MOBILE_REPOSITORY_AUTHORITY = "repo://ArchonMegalon/chummer6-mobile"
+DESIGN_REPOSITORY_AUTHORITY = "repo://ArchonMegalon/chummer6-design"
+MEDIA_REPOSITORY_AUTHORITY = "repo://ArchonMegalon/chummer6-media-factory"
+PORTABLE_REPOSITORY_ROOTS = (
+    (Path("/docker/fleet/repos/chummer-media-factory"), MEDIA_REPOSITORY_AUTHORITY),
+    (Path("/docker/chummercomplete/chummer-hub-registry"), REGISTRY_REPOSITORY_AUTHORITY),
+    (Path("/docker/chummercomplete/chummer.run-services"), HUB_REPOSITORY_AUTHORITY),
+    (Path("/docker/chummercomplete/chummer6-design"), DESIGN_REPOSITORY_AUTHORITY),
+    (Path("/docker/chummercomplete/chummer-design"), DESIGN_REPOSITORY_AUTHORITY),
+    (Path("/docker/chummercomplete/chummer6-core"), CORE_REPOSITORY_AUTHORITY),
+    (Path("/docker/chummercomplete/chummer6-mobile"), MOBILE_REPOSITORY_AUTHORITY),
+    (Path("/docker/chummercomplete/chummer-play"), MOBILE_REPOSITORY_AUTHORITY),
+    (Path("/docker/chummercomplete/chummer6-ui"), UI_REPOSITORY_AUTHORITY),
+    (Path("/docker/chummercomplete/chummer-presentation"), UI_REPOSITORY_AUTHORITY),
+    (ROOT, FLEET_REPOSITORY_AUTHORITY),
+)
+MACHINE_LOCAL_PATH_TOKEN_PATTERN = re.compile(
+    r"(?P<prefix>^|[\s\"'(:=])(?P<path>"
+    r"(?:(?:/tmp|/var/tmp|/private/tmp|/private/var/tmp|/docker|/workspace|/home|/root|/Users)"
+    r"(?:/[^\s\"'<>]*|(?=$))|"
+    r"[A-Za-z]:[\\/](?:Users|Temp|workspace)(?:[\\/][^\s\"'<>]*|(?=$))))"
+)
 
 DEFAULT_OUT = ROOT / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 DEFAULT_MIRROR_OUT = ROOT / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
@@ -9581,6 +9608,193 @@ def _normalized_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
+def _repo_reference(path: Path, root: Path, authority: str) -> str | None:
+    try:
+        relative_path = path.relative_to(root)
+    except ValueError:
+        return None
+    relative = relative_path.as_posix()
+    return authority if relative in {"", "."} else f"{authority}/{relative}"
+
+
+def _fleet_repo_root_from_acceptance_path(path: Path) -> Path | None:
+    product_root = path.parent
+    design_root = product_root.parent
+    if product_root.name != "product" or design_root.name != ".codex-design":
+        return None
+    return design_root.parent
+
+
+def _field_repository_authority(field_path: tuple[str, ...]) -> str:
+    key = next((part for part in reversed(field_path) if not part.isdecimal()), "")
+    if "hub_registry" in key:
+        return REGISTRY_REPOSITORY_AUTHORITY
+    if key.startswith("ui_") or key.startswith("sr4_") or key.startswith("sr6_"):
+        return UI_REPOSITORY_AUTHORITY
+    if key in {"release_channel_verified_mirror_path", "platform_tuple_receipts"}:
+        return UI_REPOSITORY_AUTHORITY
+    if key.startswith("hub_"):
+        return HUB_REPOSITORY_AUTHORITY
+    if key.startswith("mobile_"):
+        return MOBILE_REPOSITORY_AUTHORITY
+    if key in {"release_channel", "releases_json"}:
+        return REGISTRY_REPOSITORY_AUTHORITY
+    if key == "rules_certification_path":
+        return CORE_REPOSITORY_AUTHORITY
+    if key == "media_proof_path":
+        return MEDIA_REPOSITORY_AUTHORITY
+    return FLEET_REPOSITORY_AUTHORITY
+
+
+def _dynamic_repo_reference(
+    path: Path,
+    root: Path,
+    *,
+    authority: str,
+) -> str | None:
+    try:
+        relative_path = path.relative_to(root)
+    except ValueError:
+        return None
+    parts = relative_path.parts
+    authority_prefixes = {
+        UI_REPOSITORY_AUTHORITY: ("ui", "presentation", "chummer6-ui", "chummer-presentation"),
+        CORE_REPOSITORY_AUTHORITY: ("core", "chummer6-core"),
+        HUB_REPOSITORY_AUTHORITY: ("hub", "chummer.run-services"),
+        REGISTRY_REPOSITORY_AUTHORITY: ("registry", "chummer-hub-registry"),
+        MOBILE_REPOSITORY_AUTHORITY: ("mobile", "play", "chummer6-mobile", "chummer-play"),
+        DESIGN_REPOSITORY_AUTHORITY: ("design", "chummer6-design", "chummer-design"),
+        MEDIA_REPOSITORY_AUTHORITY: ("media", "chummer-media-factory"),
+    }
+    if parts:
+        inferred_authority = next(
+            (
+                candidate
+                for candidate, prefixes in authority_prefixes.items()
+                if any(parts[0].startswith(prefix) for prefix in prefixes)
+            ),
+            None,
+        )
+        if authority == FLEET_REPOSITORY_AUTHORITY and inferred_authority is not None:
+            authority = inferred_authority
+        owner_prefixes = authority_prefixes.get(authority, ())
+        if owner_prefixes and any(parts[0].startswith(prefix) for prefix in owner_prefixes):
+            relative_path = Path(*parts[1:])
+    relative = relative_path.as_posix()
+    return authority if relative in {"", "."} else f"{authority}/{relative}"
+
+
+def _portable_receipt_path(
+    raw_path: str,
+    *,
+    fleet_repo_roots: Sequence[Path],
+    field_path: tuple[str, ...],
+) -> str:
+    path = Path(raw_path)
+    if "ui_executable_gate_trusted_local_roots" in field_path:
+        for root, authority in PORTABLE_REPOSITORY_ROOTS:
+            if authority == FLEET_REPOSITORY_AUTHORITY:
+                continue
+            reference = _repo_reference(path, root, authority)
+            if reference is not None:
+                return reference
+        return UI_REPOSITORY_AUTHORITY
+
+    for root, authority in PORTABLE_REPOSITORY_ROOTS:
+        reference = _repo_reference(path, root, authority)
+        if reference is not None:
+            return reference
+
+    if (
+        field_path[-1:] == ("feedback_discovery_ltd_registry_path",)
+        and path.name == "LTD_RUNTIME_AND_PROJECTION_REGISTRY.yaml"
+    ):
+        return (
+            f"{FLEET_REPOSITORY_AUTHORITY}/.codex-design/product/"
+            "LTD_RUNTIME_AND_PROJECTION_REGISTRY.yaml"
+        )
+
+    if field_path[-1:] == ("ui_executable_gate_hub_registry_root",):
+        return REGISTRY_REPOSITORY_AUTHORITY
+    if (
+        field_path[-1:] == ("ui_executable_gate_hub_registry_release_channel_path",)
+        and path.name == "RELEASE_CHANNEL.generated.json"
+    ):
+        return (
+            f"{REGISTRY_REPOSITORY_AUTHORITY}/.codex-studio/published/"
+            "RELEASE_CHANNEL.generated.json"
+        )
+
+    authority = _field_repository_authority(field_path)
+    for root in sorted(set(fleet_repo_roots), key=lambda item: len(item.parts), reverse=True):
+        reference = _dynamic_repo_reference(path, root, authority=authority)
+        if reference is not None:
+            return reference
+
+    raise ValueError(
+        "flagship readiness contains an unmapped machine-local path at "
+        + ".".join(field_path)
+    )
+
+
+def _portable_receipt_string(
+    value: str,
+    *,
+    fleet_repo_roots: Sequence[Path],
+    field_path: tuple[str, ...],
+) -> str:
+    matches = list(MACHINE_LOCAL_PATH_TOKEN_PATTERN.finditer(value))
+    if not matches:
+        return value
+    result = value
+    for match in reversed(matches):
+        token = match.group("path")
+        trailing = ""
+        while token and token[-1] in ".,;:)]}":
+            trailing = token[-1] + trailing
+            token = token[:-1]
+        portable = _portable_receipt_path(
+            token,
+            fleet_repo_roots=fleet_repo_roots,
+            field_path=field_path,
+        )
+        result = result[: match.start("path")] + portable + trailing + result[match.end("path") :]
+    return result
+
+
+def _portable_public_receipt_value(
+    value: Any,
+    *,
+    fleet_repo_roots: Sequence[Path],
+    field_path: tuple[str, ...] = (),
+) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _portable_public_receipt_value(
+                item,
+                fleet_repo_roots=fleet_repo_roots,
+                field_path=(*field_path, str(key)),
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _portable_public_receipt_value(
+                item,
+                fleet_repo_roots=fleet_repo_roots,
+                field_path=(*field_path, str(index)),
+            )
+            for index, item in enumerate(value)
+        ]
+    if isinstance(value, str):
+        return _portable_receipt_string(
+            value,
+            fleet_repo_roots=fleet_repo_roots,
+            field_path=field_path,
+        )
+    return value
+
+
 def _external_request_tuple_id(request: Dict[str, Any]) -> str:
     if not isinstance(request, dict):
         return ""
@@ -9728,6 +9942,21 @@ def materialize_flagship_product_readiness(
     )
     payload["sourceCommit"] = reviewed_source_commit
     payload["source_commit"] = reviewed_source_commit
+    published_repo_root = repo_root_for_published_path(out_path)
+    acceptance_repo_root = _fleet_repo_root_from_acceptance_path(acceptance_path)
+    payload = _portable_public_receipt_value(
+        payload,
+        fleet_repo_roots=tuple(
+            root
+            for root in (
+                published_repo_root,
+                acceptance_repo_root,
+                source_repo_root,
+                SOURCE_REPO_ROOT,
+            )
+            if root is not None
+        ),
+    )
 
     existing_payload = load_json(out_path)
     if existing_payload and _normalized_payload(existing_payload) == _normalized_payload(payload):
@@ -9745,7 +9974,7 @@ def materialize_flagship_product_readiness(
             mirror_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(out_path, mirror_path)
 
-    repo_root = repo_root_for_published_path(out_path)
+    repo_root = published_repo_root
     if repo_root is not None and (wrote_out or _compile_manifest_missing_artifact(repo_root, out_path.name)):
         support_packets_path = repo_root / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
         refreshed_weekly = _refresh_weekly_governor_packet_if_possible(
