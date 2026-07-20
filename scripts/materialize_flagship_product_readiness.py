@@ -47,6 +47,10 @@ UTC = dt.timezone.utc
 ROOT = Path("/docker/fleet")
 SOURCE_REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_COMMIT_ENV = "CHUMMER_FLAGSHIP_PRODUCT_READINESS_SOURCE_COMMIT"
+RULES_CERTIFICATION_ENV = "CHUMMER_FLAGSHIP_RULES_CERTIFICATION"
+MEDIA_PROOF_ENV = "CHUMMER_FLAGSHIP_MEDIA_PROOF"
+FINAL_GOLD_JANITOR_ENV = "CHUMMER_FLAGSHIP_FINAL_GOLD_JANITOR"
+LIVE_BACKED_TRUTH_ENV = "CHUMMER_FLAGSHIP_LIVE_BACKED_TRUTH"
 SOURCE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 RELEASE_REPOSITORY_AUTHORITY_ENV = "CHUMMER_RELEASE_REPOSITORY_AUTHORITY"
 RELEASE_REPOSITORY_AUTHORITY_SHA256_ENV = (
@@ -1042,6 +1046,38 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--mobile-local-release-proof",
         default=str(DEFAULT_MOBILE_LOCAL_RELEASE_PROOF),
         help="path to MOBILE_LOCAL_RELEASE_PROOF.generated.json",
+    )
+    parser.add_argument(
+        "--rules-certification",
+        default=str(os.environ.get(RULES_CERTIFICATION_ENV) or "").strip(),
+        help=(
+            "optional exact rules/import certification JSON; when omitted, use the "
+            f"legacy candidate search (or set {RULES_CERTIFICATION_ENV})"
+        ),
+    )
+    parser.add_argument(
+        "--media-proof",
+        default=str(os.environ.get(MEDIA_PROOF_ENV) or "").strip(),
+        help=(
+            "optional exact media/artifact publication proof JSON; when omitted, use the "
+            f"legacy candidate search (or set {MEDIA_PROOF_ENV})"
+        ),
+    )
+    parser.add_argument(
+        "--final-gold-janitor",
+        default=str(os.environ.get(FINAL_GOLD_JANITOR_ENV) or "").strip(),
+        help=(
+            "optional exact final-gold janitor JSON; when omitted, use the current "
+            f"completion-root default when present (or set {FINAL_GOLD_JANITOR_ENV})"
+        ),
+    )
+    parser.add_argument(
+        "--live-backed-truth",
+        default=str(os.environ.get(LIVE_BACKED_TRUTH_ENV) or "").strip(),
+        help=(
+            "optional exact live-backed release-truth JSON; when omitted, use the current "
+            f"completion-root default when present (or set {LIVE_BACKED_TRUTH_ENV})"
+        ),
     )
     parser.add_argument("--release-channel", default=str(DEFAULT_RELEASE_CHANNEL), help="path to RELEASE_CHANNEL.generated.json")
     parser.add_argument("--releases-json", default=str(DEFAULT_RELEASES_JSON), help="path to releases.json")
@@ -4661,6 +4697,27 @@ def _first_existing_payload(paths: Iterable[Path]) -> tuple[Path | None, Dict[st
     return None, {}
 
 
+def _selected_proof_payload(
+    *,
+    explicit_path: Path | None,
+    candidates: Iterable[Path],
+    label: str,
+) -> tuple[Path | None, Dict[str, Any]]:
+    """Load an explicit immutable proof, or retain the legacy candidate search."""
+
+    if explicit_path is None:
+        return _first_existing_payload(candidates)
+    canonical = _canonical_path_preserving_final_component(explicit_path)
+    content = _read_regular_file_snapshot(canonical, require_single_link=True)
+    try:
+        payload = json.loads(content.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"explicit {label} is not valid UTF-8 JSON") from exc
+    if not isinstance(payload, dict) or not payload:
+        raise ValueError(f"explicit {label} must be a non-empty JSON object")
+    return canonical, payload
+
+
 def _ooda_steady_complete_quiet(ooda_state: Dict[str, Any]) -> bool:
     if bool(ooda_state.get("steady_complete_quiet")):
         return True
@@ -4770,6 +4827,10 @@ def build_flagship_product_readiness_payload(
     mobile_local_release_proof_path: Path,
     release_channel_path: Path,
     releases_json_path: Path,
+    rules_certification_path: Path | None = None,
+    media_proof_path: Path | None = None,
+    final_gold_janitor_path: Path | None = None,
+    live_backed_truth_path: Path | None = None,
     ui_external_host_proof_blockers_path: Path = DEFAULT_UI_EXTERNAL_HOST_PROOF_BLOCKERS,
     ui_element_parity_audit_path: Path | None = None,
     ui_user_journey_tester_audit_path: Path | None = None,
@@ -5059,8 +5120,16 @@ def build_flagship_product_readiness_payload(
     release_channel = load_json(release_channel_path)
     releases_json = load_json(releases_json_path)
     ui_external_blocker_rows = _ui_external_host_proof_request_rows(ui_external_host_proof_blockers)
-    rules_cert_path, rules_cert_payload = _first_existing_payload(RULES_CERTIFICATION_CANDIDATES)
-    media_proof_path, media_proof_payload = _first_existing_payload(MEDIA_PROOF_CANDIDATES)
+    rules_cert_path, rules_cert_payload = _selected_proof_payload(
+        explicit_path=rules_certification_path,
+        candidates=RULES_CERTIFICATION_CANDIDATES,
+        label="rules certification",
+    )
+    selected_media_proof_path, media_proof_payload = _selected_proof_payload(
+        explicit_path=media_proof_path,
+        candidates=MEDIA_PROOF_CANDIDATES,
+        label="media proof",
+    )
     parity_declared_blocking_families = _parity_unresolved_families(parity_registry)
     parity_proof_backed_closures = _parity_proof_backed_family_closures(
         ui_workflow_parity_proof_path=ui_workflow_parity_proof_path,
@@ -7542,7 +7611,7 @@ def build_flagship_product_readiness_payload(
             "media_stage": media_stage,
             "build_explain_publish": build_journey_state,
             "build_explain_publish_effective": build_journey_effective_state,
-            "media_proof_path": str(media_proof_path) if media_proof_path else "",
+            "media_proof_path": str(selected_media_proof_path) if selected_media_proof_path else "",
             "media_proof_status": str(media_proof_payload.get("status") or "").strip(),
         },
     )
@@ -8018,8 +8087,16 @@ def build_flagship_product_readiness_payload(
         fleet_positives += 1
     else:
         fleet_reasons.append("Fleet compile manifest is not marked dispatchable_truth_ready.")
-    final_gold_janitor = load_json(DEFAULT_FINAL_GOLD_JANITOR)
-    live_backed_truth = load_json(DEFAULT_LIVE_BACKED_RELEASE_TRUTH_MATRIX)
+    selected_final_gold_janitor_path, final_gold_janitor = _selected_proof_payload(
+        explicit_path=final_gold_janitor_path,
+        candidates=(DEFAULT_FINAL_GOLD_JANITOR,),
+        label="final-gold janitor proof",
+    )
+    selected_live_backed_truth_path, live_backed_truth = _selected_proof_payload(
+        explicit_path=live_backed_truth_path,
+        candidates=(DEFAULT_LIVE_BACKED_RELEASE_TRUTH_MATRIX,),
+        label="live-backed release truth",
+    )
     final_gold_ready = (
         str(final_gold_janitor.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
         and str(final_gold_janitor.get("verdict") or "").strip() == "GOLD_READY"
@@ -8087,11 +8164,19 @@ def build_flagship_product_readiness_payload(
             "external_proof_runbook_synced": external_runbook_synced,
             "external_proof_runbook_sync_issue_count": len(external_runbook_sync_reasons),
             "dispatchable_truth_ready": bool(compile_manifest.get("dispatchable_truth_ready")),
-            "final_gold_janitor_path": str(DEFAULT_FINAL_GOLD_JANITOR),
+            "final_gold_janitor_path": (
+                str(selected_final_gold_janitor_path)
+                if selected_final_gold_janitor_path
+                else ""
+            ),
             "final_gold_janitor_status": str(final_gold_janitor.get("status") or "").strip(),
             "final_gold_janitor_verdict": str(final_gold_janitor.get("verdict") or "").strip(),
             "final_gold_janitor_reasons": list(final_gold_janitor.get("reasons") or []),
-            "live_backed_truth_path": str(DEFAULT_LIVE_BACKED_RELEASE_TRUTH_MATRIX),
+            "live_backed_truth_path": (
+                str(selected_live_backed_truth_path)
+                if selected_live_backed_truth_path
+                else ""
+            ),
             "live_backed_truth_status": str(live_backed_truth.get("status") or "").strip(),
             "live_backed_gold_claim_allowed": bool(live_backed_truth.get("gold_claim_allowed")),
             "live_backed_truth_reasons": list(live_backed_truth.get("reasons") or []),
@@ -9723,7 +9808,11 @@ def _canonical_path_preserving_final_component(path: Path) -> Path:
     return expanded.parent.resolve(strict=False) / expanded.name
 
 
-def _read_regular_file_snapshot(path: Path) -> bytes:
+def _read_regular_file_snapshot(
+    path: Path,
+    *,
+    require_single_link: bool = False,
+) -> bytes:
     """Read one stable regular-file generation without following its final link."""
 
     canonical = _canonical_path_preserving_final_component(path)
@@ -9733,6 +9822,8 @@ def _read_regular_file_snapshot(path: Path) -> bytes:
         raise ValueError(f"evidence file is unavailable: {canonical}") from exc
     if not stat.S_ISREG(before.st_mode):
         raise ValueError("evidence authority requires a regular file")
+    if require_single_link and before.st_nlink != 1:
+        raise ValueError("evidence authority requires a single-link regular file")
     flags = os.O_RDONLY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
@@ -9744,6 +9835,8 @@ def _read_regular_file_snapshot(path: Path) -> bytes:
         opened = os.fstat(descriptor)
         if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
             raise ValueError("evidence file identity changed before it was read")
+        if require_single_link and opened.st_nlink != 1:
+            raise ValueError("evidence authority requires a single-link regular file")
         chunks: list[bytes] = []
         while True:
             chunk = os.read(descriptor, 1024 * 1024)
@@ -9751,6 +9844,8 @@ def _read_regular_file_snapshot(path: Path) -> bytes:
                 break
             chunks.append(chunk)
         after_read = os.fstat(descriptor)
+        if require_single_link and after_read.st_nlink != 1:
+            raise ValueError("evidence authority requires a single-link regular file")
     finally:
         os.close(descriptor)
     try:
@@ -9764,13 +9859,15 @@ def _read_regular_file_snapshot(path: Path) -> bytes:
         "st_size",
         "st_mtime_ns",
         "st_ctime_ns",
-    )
+    ) + (("st_nlink",) if require_single_link else ())
     if any(
         getattr(before, field) != getattr(after_read, field)
         or getattr(before, field) != getattr(after_path, field)
         for field in stable_fields
     ):
         raise ValueError("evidence file changed while it was read")
+    if require_single_link and after_path.st_nlink != 1:
+        raise ValueError("evidence authority requires a single-link regular file")
     content = b"".join(chunks)
     if len(content) != before.st_size:
         raise ValueError("evidence file size changed while it was read")
@@ -11111,6 +11208,10 @@ def materialize_flagship_product_readiness(
     mobile_local_release_proof_path: Path,
     release_channel_path: Path,
     releases_json_path: Path,
+    rules_certification_path: Path | None = None,
+    media_proof_path: Path | None = None,
+    final_gold_janitor_path: Path | None = None,
+    live_backed_truth_path: Path | None = None,
     ui_external_host_proof_blockers_path: Path = DEFAULT_UI_EXTERNAL_HOST_PROOF_BLOCKERS,
     ui_element_parity_audit_path: Path | None = None,
     ui_user_journey_tester_audit_path: Path | None = None,
@@ -11123,6 +11224,26 @@ def materialize_flagship_product_readiness(
     m143_route_local_output_closeout_gate_path: Path = DEFAULT_M143_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATE,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
+    effective_rules_certification_path = (
+        _canonical_path_preserving_final_component(rules_certification_path)
+        if rules_certification_path is not None
+        else None
+    )
+    effective_media_proof_path = (
+        _canonical_path_preserving_final_component(media_proof_path)
+        if media_proof_path is not None
+        else None
+    )
+    effective_final_gold_janitor_path = (
+        _canonical_path_preserving_final_component(final_gold_janitor_path)
+        if final_gold_janitor_path is not None
+        else _first_existing_payload((DEFAULT_FINAL_GOLD_JANITOR,))[0]
+    )
+    effective_live_backed_truth_path = (
+        _canonical_path_preserving_final_component(live_backed_truth_path)
+        if live_backed_truth_path is not None
+        else _first_existing_payload((DEFAULT_LIVE_BACKED_RELEASE_TRUTH_MATRIX,))[0]
+    )
     authority_path = release_repository_authority_path
     if authority_path is None:
         raw_authority_path = str(
@@ -11178,6 +11299,10 @@ def materialize_flagship_product_readiness(
         mobile_local_release_proof_path=mobile_local_release_proof_path,
         release_channel_path=release_channel_path,
         releases_json_path=releases_json_path,
+        rules_certification_path=effective_rules_certification_path,
+        media_proof_path=effective_media_proof_path,
+        final_gold_janitor_path=effective_final_gold_janitor_path,
+        live_backed_truth_path=effective_live_backed_truth_path,
         ui_user_journey_tester_audit_path=ui_user_journey_tester_audit_path,
         ignore_nonlinux_desktop_host_proof_blockers=ignore_nonlinux_desktop_host_proof_blockers,
     )
@@ -11223,6 +11348,10 @@ def materialize_flagship_product_readiness(
             sr4_sr6_frontier_receipt_path,
             hub_local_release_proof_path,
             mobile_local_release_proof_path,
+            effective_rules_certification_path,
+            effective_media_proof_path,
+            effective_final_gold_janitor_path,
+            effective_live_backed_truth_path,
             release_channel_path,
             releases_json_path,
         )
@@ -11430,6 +11559,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         sr4_sr6_frontier_receipt_path=Path(args.sr4_sr6_frontier_receipt).resolve(),
         hub_local_release_proof_path=Path(args.hub_local_release_proof).resolve(),
         mobile_local_release_proof_path=Path(args.mobile_local_release_proof).resolve(),
+        rules_certification_path=(
+            _canonical_path_preserving_final_component(Path(args.rules_certification))
+            if str(args.rules_certification or "").strip()
+            else None
+        ),
+        media_proof_path=(
+            _canonical_path_preserving_final_component(Path(args.media_proof))
+            if str(args.media_proof or "").strip()
+            else None
+        ),
+        final_gold_janitor_path=(
+            _canonical_path_preserving_final_component(Path(args.final_gold_janitor))
+            if str(args.final_gold_janitor or "").strip()
+            else None
+        ),
+        live_backed_truth_path=(
+            _canonical_path_preserving_final_component(Path(args.live_backed_truth))
+            if str(args.live_backed_truth or "").strip()
+            else None
+        ),
         release_channel_path=Path(args.release_channel).resolve(),
         releases_json_path=Path(args.releases_json).resolve(),
         ignore_nonlinux_desktop_host_proof_blockers=bool(args.ignore_nonlinux_desktop_host_proof_blockers),

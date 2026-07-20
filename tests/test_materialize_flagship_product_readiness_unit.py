@@ -228,6 +228,300 @@ def test_materializer_emits_agreeing_reviewed_source_commit_aliases(tmp_path: Pa
     ]
 
 
+def test_explicit_release_proofs_are_repository_authority_mapped(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_remote_commit_reachable", lambda _repository, _commit: True)
+    source_repo, _head = _create_source_repo(tmp_path)
+    final_gold_janitor = (
+        source_repo
+        / "_completion"
+        / "full_product_reaudit_v20"
+        / "FINAL_GOLD_JANITOR.generated.json"
+    )
+    live_backed_truth = (
+        source_repo
+        / "_completion"
+        / "full_product_reaudit_v20"
+        / "LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json"
+    )
+    final_gold_janitor.parent.mkdir(parents=True)
+    final_gold_janitor.write_text(
+        '{"contract_name":"chummer.final_gold_janitor","status":"failed"}\n',
+        encoding="utf-8",
+    )
+    live_backed_truth.write_text(
+        '{"contract_name":"chummer.live_backed_release_truth","status":"failed"}\n',
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(source_repo), "add", "_completion"], check=True)
+    subprocess.run(["git", "-C", str(source_repo), "commit", "-qm", "add aggregate proofs"], check=True)
+    head = _git_head(source_repo)
+    core_repo, core_head = _create_allowed_repo(
+        tmp_path,
+        directory_name="core",
+        repository="ArchonMegalon/chummer6-core",
+        tracked_files={
+            ".codex-studio/published/ENGINE_PROOF_PACK.generated.json": (
+                '{"contract_name":"chummer6-core.engine_proof_pack","status":"passed"}\n'
+            )
+        },
+    )
+    media_repo, media_head = _create_allowed_repo(
+        tmp_path,
+        directory_name="media",
+        repository="ArchonMegalon/chummer6-media-factory",
+        tracked_files={
+            ".codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json": (
+                '{"contract_name":"chummer6-media-factory.local_release_proof","status":"passed"}\n'
+            )
+        },
+    )
+    rules_proof = core_repo / ".codex-studio" / "published" / "ENGINE_PROOF_PACK.generated.json"
+    media_proof = media_repo / ".codex-studio" / "published" / "MEDIA_LOCAL_RELEASE_PROOF.generated.json"
+    authority_path, authority_sha256 = _write_release_authority(
+        tmp_path / "repository-authority.json",
+        (
+            ("ArchonMegalon/fleet", head),
+            ("ArchonMegalon/chummer6-core", core_head),
+            ("ArchonMegalon/chummer6-media-factory", media_head),
+        ),
+    )
+    captured: dict[str, object] = {}
+
+    def build_payload(**kwargs):
+        captured.update(kwargs)
+        return {
+            "generated_at": "2026-07-20T00:00:00Z",
+            "status": "fail",
+            "evidence": {
+                "rules_certification_path": str(kwargs["rules_certification_path"]),
+                "media_proof_path": str(kwargs["media_proof_path"]),
+                "final_gold_janitor_path": str(kwargs["final_gold_janitor_path"]),
+                "live_backed_truth_path": str(kwargs["live_backed_truth_path"]),
+            },
+        }
+
+    monkeypatch.setattr(module, "build_flagship_product_readiness_payload", build_payload)
+    runtime_root = tmp_path / "runtime"
+    out_path = runtime_root / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    kwargs = {
+        name: runtime_root / name
+        for name, parameter in inspect.signature(module.materialize_flagship_product_readiness).parameters.items()
+        if parameter.default is inspect.Parameter.empty
+    }
+    kwargs.update(
+        source_commit=head,
+        source_repo_root=source_repo,
+        release_repository_authority_path=authority_path,
+        release_repository_authority_sha256=authority_sha256,
+        out_path=out_path,
+        mirror_path=None,
+        external_proof_runbook_path=None,
+        rules_certification_path=rules_proof,
+        media_proof_path=media_proof,
+        final_gold_janitor_path=final_gold_janitor,
+        live_backed_truth_path=live_backed_truth,
+    )
+
+    payload = module.materialize_flagship_product_readiness(**kwargs)
+
+    assert captured["rules_certification_path"] == rules_proof
+    assert captured["media_proof_path"] == media_proof
+    assert captured["final_gold_janitor_path"] == final_gold_janitor
+    assert captured["live_backed_truth_path"] == live_backed_truth
+    assert payload["evidence"] == {
+        "rules_certification_path": (
+            f"repo://ArchonMegalon/chummer6-core@{core_head}/"
+            ".codex-studio/published/ENGINE_PROOF_PACK.generated.json"
+        ),
+        "media_proof_path": (
+            f"repo://ArchonMegalon/chummer6-media-factory@{media_head}/"
+            ".codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json"
+        ),
+        "final_gold_janitor_path": (
+            f"repo://ArchonMegalon/fleet@{head}/"
+            "_completion/full_product_reaudit_v20/FINAL_GOLD_JANITOR.generated.json"
+        ),
+        "live_backed_truth_path": (
+            f"repo://ArchonMegalon/fleet@{head}/"
+            "_completion/full_product_reaudit_v20/LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json"
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    ("override_name", "repository", "relative_path"),
+    (
+        (
+            "rules_certification_path",
+            "ArchonMegalon/chummer6-core",
+            ".codex-studio/published/ENGINE_PROOF_PACK.generated.json",
+        ),
+        (
+            "media_proof_path",
+            "ArchonMegalon/chummer6-media-factory",
+            ".codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json",
+        ),
+        (
+            "final_gold_janitor_path",
+            "ArchonMegalon/fleet",
+            "_completion/full_product_reaudit_v20/FINAL_GOLD_JANITOR.generated.json",
+        ),
+        (
+            "live_backed_truth_path",
+            "ArchonMegalon/fleet",
+            "_completion/full_product_reaudit_v20/LIVE_BACKED_RELEASE_TRUTH_MATRIX.generated.json",
+        ),
+    ),
+)
+def test_explicit_proof_outside_repository_authority_fails_closed(
+    tmp_path: Path,
+    monkeypatch,
+    override_name: str,
+    repository: str,
+    relative_path: str,
+) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_remote_commit_reachable", lambda _repository, _commit: True)
+    source_repo, head = _create_source_repo(tmp_path)
+    unmapped_repo, _unmapped_head = _create_allowed_repo(
+        tmp_path,
+        directory_name=f"unmapped-{override_name}",
+        repository=repository,
+        tracked_files={
+            relative_path: '{"contract_name":"test.proof","status":"passed"}\n'
+        },
+    )
+    proof_path = unmapped_repo / relative_path
+    authority_path, authority_sha256 = _write_release_authority(
+        tmp_path / "repository-authority.json",
+        (("ArchonMegalon/fleet", head),),
+    )
+    monkeypatch.setattr(
+        module,
+        "build_flagship_product_readiness_payload",
+        lambda **kwargs: {
+            "generated_at": "2026-07-20T00:00:00Z",
+            "status": "fail",
+            override_name: str(kwargs[override_name]),
+        },
+    )
+    runtime_root = tmp_path / "runtime"
+    kwargs = {
+        name: runtime_root / name
+        for name, parameter in inspect.signature(module.materialize_flagship_product_readiness).parameters.items()
+        if parameter.default is inspect.Parameter.empty
+    }
+    kwargs.update(
+        source_commit=head,
+        source_repo_root=source_repo,
+        release_repository_authority_path=authority_path,
+        release_repository_authority_sha256=authority_sha256,
+        out_path=runtime_root / "FLAGSHIP_PRODUCT_READINESS.generated.json",
+        mirror_path=None,
+        external_proof_runbook_path=None,
+    )
+    kwargs[override_name] = proof_path
+
+    with pytest.raises(
+        ValueError,
+        match=rf"invalid machine-local evidence at {override_name}",
+    ):
+        module.materialize_flagship_product_readiness(**kwargs)
+
+
+def test_explicit_proof_loader_rejects_final_symlink(tmp_path: Path) -> None:
+    module = _load_module()
+    target = tmp_path / "proof.json"
+    target.write_text('{"status":"passed"}\n', encoding="utf-8")
+    linked = tmp_path / "linked-proof.json"
+    linked.symlink_to(target)
+
+    with pytest.raises(ValueError, match="requires a regular file"):
+        module._selected_proof_payload(
+            explicit_path=linked,
+            candidates=(),
+            label="media proof",
+        )
+
+
+def test_explicit_proof_loader_rejects_hard_link(tmp_path: Path) -> None:
+    module = _load_module()
+    target = tmp_path / "proof.json"
+    target.write_text('{"status":"passed"}\n', encoding="utf-8")
+    linked = tmp_path / "hard-linked-proof.json"
+    os.link(target, linked)
+
+    with pytest.raises(ValueError, match="single-link regular file"):
+        module._selected_proof_payload(
+            explicit_path=linked,
+            candidates=(),
+            label="final-gold janitor proof",
+        )
+
+
+def test_explicit_proof_loader_overrides_legacy_candidates(tmp_path: Path) -> None:
+    module = _load_module()
+    legacy = tmp_path / "legacy.json"
+    explicit = tmp_path / "explicit.json"
+    legacy.write_text('{"status":"failed"}\n', encoding="utf-8")
+    explicit.write_text('{"status":"passed"}\n', encoding="utf-8")
+
+    selected_path, payload = module._selected_proof_payload(
+        explicit_path=explicit,
+        candidates=(legacy,),
+        label="rules certification",
+    )
+
+    assert selected_path == explicit
+    assert payload == {"status": "passed"}
+
+
+def test_absent_current_live_backed_truth_selects_no_path(tmp_path: Path) -> None:
+    module = _load_module()
+
+    selected_path, payload = module._selected_proof_payload(
+        explicit_path=None,
+        candidates=(tmp_path / "missing-v20-live-backed-truth.json",),
+        label="live-backed release truth",
+    )
+
+    assert selected_path is None
+    assert payload == {}
+    assert (str(selected_path) if selected_path else "") == ""
+
+
+def test_proof_cli_and_environment_overrides_are_explicit(tmp_path: Path, monkeypatch) -> None:
+    module = _load_module()
+    env_rules = tmp_path / "env-rules.json"
+    env_media = tmp_path / "env-media.json"
+    env_janitor = tmp_path / "env-janitor.json"
+    env_live = tmp_path / "env-live.json"
+    cli_media = tmp_path / "cli-media.json"
+    cli_live = tmp_path / "cli-live.json"
+    monkeypatch.setenv(module.RULES_CERTIFICATION_ENV, str(env_rules))
+    monkeypatch.setenv(module.MEDIA_PROOF_ENV, str(env_media))
+    monkeypatch.setenv(module.FINAL_GOLD_JANITOR_ENV, str(env_janitor))
+    monkeypatch.setenv(module.LIVE_BACKED_TRUTH_ENV, str(env_live))
+
+    args = module.parse_args(
+        [
+            "--media-proof",
+            str(cli_media),
+            "--live-backed-truth",
+            str(cli_live),
+        ]
+    )
+
+    assert args.rules_certification == str(env_rules)
+    assert args.media_proof == str(cli_media)
+    assert args.final_gold_janitor == str(env_janitor)
+    assert args.live_backed_truth == str(cli_live)
+
+
 def test_materializer_emits_portable_evidence_references(tmp_path: Path, monkeypatch) -> None:
     module = _load_module()
     monkeypatch.setattr(module, "_remote_commit_reachable", lambda _repository, _commit: True)
