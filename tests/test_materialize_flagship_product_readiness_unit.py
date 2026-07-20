@@ -834,6 +834,56 @@ def test_remote_commit_reachable_rejects_ambient_url_rewrite_for_unpublished_com
     )
 
 
+def test_remote_commit_reachable_uses_filtered_bounded_transport_retry(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_module()
+    commit = "a" * 40
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    fetch_attempts = 0
+
+    def fake_run(args, **kwargs):
+        nonlocal fetch_attempts
+        command = [str(item) for item in args]
+        calls.append((command, dict(kwargs)))
+        if "init" in command:
+            return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+        if "fetch" in command:
+            fetch_attempts += 1
+            return subprocess.CompletedProcess(
+                command,
+                1 if fetch_attempts == 1 else 0,
+                stdout=b"",
+                stderr=b"",
+            )
+        if "rev-parse" in command:
+            return subprocess.CompletedProcess(command, 0, stdout=f"{commit}\n", stderr="")
+        raise AssertionError(f"unexpected git command: {command}")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    assert module._remote_commit_reachable(
+        "ArchonMegalon/chummer6-ui",
+        commit,
+    )
+    fetch_calls = [(command, kwargs) for command, kwargs in calls if "fetch" in command]
+    assert len(fetch_calls) == 2
+    for command, kwargs in fetch_calls:
+        assert "--filter=blob:none" in command
+        assert "--depth=1" in command
+        assert command[-2:] == [
+            "https://github.com/ArchonMegalon/chummer6-ui.git",
+            commit,
+        ]
+        assert kwargs["timeout"] == 30
+        authority_env = kwargs["env"]
+        assert isinstance(authority_env, dict)
+        assert authority_env["GIT_CONFIG_NOSYSTEM"] == "1"
+        assert authority_env["GIT_CONFIG_GLOBAL"] == os.devnull
+        assert authority_env["GIT_TERMINAL_PROMPT"] == "0"
+
+
 def test_repository_checkout_uses_pinned_authority_not_mutable_origin_config(
     tmp_path: Path,
 ) -> None:

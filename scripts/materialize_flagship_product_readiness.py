@@ -10052,25 +10052,34 @@ def _remote_commit_reachable(repository: str, commit: str) -> bool:
             )
             if initialized.returncode != 0:
                 return False
-            fetched = subprocess.run(
-                [
-                    "git",
-                    *git_authority_options,
-                    "-C",
-                    str(bare),
-                    "fetch",
-                    "--quiet",
-                    "--no-tags",
-                    "--depth=1",
-                    remote,
-                    commit,
-                ],
-                check=False,
-                capture_output=True,
-                env=authority_env,
-                timeout=60,
-            )
-            if fetched.returncode != 0:
+            fetched = None
+            for _attempt in range(2):
+                try:
+                    fetch_attempt = subprocess.run(
+                        [
+                            "git",
+                            *git_authority_options,
+                            "-C",
+                            str(bare),
+                            "fetch",
+                            "--quiet",
+                            "--no-tags",
+                            "--depth=1",
+                            "--filter=blob:none",
+                            remote,
+                            commit,
+                        ],
+                        check=False,
+                        capture_output=True,
+                        env=authority_env,
+                        timeout=30,
+                    )
+                except subprocess.TimeoutExpired:
+                    continue
+                if fetch_attempt.returncode == 0:
+                    fetched = fetch_attempt
+                    break
+            if fetched is None:
                 return False
             fetched_commit = subprocess.run(
                 [
