@@ -22,7 +22,17 @@ import pytest
 import yaml
 
 
-MODULE_PATH = Path("/docker/fleet/scripts/chummer_design_supervisor.py")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+MODULE_PATH = REPO_ROOT / "scripts" / "chummer_design_supervisor.py"
+REVIEWED_SOURCE_COMMIT = subprocess.check_output(
+    ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+    text=True,
+).strip()
+
+
+@pytest.fixture(autouse=True)
+def _reviewed_flagship_readiness_source_commit(monkeypatch) -> None:
+    monkeypatch.setenv("CHUMMER_FLAGSHIP_PRODUCT_READINESS_SOURCE_COMMIT", REVIEWED_SOURCE_COMMIT)
 
 
 def _load_module():

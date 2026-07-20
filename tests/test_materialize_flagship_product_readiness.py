@@ -10,11 +10,27 @@ import datetime as dt
 import zlib
 from pathlib import Path
 
+import pytest
 import yaml
 
 
-SCRIPT = Path("/docker/fleet/scripts/materialize_flagship_product_readiness.py")
-SUPPORT_CASE_PACKETS_SCRIPT = Path("/docker/fleet/scripts/materialize_support_case_packets.py")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = REPO_ROOT / "scripts" / "materialize_flagship_product_readiness.py"
+SUPPORT_CASE_PACKETS_SCRIPT = REPO_ROOT / "scripts" / "materialize_support_case_packets.py"
+SOURCE_COMMIT_ENV = "CHUMMER_FLAGSHIP_PRODUCT_READINESS_SOURCE_COMMIT"
+REVIEWED_SOURCE_COMMIT = subprocess.check_output(
+    ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+    text=True,
+).strip()
+
+
+def _source_head() -> str:
+    return REVIEWED_SOURCE_COMMIT
+
+
+@pytest.fixture(autouse=True)
+def _reviewed_source_commit(monkeypatch) -> None:
+    monkeypatch.setenv(SOURCE_COMMIT_ENV, _source_head())
 
 
 def _load_module():
@@ -3438,6 +3454,8 @@ def test_materialize_flagship_product_readiness_uses_release_proof_journey_overr
     )
 
     payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["sourceCommit"] == _source_head()
+    assert payload["source_commit"] == _source_head()
     assert payload["coverage"]["hub_and_registry"] == "ready"
     assert payload["coverage"]["horizons_and_public_surface"] == "ready"
     assert payload["coverage"]["fleet_and_operator_loop"] == "ready"

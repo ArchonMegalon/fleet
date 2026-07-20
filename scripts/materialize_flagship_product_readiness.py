@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -41,6 +42,14 @@ except ModuleNotFoundError:
 
 UTC = dt.timezone.utc
 ROOT = Path("/docker/fleet")
+SOURCE_REPO_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_COMMIT_ENV = "CHUMMER_FLAGSHIP_PRODUCT_READINESS_SOURCE_COMMIT"
+SOURCE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+SOURCE_AUTHORITY_PATHS = (
+    "scripts/materialize_flagship_product_readiness.py",
+    "scripts/chummer_design_supervisor.py",
+    "scripts/refresh_flagship_readiness_proof.sh",
+)
 
 DEFAULT_OUT = ROOT / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 DEFAULT_MIRROR_OUT = ROOT / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
@@ -730,6 +739,45 @@ UI_ELEMENT_PARITY_AUDIT_SR6_IDS = (
 REPO_PROOF_REASON_RE = re.compile(r"repo proof (?P<repo>[^:\s]+):(?P<path>[^\s]+)")
 
 
+def _reviewed_source_commit(raw_value: str | None, *, repo_root: Path = SOURCE_REPO_ROOT) -> str:
+    """Validate one externally supplied commit against the checked-out generator source."""
+
+    commit = str(raw_value or "").strip().lower()
+    if SOURCE_COMMIT_PATTERN.fullmatch(commit) is None:
+        raise ValueError(
+            f"flagship readiness requires {SOURCE_COMMIT_ENV} or --source-commit "
+            "as a reviewed full 40-character commit SHA"
+        )
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--verify", "HEAD^{commit}"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ValueError("flagship readiness source checkout could not be authenticated") from exc
+    checked_out_commit = completed.stdout.strip().lower()
+    if completed.returncode != 0 or SOURCE_COMMIT_PATTERN.fullmatch(checked_out_commit) is None:
+        raise ValueError("flagship readiness source checkout could not be authenticated")
+    if checked_out_commit != commit:
+        raise ValueError("flagship readiness source commit does not match the reviewed checkout")
+    try:
+        producer_diff = subprocess.run(
+            ["git", "-C", str(repo_root), "diff", "--quiet", commit, "--", *SOURCE_AUTHORITY_PATHS],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ValueError("flagship readiness producer code could not be authenticated") from exc
+    if producer_diff.returncode != 0:
+        raise ValueError("flagship readiness producer code differs from the reviewed source commit")
+    return commit
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     raw_args = list(argv or sys.argv[1:])
     bootstrap = argparse.ArgumentParser(add_help=False)
@@ -740,6 +788,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         description="Materialize flagship whole-product readiness proof from Fleet's published evidence and repo-local release proofs."
     )
     parser.add_argument("--repo-root", default=str(repo_root), help="Fleet repo root")
+    parser.add_argument(
+        "--source-commit",
+        default=str(os.environ.get(SOURCE_COMMIT_ENV) or "").strip(),
+        help=(
+            "externally reviewed full Fleet commit used to generate this authority receipt; "
+            f"defaults to {SOURCE_COMMIT_ENV}"
+        ),
+    )
     parser.add_argument("--out", default=str(DEFAULT_OUT), help="output path for FLAGSHIP_PRODUCT_READINESS.generated.json")
     parser.add_argument(
         "--mirror-out",
@@ -9585,6 +9641,8 @@ def _compile_manifest_missing_artifact(repo_root: Path, artifact_name: str) -> b
 
 def materialize_flagship_product_readiness(
     *,
+    source_commit: str | None = None,
+    source_repo_root: Path = SOURCE_REPO_ROOT,
     out_path: Path,
     mirror_path: Path | None,
     acceptance_path: Path,
@@ -9625,6 +9683,10 @@ def materialize_flagship_product_readiness(
     m143_route_local_output_closeout_gate_path: Path = DEFAULT_M143_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATE,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
+    reviewed_source_commit = _reviewed_source_commit(
+        source_commit if source_commit is not None else os.environ.get(SOURCE_COMMIT_ENV),
+        repo_root=source_repo_root,
+    )
     payload = build_flagship_product_readiness_payload(
         acceptance_path=acceptance_path,
         parity_registry_path=parity_registry_path,
@@ -9664,6 +9726,8 @@ def materialize_flagship_product_readiness(
         ui_user_journey_tester_audit_path=ui_user_journey_tester_audit_path,
         ignore_nonlinux_desktop_host_proof_blockers=ignore_nonlinux_desktop_host_proof_blockers,
     )
+    payload["sourceCommit"] = reviewed_source_commit
+    payload["source_commit"] = reviewed_source_commit
 
     existing_payload = load_json(out_path)
     if existing_payload and _normalized_payload(existing_payload) == _normalized_payload(payload):
@@ -9700,6 +9764,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if mirror_path is not None:
         _ensure_non_design_mirror_path(mirror_path, repo_root=repo_root)
     payload = materialize_flagship_product_readiness(
+        source_commit=args.source_commit,
+        source_repo_root=SOURCE_REPO_ROOT,
         out_path=Path(args.out).resolve(),
         mirror_path=mirror_path,
         acceptance_path=Path(args.acceptance).resolve(),

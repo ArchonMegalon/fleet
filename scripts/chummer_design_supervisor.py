@@ -8675,6 +8675,8 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
         if _hard_flagship_requested(args):
             ignore_nonlinux_desktop_host_proof_blockers = False
         payload = materialize_flagship_product_readiness(
+            source_commit=_runtime_env_default("CHUMMER_FLAGSHIP_PRODUCT_READINESS_SOURCE_COMMIT"),
+            source_repo_root=Path(__file__).resolve().parents[1],
             out_path=Path(args.flagship_product_readiness_path).resolve(),
             mirror_path=readiness_mirror_path,
             acceptance_path=acceptance_mirror_path,

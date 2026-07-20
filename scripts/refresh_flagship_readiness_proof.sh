@@ -2,6 +2,25 @@
 set -euo pipefail
 
 fleet_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+readiness_source_commit="${CHUMMER_FLAGSHIP_PRODUCT_READINESS_SOURCE_COMMIT:-}"
+if [[ ! "$readiness_source_commit" =~ ^[0-9a-fA-F]{40}$ ]]; then
+  echo "CHUMMER_FLAGSHIP_PRODUCT_READINESS_SOURCE_COMMIT must be an externally reviewed full 40-character commit SHA" >&2
+  exit 2
+fi
+readiness_source_commit="${readiness_source_commit,,}"
+checked_out_source_commit="$(git -C "$fleet_root" rev-parse --verify 'HEAD^{commit}')"
+checked_out_source_commit="${checked_out_source_commit,,}"
+if [[ "$checked_out_source_commit" != "$readiness_source_commit" ]]; then
+  echo "CHUMMER_FLAGSHIP_PRODUCT_READINESS_SOURCE_COMMIT does not match the reviewed checkout" >&2
+  exit 2
+fi
+if ! git -C "$fleet_root" diff --quiet "$readiness_source_commit" -- \
+  scripts/materialize_flagship_product_readiness.py \
+  scripts/chummer_design_supervisor.py \
+  scripts/refresh_flagship_readiness_proof.sh; then
+  echo "flagship readiness producer code differs from the reviewed source commit" >&2
+  exit 2
+fi
 readiness_out="$fleet_root/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json"
 readiness_state_mirror_out="$fleet_root/state/chummer_design_supervisor/artifacts/FLAGSHIP_PRODUCT_READINESS.generated.json"
 state_root_default="$fleet_root/state/chummer_design_supervisor"
@@ -330,6 +349,7 @@ python3 scripts/materialize_next90_m136_fleet_aggregate_readiness_parity_gates.p
 python3 scripts/materialize_next90_m138_fleet_hero_path_projections.py
 python3 scripts/materialize_next90_m138_fleet_hero_path_closeout_gates.py
 python3 scripts/materialize_flagship_product_readiness.py \
+  --source-commit "$readiness_source_commit" \
   --release-channel "$ui_release_channel_path" \
   --out "$readiness_out" \
   --mirror-out "$readiness_state_mirror_out"
