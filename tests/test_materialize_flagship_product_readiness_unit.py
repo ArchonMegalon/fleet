@@ -6,6 +6,7 @@ import inspect
 import json
 import os
 from pathlib import Path
+import stat
 import subprocess
 import tempfile
 from urllib.parse import unquote, urlsplit
@@ -152,6 +153,527 @@ def _write_release_authority(
     ).encode("utf-8")
     path.write_bytes(content)
     return path, hashlib.sha256(content).hexdigest()
+
+
+def _approved_scope_payload(
+    *,
+    release_version: str = "run-20260728-050000",
+    support_owner: str = "chummer-release-operations",
+) -> dict[str, object]:
+    return {
+        "approvedAtUtc": "2026-07-21T06:21:37Z",
+        "approvedBy": "Release reviewer",
+        "channel": "preview",
+        "contractName": "chummer.release-scope-decision/v1",
+        "contractVersion": 1,
+        "decisionId": "nightly-macos-arm64-20260728",
+        "platforms": [
+            {
+                "artifactAccessClass": "open_public",
+                "fallbackHeads": ["blazor-desktop"],
+                "platform": "macos",
+                "primaryHead": "avalonia",
+                "rid": "osx-arm64",
+                "signingRequirement": "signed",
+            }
+        ],
+        "releaseTarget": "preview",
+        "releaseVersion": release_version,
+        "status": "approved",
+        "supportOwner": support_owner,
+    }
+
+
+def _write_approved_scope(
+    path: Path,
+    *,
+    release_version: str = "run-20260728-050000",
+    support_owner: str = "chummer-release-operations",
+) -> tuple[Path, str]:
+    raw = (
+        json.dumps(
+            _approved_scope_payload(
+                release_version=release_version,
+                support_owner=support_owner,
+            ),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode("utf-8")
+    path.write_bytes(raw)
+    return path, hashlib.sha256(raw).hexdigest()
+
+
+def _registry_snapshot_payload(
+    *,
+    release_version: str = "run-20260728-050000",
+    support_owner: str = "chummer-release-operations",
+) -> dict[str, object]:
+    artifact = {
+        "artifactId": "chummer-macos-arm64.pkg",
+        "head": "avalonia",
+        "platform": "macos",
+        "rid": "osx-arm64",
+        "arch": "arm64",
+        "kind": "installer",
+        "downloadUrl": (
+            "/downloads/g/generation-1/files/"
+            "chummer-macos-arm64.pkg"
+        ),
+        "sha256": "a" * 64,
+        "sizeBytes": 1024,
+        "compatibilityState": "compatible",
+        "promotionState": "promoted",
+        "publicationScope": "signed-in-and-public",
+        "revokeState": "not_revoked",
+        "publicInstallRoute": "/downloads/install/chummer-macos-arm64.pkg",
+        "installAccessClass": "open_public",
+    }
+    fallback = {
+        **artifact,
+        "artifactId": "chummer-blazor-macos-arm64.pkg",
+        "head": "blazor-desktop",
+        "downloadUrl": (
+            "/downloads/g/generation-1/files/"
+            "chummer-blazor-macos-arm64.pkg"
+        ),
+        "publicInstallRoute": (
+            "/downloads/install/chummer-blazor-macos-arm64.pkg"
+        ),
+        "sha256": "e" * 64,
+    }
+    return {
+        "authorityContract": "chummer.release-authority-snapshot/v2",
+        "releaseVersion": release_version,
+        "channel": "preview",
+        "status": "published",
+        "rolloutState": "promoted_preview",
+        "supportabilityState": "preview_supported",
+        "availablePlatforms": ["macos"],
+        "primaryHeadByPlatform": {"macos": "avalonia"},
+        "artifactCount": 2,
+        "downloadAccessPosture": "open_public",
+        "knownIssueSummary": "Stable evidence remains open.",
+        "manifestSha256": "b" * 64,
+        "registryRepository": "ArchonMegalon/chummer6-hub-registry",
+        "registryCommit": "c" * 40,
+        "releaseDecisionStatus": "review_required",
+        "releaseDecisionSha256": "d" * 64,
+        "releaseDecisionPath": "RELEASE_DECISION.json",
+        "supportOwner": support_owner,
+        "nextActions": ["Complete stable evidence before widening the channel."],
+        "artifacts": [artifact, fallback],
+        "manifestPath": "RELEASE_CHANNEL.json",
+    }
+
+
+def _write_registry_snapshot(
+    path: Path,
+    *,
+    release_version: str = "run-20260728-050000",
+    support_owner: str = "chummer-release-operations",
+) -> tuple[Path, str]:
+    raw = (
+        json.dumps(
+            _registry_snapshot_payload(
+                release_version=release_version,
+                support_owner=support_owner,
+            ),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode("utf-8")
+    path.write_bytes(raw)
+    return path, hashlib.sha256(raw).hexdigest()
+
+
+def _preview_declaration(module, scope_path: Path, scope_sha256: str, **overrides):
+    snapshot_path, snapshot_sha256 = _write_registry_snapshot(
+        scope_path.parent / "registry-authority.json"
+    )
+    arguments = {
+        "preview_mode": True,
+        "approved_release_scope_path": scope_path,
+        "expected_release_scope_sha256": scope_sha256,
+        "registry_authority_snapshot_path": snapshot_path,
+        "expected_registry_authority_snapshot_sha256": snapshot_sha256,
+        "expected_release_version": "run-20260728-050000",
+        "bounded_owner": "chummer-release-operations",
+        "next_actions": ("Capture the remaining stable flagship evidence.",),
+    }
+    arguments.update(overrides)
+    return module._campaign_operability_preview_declaration(**arguments)
+
+
+def _candidate_binding(scope_sha256: str, snapshot_sha256: str) -> dict[str, str]:
+    return {
+        "releaseVersion": "run-20260728-050000",
+        "releaseScopeDecisionSha256": scope_sha256,
+        "snapshotSha256": snapshot_sha256,
+        "manifestSha256": "b" * 64,
+        "releaseDecisionSha256": "d" * 64,
+        "registryCommit": "c" * 40,
+    }
+
+
+def test_campaign_operability_preview_emits_exact_v2_declaration(tmp_path: Path) -> None:
+    module = _load_module()
+    scope_path, scope_sha256 = _write_approved_scope(tmp_path / "scope.json")
+
+    declaration = _preview_declaration(module, scope_path, scope_sha256)
+
+    assert declaration == {
+        "contract_name": "chummer.campaign_operability_preview_evidence",
+        "contract_version": 2,
+        "status": "pass",
+        "release_version": "run-20260728-050000",
+        "release_scope_decision_sha256": scope_sha256,
+        "bounded_owner": "chummer-release-operations",
+        "next_actions": ["Capture the remaining stable flagship evidence."],
+    }
+    assert len(declaration) == 7
+
+
+def test_campaign_operability_preview_raw_pass_emits_exact_candidate_binding(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    scope_path, scope_sha256 = _write_approved_scope(tmp_path / "scope.json")
+    _, snapshot_sha256 = _write_registry_snapshot(
+        tmp_path / "registry-authority-binding.json"
+    )
+    declaration = _preview_declaration(module, scope_path, scope_sha256)
+
+    decorated = module._decorate_campaign_operability_preview_payload(
+        {
+            "contract_name": "fleet.flagship_product_readiness",
+            "schema_version": 1,
+            "releaseVersion": "run-20260728-050000",
+            "status": "pass",
+            "verdict": "FLAGSHIP_PRODUCT_READY",
+        },
+        declaration,
+        _candidate_binding(scope_sha256, snapshot_sha256),
+    )
+
+    assert decorated["status"] == "pass"
+    assert decorated["verdict"] == "FLAGSHIP_PRODUCT_READY"
+    assert decorated["release_version"] == "run-20260728-050000"
+    assert {
+        field: decorated[field]
+        for field in _candidate_binding(scope_sha256, snapshot_sha256)
+    } == _candidate_binding(scope_sha256, snapshot_sha256)
+    assert "campaign_operability_preview" not in decorated
+
+
+@pytest.mark.parametrize(
+    "aliases",
+    [
+        {
+            "releaseVersion": "run-20260728-050000",
+            "release_version": "run-other",
+        },
+        {
+            "releaseVersion": "run-20260728-050000",
+            "version": "run-other",
+        },
+        {
+            "release_version": "run-20260728-050000",
+            "version": "run-other",
+        },
+    ],
+)
+def test_campaign_operability_preview_rejects_conflicting_output_release_aliases(
+    tmp_path: Path,
+    aliases: dict[str, str],
+) -> None:
+    module = _load_module()
+    scope_path, scope_sha256 = _write_approved_scope(tmp_path / "scope.json")
+    _, snapshot_sha256 = _write_registry_snapshot(tmp_path / "binding-snapshot.json")
+    declaration = _preview_declaration(module, scope_path, scope_sha256)
+
+    with pytest.raises(ValueError, match="conflicting candidate release-version aliases"):
+        module._decorate_campaign_operability_preview_payload(
+            {
+                "contract_name": "fleet.flagship_product_readiness",
+                "status": "fail",
+                **aliases,
+            },
+            declaration,
+            _candidate_binding(scope_sha256, snapshot_sha256),
+        )
+
+
+def test_campaign_operability_preview_is_explicit_and_all_or_none(tmp_path: Path) -> None:
+    module = _load_module()
+    scope_path, scope_sha256 = _write_approved_scope(tmp_path / "scope.json")
+
+    assert module._campaign_operability_preview_declaration(
+        preview_mode=False,
+        approved_release_scope_path=None,
+        expected_release_scope_sha256=None,
+        registry_authority_snapshot_path=None,
+        expected_registry_authority_snapshot_sha256=None,
+        expected_release_version=None,
+        bounded_owner=None,
+        next_actions=(),
+    ) is None
+    with pytest.raises(ValueError, match="require explicit preview mode"):
+        _preview_declaration(
+            module,
+            scope_path,
+            scope_sha256,
+            preview_mode=False,
+        )
+    with pytest.raises(ValueError, match="requires approved scope path"):
+        _preview_declaration(
+            module,
+            scope_path,
+            scope_sha256,
+            next_actions=(),
+        )
+
+
+def test_campaign_operability_preview_rejects_stale_candidate_scope(tmp_path: Path) -> None:
+    module = _load_module()
+    scope_path, scope_sha256 = _write_approved_scope(
+        tmp_path / "scope.json", release_version="run-20260727-050000"
+    )
+
+    with pytest.raises(ValueError, match="release version does not match"):
+        _preview_declaration(module, scope_path, scope_sha256)
+
+
+def test_campaign_operability_preview_rejects_scope_digest_mismatch(tmp_path: Path) -> None:
+    module = _load_module()
+    scope_path, scope_sha256 = _write_approved_scope(tmp_path / "scope.json")
+    wrong_sha256 = "f" * 64 if scope_sha256 != "f" * 64 else "e" * 64
+
+    with pytest.raises(ValueError, match="bytes do not match"):
+        _preview_declaration(module, scope_path, wrong_sha256)
+
+
+def test_campaign_operability_preview_rejects_registry_digest_mismatch(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    scope_path, scope_sha256 = _write_approved_scope(tmp_path / "scope.json")
+    snapshot_path, snapshot_sha256 = _write_registry_snapshot(
+        tmp_path / "registry.json"
+    )
+    wrong_sha256 = "f" * 64 if snapshot_sha256 != "f" * 64 else "e" * 64
+
+    with pytest.raises(ValueError, match="snapshot bytes do not match"):
+        _preview_declaration(
+            module,
+            scope_path,
+            scope_sha256,
+            registry_authority_snapshot_path=snapshot_path,
+            expected_registry_authority_snapshot_sha256=wrong_sha256,
+        )
+
+
+def test_campaign_operability_preview_rejects_other_candidate_registry_snapshot(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    scope_path, scope_sha256 = _write_approved_scope(tmp_path / "scope.json")
+    snapshot_path, snapshot_sha256 = _write_registry_snapshot(
+        tmp_path / "registry.json",
+        release_version="run-20260727-050000",
+    )
+
+    with pytest.raises(ValueError, match="releaseVersion does not match"):
+        _preview_declaration(
+            module,
+            scope_path,
+            scope_sha256,
+            registry_authority_snapshot_path=snapshot_path,
+            expected_registry_authority_snapshot_sha256=snapshot_sha256,
+        )
+
+
+def test_campaign_operability_preview_rejects_substituted_registry_artifact(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    scope_path, scope_sha256 = _write_approved_scope(tmp_path / "scope.json")
+    snapshot = _registry_snapshot_payload()
+    snapshot["artifacts"][0]["head"] = "blazor-desktop"
+    raw = (json.dumps(snapshot, sort_keys=True, separators=(",", ":")) + "\n").encode(
+        "utf-8"
+    )
+    snapshot_path = tmp_path / "registry.json"
+    snapshot_path.write_bytes(raw)
+
+    with pytest.raises(ValueError, match="artifact projection does not exactly match"):
+        _preview_declaration(
+            module,
+            scope_path,
+            scope_sha256,
+            registry_authority_snapshot_path=snapshot_path,
+            expected_registry_authority_snapshot_sha256=hashlib.sha256(raw).hexdigest(),
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        (
+            "downloadUrl",
+            "https://chummer.run/downloads/g/generation-1/files/chummer-macos-arm64.pkg",
+        ),
+        ("publicInstallRoute", "/downloads/macos"),
+    ],
+)
+def test_campaign_operability_preview_rejects_non_registry_artifact_routes(
+    tmp_path: Path,
+    field: str,
+    value: str,
+) -> None:
+    module = _load_module()
+    scope_path, scope_sha256 = _write_approved_scope(tmp_path / "scope.json")
+    snapshot = _registry_snapshot_payload()
+    snapshot["artifacts"][0][field] = value
+    raw = (json.dumps(snapshot, sort_keys=True, separators=(",", ":")) + "\n").encode(
+        "utf-8"
+    )
+    snapshot_path = tmp_path / "registry.json"
+    snapshot_path.write_bytes(raw)
+
+    with pytest.raises(ValueError, match="root-relative route|Registry route schema"):
+        _preview_declaration(
+            module,
+            scope_path,
+            scope_sha256,
+            registry_authority_snapshot_path=snapshot_path,
+            expected_registry_authority_snapshot_sha256=hashlib.sha256(raw).hexdigest(),
+        )
+
+
+def test_flagship_readiness_output_writer_is_atomic_and_rejects_symlinks(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    output = tmp_path / "candidate" / "readiness.json"
+
+    assert module._read_existing_output_text(output) == ""
+    module._write_text(output, '{"status":"pass"}\n')
+
+    assert output.read_text(encoding="utf-8") == '{"status":"pass"}\n'
+    assert stat.S_IMODE(output.stat().st_mode) == 0o600
+    assert not [path for path in output.parent.iterdir() if path.name.endswith(".tmp")]
+
+    victim = tmp_path / "victim.json"
+    victim.write_text("preserve\n", encoding="utf-8")
+    output.unlink()
+    output.symlink_to(victim)
+    with pytest.raises(ValueError, match="symlink"):
+        module._write_text(output, "replace\n")
+    assert victim.read_text(encoding="utf-8") == "preserve\n"
+
+
+def test_flagship_readiness_output_writer_rejects_symlinked_parent(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    real_parent = tmp_path / "real-parent"
+    real_parent.mkdir()
+    alias_parent = tmp_path / "alias-parent"
+    alias_parent.symlink_to(real_parent, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="not a real directory"):
+        module._write_text(alias_parent / "readiness.json", "preserve\n")
+    assert not (real_parent / "readiness.json").exists()
+
+
+def test_mirror_cas_publication_is_atomic_no_replace(tmp_path: Path) -> None:
+    module = _load_module()
+    target = tmp_path / "mirror" / "sha256" / "aa" / ("a" * 64 + ".blob")
+
+    module._publish_bytes_exclusive(target, b"candidate-bytes")
+    module._publish_bytes_exclusive(target, b"candidate-bytes")
+
+    assert target.read_bytes() == b"candidate-bytes"
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    with pytest.raises(ValueError, match="conflicting bytes"):
+        module._publish_bytes_exclusive(target, b"substituted-bytes")
+    assert target.read_bytes() == b"candidate-bytes"
+    assert not [path for path in target.parent.iterdir() if path.name.endswith(".tmp")]
+
+
+def test_campaign_operability_preview_rejects_scope_symlink(tmp_path: Path) -> None:
+    module = _load_module()
+    scope_path, scope_sha256 = _write_approved_scope(tmp_path / "scope.json")
+    alias_path = tmp_path / "scope-alias.json"
+    alias_path.symlink_to(scope_path)
+
+    with pytest.raises(ValueError, match="non-symlink"):
+        _preview_declaration(module, alias_path, scope_sha256)
+
+
+def test_campaign_operability_preview_rejects_owner_mismatch(tmp_path: Path) -> None:
+    module = _load_module()
+    scope_path, scope_sha256 = _write_approved_scope(tmp_path / "scope.json")
+
+    with pytest.raises(ValueError, match="does not match.*support owner"):
+        _preview_declaration(
+            module,
+            scope_path,
+            scope_sha256,
+            bounded_owner="other-release-owner",
+        )
+
+
+@pytest.mark.parametrize(
+    "actions",
+    [
+        "Capture candidate proof.",
+        ("todo",),
+        (" action with whitespace ",),
+        ("Capture candidate proof.", "Capture candidate proof."),
+        ("x" * 513,),
+    ],
+)
+def test_campaign_operability_preview_rejects_nonconcrete_actions(
+    tmp_path: Path,
+    actions: object,
+) -> None:
+    module = _load_module()
+    scope_path, scope_sha256 = _write_approved_scope(tmp_path / "scope.json")
+
+    with pytest.raises(ValueError, match="next actions"):
+        _preview_declaration(
+            module,
+            scope_path,
+            scope_sha256,
+            next_actions=actions,
+        )
+
+
+@pytest.mark.parametrize(
+    "shadow_field",
+    ["releaseVersion", "ReleaseVersion"],
+)
+def test_approved_scope_rejects_duplicate_or_case_shadowed_aliases(
+    tmp_path: Path,
+    shadow_field: str,
+) -> None:
+    module = _load_module()
+    scope_path = tmp_path / "scope.json"
+    canonical = json.dumps(
+        _approved_scope_payload(),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    raw = canonical[:-1] + f',"{shadow_field}":"run-20260728-050000"}}\n'
+    scope_path.write_text(raw, encoding="utf-8")
+    scope_sha256 = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    with pytest.raises(ValueError, match="duplicate or case-shadowed"):
+        _preview_declaration(module, scope_path, scope_sha256)
 
 
 def test_reviewed_source_commit_requires_exact_checked_out_full_sha(tmp_path: Path) -> None:
@@ -520,6 +1042,76 @@ def test_proof_cli_and_environment_overrides_are_explicit(tmp_path: Path, monkey
     assert args.media_proof == str(cli_media)
     assert args.final_gold_janitor == str(env_janitor)
     assert args.live_backed_truth == str(cli_live)
+
+
+def test_materializer_preview_decoration_preserves_raw_status_and_verdict(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_remote_commit_reachable", lambda _repository, _commit: True)
+    source_repo, head = _create_source_repo(tmp_path)
+    authority_path, authority_sha256 = _write_release_authority(
+        tmp_path / "repository-authority.json",
+        (("ArchonMegalon/fleet", head),),
+    )
+    scope_path, scope_sha256 = _write_approved_scope(tmp_path / "scope.json")
+    snapshot_path, snapshot_sha256 = _write_registry_snapshot(
+        tmp_path / "registry-authority.json"
+    )
+    monkeypatch.setattr(
+        module,
+        "build_flagship_product_readiness_payload",
+        lambda **_kwargs: {
+            "generated_at": "2026-07-20T00:00:00Z",
+            "status": "fail",
+            "verdict": "FLAGSHIP_PRODUCT_NOT_READY",
+        },
+    )
+    out_path = tmp_path / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    kwargs = {
+        name: tmp_path / name
+        for name, parameter in inspect.signature(
+            module.materialize_flagship_product_readiness
+        ).parameters.items()
+        if parameter.default is inspect.Parameter.empty
+    }
+    kwargs.update(
+        source_commit=head,
+        source_repo_root=source_repo,
+        release_repository_authority_path=authority_path,
+        release_repository_authority_sha256=authority_sha256,
+        out_path=out_path,
+        mirror_path=None,
+        external_proof_runbook_path=None,
+        campaign_operability_preview=True,
+        approved_release_scope_path=scope_path,
+        expected_release_scope_sha256=scope_sha256,
+        registry_authority_snapshot_path=snapshot_path,
+        expected_registry_authority_snapshot_sha256=snapshot_sha256,
+        expected_release_version="run-20260728-050000",
+        preview_bounded_owner="chummer-release-operations",
+        preview_next_actions=("Capture the remaining stable flagship evidence.",),
+    )
+
+    payload = module.materialize_flagship_product_readiness(**kwargs)
+
+    assert payload["status"] == "fail"
+    assert payload["verdict"] == "FLAGSHIP_PRODUCT_NOT_READY"
+    assert payload["release_version"] == "run-20260728-050000"
+    assert {
+        field: payload[field]
+        for field in _candidate_binding(scope_sha256, snapshot_sha256)
+    } == _candidate_binding(scope_sha256, snapshot_sha256)
+    assert set(payload["campaign_operability_preview"]) == {
+        "contract_name",
+        "contract_version",
+        "status",
+        "release_version",
+        "release_scope_decision_sha256",
+        "bounded_owner",
+        "next_actions",
+    }
 
 
 def test_materializer_emits_portable_evidence_references(tmp_path: Path, monkeypatch) -> None:
