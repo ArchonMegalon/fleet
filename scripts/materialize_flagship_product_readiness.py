@@ -56,6 +56,9 @@ RELEASE_REPOSITORY_AUTHORITY_ENV = "CHUMMER_RELEASE_REPOSITORY_AUTHORITY"
 RELEASE_REPOSITORY_AUTHORITY_SHA256_ENV = (
     "CHUMMER_RELEASE_REPOSITORY_AUTHORITY_SHA256"
 )
+HUB_REPO_ROOT_ENV = "CHUMMER_HUB_REPO_ROOT"
+HUB_REGISTRY_REPO_ROOT_ENV = "CHUMMER_HUB_REGISTRY_REPO_ROOT"
+EXTERNAL_PROOF_RELEASE_CHANNEL_ENV = "CHUMMER_EXTERNAL_PROOF_RELEASE_CHANNEL"
 RELEASE_REPOSITORY_AUTHORITY_CONTRACT = (
     "chummer.release-repository-authority/v1"
 )
@@ -466,6 +469,31 @@ def _preferred_mobile_published_artifact(name: str) -> Path:
     return Path("/docker/chummercomplete/chummer-play/.codex-studio/published") / name
 
 
+def _published_artifact_from_repo_root(
+    *,
+    root_env: str,
+    default_root: Path,
+    name: str,
+) -> Path:
+    override = str(os.environ.get(root_env, "") or "").strip()
+    repo_root = Path(override) if override else default_root
+    return repo_root / ".codex-studio" / "published" / name
+
+
+def _preferred_release_channel_path() -> Path:
+    if str(os.environ.get(EXTERNAL_PROOF_RELEASE_CHANNEL_ENV, "") or "").strip():
+        return resolve_release_channel_path()
+    registry_root = str(os.environ.get(HUB_REGISTRY_REPO_ROOT_ENV, "") or "").strip()
+    if registry_root:
+        return (
+            Path(registry_root)
+            / ".codex-studio"
+            / "published"
+            / "RELEASE_CHANNEL.generated.json"
+        )
+    return resolve_release_channel_path()
+
+
 PREFERRED_UI_REPO_ROOT = _preferred_ui_repo_root()
 DEFAULT_UI_LOCAL_RELEASE_PROOF = _preferred_ui_published_artifact("UI_LOCAL_RELEASE_PROOF.generated.json")
 DEFAULT_UI_LINUX_EXIT_GATE = _preferred_ui_published_artifact("UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
@@ -481,9 +509,13 @@ DEFAULT_UI_VISUAL_FAMILIARITY_EXIT_GATE = _preferred_ui_published_artifact("DESK
 DEFAULT_UI_ELEMENT_PARITY_AUDIT = _preferred_ui_published_artifact("CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json")
 DEFAULT_UI_USER_JOURNEY_TESTER_AUDIT = _preferred_ui_published_artifact("USER_JOURNEY_TESTER_AUDIT.generated.json")
 DEFAULT_UI_LOCALIZATION_RELEASE_GATE = _preferred_ui_published_artifact("UI_LOCALIZATION_RELEASE_GATE.generated.json")
-DEFAULT_HUB_LOCAL_RELEASE_PROOF = Path("/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json")
+DEFAULT_HUB_LOCAL_RELEASE_PROOF = _published_artifact_from_repo_root(
+    root_env=HUB_REPO_ROOT_ENV,
+    default_root=Path("/docker/chummercomplete/chummer6-hub"),
+    name="HUB_LOCAL_RELEASE_PROOF.generated.json",
+)
 DEFAULT_MOBILE_LOCAL_RELEASE_PROOF = _preferred_mobile_published_artifact("MOBILE_LOCAL_RELEASE_PROOF.generated.json")
-DEFAULT_RELEASE_CHANNEL = resolve_release_channel_path()
+DEFAULT_RELEASE_CHANNEL = _preferred_release_channel_path()
 DEFAULT_RELEASES_JSON = DEFAULT_RELEASE_CHANNEL.with_name("releases.json")
 DEFAULT_SHARD_SUPERVISOR_ROOT = DEFAULT_SUPERVISOR_STATE.parent
 UI_REPO_CANONICAL_ALIAS_ROOT = Path("/docker/chummercomplete/chummer6-ui")
