@@ -639,6 +639,30 @@ def test_portable_receipt_detects_all_adversarial_machine_local_paths(value: str
         )
 
 
+def test_portable_receipt_redacts_unmounted_paths_inside_blocker_messages() -> None:
+    module = _load_module()
+    resolver = _resolver(module)
+
+    payload = module._portable_public_receipt_value(
+        {
+            "evidence": {
+                "blocker_messages": [
+                    "installer missing at /docker/retired-host/files/chummer.dmg"
+                ]
+            }
+        },
+        resolver=resolver,
+    )
+
+    assert payload == {
+        "evidence": {
+            "blocker_messages": [
+                "installer missing at [unavailable local evidence]"
+            ]
+        }
+    }
+
+
 @pytest.mark.parametrize(
     "value",
     (

@@ -11000,10 +11000,18 @@ def _portable_receipt_string(
         try:
             portable = resolver.reference_for_local_path(token.path_text)
         except ValueError as exc:
-            raise ValueError(
-                "flagship readiness contains invalid machine-local evidence at "
-                + ".".join(field_path)
-            ) from exc
+            # Blocker messages describe evidence that is absent by definition.  A
+            # missing artifact may therefore name a checkout that is no longer
+            # mounted on the release host.  Keep the blocker while redacting that
+            # non-portable location; all structured evidence fields remain
+            # fail-closed and must still resolve to repository or CAS authority.
+            if "blocker_messages" in field_path[:-1]:
+                portable = "[unavailable local evidence]"
+            else:
+                raise ValueError(
+                    "flagship readiness contains invalid machine-local evidence at "
+                    + ".".join(field_path)
+                ) from exc
         if portable is None:
             exact_value = token.start == 0 and token.end == len(value) and not token.trailing
             if exact_value:
