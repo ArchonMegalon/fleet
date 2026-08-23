@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-MODULE_PATH = Path("/docker/fleet/scripts/fleet_ooda_keeper.py")
+MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "fleet_ooda_keeper.py"
 SPEC = importlib.util.spec_from_file_location("fleet_ooda_keeper", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 keeper = importlib.util.module_from_spec(SPEC)

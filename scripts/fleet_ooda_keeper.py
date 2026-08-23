@@ -16,6 +16,16 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import yaml
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from fleet_retention_janitor import (  # noqa: E402
+    RetentionPolicy,
+    run_retention_janitor,
+    write_retention_error_receipt,
+)
+
 CONTAINER_CONTROLLER_DIR = Path("/app")
 HOST_WORKSPACE_ROOT = Path("/docker/fleet")
 RUNNING_IN_CONTROLLER_CONTAINER = CONTAINER_CONTROLLER_DIR.joinpath("app.py").exists()
@@ -90,6 +100,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repeat-failure-threshold", type=int, default=DEFAULT_REPEAT_FAILURE_THRESHOLD)
     parser.add_argument("--stale-local-review-minutes", type=int, default=DEFAULT_STALE_LOCAL_REVIEW_MINUTES)
     parser.add_argument("--stale-runtime-hours", type=int, default=DEFAULT_STALE_RUNTIME_HOURS)
+    parser.add_argument(
+        "--retention-janitor-mode",
+        choices=("apply", "dry-run", "off"),
+        default=os.environ.get("FLEET_RETENTION_JANITOR_MODE", "apply"),
+    )
+    parser.add_argument("--retention-janitor-interval-hours", type=int, default=6)
+    parser.add_argument("--retention-worktree-min-age-hours", type=int, default=24)
+    parser.add_argument("--retention-log-min-age-hours", type=int, default=7 * 24)
+    parser.add_argument("--retention-keep-run-artifacts-per-package", type=int, default=2)
+    parser.add_argument("--retention-max-worktrees-per-pass", type=int, default=4)
+    parser.add_argument("--retention-max-artifacts-per-pass", type=int, default=32)
+    parser.add_argument("--retention-max-candidates-per-pass", type=int, default=32)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--forever", action="store_true")
     return parser.parse_args()
@@ -1722,6 +1744,43 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
     healed_stale_runtime_count = int(app.reconcile_stale_worker_sessions(config) or 0)
     app.reconcile_stuck_work_package_runtime_links()
     app.save_runtime_task_cache_snapshot()
+    retention_policy = RetentionPolicy(
+        mode=str(getattr(args, "retention_janitor_mode", "apply") or "apply"),
+        interval_hours=max(0, int(getattr(args, "retention_janitor_interval_hours", 6) or 0)),
+        worktree_min_age_hours=max(1, int(getattr(args, "retention_worktree_min_age_hours", 24) or 1)),
+        log_min_age_hours=max(1, int(getattr(args, "retention_log_min_age_hours", 7 * 24) or 1)),
+        keep_run_artifacts_per_package=max(
+            0,
+            int(getattr(args, "retention_keep_run_artifacts_per_package", 2) or 0),
+        ),
+        max_worktrees_per_pass=max(
+            0,
+            int(getattr(args, "retention_max_worktrees_per_pass", 4) or 0),
+        ),
+        max_artifacts_per_pass=max(
+            0,
+            int(getattr(args, "retention_max_artifacts_per_pass", 32) or 0),
+        ),
+        max_candidates_per_pass=max(
+            1,
+            int(getattr(args, "retention_max_candidates_per_pass", 32) or 1),
+        ),
+    )
+    try:
+        retention_janitor = run_retention_janitor(
+            app,
+            workspace_root=workspace_root,
+            state_root=state_root,
+            worktree_root=Path(getattr(app, "WORKTREE_ROOT", workspace_root / "state" / "worktrees")),
+            log_root=Path(getattr(app, "LOG_DIR", workspace_root / "state" / "logs")),
+            policy=retention_policy,
+        )
+    except Exception as exc:
+        retention_janitor = write_retention_error_receipt(
+            state_root,
+            mode=retention_policy.mode,
+            error=f"retention_janitor_exception:{type(exc).__name__}",
+        )
     app.request_due_group_audits(config)
     app.auto_publish_approved_audit_candidates(config)
     healed_local_reviews = int(app.heal_orphaned_local_reviews(config) or 0)
@@ -1784,7 +1843,15 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
         last_action_kind = "autoheal_drift"
     elif transient_retries:
         last_action_kind = "transient_retry"
-    elif pruned_stale_commitment_count or healed_stale_runtime_count or healed_local_reviews or released_review_holds or released_orphan_scope_claims:
+    elif (
+        int((retention_janitor.get("summary") or {}).get("worktrees_removed") or 0)
+        or int((retention_janitor.get("summary") or {}).get("artifact_files_removed") or 0)
+        or pruned_stale_commitment_count
+        or healed_stale_runtime_count
+        or healed_local_reviews
+        or released_review_holds
+        or released_orphan_scope_claims
+    ):
         last_action_kind = "cleanup"
     elif guide_pause:
         last_action_kind = "guide_pause"
@@ -1799,6 +1866,13 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
         "released_orphan_scope_claim_count": len(released_orphan_scope_claims),
         "transient_retry_count": len(transient_retries),
         "autohealed_drift_action_count": len(autohealed_drift_actions),
+        "retention_janitor_status": str(retention_janitor.get("status") or ""),
+        "retention_worktrees_removed": int(
+            (retention_janitor.get("summary") or {}).get("worktrees_removed") or 0
+        ),
+        "retention_artifact_files_removed": int(
+            (retention_janitor.get("summary") or {}).get("artifact_files_removed") or 0
+        ),
         "guide_pause": bool(guide_pause),
     }
     payload = {
@@ -1818,6 +1892,7 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
         "released_orphan_scope_claims": released_orphan_scope_claims,
         "transient_retries": transient_retries,
         "autohealed_drift_actions": autohealed_drift_actions,
+        "retention_janitor": retention_janitor,
         "guide_pause": guide_pause or {},
         "repeated_failures": repeated_failures,
         "repeated_failure_counts": repeated_failure_counts,
@@ -1845,6 +1920,7 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
                 "healed_local_review_count": healed_local_reviews,
                 "released_review_hold_count": len(released_review_holds),
                 "released_orphan_scope_claim_count": len(released_orphan_scope_claims),
+                "retention_janitor": retention_janitor,
             },
             "act": {
                 "launched": launched,
@@ -1854,6 +1930,7 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
                 "healed_local_review_count": healed_local_reviews,
                 "released_review_holds": released_review_holds,
                 "released_orphan_scope_claims": released_orphan_scope_claims,
+                "retention_janitor": retention_janitor,
                 "guide_pause": guide_pause or {},
             },
         },
@@ -1872,6 +1949,13 @@ def run_once(app: Any, args: argparse.Namespace, state_root: Path) -> Dict[str, 
             "healed_local_review_count": healed_local_reviews,
             "released_review_hold_count": len(released_review_holds),
             "released_orphan_scope_claim_count": len(released_orphan_scope_claims),
+            "retention_janitor_status": str(retention_janitor.get("status") or ""),
+            "retention_worktrees_removed": int(
+                (retention_janitor.get("summary") or {}).get("worktrees_removed") or 0
+            ),
+            "retention_artifact_files_removed": int(
+                (retention_janitor.get("summary") or {}).get("artifact_files_removed") or 0
+            ),
             "guide_pause": bool(guide_pause),
             "repeat_failure_keys": sorted(repeated_failures.keys()),
             "repeat_failure_projects": sorted({str(item.get("project_id") or "") for item in repeated_failures.values() if str(item.get("project_id") or "")}),
@@ -1902,6 +1986,13 @@ def main() -> int:
                     "healed_local_review_count": payload["healed_local_review_count"],
                     "released_review_hold_count": len(payload["released_review_holds"]),
                     "released_orphan_scope_claim_count": len(payload["released_orphan_scope_claims"]),
+                    "retention_janitor_status": str(payload["retention_janitor"].get("status") or ""),
+                    "retention_worktrees_removed": int(
+                        (payload["retention_janitor"].get("summary") or {}).get("worktrees_removed") or 0
+                    ),
+                    "retention_artifact_files_removed": int(
+                        (payload["retention_janitor"].get("summary") or {}).get("artifact_files_removed") or 0
+                    ),
                     "repeat_failure_keys": sorted(payload["repeated_failures"].keys()),
                     "repeat_failure_projects": sorted({str(item.get("project_id") or "") for item in payload["repeated_failures"].values() if str(item.get("project_id") or "")}),
                 },
