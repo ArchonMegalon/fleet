@@ -86,6 +86,14 @@ except ImportError:  # pragma: no cover - test stubs can expose only partial res
     PlainTextResponse = _DummyResponse  # type: ignore[assignment]
 
 CONTROLLER_DIR = pathlib.Path(__file__).resolve().parent
+if str(CONTROLLER_DIR) not in sys.path:
+    sys.path.insert(0, str(CONTROLLER_DIR))
+from protected_infrastructure import (
+    assert_cleanup_target_is_safe,
+    assert_command_preserves_protected_infrastructure,
+    signal_process_group_preserving_vexp,
+)
+
 FLEET_MOUNT_ROOT = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet"))
 _SECRET_ENV_PATHS_OVERRIDE = str(os.environ.get("FLEET_SECRET_ENV_PATHS", "") or "").strip()
 _MOUNTED_ADMIN_HELPERS_DIR = FLEET_MOUNT_ROOT / "admin"
@@ -11334,6 +11342,8 @@ def ensure_package_worktree(
                 quarantine_root = worktree_root.parent / (
                     f".broken-{worktree_root.name}-{utc_now().strftime('%Y%m%dT%H%M%SZ')}-{suffix}"
                 )
+            assert_cleanup_target_is_safe(worktree_root)
+            assert_cleanup_target_is_safe(quarantine_root)
             shutil.move(str(worktree_root), str(quarantine_root))
             run_capture(["git", "worktree", "prune"], cwd=str(repo_path), timeout_seconds=60)
     if not worktree_root.exists():
@@ -21340,7 +21350,7 @@ async def _terminate_process(proc: asyncio.subprocess.Process, grace_seconds: fl
         return
     try:
         if os.name == "posix":
-            os.killpg(proc.pid, 15)
+            signal_process_group_preserving_vexp(proc.pid, 15)
         else:
             proc.terminate()
     except ProcessLookupError:
@@ -21355,7 +21365,7 @@ async def _terminate_process(proc: asyncio.subprocess.Process, grace_seconds: fl
         pass
     try:
         if os.name == "posix":
-            os.killpg(proc.pid, 9)
+            signal_process_group_preserving_vexp(proc.pid, 9)
         else:
             proc.kill()
     except ProcessLookupError:
@@ -21377,6 +21387,7 @@ async def run_command(
     timeout_seconds: Optional[int] = None,
     idle_timeout_seconds: Optional[int] = None,
 ) -> CommandResult:
+    assert_command_preserves_protected_infrastructure(cmd)
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         cwd=cwd,

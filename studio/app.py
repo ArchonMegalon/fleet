@@ -9,6 +9,7 @@ import os
 import pathlib
 import re
 import sqlite3
+import sys
 import threading
 import traceback
 import urllib.parse
@@ -31,6 +32,12 @@ APP_PORT = int(os.environ.get("APP_PORT", "8091"))
 APP_TITLE = "Codex Fleet Studio"
 FLEET_MOUNT_ROOT = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet"))
 STUDIO_DIR = pathlib.Path(__file__).resolve().parent
+if str(STUDIO_DIR) not in sys.path:
+    sys.path.insert(0, str(STUDIO_DIR))
+from protected_infrastructure import (
+    assert_command_preserves_protected_infrastructure,
+    signal_process_group_preserving_vexp,
+)
 
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 LOG_DIR = pathlib.Path(os.environ.get("FLEET_LOG_DIR", "/var/lib/codex-fleet/studio-logs"))
@@ -1970,7 +1977,7 @@ async def _terminate_process(proc: asyncio.subprocess.Process, grace_seconds: fl
         return
     try:
         if os.name == "posix":
-            os.killpg(proc.pid, 15)
+            signal_process_group_preserving_vexp(proc.pid, 15)
         else:
             proc.terminate()
     except ProcessLookupError:
@@ -1985,7 +1992,7 @@ async def _terminate_process(proc: asyncio.subprocess.Process, grace_seconds: fl
         pass
     try:
         if os.name == "posix":
-            os.killpg(proc.pid, 9)
+            signal_process_group_preserving_vexp(proc.pid, 9)
         else:
             proc.kill()
     except ProcessLookupError:
@@ -2006,6 +2013,7 @@ async def run_command(
     log_path: Optional[pathlib.Path] = None,
     timeout_seconds: Optional[int] = None,
 ) -> CommandResult:
+    assert_command_preserves_protected_infrastructure(cmd)
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         cwd=cwd,
