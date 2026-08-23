@@ -18,6 +18,12 @@ def _load(relative_path: str, module_name: str):
     return module
 
 
+def test_controller_and_studio_use_the_same_protection_contract() -> None:
+    assert (ROOT / "controller/protected_infrastructure.py").read_bytes() == (
+        ROOT / "studio/protected_infrastructure.py"
+    ).read_bytes()
+
+
 @pytest.fixture(params=["controller/protected_infrastructure.py", "studio/protected_infrastructure.py"])
 def safety(request):
     return _load(request.param, "fleet_protected_infrastructure_" + request.param.split("/", 1)[0])
