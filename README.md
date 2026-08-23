@@ -55,6 +55,18 @@ Queue recovery and anti-starvation policy is explicit in `config/policies.yaml` 
 - every controller auto-requeue must carry a signed `fleet.queue_recovery_receipt` under `state/queue-recovery/<project>/`
 - `/ops/` shows the same thresholds and links each recent auto-requeue back to its receipt path
 
+The normal `fleet_ooda_keeper.py` pass also owns a conservative retention janitor for Fleet-created
+transients. It defaults to apply mode on a six-hour cadence, waits 24 hours before removing an
+eligible package worktree, waits seven days before removing old run log/prompt/final files, retains
+the two newest terminal run artifact sets per package, and caps each pass at four worktrees and 32
+files. Cleanup fails closed unless the package is terminal and inactive, jury/review and landing
+receipts are complete, the worktree is clean and unused, and both its head and the landed SHA are
+ancestors of a freshly fetched remote base branch. Unknown paths, dirty or unpushed branches,
+`.vexp`, queue-recovery receipts, Codex homes, Docker, and shared caches are never cleanup targets.
+Use `--retention-janitor-mode dry-run` for a proof-only pass or `off` to disable it. Each executed
+pass atomically replaces the single bounded `retention-janitor.latest.json` receipt under the keeper
+state root.
+
 Published artifacts can include:
 - `VISION.md`
 - `ROADMAP.md`
