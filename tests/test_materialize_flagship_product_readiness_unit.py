@@ -15,6 +15,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "materialize_flagship_product_readiness.py"
+REFRESH_SCRIPT = REPO_ROOT / "scripts" / "refresh_flagship_readiness_proof.sh"
 
 
 def _load_module():
@@ -152,6 +153,65 @@ def _write_release_authority(
     ).encode("utf-8")
     path.write_bytes(content)
     return path, hashlib.sha256(content).hexdigest()
+
+
+def test_hub_and_registry_repo_root_overrides_pin_default_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hub_root = tmp_path / "hub"
+    registry_root = tmp_path / "registry"
+    monkeypatch.setenv("CHUMMER_HUB_REPO_ROOT", str(hub_root))
+    monkeypatch.setenv("CHUMMER_HUB_REGISTRY_REPO_ROOT", str(registry_root))
+    monkeypatch.delenv("CHUMMER_EXTERNAL_PROOF_RELEASE_CHANNEL", raising=False)
+
+    module = _load_module()
+
+    assert module.DEFAULT_HUB_LOCAL_RELEASE_PROOF == (
+        hub_root
+        / ".codex-studio"
+        / "published"
+        / "HUB_LOCAL_RELEASE_PROOF.generated.json"
+    )
+    assert module.DEFAULT_RELEASE_CHANNEL == (
+        registry_root
+        / ".codex-studio"
+        / "published"
+        / "RELEASE_CHANNEL.generated.json"
+    )
+    assert module.DEFAULT_RELEASES_JSON == (
+        registry_root / ".codex-studio" / "published" / "releases.json"
+    )
+
+
+def test_explicit_release_channel_path_precedes_registry_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry_root = tmp_path / "registry"
+    explicit_release_channel = tmp_path / "reviewed" / "RELEASE_CHANNEL.generated.json"
+    monkeypatch.setenv("CHUMMER_HUB_REGISTRY_REPO_ROOT", str(registry_root))
+    monkeypatch.setenv(
+        "CHUMMER_EXTERNAL_PROOF_RELEASE_CHANNEL",
+        str(explicit_release_channel),
+    )
+
+    module = _load_module()
+
+    assert module.DEFAULT_RELEASE_CHANNEL == explicit_release_channel
+    assert module.DEFAULT_RELEASES_JSON == explicit_release_channel.with_name(
+        "releases.json"
+    )
+
+
+def test_refresh_workflow_forwards_pinned_hub_and_registry_evidence() -> None:
+    script = REFRESH_SCRIPT.read_text(encoding="utf-8")
+
+    assert "CHUMMER_HUB_REPO_ROOT" in script
+    assert "CHUMMER_HUB_REGISTRY_REPO_ROOT" in script
+    assert '--hub-local-release-proof "$readiness_hub_local_release_proof_path"' in script
+    assert '--release-channel "$readiness_release_channel_path"' in script
+    assert '--releases-json "$readiness_releases_json_path"' in script
 
 
 def test_reviewed_source_commit_requires_exact_checked_out_full_sha(tmp_path: Path) -> None:

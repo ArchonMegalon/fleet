@@ -103,6 +103,9 @@ ui_executable_gate_path="$ui_root/.codex-studio/published/DESKTOP_EXECUTABLE_EXI
 ui_parity_audit_path="$ui_root/.codex-studio/published/CHUMMER5A_UI_ELEMENT_PARITY_AUDIT.generated.json"
 ui_refresh_lock_stale_max_age_seconds="${CHUMMER_FLAGSHIP_UI_REFRESH_LOCK_STALE_MAX_AGE_SECONDS:-900}"
 ui_release_channel_path="${CHUMMER_FLAGSHIP_UI_RELEASE_CHANNEL_PATH:-}"
+readiness_release_channel_path="${CHUMMER_FLAGSHIP_RELEASE_CHANNEL_PATH:-}"
+readiness_releases_json_path="${CHUMMER_FLAGSHIP_RELEASES_JSON_PATH:-}"
+readiness_hub_local_release_proof_path="${CHUMMER_FLAGSHIP_HUB_LOCAL_RELEASE_PROOF_PATH:-}"
 
 if [[ -z "$ui_release_channel_path" ]]; then
   for candidate in \
@@ -115,6 +118,19 @@ if [[ -z "$ui_release_channel_path" ]]; then
       break
     fi
   done
+fi
+
+if [[ -z "$readiness_release_channel_path" && -n "${CHUMMER_HUB_REGISTRY_REPO_ROOT:-}" ]]; then
+  readiness_release_channel_path="${CHUMMER_HUB_REGISTRY_REPO_ROOT%/}/.codex-studio/published/RELEASE_CHANNEL.generated.json"
+fi
+if [[ -z "$readiness_release_channel_path" ]]; then
+  readiness_release_channel_path="$ui_release_channel_path"
+fi
+if [[ -z "$readiness_releases_json_path" ]]; then
+  readiness_releases_json_path="$(dirname "$readiness_release_channel_path")/releases.json"
+fi
+if [[ -z "$readiness_hub_local_release_proof_path" && -n "${CHUMMER_HUB_REPO_ROOT:-}" ]]; then
+  readiness_hub_local_release_proof_path="${CHUMMER_HUB_REPO_ROOT%/}/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json"
 fi
 
 if ! [[ "$ui_refresh_wait_timeout_seconds" =~ ^[0-9]+$ ]]; then
@@ -348,10 +364,18 @@ python3 scripts/verify_next90_m142_fleet_route_local_proof_closeout_gates.py --j
 python3 scripts/materialize_next90_m136_fleet_aggregate_readiness_parity_gates.py
 python3 scripts/materialize_next90_m138_fleet_hero_path_projections.py
 python3 scripts/materialize_next90_m138_fleet_hero_path_closeout_gates.py
-python3 scripts/materialize_flagship_product_readiness.py \
-  --source-commit "$readiness_source_commit" \
-  --release-channel "$ui_release_channel_path" \
-  --out "$readiness_out" \
+readiness_materializer_args=(
+  --source-commit "$readiness_source_commit"
+  --release-channel "$readiness_release_channel_path"
+  --releases-json "$readiness_releases_json_path"
+  --out "$readiness_out"
   --mirror-out "$readiness_state_mirror_out"
+)
+if [[ -n "$readiness_hub_local_release_proof_path" ]]; then
+  readiness_materializer_args+=(
+    --hub-local-release-proof "$readiness_hub_local_release_proof_path"
+  )
+fi
+python3 scripts/materialize_flagship_product_readiness.py "${readiness_materializer_args[@]}"
 python3 scripts/materialize_weekly_governor_packet.py
 refresh_full_product_frontier
