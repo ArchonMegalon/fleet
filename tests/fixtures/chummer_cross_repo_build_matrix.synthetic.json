@@ -1,0 +1,131 @@
+{
+  "contractName": "chummer.cross-repo-build-matrix/v1",
+  "mode": "synthetic-fixture",
+  "rows": [
+    {
+      "repositoryId": "chummer-android",
+      "repository": "ArchonMegalon/chummer-android",
+      "ref": "d749152ad0c060813d2b61834cdf9ddc14653c65",
+      "assetsSha256": "67ff3f69b56e6d3542eb963c4967d56ecfdd88985c0e07017affd82164e312b2",
+      "membersSha256": "78c80011463eab69744d64212d0f9bf1001da0ef0f656d4b73f07f365b3d93dd",
+      "runId": 100001,
+      "runAttempt": 1,
+      "artifactId": 200001,
+      "artifactName": "synthetic-chummer-android-build-proof",
+      "artifactSha256": "9c75e45dca53b2cea01e829b30a745abc62961c69f742d39991672be70c8a744"
+    },
+    {
+      "repositoryId": "chummer6-ui",
+      "repository": "ArchonMegalon/chummer6-ui",
+      "ref": "42dbedf01994aea0e8e623354432ca6e1e6f2bb6",
+      "assetsSha256": "faf768a8b30ad83dd68ebdcafdca01694880f58ebf70d362e4c5bbd6dc5ee414",
+      "membersSha256": "090ec29a67e9f0940ea41caba7a2401d5beac625dc769630bb5d444cf33948bc",
+      "runId": 100002,
+      "runAttempt": 1,
+      "artifactId": 200002,
+      "artifactName": "synthetic-chummer6-ui-build-proof",
+      "artifactSha256": "29851096f9faded72dc658d032f24f8da3c93510267564055d6178d54bf54761"
+    },
+    {
+      "repositoryId": "chummer6-core",
+      "repository": "ArchonMegalon/chummer6-core",
+      "ref": "d27a0ec06a1115ca6d57e1c69a79c8bddbcacdb1",
+      "assetsSha256": "9743ee0dccd74ec04f74f5806aace6f252304aa5efbc47be89c59b46d2d84ed0",
+      "membersSha256": "ea9b9670453bf42396ab298aacc4b3f90e9ea02ffebabb5e878445b162cefdcf",
+      "runId": 100003,
+      "runAttempt": 1,
+      "artifactId": 200003,
+      "artifactName": "synthetic-chummer6-core-build-proof",
+      "artifactSha256": "1bcf13af59a5018fad79ccf767c8a3c31552269bc823926afbfbe4cf0d830ad7"
+    },
+    {
+      "repositoryId": "chummer6-hub",
+      "repository": "ArchonMegalon/chummer6-hub",
+      "ref": "2fea5272558af595bc57a1cb3f8b4ec451c332d3",
+      "assetsSha256": "73e94b88c54efa653c95587debc0ad53ad2fe78e6356919119a7b8b66b28aabf",
+      "membersSha256": "2a66293a393904d1dea93ea2722aa2051829336d79ccf880141bbd3cd320ac3d",
+      "runId": 100004,
+      "runAttempt": 1,
+      "artifactId": 200004,
+      "artifactName": "synthetic-chummer6-hub-build-proof",
+      "artifactSha256": "7ba25ea780e35451d6b56d4cc3e874196065ff8e66e03f5f8175e34bbcb0f53f"
+    },
+    {
+      "repositoryId": "chummer6-hub-registry",
+      "repository": "ArchonMegalon/chummer6-hub-registry",
+      "ref": "ae8c437703583daf7a82948f856813808c6969b4",
+      "assetsSha256": "c808199167551d890fb1b6a6f9279bdcee2ffdc2c1b82cde43f24b48ffd45650",
+      "membersSha256": "1b2509c736ac61f90b74b36c855408eef519a5b9339da905c77306bf0975dafc",
+      "runId": 100005,
+      "runAttempt": 1,
+      "artifactId": 200005,
+      "artifactName": "synthetic-chummer6-hub-registry-build-proof",
+      "artifactSha256": "69a1dd107892e0671447975170e7ed8dbafe1ffda499eac7d6cbecb283d9940e"
+    },
+    {
+      "repositoryId": "chummer6-ui-kit",
+      "repository": "ArchonMegalon/chummer6-ui-kit",
+      "ref": "33a3a83b43ce021ce480065e9b66f6f68256c430",
+      "assetsSha256": "3e641c703429ab4b4adcb4024d4d86bb63243685b36195802aa2cd968adeba9f",
+      "membersSha256": "a9ff7a83174d1965fe5715adeac1bb470bafadd62fb8a7d7f93d9b13c2719732",
+      "runId": 100006,
+      "runAttempt": 1,
+      "artifactId": 200006,
+      "artifactName": "synthetic-chummer6-ui-kit-build-proof",
+      "artifactSha256": "54b604f3d91cbc8e9a1568170200b576bc703552de3ef0fcc82313f9497e4b0b"
+    },
+    {
+      "repositoryId": "chummer6-media-factory",
+      "repository": "ArchonMegalon/chummer6-media-factory",
+      "ref": "a49fa9c7cf167a66d0b5e71ccb5c865b8deff5b5",
+      "assetsSha256": "e28210f5184d0b29c89cbc06c2cf3d35c1c33ee5bd5ff6b587751d002ea7c08f",
+      "membersSha256": "3cf7b05b0e0e05d52233eff20d59b12a5d6e68005544d9fcf366a8b2b785bb43",
+      "runId": 100007,
+      "runAttempt": 1,
+      "artifactId": 200007,
+      "artifactName": "synthetic-chummer6-media-factory-build-proof",
+      "artifactSha256": "ad9bc55a207fc635782985187bf4cc4363728b8664b6341b12c2b616c8d43b9c"
+    },
+    {
+      "repositoryId": "chummer6-design",
+      "repository": "ArchonMegalon/chummer6-design",
+      "ref": "78d8ff627cf1ff395d555f1922cb0d218fb46e14",
+      "assetsSha256": "cecff53dae9f678bf3f49daec3cac2a7e644f2d5a118579128f3217e5ddd63c2",
+      "membersSha256": "a16997b3246b3383f40736ca309d2218307df38e03437fa71cb5da3cdc20e355",
+      "runId": 100008,
+      "runAttempt": 1,
+      "artifactId": 200008,
+      "artifactName": "synthetic-chummer6-design-build-proof",
+      "artifactSha256": "f72e704839350f42c66249a0aa917f0bab3ea1819571e2a63979ed6c6c7a8ada"
+    },
+    {
+      "repositoryId": "chummer5a",
+      "repository": "ArchonMegalon/chummer5a",
+      "ref": "ce9ccc433384d088fbefc9ae9e73eab55bc9311d",
+      "assetsSha256": "ab549c405624f9b319e9959abfe063ef2ed48052c626bac6679594bc432d0bf3",
+      "membersSha256": "29fd73a49bd72022a574e23278a48e768661fdecaf65ca99095dda79dbc2a2af",
+      "runId": 100009,
+      "runAttempt": 1,
+      "artifactId": 200009,
+      "artifactName": "synthetic-chummer5a-build-proof",
+      "artifactSha256": "3dd12818032310ad53f92a73671240bdc7778e11b9f86b19e83b5f2702150d05"
+    }
+  ],
+  "workflowPosture": {
+    "runner": "ubuntu-24.04",
+    "dotnetSdk": "10.0.110",
+    "android": {
+      "apiLevel": 36,
+      "systemImage": "google_apis",
+      "architecture": "x86_64",
+      "deviceProfile": "pixel_6"
+    },
+    "journeys": [
+      "full-editing",
+      "creation-prerequisite",
+      "career-active-skill-advance",
+      "career-weapon-fire"
+    ]
+  },
+  "matrixDigest": "17abda5017793bcaabde23f40c6777d7dc08d8cd21705963fc010f93bc30304c"
+}
