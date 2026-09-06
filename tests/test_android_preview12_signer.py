@@ -378,12 +378,33 @@ def test_duplicate_or_indeterminate_reservation_rejects_without_output(tmp_path,
     assert not Path(args.output).exists()
 
 
+def test_reservation_created_or_reused_normalizes_to_same_durable_evidence(tmp_path):
+    lock, lock_bytes, toolchain, toolchain_bytes, installed = _ready(tmp_path)
+    _write_intake(tmp_path / "intake", lock, lock_bytes, _aab())
+    args = _reserve_args(tmp_path, installed, signer._full_image(lock))
+
+    class Client:
+        def __init__(self, created):
+            self.created = created
+
+        def reserve(self, request):
+            return {"contract_name": "fleet.android_preview12_reservation.v2", "decision": "reserved",
+                "created": self.created, "durable": True, "transaction_id": request["transaction_id"],
+                "request_sha256": hashlib.sha256(signer._json_bytes(request)).hexdigest(),
+                "bindings": request["bindings"]}
+
+    created = signer.reserve(args, lock, lock_bytes, toolchain, toolchain_bytes, _runtime(), Client(True))
+    reused = signer.reserve(args, lock, lock_bytes, toolchain, toolchain_bytes, _runtime(), Client(False))
+    assert created == reused == json.loads(Path(args.output).read_text())
+    assert "created" not in created and created["state"] == "reserved"
+
+
 def _reservation(lock, lock_bytes, intake, image):
     transaction, bindings = signer._transaction(lock, lock_bytes, intake, image)
     request = {"contract_name": "fleet.android_preview12_reservation_request.v2",
                "transaction_id": transaction, "bindings": bindings}
-    return {"contract_name": "fleet.android_preview12_reservation.v2", "decision": "reserved", "created": True,
-        "durable": True, "transaction_id": transaction,
+    return {"contract_name": signer.RESERVATION_EVIDENCE_CONTRACT, "state": "reserved", "durable": True,
+        "transaction_id": transaction,
         "request_sha256": hashlib.sha256(signer._json_bytes(request)).hexdigest(), "bindings": bindings}
 
 
@@ -725,6 +746,23 @@ def test_handoff_rejects_tampered_attestation_before_client_or_readback(tmp_path
     assert client.requests == [] and not Path(args.output).exists()
 
 
+def test_handoff_rejects_replacement_of_pinned_file_between_verification_and_upload(tmp_path):
+    lock, lock_bytes, toolchain, toolchain_bytes, args, _, _ = _handoff_fixture(tmp_path)
+    client = _FakeHandoffClient()
+
+    def replacing_runner(command, **kwargs):
+        if "-verify" in command:
+            pinned = Path(command[-1])
+            pinned.unlink()
+            pinned.write_bytes(b"hostile-replacement")
+            return subprocess.CompletedProcess(command, 0, stdout="jar verified.\n", stderr="")
+        raise AssertionError("keytool must not run after pinned content replacement")
+
+    with pytest.raises(signer.SignerError, match="identity changed"):
+        signer.handoff(args, lock, lock_bytes, toolchain, toolchain_bytes, _runtime(), client, replacing_runner)
+    assert client.requests == [] and not Path(args.output).exists()
+
+
 @pytest.mark.parametrize("changes,error", [
     ({"aud": "wrong"}, "authority is not exact"),
     ({"aud": ["fleet-preview12-handoff", "broader-service"]}, "authority is not exact"),
@@ -732,6 +770,7 @@ def test_handoff_rejects_tampered_attestation_before_client_or_readback(tmp_path
     ({"scope": "signed-content:create signed-content:delete"}, "authority is not exact"),
     ({"exp": 1_800_000_400}, "lifetime exceeds"),
     ({"exp": 1_799_999_999}, "lifetime is invalid"),
+    ({"iat": 1_800_000_020, "exp": 1_800_000_010}, "lifetime is invalid"),
 ])
 def test_handoff_bearer_is_short_lived_and_exactly_scoped(changes, error):
     auth = {"issuer": "https://identity.example.test", "audience": "fleet-preview12-handoff",
@@ -751,22 +790,41 @@ def test_handoff_bearer_audit_hashes_subject_and_jti_without_leaking_token():
     assert token not in rendered and "private-signer" not in rendered and "one-time-grant" not in rendered
 
 
+@pytest.mark.parametrize("signature", ["signature\n", "signature!", "AB", ""])
+def test_handoff_bearer_rejects_noncanonical_or_whitespace_signature_segment(signature):
+    auth = {"issuer": "https://identity.example.test", "audience": "fleet-preview12-handoff",
+        "scope": "signed-content:create", "max_ttl_seconds": 300}
+    token = _handoff_token().rsplit(".", 1)[0] + "." + signature
+    with pytest.raises(signer.SignerError, match="signed JWT|signature"):
+        signer._validate_handoff_bearer(token, auth, now=1_800_000_000)
+
+
 class _HandoffOpener:
     def __init__(self, signed: bytes, status=201, conflict=False, corrupt_readback=False,
-                 duplicate_receipt=False, redirect=False, oversized_create_receipt=False):
+                 duplicate_receipt=False, redirect=False, oversized_create_receipt=False,
+                 persisted_request=None, stored_payload=None, consume_then_error=False,
+                 local_value_error=False, replace_path: Path | None = None):
         self.signed, self.status, self.conflict = signed, status, conflict
         self.corrupt_readback, self.duplicate_receipt, self.redirect = corrupt_readback, duplicate_receipt, redirect
         self.oversized_create_receipt = oversized_create_receipt
+        self.request_value = persisted_request
+        self.stored_payload = signed if stored_payload is None else stored_payload
+        self.consume_then_error, self.local_value_error = consume_then_error, local_value_error
+        self.replace_path = replace_path
         self.requests = []
-        self.request_value = None
         self.upload_chunks = 0
 
     def open(self, request, timeout):
         self.requests.append(request)
         method = request.get_method()
         if method == "PUT":
+            if self.local_value_error:
+                raise ValueError("Invalid header value b'Bearer " + _handoff_token() + "\\n'")
             if self.conflict:
                 raise urllib.error.HTTPError(request.full_url, 409, "conflict", {}, None)
+            if self.replace_path is not None:
+                self.replace_path.unlink()
+                self.replace_path.write_bytes(b"hostile-replacement")
             chunks = list(request.data)
             self.upload_chunks = len(chunks)
             uploaded = b"".join(chunks)
@@ -777,13 +835,20 @@ class _HandoffOpener:
             self.request_value = json.loads(raw)
             digest = hashlib.sha256(signer._json_bytes(self.request_value)).hexdigest()
             receipt = signer._handoff_service_receipt(self.request_value, digest)
+            self.stored_payload = uploaded
+            if self.consume_then_error:
+                raise urllib.error.URLError("response lost after durable commit")
             if self.oversized_create_receipt:
                 return _HttpResponse(b"{" + b" " * (1024 * 1024 + 1))
             return _HttpResponse(json.dumps(receipt).encode(), {"Location": "https://public.example/leak"}
                 if self.redirect else {}, self.status)
         if "/objects/" in request.full_url:
-            payload = self.signed + (b"corrupt" if self.corrupt_readback else b"")
+            if self.request_value is None:
+                raise urllib.error.HTTPError(request.full_url, 404, "missing", {}, None)
+            payload = self.stored_payload + (b"corrupt" if self.corrupt_readback else b"")
             return _HttpResponse(payload, {"Content-Length": str(len(payload))})
+        if self.request_value is None:
+            raise urllib.error.HTTPError(request.full_url, 404, "missing", {}, None)
         digest = hashlib.sha256(signer._json_bytes(self.request_value)).hexdigest()
         receipt = signer._handoff_service_receipt(self.request_value, digest)
         payload = b'{"state":"present","state":"hostile"}' if self.duplicate_receipt else json.dumps(receipt).encode()
@@ -846,6 +911,56 @@ def test_private_client_same_request_is_idempotent_for_created_and_existing(tmp_
     assert values[0] == values[1]
 
 
+def test_private_client_reconciles_consumed_put_with_lost_response(tmp_path):
+    payload = b"durably-stored-before-response-loss"
+    signed = tmp_path / "signed.aab"
+    signed.write_bytes(payload)
+    opener = _HandoffOpener(payload, consume_then_error=True)
+    receipt, _ = _direct_handoff_client(opener).create_and_verify(_direct_handoff_request(payload), signed)
+    assert receipt["state"] == "present"
+    assert [request.get_method() for request in opener.requests] == ["PUT", "GET", "GET"]
+
+
+def test_private_client_reconciles_exact_conflict_and_safe_workflow_rerun(tmp_path):
+    payload = b"one-immutable-object"
+    signed = tmp_path / "signed.aab"
+    signed.write_bytes(payload)
+    request = _direct_handoff_request(payload)
+    opener = _HandoffOpener(payload)
+    client = _direct_handoff_client(opener)
+    first, _ = client.create_and_verify(request, signed)
+    opener.conflict = True
+    second, _ = client.create_and_verify(request, signed)
+    assert first == second
+    assert [item.get_method() for item in opener.requests[-3:]] == ["PUT", "GET", "GET"]
+
+
+def test_private_client_rejects_conflict_when_object_or_receipt_identity_differs(tmp_path):
+    payload = b"expected-content"
+    signed = tmp_path / "signed.aab"
+    signed.write_bytes(payload)
+    request = _direct_handoff_request(payload)
+    mismatched = json.loads(json.dumps(request))
+    mismatched["bindings"]["source_graph_sha256"] = "0" * 64
+    cases = [
+        _HandoffOpener(payload, conflict=True, persisted_request=request, stored_payload=b"wrong"),
+        _HandoffOpener(payload, conflict=True, persisted_request=mismatched),
+    ]
+    for opener in cases:
+        with pytest.raises(signer.SignerError, match="conflicting immutable"):
+            _direct_handoff_client(opener).create_and_verify(request, signed)
+
+
+def test_private_client_pins_original_file_before_network_replacement(tmp_path):
+    payload = b"stable-signed-content"
+    signed = tmp_path / "signed.aab"
+    signed.write_bytes(payload)
+    opener = _HandoffOpener(payload, replace_path=signed)
+    receipt, _ = _direct_handoff_client(opener).create_and_verify(_direct_handoff_request(payload), signed)
+    assert receipt["content_address"]["sha256"] == hashlib.sha256(payload).hexdigest()
+    assert signed.read_bytes() == b"hostile-replacement"
+
+
 def test_private_client_uploads_and_reads_large_content_in_bounded_chunks(tmp_path):
     payload = b"x" * (2 * 1024 * 1024 + 7)
     signed = tmp_path / "signed.aab"
@@ -896,6 +1011,22 @@ def test_private_client_bounds_encoded_metadata_and_rejects_incomplete_contract_
     with pytest.raises(signer.SignerError, match="bindings are not exact"):
         _direct_handoff_client(opener).create_and_verify(bad, signed)
     assert opener.requests == []
+
+
+def test_private_client_sanitizes_local_header_value_error_without_token_disclosure(tmp_path, capsys):
+    payload = b"signed"
+    signed = tmp_path / "signed.aab"
+    signed.write_bytes(payload)
+    token = _handoff_token()
+    opener = _HandoffOpener(payload, local_value_error=True)
+    with pytest.raises(signer.SignerError) as captured:
+        _direct_handoff_client(opener).create_and_verify(_direct_handoff_request(payload), signed)
+    rendered = str(captured.value)
+    assert rendered == "private signed-content request was rejected locally"
+    assert token not in rendered
+    assert captured.value.__suppress_context__ is True
+    streams = capsys.readouterr()
+    assert token not in streams.out + streams.err
 
 
 def test_github_json_body_is_bounded_and_duplicate_keys_fail_closed(monkeypatch):

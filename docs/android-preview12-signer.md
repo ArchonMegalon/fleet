@@ -19,17 +19,29 @@ Before key access the signer verifies installed toolchain, Fleet job SHA,
 GitHub-hosted runtime, package/version/code/SDK manifest identity, source graph,
 proof exclusion, and a new durable reservation. The reservation transaction
 binds both candidate and verification run/artifact/digest authorities, including
-the verification receipt and source graph. Duplicate or indeterminate results
-stop. Candidate tools receive a secret-free environment.
+the verification receipt and source graph. A broker may report either a newly
+created or an already-existing exact reservation; Fleet normalizes both to the
+same immutable local evidence, so an exact workflow retry does not require a
+second signing slot. Any non-exact or indeterminate result stops. Candidate
+tools receive a secret-free environment.
 
 After signing, the same protected job must complete the private content-addressed
 handoff. It creates the immutable object at its SHA-256 address with
 `If-None-Match: *` and a stable idempotency key. A retry may receive the same
 normalized `present` receipt; a different request at the same address is a hard
-conflict. The client then streams the object back, verifies its exact byte count
-and SHA-256, reads the durable receipt independently, and requires that receipt
-to equal the original canonical request. Neither contract nor audit receipt
+conflict. If the PUT response is lost, or the server returns `409`/`412`, the
+client performs bounded authenticated GETs of both the object and its durable
+request receipt. It accepts the retry only when the bytes, address, transaction,
+request digest, and every binding are exact; otherwise it fails closed. The
+normal path performs the same readbacks. Neither contract nor audit receipt
 contains a public or private download URL.
+
+Before certificate verification or upload, the signed AAB is opened without
+following symlinks and copied through that one descriptor into a private scratch
+file. The scratch file remains open for hashing and upload, and its descriptor,
+pathname inode, size, timestamps, and bytes are rechecked across certificate
+tools and network operations. Replacing either pathname cannot substitute new
+bytes into the handoff.
 
 The handoff request binds all of the following without relying on a filename:
 
@@ -43,12 +55,16 @@ The handoff request binds all of the following without relying on a filename:
   digests;
 * audited handoff implementation, endpoint-authority, and auth-policy digests.
 
-The bearer accepted by the client must be a signed JWT whose issuer, audience,
-single required scope, issued-at/not-before/expiry window, and maximum lifetime
-match the lock. Lifetime is capped at 15 minutes. Client-side claim checks are
-defence in depth; the private handoff service remains responsible for authenticating
-the JWT signature and enforcing create-only scope. The token, subject, JTI, raw
-endpoint, and HTTP bodies are never written to the sanitized audit receipt.
+The bearer accepted by the client must be a signed JWT whose three segments are
+strict canonical base64url without whitespace. Its issuer, audience, single
+required scope, issued-at/not-before/expiry window, and maximum lifetime match
+the lock; `iat` cannot follow `exp`. Lifetime is capped at 15 minutes.
+Client-side claim checks are defence in depth; the private handoff service
+remains responsible for authenticating the JWT signature and enforcing
+create-only scope. Header-construction and HTTP client errors are sanitized
+without exception chaining because some runtimes include the raw Authorization
+value in those errors. The token, subject, JTI, raw endpoint, and HTTP bodies are
+never written to the sanitized audit receipt.
 
 Only sanitized intake uses Actions artifacts. Signed output and the handoff audit
 remain runner-local; no signed Actions artifact, Play lane, Registry publication,
