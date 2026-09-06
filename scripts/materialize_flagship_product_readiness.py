@@ -7,11 +7,11 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import stat
 import subprocess
 import sys
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, NamedTuple, Optional, Sequence
 from urllib.parse import quote, unquote, urlsplit
@@ -60,6 +60,113 @@ RELEASE_REPOSITORY_AUTHORITY_CONTRACT = (
     "chummer.release-repository-authority/v1"
 )
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+GIT_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+CANONICAL_SCOPE_TOKEN_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
+APPROVED_RELEASE_SCOPE_FIELDS = {
+    "approvedAtUtc",
+    "approvedBy",
+    "channel",
+    "contractName",
+    "contractVersion",
+    "decisionId",
+    "platforms",
+    "releaseTarget",
+    "releaseVersion",
+    "status",
+    "supportOwner",
+}
+APPROVED_RELEASE_SCOPE_PLATFORM_FIELDS = {
+    "artifactAccessClass",
+    "fallbackHeads",
+    "platform",
+    "primaryHead",
+    "rid",
+    "signingRequirement",
+}
+CAMPAIGN_OPERABILITY_PREVIEW_CONTRACT = (
+    "chummer.campaign_operability_preview_evidence"
+)
+REGISTRY_AUTHORITY_SNAPSHOT_FIELDS = {
+    "authorityContract",
+    "releaseVersion",
+    "channel",
+    "status",
+    "rolloutState",
+    "supportabilityState",
+    "availablePlatforms",
+    "primaryHeadByPlatform",
+    "artifactCount",
+    "downloadAccessPosture",
+    "knownIssueSummary",
+    "manifestSha256",
+    "registryRepository",
+    "registryCommit",
+    "releaseDecisionStatus",
+    "releaseDecisionSha256",
+    "releaseDecisionPath",
+    "supportOwner",
+    "nextActions",
+    "artifacts",
+    "manifestPath",
+}
+REGISTRY_AUTHORITY_SNAPSHOT_STRING_FIELDS = {
+    "authorityContract",
+    "releaseVersion",
+    "channel",
+    "status",
+    "rolloutState",
+    "supportabilityState",
+    "downloadAccessPosture",
+    "knownIssueSummary",
+    "manifestSha256",
+    "registryRepository",
+    "registryCommit",
+    "releaseDecisionStatus",
+    "releaseDecisionSha256",
+    "releaseDecisionPath",
+    "supportOwner",
+    "manifestPath",
+}
+REGISTRY_AUTHORITY_ARTIFACT_FIELDS = {
+    "artifactId",
+    "head",
+    "platform",
+    "rid",
+    "arch",
+    "kind",
+    "downloadUrl",
+    "sha256",
+    "sizeBytes",
+    "compatibilityState",
+    "promotionState",
+    "publicationScope",
+    "revokeState",
+    "publicInstallRoute",
+    "installAccessClass",
+}
+REGISTRY_INSTALL_ACCESS_CLASSES = {
+    "open_public",
+    "account_recommended",
+    "account_required",
+}
+REGISTRY_GENERATION_FILE_ROUTE = re.compile(
+    r"^/downloads/g/([^/]+)/files/([^/]+)$"
+)
+REGISTRY_GENERATION_INSTALL_ROUTE = re.compile(
+    r"^/downloads/g/([^/]+)/install/([^/]+)$"
+)
+REGISTRY_PUBLIC_INSTALL_ROUTE = re.compile(
+    r"^/downloads/(?:install/|g/([^/]+)/install/)([^/]+)$"
+)
+UNRESOLVED_PREVIEW_VALUES = {
+    "",
+    "none",
+    "null",
+    "tbd",
+    "todo",
+    "unknown",
+    "unassigned",
+}
 ALLOWED_GITHUB_REPOSITORIES = {
     repository.casefold(): repository
     for repository in (
@@ -857,6 +964,639 @@ def _reviewed_source_commit(raw_value: str | None, *, repo_root: Path = SOURCE_R
     return commit
 
 
+def _strict_json_object(raw: bytes, *, label: str) -> Dict[str, Any]:
+    def reject_duplicate_or_case_shadowed_keys(
+        pairs: List[tuple[str, Any]],
+    ) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
+        folded: set[str] = set()
+        for key, value in pairs:
+            normalized = key.casefold()
+            if normalized in folded:
+                raise ValueError(
+                    f"{label} contains duplicate or case-shadowed JSON field: {key}"
+                )
+            folded.add(normalized)
+            result[key] = value
+        return result
+
+    try:
+        payload = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=reject_duplicate_or_case_shadowed_keys,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"{label} is not strict UTF-8 JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    return payload
+
+
+def _read_regular_file_bytes_no_follow(
+    path: Path,
+    *,
+    label: str,
+    allow_missing: bool = False,
+) -> bytes | None:
+    parent = path.parent if str(path.parent) else Path(".")
+    if path.name in {"", ".", ".."}:
+        raise ValueError(f"{label} path is invalid")
+    directory_flags = os.O_RDONLY
+    directory_flags |= getattr(os, "O_DIRECTORY", 0)
+    directory_flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        directory_fd = os.open(parent, directory_flags)
+    except FileNotFoundError:
+        if allow_missing:
+            return None
+        raise ValueError(f"{label} parent does not exist")
+    except OSError as exc:
+        raise ValueError(f"{label} parent could not be opened safely") from exc
+    file_fd: int | None = None
+    try:
+        opened_parent = os.fstat(directory_fd)
+        observed_parent = os.lstat(parent)
+        if (opened_parent.st_dev, opened_parent.st_ino) != (
+            observed_parent.st_dev,
+            observed_parent.st_ino,
+        ):
+            raise ValueError(f"{label} parent identity changed before read")
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            file_fd = os.open(path.name, flags, dir_fd=directory_fd)
+        except FileNotFoundError:
+            if allow_missing:
+                return None
+            raise ValueError(f"{label} must be an existing regular file")
+        before = os.fstat(file_fd)
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError(f"{label} must be an existing regular non-symlink file")
+        chunks: List[bytes] = []
+        while True:
+            chunk = os.read(file_fd, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        after = os.fstat(file_fd)
+        stable_fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+        if any(getattr(before, field) != getattr(after, field) for field in stable_fields):
+            raise ValueError(f"{label} changed while it was being read")
+        return b"".join(chunks)
+    except OSError as exc:
+        raise ValueError(
+            f"{label} could not be read safely as a regular non-symlink file"
+        ) from exc
+    finally:
+        if file_fd is not None:
+            os.close(file_fd)
+        os.close(directory_fd)
+
+
+def _canonical_scope_token(value: Any, *, label: str) -> str:
+    if not isinstance(value, str) or value != value.strip():
+        raise ValueError(f"{label} must be an exact canonical token")
+    if (
+        CANONICAL_SCOPE_TOKEN_PATTERN.fullmatch(value) is None
+        or value.casefold() in UNRESOLVED_PREVIEW_VALUES
+    ):
+        raise ValueError(f"{label} must be an exact canonical token")
+    return value
+
+
+def _load_approved_release_scope(
+    path: Path,
+    *,
+    expected_sha256: str,
+    expected_release_version: str,
+    expected_bounded_owner: str,
+) -> Dict[str, Any]:
+    if SHA256_PATTERN.fullmatch(expected_sha256) is None:
+        raise ValueError("expected approved release-scope SHA-256 is invalid")
+    raw = _read_regular_file_bytes_no_follow(
+        path,
+        label="approved release-scope decision",
+    )
+    assert raw is not None
+    if hashlib.sha256(raw).hexdigest() != expected_sha256:
+        raise ValueError(
+            "approved release-scope decision bytes do not match the expected SHA-256"
+        )
+    scope = _strict_json_object(raw, label="approved release-scope decision")
+    if set(scope) != APPROVED_RELEASE_SCOPE_FIELDS:
+        raise ValueError("approved release-scope decision field set is not exact")
+    canonical = (
+        json.dumps(
+            scope,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+    if raw != canonical:
+        raise ValueError(
+            "approved release-scope decision bytes are not canonical compact JSON plus LF"
+        )
+    if (
+        scope.get("contractName") != "chummer.release-scope-decision/v1"
+        or scope.get("contractVersion") != 1
+        or scope.get("status") != "approved"
+        or scope.get("channel") != "preview"
+        or scope.get("releaseTarget") != "preview"
+    ):
+        raise ValueError("approved release-scope decision v1 posture is invalid")
+
+    release_version = _canonical_scope_token(
+        scope.get("releaseVersion"), label="approved release version"
+    )
+    bounded_owner = _canonical_scope_token(
+        scope.get("supportOwner"), label="approved release support owner"
+    )
+    _canonical_scope_token(scope.get("decisionId"), label="approved decision ID")
+    if release_version != expected_release_version:
+        raise ValueError(
+            "approved release-scope decision release version does not match the expected candidate"
+        )
+    if bounded_owner != expected_bounded_owner:
+        raise ValueError(
+            "preview bounded owner does not match the approved release-scope support owner"
+        )
+    approved_by = scope.get("approvedBy")
+    if (
+        not isinstance(approved_by, str)
+        or approved_by != approved_by.strip()
+        or not approved_by
+        or len(approved_by) > 256
+    ):
+        raise ValueError("approved release-scope decision approver is invalid")
+    approved_at = scope.get("approvedAtUtc")
+    if (
+        not isinstance(approved_at, str)
+        or not approved_at.endswith("Z")
+        or parse_iso(approved_at) is None
+    ):
+        raise ValueError("approved release-scope decision timestamp is invalid")
+
+    platform_rows = scope.get("platforms")
+    if not isinstance(platform_rows, list) or not platform_rows:
+        raise ValueError("approved release-scope decision platforms are invalid")
+    platforms: set[str] = set()
+    for row in platform_rows:
+        if not isinstance(row, dict) or set(row) != APPROVED_RELEASE_SCOPE_PLATFORM_FIELDS:
+            raise ValueError("approved release-scope platform field set is not exact")
+        platform = _canonical_scope_token(
+            row.get("platform"), label="approved platform"
+        )
+        if platform in platforms:
+            raise ValueError("approved release-scope platform identity is duplicated")
+        platforms.add(platform)
+        _canonical_scope_token(row.get("rid"), label=f"{platform} RID")
+        primary_head = _canonical_scope_token(
+            row.get("primaryHead"), label=f"{platform} primary head"
+        )
+        _canonical_scope_token(
+            row.get("artifactAccessClass"),
+            label=f"{platform} artifact access class",
+        )
+        _canonical_scope_token(
+            row.get("signingRequirement"),
+            label=f"{platform} signing requirement",
+        )
+        fallback_heads = row.get("fallbackHeads")
+        if not isinstance(fallback_heads, list):
+            raise ValueError(f"{platform} fallback heads must be a list")
+        normalized_fallbacks = [
+            _canonical_scope_token(item, label=f"{platform} fallback head")
+            for item in fallback_heads
+        ]
+        if (
+            len(normalized_fallbacks) != len(set(normalized_fallbacks))
+            or primary_head in normalized_fallbacks
+        ):
+            raise ValueError(f"{platform} fallback heads are invalid")
+    return scope
+
+
+def _safe_root_relative_route_match(
+    value: Any,
+    *,
+    pattern: re.Pattern[str],
+    label: str,
+) -> re.Match[str]:
+    if not isinstance(value, str) or value != value.strip() or not value:
+        raise ValueError(f"{label} must be an exact nonempty route")
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme
+        or parsed.netloc
+        or parsed.query
+        or parsed.fragment
+        or not parsed.path.startswith("/")
+        or parsed.path.startswith("//")
+        or "\\" in parsed.path
+        or any(character.isspace() or ord(character) < 32 for character in parsed.path)
+    ):
+        raise ValueError(f"{label} must be a safe root-relative route")
+    match = pattern.fullmatch(parsed.path)
+    if match is None:
+        raise ValueError(f"{label} does not match the Registry route schema")
+    for segment in match.groups():
+        if segment is None:
+            continue
+        decoded = unquote(segment)
+        if (
+            decoded in {".", ".."}
+            or "/" in decoded
+            or "\\" in decoded
+            or any(character.isspace() or ord(character) < 32 for character in decoded)
+        ):
+            raise ValueError(f"{label} contains traversal or unsafe bytes")
+    return match
+
+
+def _load_registry_candidate_binding(
+    path: Path,
+    *,
+    expected_sha256: str,
+    approved_scope: Mapping[str, Any],
+    release_scope_decision_sha256: str,
+) -> Dict[str, str]:
+    if SHA256_PATTERN.fullmatch(expected_sha256) is None:
+        raise ValueError("expected Registry authority snapshot SHA-256 is invalid")
+    raw = _read_regular_file_bytes_no_follow(
+        path,
+        label="Registry authority snapshot",
+    )
+    assert raw is not None
+    if hashlib.sha256(raw).hexdigest() != expected_sha256:
+        raise ValueError(
+            "Registry authority snapshot bytes do not match the expected SHA-256"
+        )
+    snapshot = _strict_json_object(raw, label="Registry authority snapshot")
+    if set(snapshot) != REGISTRY_AUTHORITY_SNAPSHOT_FIELDS:
+        raise ValueError("Registry authority snapshot field set is not exact v2")
+    for field in REGISTRY_AUTHORITY_SNAPSHOT_STRING_FIELDS:
+        value = snapshot.get(field)
+        if not isinstance(value, str) or value != value.strip() or not value:
+            raise ValueError(
+                f"Registry authority snapshot {field} must be an exact nonempty string"
+            )
+
+    release_version = str(approved_scope["releaseVersion"])
+    support_owner = str(approved_scope["supportOwner"])
+    scope_rows = approved_scope.get("platforms")
+    if not isinstance(scope_rows, list) or not scope_rows:
+        raise ValueError("approved release-scope platforms are unavailable")
+    expected_platforms = [str(row["platform"]) for row in scope_rows]
+    expected_primary_heads = {
+        str(row["platform"]): str(row["primaryHead"]) for row in scope_rows
+    }
+    expected_heads = {
+        str(row["platform"]): {
+            str(row["primaryHead"]),
+            *(str(head) for head in row["fallbackHeads"]),
+        }
+        for row in scope_rows
+    }
+    expected_rids = {
+        str(row["platform"]): str(row["rid"]) for row in scope_rows
+    }
+    expected_access_classes = {
+        str(row["artifactAccessClass"]) for row in scope_rows
+    }
+    if len(expected_access_classes) != 1:
+        raise ValueError(
+            "approved release-scope artifact access classes are not uniform"
+        )
+
+    exact_posture = {
+        "authorityContract": "chummer.release-authority-snapshot/v2",
+        "releaseVersion": release_version,
+        "channel": "preview",
+        "status": "published",
+        "rolloutState": "promoted_preview",
+        "supportabilityState": "preview_supported",
+        "downloadAccessPosture": next(iter(expected_access_classes)),
+        "registryRepository": "ArchonMegalon/chummer6-hub-registry",
+        "releaseDecisionStatus": "review_required",
+        "releaseDecisionPath": "RELEASE_DECISION.json",
+        "supportOwner": support_owner,
+        "manifestPath": "RELEASE_CHANNEL.json",
+    }
+    for field, expected in exact_posture.items():
+        if snapshot.get(field) != expected:
+            raise ValueError(
+                f"Registry authority snapshot {field} does not match the approved candidate"
+            )
+    if SHA256_PATTERN.fullmatch(str(snapshot.get("manifestSha256"))) is None:
+        raise ValueError("Registry authority snapshot manifestSha256 is invalid")
+    if SHA256_PATTERN.fullmatch(str(snapshot.get("releaseDecisionSha256"))) is None:
+        raise ValueError(
+            "Registry authority snapshot releaseDecisionSha256 is invalid"
+        )
+    if GIT_COMMIT_PATTERN.fullmatch(str(snapshot.get("registryCommit"))) is None:
+        raise ValueError("Registry authority snapshot registryCommit is invalid")
+    next_actions = snapshot.get("nextActions")
+    if (
+        not isinstance(next_actions, list)
+        or not next_actions
+        or any(
+            not isinstance(item, str)
+            or item != item.strip()
+            or not item
+            or item.casefold() in UNRESOLVED_PREVIEW_VALUES
+            for item in next_actions
+        )
+    ):
+        raise ValueError(
+            "review-required Registry authority snapshot must name concrete nextActions"
+        )
+    if snapshot.get("availablePlatforms") != sorted(expected_platforms):
+        raise ValueError(
+            "Registry authority snapshot platforms do not match the approved scope"
+        )
+    if snapshot.get("primaryHeadByPlatform") != expected_primary_heads:
+        raise ValueError(
+            "Registry authority snapshot primary heads do not match the approved scope"
+        )
+
+    artifacts = snapshot.get("artifacts")
+    artifact_count = snapshot.get("artifactCount")
+    if (
+        not isinstance(artifacts, list)
+        or not isinstance(artifact_count, int)
+        or isinstance(artifact_count, bool)
+        or artifact_count != len(artifacts)
+        or not artifacts
+    ):
+        raise ValueError(
+            "Registry authority snapshot artifact projection count is invalid"
+        )
+    artifact_ids: set[str] = set()
+    artifact_platforms: set[str] = set()
+    artifact_heads: Dict[str, set[str]] = {}
+    artifact_rids: Dict[str, set[str]] = {}
+    artifact_access_classes: set[str] = set()
+    for index, row in enumerate(artifacts):
+        if not isinstance(row, dict) or set(row) != REGISTRY_AUTHORITY_ARTIFACT_FIELDS:
+            raise ValueError(
+                f"Registry authority artifact {index} field set is not exact v2"
+            )
+        artifact_id = row.get("artifactId")
+        platform = row.get("platform")
+        head = row.get("head")
+        rid = row.get("rid")
+        arch = row.get("arch")
+        if any(
+            not isinstance(value, str)
+            or value != value.strip()
+            or CANONICAL_SCOPE_TOKEN_PATTERN.fullmatch(value) is None
+            or value.casefold() in UNRESOLVED_PREVIEW_VALUES
+            for value in (artifact_id, platform, head, rid, arch)
+        ):
+            raise ValueError(
+                f"Registry authority artifact {index} identity is invalid"
+            )
+        if artifact_id in artifact_ids:
+            raise ValueError("Registry authority artifact IDs are duplicated")
+        artifact_ids.add(artifact_id)
+        artifact_platforms.add(platform)
+        artifact_heads.setdefault(platform, set()).add(head)
+        artifact_rids.setdefault(platform, set()).add(rid)
+        exact_artifact_posture = {
+            "kind": "installer",
+            "compatibilityState": "compatible",
+            "promotionState": "promoted",
+            "publicationScope": "signed-in-and-public",
+            "revokeState": "not_revoked",
+        }
+        if any(row.get(field) != expected for field, expected in exact_artifact_posture.items()):
+            raise ValueError(
+                f"Registry authority artifact {index} is not an eligible promoted installer"
+            )
+        access_class = row.get("installAccessClass")
+        if access_class not in REGISTRY_INSTALL_ACCESS_CLASSES:
+            raise ValueError(
+                f"Registry authority artifact {index} access class is invalid"
+            )
+        artifact_access_classes.add(str(access_class))
+        if SHA256_PATTERN.fullmatch(str(row.get("sha256"))) is None:
+            raise ValueError(
+                f"Registry authority artifact {index} SHA-256 is invalid"
+            )
+        size_bytes = row.get("sizeBytes")
+        if (
+            not isinstance(size_bytes, int)
+            or isinstance(size_bytes, bool)
+            or size_bytes <= 0
+        ):
+            raise ValueError(
+                f"Registry authority artifact {index} sizeBytes is invalid"
+            )
+        download_route = str(row.get("downloadUrl") or "")
+        download_pattern = (
+            REGISTRY_GENERATION_FILE_ROUTE
+            if access_class == "open_public"
+            else REGISTRY_GENERATION_INSTALL_ROUTE
+        )
+        download_match = _safe_root_relative_route_match(
+            download_route,
+            pattern=download_pattern,
+            label=f"Registry authority artifact {index} downloadUrl",
+        )
+        public_route = str(row.get("publicInstallRoute") or "")
+        _safe_root_relative_route_match(
+            public_route,
+            pattern=REGISTRY_PUBLIC_INSTALL_ROUTE,
+            label=f"Registry authority artifact {index} publicInstallRoute",
+        )
+        if access_class == "open_public" and public_route == download_route:
+            raise ValueError(
+                f"Registry authority artifact {index} open-public routes must be distinct"
+            )
+        if access_class != "open_public":
+            if public_route != download_route or unquote(download_match.group(2)) != artifact_id:
+                raise ValueError(
+                    f"Registry authority artifact {index} protected routes must equal and end with artifactId"
+                )
+
+    if (
+        sorted(artifact_platforms) != sorted(expected_platforms)
+        or artifact_heads != expected_heads
+        or artifact_rids
+        != {platform: {rid} for platform, rid in expected_rids.items()}
+        or artifact_access_classes != expected_access_classes
+    ):
+        raise ValueError(
+            "Registry authority artifact projection does not exactly match the approved scope"
+        )
+    return {
+        "releaseVersion": release_version,
+        "releaseScopeDecisionSha256": release_scope_decision_sha256,
+        "snapshotSha256": expected_sha256,
+        "manifestSha256": str(snapshot["manifestSha256"]),
+        "releaseDecisionSha256": str(snapshot["releaseDecisionSha256"]),
+        "registryCommit": str(snapshot["registryCommit"]),
+    }
+
+
+def _concrete_preview_actions(values: Sequence[str]) -> List[str]:
+    if not isinstance(values, (list, tuple)) or not values or len(values) > 16:
+        raise ValueError("campaign-operability preview requires 1-16 concrete next actions")
+    actions: List[str] = []
+    for value in values:
+        if (
+            not isinstance(value, str)
+            or value != value.strip()
+            or not value
+            or len(value) > 512
+            or value.casefold() in UNRESOLVED_PREVIEW_VALUES
+        ):
+            raise ValueError(
+                "campaign-operability preview next actions must be concrete bounded strings"
+            )
+        actions.append(value)
+    if len(set(actions)) != len(actions):
+        raise ValueError("campaign-operability preview next actions must be unique")
+    return actions
+
+
+def _campaign_operability_preview_declaration(
+    *,
+    preview_mode: bool,
+    approved_release_scope_path: Path | None,
+    expected_release_scope_sha256: str | None,
+    registry_authority_snapshot_path: Path | None,
+    expected_registry_authority_snapshot_sha256: str | None,
+    expected_release_version: str | None,
+    bounded_owner: str | None,
+    next_actions: Sequence[str],
+) -> Dict[str, Any] | None:
+    configured = (
+        approved_release_scope_path is not None,
+        bool(str(expected_release_scope_sha256 or "").strip()),
+        registry_authority_snapshot_path is not None,
+        bool(str(expected_registry_authority_snapshot_sha256 or "").strip()),
+        bool(str(expected_release_version or "").strip()),
+        bool(str(bounded_owner or "").strip()),
+        bool(next_actions),
+    )
+    if not preview_mode:
+        if any(configured):
+            raise ValueError(
+                "campaign-operability preview inputs require explicit preview mode"
+            )
+        return None
+    if not all(configured):
+        raise ValueError(
+            "campaign-operability preview mode requires approved scope path and SHA-256, Registry authority snapshot path and SHA-256, expected release version, bounded owner, and next actions"
+        )
+
+    release_version = _canonical_scope_token(
+        expected_release_version, label="expected preview release version"
+    )
+    owner = _canonical_scope_token(bounded_owner, label="preview bounded owner")
+    scope_sha256 = str(expected_release_scope_sha256)
+    approved_scope = _load_approved_release_scope(
+        approved_release_scope_path,
+        expected_sha256=scope_sha256,
+        expected_release_version=release_version,
+        expected_bounded_owner=owner,
+    )
+    _load_registry_candidate_binding(
+        registry_authority_snapshot_path,
+        expected_sha256=str(expected_registry_authority_snapshot_sha256),
+        approved_scope=approved_scope,
+        release_scope_decision_sha256=scope_sha256,
+    )
+    actions = _concrete_preview_actions(next_actions)
+    return {
+        "contract_name": CAMPAIGN_OPERABILITY_PREVIEW_CONTRACT,
+        "contract_version": 2,
+        "status": "pass",
+        "release_version": release_version,
+        "release_scope_decision_sha256": scope_sha256,
+        "bounded_owner": owner,
+        "next_actions": actions,
+    }
+
+
+def _candidate_release_version_aliases(payload: Mapping[str, Any]) -> List[Any]:
+    aliases = [
+        payload[field]
+        for field in ("releaseVersion", "release_version")
+        if field in payload
+    ]
+    contract_version_fields = {
+        "contract_version",
+        "contractVersion",
+        "schemaVersion",
+        "schema_version",
+    }
+    if "version" in payload and not contract_version_fields.intersection(payload):
+        aliases.append(payload["version"])
+    return aliases
+
+
+def _decorate_campaign_operability_preview_payload(
+    payload: Dict[str, Any],
+    declaration: Dict[str, Any],
+    candidate_binding: Mapping[str, str],
+) -> Dict[str, Any]:
+    if "campaign_operability_preview" in payload:
+        raise ValueError(
+            "flagship readiness payload reserved preview declaration field collides"
+        )
+    release_version = declaration["release_version"]
+    aliases = _candidate_release_version_aliases(payload)
+    if aliases and (
+        any(
+            not isinstance(value, str)
+            or value != value.strip()
+            or CANONICAL_SCOPE_TOKEN_PATTERN.fullmatch(value) is None
+            for value in aliases
+        )
+        or len(set(aliases)) != 1
+        or aliases[0] != release_version
+    ):
+        raise ValueError(
+            "flagship readiness payload has conflicting candidate release-version aliases"
+        )
+    raw_status = payload.get("status")
+    raw_verdict_present = "verdict" in payload
+    raw_verdict = payload.get("verdict")
+    decorated = dict(payload)
+    if set(candidate_binding) != {
+        "releaseVersion",
+        "releaseScopeDecisionSha256",
+        "snapshotSha256",
+        "manifestSha256",
+        "releaseDecisionSha256",
+        "registryCommit",
+    }:
+        raise ValueError("campaign-operability candidate binding field set is not exact")
+    conflicts = [
+        field
+        for field, value in candidate_binding.items()
+        if field in decorated and decorated[field] != value
+    ]
+    if conflicts:
+        raise ValueError(
+            "flagship readiness payload has conflicting candidate authority aliases"
+        )
+    decorated.update(candidate_binding)
+    decorated["release_version"] = release_version
+    if str(raw_status or "").strip().lower() in {"fail", "failed"}:
+        decorated["campaign_operability_preview"] = declaration
+    if decorated.get("status") != raw_status or (
+        raw_verdict_present and decorated.get("verdict") != raw_verdict
+    ):
+        raise ValueError(
+            "campaign-operability preview decoration changed raw status or verdict"
+        )
+    return decorated
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     raw_args = list(argv or sys.argv[1:])
     bootstrap = argparse.ArgumentParser(add_help=False)
@@ -1081,6 +1821,50 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--release-channel", default=str(DEFAULT_RELEASE_CHANNEL), help="path to RELEASE_CHANNEL.generated.json")
     parser.add_argument("--releases-json", default=str(DEFAULT_RELEASES_JSON), help="path to releases.json")
+    parser.add_argument(
+        "--campaign-operability-preview",
+        action="store_true",
+        help=(
+            "explicitly emit candidate-bound campaign-operability preview evidence; "
+            "all approved-scope, version, owner, and action inputs are required"
+        ),
+    )
+    parser.add_argument(
+        "--approved-release-scope",
+        default="",
+        help="path to the exact canonical approved release-scope decision v1 bytes",
+    )
+    parser.add_argument(
+        "--expected-release-scope-decision-sha256",
+        default="",
+        help="reviewed SHA-256 of the exact approved release-scope decision bytes",
+    )
+    parser.add_argument(
+        "--registry-authority-snapshot",
+        default="",
+        help="path to the exact reviewed Registry release-authority v2 snapshot bytes",
+    )
+    parser.add_argument(
+        "--expected-registry-authority-snapshot-sha256",
+        default="",
+        help="reviewed SHA-256 of the exact Registry authority snapshot bytes",
+    )
+    parser.add_argument(
+        "--expected-release-version",
+        default="",
+        help="exact candidate release version expected in the approved scope",
+    )
+    parser.add_argument(
+        "--preview-bounded-owner",
+        default="",
+        help="bounded owner; must exactly match the approved scope supportOwner",
+    )
+    parser.add_argument(
+        "--preview-next-action",
+        action="append",
+        default=[],
+        help="concrete bounded next action; repeat for multiple actions",
+    )
     parser.add_argument(
         "--ignore-nonlinux-desktop-host-proof-blockers",
         action="store_true",
@@ -10833,18 +11617,16 @@ class EvidenceAuthorityResolver:
         self._json_pointer_value(payload, pointer)
 
     def copy_artifact_store(self, destination_root: Path) -> None:
-        destination = destination_root.expanduser().resolve(strict=False)
+        destination = Path(
+            os.path.abspath(os.path.expanduser(str(destination_root)))
+        )
         for record in self.artifact_records.values():
             source = self._cas_path_for_record(record)
+            source_bytes = _read_regular_file_snapshot(source)
             target = destination / "sha256" / record.digest[:2] / (
                 record.digest + ".blob"
             )
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if target.exists():
-                if _read_regular_file_snapshot(target) != _read_regular_file_snapshot(source):
-                    raise ValueError("mirror artifact CAS contains conflicting bytes")
-                continue
-            shutil.copy2(source, target)
+            _publish_bytes_exclusive(target, source_bytes)
 
     def reference_for_local_path(self, raw_path: str) -> str | None:
         canonical = _canonical_machine_local_path(raw_path)
@@ -11167,9 +11949,228 @@ def _ui_external_host_proof_request_rows(payload: Dict[str, Any]) -> List[Dict[s
     return rows
 
 
+def _open_directory_tree_no_symlinks(path: Path) -> tuple[int, Path]:
+    absolute = Path(os.path.abspath(os.path.expanduser(str(path))))
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    anchor = Path(absolute.anchor or os.sep)
+    try:
+        directory_fd = os.open(anchor, flags)
+    except OSError as exc:
+        raise ValueError(f"output directory anchor could not be opened: {anchor}") from exc
+    try:
+        for component in absolute.parts[1:]:
+            if component in {"", ".", ".."}:
+                raise ValueError("output directory contains an invalid component")
+            try:
+                before = os.stat(
+                    component,
+                    dir_fd=directory_fd,
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                os.mkdir(component, 0o755, dir_fd=directory_fd)
+                before = os.stat(
+                    component,
+                    dir_fd=directory_fd,
+                    follow_symlinks=False,
+                )
+            if not stat.S_ISDIR(before.st_mode):
+                raise ValueError(
+                    f"output directory component is not a real directory: {component}"
+                )
+            next_fd = os.open(component, flags, dir_fd=directory_fd)
+            opened = os.fstat(next_fd)
+            if (before.st_dev, before.st_ino) != (opened.st_dev, opened.st_ino):
+                os.close(next_fd)
+                raise ValueError("output directory identity changed while opening")
+            os.close(directory_fd)
+            directory_fd = next_fd
+        return directory_fd, absolute
+    except Exception:
+        os.close(directory_fd)
+        raise
+
+
+def _write_bytes_safely(path: Path, content: bytes) -> None:
+    if path.name in {"", ".", ".."}:
+        raise ValueError("flagship readiness output path is invalid")
+    directory_fd, absolute_parent = _open_directory_tree_no_symlinks(path.parent)
+    temporary_name = f".{path.name}.{uuid.uuid4().hex}.tmp"
+    try:
+        opened_parent = os.fstat(directory_fd)
+        observed_parent = os.lstat(absolute_parent)
+        if (opened_parent.st_dev, opened_parent.st_ino) != (
+            observed_parent.st_dev,
+            observed_parent.st_ino,
+        ):
+            raise ValueError("flagship readiness output parent identity changed")
+        try:
+            existing = os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            existing = None
+        if existing is not None and not stat.S_ISREG(existing.st_mode):
+            raise ValueError(
+                "flagship readiness output must not be a symlink or non-regular file"
+            )
+        temporary_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        temporary_flags |= getattr(os, "O_NOFOLLOW", 0)
+        temporary_fd = os.open(
+            temporary_name,
+            temporary_flags,
+            0o600,
+            dir_fd=directory_fd,
+        )
+        with os.fdopen(temporary_fd, mode="wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        observed_parent = os.lstat(absolute_parent)
+        if (opened_parent.st_dev, opened_parent.st_ino) != (
+            observed_parent.st_dev,
+            observed_parent.st_ino,
+        ):
+            raise ValueError(
+                "flagship readiness output parent identity changed before replace"
+            )
+        try:
+            existing = os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            existing = None
+        if existing is not None and not stat.S_ISREG(existing.st_mode):
+            raise ValueError(
+                "flagship readiness output became a symlink or non-regular file"
+            )
+        os.replace(
+            temporary_name,
+            path.name,
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+        )
+        temporary_name = ""
+        os.fsync(directory_fd)
+    except OSError as exc:
+        raise ValueError("flagship readiness output could not be written safely") from exc
+    finally:
+        if temporary_name:
+            try:
+                os.unlink(temporary_name, dir_fd=directory_fd)
+            except FileNotFoundError:
+                pass
+        os.close(directory_fd)
+
+
 def _write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    _write_bytes_safely(path, content.encode("utf-8"))
+
+
+def _read_regular_bytes_at(
+    directory_fd: int,
+    name: str,
+    *,
+    label: str,
+) -> bytes:
+    try:
+        before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except OSError as exc:
+        raise ValueError(f"{label} is unavailable") from exc
+    if not stat.S_ISREG(before.st_mode):
+        raise ValueError(f"{label} must be a regular non-symlink file")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        file_fd = os.open(name, flags, dir_fd=directory_fd)
+    except OSError as exc:
+        raise ValueError(f"{label} could not be opened safely") from exc
+    try:
+        opened = os.fstat(file_fd)
+        if (before.st_dev, before.st_ino) != (opened.st_dev, opened.st_ino):
+            raise ValueError(f"{label} identity changed before read")
+        chunks: List[bytes] = []
+        while True:
+            chunk = os.read(file_fd, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        after_read = os.fstat(file_fd)
+        after_path = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    finally:
+        os.close(file_fd)
+    stable_fields = (
+        "st_dev",
+        "st_ino",
+        "st_mode",
+        "st_size",
+        "st_mtime_ns",
+        "st_ctime_ns",
+    )
+    if any(
+        getattr(before, field) != getattr(after_read, field)
+        or getattr(before, field) != getattr(after_path, field)
+        for field in stable_fields
+    ):
+        raise ValueError(f"{label} changed while it was read")
+    content = b"".join(chunks)
+    if len(content) != before.st_size:
+        raise ValueError(f"{label} size changed while it was read")
+    return content
+
+
+def _publish_bytes_exclusive(path: Path, content: bytes) -> None:
+    if path.name in {"", ".", ".."}:
+        raise ValueError("CAS publication path is invalid")
+    directory_fd, _ = _open_directory_tree_no_symlinks(path.parent)
+    temporary_name = f".{path.name}.{uuid.uuid4().hex}.tmp"
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        temporary_fd = os.open(
+            temporary_name,
+            flags,
+            0o600,
+            dir_fd=directory_fd,
+        )
+        with os.fdopen(temporary_fd, mode="wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(
+                temporary_name,
+                path.name,
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+        except FileExistsError:
+            existing = _read_regular_bytes_at(
+                directory_fd,
+                path.name,
+                label="mirror artifact CAS entry",
+            )
+            if existing != content:
+                raise ValueError("mirror artifact CAS contains conflicting bytes")
+        os.fsync(directory_fd)
+    finally:
+        try:
+            os.unlink(temporary_name, dir_fd=directory_fd)
+        except FileNotFoundError:
+            pass
+        os.fsync(directory_fd)
+        os.close(directory_fd)
+
+
+def _read_existing_output_text(path: Path) -> str:
+    raw = _read_regular_file_bytes_no_follow(
+        path,
+        label="flagship readiness output",
+        allow_missing=True,
+    )
+    if raw is None:
+        return ""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("flagship readiness output is not valid UTF-8") from exc
 
 
 def _ensure_non_design_mirror_path(path: Path, *, repo_root: Path) -> None:
@@ -11240,6 +12241,14 @@ def materialize_flagship_product_readiness(
     m142_route_local_proof_closeout_gate_path: Path = DEFAULT_M142_ROUTE_LOCAL_PROOF_CLOSEOUT_GATE,
     m143_route_local_output_closeout_gate_path: Path = DEFAULT_M143_ROUTE_LOCAL_OUTPUT_CLOSEOUT_GATE,
     ignore_nonlinux_desktop_host_proof_blockers: bool = False,
+    campaign_operability_preview: bool = False,
+    approved_release_scope_path: Path | None = None,
+    expected_release_scope_sha256: str | None = None,
+    registry_authority_snapshot_path: Path | None = None,
+    expected_registry_authority_snapshot_sha256: str | None = None,
+    expected_release_version: str | None = None,
+    preview_bounded_owner: str | None = None,
+    preview_next_actions: Sequence[str] = (),
 ) -> Dict[str, Any]:
     effective_rules_certification_path = (
         _canonical_path_preserving_final_component(rules_certification_path)
@@ -11260,6 +12269,18 @@ def materialize_flagship_product_readiness(
         _canonical_path_preserving_final_component(live_backed_truth_path)
         if live_backed_truth_path is not None
         else _first_existing_payload((DEFAULT_LIVE_BACKED_RELEASE_TRUTH_MATRIX,))[0]
+    )
+    preview_declaration = _campaign_operability_preview_declaration(
+        preview_mode=campaign_operability_preview,
+        approved_release_scope_path=approved_release_scope_path,
+        expected_release_scope_sha256=expected_release_scope_sha256,
+        registry_authority_snapshot_path=registry_authority_snapshot_path,
+        expected_registry_authority_snapshot_sha256=(
+            expected_registry_authority_snapshot_sha256
+        ),
+        expected_release_version=expected_release_version,
+        bounded_owner=preview_bounded_owner,
+        next_actions=preview_next_actions,
     )
     authority_path = release_repository_authority_path
     if authority_path is None:
@@ -11325,6 +12346,24 @@ def materialize_flagship_product_readiness(
     )
     payload["sourceCommit"] = reviewed_source_commit
     payload["source_commit"] = reviewed_source_commit
+    if preview_declaration is not None:
+        preview_scope = _load_approved_release_scope(
+            approved_release_scope_path,
+            expected_sha256=str(expected_release_scope_sha256),
+            expected_release_version=str(expected_release_version),
+            expected_bounded_owner=str(preview_bounded_owner),
+        )
+        preview_candidate_binding = _load_registry_candidate_binding(
+            registry_authority_snapshot_path,
+            expected_sha256=str(expected_registry_authority_snapshot_sha256),
+            approved_scope=preview_scope,
+            release_scope_decision_sha256=str(expected_release_scope_sha256),
+        )
+        payload = _decorate_campaign_operability_preview_payload(
+            payload,
+            preview_declaration,
+            preview_candidate_binding,
+        )
     published_repo_root = repo_root_for_published_path(out_path)
     acceptance_repo_root = _fleet_repo_root_from_acceptance_path(acceptance_path)
     evidence_paths = tuple(
@@ -11482,22 +12521,28 @@ def materialize_flagship_product_readiness(
     }
     _validate_portable_public_receipt(payload, resolver=resolver)
 
-    existing_payload = load_json(out_path)
+    existing_text = _read_existing_output_text(out_path)
+    try:
+        loaded_existing = json.loads(existing_text) if existing_text else {}
+    except json.JSONDecodeError:
+        loaded_existing = {}
+    existing_payload = (
+        dict(loaded_existing) if isinstance(loaded_existing, dict) else {}
+    )
     if existing_payload and _normalized_payload(existing_payload) == _normalized_payload(payload):
         payload["generated_at"] = str(existing_payload.get("generated_at") or payload["generated_at"]).strip() or payload["generated_at"]
 
     rendered = json.dumps(payload, indent=2, sort_keys=False) + "\n"
     wrote_out = False
-    if out_path.read_text(encoding="utf-8") != rendered if out_path.is_file() else True:
+    if existing_text != rendered:
         _write_text(out_path, rendered)
         wrote_out = True
 
     if mirror_path is not None:
         resolver.copy_artifact_store(mirror_path.parent / "artifact-cas")
-        mirror_content = mirror_path.read_text(encoding="utf-8") if mirror_path.is_file() else ""
+        mirror_content = _read_existing_output_text(mirror_path)
         if mirror_content != rendered:
-            mirror_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(out_path, mirror_path)
+            _write_text(mirror_path, rendered)
 
     repo_root = published_repo_root
     if repo_root is not None and (wrote_out or _compile_manifest_missing_artifact(repo_root, out_path.name)):
@@ -11514,7 +12559,12 @@ def materialize_flagship_product_readiness(
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     repo_root = Path(args.repo_root).resolve()
-    mirror_path = Path(args.mirror_out).resolve() if str(args.mirror_out or "").strip() else None
+    out_path = Path(os.path.abspath(os.path.expanduser(str(args.out))))
+    mirror_path = (
+        Path(os.path.abspath(os.path.expanduser(str(args.mirror_out))))
+        if str(args.mirror_out or "").strip()
+        else None
+    )
     if mirror_path is not None:
         _ensure_non_design_mirror_path(mirror_path, repo_root=repo_root)
     payload = materialize_flagship_product_readiness(
@@ -11528,7 +12578,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         release_repository_authority_sha256=(
             args.release_repository_authority_sha256
         ),
-        out_path=Path(args.out).resolve(),
+        out_path=out_path,
         mirror_path=mirror_path,
         acceptance_path=Path(args.acceptance).resolve(),
         parity_registry_path=Path(args.parity_registry).resolve(),
@@ -11599,10 +12649,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         release_channel_path=Path(args.release_channel).resolve(),
         releases_json_path=Path(args.releases_json).resolve(),
         ignore_nonlinux_desktop_host_proof_blockers=bool(args.ignore_nonlinux_desktop_host_proof_blockers),
+        campaign_operability_preview=bool(args.campaign_operability_preview),
+        approved_release_scope_path=(
+            Path(args.approved_release_scope)
+            if str(args.approved_release_scope or "").strip()
+            else None
+        ),
+        expected_release_scope_sha256=(
+            str(args.expected_release_scope_decision_sha256 or "").strip()
+        ),
+        registry_authority_snapshot_path=(
+            Path(args.registry_authority_snapshot)
+            if str(args.registry_authority_snapshot or "").strip()
+            else None
+        ),
+        expected_registry_authority_snapshot_sha256=(
+            str(args.expected_registry_authority_snapshot_sha256 or "").strip()
+        ),
+        expected_release_version=str(args.expected_release_version or "").strip(),
+        preview_bounded_owner=str(args.preview_bounded_owner or "").strip(),
+        preview_next_actions=tuple(args.preview_next_action or ()),
     )
     print(
         "wrote flagship product readiness: "
-        f"{Path(args.out).resolve()} ({payload['status']}; ready={payload['summary']['ready_count']}, "
+        f"{out_path} ({payload['status']}; ready={payload['summary']['ready_count']}, "
         f"warning={payload['summary']['warning_count']}, missing={payload['summary']['missing_count']})"
     )
     return 0
