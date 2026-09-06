@@ -1,0 +1,186 @@
+name: Android Preview12 protected signer
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact chummer6-mobile source commit
+        required: true
+        type: string
+      candidate_run_id:
+        description: Exact successful unsigned-candidate run ID
+        required: true
+        type: string
+      verification_run_id:
+        description: Exact distinct successful verification run ID
+        required: true
+        type: string
+      artifact_id:
+        description: Exact unsigned-candidate artifact ID
+        required: true
+        type: string
+      artifact_sha256:
+        description: Exact GitHub artifact archive SHA-256
+        required: true
+        type: string
+      candidate_sha256:
+        description: Exact unsigned AAB SHA-256
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+      candidate_run_id:
+        required: true
+        type: string
+      verification_run_id:
+        required: true
+        type: string
+      artifact_id:
+        required: true
+        type: string
+      artifact_sha256:
+        required: true
+        type: string
+      candidate_sha256:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-preview12-signer-${{ inputs.artifact_sha256 }}
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    name: Fail-closed contract and image gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      signer_image: ${{ steps.preflight.outputs.signer_image }}
+      intake_environment: ${{ steps.preflight.outputs.intake_environment }}
+      signing_environment: ${{ steps.preflight.outputs.signing_environment }}
+    steps:
+      - name: Check out the exact trusted Fleet workflow commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ArchonMegalon/fleet
+          ref: ${{ job.workflow_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Require canonical protected-main contract and locked signer image
+        id: preflight
+        env:
+          SIGNER_IMAGE: ${{ vars.ANDROID_PREVIEW12_SIGNER_IMAGE }}
+          EXECUTION_REPOSITORY: ${{ github.repository }}
+          EXECUTION_REF: ${{ github.ref }}
+          EXECUTION_REF_PROTECTED: ${{ github.ref_protected }}
+          TRUSTED_WORKFLOW_REF: ${{ job.workflow_ref }}
+          TRUSTED_WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: >-
+          python3 scripts/android_preview12_signer.py
+          --lock config/release/android-preview12-signer.lock.json
+          --toolchain-lock config/release/android-preview12-signer-toolchain.lock.json
+          preflight
+          --signer-image "${SIGNER_IMAGE}"
+          --execution-repository "${EXECUTION_REPOSITORY}"
+          --execution-ref "${EXECUTION_REF}"
+          --execution-ref-protected "${EXECUTION_REF_PROTECTED}"
+          --workflow-ref "${TRUSTED_WORKFLOW_REF}"
+          --workflow-sha "${TRUSTED_WORKFLOW_SHA}"
+          --github-output "${GITHUB_OUTPUT}"
+
+  trusted-intake:
+    name: Brokered exact-artifact intake
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ needs.contract.outputs.intake_environment }}
+    steps:
+      - name: Check out only the exact trusted Fleet workflow commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ArchonMegalon/fleet
+          ref: ${{ job.workflow_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify two green runs and ingest exact unsigned bytes
+        env:
+          ANDROID_PREVIEW12_CANDIDATE_BROKER_TOKEN: ${{ secrets.ANDROID_PREVIEW12_CANDIDATE_BROKER_TOKEN }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+          ARTIFACT_ID: ${{ inputs.artifact_id }}
+          ARTIFACT_SHA256: ${{ inputs.artifact_sha256 }}
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+        run: >-
+          python3 scripts/android_preview12_signer.py
+          --lock config/release/android-preview12-signer.lock.json
+          --toolchain-lock config/release/android-preview12-signer-toolchain.lock.json
+          intake
+          --source-sha "${SOURCE_SHA}"
+          --candidate-run-id "${CANDIDATE_RUN_ID}"
+          --verification-run-id "${VERIFICATION_RUN_ID}"
+          --artifact-id "${ARTIFACT_ID}"
+          --artifact-sha256 "${ARTIFACT_SHA256}"
+          --candidate-sha256 "${CANDIDATE_SHA256}"
+          --output-dir trusted-intake
+      - name: Seal private CI intake evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: preview12-intake-${{ inputs.artifact_id }}-${{ inputs.candidate_sha256 }}
+          path: trusted-intake
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+          retention-days: 1
+
+  sign-once:
+    name: One-shot upload-key signing
+    needs:
+      - contract
+      - trusted-intake
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ needs.contract.outputs.signing_environment }}
+    container:
+      image: ${{ needs.contract.outputs.signer_image }}
+    steps:
+      - name: Download only sealed trusted intake
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: preview12-intake-${{ inputs.artifact_id }}-${{ inputs.candidate_sha256 }}
+          path: trusted-intake
+      - name: Sign exactly once and emit non-publication attestation
+        env:
+          ANDROID_PREVIEW12_UPLOAD_KEYSTORE_B64: ${{ secrets.ANDROID_PREVIEW12_UPLOAD_KEYSTORE_B64 }}
+          ANDROID_PREVIEW12_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_PREVIEW12_KEYSTORE_PASSWORD }}
+          ANDROID_PREVIEW12_KEY_PASSWORD: ${{ secrets.ANDROID_PREVIEW12_KEY_PASSWORD }}
+          FLEET_SIGNING_ENVIRONMENT: ${{ needs.contract.outputs.signing_environment }}
+          FLEET_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          FLEET_WORKFLOW_REF: ${{ job.workflow_ref }}
+          FLEET_WORKFLOW_SHA: ${{ job.workflow_sha }}
+          LOCKED_SIGNER_IMAGE: ${{ needs.contract.outputs.signer_image }}
+        run: >-
+          python3 /opt/fleet-signer/android_preview12_signer.py
+          --lock trusted-intake/signer.lock.json
+          --toolchain-lock /opt/fleet-signer/toolchain.lock.json
+          sign
+          --candidate-dir trusted-intake
+          --output-dir signed-output
+          --running-image "${LOCKED_SIGNER_IMAGE}"
+      - name: Seal signed artifact and attestation as private CI evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: preview12-signed-${{ inputs.artifact_id }}-${{ inputs.candidate_sha256 }}
+          path: signed-output
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+          retention-days: 1

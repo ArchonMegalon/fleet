@@ -1,0 +1,48 @@
+{
+  "contract_name": "fleet.android_preview12_signer_transaction.v1",
+  "contract_version": 1,
+  "state": "blocked_pending_provisioning",
+  "release": {
+    "version_name": "Preview12",
+    "version_code": 12,
+    "candidate_file_name": "chummer6-preview12.aab",
+    "signed_file_name": "chummer6-preview12-signed.aab"
+  },
+  "source": {
+    "repository": "ArchonMegalon/chummer6-mobile",
+    "branch": "main",
+    "artifact_name": "android-preview12-unsigned",
+    "candidate_workflow_path": null,
+    "verification_workflow_path": null
+  },
+  "environments": {
+    "intake": "android-preview12-intake",
+    "signing": "android-preview12-signing",
+    "play_upload": "android-play-upload",
+    "play_upload_enabled": false
+  },
+  "signing": {
+    "enabled": false,
+    "key_alias": "upload",
+    "signature_algorithm": null,
+    "digest_algorithm": "SHA-256",
+    "expected_upload_certificate_sha256": null
+  },
+  "toolchain": {
+    "lock_path": "config/release/android-preview12-signer-toolchain.lock.json",
+    "lock_sha256": "f40fb8a2d254900a2eac3da50ebd57f251528a69e4d14597d7a6ead1a4420b7a",
+    "image_repository": "ghcr.io/archonmegalon/fleet-android-preview12-signer",
+    "image_digest": null,
+    "platform": "linux/amd64"
+  },
+  "limits": {
+    "artifact_max_bytes": 1073741824,
+    "candidate_max_bytes": 536870912
+  },
+  "publication": {
+    "github_artifact_is_private_ci_evidence": true,
+    "registry_publication": false,
+    "play_upload": false,
+    "github_release": false
+  }
+}
