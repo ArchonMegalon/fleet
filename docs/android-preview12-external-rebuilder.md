@@ -78,7 +78,10 @@ lost-response recovery. Exact public external-signer v1 bytes are committed to
 that ledger.
 
 After credential admission, signed bytes and their attestations remain in a
-deterministic owner-only recovery directory until promotion succeeds. An
+deterministic owner-only recovery store until promotion succeeds. The store is
+authenticated as part of the handoff and its attempt journal is independent of
+the requested output path, so changing a destination cannot create a second
+signing opportunity for an already reserved attempt. An
 exclusive reservation record, attested-byte record, and commit-intent record
 bind that recovery transaction. Failures after a commit acknowledgement, a
 lost commit acknowledgement, Fleet-audit materialization, audit persistence,
@@ -90,9 +93,20 @@ and replays the exact commit through Draft #11's signed ledger adapter before
 finishing audit and promotion. A local ledger-response file can never replace
 that service-authenticated replay.
 
+Draft #11 may legitimately return a signed `status` response after a lost
+commit acknowledgement and a different signed `commit` response on later
+reconciliation. Fleet revalidates both envelopes with the reviewed adapter,
+requires the same reservation and exact external-v1 approval bytes, preserves
+each response under its content digest, and keeps the first authenticated
+response as the stable audit binding. It never requires unrelated request IDs
+or signatures to be byte-identical.
+
 If failure occurs after key admission but before complete v2/v1 evidence is
-journaled, the private bytes are retained for operator diagnosis and explicit
-abort; the code does not silently delete them or attempt a second signature.
+journaled, the private bytes are retained with an explicit `quarantined`,
+`verified = false`, `reconciliationEligible = false` marker for operator
+diagnosis and explicit abort. Quarantined bytes cannot enter ordinary
+reconciliation or promotion; the code does not silently delete them or attempt
+a second signature.
 The future owner workflow must provide durable private recovery storage and
 authenticate that storage as part of its signer-runtime provenance.
 

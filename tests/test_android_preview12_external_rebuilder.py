@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from copy import deepcopy
 from datetime import UTC, datetime
 import hashlib
@@ -355,7 +356,7 @@ def test_exact_ledger_commit_accepts_recovered_bytes_and_rejects_mismatch(tmp_pa
             assert payload == raw
             return {"receipt": {"state": "committed", "approval": {
                 "sha256": self.digest, "sizeBytes": len(payload),
-                "publicJsonBase64": "owned-by-reviewed-ledger-adapter",
+                "publicJsonBase64": base64.b64encode(payload).decode("ascii"),
             }}}
 
     committed = module.commit_signing_attempt(
