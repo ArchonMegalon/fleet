@@ -23,6 +23,11 @@ import tempfile
 from typing import Any, Mapping
 import zipfile
 
+try:
+    from scripts import android_preview12_approval_ledger as approval_ledger
+except ModuleNotFoundError:  # Direct execution places scripts/ on sys.path.
+    import android_preview12_approval_ledger as approval_ledger
+
 
 POLICY_CONTRACT = "fleet.android_preview12_two_green_release_approval_policy.v1"
 OUTPUT_CONTRACT = "fleet.android_preview12_two_green_release_approval.v1"
@@ -222,7 +227,7 @@ def expected_policy() -> dict[str, Any]:
     return {
         "contract_name": POLICY_CONTRACT,
         "contract_version": 1,
-        "state": "dormant_pending_environment_external_key_and_durable_replay",
+        "state": "dormant_pending_environment_external_keys_and_ledger_service",
         "release": {"package_id": PACKAGE_ID, "version_name": VERSION_NAME,
                     "version_code": VERSION_CODE},
         "android_source": {"repository": ANDROID_REPOSITORY,
@@ -262,7 +267,7 @@ def expected_policy() -> dict[str, Any]:
             "maximum_future_skew_seconds": MAX_FUTURE_SKEW_SECONDS,
         },
         "replay_protection": {
-            "mode": "artifact_observation_only_incomplete",
+            "mode": "durable_external_exactly_once",
             "approval_request_nonce_required": True,
             "artifact_ledger_required": True,
             "durable_external_reservation_required": True,
@@ -271,6 +276,7 @@ def expected_policy() -> dict[str, Any]:
             ],
             "durable_external_reservation_configured": False,
             "authority_complete": False,
+            "external_ledger": approval_ledger.dormant_ledger_policy(),
         },
         "activation": {"enabled": False,
                        "requires_separate_reviewed_contract_change": True},
@@ -305,11 +311,31 @@ def load_policy(path: Path) -> tuple[dict[str, Any], bytes, str]:
         active["github_environment"]["configured"] = True
         active["external_ed25519_key"]["configured"] = True
         active["activation"]["enabled"] = True
+        replay = value.get("replay_protection")
+        observed_ledger = replay.get("external_ledger") if isinstance(replay, dict) else None
+        try:
+            approval_ledger.validate_ledger_policy(
+                observed_ledger, require_configured=True
+            )
+        except approval_ledger.LedgerError:
+            observed_ledger = None
+        if observed_ledger is not None:
+            active["replay_protection"]["durable_external_reservation_configured"] = True
+            active["replay_protection"]["authority_complete"] = True
+            active["replay_protection"]["external_ledger"] = observed_ledger
         observed_key_digest = value.get("external_ed25519_key", {}).get(
             "expected_public_key_spki_sha256"
         ) if isinstance(value.get("external_ed25519_key"), dict) else None
         if SHA256.fullmatch(str(observed_key_digest or "")):
             active["external_ed25519_key"]["expected_public_key_spki_sha256"] = observed_key_digest
+        if (
+            observed_ledger is not None
+            and observed_key_digest
+            == observed_ledger.get("receipt_public_key_spki_sha256")
+        ):
+            raise ApprovalError(
+                "approval and durable-ledger receipt keys must be distinct"
+            )
         observed_reviewers = value.get("github_environment", {}).get(
             "expected_human_user_reviewers"
         ) if isinstance(value.get("github_environment"), dict) else None
@@ -356,6 +382,7 @@ def _require_ready(policy: Mapping[str, Any]) -> None:
     replay = policy.get("replay_protection", {})
     if (
         not isinstance(replay, dict)
+        or replay.get("mode") != "durable_external_exactly_once"
         or replay.get("durable_external_reservation_required") is not True
         or replay.get("durable_reservation_subjects")
         != ["two_green_artifact_id", "approval_request_nonce"]
@@ -363,6 +390,21 @@ def _require_ready(policy: Mapping[str, Any]) -> None:
         or replay.get("authority_complete") is not True
     ):
         blockers.append("durable external replay reservation authority is incomplete")
+    else:
+        try:
+            ledger_policy = approval_ledger.validate_ledger_policy(
+                replay.get("external_ledger"), require_configured=True
+            )
+            if (
+                isinstance(key, dict)
+                and key.get("expected_public_key_spki_sha256")
+                == ledger_policy.get("receipt_public_key_spki_sha256")
+            ):
+                blockers.append(
+                    "approval and durable-ledger receipt keys are not distinct"
+                )
+        except approval_ledger.LedgerError:
+            blockers.append("durable external ledger authority is unavailable")
     if blockers:
         raise ApprovalError("; ".join(blockers))
 
@@ -664,6 +706,54 @@ def validate_replay_snapshot(
     }
 
 
+def validate_external_reservation_snapshot(
+    path: Path, policy: Mapping[str, Any], inputs: Mapping[str, Any],
+    policy_sha256: str, *, now: datetime,
+) -> dict[str, Any]:
+    data, snapshot_sha256 = stable_file(
+        path, "durable external reservation receipt", MAX_RECEIPT_BYTES
+    )
+    subject = approval_ledger.make_subject(
+        approval_request_nonce=inputs["approvalRequestNonce"],
+        two_green_artifact_id=inputs["twoGreenArtifactId"],
+        two_green_artifact_sha256=inputs["twoGreenArtifactSha256"],
+        two_green_receipt_sha256=inputs["twoGreenReceiptSha256"],
+        main_tree=inputs["mainTree"],
+        policy_sha256=policy_sha256,
+        version_name=inputs["versionName"],
+        version_code=inputs["versionCode"],
+    )
+    request = approval_ledger._request("reserve", subject)
+    response = approval_ledger.validate_response(
+        approval_ledger.strict_json_bytes(
+            data, "durable external reservation receipt", MAX_RECEIPT_BYTES
+        ),
+        request=request,
+        policy=policy["replay_protection"]["external_ledger"],
+        now=now,
+    )
+    receipt = response["receipt"]
+    if receipt["state"] != "reserved":
+        raise ApprovalError("durable external reservation is not open for approval")
+    return {
+        "mode": "durable_external_exactly_once",
+        "serviceIdentity": receipt["serviceIdentity"],
+        "reservationId": receipt["reservationId"],
+        "reservationState": "reserved",
+        "reservationRevision": receipt["revision"],
+        "reservationCreatedAtUtc": receipt["reservedAtUtc"],
+        "reservationLeaseExpiresAtUtc": receipt["leaseExpiresAtUtc"],
+        "reservationRequestId": receipt["requestId"],
+        "reservationSubjectSha256": receipt["subjectSha256"],
+        "reservationReceiptSha256": response["receiptSha256"],
+        "reservationSnapshotSha256": snapshot_sha256,
+        "uniquenessSubjects": approval_ledger.UNIQUENESS_SUBJECTS,
+        "durabilityClass": "external_durable",
+        "exactlyOnce": True,
+        "receiptPublicKeySpkiSha256": response["signature"]["publicKeySpkiSha256"],
+    }
+
+
 def extract_receipt(
     archive_path: Path, inputs: Mapping[str, Any]
 ) -> tuple[dict[str, Any], bytes, int]:
@@ -939,6 +1029,9 @@ def create_approval(
     replay_authority = validate_replay_snapshot(
         strict_json_bytes(replay_bytes, "approval artifact ledger snapshot"), inputs
     )
+    durable_replay_authority = validate_external_reservation_snapshot(
+        args.ledger_reservation_snapshot, policy, inputs, policy_sha256, now=now
+    )
     if args.execution_environment != ENVIRONMENT_NAME:
         raise ApprovalError("approval job did not run in the reviewed GitHub environment")
     execution = {
@@ -1006,9 +1099,13 @@ def create_approval(
             "checkedAtUtc": _iso(now),
         },
         "replayProtection": {
-            **replay_authority,
-            "ledgerApiSnapshotSha256": replay_sha256,
+            **durable_replay_authority,
             "approvalRequestNonce": inputs["approvalRequestNonce"],
+            "githubArtifactObservation": {
+                **replay_authority,
+                "ledgerApiSnapshotSha256": replay_sha256,
+                "authoritative": False,
+            },
         },
         "policyAuthority": {
             "contract": POLICY_CONTRACT,
@@ -1232,20 +1329,61 @@ def validate_approval(
     if (
         not isinstance(replay, dict)
         or set(replay) != {
-            "mode", "artifactName", "priorApprovalArtifactCount",
-            "ledgerApiSnapshotSha256", "approvalRequestNonce",
+            "mode", "serviceIdentity", "reservationId", "reservationState",
+            "reservationRevision", "reservationRequestId",
+            "reservationCreatedAtUtc", "reservationLeaseExpiresAtUtc",
+            "reservationSubjectSha256", "reservationReceiptSha256",
+            "reservationSnapshotSha256", "uniquenessSubjects",
+            "durabilityClass", "exactlyOnce", "receiptPublicKeySpkiSha256",
+            "approvalRequestNonce", "githubArtifactObservation",
         }
-        or replay.get("mode") != "artifact_observation_only_incomplete"
-        or replay.get("artifactName")
-        != approval_artifact_name({"twoGreenArtifactId": artifact["id"]})
-        or replay.get("priorApprovalArtifactCount") != 0
+        or replay.get("mode") != "durable_external_exactly_once"
+        or replay.get("reservationState") != "reserved"
+        or replay.get("uniquenessSubjects") != approval_ledger.UNIQUENESS_SUBJECTS
+        or replay.get("durabilityClass") != "external_durable"
+        or replay.get("exactlyOnce") is not True
         or replay.get("approvalRequestNonce") != value.get("approvalRequestNonce")
     ):
         raise ApprovalError("public approval replay protection differs")
-    _sha256(
-        replay.get("ledgerApiSnapshotSha256"),
-        "public approval artifact ledger snapshot",
+    if (
+        not isinstance(replay.get("serviceIdentity"), str)
+        or approval_ledger.SERVICE_ID.fullmatch(replay["serviceIdentity"]) is None
+        or not isinstance(replay.get("reservationId"), str)
+        or approval_ledger.RESERVATION_ID.fullmatch(replay["reservationId"]) is None
+    ):
+        raise ApprovalError("public approval durable ledger identity differs")
+    _positive(replay.get("reservationRevision"), "public approval ledger revision")
+    reservation_created = _timestamp(
+        replay.get("reservationCreatedAtUtc"), "public approval ledger reservation time"
     )
+    reservation_expires = _timestamp(
+        replay.get("reservationLeaseExpiresAtUtc"), "public approval ledger lease expiry"
+    )
+    if reservation_expires != reservation_created + timedelta(
+        seconds=effective_policy["replay_protection"]["external_ledger"]["reservation_lease_seconds"]
+    ):
+        raise ApprovalError("public approval durable ledger lease differs")
+    for field in (
+        "reservationRequestId", "reservationSubjectSha256",
+        "reservationReceiptSha256", "reservationSnapshotSha256",
+        "receiptPublicKeySpkiSha256",
+    ):
+        _sha256(replay.get(field), f"public approval {field}")
+    observation = replay.get("githubArtifactObservation")
+    if (
+        not isinstance(observation, dict)
+        or set(observation) != {
+            "mode", "artifactName", "priorApprovalArtifactCount",
+            "ledgerApiSnapshotSha256", "authoritative",
+        }
+        or observation.get("mode") != "artifact_observation_only_incomplete"
+        or observation.get("artifactName")
+        != approval_artifact_name({"twoGreenArtifactId": artifact["id"]})
+        or observation.get("priorApprovalArtifactCount") != 0
+        or observation.get("authoritative") is not False
+    ):
+        raise ApprovalError("public approval GitHub artifact observation differs")
+    _sha256(observation.get("ledgerApiSnapshotSha256"), "public approval artifact ledger snapshot")
     policy_authority = value.get("policyAuthority")
     if (
         not isinstance(policy_authority, dict)
@@ -1255,6 +1393,35 @@ def validate_approval(
         raise ApprovalError("public approval policy authority differs")
     _sha256(policy_authority.get("sha256"), "public approval policy digest")
     _positive(policy_authority.get("sizeBytes"), "public approval policy size")
+    expected_ledger_subject = approval_ledger.make_subject(
+        approval_request_nonce=value["approvalRequestNonce"],
+        two_green_artifact_id=artifact["id"],
+        two_green_artifact_sha256=artifact["archiveSha256"],
+        two_green_receipt_sha256=two_green["receiptSha256"],
+        main_tree=source_tree,
+        policy_sha256=policy_authority["sha256"],
+        version_name=release["versionName"],
+        version_code=release["versionCode"],
+    )
+    expected_reservation_request = approval_ledger._request(
+        "reserve", expected_ledger_subject
+    )
+    if (
+        replay.get("reservationSubjectSha256")
+        != expected_reservation_request["subjectSha256"]
+        or replay.get("reservationRequestId")
+        != expected_reservation_request["requestId"]
+    ):
+        raise ApprovalError("public approval durable reservation binding differs")
+    if policy is not None:
+        ledger_policy = policy["replay_protection"]["external_ledger"]
+        if (
+            replay.get("serviceIdentity")
+            != ledger_policy["expected_service_identity"]
+            or replay.get("receiptPublicKeySpkiSha256")
+            != ledger_policy["receipt_public_key_spki_sha256"]
+        ):
+            raise ApprovalError("public approval durable ledger policy identity differs")
     statement = {key: member for key, member in value.items() if key not in {"approvalSha256", "signature"}}
     if value.get("approvalSha256") != canonical_sha256(statement):
         raise ApprovalError("public approval digest is invalid")
@@ -1345,6 +1512,7 @@ def main(argv: list[str] | None = None) -> int:
     _input_arguments(approve)
     _execution_arguments(approve, environment=True)
     approve.add_argument("--environment-snapshot", type=Path, required=True)
+    approve.add_argument("--ledger-reservation-snapshot", type=Path, required=True)
     approve.add_argument("--run-snapshot", type=Path, required=True)
     approve.add_argument("--artifact-snapshot", type=Path, required=True)
     approve.add_argument("--artifact-archive", type=Path, required=True)

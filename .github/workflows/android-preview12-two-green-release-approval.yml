@@ -114,7 +114,9 @@ jobs:
         run: |
           set -euo pipefail
           evidence="$RUNNER_TEMP/preview12-approval-evidence"
+          output="$RUNNER_TEMP/preview12-approval-public"
           install -d -m 0700 "$evidence"
+          install -d -m 0700 "$output"
           gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
             "repos/ArchonMegalon/chummer-android/actions/runs/$TWO_GREEN_RUN_ID" >"$evidence/run.json"
           gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
@@ -135,7 +137,47 @@ jobs:
           gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
             "repos/ArchonMegalon/fleet/actions/artifacts?per_page=100&name=$approval_artifact_name" \
             >"$evidence/approval-artifact-ledger.json"
+      - id: reserve
+        name: Reserve exact approval subject in the durable external ledger
+        env:
+          ANDROID_PREVIEW12_APPROVAL_LEDGER_BEARER_TOKEN: ${{ secrets.ANDROID_PREVIEW12_APPROVAL_LEDGER_BEARER_TOKEN }}
+          APPROVAL_REQUEST_NONCE: ${{ inputs.approval_request_nonce }}
+          TWO_GREEN_ARTIFACT_ID: ${{ inputs.two_green_artifact_id }}
+          TWO_GREEN_ARTIFACT_SHA256: ${{ inputs.two_green_artifact_sha256 }}
+          TWO_GREEN_RECEIPT_SHA256: ${{ inputs.two_green_receipt_sha256 }}
+          MAIN_TREE: ${{ inputs.main_tree }}
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/preview12-approval-evidence"
+          output="$RUNNER_TEMP/preview12-approval-public"
+          policy="$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json"
+          python3 scripts/android_preview12_approval_ledger.py \
+            --policy "$policy" reserve \
+            --approval-request-nonce "$APPROVAL_REQUEST_NONCE" \
+            --two-green-artifact-id "$TWO_GREEN_ARTIFACT_ID" \
+            --two-green-artifact-sha256 "$TWO_GREEN_ARTIFACT_SHA256" \
+            --two-green-receipt-sha256 "$TWO_GREEN_RECEIPT_SHA256" \
+            --main-tree "$MAIN_TREE" \
+            --version-name "$VERSION_NAME" \
+            --version-code "$VERSION_CODE" \
+            --receipt-output "$evidence/ledger-reservation.json" \
+            --committed-approval-output "$output/recovered-public-approval.json"
+          if test -f "$output/recovered-public-approval.json"; then
+            echo 'recovered=true' >>"$GITHUB_OUTPUT"
+          else
+            echo 'recovered=false' >>"$GITHUB_OUTPUT"
+          fi
+      - name: Restore the exact already-committed public approval
+        if: ${{ steps.reserve.outputs.recovered == 'true' }}
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/preview12-approval-public"
+          install -m 0600 "$output/recovered-public-approval.json" \
+            "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json"
       - name: Emit only the public, non-authorizing approval JSON
+        if: ${{ steps.reserve.outputs.recovered != 'true' }}
         env:
           ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64: ${{ secrets.ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64 }}
           APPROVAL_REQUEST_NONCE: ${{ inputs.approval_request_nonce }}
@@ -159,10 +201,9 @@ jobs:
           set -euo pipefail
           evidence="$RUNNER_TEMP/preview12-approval-evidence"
           output="$RUNNER_TEMP/preview12-approval-public"
-          install -d -m 0700 "$output"
+          policy="$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json"
           python3 scripts/android_preview12_two_green_release_approval.py \
-            --policy "$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json" \
-            approve \
+            --policy "$policy" approve \
             --approval-request-nonce "$APPROVAL_REQUEST_NONCE" \
             --two-green-run-id "$TWO_GREEN_RUN_ID" \
             --two-green-run-attempt "$TWO_GREEN_RUN_ATTEMPT" \
@@ -188,6 +229,7 @@ jobs:
             --execution-run-attempt "$GITHUB_RUN_ATTEMPT" \
             --execution-environment android-preview12-release-approval \
             --environment-snapshot "$evidence/environment.json" \
+            --ledger-reservation-snapshot "$evidence/ledger-reservation.json" \
             --run-snapshot "$evidence/run.json" \
             --artifact-snapshot "$evidence/artifact.json" \
             --artifact-archive "$evidence/artifact.zip" \
@@ -197,17 +239,85 @@ jobs:
             --fleet-main-commit-snapshot "$evidence/fleet-main-commit.json" \
             --approval-artifact-ledger-snapshot "$evidence/approval-artifact-ledger.json" \
             --output "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json"
-          env -u ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64 \
-            python3 scripts/android_preview12_two_green_release_approval.py \
-              --policy "$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json" \
-              verify --approval "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json"
+      - id: commit
+        name: Commit the exact public approval to the durable external ledger
+        env:
+          ANDROID_PREVIEW12_APPROVAL_LEDGER_BEARER_TOKEN: ${{ secrets.ANDROID_PREVIEW12_APPROVAL_LEDGER_BEARER_TOKEN }}
+          APPROVAL_REQUEST_NONCE: ${{ inputs.approval_request_nonce }}
+          TWO_GREEN_ARTIFACT_ID: ${{ inputs.two_green_artifact_id }}
+          TWO_GREEN_ARTIFACT_SHA256: ${{ inputs.two_green_artifact_sha256 }}
+          TWO_GREEN_RECEIPT_SHA256: ${{ inputs.two_green_receipt_sha256 }}
+          MAIN_TREE: ${{ inputs.main_tree }}
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/preview12-approval-evidence"
+          output="$RUNNER_TEMP/preview12-approval-public"
+          policy="$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json"
+          python3 scripts/android_preview12_approval_ledger.py \
+            --policy "$policy" commit \
+            --approval-request-nonce "$APPROVAL_REQUEST_NONCE" \
+            --two-green-artifact-id "$TWO_GREEN_ARTIFACT_ID" \
+            --two-green-artifact-sha256 "$TWO_GREEN_ARTIFACT_SHA256" \
+            --two-green-receipt-sha256 "$TWO_GREEN_RECEIPT_SHA256" \
+            --main-tree "$MAIN_TREE" \
+            --version-name "$VERSION_NAME" \
+            --version-code "$VERSION_CODE" \
+            --reservation-snapshot "$evidence/ledger-reservation.json" \
+            --approval "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json" \
+            --receipt-output "$evidence/ledger-commit.json" \
+            --committed-approval-output "$output/ledger-committed-public-approval.json"
+      - name: Abort an open reservation after an interrupted approval transaction
+        if: ${{ always() && steps.reserve.outcome == 'success' && steps.commit.outcome != 'success' }}
+        env:
+          ANDROID_PREVIEW12_APPROVAL_LEDGER_BEARER_TOKEN: ${{ secrets.ANDROID_PREVIEW12_APPROVAL_LEDGER_BEARER_TOKEN }}
+          APPROVAL_REQUEST_NONCE: ${{ inputs.approval_request_nonce }}
+          TWO_GREEN_ARTIFACT_ID: ${{ inputs.two_green_artifact_id }}
+          TWO_GREEN_ARTIFACT_SHA256: ${{ inputs.two_green_artifact_sha256 }}
+          TWO_GREEN_RECEIPT_SHA256: ${{ inputs.two_green_receipt_sha256 }}
+          MAIN_TREE: ${{ inputs.main_tree }}
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/preview12-approval-evidence"
+          policy="$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json"
+          python3 scripts/android_preview12_approval_ledger.py \
+            --policy "$policy" cleanup \
+            --approval-request-nonce "$APPROVAL_REQUEST_NONCE" \
+            --two-green-artifact-id "$TWO_GREEN_ARTIFACT_ID" \
+            --two-green-artifact-sha256 "$TWO_GREEN_ARTIFACT_SHA256" \
+            --two-green-receipt-sha256 "$TWO_GREEN_RECEIPT_SHA256" \
+            --main-tree "$MAIN_TREE" \
+            --version-name "$VERSION_NAME" \
+            --version-code "$VERSION_CODE" \
+            --reservation-snapshot "$evidence/ledger-reservation.json" \
+            --reason-code workflow_interrupted \
+            --receipt-output "$evidence/ledger-cleanup.json"
+      - name: Verify only the public approval and committed ledger bytes
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/preview12-approval-evidence"
+          output="$RUNNER_TEMP/preview12-approval-public"
+          policy="$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json"
+          cmp --silent \
+            "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json" \
+            "$output/ledger-committed-public-approval.json"
+          install -m 0600 "$evidence/ledger-commit.json" \
+            "$output/ANDROID_PREVIEW12_APPROVAL_LEDGER_COMMIT.public.json"
+          python3 scripts/android_preview12_two_green_release_approval.py \
+            --policy "$policy" \
+            verify --approval "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json"
           jq -e '.signingAuthorized == false and .publicationAuthorized == false and .googlePlayUploadAuthorized == false' \
             "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json" >/dev/null
-      - name: Upload only the public approval JSON
+      - name: Upload only the public approval and signed commit receipt JSON
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: android-preview12-two-green-release-approval-${{ inputs.two_green_artifact_id }}
-          path: ${{ runner.temp }}/preview12-approval-public/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json
+          path: |
+            ${{ runner.temp }}/preview12-approval-public/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json
+            ${{ runner.temp }}/preview12-approval-public/ANDROID_PREVIEW12_APPROVAL_LEDGER_COMMIT.public.json
           if-no-files-found: error
           retention-days: 30
           compression-level: 0

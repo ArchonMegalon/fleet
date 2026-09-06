@@ -10,6 +10,8 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
+import textwrap
 import zipfile
 
 import pytest
@@ -27,6 +29,8 @@ spec.loader.exec_module(approval)
 # RFC 8032 test-vector seed wrapped in the standard Ed25519 PKCS#8 DER envelope.
 TEST_SEED = bytes.fromhex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
 TEST_PRIVATE_DER = bytes.fromhex("302e020100300506032b657004220420") + TEST_SEED
+LEDGER_TEST_SEED = bytes.fromhex("4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb")
+LEDGER_TEST_PRIVATE_DER = bytes.fromhex("302e020100300506032b657004220420") + LEDGER_TEST_SEED
 NOW = datetime(2026, 9, 6, 14, 10, tzinfo=timezone.utc)
 REVIEWERS = [{"id": 17, "login": "reviewer"}]
 
@@ -37,7 +41,7 @@ def write_json(path: Path, value: object) -> bytes:
     return data
 
 
-def active_policy(tmp_path: Path) -> tuple[dict, Path, str]:
+def active_policy(tmp_path: Path, *, durable: bool = False) -> tuple[dict, Path, str]:
     value = json.loads(POLICY.read_text())
     value["state"] = "ready"
     value["github_environment"]["configured"] = True
@@ -56,22 +60,95 @@ def active_policy(tmp_path: Path) -> tuple[dict, Path, str]:
         os.close(key_fd)
     public_digest = hashlib.sha256(public).hexdigest()
     value["external_ed25519_key"]["expected_public_key_spki_sha256"] = public_digest
+    if durable:
+        key_fd = os.memfd_create("test-ledger-ed25519-public")
+        try:
+            os.write(key_fd, LEDGER_TEST_PRIVATE_DER)
+            os.lseek(key_fd, 0, os.SEEK_SET)
+            ledger_public = approval._openssl(
+                ["pkey", "-inform", "DER", "-in", f"/proc/self/fd/{key_fd}", "-pubout", "-outform", "DER"],
+                pass_fds=(key_fd,),
+            )
+        finally:
+            os.close(key_fd)
+        ledger_public_digest = hashlib.sha256(ledger_public).hexdigest()
+        ledger = value["replay_protection"]["external_ledger"]
+        ledger.update({
+            "configured": True,
+            "base_url": "https://approval-ledger.example.test",
+            "allowed_hosts": ["approval-ledger.example.test"],
+            "expected_service_identity": "chummer.preview12.approval-ledger",
+            "receipt_public_key_spki_der_base64": base64.b64encode(ledger_public).decode(),
+            "receipt_public_key_spki_sha256": ledger_public_digest,
+        })
+        value["replay_protection"]["durable_external_reservation_configured"] = True
+        value["replay_protection"]["authority_complete"] = True
     path = tmp_path / "policy.json"
     write_json(path, value)
     return value, path, public_digest
 
 
-def enable_test_durable_reservation(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Exercise downstream approval logic with only the future replay gate simulated."""
-    original = approval._require_ready
-
-    def require_ready_with_test_reservation(policy):
-        value = json.loads(json.dumps(policy))
-        value["replay_protection"]["durable_external_reservation_configured"] = True
-        value["replay_protection"]["authority_complete"] = True
-        original(value)
-
-    monkeypatch.setattr(approval, "_require_ready", require_ready_with_test_reservation)
+def ledger_reservation(policy: dict, policy_path: Path, values: dict[str, object]) -> dict:
+    ledger = approval.approval_ledger
+    policy_sha256 = hashlib.sha256(policy_path.read_bytes()).hexdigest()
+    subject = ledger.make_subject(
+        approval_request_nonce=str(values["approval_request_nonce"]),
+        two_green_artifact_id=int(str(values["two_green_artifact_id"])),
+        two_green_artifact_sha256=str(values["two_green_artifact_sha256"]),
+        two_green_receipt_sha256=str(values["two_green_receipt_sha256"]),
+        main_tree=str(values["main_tree"]),
+        policy_sha256=policy_sha256,
+        version_name=str(values["version_name"]),
+        version_code=int(str(values["version_code"])),
+    )
+    request = ledger._request("reserve", subject)
+    statement = {
+        "contractName": ledger.RECEIPT_CONTRACT,
+        "contractVersion": 1,
+        "serviceIdentity": policy["replay_protection"]["external_ledger"]["expected_service_identity"],
+        "requestId": request["requestId"],
+        "operation": "reserve",
+        "subject": subject,
+        "subjectSha256": request["subjectSha256"],
+        "reservationId": "rsv_abcdefghijklmnop",
+        "state": "reserved",
+        "revision": 1,
+        "reservedAtUtc": "2026-09-06T14:01:00Z",
+        "updatedAtUtc": "2026-09-06T14:01:00Z",
+        "leaseExpiresAtUtc": "2026-09-06T14:16:00Z",
+        "priorReservation": None,
+        "uniquenessSubjects": ledger.UNIQUENESS_SUBJECTS,
+        "durabilityClass": "external_durable",
+        "exactlyOnce": True,
+        "approval": None,
+        "abort": None,
+    }
+    key_fd = os.memfd_create("test-ledger-ed25519")
+    message_fd = os.memfd_create("test-ledger-message")
+    try:
+        os.write(key_fd, LEDGER_TEST_PRIVATE_DER)
+        os.lseek(key_fd, 0, os.SEEK_SET)
+        os.write(message_fd, ledger.canonical_bytes(statement))
+        os.lseek(message_fd, 0, os.SEEK_SET)
+        signature = approval._openssl(
+            ["pkeyutl", "-sign", "-rawin", "-inkey", f"/proc/self/fd/{key_fd}",
+             "-keyform", "DER", "-in", f"/proc/self/fd/{message_fd}"],
+            pass_fds=(key_fd, message_fd),
+        )
+    finally:
+        os.close(key_fd)
+        os.close(message_fd)
+    return {
+        "contractName": ledger.RESPONSE_CONTRACT,
+        "contractVersion": 1,
+        "receipt": statement,
+        "receiptSha256": ledger.canonical_sha256(statement),
+        "signature": {
+            "algorithm": "Ed25519",
+            "publicKeySpkiSha256": policy["replay_protection"]["external_ledger"]["receipt_public_key_spki_sha256"],
+            "signatureBase64": base64.b64encode(signature).decode(),
+        },
+    }
 
 
 def inputs() -> dict[str, object]:
@@ -169,9 +246,9 @@ def archive(path: Path, data: bytes) -> bytes:
 
 
 def full_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None):
-    if monkeypatch is not None:
-        enable_test_durable_reservation(monkeypatch)
-    policy_value, policy_path, public_digest = active_policy(tmp_path)
+    policy_value, policy_path, public_digest = active_policy(
+        tmp_path, durable=monkeypatch is not None
+    )
     receipt_value = receipt()
     receipt_bytes = write_json(tmp_path / "receipt.json", receipt_value)
     archive_bytes = archive(tmp_path / "artifact.zip", receipt_bytes)
@@ -251,6 +328,7 @@ def full_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None):
         **values,
         **execution(),
         environment_snapshot=(tmp_path / "environment.json").resolve(),
+        ledger_reservation_snapshot=(tmp_path / "ledger-reservation.json").resolve(),
         run_snapshot=(tmp_path / "run.json").resolve(),
         artifact_snapshot=(tmp_path / "artifact.json").resolve(),
         artifact_archive=(tmp_path / "artifact.zip").resolve(),
@@ -261,6 +339,11 @@ def full_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None):
         approval_artifact_ledger_snapshot=(tmp_path / "approval-artifact-ledger.json").resolve(),
         output=(tmp_path / approval.OUTPUT_NAME).resolve(),
     )
+    if monkeypatch is not None:
+        write_json(
+            args.ledger_reservation_snapshot,
+            ledger_reservation(policy_value, policy_path, values),
+        )
     environment = {approval.KEY_ENV_NAME: base64.b64encode(TEST_PRIVATE_DER).decode()}
     return policy_value, public_digest, receipt_value, args, environment
 
@@ -280,6 +363,10 @@ def test_checked_in_policy_is_exact_dormant_and_contains_no_key_material():
     ]
     assert value["replay_protection"]["durable_external_reservation_configured"] is False
     assert value["replay_protection"]["authority_complete"] is False
+    assert value["replay_protection"]["mode"] == "durable_external_exactly_once"
+    assert value["replay_protection"]["external_ledger"] == approval.approval_ledger.dormant_ledger_policy()
+    assert value["replay_protection"]["external_ledger"]["base_url"] is None
+    assert value["replay_protection"]["external_ledger"]["allowed_hosts"] == []
     assert b"PRIVATE KEY" not in data
     assert base64.b64encode(TEST_PRIVATE_DER) not in data
 
@@ -306,6 +393,31 @@ def test_environment_key_activation_still_fails_without_durable_replay(tmp_path:
         approval.validate_dispatch(policy, args)
 
 
+def test_ready_policy_rejects_shared_approval_and_ledger_signing_key(tmp_path: Path):
+    policy, policy_path, approval_digest = active_policy(tmp_path, durable=True)
+    key_fd = os.memfd_create("test-shared-ed25519-public")
+    try:
+        os.write(key_fd, TEST_PRIVATE_DER)
+        os.lseek(key_fd, 0, os.SEEK_SET)
+        approval_public = approval._openssl(
+            ["pkey", "-inform", "DER", "-in", f"/proc/self/fd/{key_fd}",
+             "-pubout", "-outform", "DER"],
+            pass_fds=(key_fd,),
+        )
+    finally:
+        os.close(key_fd)
+    ledger_policy = policy["replay_protection"]["external_ledger"]
+    ledger_policy["receipt_public_key_spki_der_base64"] = base64.b64encode(
+        approval_public
+    ).decode()
+    ledger_policy["receipt_public_key_spki_sha256"] = approval_digest
+    write_json(policy_path, policy)
+    with pytest.raises(approval.ApprovalError, match="must be distinct"):
+        approval.load_policy(policy_path.resolve())
+    with pytest.raises(approval.ApprovalError, match="not distinct"):
+        approval._require_ready(policy)
+
+
 @pytest.mark.parametrize("change", [
     {"execution_ref": "refs/heads/feature"},
     {"execution_ref_protected": "false"},
@@ -317,8 +429,7 @@ def test_environment_key_activation_still_fails_without_durable_replay(tmp_path:
 def test_active_preflight_rejects_context_or_release_substitution(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change
 ):
-    enable_test_durable_reservation(monkeypatch)
-    policy, policy_path, _ = active_policy(tmp_path)
+    policy, policy_path, _ = active_policy(tmp_path, durable=True)
     values = {**inputs(), **execution(), **change}
     values.pop("execution_run_id", None)
     values.pop("execution_run_attempt", None)
@@ -332,8 +443,7 @@ def test_active_preflight_rejects_context_or_release_substitution(
 def test_future_ready_preflight_accepts_exact_context(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    enable_test_durable_reservation(monkeypatch)
-    policy, _, _ = active_policy(tmp_path)
+    policy, _, _ = active_policy(tmp_path, durable=True)
     values = {**inputs(), **execution()}
     values.pop("execution_run_id")
     values.pop("execution_run_attempt")
@@ -544,12 +654,29 @@ def test_public_approval_tamper_is_rejected(
         approval.validate_approval(result, now=NOW)
 
 
+def test_missing_or_tampered_durable_reservation_blocks_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _, _, _, args, environment = full_case(tmp_path, monkeypatch)
+    args.ledger_reservation_snapshot.unlink()
+    with pytest.raises((approval.ApprovalError, FileNotFoundError)):
+        approval.create_approval(args, environment, now=NOW)
+
+    _, _, _, args, environment = full_case(tmp_path, monkeypatch)
+    reservation = json.loads(args.ledger_reservation_snapshot.read_text())
+    reservation["receipt"]["subject"]["mainTree"] = "e" * 40
+    write_json(args.ledger_reservation_snapshot, reservation)
+    with pytest.raises((approval.ApprovalError, approval.approval_ledger.LedgerError)):
+        approval.create_approval(args, environment, now=NOW)
+
+
 def test_workflow_is_dormant_separate_and_uploads_only_public_json():
     text = WORKFLOW.read_text()
     assert "dormant-contract" in text
     assert "environment: ${{ needs.dormant-contract.outputs.environment }}" in text
     assert "github.ref_protected" in text
     assert approval.KEY_ENV_NAME in text
+    assert approval.approval_ledger.CREDENTIAL_ENV_NAME in text
     assert approval.OUTPUT_NAME in text
     assert "ANDROID_PREVIEW12_UPLOAD_KEYSTORE" not in text
     assert "ANDROID_PREVIEW12_KEYSTORE_PASSWORD" not in text
@@ -587,6 +714,38 @@ def test_workflow_is_dormant_separate_and_uploads_only_public_json():
     assert "approval-artifact-ledger.json" in text
     assert "fleet-main-branch.json" in text
     assert "fleet-main-commit.json" in text
+    assert "ledger-reservation.json" in text
+    assert "ledger-commit.json" in text
+    assert "ledger-cleanup.json" in text
+    assert "recovered-public-approval.json" in text
+    assert "steps.reserve.outcome == 'success'" in text
+    assert "steps.commit.outcome != 'success'" in text
+    assert "--reason-code workflow_interrupted" in text
+    assert "--reservation-snapshot \"$evidence/ledger-reservation.json\"" in text
+    step_blocks = re.split(r"^      - (?:id:|name:|uses:)", text, flags=re.MULTILINE)[1:]
+    secret_name = "ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64"
+    ledger_name = "ANDROID_PREVIEW12_APPROVAL_LEDGER_BEARER_TOKEN"
+    assert all(not (secret_name in block and ledger_name in block) for block in step_blocks)
+    signer_block = next(
+        block for block in step_blocks
+        if "Emit only the public, non-authorizing approval JSON" in block
+    )
+    assert secret_name in signer_block
+    assert ledger_name not in signer_block
+    for name in (
+        "Reserve exact approval subject in the durable external ledger",
+        "Commit the exact public approval to the durable external ledger",
+        "Abort an open reservation after an interrupted approval transaction",
+    ):
+        block = next(item for item in step_blocks if name in item)
+        assert ledger_name in block
+        assert secret_name not in block
+    reserve_at = text.index("--policy \"$policy\" reserve")
+    approve_at = text.index("--policy \"$policy\" approve")
+    commit_at = text.index("--policy \"$policy\" commit")
+    upload_at = text.index("- name: Upload only the public approval and signed commit receipt JSON")
+    assert reserve_at < approve_at < commit_at < upload_at
+    assert 'cmp --silent' in text
     assert (
         "group: preview12-two-green-release-approval-"
         "${{ inputs.two_green_artifact_id }}"
@@ -595,6 +754,54 @@ def test_workflow_is_dormant_separate_and_uploads_only_public_json():
         "name: android-preview12-two-green-release-approval-"
         "${{ inputs.two_green_artifact_id }}"
     ) in text
-    upload_block = text.split("- name: Upload only the public approval JSON", 1)[1]
+    upload_block = text.split("- name: Upload only the public approval and signed commit receipt JSON", 1)[1]
     assert approval.OUTPUT_NAME in upload_block
+    assert "ANDROID_PREVIEW12_APPROVAL_LEDGER_COMMIT.public.json" in upload_block
     assert "preview12-approval-evidence" not in upload_block
+
+
+def test_cleanup_workflow_shell_invokes_status_aware_cli_with_only_ledger_secret(tmp_path: Path):
+    text = WORKFLOW.read_text()
+    marker = "      - name: Abort an open reservation after an interrupted approval transaction"
+    step = text.split(marker, 1)[1].split("      - name:", 1)[0]
+    run = step.split("        run: |\n", 1)[1]
+    shell = textwrap.dedent(run)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_python = fake_bin / "python3"
+    fake_python.write_text(
+        "#!/bin/sh\n"
+        "printf '%s\\n' \"$@\" >\"$CAPTURE_ARGS\"\n"
+        "env >\"$CAPTURE_ENV\"\n"
+    )
+    fake_python.chmod(0o700)
+    runner_temp = tmp_path / "runner"
+    (runner_temp / "preview12-approval-evidence").mkdir(parents=True)
+    environment = {
+        "PATH": f"{fake_bin}:/usr/bin:/bin",
+        "RUNNER_TEMP": str(runner_temp),
+        "GITHUB_WORKSPACE": str(ROOT),
+        "CAPTURE_ARGS": str(tmp_path / "args"),
+        "CAPTURE_ENV": str(tmp_path / "env"),
+        approval.approval_ledger.CREDENTIAL_ENV_NAME: "ledger-only-test-secret",
+        "APPROVAL_REQUEST_NONCE": "1" * 64,
+        "TWO_GREEN_ARTIFACT_ID": "9989938590",
+        "TWO_GREEN_ARTIFACT_SHA256": "2" * 64,
+        "TWO_GREEN_RECEIPT_SHA256": "3" * 64,
+        "MAIN_TREE": "4" * 40,
+        "VERSION_NAME": approval.VERSION_NAME,
+        "VERSION_CODE": str(approval.VERSION_CODE),
+    }
+    completed = subprocess.run(
+        ["/bin/bash", "-c", shell], cwd=ROOT, env=environment,
+        text=True, capture_output=True, check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    arguments = (tmp_path / "args").read_text().splitlines()
+    assert "cleanup" in arguments
+    assert "--reason-code" in arguments
+    assert "workflow_interrupted" in arguments
+    assert "--reservation-snapshot" in arguments
+    captured_environment = (tmp_path / "env").read_text()
+    assert f"{approval.approval_ledger.CREDENTIAL_ENV_NAME}=ledger-only-test-secret" in captured_environment
+    assert approval.KEY_ENV_NAME not in captured_environment
