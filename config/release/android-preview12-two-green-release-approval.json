@@ -25,6 +25,18 @@
     "administrators_can_bypass_allowed": false,
     "protected_branches_only": true
   },
+  "cross_repo_actions_read": {
+    "configured": false,
+    "source": "github_environment_secret_only",
+    "secret_name": "ANDROID_PREVIEW12_CROSS_REPO_ACTIONS_READ_TOKEN",
+    "credential_type": "fine_grained_pat_or_github_app_installation_token",
+    "target_repository": "ArchonMegalon/chummer-android",
+    "target_repository_id": 1331626697,
+    "required_permissions": ["actions:read", "contents:read", "metadata:read"],
+    "github_token_fallback_allowed": false,
+    "passed_to_approval_signer": false,
+    "persisted": false
+  },
   "external_ed25519_key": {
     "configured": false,
     "source": "github_environment_secret_only",

@@ -104,19 +104,29 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
-      - name: Fetch exact public authority snapshots and Two-Green archive
+      - name: Initialize private evidence directories
+        run: |
+          set -euo pipefail
+          install -d -m 0700 "$RUNNER_TEMP/preview12-approval-evidence"
+          install -d -m 0700 "$RUNNER_TEMP/preview12-approval-public"
+      - name: Fetch exact Android authority and Two-Green archive
         env:
-          GH_TOKEN: ${{ github.token }}
+          ANDROID_PREVIEW12_CROSS_REPO_ACTIONS_READ_TOKEN: ${{ secrets.ANDROID_PREVIEW12_CROSS_REPO_ACTIONS_READ_TOKEN }}
           TWO_GREEN_RUN_ID: ${{ inputs.two_green_run_id }}
           TWO_GREEN_ARTIFACT_ID: ${{ inputs.two_green_artifact_id }}
           MAIN_COMMIT: ${{ inputs.main_commit }}
-          FLEET_EXECUTION_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           evidence="$RUNNER_TEMP/preview12-approval-evidence"
-          output="$RUNNER_TEMP/preview12-approval-public"
-          install -d -m 0700 "$evidence"
-          install -d -m 0700 "$output"
+          policy="$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json"
+          python3 scripts/android_preview12_two_green_release_approval.py \
+            --policy "$policy" cross-repo-credential-preflight
+          export GH_TOKEN="$ANDROID_PREVIEW12_CROSS_REPO_ACTIONS_READ_TOKEN"
+          unset ANDROID_PREVIEW12_CROSS_REPO_ACTIONS_READ_TOKEN
+          gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'repos/ArchonMegalon/chummer-android' >"$evidence/android-repository.json"
+          jq -e '.id == 1331626697 and .full_name == "ArchonMegalon/chummer-android"' \
+            "$evidence/android-repository.json" >/dev/null
           gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
             "repos/ArchonMegalon/chummer-android/actions/runs/$TWO_GREEN_RUN_ID" >"$evidence/run.json"
           gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
@@ -124,11 +134,20 @@ jobs:
           gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
             "repos/ArchonMegalon/chummer-android/actions/artifacts/$TWO_GREEN_ARTIFACT_ID/zip" >"$evidence/artifact.zip"
           gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
-            'repos/ArchonMegalon/fleet/environments/android-preview12-release-approval' >"$evidence/environment.json"
-          gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
             'repos/ArchonMegalon/chummer-android/branches/main' >"$evidence/android-main-branch.json"
           gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
             "repos/ArchonMegalon/chummer-android/git/commits/$MAIN_COMMIT" >"$evidence/android-main-commit.json"
+          unset GH_TOKEN
+      - name: Fetch exact Fleet authority snapshots
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TWO_GREEN_ARTIFACT_ID: ${{ inputs.two_green_artifact_id }}
+          FLEET_EXECUTION_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/preview12-approval-evidence"
+          gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'repos/ArchonMegalon/fleet/environments/android-preview12-release-approval' >"$evidence/environment.json"
           gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
             'repos/ArchonMegalon/fleet/branches/main' >"$evidence/fleet-main-branch.json"
           gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \

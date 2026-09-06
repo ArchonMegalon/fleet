@@ -45,6 +45,7 @@ OUTPUT_NAME = "ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json"
 AUDIT_OUTPUT_NAME = "FLEET_ANDROID_PREVIEW12_APPROVAL_AUDIT.generated.json"
 ENVIRONMENT_NAME = "android-preview12-release-approval"
 KEY_ENV_NAME = "ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64"
+CROSS_REPO_TOKEN_ENV_NAME = "ANDROID_PREVIEW12_CROSS_REPO_ACTIONS_READ_TOKEN"
 PACKAGE_ID = "com.myexternalbrain.chummer"
 VERSION_NAME = "0.1.0-preview.12"
 VERSION_CODE = 12
@@ -288,6 +289,18 @@ def expected_policy() -> dict[str, Any]:
             "administrators_can_bypass_allowed": False,
             "protected_branches_only": True,
         },
+        "cross_repo_actions_read": {
+            "configured": False,
+            "source": "github_environment_secret_only",
+            "secret_name": CROSS_REPO_TOKEN_ENV_NAME,
+            "credential_type": "fine_grained_pat_or_github_app_installation_token",
+            "target_repository": ANDROID_REPOSITORY,
+            "target_repository_id": 1331626697,
+            "required_permissions": ["actions:read", "contents:read", "metadata:read"],
+            "github_token_fallback_allowed": False,
+            "passed_to_approval_signer": False,
+            "persisted": False,
+        },
         "external_ed25519_key": {
             "configured": False,
             "source": "github_environment_secret_only",
@@ -365,6 +378,7 @@ def load_policy(path: Path) -> tuple[dict[str, Any], bytes, str]:
         active = json.loads(json.dumps(expected))
         active["state"] = "ready"
         active["github_environment"]["configured"] = True
+        active["cross_repo_actions_read"]["configured"] = True
         active["external_ed25519_key"]["configured"] = True
         active["activation"]["enabled"] = True
         replay = value.get("replay_protection")
@@ -413,12 +427,27 @@ def _require_ready(policy: Mapping[str, Any]) -> None:
     environment = policy.get("github_environment", {})
     key = policy.get("external_ed25519_key", {})
     activation = policy.get("activation", {})
+    cross_repo = policy.get("cross_repo_actions_read", {})
     if not isinstance(environment, dict) or environment.get("configured") is not True:
         blockers.append("reviewed GitHub environment is not configured")
     if not isinstance(key, dict) or key.get("configured") is not True:
         blockers.append("external Ed25519 key is not configured")
     if not isinstance(activation, dict) or activation.get("enabled") is not True:
         blockers.append("approval activation is disabled")
+    if (
+        not isinstance(cross_repo, dict)
+        or cross_repo.get("configured") is not True
+        or cross_repo.get("source") != "github_environment_secret_only"
+        or cross_repo.get("secret_name") != CROSS_REPO_TOKEN_ENV_NAME
+        or cross_repo.get("target_repository") != ANDROID_REPOSITORY
+        or cross_repo.get("target_repository_id") != 1331626697
+        or cross_repo.get("required_permissions")
+        != ["actions:read", "contents:read", "metadata:read"]
+        or cross_repo.get("github_token_fallback_allowed") is not False
+        or cross_repo.get("passed_to_approval_signer") is not False
+        or cross_repo.get("persisted") is not False
+    ):
+        blockers.append("cross-repository Android Actions read authority is unavailable")
     if not isinstance(key, dict) or SHA256.fullmatch(
         str(key.get("expected_public_key_spki_sha256") or "")
     ) is None:
@@ -1040,6 +1069,51 @@ def verify_ed25519(public_der: bytes, message: bytes, signature: bytes) -> None:
         os.close(signature_fd)
 
 
+def validate_cross_repo_actions_read_credential(
+    policy: Mapping[str, Any], environment: Mapping[str, str]
+) -> dict[str, Any]:
+    """Validate presence/shape without returning or logging credential material."""
+    cross_repo = policy.get("cross_repo_actions_read")
+    if (
+        not isinstance(cross_repo, dict)
+        or cross_repo.get("configured") is not True
+        or cross_repo.get("secret_name") != CROSS_REPO_TOKEN_ENV_NAME
+        or cross_repo.get("target_repository") != ANDROID_REPOSITORY
+        or cross_repo.get("target_repository_id") != 1331626697
+        or cross_repo.get("required_permissions")
+        != ["actions:read", "contents:read", "metadata:read"]
+        or cross_repo.get("github_token_fallback_allowed") is not False
+        or cross_repo.get("passed_to_approval_signer") is not False
+        or cross_repo.get("persisted") is not False
+    ):
+        raise ApprovalError("cross-repository Actions read policy is not ready")
+    token = environment.get(CROSS_REPO_TOKEN_ENV_NAME)
+    if not isinstance(token, str) or not token:
+        raise ApprovalError("protected cross-repository Actions read credential is missing")
+    try:
+        token.encode("ascii", errors="strict")
+    except UnicodeEncodeError:
+        raise ApprovalError(
+            "protected cross-repository Actions read credential is malformed"
+        ) from None
+    if (
+        not 20 <= len(token) <= 512
+        or token != token.strip()
+        or any(character.isspace() or ord(character) < 0x21 for character in token)
+    ):
+        raise ApprovalError(
+            "protected cross-repository Actions read credential is malformed"
+        )
+    return {
+        "ok": True,
+        "targetRepository": ANDROID_REPOSITORY,
+        "targetRepositoryId": 1331626697,
+        "requiredPermissions": ["actions:read", "contents:read", "metadata:read"],
+        "githubTokenFallbackUsed": False,
+        "credentialRecorded": False,
+    }
+
+
 def _create_fleet_audit_receipt(
     args: argparse.Namespace, environment: Mapping[str, str], *,
     now: datetime | None = None
@@ -1482,7 +1556,14 @@ def main(argv: list[str] | None = None) -> int:
     verify.add_argument("--approval", type=Path, required=True)
     verify.add_argument("--audit-receipt", type=Path)
     verify.add_argument("--expected-challenge-nonce")
+    subparsers.add_parser("cross-repo-credential-preflight")
     args = parser.parse_args(argv)
+    if args.command == "cross-repo-credential-preflight":
+        policy, _, _ = load_policy(args.policy)
+        _require_ready(policy)
+        result = validate_cross_repo_actions_read_credential(policy, os.environ)
+        print(json.dumps(result, sort_keys=True))
+        return 0
     if args.command == "verify":
         policy, _, _ = load_policy(args.policy)
         data, _ = stable_file(args.approval, "public approval", MAX_RECEIPT_BYTES)

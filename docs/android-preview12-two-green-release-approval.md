@@ -79,6 +79,19 @@ unrelated credential from entering the same parent-shell environment. The
 ledger receipt-signing key is independently held by the external service and
 must be distinct from the approval-signing key.
 
+Cross-repository Android evidence fetches use a third, separately named
+protected-environment credential:
+`ANDROID_PREVIEW12_CROSS_REPO_ACTIONS_READ_TOKEN`. Fleet's default
+`GITHUB_TOKEN` is never used as a fallback for Android. The credential must be
+either a fine-grained PAT or GitHub App installation token scoped only to
+`ArchonMegalon/chummer-android` with `Actions: read`, `Contents: read`, and
+`Metadata: read`. Its step fetches only Android repository/run/artifact/branch/
+commit authority. A separate Fleet-only step uses the normal Fleet token for
+Fleet environment, branch, commit, and diagnostic artifact observations. The
+cross-repository credential is absent from signer and ledger steps, is never
+printed or persisted, and malformed or missing values fail before network
+access.
+
 The final GitHub artifact exposes the Android-compatible signed approval, the
 separate Fleet audit receipt when this run performed the signing operation, and
 the signed durable commit receipt. A recovery run restores the exact previously
@@ -92,7 +105,8 @@ signing, upload, processing, distribution, or publication authority.
 
 The checked-in policy fails before the protected environment: it is not ready,
 activation is disabled, environment/private-key configuration is false, no
-human reviewer identity is pinned, and the ledger URL, hostname,
+human reviewer identity is pinned, cross-repository Actions credential
+configuration is false, and the ledger URL, hostname,
 service identity, bearer credential and receipt-verification public key are all
 unset. Android's existing public release-approver key, key ID, consumer commit,
 consumer tree, verifier contract, and provenance-validator digest are pinned as
@@ -119,6 +133,7 @@ administrator bypass, prevent self-review, add the external key only there,
 pin the exact reviewer IDs/logins, retain Android's exact key ID/public-key and
 consumer-contract pins, set the two
 approval `configured` flags, the ledger `configured` flag and replay authority,
+the cross-repository credential's `configured` flag,
 `state: ready`, and `activation.enabled: true`, then land
 through protected Fleet `main`. Merely changing the checked-in policy flags
 cannot activate the current implementation.

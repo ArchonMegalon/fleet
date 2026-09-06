@@ -74,6 +74,7 @@ def active_policy(tmp_path: Path, *, durable: bool = False) -> tuple[dict, Path,
     value["state"] = "ready"
     value["github_environment"]["configured"] = True
     value["github_environment"]["expected_human_user_reviewers"] = REVIEWERS
+    value["cross_repo_actions_read"]["configured"] = True
     value["external_ed25519_key"]["configured"] = True
     value["activation"]["enabled"] = True
     value["external_ed25519_key"]["public_key_spki_der_base64"] = (
@@ -382,6 +383,11 @@ def test_checked_in_policy_is_exact_dormant_and_contains_no_key_material():
     assert value["state"].startswith("dormant")
     assert value["activation"]["enabled"] is False
     assert value["github_environment"]["configured"] is False
+    assert value["cross_repo_actions_read"]["configured"] is False
+    assert value["cross_repo_actions_read"]["secret_name"] == (
+        approval.CROSS_REPO_TOKEN_ENV_NAME
+    )
+    assert value["cross_repo_actions_read"]["github_token_fallback_allowed"] is False
     assert value["external_ed25519_key"]["configured"] is False
     assert value["external_ed25519_key"]["key_id"] == "local-release-builder-2026"
     assert value["external_ed25519_key"]["expected_public_key_spki_sha256"] == (
@@ -426,6 +432,84 @@ def test_environment_key_activation_still_fails_without_durable_replay(tmp_path:
     )
     with pytest.raises(approval.ApprovalError, match="durable external replay"):
         approval.validate_dispatch(policy, args)
+
+
+def test_cross_repo_actions_credential_is_explicit_scoped_and_redacted(
+    tmp_path: Path,
+):
+    policy, _, _ = active_policy(tmp_path, durable=True)
+    token = "github_pat_test_cross_repo_actions_read_1234567890"
+    result = approval.validate_cross_repo_actions_read_credential(
+        policy, {approval.CROSS_REPO_TOKEN_ENV_NAME: token}
+    )
+    assert result == {
+        "ok": True,
+        "targetRepository": approval.ANDROID_REPOSITORY,
+        "targetRepositoryId": 1331626697,
+        "requiredPermissions": ["actions:read", "contents:read", "metadata:read"],
+        "githubTokenFallbackUsed": False,
+        "credentialRecorded": False,
+    }
+    assert token not in json.dumps(result)
+
+
+@pytest.mark.parametrize(
+    "environment,match",
+    [
+        ({}, "missing"),
+        ({"GITHUB_TOKEN": "ghs_fleet_default_token_is_not_a_fallback"}, "missing"),
+        ({approval.CROSS_REPO_TOKEN_ENV_NAME: "short"}, "malformed"),
+        ({approval.CROSS_REPO_TOKEN_ENV_NAME: "github_pat_has whitespace"}, "malformed"),
+        ({approval.CROSS_REPO_TOKEN_ENV_NAME: "github_pat_nonascii_é_123456789"}, "malformed"),
+    ],
+)
+def test_cross_repo_actions_credential_absence_or_malformed_fails_redacted(
+    tmp_path: Path, environment: dict[str, str], match: str
+):
+    policy, _, _ = active_policy(tmp_path, durable=True)
+    supplied = environment.get(approval.CROSS_REPO_TOKEN_ENV_NAME, "")
+    with pytest.raises(approval.ApprovalError, match=match) as caught:
+        approval.validate_cross_repo_actions_read_credential(policy, environment)
+    assert not supplied or supplied not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda value: value.update(target_repository="ArchonMegalon/fleet"),
+        lambda value: value.update(target_repository_id=1176287728),
+        lambda value: value.update(required_permissions=["contents:read"]),
+        lambda value: value.update(github_token_fallback_allowed=True),
+        lambda value: value.update(passed_to_approval_signer=True),
+    ],
+)
+def test_cross_repo_actions_credential_scope_drift_fails_closed(
+    tmp_path: Path, mutate
+):
+    policy, _, _ = active_policy(tmp_path, durable=True)
+    mutate(policy["cross_repo_actions_read"])
+    with pytest.raises(approval.ApprovalError, match="policy is not ready"):
+        approval.validate_cross_repo_actions_read_credential(
+            policy,
+            {approval.CROSS_REPO_TOKEN_ENV_NAME: "github_pat_test_token_123456789"},
+        )
+
+
+def test_cross_repo_credential_preflight_cli_never_prints_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    _, policy_path, _ = active_policy(tmp_path, durable=True)
+    token = "github_pat_cli_redaction_test_1234567890"
+    monkeypatch.setenv(approval.CROSS_REPO_TOKEN_ENV_NAME, token)
+    assert approval.main(
+        ["--policy", str(policy_path), "cross-repo-credential-preflight"]
+    ) == 0
+    captured = capsys.readouterr()
+    assert token not in captured.out
+    assert token not in captured.err
+    result = json.loads(captured.out)
+    assert result["targetRepository"] == approval.ANDROID_REPOSITORY
+    assert result["githubTokenFallbackUsed"] is False
 
 
 def test_ready_policy_rejects_shared_approval_and_ledger_signing_key(tmp_path: Path):
@@ -625,6 +709,50 @@ def test_android_388_consumer_rejects_replayed_challenge(
         )
 
 
+@pytest.mark.skipif(
+    not os.environ.get("CHUMMER_ANDROID_388_ROOT"),
+    reason="exact Android 388425ace checkout not supplied",
+)
+def test_exact_android_388_verifier_accepts_fleet_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    android_root = Path(os.environ["CHUMMER_ANDROID_388_ROOT"]).resolve(strict=True)
+    head = subprocess.run(
+        ["git", "-C", str(android_root), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    assert head == approval.ANDROID_CONSUMER_COMMIT
+    consumer_path = android_root / "scripts/verify_api36_two_green_release_eligibility.py"
+    specification = importlib.util.spec_from_file_location(
+        "android_388_release_consumer", consumer_path
+    )
+    assert specification and specification.loader
+    consumer = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(consumer)
+
+    _, _, receipt_value, args, environment = full_case(tmp_path, monkeypatch)
+    result, audit = approval.create_approval_bundle(args, environment, now=NOW)
+    approval.write_output(args.output, result)
+    test_public = subprocess.run(
+        ["openssl", "pkey", "-inform", "DER", "-pubout"],
+        input=TEST_PRIVATE_DER, check=True, capture_output=True,
+    ).stdout
+    public_path = tmp_path / "android-consumer-test-public.pem"
+    public_path.write_bytes(test_public)
+    public_path.chmod(0o600)
+    monkeypatch.setattr(consumer, "RELEASE_APPROVER_PUBLIC_KEY", public_path)
+    monkeypatch.setattr(
+        consumer, "RELEASE_APPROVER_PUBLIC_KEY_SHA256",
+        hashlib.sha256(test_public).hexdigest(),
+    )
+    receipt_raw = (tmp_path / "receipt.json").read_bytes()
+    verified = consumer._verify_release_approval(
+        args.output, receipt_raw=receipt_raw, receipt=receipt_value, now=NOW
+    )
+    assert verified["contractName"] == approval.OUTPUT_CONTRACT
+    assert verified["provenanceReplaySha256"] == approval.canonical_sha256(audit)
+
+
 @pytest.mark.parametrize("mutate,match", [
     (lambda value: value.update(sourceTree="d" * 40), "Android identity differs"),
     (lambda value: value["releaseIdentity"].update(versionCode=13), "release identity differs"),
@@ -802,6 +930,7 @@ def test_workflow_is_dormant_separate_and_uploads_only_public_json():
     assert "environment: ${{ needs.dormant-contract.outputs.environment }}" in text
     assert "github.ref_protected" in text
     assert approval.KEY_ENV_NAME in text
+    assert approval.CROSS_REPO_TOKEN_ENV_NAME in text
     assert approval.approval_ledger.CREDENTIAL_ENV_NAME in text
     assert approval.OUTPUT_NAME in text
     assert approval.AUDIT_OUTPUT_NAME in text
@@ -852,7 +981,25 @@ def test_workflow_is_dormant_separate_and_uploads_only_public_json():
     step_blocks = re.split(r"^      - (?:id:|name:|uses:)", text, flags=re.MULTILINE)[1:]
     secret_name = "ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64"
     ledger_name = "ANDROID_PREVIEW12_APPROVAL_LEDGER_BEARER_TOKEN"
+    cross_repo_name = "ANDROID_PREVIEW12_CROSS_REPO_ACTIONS_READ_TOKEN"
     assert all(not (secret_name in block and ledger_name in block) for block in step_blocks)
+    assert all(not (secret_name in block and cross_repo_name in block) for block in step_blocks)
+    assert all(not (ledger_name in block and cross_repo_name in block) for block in step_blocks)
+    cross_repo_block = next(
+        block for block in step_blocks
+        if "Fetch exact Android authority and Two-Green archive" in block
+    )
+    assert cross_repo_name in cross_repo_block
+    assert "GH_TOKEN: ${{ github.token }}" not in cross_repo_block
+    assert "repos/ArchonMegalon/chummer-android/actions/" in cross_repo_block
+    assert "repos/ArchonMegalon/fleet/" not in cross_repo_block
+    fleet_block = next(
+        block for block in step_blocks
+        if "Fetch exact Fleet authority snapshots" in block
+    )
+    assert "GH_TOKEN: ${{ github.token }}" in fleet_block
+    assert cross_repo_name not in fleet_block
+    assert "repos/ArchonMegalon/chummer-android" not in fleet_block
     signer_block = next(
         block for block in step_blocks
         if "Emit only the public, non-authorizing approval JSON" in block
