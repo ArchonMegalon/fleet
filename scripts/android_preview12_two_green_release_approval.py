@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
@@ -46,6 +47,8 @@ ARTIFACT_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 SPKI_ED25519_PREFIX = bytes.fromhex("302a300506032b6570032100")
 MAX_ARCHIVE_BYTES = 32 * 1024 * 1024
 MAX_RECEIPT_BYTES = 16 * 1024 * 1024
+MAX_EVIDENCE_AGE_SECONDS = 24 * 60 * 60
+MAX_FUTURE_SKEW_SECONDS = 5 * 60
 DOES_NOT_AUTHORIZE = """android_artifact_signing play_upload_key_access
 google_play_upload google_play_processing tester_distribution tester_installation
 registry_publication github_release public_release""".split()
@@ -152,9 +155,67 @@ def _positive(value: object, label: str) -> int:
 
 
 def _positive_decimal(value: object, label: str) -> int:
-    if not isinstance(value, str) or not value.isascii() or not value.isdigit():
+    if (
+        not isinstance(value, str)
+        or re.fullmatch(r"[1-9][0-9]*", value, flags=re.ASCII) is None
+    ):
         raise ApprovalError(f"{label} must be a positive decimal integer")
     return _positive(int(value), label)
+
+
+def _timestamp(value: object, label: str) -> datetime:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        raise ApprovalError(f"{label} must be a UTC timestamp")
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError as error:
+        raise ApprovalError(f"{label} must be a UTC timestamp") from error
+    if parsed.tzinfo != timezone.utc:
+        raise ApprovalError(f"{label} must be a UTC timestamp")
+    return parsed
+
+
+def _iso(value: datetime) -> str:
+    return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace(
+        "+00:00", "Z"
+    )
+
+
+def _fresh_timestamp(
+    value: object, label: str, *, now: datetime, policy: Mapping[str, Any]
+) -> tuple[datetime, str]:
+    parsed = _timestamp(value, label)
+    freshness = policy["freshness"]
+    if parsed > now + timedelta(seconds=freshness["maximum_future_skew_seconds"]):
+        raise ApprovalError(f"{label} is unacceptably in the future")
+    if now - parsed > timedelta(seconds=freshness["maximum_evidence_age_seconds"]):
+        raise ApprovalError(f"{label} is stale")
+    return parsed, str(value)
+
+
+def _reviewer_list(value: object, label: str) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        raise ApprovalError(f"{label} must be a list")
+    output: list[dict[str, object]] = []
+    for row in value:
+        if not isinstance(row, dict) or set(row) != {"id", "login"}:
+            raise ApprovalError(f"{label} contains a malformed identity")
+        reviewer_id = row.get("id")
+        login = row.get("login")
+        if (
+            type(reviewer_id) is not int
+            or reviewer_id <= 0
+            or not isinstance(login, str)
+            or not login
+            or login != login.strip()
+            or login.casefold().endswith("[bot]")
+        ):
+            raise ApprovalError(f"{label} contains a non-human identity")
+        output.append({"id": reviewer_id, "login": login})
+    ordered = sorted(output, key=lambda row: (row["id"], row["login"]))
+    if output != ordered or len({row["id"] for row in output}) != len(output):
+        raise ApprovalError(f"{label} must be unique and canonically ordered")
+    return output
 
 
 def expected_policy() -> dict[str, Any]:
@@ -181,7 +242,9 @@ def expected_policy() -> dict[str, Any]:
             "required_reviewers_required": True,
             "minimum_required_reviewers": 1,
             "human_user_reviewer_required": True,
+            "expected_human_user_reviewers": [],
             "prevent_self_review_required": True,
+            "administrators_can_bypass_allowed": False,
             "protected_branches_only": True,
         },
         "external_ed25519_key": {
@@ -190,6 +253,15 @@ def expected_policy() -> dict[str, Any]:
             "secret_name": KEY_ENV_NAME,
             "expected_public_key_spki_sha256": None,
             "private_key_persistence_allowed": False,
+        },
+        "freshness": {
+            "maximum_evidence_age_seconds": MAX_EVIDENCE_AGE_SECONDS,
+            "maximum_future_skew_seconds": MAX_FUTURE_SKEW_SECONDS,
+        },
+        "replay_protection": {
+            "mode": "one_approval_artifact_per_two_green_artifact",
+            "approval_request_nonce_required": True,
+            "artifact_ledger_required": True,
         },
         "activation": {"enabled": False,
                        "requires_separate_reviewed_contract_change": True},
@@ -229,6 +301,17 @@ def load_policy(path: Path) -> tuple[dict[str, Any], bytes, str]:
         ) if isinstance(value.get("external_ed25519_key"), dict) else None
         if SHA256.fullmatch(str(observed_key_digest or "")):
             active["external_ed25519_key"]["expected_public_key_spki_sha256"] = observed_key_digest
+        observed_reviewers = value.get("github_environment", {}).get(
+            "expected_human_user_reviewers"
+        ) if isinstance(value.get("github_environment"), dict) else None
+        try:
+            reviewed_users = _reviewer_list(
+                observed_reviewers, "reviewed human user identities"
+            )
+        except ApprovalError:
+            reviewed_users = []
+        if reviewed_users:
+            active["github_environment"]["expected_human_user_reviewers"] = reviewed_users
         if value != active:
             raise ApprovalError("approval policy differs from the closed dormant/ready contract")
     return value, data, digest
@@ -251,6 +334,16 @@ def _require_ready(policy: Mapping[str, Any]) -> None:
         str(key.get("expected_public_key_spki_sha256") or "")
     ) is None:
         blockers.append("external Ed25519 public-key digest is not pinned")
+    try:
+        reviewed_users = _reviewer_list(
+            environment.get("expected_human_user_reviewers")
+            if isinstance(environment, dict) else None,
+            "reviewed human user identities",
+        )
+    except ApprovalError:
+        reviewed_users = []
+    if not reviewed_users:
+        blockers.append("human user reviewer identities are not pinned")
     if blockers:
         raise ApprovalError("; ".join(blockers))
 
@@ -284,12 +377,18 @@ def validate_dispatch(policy: Mapping[str, Any], args: argparse.Namespace) -> di
 
 def validate_inputs(args: argparse.Namespace) -> dict[str, Any]:
     values = {
+        "approvalRequestNonce": _sha256(
+            args.approval_request_nonce, "approval request nonce"
+        ),
         "twoGreenRunId": _positive_decimal(args.two_green_run_id, "Two-Green run ID"),
         "twoGreenRunAttempt": _positive_decimal(args.two_green_run_attempt, "Two-Green run attempt"),
         "twoGreenArtifactId": _positive_decimal(args.two_green_artifact_id, "Two-Green artifact ID"),
         "twoGreenArtifactSha256": _sha256(args.two_green_artifact_sha256, "Two-Green artifact SHA-256"),
         "twoGreenReceiptSha256": _sha256(args.two_green_receipt_sha256, "Two-Green receipt SHA-256"),
         "reviewRunId": _positive_decimal(args.review_run_id, "review run ID"),
+        "reviewPullRequestNumber": _positive_decimal(
+            args.review_pull_request_number, "review pull request number"
+        ),
         "mainRunId": _positive_decimal(args.main_run_id, "main run ID"),
         "mainCommit": _sha40(args.main_commit, "Android main commit"),
         "mainTree": _sha40(args.main_tree, "Android main tree"),
@@ -307,6 +406,8 @@ def validate_environment_snapshot(value: Mapping[str, Any], policy: Mapping[str,
     expected_url = f"https://api.github.com/repos/{FLEET_REPOSITORY}/environments/{ENVIRONMENT_NAME}"
     if value.get("name") != ENVIRONMENT_NAME or value.get("url") != expected_url:
         raise ApprovalError("GitHub environment identity differs")
+    if value.get("can_admins_bypass") is not False:
+        raise ApprovalError("approval environment permits administrator bypass")
     branch = value.get("deployment_branch_policy")
     if not isinstance(branch, dict) or branch.get("protected_branches") is not True or branch.get("custom_branch_policies") is not False:
         raise ApprovalError("approval environment is not restricted to protected branches")
@@ -322,39 +423,49 @@ def validate_environment_snapshot(value: Mapping[str, Any], policy: Mapping[str,
     if rule.get("prevent_self_review") is not True or not isinstance(reviewers, list) or len(reviewers) < minimum:
         raise ApprovalError("approval environment lacks human review or self-review prevention")
     reviewer_types: list[str] = []
-    reviewer_ids: list[int] = []
-    human_users = 0
+    human_users: list[dict[str, object]] = []
     for row in reviewers:
-        if not isinstance(row, dict) or row.get("type") not in {"User", "Team"}:
-            raise ApprovalError("approval environment reviewer is not a user or team")
+        if not isinstance(row, dict) or row.get("type") != "User":
+            raise ApprovalError("approval environment reviewer is not an explicit User")
         reviewer = row.get("reviewer")
         if not isinstance(reviewer, dict) or type(reviewer.get("id")) is not int or reviewer["id"] <= 0:
             raise ApprovalError("approval environment reviewer identity is malformed")
         reviewer_types.append(row["type"])
-        reviewer_ids.append(reviewer["id"])
-        if row["type"] == "User":
-            login = reviewer.get("login")
-            if (
-                not isinstance(login, str)
-                or not login
-                or login.casefold().endswith("[bot]")
-            ):
-                raise ApprovalError("approval environment user reviewer is not a human account")
-            human_users += 1
-    if human_users < 1:
+        login = reviewer.get("login")
+        if (
+            not isinstance(login, str)
+            or not login
+            or login.casefold().endswith("[bot]")
+        ):
+            raise ApprovalError("approval environment user reviewer is not a human account")
+        human_users.append({"id": reviewer["id"], "login": login})
+    human_users = sorted(human_users, key=lambda row: (row["id"], row["login"]))
+    if len(human_users) < 1:
         raise ApprovalError("approval environment has no explicit human user reviewer")
+    expected_users = _reviewer_list(
+        policy["github_environment"]["expected_human_user_reviewers"],
+        "reviewed human user identities",
+    )
+    if human_users != expected_users:
+        raise ApprovalError("approval environment reviewer identities differ from policy")
     return {
         "name": ENVIRONMENT_NAME,
         "requiredReviewerCount": len(reviewers),
         "reviewerTypes": sorted(reviewer_types),
-        "humanUserReviewerCount": human_users,
-        "reviewerIdentitySetSha256": canonical_sha256(sorted(reviewer_ids)),
+        "humanUserReviewerCount": len(human_users),
+        "reviewerIdentitySetSha256": canonical_sha256(human_users),
+        "configuredHumanReviewerSetPinned": True,
         "preventSelfReview": True,
+        "administratorsCanBypass": False,
         "protectedBranchesOnly": True,
+        "actualApprovalActorRecorded": False,
     }
 
 
-def validate_run(value: Mapping[str, Any], inputs: Mapping[str, Any]) -> dict[str, Any]:
+def validate_run(
+    value: Mapping[str, Any], inputs: Mapping[str, Any], *, now: datetime,
+    policy: Mapping[str, Any]
+) -> dict[str, Any]:
     repository = value.get("repository")
     head_repository = value.get("head_repository")
     expected_api = f"https://api.github.com/repos/{ANDROID_REPOSITORY}"
@@ -377,6 +488,18 @@ def validate_run(value: Mapping[str, Any], inputs: Mapping[str, Any]) -> dict[st
         or value.get("html_url") != f"https://github.com/{ANDROID_REPOSITORY}/actions/runs/{run_id}"
     ):
         raise ApprovalError("Two-Green workflow run is not the exact successful main authority")
+    created, created_text = _fresh_timestamp(
+        value.get("created_at"), "Two-Green run creation", now=now, policy=policy
+    )
+    started, started_text = _fresh_timestamp(
+        value.get("run_started_at"), "Two-Green run attempt start", now=now,
+        policy=policy,
+    )
+    updated, updated_text = _fresh_timestamp(
+        value.get("updated_at"), "Two-Green run completion", now=now, policy=policy
+    )
+    if not created <= started <= updated:
+        raise ApprovalError("Two-Green run timestamps are out of order")
     return {
         "id": run_id,
         "attempt": inputs["twoGreenRunAttempt"],
@@ -387,11 +510,17 @@ def validate_run(value: Mapping[str, Any], inputs: Mapping[str, Any]) -> dict[st
         "headSha": inputs["mainCommit"],
         "status": "completed",
         "conclusion": "success",
+        "createdAtUtc": created_text,
+        "attemptStartedAtUtc": started_text,
+        "completedAtUtc": updated_text,
         "detailsUrl": value["html_url"],
     }
 
 
-def validate_artifact(value: Mapping[str, Any], inputs: Mapping[str, Any]) -> dict[str, Any]:
+def validate_artifact(
+    value: Mapping[str, Any], inputs: Mapping[str, Any], *, now: datetime,
+    policy: Mapping[str, Any]
+) -> dict[str, Any]:
     run = value.get("workflow_run")
     expected_name = f"chummer-android-api36-two-green-eligibility-{inputs['reviewRunId']}-{inputs['mainRunId']}"
     digest = value.get("digest")
@@ -413,11 +542,79 @@ def validate_artifact(value: Mapping[str, Any], inputs: Mapping[str, Any]) -> di
         or run.get("head_sha") != inputs["mainCommit"]
     ):
         raise ApprovalError("Two-Green artifact authority differs")
+    created, created_text = _fresh_timestamp(
+        value.get("created_at"), "Two-Green artifact creation", now=now, policy=policy
+    )
+    expires = _timestamp(value.get("expires_at"), "Two-Green artifact expiry")
+    if expires <= now or expires <= created:
+        raise ApprovalError("Two-Green artifact expiry is not current")
     return {
         "id": inputs["twoGreenArtifactId"],
         "name": expected_name,
         "archiveSha256": inputs["twoGreenArtifactSha256"],
         "archiveSizeBytes": value["size_in_bytes"],
+        "createdAtUtc": created_text,
+        "expiresAtUtc": str(value["expires_at"]),
+    }
+
+
+def approval_artifact_name(inputs: Mapping[str, Any]) -> str:
+    return (
+        "android-preview12-two-green-release-approval-"
+        f"{inputs['twoGreenArtifactId']}"
+    )
+
+
+def validate_android_main_snapshots(
+    branch: Mapping[str, Any], commit: Mapping[str, Any], inputs: Mapping[str, Any]
+) -> dict[str, Any]:
+    branch_commit = branch.get("commit")
+    if (
+        branch.get("name") != "main"
+        or branch.get("protected") is not True
+        or not isinstance(branch_commit, dict)
+        or branch_commit.get("sha") != inputs["mainCommit"]
+    ):
+        raise ApprovalError("current Android main branch authority differs")
+    tree = commit.get("tree")
+    expected_commit_url = (
+        f"https://api.github.com/repos/{ANDROID_REPOSITORY}/git/commits/"
+        f"{inputs['mainCommit']}"
+    )
+    if (
+        commit.get("sha") != inputs["mainCommit"]
+        or commit.get("url") != expected_commit_url
+        or not isinstance(tree, dict)
+        or tree.get("sha") != inputs["mainTree"]
+    ):
+        raise ApprovalError("current Android main commit/tree authority differs")
+    return {
+        "protected": True,
+        "commit": inputs["mainCommit"],
+        "tree": inputs["mainTree"],
+    }
+
+
+def validate_replay_snapshot(
+    value: Mapping[str, Any], inputs: Mapping[str, Any]
+) -> dict[str, Any]:
+    total = value.get("total_count")
+    artifacts = value.get("artifacts")
+    if type(total) is not int or total < 0 or not isinstance(artifacts, list):
+        raise ApprovalError("approval artifact ledger snapshot is malformed")
+    expected_name = approval_artifact_name(inputs)
+    matching = [
+        row for row in artifacts
+        if isinstance(row, dict) and row.get("name") == expected_name
+    ]
+    if total != len(artifacts) or total != len(matching):
+        raise ApprovalError("approval artifact ledger response is not exact")
+    if matching:
+        raise ApprovalError("Two-Green artifact was already approved")
+    return {
+        "mode": "one_approval_artifact_per_two_green_artifact",
+        "artifactName": expected_name,
+        "priorApprovalArtifactCount": 0,
     }
 
 
@@ -444,7 +641,10 @@ def extract_receipt(
     return strict_json_bytes(receipt_bytes, "Two-Green receipt"), receipt_bytes, len(data)
 
 
-def validate_receipt(value: Mapping[str, Any], inputs: Mapping[str, Any]) -> dict[str, Any]:
+def validate_receipt(
+    value: Mapping[str, Any], inputs: Mapping[str, Any], *, now: datetime,
+    policy: Mapping[str, Any]
+) -> dict[str, Any]:
     required = {
         "schema", "status", "eligibilityScope", "eligible", "internalTestingEligible",
         "publicationAuthorized", "googlePlayUploadAuthorized", "policyAuthority",
@@ -456,6 +656,7 @@ def validate_receipt(value: Mapping[str, Any], inputs: Mapping[str, Any]) -> dic
     if (
         value.get("schema") != TWO_GREEN_CONTRACT
         or value.get("status") != "pass"
+        or value.get("eligibilityScope") != "current_preview_internal_testing_candidate"
         or value.get("eligible") is not True
         or value.get("internalTestingEligible") is not True
         or value.get("publicationAuthorized") is not False
@@ -464,6 +665,10 @@ def validate_receipt(value: Mapping[str, Any], inputs: Mapping[str, Any]) -> dic
         or value.get("sourceTree") != inputs["mainTree"]
     ):
         raise ApprovalError("Two-Green receipt posture or Android identity differs")
+    _, decision_time = _fresh_timestamp(
+        value.get("decisionTimeUtc"), "Two-Green receipt decision", now=now,
+        policy=policy,
+    )
     release = value.get("releaseIdentity")
     if not isinstance(release, dict) or release != {
         "packageId": PACKAGE_ID,
@@ -477,12 +682,31 @@ def validate_receipt(value: Mapping[str, Any], inputs: Mapping[str, Any]) -> dic
         run = block.get("run") if isinstance(block, dict) else None
         if not isinstance(run, dict) or run.get("id") != expected_id or run.get("status") != "completed" or run.get("conclusion") != "success" or block.get("aggregateStatus") != "pass":
             raise ApprovalError(f"Two-Green {role} is not exact and successful")
+    review_pull_request = value.get("reviewPullRequest")
+    if (
+        not isinstance(review_pull_request, dict)
+        or review_pull_request.get("repository") != ANDROID_REPOSITORY
+        or review_pull_request.get("number") != inputs["reviewPullRequestNumber"]
+    ):
+        raise ApprovalError("Two-Green reviewed pull request differs")
     main = value["mainRun"]["run"]
     if main.get("headSha") != inputs["mainCommit"] or value["mainRun"].get("p0EventSha") != inputs["mainCommit"]:
         raise ApprovalError("Two-Green main source commit differs")
     common = value.get("commonAuthority")
     if not isinstance(common, dict) or common.get("androidTree") != inputs["mainTree"] or common.get("environmentCompatibilityStatus") != "pass":
         raise ApprovalError("Two-Green common tree/environment authority differs")
+    policy_authority = value.get("policyAuthority")
+    if (
+        not isinstance(policy_authority, dict)
+        or policy_authority.get("schema")
+        != "chummer.android.api36-ordered-review-main-green-policy/v2"
+        or policy_authority.get("path")
+        != "eng/api36-two-consecutive-green-authority.json"
+        or policy_authority.get("publicationAuthorized") is not False
+    ):
+        raise ApprovalError("Two-Green policy authority differs")
+    _sha256(policy_authority.get("sha256"), "Two-Green policy digest")
+    _positive(policy_authority.get("sizeBytes"), "Two-Green policy size")
     does_not_assert = value.get("doesNotAssert")
     for required_exclusion in ("google_play_upload", "release_signing", "publication_authority"):
         if not isinstance(does_not_assert, list) or required_exclusion not in does_not_assert:
@@ -493,7 +717,8 @@ def validate_receipt(value: Mapping[str, Any], inputs: Mapping[str, Any]) -> dic
     return {
         "contract": TWO_GREEN_CONTRACT,
         "eligibilitySha256": value["eligibilitySha256"],
-        "decisionTimeUtc": value["decisionTimeUtc"],
+        "decisionTimeUtc": decision_time,
+        "reviewPullRequestNumber": inputs["reviewPullRequestNumber"],
         "reviewRunId": inputs["reviewRunId"],
         "mainRunId": inputs["mainRunId"],
         "status": "pass",
@@ -594,7 +819,13 @@ def verify_ed25519(public_der: bytes, message: bytes, signature: bytes) -> None:
         os.close(signature_fd)
 
 
-def create_approval(args: argparse.Namespace, environment: Mapping[str, str]) -> dict[str, Any]:
+def create_approval(
+    args: argparse.Namespace, environment: Mapping[str, str], *,
+    now: datetime | None = None
+) -> dict[str, Any]:
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo != timezone.utc:
+        raise ApprovalError("approval clock must be UTC")
     policy, policy_bytes, policy_sha256 = load_policy(args.policy)
     _require_ready(policy)
     inputs = validate_inputs(args)
@@ -602,13 +833,53 @@ def create_approval(args: argparse.Namespace, environment: Mapping[str, str]) ->
     environment_value = strict_json_bytes(environment_bytes, "GitHub environment snapshot")
     environment_authority = validate_environment_snapshot(environment_value, policy)
     run_bytes, run_sha256 = stable_file(args.run_snapshot, "Two-Green run snapshot", MAX_RECEIPT_BYTES)
-    run_authority = validate_run(strict_json_bytes(run_bytes, "Two-Green run snapshot"), inputs)
+    run_authority = validate_run(
+        strict_json_bytes(run_bytes, "Two-Green run snapshot"), inputs,
+        now=now, policy=policy,
+    )
     artifact_bytes, artifact_metadata_sha256 = stable_file(args.artifact_snapshot, "Two-Green artifact snapshot", MAX_RECEIPT_BYTES)
-    artifact_authority = validate_artifact(strict_json_bytes(artifact_bytes, "Two-Green artifact snapshot"), inputs)
+    artifact_authority = validate_artifact(
+        strict_json_bytes(artifact_bytes, "Two-Green artifact snapshot"), inputs,
+        now=now, policy=policy,
+    )
+    artifact_created = _timestamp(
+        artifact_authority["createdAtUtc"], "Two-Green artifact creation"
+    )
+    attempt_started = _timestamp(
+        run_authority["attemptStartedAtUtc"], "Two-Green run attempt start"
+    )
+    run_completed = _timestamp(
+        run_authority["completedAtUtc"], "Two-Green run completion"
+    )
+    if not attempt_started <= artifact_created <= (
+        run_completed
+        + timedelta(seconds=policy["freshness"]["maximum_future_skew_seconds"])
+    ):
+        raise ApprovalError("Two-Green artifact is not bound to the exact run attempt")
     receipt, receipt_bytes, archive_size = extract_receipt(args.artifact_archive, inputs)
     if archive_size != artifact_authority["archiveSizeBytes"]:
         raise ApprovalError("Two-Green artifact archive size differs")
-    receipt_authority = validate_receipt(receipt, inputs)
+    receipt_authority = validate_receipt(receipt, inputs, now=now, policy=policy)
+    branch_bytes, branch_sha256 = stable_file(
+        args.android_main_branch_snapshot, "Android main branch snapshot",
+        MAX_RECEIPT_BYTES,
+    )
+    commit_bytes, commit_sha256 = stable_file(
+        args.android_main_commit_snapshot, "Android main commit snapshot",
+        MAX_RECEIPT_BYTES,
+    )
+    android_main_authority = validate_android_main_snapshots(
+        strict_json_bytes(branch_bytes, "Android main branch snapshot"),
+        strict_json_bytes(commit_bytes, "Android main commit snapshot"),
+        inputs,
+    )
+    replay_bytes, replay_sha256 = stable_file(
+        args.approval_artifact_ledger_snapshot,
+        "approval artifact ledger snapshot", MAX_RECEIPT_BYTES,
+    )
+    replay_authority = validate_replay_snapshot(
+        strict_json_bytes(replay_bytes, "approval artifact ledger snapshot"), inputs
+    )
     if args.execution_environment != ENVIRONMENT_NAME:
         raise ApprovalError("approval job did not run in the reviewed GitHub environment")
     execution = {
@@ -638,8 +909,20 @@ def create_approval(args: argparse.Namespace, environment: Mapping[str, str]) ->
         "contractVersion": 1,
         "status": "approved",
         "approvalScope": "preview12_two_green_evidence_only",
+        "approvalRequestNonce": inputs["approvalRequestNonce"],
+        "approvedAtUtc": _iso(now),
         "release": {"packageId": PACKAGE_ID, "versionName": VERSION_NAME, "versionCode": VERSION_CODE},
-        "androidSource": {"repository": ANDROID_REPOSITORY, "ref": ANDROID_REF, "commit": inputs["mainCommit"], "tree": inputs["mainTree"]},
+        "androidSource": {
+            "repository": ANDROID_REPOSITORY,
+            "ref": ANDROID_REF,
+            "commit": inputs["mainCommit"],
+            "tree": inputs["mainTree"],
+            "currentMainAuthority": {
+                **android_main_authority,
+                "branchApiSnapshotSha256": branch_sha256,
+                "commitApiSnapshotSha256": commit_sha256,
+            },
+        },
         "twoGreen": {
             "workflowRun": run_authority,
             "artifact": artifact_authority,
@@ -653,6 +936,16 @@ def create_approval(args: argparse.Namespace, environment: Mapping[str, str]) ->
             **environment_authority,
             "apiSnapshotSha256": environment_sha256,
         },
+        "freshnessAuthority": {
+            "maximumEvidenceAgeSeconds": policy["freshness"]["maximum_evidence_age_seconds"],
+            "maximumFutureSkewSeconds": policy["freshness"]["maximum_future_skew_seconds"],
+            "checkedAtUtc": _iso(now),
+        },
+        "replayProtection": {
+            **replay_authority,
+            "ledgerApiSnapshotSha256": replay_sha256,
+            "approvalRequestNonce": inputs["approvalRequestNonce"],
+        },
         "policyAuthority": {
             "contract": POLICY_CONTRACT,
             "sha256": policy_sha256,
@@ -661,7 +954,9 @@ def create_approval(args: argparse.Namespace, environment: Mapping[str, str]) ->
         },
         "twoGreenVerified": True,
         "humanEnvironmentReviewRequired": True,
-        "humanEnvironmentGatePassed": True,
+        "configuredHumanReviewerSetPinned": True,
+        "protectedEnvironmentGatePassed": True,
+        "actualApprovalActorRecorded": False,
         "signingAuthorized": False,
         "publicationAuthorized": False,
         "googlePlayUploadAuthorized": False,
@@ -673,14 +968,22 @@ def create_approval(args: argparse.Namespace, environment: Mapping[str, str]) ->
 
 
 def validate_approval(
-    value: Mapping[str, Any], policy: Mapping[str, Any] | None = None
+    value: Mapping[str, Any], policy: Mapping[str, Any] | None = None, *,
+    now: datetime | None = None
 ) -> None:
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo != timezone.utc:
+        raise ApprovalError("approval verification clock must be UTC")
     required = {
-        "contractName", "contractVersion", "status", "approvalScope", "release",
+        "contractName", "contractVersion", "status", "approvalScope",
+        "approvalRequestNonce", "approvedAtUtc", "release",
         "androidSource", "twoGreen", "fleetExecution", "environmentAuthority",
-        "policyAuthority", "twoGreenVerified", "humanEnvironmentReviewRequired",
-        "humanEnvironmentGatePassed", "signingAuthorized", "publicationAuthorized",
-        "googlePlayUploadAuthorized", "doesNotAuthorize", "approvalSha256", "signature",
+        "freshnessAuthority", "replayProtection", "policyAuthority",
+        "twoGreenVerified", "humanEnvironmentReviewRequired",
+        "configuredHumanReviewerSetPinned", "protectedEnvironmentGatePassed",
+        "actualApprovalActorRecorded", "signingAuthorized",
+        "publicationAuthorized", "googlePlayUploadAuthorized", "doesNotAuthorize",
+        "approvalSha256", "signature",
     }
     _exact_keys(value, required, "public approval")
     if (
@@ -688,15 +991,23 @@ def validate_approval(
         or value.get("contractVersion") != 1
         or value.get("status") != "approved"
         or value.get("approvalScope") != "preview12_two_green_evidence_only"
+        or SHA256.fullmatch(str(value.get("approvalRequestNonce") or "")) is None
         or value.get("twoGreenVerified") is not True
         or value.get("humanEnvironmentReviewRequired") is not True
-        or value.get("humanEnvironmentGatePassed") is not True
+        or value.get("configuredHumanReviewerSetPinned") is not True
+        or value.get("protectedEnvironmentGatePassed") is not True
+        or value.get("actualApprovalActorRecorded") is not False
         or value.get("signingAuthorized") is not False
         or value.get("publicationAuthorized") is not False
         or value.get("googlePlayUploadAuthorized") is not False
         or value.get("doesNotAuthorize") != DOES_NOT_AUTHORIZE
     ):
         raise ApprovalError("public approval posture is invalid")
+    effective_policy = policy or expected_policy()
+    _fresh_timestamp(
+        value.get("approvedAtUtc"), "public approval time", now=now,
+        policy=effective_policy,
+    )
     release = value.get("release")
     if release != {
         "packageId": PACKAGE_ID,
@@ -707,13 +1018,33 @@ def validate_approval(
     source = value.get("androidSource")
     if (
         not isinstance(source, dict)
-        or set(source) != {"repository", "ref", "commit", "tree"}
+        or set(source) != {"repository", "ref", "commit", "tree", "currentMainAuthority"}
         or source.get("repository") != ANDROID_REPOSITORY
         or source.get("ref") != ANDROID_REF
     ):
         raise ApprovalError("public approval Android source identity differs")
     source_commit = _sha40(source.get("commit"), "public approval Android commit")
-    _sha40(source.get("tree"), "public approval Android tree")
+    source_tree = _sha40(source.get("tree"), "public approval Android tree")
+    current_main = source.get("currentMainAuthority")
+    if (
+        not isinstance(current_main, dict)
+        or set(current_main) != {
+            "protected", "commit", "tree", "branchApiSnapshotSha256",
+            "commitApiSnapshotSha256",
+        }
+        or current_main.get("protected") is not True
+        or current_main.get("commit") != source_commit
+        or current_main.get("tree") != source_tree
+    ):
+        raise ApprovalError("public approval current Android main authority differs")
+    _sha256(
+        current_main.get("branchApiSnapshotSha256"),
+        "public approval Android branch snapshot",
+    )
+    _sha256(
+        current_main.get("commitApiSnapshotSha256"),
+        "public approval Android commit snapshot",
+    )
     two_green = value.get("twoGreen")
     if not isinstance(two_green, dict) or set(two_green) != {
         "workflowRun", "artifact", "receipt", "receiptSha256",
@@ -738,6 +1069,7 @@ def validate_approval(
         or receipt.get("status") != "pass"
         or receipt.get("eligible") is not True
         or receipt.get("internalTestingEligible") is not True
+        or receipt.get("reviewPullRequestNumber") is None
         or not SHA256.fullmatch(str(two_green.get("receiptSha256") or ""))
         or not SHA256.fullmatch(str(two_green.get("runSnapshotSha256") or ""))
         or not SHA256.fullmatch(str(two_green.get("artifactMetadataSnapshotSha256") or ""))
@@ -750,6 +1082,10 @@ def validate_approval(
     _sha256(receipt.get("eligibilitySha256"), "public approval eligibility")
     _positive(receipt.get("reviewRunId"), "public approval review run ID")
     _positive(receipt.get("mainRunId"), "public approval main run ID")
+    _positive(
+        receipt.get("reviewPullRequestNumber"),
+        "public approval review pull request number",
+    )
     expected_artifact_name = (
         "chummer-android-api36-two-green-eligibility-"
         f"{receipt['reviewRunId']}-{receipt['mainRunId']}"
@@ -778,7 +1114,10 @@ def validate_approval(
         not isinstance(environment_authority, dict)
         or environment_authority.get("name") != ENVIRONMENT_NAME
         or environment_authority.get("preventSelfReview") is not True
+        or environment_authority.get("administratorsCanBypass") is not False
         or environment_authority.get("protectedBranchesOnly") is not True
+        or environment_authority.get("configuredHumanReviewerSetPinned") is not True
+        or environment_authority.get("actualApprovalActorRecorded") is not False
         or type(environment_authority.get("requiredReviewerCount")) is not int
         or environment_authority["requiredReviewerCount"] < 1
         or type(environment_authority.get("humanUserReviewerCount")) is not int
@@ -792,6 +1131,31 @@ def validate_approval(
     _sha256(
         environment_authority.get("apiSnapshotSha256"),
         "public approval environment snapshot",
+    )
+    freshness = value.get("freshnessAuthority")
+    if freshness != {
+        "maximumEvidenceAgeSeconds": effective_policy["freshness"]["maximum_evidence_age_seconds"],
+        "maximumFutureSkewSeconds": effective_policy["freshness"]["maximum_future_skew_seconds"],
+        "checkedAtUtc": value.get("approvedAtUtc"),
+    }:
+        raise ApprovalError("public approval freshness authority differs")
+    replay = value.get("replayProtection")
+    if (
+        not isinstance(replay, dict)
+        or set(replay) != {
+            "mode", "artifactName", "priorApprovalArtifactCount",
+            "ledgerApiSnapshotSha256", "approvalRequestNonce",
+        }
+        or replay.get("mode") != "one_approval_artifact_per_two_green_artifact"
+        or replay.get("artifactName")
+        != approval_artifact_name({"twoGreenArtifactId": artifact["id"]})
+        or replay.get("priorApprovalArtifactCount") != 0
+        or replay.get("approvalRequestNonce") != value.get("approvalRequestNonce")
+    ):
+        raise ApprovalError("public approval replay protection differs")
+    _sha256(
+        replay.get("ledgerApiSnapshotSha256"),
+        "public approval artifact ledger snapshot",
     )
     policy_authority = value.get("policyAuthority")
     if (
@@ -851,12 +1215,14 @@ def write_output(path: Path, value: Mapping[str, Any]) -> None:
 
 
 def _input_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--approval-request-nonce", required=True)
     parser.add_argument("--two-green-run-id", required=True)
     parser.add_argument("--two-green-run-attempt", required=True)
     parser.add_argument("--two-green-artifact-id", required=True)
     parser.add_argument("--two-green-artifact-sha256", required=True)
     parser.add_argument("--two-green-receipt-sha256", required=True)
     parser.add_argument("--review-run-id", required=True)
+    parser.add_argument("--review-pull-request-number", required=True)
     parser.add_argument("--main-run-id", required=True)
     parser.add_argument("--main-commit", required=True)
     parser.add_argument("--main-tree", required=True)
@@ -893,6 +1259,11 @@ def main(argv: list[str] | None = None) -> int:
     approve.add_argument("--run-snapshot", type=Path, required=True)
     approve.add_argument("--artifact-snapshot", type=Path, required=True)
     approve.add_argument("--artifact-archive", type=Path, required=True)
+    approve.add_argument("--android-main-branch-snapshot", type=Path, required=True)
+    approve.add_argument("--android-main-commit-snapshot", type=Path, required=True)
+    approve.add_argument(
+        "--approval-artifact-ledger-snapshot", type=Path, required=True
+    )
     approve.add_argument("--output", type=Path, required=True)
     verify = subparsers.add_parser("verify")
     verify.add_argument("--approval", type=Path, required=True)

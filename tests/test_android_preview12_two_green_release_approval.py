@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import io
@@ -26,6 +27,8 @@ spec.loader.exec_module(approval)
 # RFC 8032 test-vector seed wrapped in the standard Ed25519 PKCS#8 DER envelope.
 TEST_SEED = bytes.fromhex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
 TEST_PRIVATE_DER = bytes.fromhex("302e020100300506032b657004220420") + TEST_SEED
+NOW = datetime(2026, 9, 6, 14, 10, tzinfo=timezone.utc)
+REVIEWERS = [{"id": 17, "login": "reviewer"}]
 
 
 def write_json(path: Path, value: object) -> bytes:
@@ -38,6 +41,7 @@ def active_policy(tmp_path: Path) -> tuple[dict, Path, str]:
     value = json.loads(POLICY.read_text())
     value["state"] = "ready"
     value["github_environment"]["configured"] = True
+    value["github_environment"]["expected_human_user_reviewers"] = REVIEWERS
     value["external_ed25519_key"]["configured"] = True
     value["activation"]["enabled"] = True
     key_fd = os.memfd_create("test-ed25519")
@@ -59,12 +63,14 @@ def active_policy(tmp_path: Path) -> tuple[dict, Path, str]:
 
 def inputs() -> dict[str, object]:
     return {
+        "approval_request_nonce": "9" * 64,
         "two_green_run_id": "301",
         "two_green_run_attempt": "1",
         "two_green_artifact_id": "401",
         "two_green_artifact_sha256": "0" * 64,
         "two_green_receipt_sha256": "0" * 64,
         "review_run_id": "101",
+        "review_pull_request_number": "45",
         "main_run_id": "201",
         "main_commit": "a" * 40,
         "main_tree": "b" * 40,
@@ -122,9 +128,19 @@ def receipt() -> dict:
             "p0EventSha": "a" * 40,
             "aggregateStatus": "pass",
         },
-        "decisionTimeUtc": "2026-09-06T12:00:00Z",
-        "reviewPullRequest": {},
+        "decisionTimeUtc": "2026-09-06T14:02:00Z",
+        "reviewPullRequest": {
+            "repository": approval.ANDROID_REPOSITORY,
+            "number": 45,
+        },
         "doesNotAssert": ["google_play_upload", "release_signing", "publication_authority"],
+    }
+    value["policyAuthority"] = {
+        "path": "eng/api36-two-consecutive-green-authority.json",
+        "publicationAuthorized": False,
+        "schema": "chummer.android.api36-ordered-review-main-green-policy/v2",
+        "sha256": "8" * 64,
+        "sizeBytes": 1024,
     }
     value["eligibilitySha256"] = approval.canonical_sha256(value)
     return value
@@ -157,6 +173,9 @@ def full_case(tmp_path: Path):
         "head_sha": "a" * 40,
         "status": "completed",
         "conclusion": "success",
+        "created_at": "2026-09-06T14:02:10Z",
+        "run_started_at": "2026-09-06T14:02:11Z",
+        "updated_at": "2026-09-06T14:02:30Z",
         "url": f"https://api.github.com/repos/{approval.ANDROID_REPOSITORY}/actions/runs/301",
         "html_url": f"https://github.com/{approval.ANDROID_REPOSITORY}/actions/runs/301",
         "repository": {"id": 1331626697, "full_name": approval.ANDROID_REPOSITORY},
@@ -171,20 +190,37 @@ def full_case(tmp_path: Path):
         "url": f"https://api.github.com/repos/{approval.ANDROID_REPOSITORY}/actions/artifacts/401",
         "archive_download_url": f"https://api.github.com/repos/{approval.ANDROID_REPOSITORY}/actions/artifacts/401/zip",
         "workflow_run": {"id": 301, "head_sha": "a" * 40},
+        "created_at": "2026-09-06T14:02:35Z",
+        "expires_at": "2026-10-06T14:02:35Z",
     }
     environment_value = {
         "name": approval.ENVIRONMENT_NAME,
         "url": f"https://api.github.com/repos/{approval.FLEET_REPOSITORY}/environments/{approval.ENVIRONMENT_NAME}",
+        "can_admins_bypass": False,
         "deployment_branch_policy": {"protected_branches": True, "custom_branch_policies": False},
         "protection_rules": [{
             "type": "required_reviewers",
             "prevent_self_review": True,
-            "reviewers": [{"type": "User", "reviewer": {"id": 17, "login": "reviewer"}}],
+            "reviewers": [{"type": "User", "reviewer": REVIEWERS[0]}],
         }],
     }
     write_json(tmp_path / "run.json", run)
     write_json(tmp_path / "artifact.json", artifact_value)
     write_json(tmp_path / "environment.json", environment_value)
+    write_json(tmp_path / "android-main-branch.json", {
+        "name": "main",
+        "protected": True,
+        "commit": {"sha": "a" * 40},
+    })
+    write_json(tmp_path / "android-main-commit.json", {
+        "sha": "a" * 40,
+        "url": f"https://api.github.com/repos/{approval.ANDROID_REPOSITORY}/git/commits/{'a' * 40}",
+        "tree": {"sha": "b" * 40},
+    })
+    write_json(tmp_path / "approval-artifact-ledger.json", {
+        "total_count": 0,
+        "artifacts": [],
+    })
     args = argparse.Namespace(
         policy=policy_path,
         **values,
@@ -193,6 +229,9 @@ def full_case(tmp_path: Path):
         run_snapshot=(tmp_path / "run.json").resolve(),
         artifact_snapshot=(tmp_path / "artifact.json").resolve(),
         artifact_archive=(tmp_path / "artifact.zip").resolve(),
+        android_main_branch_snapshot=(tmp_path / "android-main-branch.json").resolve(),
+        android_main_commit_snapshot=(tmp_path / "android-main-commit.json").resolve(),
+        approval_artifact_ledger_snapshot=(tmp_path / "approval-artifact-ledger.json").resolve(),
         output=(tmp_path / approval.OUTPUT_NAME).resolve(),
     )
     environment = {approval.KEY_ENV_NAME: base64.b64encode(TEST_PRIVATE_DER).decode()}
@@ -243,17 +282,24 @@ def test_environment_requires_human_reviewer_self_review_prevention_and_protecte
     base = {
         "name": approval.ENVIRONMENT_NAME,
         "url": f"https://api.github.com/repos/{approval.FLEET_REPOSITORY}/environments/{approval.ENVIRONMENT_NAME}",
+        "can_admins_bypass": False,
         "deployment_branch_policy": {"protected_branches": True, "custom_branch_policies": False},
         "protection_rules": [{"type": "required_reviewers", "prevent_self_review": True,
-                              "reviewers": [{"type": "User", "reviewer": {"id": 7, "login": "human-reviewer"}}]}],
+                              "reviewers": [{"type": "User", "reviewer": REVIEWERS[0]}]}],
     }
     assert approval.validate_environment_snapshot(base, policy)["requiredReviewerCount"] == 1
     for mutation in (
         lambda value: value["protection_rules"].clear(),
         lambda value: value["protection_rules"][0].update(prevent_self_review=False),
         lambda value: value["deployment_branch_policy"].update(protected_branches=False),
+        lambda value: value.update(can_admins_bypass=True),
         lambda value: value["protection_rules"][0].update(reviewers=[]),
         lambda value: value["protection_rules"][0].update(reviewers=[{"type": "Team", "reviewer": {"id": 7}}]),
+        lambda value: value["protection_rules"][0].update(reviewers=[
+            {"type": "User", "reviewer": REVIEWERS[0]},
+            {"type": "Team", "reviewer": {"id": 8}},
+        ]),
+        lambda value: value["protection_rules"][0]["reviewers"][0]["reviewer"].update(id=18),
     ):
         changed = json.loads(json.dumps(base))
         mutation(changed)
@@ -263,8 +309,8 @@ def test_environment_requires_human_reviewer_self_review_prevention_and_protecte
 
 def test_exact_two_green_receipt_emits_only_public_non_authorizing_approval(tmp_path: Path):
     _, public_digest, _, args, environment = full_case(tmp_path)
-    result = approval.create_approval(args, environment)
-    approval.validate_approval(result)
+    result = approval.create_approval(args, environment, now=NOW)
+    approval.validate_approval(result, now=NOW)
     assert result["signature"]["publicKeySpkiSha256"] == public_digest
     assert result["twoGreenVerified"] is True
     assert result["signingAuthorized"] is False
@@ -273,7 +319,8 @@ def test_exact_two_green_receipt_emits_only_public_non_authorizing_approval(tmp_
     serialized = approval.pretty_bytes(result)
     assert base64.b64encode(TEST_PRIVATE_DER) not in serialized
     assert b"keystore" not in serialized.lower()
-    assert b"aab" not in serialized.lower()
+    assert b'"aab"' not in serialized.lower()
+    assert b'"aabsha256"' not in serialized.lower()
 
 
 @pytest.mark.parametrize("mutate,match", [
@@ -283,10 +330,102 @@ def test_exact_two_green_receipt_emits_only_public_non_authorizing_approval(tmp_
     (lambda value: value.update(publicationAuthorized=True), "posture"),
 ])
 def test_receipt_substitution_fails_closed(tmp_path: Path, mutate, match):
-    _, _, receipt_value, args, _ = full_case(tmp_path)
+    policy, _, receipt_value, args, _ = full_case(tmp_path)
     mutate(receipt_value)
     with pytest.raises(approval.ApprovalError, match=match):
-        approval.validate_receipt(receipt_value, approval.validate_inputs(args))
+        approval.validate_receipt(
+            receipt_value, approval.validate_inputs(args), now=NOW,
+            policy=policy,
+        )
+
+
+def test_stale_or_future_evidence_fails_closed(tmp_path: Path):
+    _, _, _, args, environment = full_case(tmp_path)
+    run = json.loads(args.run_snapshot.read_text())
+    run["updated_at"] = "2026-09-04T14:02:30Z"
+    write_json(args.run_snapshot, run)
+    with pytest.raises(approval.ApprovalError, match="stale"):
+        approval.create_approval(args, environment, now=NOW)
+
+    _, _, _, args, environment = full_case(tmp_path)
+    artifact_value = json.loads(args.artifact_snapshot.read_text())
+    artifact_value["created_at"] = "2026-09-06T14:01:00Z"
+    write_json(args.artifact_snapshot, artifact_value)
+    with pytest.raises(approval.ApprovalError, match="exact run attempt"):
+        approval.create_approval(args, environment, now=NOW)
+
+    _, _, receipt_value, args, environment = full_case(tmp_path)
+    receipt_value["decisionTimeUtc"] = "2026-09-06T15:00:00Z"
+    receipt_value["eligibilitySha256"] = approval.canonical_sha256(
+        {key: value for key, value in receipt_value.items() if key != "eligibilitySha256"}
+    )
+    receipt_bytes = write_json(tmp_path / "receipt.json", receipt_value)
+    archive_bytes = archive(args.artifact_archive, receipt_bytes)
+    values = json.loads(args.artifact_snapshot.read_text())
+    values["digest"] = f"sha256:{hashlib.sha256(archive_bytes).hexdigest()}"
+    values["size_in_bytes"] = len(archive_bytes)
+    write_json(args.artifact_snapshot, values)
+    args.two_green_artifact_sha256 = hashlib.sha256(archive_bytes).hexdigest()
+    args.two_green_receipt_sha256 = hashlib.sha256(receipt_bytes).hexdigest()
+    with pytest.raises(approval.ApprovalError, match="future"):
+        approval.create_approval(args, environment, now=NOW)
+
+
+@pytest.mark.parametrize("snapshot,mutate,match", [
+    ("android_main_branch_snapshot", lambda value: value["commit"].update(sha="d" * 40), "branch authority"),
+    ("android_main_branch_snapshot", lambda value: value.update(protected=False), "branch authority"),
+    ("android_main_commit_snapshot", lambda value: value["tree"].update(sha="d" * 40), "commit/tree authority"),
+])
+def test_current_protected_android_main_is_exact(
+    tmp_path: Path, snapshot: str, mutate, match: str
+):
+    _, _, _, args, environment = full_case(tmp_path)
+    path = getattr(args, snapshot)
+    value = json.loads(path.read_text())
+    mutate(value)
+    write_json(path, value)
+    with pytest.raises(approval.ApprovalError, match=match):
+        approval.create_approval(args, environment, now=NOW)
+
+
+def test_prior_approval_artifact_blocks_replay(tmp_path: Path):
+    _, _, _, args, environment = full_case(tmp_path)
+    expected_name = approval.approval_artifact_name(approval.validate_inputs(args))
+    write_json(args.approval_artifact_ledger_snapshot, {
+        "total_count": 1,
+        "artifacts": [{"id": 9001, "name": expected_name, "expired": False}],
+    })
+    with pytest.raises(approval.ApprovalError, match="already approved"):
+        approval.create_approval(args, environment, now=NOW)
+
+
+def test_nonce_and_reviewed_pull_request_are_exact(tmp_path: Path):
+    policy, _, receipt_value, args, _ = full_case(tmp_path)
+    args.approval_request_nonce = "not-a-nonce"
+    with pytest.raises(approval.ApprovalError, match="nonce"):
+        approval.validate_inputs(args)
+    args.approval_request_nonce = "9" * 64
+    receipt_value["reviewPullRequest"]["number"] = 46
+    receipt_value["eligibilitySha256"] = approval.canonical_sha256(
+        {key: value for key, value in receipt_value.items() if key != "eligibilitySha256"}
+    )
+    with pytest.raises(approval.ApprovalError, match="reviewed pull request"):
+        approval.validate_receipt(
+            receipt_value, approval.validate_inputs(args), now=NOW, policy=policy
+        )
+
+    args.review_pull_request_number = "045"
+    with pytest.raises(approval.ApprovalError, match="positive decimal"):
+        approval.validate_inputs(args)
+
+
+def test_public_approval_expires_for_consumers(tmp_path: Path):
+    _, _, _, args, environment = full_case(tmp_path)
+    result = approval.create_approval(args, environment, now=NOW)
+    with pytest.raises(approval.ApprovalError, match="stale"):
+        approval.validate_approval(
+            result, now=datetime(2026, 9, 8, 14, 10, tzinfo=timezone.utc)
+        )
 
 
 def test_wrong_external_key_is_rejected_against_reviewed_public_digest(tmp_path: Path):
@@ -296,7 +435,7 @@ def test_wrong_external_key_is_rejected_against_reviewed_public_digest(tmp_path:
         bytes.fromhex("302e020100300506032b657004220420") + other_seed
     ).decode()
     with pytest.raises(approval.ApprovalError, match="public key differs"):
-        approval.create_approval(args, environment)
+        approval.create_approval(args, environment, now=NOW)
 
 
 def test_artifact_metadata_size_must_match_downloaded_exact_archive(tmp_path: Path):
@@ -305,15 +444,15 @@ def test_artifact_metadata_size_must_match_downloaded_exact_archive(tmp_path: Pa
     value["size_in_bytes"] += 1
     write_json(args.artifact_snapshot, value)
     with pytest.raises(approval.ApprovalError, match="archive size differs"):
-        approval.create_approval(args, environment)
+        approval.create_approval(args, environment, now=NOW)
 
 
 def test_public_approval_tamper_is_rejected(tmp_path: Path):
     _, _, _, args, environment = full_case(tmp_path)
-    result = approval.create_approval(args, environment)
+    result = approval.create_approval(args, environment, now=NOW)
     result["androidSource"]["tree"] = "e" * 40
-    with pytest.raises(approval.ApprovalError, match="digest is invalid"):
-        approval.validate_approval(result)
+    with pytest.raises(approval.ApprovalError, match="authority differs"):
+        approval.validate_approval(result, now=NOW)
 
 
 def test_workflow_is_dormant_separate_and_uploads_only_public_json():
@@ -341,12 +480,14 @@ def test_workflow_is_dormant_separate_and_uploads_only_public_json():
             body.append(candidate)
         assert "${{ inputs." not in "\n".join(body)
     for name in (
+        "APPROVAL_REQUEST_NONCE",
         "TWO_GREEN_RUN_ID",
         "TWO_GREEN_RUN_ATTEMPT",
         "TWO_GREEN_ARTIFACT_ID",
         "TWO_GREEN_ARTIFACT_SHA256",
         "TWO_GREEN_RECEIPT_SHA256",
         "REVIEW_RUN_ID",
+        "REVIEW_PULL_REQUEST_NUMBER",
         "MAIN_RUN_ID",
         "MAIN_COMMIT",
         "MAIN_TREE",
@@ -354,6 +495,15 @@ def test_workflow_is_dormant_separate_and_uploads_only_public_json():
         "VERSION_CODE",
     ):
         assert f'"${name}"' in text
+    assert "approval-artifact-ledger.json" in text
+    assert (
+        "group: preview12-two-green-release-approval-"
+        "${{ inputs.two_green_artifact_id }}"
+    ) in text
+    assert (
+        "name: android-preview12-two-green-release-approval-"
+        "${{ inputs.two_green_artifact_id }}"
+    ) in text
     upload_block = text.split("- name: Upload only the public approval JSON", 1)[1]
     assert approval.OUTPUT_NAME in upload_block
     assert "preview12-approval-evidence" not in upload_block
