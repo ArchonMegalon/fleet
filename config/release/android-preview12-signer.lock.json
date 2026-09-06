@@ -1,12 +1,16 @@
 {
-  "contract_name": "fleet.android_preview12_signer_transaction.v2",
-  "contract_version": 2,
+  "contract_name": "fleet.android_preview12_signer_transaction.v3",
+  "contract_version": 3,
   "state": "blocked_pending_preview12_producer_and_signer_services",
   "release": {
-    "version_name": "Preview12",
+    "package_id": "com.myexternalbrain.chummer",
+    "version_name": "0.1.0-preview.12",
     "version_code": 12,
+    "minimum_sdk": 24,
+    "target_sdk": 36,
     "candidate_file_name": null,
-    "signed_file_name": null
+    "signed_file_name": null,
+    "source_graph_file_name": null
   },
   "source": {
     "repository": "ArchonMegalon/chummer-android",
@@ -28,7 +32,9 @@
       "event": null,
       "run_attempt": null,
       "artifact_name": null,
-      "receipt_file_name": null
+      "receipt_file_name": null,
+      "proof_exclusion_validator_path": null,
+      "proof_exclusion_validator_blob_sha": null
     },
     "discovery_receipt": {
       "remote_main_sha": "eb4d37ee95eee808a4c2269f1d3f3b5631eb3129",
@@ -72,9 +78,18 @@
     "private_content_addressed_endpoint": null,
     "audited_implementation_sha256": null
   },
-  "limits": {"artifact_max_bytes": 1073741824, "candidate_max_bytes": 536870912},
+  "limits": {
+    "artifact_max_bytes": 1073741824,
+    "candidate_max_bytes": 536870912,
+    "source_graph_max_bytes": 16777216,
+    "verification_receipt_max_bytes": 1048576,
+    "api_json_max_bytes": 1048576,
+    "reservation_json_max_bytes": 262144
+  },
   "publication": {
     "intake_actions_artifact_is_private_ci_evidence": true,
+    "signing": false,
+    "signed_content_handoff": false,
     "signed_aab_actions_artifact": false,
     "registry_publication": false,
     "play_upload": false,

@@ -25,6 +25,23 @@ HEX64 = re.compile(r"^[0-9a-f]{64}$")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 FLEET_REPOSITORY = "ArchonMegalon/fleet"
 ANDROID_REPOSITORY = "ArchonMegalon/chummer-android"
+PACKAGE_ID = "com.myexternalbrain.chummer"
+VERSION_NAME = "0.1.0-preview.12"
+VERSION_CODE = 12
+MINIMUM_SDK = 24
+TARGET_SDK = 36
+SOURCE_GRAPH_CONTRACT = "chummer.android.release-source-graph/v3"
+PROOF_EXCLUSION_CONTRACT = "chummer.android.release-aab-proof-exclusion/v1"
+SOURCE_REPOSITORIES = {
+    "chummer-android": ("app", "https://github.com/ArchonMegalon/chummer-android.git"),
+    "chummer6-core": ("runtime", "https://github.com/ArchonMegalon/chummer6-core.git"),
+    "chummer6-design": ("validation", "https://github.com/ArchonMegalon/chummer6-design.git"),
+    "chummer6-hub": ("contracts_and_validation", "https://github.com/ArchonMegalon/chummer6-hub.git"),
+    "chummer6-hub-registry": ("contracts", "https://github.com/ArchonMegalon/chummer6-hub-registry.git"),
+    "chummer6-media-factory": ("contracts", "https://github.com/ArchonMegalon/chummer6-media-factory.git"),
+    "chummer6-ui": ("runtime", "https://github.com/ArchonMegalon/chummer6-ui.git"),
+    "chummer6-ui-kit": ("runtime", "https://github.com/ArchonMegalon/chummer6-ui-kit.git"),
+}
 VERIFIER_PATH = f"{FLEET_REPOSITORY}/.github/workflows/android-preview12-verifier.yml"
 SIGNER_REF = f"{FLEET_REPOSITORY}/.github/workflows/android-preview12-signer.yml@refs/heads/main"
 class SignerError(RuntimeError):
@@ -37,14 +54,52 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 def _json_bytes(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+def _object_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise SignerError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+def _json_object(payload: bytes, label: str) -> dict[str, Any]:
+    try:
+        value = json.loads(payload.decode("utf-8", errors="strict"),
+            object_pairs_hook=_object_without_duplicates,
+            parse_constant=lambda token: (_ for _ in ()).throw(SignerError(f"non-finite JSON value: {token}")))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise SignerError(f"{label} is not strict UTF-8 JSON") from error
+    if not isinstance(value, dict):
+        raise SignerError(f"{label} must contain one JSON object")
+    return value
+def _bounded_file_bytes(path: Path, label: str, limit: int) -> bytes:
+    if limit < 1:
+        raise SignerError(f"{label} has an invalid size limit")
+    with path.open("rb") as stream:
+        payload = stream.read(limit + 1)
+    if len(payload) > limit:
+        raise SignerError(f"{label} exceeds the locked size limit")
+    return payload
+def _bounded_response_bytes(response, label: str, limit: int) -> bytes:
+    declared = response.headers.get("Content-Length") if getattr(response, "headers", None) else None
+    if declared is not None:
+        if not declared.isascii() or not declared.isdigit():
+            raise SignerError(f"{label} has an invalid Content-Length")
+        if int(declared) > limit:
+            raise SignerError(f"{label} exceeds the locked size limit")
+    payload = response.read(limit + 1)
+    if len(payload) > limit:
+        raise SignerError(f"{label} exceeds the locked size limit")
+    if declared is not None and len(payload) != int(declared):
+        raise SignerError(f"{label} body length differs from Content-Length")
+    return payload
 def _load(path: Path, contract: str) -> tuple[dict[str, Any], bytes]:
-    payload = path.read_bytes()
-    value = json.loads(payload)
+    payload = _bounded_file_bytes(path, contract, 1024 * 1024)
+    value = _json_object(payload, contract)
     if value.get("contract_name") != contract:
         raise SignerError(f"unexpected {contract} contract")
     return value, payload
 def _load_lock(path: Path):
-    return _load(path, "fleet.android_preview12_signer_transaction.v2")
+    return _load(path, "fleet.android_preview12_signer_transaction.v3")
 def _load_toolchain(path: Path):
     return _load(path, "fleet.android_preview12_toolchain.v1")
 def _full_image(lock: Mapping[str, Any]) -> str | None:
@@ -55,17 +110,24 @@ def _positive(value: Any, label: str) -> int:
     if not text.isascii() or not text.isdigit() or int(text) < 1:
         raise SignerError(f"{label} must be a positive integer")
     return int(text)
+def _plain_file_name(value: Any, suffix: str) -> bool:
+    return isinstance(value, str) and value.endswith(suffix) and PurePosixPath(value).name == value \
+        and "\\" not in value and value not in ("", ".", "..")
 def provisioning_blockers(lock, signer_image: str, toolchain, toolchain_bytes: bytes,
                           producer_only: bool = False) -> list[str]:
     failures: list[str] = []
     if lock.get("state") != "ready":
         failures.append("lock state is not ready")
     release = lock.get("release", {})
-    if (release.get("version_name"), release.get("version_code")) != ("Preview12", 12):
-        failures.append("release identity is not exact Preview12/code12")
+    identity = (release.get("package_id"), release.get("version_name"), release.get("version_code"),
+                release.get("minimum_sdk"), release.get("target_sdk"))
+    if identity != (PACKAGE_ID, VERSION_NAME, VERSION_CODE, MINIMUM_SDK, TARGET_SDK):
+        failures.append("release identity is not exact com.myexternalbrain.chummer/0.1.0-preview.12/code12/API24-36")
     for field in ("candidate_file_name", "signed_file_name"):
-        if not isinstance(release.get(field), str) or not release[field].endswith(".aab"):
+        if not _plain_file_name(release.get(field), ".aab"):
             failures.append(f"release.{field} is not provisioned")
+    if not _plain_file_name(release.get("source_graph_file_name"), "-source-graph.json"):
+        failures.append("release.source_graph_file_name is not provisioned")
     source = lock.get("source", {})
     if (source.get("repository"), source.get("repository_id")) != (ANDROID_REPOSITORY, 1331626697):
         failures.append("canonical Android source repository drifted")
@@ -92,8 +154,25 @@ def provisioning_blockers(lock, signer_image: str, toolchain, toolchain_bytes: b
     verification = source.get("verification", {})
     if not HEX64.fullmatch(str(candidate.get("producer_toolchain_closure_sha256") or "")):
         failures.append("producer toolchain closure is not provisioned")
-    if not isinstance(verification.get("receipt_file_name"), str):
-        failures.append("verification receipt file name is not provisioned")
+    for field in ("receipt_file_name", "proof_exclusion_validator_path"):
+        if not isinstance(verification.get(field), str) or not verification[field]:
+            failures.append(f"verification {field} is not provisioned")
+    receipt_name = verification.get("receipt_file_name")
+    if receipt_name is not None and not _plain_file_name(receipt_name, ".json"):
+        failures.append("verification receipt file name is unsafe")
+    validator_path = str(verification.get("proof_exclusion_validator_path") or "")
+    validator_parts = PurePosixPath(validator_path)
+    if validator_path and (validator_parts.is_absolute() or ".." in validator_parts.parts
+                           or "\\" in validator_path or not validator_path.startswith("scripts/")
+                           or not validator_path.endswith(".py")):
+        failures.append("verification proof-exclusion validator path is unsafe")
+    if not HEX40.fullmatch(str(verification.get("proof_exclusion_validator_blob_sha") or "")):
+        failures.append("verification proof-exclusion validator blob SHA is not provisioned")
+    limits = lock.get("limits", {})
+    for key in ("artifact_max_bytes", "candidate_max_bytes", "source_graph_max_bytes",
+                "verification_receipt_max_bytes", "api_json_max_bytes", "reservation_json_max_bytes"):
+        if type(limits.get(key)) is not int or limits[key] < 1:
+            failures.append(f"limits.{key} is not provisioned")
     if producer_only:
         return failures
     reservation = lock.get("reservation", {})
@@ -142,7 +221,8 @@ def provisioning_blockers(lock, signer_image: str, toolchain, toolchain_bytes: b
         failures.append("Play upload environment must remain disabled")
     if publication.get("intake_actions_artifact_is_private_ci_evidence") is not True:
         failures.append("intake Actions artifact must remain private CI evidence")
-    for key in ("signed_aab_actions_artifact", "registry_publication", "play_upload", "github_release"):
+    for key in ("signing", "signed_content_handoff", "signed_aab_actions_artifact", "registry_publication",
+                "play_upload", "github_release"):
         if publication.get(key) is not False:
             failures.append(f"publication.{key} must remain false")
     return failures
@@ -217,15 +297,19 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, fp, code, message, headers, new_url):  # noqa: ANN001
         return None
 class GitHubClient:
-    def __init__(self, token: str):
+    def __init__(self, token: str, json_limit: int = 1024 * 1024):
         if not token:
             raise SignerError("candidate broker credential is missing")
+        if json_limit < 1:
+            raise SignerError("GitHub JSON limit is invalid")
+        self.json_limit = json_limit
         self.headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}",
                         "User-Agent": "fleet-preview12-intake/2", "X-GitHub-Api-Version": "2022-11-28"}
 
     def get_json(self, url: str) -> dict[str, Any]:
         with urllib.request.urlopen(urllib.request.Request(url, headers=self.headers), timeout=30) as response:
-            return json.load(response)
+            return _json_object(_bounded_response_bytes(response, "GitHub API response", self.json_limit),
+                                "GitHub API response")
 
     def download_to(self, url: str, output: Path, limit: int) -> None:
         request = urllib.request.Request(url, headers=self.headers)
@@ -241,16 +325,23 @@ class GitHubClient:
             response = urllib.request.urlopen(urllib.request.Request(location, headers={"User-Agent": self.headers["User-Agent"]}), timeout=60)
         total = 0
         with response, output.open("wb") as stream:
+            declared = response.headers.get("Content-Length") if getattr(response, "headers", None) else None
+            if declared is not None and (not declared.isascii() or not declared.isdigit() or int(declared) > limit):
+                raise SignerError("artifact has an invalid or oversized Content-Length")
             while chunk := response.read(1024 * 1024):
                 total += len(chunk)
                 if total > limit:
                     raise SignerError("artifact exceeds locked size limit")
                 stream.write(chunk)
+            if declared is not None and total != int(declared):
+                raise SignerError("artifact body length differs from Content-Length")
 class ReservationClient:
-    def __init__(self, url: str, token: str):
+    def __init__(self, url: str, token: str, json_limit: int = 256 * 1024):
         if not token:
             raise SignerError("reservation broker credential is missing")
-        self.url, self.token = url, token
+        if json_limit < 1:
+            raise SignerError("reservation JSON limit is invalid")
+        self.url, self.token, self.json_limit = url, token, json_limit
 
     def reserve(self, request_value: Mapping[str, Any]) -> dict[str, Any]:
         transaction = str(request_value["transaction_id"])
@@ -259,8 +350,9 @@ class ReservationClient:
             "Idempotency-Key": transaction, "User-Agent": "fleet-preview12-reservation/1"})
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
-                return json.load(response)
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+                return _json_object(_bounded_response_bytes(response, "reservation response", self.json_limit),
+                                    "reservation response")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, SignerError) as error:
             raise SignerError("reservation outcome is indeterminate") from error
 def _validate_run(run, run_id: int, source, source_sha: str, spec) -> None:
     expected = {"id": run_id, "run_attempt": spec["run_attempt"], "event": spec["event"],
@@ -279,6 +371,10 @@ def _validate_workflow_blob(client, api: str, spec, source_sha: str) -> None:
     value = client.get_json(f"{api}/contents/{path}?ref={source_sha}")
     if (value.get("path"), value.get("sha")) != (spec["workflow_path"], spec["workflow_blob_sha"]):
         raise SignerError("workflow path/blob SHA does not match the run commit")
+def _validate_source_blob(client, api: str, path: str, blob_sha: str, source_sha: str, label: str) -> None:
+    value = client.get_json(f"{api}/contents/{urllib.parse.quote(path, safe='/')}?ref={source_sha}")
+    if (value.get("path"), value.get("sha")) != (path, blob_sha):
+        raise SignerError(f"{label} path/blob SHA does not match the run commit")
 def _validate_artifact(value, artifact_id: int, run_id: int, name: str, digest: str, api: str) -> str:
     expected_url = f"{api}/actions/artifacts/{artifact_id}/zip"
     if (value.get("id"), value.get("name"), value.get("expired"), value.get("digest")) != (
@@ -315,12 +411,71 @@ def _assert_unsigned_aab(path: Path) -> None:
     signature = re.compile(r"^META-INF/[^/]+\.(SF|RSA|DSA|EC)$")
     if len(names) != len(set(names)) or any(signature.fullmatch(name) for name in names):
         raise SignerError("candidate is already signed or has duplicate members")
+def _validate_source_graph(value: dict[str, Any], raw: bytes, lock, source_sha: str,
+                           expected_sha256: str) -> None:
+    expected_fields = {"contractName", "generatedAtUtc", "authorityState", "publicationAuthorized",
+        "releaseIdentity", "generator", "repositories", "packagePins", "ownerPackagePins",
+        "dependencyClosure", "presentationSource", "doesNotAssert"}
+    if set(value) != expected_fields or value.get("contractName") != SOURCE_GRAPH_CONTRACT \
+            or value.get("authorityState") != "local_review_required" \
+            or value.get("publicationAuthorized") is not False:
+        raise SignerError("release source graph contract/posture is not exact")
+    if hashlib.sha256(raw).hexdigest() != expected_sha256:
+        raise SignerError("release source graph digest is not exact")
+    release = lock["release"]
+    if value.get("releaseIdentity") != {"packageId": PACKAGE_ID, "versionName": VERSION_NAME,
+            "versionCode": VERSION_CODE, "intentAuthority": "explicit_build_input",
+            "minimumExclusiveVersionCode": 11}:
+        raise SignerError("release source graph identity is not exact Preview12")
+    rows = value.get("repositories")
+    if not isinstance(rows, list) or len(rows) != len(SOURCE_REPOSITORIES):
+        raise SignerError("release source graph repository inventory is not exact")
+    by_name: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != {"name", "role", "commit", "tree", "tree_sha256", "repository"}:
+            raise SignerError("release source graph repository binding is not exact")
+        name = row.get("name")
+        if name not in SOURCE_REPOSITORIES or name in by_name:
+            raise SignerError("release source graph repository inventory is ambiguous")
+        role, repository = SOURCE_REPOSITORIES[name]
+        if row.get("role") != role or row.get("repository") != repository \
+                or not HEX40.fullmatch(str(row.get("commit") or "")) \
+                or not HEX40.fullmatch(str(row.get("tree") or "")) \
+                or not HEX64.fullmatch(str(row.get("tree_sha256") or "")):
+            raise SignerError(f"release source graph repository authority differs: {name}")
+        by_name[name] = row
+    if set(by_name) != set(SOURCE_REPOSITORIES) or by_name["chummer-android"]["commit"] != source_sha:
+        raise SignerError("release source graph does not bind the exact Android source")
+    if not isinstance(value.get("packagePins"), list) or not value["packagePins"] \
+            or not isinstance(value.get("ownerPackagePins"), list) or not value["ownerPackagePins"] \
+            or not isinstance(value.get("dependencyClosure"), list) or not value["dependencyClosure"]:
+        raise SignerError("release source graph package closure is absent")
+    if not isinstance(release.get("source_graph_file_name"), str):
+        raise SignerError("release source graph file name is unavailable")
+def _validate_proof_exclusion(value: Any, lock, candidate_sha256: str, source_graph_sha256: str) -> str:
+    verification = lock["source"]["verification"]
+    expected_fields = {"contract_name", "status", "candidate_aab_sha256", "source_graph_sha256",
+        "validator_path", "validator_blob_sha", "validation_output_sha256", "publication_authorized"}
+    if not isinstance(value, dict) or set(value) != expected_fields \
+            or value.get("contract_name") != PROOF_EXCLUSION_CONTRACT or value.get("status") != "pass" \
+            or value.get("candidate_aab_sha256") != candidate_sha256 \
+            or value.get("source_graph_sha256") != source_graph_sha256 \
+            or value.get("validator_path") != verification["proof_exclusion_validator_path"] \
+            or value.get("validator_blob_sha") != verification["proof_exclusion_validator_blob_sha"] \
+            or value.get("publication_authorized") is not False:
+        raise SignerError("proof-exclusion authority does not bind the exact candidate and source graph")
+    output_digest = str(value.get("validation_output_sha256") or "")
+    if not HEX64.fullmatch(output_digest):
+        raise SignerError("proof-exclusion validation output digest is invalid")
+    return output_digest
 def _producer_receipt_expected(lock, args, source_sha: str, digests: Mapping[str, str]) -> dict[str, Any]:
     source, candidate, verification = lock["source"], lock["source"]["candidate"], lock["source"]["verification"]
     return {
-        "contract_name": "chummer_android.preview12_signer_eligibility.v1", "eligible": True,
+        "contract_name": "chummer_android.preview12_signer_eligibility.v2", "eligible": True,
         "source_repository": source["repository"], "source_repository_id": source["repository_id"],
         "source_ref": source["source_ref"], "source_sha": source_sha,
+        "release_identity": {"package_id": PACKAGE_ID, "version_name": VERSION_NAME, "version_code": VERSION_CODE,
+            "minimum_sdk": MINIMUM_SDK, "target_sdk": TARGET_SDK},
         "candidate": {"run_id": int(args.candidate_run_id), "run_attempt": candidate["run_attempt"],
             "workflow_id": candidate["workflow_id"], "workflow_path": candidate["workflow_path"],
             "workflow_blob_sha": candidate["workflow_blob_sha"], "artifact_id": int(args.candidate_artifact_id),
@@ -331,6 +486,14 @@ def _producer_receipt_expected(lock, args, source_sha: str, digests: Mapping[str
             "workflow_id": verification["workflow_id"], "workflow_path": verification["workflow_path"],
             "workflow_blob_sha": verification["workflow_blob_sha"], "artifact_id": int(args.verification_artifact_id),
             "artifact_name": verification["artifact_name"]},
+        "source_graph": {"contract_name": SOURCE_GRAPH_CONTRACT,
+            "file_name": lock["release"]["source_graph_file_name"], "sha256": digests["source_graph"],
+            "android_source_sha": source_sha, "publication_authorized": False},
+        "proof_exclusion": {"contract_name": PROOF_EXCLUSION_CONTRACT, "status": "pass",
+            "candidate_aab_sha256": digests["candidate_aab"], "source_graph_sha256": digests["source_graph"],
+            "validator_path": verification["proof_exclusion_validator_path"],
+            "validator_blob_sha": verification["proof_exclusion_validator_blob_sha"],
+            "validation_output_sha256": digests["proof_validation_output"], "publication_authorized": False},
         "publication_authorized": False, "play_upload_authorized": False,
     }
 def intake(args, lock, lock_bytes: bytes, toolchain, toolchain_bytes: bytes, client) -> dict[str, Any]:
@@ -351,6 +514,10 @@ def intake(args, lock, lock_bytes: bytes, toolchain, toolchain_bytes: bytes, cli
         run_id = ids[f"{kind}_run_id"]
         _validate_run(client.get_json(f"{api}/actions/runs/{run_id}"), run_id, source, source_sha, source[kind])
         _validate_workflow_blob(client, api, source[kind], source_sha)
+    verification_spec = source["verification"]
+    _validate_source_blob(client, api, verification_spec["proof_exclusion_validator_path"],
+                          verification_spec["proof_exclusion_validator_blob_sha"], source_sha,
+                          "proof-exclusion validator")
     artifact_urls = {}
     for kind in ("candidate", "verification"):
         artifact_id, run_id = ids[f"{kind}_artifact_id"], ids[f"{kind}_run_id"]
@@ -369,15 +536,37 @@ def intake(args, lock, lock_bytes: bytes, toolchain, toolchain_bytes: bytes, cli
                 raise SignerError(f"downloaded {kind} artifact digest mismatch")
         candidate = temporary_path / lock["release"]["candidate_file_name"]
         verification_receipt = temporary_path / source["verification"]["receipt_file_name"]
+        source_graph = temporary_path / lock["release"]["source_graph_file_name"]
         _extract(archives["candidate"], candidate.name, candidate, int(lock["limits"]["candidate_max_bytes"]))
-        _extract(archives["verification"], verification_receipt.name, verification_receipt, 1024 * 1024)
+        _extract(archives["verification"], verification_receipt.name, verification_receipt,
+                 int(lock["limits"]["verification_receipt_max_bytes"]))
+        _extract(archives["verification"], source_graph.name, source_graph,
+                 int(lock["limits"]["source_graph_max_bytes"]))
         if _sha256(candidate) != digests["candidate_aab"] or _sha256(verification_receipt) != digests["verification_receipt"]:
             raise SignerError("candidate or producer verification receipt digest mismatch")
         _assert_unsigned_aab(candidate)
-        producer_receipt = json.loads(verification_receipt.read_text(encoding="utf-8"))
-        if producer_receipt != _producer_receipt_expected(lock, args, source_sha, digests):
+        receipt_bytes = _bounded_file_bytes(verification_receipt, "producer verification receipt",
+                                            int(lock["limits"]["verification_receipt_max_bytes"]))
+        producer_receipt = _json_object(receipt_bytes, "producer verification receipt")
+        graph_bytes = _bounded_file_bytes(source_graph, "release source graph",
+                                          int(lock["limits"]["source_graph_max_bytes"]))
+        graph_value = _json_object(graph_bytes, "release source graph")
+        graph_claim = producer_receipt.get("source_graph")
+        if not isinstance(graph_claim, dict) or set(graph_claim) != {
+                "contract_name", "file_name", "sha256", "android_source_sha", "publication_authorized"}:
+            raise SignerError("producer receipt source-graph binding is not exact")
+        graph_sha = str(graph_claim.get("sha256") or "")
+        if not HEX64.fullmatch(graph_sha) or graph_claim != {
+                "contract_name": SOURCE_GRAPH_CONTRACT, "file_name": source_graph.name, "sha256": graph_sha,
+                "android_source_sha": source_sha, "publication_authorized": False}:
+            raise SignerError("producer receipt source-graph authority is invalid")
+        _validate_source_graph(graph_value, graph_bytes, lock, source_sha, graph_sha)
+        proof_output = _validate_proof_exclusion(producer_receipt.get("proof_exclusion"), lock,
+                                                 digests["candidate_aab"], graph_sha)
+        expected_digests = {**digests, "source_graph": graph_sha, "proof_validation_output": proof_output}
+        if producer_receipt != _producer_receipt_expected(lock, args, source_sha, expected_digests):
             raise SignerError("producer verification receipt does not bind the exact candidate transaction")
-        receipt = {"contract_name": "fleet.android_preview12_trusted_intake.v2", "producer": producer_receipt,
+        receipt = {"contract_name": "fleet.android_preview12_trusted_intake.v3", "producer": producer_receipt,
             "verification_artifact_sha256": digests["verification_artifact"],
             "verification_receipt_sha256": digests["verification_receipt"],
             "signer_contract_sha256": hashlib.sha256(lock_bytes).hexdigest(),
@@ -387,30 +576,73 @@ def intake(args, lock, lock_bytes: bytes, toolchain, toolchain_bytes: bytes, cli
         with tempfile.TemporaryDirectory(prefix=f".{output_dir.name}-", dir=output_dir.parent) as stage_name:
             stage = Path(stage_name)
             shutil.copyfile(candidate, stage / candidate.name)
+            shutil.copyfile(source_graph, stage / source_graph.name)
             (stage / "signer.lock.json").write_bytes(lock_bytes)
             (stage / "intake-attestation.json").write_text(json.dumps(receipt, sort_keys=True, indent=2) + "\n")
             os.replace(stage, output_dir)
     return receipt
 def _installed_receipt(path: Path, lock, toolchain, toolchain_bytes: bytes) -> None:
-    payload = path.read_bytes()
+    payload = _bounded_file_bytes(path, "installed signer receipt", 1024 * 1024)
     if hashlib.sha256(payload).hexdigest() != lock["toolchain"]["installed_receipt_sha256"]:
         raise SignerError("installed signer receipt digest mismatch")
-    actual = json.loads(payload)
+    actual = _json_object(payload, "installed signer receipt")
     expected = {"contract_name": "fleet.android_preview12_installed_toolchain.v1",
         "lock_sha256": hashlib.sha256(toolchain_bytes).hexdigest(), "base_images": toolchain["base_images"],
         "archives": [{key: item[key] for key in ("name", "version", "url", "sha256")} for item in toolchain["archives"]]}
     if actual != expected:
         raise SignerError("installed signer receipt does not match the full toolchain closure")
 def _intake_receipt(path: Path, lock_bytes: bytes, candidate: Path) -> dict[str, Any]:
-    receipt = json.loads((path / "intake-attestation.json").read_text())
-    if receipt.get("contract_name") != "fleet.android_preview12_trusted_intake.v2":
+    lock = _json_object(lock_bytes, "signer contract")
+    receipt = _json_object(_bounded_file_bytes(path / "intake-attestation.json", "trusted intake attestation",
+                                               int(lock["limits"]["verification_receipt_max_bytes"])),
+                           "trusted intake attestation")
+    if set(receipt) != {"contract_name", "producer", "verification_artifact_sha256",
+            "verification_receipt_sha256", "signer_contract_sha256", "ci_transport_role",
+            "signed_aab_actions_artifact_uploaded", "play_upload_performed", "publication_performed"} \
+            or receipt.get("contract_name") != "fleet.android_preview12_trusted_intake.v3" \
+            or receipt.get("ci_transport_role") != "private_actions_artifact_sanitized_intake" \
+            or any(receipt.get(field) is not False for field in (
+                "signed_aab_actions_artifact_uploaded", "play_upload_performed", "publication_performed")):
         raise SignerError("trusted intake attestation is missing")
     if receipt.get("signer_contract_sha256") != hashlib.sha256(lock_bytes).hexdigest():
         raise SignerError("signer contract changed after trusted intake")
     expected = receipt.get("producer", {}).get("candidate", {}).get("aab_sha256")
     if not candidate.is_file() or _sha256(candidate) != expected:
         raise SignerError("candidate changed after trusted intake")
+    for field in ("verification_artifact_sha256", "verification_receipt_sha256"):
+        if not HEX64.fullmatch(str(receipt.get(field) or "")):
+            raise SignerError(f"trusted intake {field} is invalid")
     _assert_unsigned_aab(candidate)
+    producer = receipt.get("producer")
+    if not isinstance(producer, dict):
+        raise SignerError("trusted intake producer receipt is invalid")
+    source_sha = str(producer.get("source_sha") or "")
+    if not HEX40.fullmatch(source_sha):
+        raise SignerError("trusted intake Android source is invalid")
+    graph_claim = producer.get("source_graph")
+    if not isinstance(graph_claim, dict):
+        raise SignerError("trusted intake source graph is missing")
+    graph_path = path / lock["release"]["source_graph_file_name"]
+    graph_bytes = _bounded_file_bytes(graph_path, "trusted intake source graph",
+                                      int(lock["limits"]["source_graph_max_bytes"]))
+    graph_sha = str(graph_claim.get("sha256") or "")
+    _validate_source_graph(_json_object(graph_bytes, "trusted intake source graph"), graph_bytes,
+                           lock, source_sha, graph_sha)
+    proof_output = _validate_proof_exclusion(producer.get("proof_exclusion"), lock, expected, graph_sha)
+    candidate_claim = producer.get("candidate")
+    verification_claim = producer.get("verification")
+    if not isinstance(candidate_claim, dict) or not isinstance(verification_claim, dict):
+        raise SignerError("trusted intake run/artifact authority is missing")
+    expected_args = argparse.Namespace(candidate_run_id=candidate_claim.get("run_id"),
+        candidate_artifact_id=candidate_claim.get("artifact_id"),
+        verification_run_id=verification_claim.get("run_id"),
+        verification_artifact_id=verification_claim.get("artifact_id"))
+    digests = {"candidate_artifact": candidate_claim.get("artifact_sha256"),
+        "candidate_aab": expected, "verification_artifact": receipt["verification_artifact_sha256"],
+        "verification_receipt": receipt["verification_receipt_sha256"], "source_graph": graph_sha,
+        "proof_validation_output": proof_output}
+    if producer != _producer_receipt_expected(lock, expected_args, source_sha, digests):
+        raise SignerError("trusted intake producer authority changed after sanitization")
     return receipt
 def _runtime(environ: Mapping[str, str]) -> dict[str, str | None]:
     value = {"repository": environ.get("GITHUB_REPOSITORY"), "event": environ.get("GITHUB_EVENT_NAME"),
@@ -428,9 +660,21 @@ def _runtime(environ: Mapping[str, str]) -> dict[str, str | None]:
     return value
 def _transaction(lock, lock_bytes: bytes, intake_receipt, image: str) -> tuple[str, dict[str, Any]]:
     candidate = intake_receipt["producer"]["candidate"]
+    verification = intake_receipt["producer"]["verification"]
+    source_graph = intake_receipt["producer"]["source_graph"]
+    proof_exclusion = intake_receipt["producer"]["proof_exclusion"]
     bindings = {"source_sha": intake_receipt["producer"]["source_sha"], "candidate_run_id": candidate["run_id"],
         "candidate_artifact_id": candidate["artifact_id"], "candidate_artifact_sha256": candidate["artifact_sha256"],
-        "candidate_aab_sha256": candidate["aab_sha256"], "upload_certificate_sha256": lock["signing"]["expected_upload_certificate_sha256"],
+        "candidate_aab_sha256": candidate["aab_sha256"], "verification_run_id": verification["run_id"],
+        "verification_artifact_id": verification["artifact_id"],
+        "verification_artifact_sha256": intake_receipt["verification_artifact_sha256"],
+        "verification_receipt_sha256": intake_receipt["verification_receipt_sha256"],
+        "source_graph_sha256": source_graph["sha256"],
+        "proof_exclusion_validator_blob_sha": proof_exclusion["validator_blob_sha"],
+        "proof_exclusion_validation_output_sha256": proof_exclusion["validation_output_sha256"],
+        "package_id": PACKAGE_ID, "version_name": VERSION_NAME, "version_code": VERSION_CODE,
+        "minimum_sdk": MINIMUM_SDK, "target_sdk": TARGET_SDK,
+        "upload_certificate_sha256": lock["signing"]["expected_upload_certificate_sha256"],
         "signer_image": image, "signer_contract_sha256": hashlib.sha256(lock_bytes).hexdigest()}
     return hashlib.sha256(_json_bytes(bindings)).hexdigest(), bindings
 def reserve(args, lock, lock_bytes, toolchain, toolchain_bytes, environ, client) -> dict[str, Any]:
@@ -442,10 +686,10 @@ def reserve(args, lock, lock_bytes, toolchain, toolchain_bytes, environ, client)
     _installed_receipt(Path(args.installed_toolchain_receipt), lock, toolchain, toolchain_bytes)
     _runtime(environ)
     transaction_id, bindings = _transaction(lock, lock_bytes, receipt, args.running_image)
-    request_value = {"contract_name": "fleet.android_preview12_reservation_request.v1",
+    request_value = {"contract_name": "fleet.android_preview12_reservation_request.v2",
                      "transaction_id": transaction_id, "bindings": bindings}
     response = client.reserve(request_value)
-    expected = {"contract_name": "fleet.android_preview12_reservation.v1", "decision": "reserved",
+    expected = {"contract_name": "fleet.android_preview12_reservation.v2", "decision": "reserved",
         "created": True, "durable": True, "transaction_id": transaction_id,
         "request_sha256": hashlib.sha256(_json_bytes(request_value)).hexdigest(), "bindings": bindings}
     if response != expected:
@@ -468,6 +712,17 @@ def _bundle_value(runner, candidate: Path, xpath: str, env) -> str:
     result = _checked(runner, ["/opt/jdk/bin/java", "-jar", "/opt/android-sdk/tools/bundletool.jar", "dump",
         "manifest", f"--bundle={candidate}", f"--xpath={xpath}"], text=True, env=env)
     return result.stdout.strip()
+def _validate_candidate_manifest(runner, candidate: Path, env) -> None:
+    expected = {
+        "/manifest/@package": PACKAGE_ID,
+        "/manifest/@android:versionName": VERSION_NAME,
+        "/manifest/@android:versionCode": str(VERSION_CODE),
+        "/manifest/uses-sdk/@android:minSdkVersion": str(MINIMUM_SDK),
+        "/manifest/uses-sdk/@android:targetSdkVersion": str(TARGET_SDK),
+    }
+    for xpath, value in expected.items():
+        if _bundle_value(runner, candidate, xpath, env) != value:
+            raise SignerError(f"candidate manifest is not exact for {xpath}")
 def _pem_der(payload: str) -> bytes:
     match = re.search(r"-----BEGIN CERTIFICATE-----(.*?)-----END CERTIFICATE-----", payload, re.S)
     if not match:
@@ -484,10 +739,12 @@ def sign(args, lock, lock_bytes, toolchain, toolchain_bytes, environ,
     _installed_receipt(Path(args.installed_toolchain_receipt), lock, toolchain, toolchain_bytes)
     runtime = _runtime(environ)
     transaction_id, bindings = _transaction(lock, lock_bytes, intake_receipt, args.running_image)
-    reservation = json.loads(Path(args.reservation_receipt).read_text())
-    reservation_request = {"contract_name": "fleet.android_preview12_reservation_request.v1",
+    reservation = _json_object(_bounded_file_bytes(Path(args.reservation_receipt), "durable reservation receipt",
+                                                    int(lock["limits"]["reservation_json_max_bytes"])),
+                               "durable reservation receipt")
+    reservation_request = {"contract_name": "fleet.android_preview12_reservation_request.v2",
                            "transaction_id": transaction_id, "bindings": bindings}
-    if reservation != {"contract_name": "fleet.android_preview12_reservation.v1", "decision": "reserved",
+    if reservation != {"contract_name": "fleet.android_preview12_reservation.v2", "decision": "reserved",
         "created": True, "durable": True, "transaction_id": transaction_id,
         "request_sha256": hashlib.sha256(_json_bytes(reservation_request)).hexdigest(), "bindings": bindings}:
         raise SignerError("durable reservation receipt is missing or does not bind this transaction")
@@ -496,9 +753,7 @@ def sign(args, lock, lock_bytes, toolchain, toolchain_bytes, environ,
         raise SignerError("signed output already exists")
     with tempfile.TemporaryDirectory(prefix="fleet-secret-free-") as scratch:
         clean_env = _tool_env(scratch)
-        if _bundle_value(runner, candidate, "/manifest/@android:versionName", clean_env) != "Preview12" \
-                or _bundle_value(runner, candidate, "/manifest/@android:versionCode", clean_env) != "12":
-            raise SignerError("candidate manifest is not exact Preview12/code12")
+        _validate_candidate_manifest(runner, candidate, clean_env)
         names = ("ANDROID_PREVIEW12_UPLOAD_KEYSTORE_B64", "ANDROID_PREVIEW12_KEYSTORE_PASSWORD",
                  "ANDROID_PREVIEW12_KEY_PASSWORD")
         if any(not environ.get(name) for name in names):
@@ -535,7 +790,7 @@ def sign(args, lock, lock_bytes, toolchain, toolchain_bytes, environ,
                                text=True, env=clean_env).stdout
                 if hashlib.sha256(_pem_der(pem)).hexdigest() != expected_cert:
                     raise SignerError("signed bundle certificate does not match expected upload certificate")
-                attestation = {"contract_name": "fleet.android_preview12_signed_attestation.v2",
+                attestation = {"contract_name": "fleet.android_preview12_signed_attestation.v3",
                     "transaction_id": transaction_id, "bindings": bindings, "signed_file": signed.name,
                     "signed_sha256": _sha256(signed), "github_runtime": runtime, "signing_invocations": 1,
                     "ci_evidence_actions_artifact_uploaded": False, "signed_content_handoff_performed": False,
@@ -582,10 +837,13 @@ def main(argv: list[str] | None = None) -> int:
             value = dispatch_preflight(args, lock, toolchain, toolchain_bytes)
         elif args.command == "intake":
             value = intake(args, lock, lock_bytes, toolchain, toolchain_bytes,
-                GitHubClient(os.environ.get("ANDROID_PREVIEW12_CANDIDATE_BROKER_TOKEN", "")))
+                GitHubClient(os.environ.get("ANDROID_PREVIEW12_CANDIDATE_BROKER_TOKEN", ""),
+                             int(lock["limits"]["api_json_max_bytes"])))
         elif args.command == "reserve":
             value = reserve(args, lock, lock_bytes, toolchain, toolchain_bytes, os.environ,
-                ReservationClient(lock["reservation"]["broker_url"], os.environ.get("ANDROID_PREVIEW12_LEDGER_TOKEN", "")))
+                ReservationClient(lock["reservation"]["broker_url"],
+                                  os.environ.get("ANDROID_PREVIEW12_LEDGER_TOKEN", ""),
+                                  int(lock["limits"]["reservation_json_max_bytes"])))
         else:
             value = sign(args, lock, lock_bytes, toolchain, toolchain_bytes, os.environ)
     except (OSError, KeyError, TypeError, ValueError, binascii.Error, json.JSONDecodeError, zipfile.BadZipFile, SignerError) as error:
