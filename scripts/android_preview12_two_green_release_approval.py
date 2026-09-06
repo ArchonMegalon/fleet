@@ -1,0 +1,922 @@
+#!/usr/bin/env python3
+"""Verify Preview12 Two-Green evidence and sign only a public approval JSON.
+
+This lane never accepts an AAB, upload keystore, Play credential, or publication
+target.  Its Ed25519 key is accepted only from the protected GitHub environment
+variable named by the reviewed policy.  The checked-in policy is dormant.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import binascii
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import subprocess
+import tempfile
+from typing import Any, Mapping
+import zipfile
+
+
+POLICY_CONTRACT = "fleet.android_preview12_two_green_release_approval_policy.v1"
+OUTPUT_CONTRACT = "fleet.android_preview12_two_green_release_approval.v1"
+TWO_GREEN_CONTRACT = "chummer.android.api36-ordered-review-main-green-eligibility/v2"
+FLEET_REPOSITORY = "ArchonMegalon/fleet"
+ANDROID_REPOSITORY = "ArchonMegalon/chummer-android"
+FLEET_REF = "refs/heads/main"
+ANDROID_REF = "refs/heads/main"
+WORKFLOW_PATH = ".github/workflows/android-preview12-two-green-release-approval.yml"
+TWO_GREEN_WORKFLOW_NAME = "API 36 ordered review-to-main green eligibility"
+TWO_GREEN_WORKFLOW_PATH = ".github/workflows/api36-two-consecutive-green.yml"
+RECEIPT_NAME = "ANDROID_API36_TWO_GREEN_ELIGIBILITY.generated.json"
+OUTPUT_NAME = "ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json"
+ENVIRONMENT_NAME = "android-preview12-release-approval"
+KEY_ENV_NAME = "ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64"
+PACKAGE_ID = "com.myexternalbrain.chummer"
+VERSION_NAME = "0.1.0-preview.12"
+VERSION_CODE = 12
+SHA40 = re.compile(r"^[0-9a-f]{40}$")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+ARTIFACT_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+SPKI_ED25519_PREFIX = bytes.fromhex("302a300506032b6570032100")
+MAX_ARCHIVE_BYTES = 32 * 1024 * 1024
+MAX_RECEIPT_BYTES = 16 * 1024 * 1024
+DOES_NOT_AUTHORIZE = """android_artifact_signing play_upload_key_access
+google_play_upload google_play_processing tester_distribution tester_installation
+registry_publication github_release public_release""".split()
+
+
+class ApprovalError(RuntimeError):
+    """One fail-closed approval contract violation."""
+
+
+def canonical_bytes(value: object) -> bytes:
+    return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+
+def pretty_bytes(value: object) -> bytes:
+    return (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
+
+
+def canonical_sha256(value: object) -> str:
+    return hashlib.sha256(canonical_bytes(value)).hexdigest()
+
+
+def _strict_object_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    output: dict[str, object] = {}
+    for key, value in pairs:
+        if key in output:
+            raise ApprovalError(f"duplicate JSON key: {key}")
+        output[key] = value
+    return output
+
+
+def strict_json_bytes(data: bytes, label: str) -> dict[str, Any]:
+    try:
+        value = json.loads(
+            data.decode("utf-8", errors="strict"),
+            object_pairs_hook=_strict_object_pairs,
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ApprovalError(f"non-finite JSON value in {label}: {token}")
+            ),
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ApprovalError(f"{label} is not strict UTF-8 JSON") from error
+    if not isinstance(value, dict):
+        raise ApprovalError(f"{label} must contain one JSON object")
+    return value
+
+
+def stable_file(path: Path, label: str, limit: int) -> tuple[bytes, str]:
+    if (
+        not path.is_absolute()
+        or path.is_symlink()
+        or path.resolve(strict=True) != path
+    ):
+        raise ApprovalError(f"{label} must be an absolute canonical non-symlink file")
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_size <= 0 or before.st_size > limit:
+            raise ApprovalError(f"{label} is not one bounded regular file")
+        chunks: list[bytes] = []
+        while chunk := os.read(descriptor, min(1024 * 1024, limit + 1)):
+            chunks.append(chunk)
+            if sum(map(len, chunks)) > limit:
+                raise ApprovalError(f"{label} exceeds its byte limit")
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    identity = lambda value: (
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+    if identity(before) != identity(after):
+        raise ApprovalError(f"{label} changed during capture")
+    data = b"".join(chunks)
+    if len(data) != before.st_size:
+        raise ApprovalError(f"{label} size changed during capture")
+    return data, hashlib.sha256(data).hexdigest()
+
+
+def _exact_keys(value: Mapping[str, Any], keys: set[str], label: str) -> None:
+    if set(value) != keys:
+        raise ApprovalError(f"{label} fields are not exact")
+
+
+def _sha40(value: object, label: str) -> str:
+    if not isinstance(value, str) or SHA40.fullmatch(value) is None:
+        raise ApprovalError(f"{label} must be a lowercase SHA-40")
+    return value
+
+
+def _sha256(value: object, label: str) -> str:
+    if not isinstance(value, str) or SHA256.fullmatch(value) is None:
+        raise ApprovalError(f"{label} must be a lowercase SHA-256")
+    return value
+
+
+def _positive(value: object, label: str) -> int:
+    if type(value) is not int or value <= 0:
+        raise ApprovalError(f"{label} must be a positive integer")
+    return value
+
+
+def _positive_decimal(value: object, label: str) -> int:
+    if not isinstance(value, str) or not value.isascii() or not value.isdigit():
+        raise ApprovalError(f"{label} must be a positive decimal integer")
+    return _positive(int(value), label)
+
+
+def expected_policy() -> dict[str, Any]:
+    return {
+        "contract_name": POLICY_CONTRACT,
+        "contract_version": 1,
+        "state": "dormant_pending_environment_and_external_key",
+        "release": {"package_id": PACKAGE_ID, "version_name": VERSION_NAME,
+                    "version_code": VERSION_CODE},
+        "android_source": {"repository": ANDROID_REPOSITORY,
+                           "repository_id": 1331626697, "ref": ANDROID_REF},
+        "two_green": {
+            "workflow_name": TWO_GREEN_WORKFLOW_NAME,
+            "workflow_path": TWO_GREEN_WORKFLOW_PATH,
+            "receipt_contract": TWO_GREEN_CONTRACT,
+            "receipt_file_name": RECEIPT_NAME,
+        },
+        "fleet_execution": {"repository": FLEET_REPOSITORY, "ref": FLEET_REF,
+                            "protected_ref_required": True, "event": "workflow_dispatch",
+                            "workflow_path": WORKFLOW_PATH},
+        "github_environment": {
+            "name": ENVIRONMENT_NAME,
+            "configured": False,
+            "required_reviewers_required": True,
+            "minimum_required_reviewers": 1,
+            "human_user_reviewer_required": True,
+            "prevent_self_review_required": True,
+            "protected_branches_only": True,
+        },
+        "external_ed25519_key": {
+            "configured": False,
+            "source": "github_environment_secret_only",
+            "secret_name": KEY_ENV_NAME,
+            "expected_public_key_spki_sha256": None,
+            "private_key_persistence_allowed": False,
+        },
+        "activation": {"enabled": False,
+                       "requires_separate_reviewed_contract_change": True},
+        "output": {
+            "contract_name": OUTPUT_CONTRACT,
+            "approval_scope": "preview12_two_green_evidence_only",
+            "public_json_only": True,
+            "signing_authorized": False,
+            "publication_authorized": False,
+            "google_play_upload_authorized": False,
+        },
+        "separation": {
+            "play_aab_signer": "strictly_separate",
+            "accepts_aab_bytes": False,
+            "accepts_play_credentials": False,
+            "accepts_upload_keystore": False,
+            "performs_artifact_signing": False,
+            "performs_play_upload": False,
+            "performs_publication": False,
+        },
+    }
+
+
+def load_policy(path: Path) -> tuple[dict[str, Any], bytes, str]:
+    data, digest = stable_file(path, "approval policy", MAX_RECEIPT_BYTES)
+    value = strict_json_bytes(data, "approval policy")
+    expected = expected_policy()
+    if value != expected:
+        # Activation is deliberately the only accepted deviation from the dormant template.
+        active = json.loads(json.dumps(expected))
+        active["state"] = "ready"
+        active["github_environment"]["configured"] = True
+        active["external_ed25519_key"]["configured"] = True
+        active["activation"]["enabled"] = True
+        observed_key_digest = value.get("external_ed25519_key", {}).get(
+            "expected_public_key_spki_sha256"
+        ) if isinstance(value.get("external_ed25519_key"), dict) else None
+        if SHA256.fullmatch(str(observed_key_digest or "")):
+            active["external_ed25519_key"]["expected_public_key_spki_sha256"] = observed_key_digest
+        if value != active:
+            raise ApprovalError("approval policy differs from the closed dormant/ready contract")
+    return value, data, digest
+
+
+def _require_ready(policy: Mapping[str, Any]) -> None:
+    blockers: list[str] = []
+    if policy.get("state") != "ready":
+        blockers.append("policy state is dormant")
+    environment = policy.get("github_environment", {})
+    key = policy.get("external_ed25519_key", {})
+    activation = policy.get("activation", {})
+    if not isinstance(environment, dict) or environment.get("configured") is not True:
+        blockers.append("reviewed GitHub environment is not configured")
+    if not isinstance(key, dict) or key.get("configured") is not True:
+        blockers.append("external Ed25519 key is not configured")
+    if not isinstance(activation, dict) or activation.get("enabled") is not True:
+        blockers.append("approval activation is disabled")
+    if not isinstance(key, dict) or SHA256.fullmatch(
+        str(key.get("expected_public_key_spki_sha256") or "")
+    ) is None:
+        blockers.append("external Ed25519 public-key digest is not pinned")
+    if blockers:
+        raise ApprovalError("; ".join(blockers))
+
+
+def validate_dispatch(policy: Mapping[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    _require_ready(policy)
+    expected = {
+        "execution_repository": FLEET_REPOSITORY,
+        "execution_ref": FLEET_REF,
+        "execution_ref_protected": "true",
+        "execution_event": "workflow_dispatch",
+        "workflow_repository": FLEET_REPOSITORY,
+        "workflow_ref": f"{FLEET_REPOSITORY}/{WORKFLOW_PATH}@refs/heads/main",
+    }
+    for field, value in expected.items():
+        if getattr(args, field) != value:
+            raise ApprovalError(f"{field} differs from protected Fleet main authority")
+    execution_sha = _sha40(args.execution_sha, "Fleet execution SHA")
+    if _sha40(args.workflow_sha, "Fleet workflow SHA") != execution_sha:
+        raise ApprovalError("workflow SHA differs from the exact Fleet execution SHA")
+    inputs = validate_inputs(args)
+    return {
+        "ok": True,
+        "environment": policy["github_environment"]["name"],
+        "inputSha256": canonical_sha256(inputs),
+        "signingAuthorized": False,
+        "publicationAuthorized": False,
+        "googlePlayUploadAuthorized": False,
+    }
+
+
+def validate_inputs(args: argparse.Namespace) -> dict[str, Any]:
+    values = {
+        "twoGreenRunId": _positive_decimal(args.two_green_run_id, "Two-Green run ID"),
+        "twoGreenRunAttempt": _positive_decimal(args.two_green_run_attempt, "Two-Green run attempt"),
+        "twoGreenArtifactId": _positive_decimal(args.two_green_artifact_id, "Two-Green artifact ID"),
+        "twoGreenArtifactSha256": _sha256(args.two_green_artifact_sha256, "Two-Green artifact SHA-256"),
+        "twoGreenReceiptSha256": _sha256(args.two_green_receipt_sha256, "Two-Green receipt SHA-256"),
+        "reviewRunId": _positive_decimal(args.review_run_id, "review run ID"),
+        "mainRunId": _positive_decimal(args.main_run_id, "main run ID"),
+        "mainCommit": _sha40(args.main_commit, "Android main commit"),
+        "mainTree": _sha40(args.main_tree, "Android main tree"),
+        "versionName": args.version_name,
+        "versionCode": _positive_decimal(args.version_code, "version code"),
+    }
+    if (values["versionName"], values["versionCode"]) != (VERSION_NAME, VERSION_CODE):
+        raise ApprovalError("release identity is not exact Preview12/code12")
+    if values["reviewRunId"] == values["mainRunId"]:
+        raise ApprovalError("review and main run IDs must be distinct")
+    return values
+
+
+def validate_environment_snapshot(value: Mapping[str, Any], policy: Mapping[str, Any]) -> dict[str, Any]:
+    expected_url = f"https://api.github.com/repos/{FLEET_REPOSITORY}/environments/{ENVIRONMENT_NAME}"
+    if value.get("name") != ENVIRONMENT_NAME or value.get("url") != expected_url:
+        raise ApprovalError("GitHub environment identity differs")
+    branch = value.get("deployment_branch_policy")
+    if not isinstance(branch, dict) or branch.get("protected_branches") is not True or branch.get("custom_branch_policies") is not False:
+        raise ApprovalError("approval environment is not restricted to protected branches")
+    rules = value.get("protection_rules")
+    if not isinstance(rules, list):
+        raise ApprovalError("approval environment protection rules are missing")
+    reviewer_rules = [row for row in rules if isinstance(row, dict) and row.get("type") == "required_reviewers"]
+    if len(reviewer_rules) != 1:
+        raise ApprovalError("approval environment must have exactly one required-reviewer rule")
+    rule = reviewer_rules[0]
+    reviewers = rule.get("reviewers")
+    minimum = policy["github_environment"]["minimum_required_reviewers"]
+    if rule.get("prevent_self_review") is not True or not isinstance(reviewers, list) or len(reviewers) < minimum:
+        raise ApprovalError("approval environment lacks human review or self-review prevention")
+    reviewer_types: list[str] = []
+    reviewer_ids: list[int] = []
+    human_users = 0
+    for row in reviewers:
+        if not isinstance(row, dict) or row.get("type") not in {"User", "Team"}:
+            raise ApprovalError("approval environment reviewer is not a user or team")
+        reviewer = row.get("reviewer")
+        if not isinstance(reviewer, dict) or type(reviewer.get("id")) is not int or reviewer["id"] <= 0:
+            raise ApprovalError("approval environment reviewer identity is malformed")
+        reviewer_types.append(row["type"])
+        reviewer_ids.append(reviewer["id"])
+        if row["type"] == "User":
+            login = reviewer.get("login")
+            if (
+                not isinstance(login, str)
+                or not login
+                or login.casefold().endswith("[bot]")
+            ):
+                raise ApprovalError("approval environment user reviewer is not a human account")
+            human_users += 1
+    if human_users < 1:
+        raise ApprovalError("approval environment has no explicit human user reviewer")
+    return {
+        "name": ENVIRONMENT_NAME,
+        "requiredReviewerCount": len(reviewers),
+        "reviewerTypes": sorted(reviewer_types),
+        "humanUserReviewerCount": human_users,
+        "reviewerIdentitySetSha256": canonical_sha256(sorted(reviewer_ids)),
+        "preventSelfReview": True,
+        "protectedBranchesOnly": True,
+    }
+
+
+def validate_run(value: Mapping[str, Any], inputs: Mapping[str, Any]) -> dict[str, Any]:
+    repository = value.get("repository")
+    head_repository = value.get("head_repository")
+    expected_api = f"https://api.github.com/repos/{ANDROID_REPOSITORY}"
+    if not isinstance(repository, dict) or repository.get("id") != 1331626697 or repository.get("full_name") != ANDROID_REPOSITORY:
+        raise ApprovalError("Two-Green run repository differs")
+    if not isinstance(head_repository, dict) or head_repository.get("id") != 1331626697 or head_repository.get("full_name") != ANDROID_REPOSITORY:
+        raise ApprovalError("Two-Green run head repository differs")
+    run_id = inputs["twoGreenRunId"]
+    if (
+        value.get("id") != run_id
+        or value.get("run_attempt") != inputs["twoGreenRunAttempt"]
+        or value.get("name") != TWO_GREEN_WORKFLOW_NAME
+        or value.get("path") != TWO_GREEN_WORKFLOW_PATH
+        or value.get("event") != "workflow_dispatch"
+        or value.get("head_branch") != "main"
+        or value.get("head_sha") != inputs["mainCommit"]
+        or value.get("status") != "completed"
+        or value.get("conclusion") != "success"
+        or value.get("url") != f"{expected_api}/actions/runs/{run_id}"
+        or value.get("html_url") != f"https://github.com/{ANDROID_REPOSITORY}/actions/runs/{run_id}"
+    ):
+        raise ApprovalError("Two-Green workflow run is not the exact successful main authority")
+    return {
+        "id": run_id,
+        "attempt": inputs["twoGreenRunAttempt"],
+        "workflowName": TWO_GREEN_WORKFLOW_NAME,
+        "workflowPath": TWO_GREEN_WORKFLOW_PATH,
+        "event": "workflow_dispatch",
+        "ref": ANDROID_REF,
+        "headSha": inputs["mainCommit"],
+        "status": "completed",
+        "conclusion": "success",
+        "detailsUrl": value["html_url"],
+    }
+
+
+def validate_artifact(value: Mapping[str, Any], inputs: Mapping[str, Any]) -> dict[str, Any]:
+    run = value.get("workflow_run")
+    expected_name = f"chummer-android-api36-two-green-eligibility-{inputs['reviewRunId']}-{inputs['mainRunId']}"
+    digest = value.get("digest")
+    if (
+        value.get("id") != inputs["twoGreenArtifactId"]
+        or value.get("name") != expected_name
+        or value.get("expired") is not False
+        or digest != f"sha256:{inputs['twoGreenArtifactSha256']}"
+        or ARTIFACT_DIGEST.fullmatch(str(digest or "")) is None
+        or type(value.get("size_in_bytes")) is not int
+        or value["size_in_bytes"] <= 0
+        or value["size_in_bytes"] > MAX_ARCHIVE_BYTES
+        or value.get("url")
+        != f"https://api.github.com/repos/{ANDROID_REPOSITORY}/actions/artifacts/{inputs['twoGreenArtifactId']}"
+        or value.get("archive_download_url")
+        != f"https://api.github.com/repos/{ANDROID_REPOSITORY}/actions/artifacts/{inputs['twoGreenArtifactId']}/zip"
+        or not isinstance(run, dict)
+        or run.get("id") != inputs["twoGreenRunId"]
+        or run.get("head_sha") != inputs["mainCommit"]
+    ):
+        raise ApprovalError("Two-Green artifact authority differs")
+    return {
+        "id": inputs["twoGreenArtifactId"],
+        "name": expected_name,
+        "archiveSha256": inputs["twoGreenArtifactSha256"],
+        "archiveSizeBytes": value["size_in_bytes"],
+    }
+
+
+def extract_receipt(
+    archive_path: Path, inputs: Mapping[str, Any]
+) -> tuple[dict[str, Any], bytes, int]:
+    data, digest = stable_file(archive_path, "Two-Green artifact archive", MAX_ARCHIVE_BYTES)
+    if digest != inputs["twoGreenArtifactSha256"]:
+        raise ApprovalError("Two-Green artifact archive SHA-256 differs")
+    try:
+        with zipfile.ZipFile(archive_path, "r") as archive:
+            members = archive.infolist()
+            if len(members) != 1 or members[0].filename != RECEIPT_NAME:
+                raise ApprovalError(f"Two-Green archive must contain exactly {RECEIPT_NAME}")
+            member = members[0]
+            mode = (member.external_attr >> 16) & 0xFFFF
+            if member.is_dir() or member.flag_bits & 1 or stat.S_IFMT(mode) == stat.S_IFLNK or member.file_size <= 0 or member.file_size > MAX_RECEIPT_BYTES:
+                raise ApprovalError("Two-Green receipt member is unsafe")
+            receipt_bytes = archive.read(member)
+    except (zipfile.BadZipFile, RuntimeError) as error:
+        raise ApprovalError("Two-Green artifact archive is invalid") from error
+    if hashlib.sha256(receipt_bytes).hexdigest() != inputs["twoGreenReceiptSha256"]:
+        raise ApprovalError("Two-Green receipt SHA-256 differs")
+    return strict_json_bytes(receipt_bytes, "Two-Green receipt"), receipt_bytes, len(data)
+
+
+def validate_receipt(value: Mapping[str, Any], inputs: Mapping[str, Any]) -> dict[str, Any]:
+    required = {
+        "schema", "status", "eligibilityScope", "eligible", "internalTestingEligible",
+        "publicationAuthorized", "googlePlayUploadAuthorized", "policyAuthority",
+        "sourceCommit", "sourceTree", "releaseIdentity", "commonAuthority",
+        "reviewRun", "mainRun", "decisionTimeUtc", "reviewPullRequest",
+        "doesNotAssert", "eligibilitySha256",
+    }
+    _exact_keys(value, required, "Two-Green receipt")
+    if (
+        value.get("schema") != TWO_GREEN_CONTRACT
+        or value.get("status") != "pass"
+        or value.get("eligible") is not True
+        or value.get("internalTestingEligible") is not True
+        or value.get("publicationAuthorized") is not False
+        or value.get("googlePlayUploadAuthorized") is not False
+        or value.get("sourceCommit") != inputs["mainCommit"]
+        or value.get("sourceTree") != inputs["mainTree"]
+    ):
+        raise ApprovalError("Two-Green receipt posture or Android identity differs")
+    release = value.get("releaseIdentity")
+    if not isinstance(release, dict) or release != {
+        "packageId": PACKAGE_ID,
+        "versionName": VERSION_NAME,
+        "versionCode": VERSION_CODE,
+        "intentAuthority": "android_project_at_exact_main_tree",
+    }:
+        raise ApprovalError("Two-Green receipt release identity differs")
+    for role, expected_id in (("reviewRun", inputs["reviewRunId"]), ("mainRun", inputs["mainRunId"])):
+        block = value.get(role)
+        run = block.get("run") if isinstance(block, dict) else None
+        if not isinstance(run, dict) or run.get("id") != expected_id or run.get("status") != "completed" or run.get("conclusion") != "success" or block.get("aggregateStatus") != "pass":
+            raise ApprovalError(f"Two-Green {role} is not exact and successful")
+    main = value["mainRun"]["run"]
+    if main.get("headSha") != inputs["mainCommit"] or value["mainRun"].get("p0EventSha") != inputs["mainCommit"]:
+        raise ApprovalError("Two-Green main source commit differs")
+    common = value.get("commonAuthority")
+    if not isinstance(common, dict) or common.get("androidTree") != inputs["mainTree"] or common.get("environmentCompatibilityStatus") != "pass":
+        raise ApprovalError("Two-Green common tree/environment authority differs")
+    does_not_assert = value.get("doesNotAssert")
+    for required_exclusion in ("google_play_upload", "release_signing", "publication_authority"):
+        if not isinstance(does_not_assert, list) or required_exclusion not in does_not_assert:
+            raise ApprovalError("Two-Green receipt omits a required non-authority boundary")
+    unsigned = {key: member for key, member in value.items() if key != "eligibilitySha256"}
+    if value.get("eligibilitySha256") != canonical_sha256(unsigned):
+        raise ApprovalError("Two-Green eligibility digest is invalid")
+    return {
+        "contract": TWO_GREEN_CONTRACT,
+        "eligibilitySha256": value["eligibilitySha256"],
+        "decisionTimeUtc": value["decisionTimeUtc"],
+        "reviewRunId": inputs["reviewRunId"],
+        "mainRunId": inputs["mainRunId"],
+        "status": "pass",
+        "eligible": True,
+        "internalTestingEligible": True,
+    }
+
+
+def _openssl(arguments: list[str], *, input_bytes: bytes | None = None, pass_fds: tuple[int, ...] = ()) -> bytes:
+    try:
+        completed = subprocess.run(
+            ["/usr/bin/openssl", *arguments],
+            input=input_bytes,
+            check=False,
+            capture_output=True,
+            timeout=10,
+            env={"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"},
+            pass_fds=pass_fds,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ApprovalError("Ed25519 provider is unavailable") from error
+    if completed.returncode != 0:
+        raise ApprovalError("Ed25519 operation failed")
+    return completed.stdout
+
+
+def sign_ed25519(message: bytes, policy: Mapping[str, Any], environment: Mapping[str, str]) -> dict[str, str]:
+    encoded = environment.get(KEY_ENV_NAME)
+    if environment is os.environ:
+        os.environ.pop(KEY_ENV_NAME, None)
+    if not encoded:
+        raise ApprovalError("external Ed25519 environment key is missing")
+    if len(encoded) > 16384:
+        raise ApprovalError("external Ed25519 environment key is oversized")
+    try:
+        private_der = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise ApprovalError("external Ed25519 environment key is not strict Base64") from error
+    if not 32 <= len(private_der) <= 4096:
+        raise ApprovalError("external Ed25519 PKCS#8 key has an invalid size")
+    key_fd = os.memfd_create("preview12-approval-key", flags=getattr(os, "MFD_CLOEXEC", 0))
+    message_fd = os.memfd_create("preview12-approval-message", flags=getattr(os, "MFD_CLOEXEC", 0))
+    try:
+        os.write(key_fd, private_der)
+        os.lseek(key_fd, 0, os.SEEK_SET)
+        os.write(message_fd, message)
+        os.lseek(message_fd, 0, os.SEEK_SET)
+        key_path = f"/proc/self/fd/{key_fd}"
+        public_der = _openssl(
+            ["pkey", "-inform", "DER", "-in", key_path, "-pubout", "-outform", "DER"],
+            pass_fds=(key_fd,),
+        )
+        if len(public_der) != len(SPKI_ED25519_PREFIX) + 32 or not public_der.startswith(SPKI_ED25519_PREFIX):
+            raise ApprovalError("external key is not Ed25519")
+        public_digest = hashlib.sha256(public_der).hexdigest()
+        expected = policy["external_ed25519_key"]["expected_public_key_spki_sha256"]
+        if public_digest != expected:
+            raise ApprovalError("external Ed25519 public key differs from reviewed policy")
+        os.lseek(key_fd, 0, os.SEEK_SET)
+        signature = _openssl(
+            ["pkeyutl", "-sign", "-rawin", "-inkey", key_path, "-keyform", "DER", "-in", f"/proc/self/fd/{message_fd}"],
+            pass_fds=(key_fd, message_fd),
+        )
+    finally:
+        os.close(key_fd)
+        os.close(message_fd)
+        private_der = b""
+    if len(signature) != 64:
+        raise ApprovalError("Ed25519 signature size differs")
+    verify_ed25519(public_der, message, signature)
+    return {
+        "algorithm": "Ed25519",
+        "encoding": "base64",
+        "publicKeySpkiDerBase64": base64.b64encode(public_der).decode("ascii"),
+        "publicKeySpkiSha256": public_digest,
+        "signatureBase64": base64.b64encode(signature).decode("ascii"),
+    }
+
+
+def verify_ed25519(public_der: bytes, message: bytes, signature: bytes) -> None:
+    public_fd = os.memfd_create("preview12-approval-public-key", flags=getattr(os, "MFD_CLOEXEC", 0))
+    message_fd = os.memfd_create("preview12-approval-message", flags=getattr(os, "MFD_CLOEXEC", 0))
+    signature_fd = os.memfd_create("preview12-approval-signature", flags=getattr(os, "MFD_CLOEXEC", 0))
+    try:
+        os.write(public_fd, public_der)
+        os.lseek(public_fd, 0, os.SEEK_SET)
+        os.write(message_fd, message)
+        os.lseek(message_fd, 0, os.SEEK_SET)
+        os.write(signature_fd, signature)
+        os.lseek(signature_fd, 0, os.SEEK_SET)
+        _openssl(
+            ["pkeyutl", "-verify", "-rawin", "-pubin", "-inkey", f"/proc/self/fd/{public_fd}", "-keyform", "DER", "-in", f"/proc/self/fd/{message_fd}", "-sigfile", f"/proc/self/fd/{signature_fd}"],
+            pass_fds=(public_fd, message_fd, signature_fd),
+        )
+    finally:
+        os.close(public_fd)
+        os.close(message_fd)
+        os.close(signature_fd)
+
+
+def create_approval(args: argparse.Namespace, environment: Mapping[str, str]) -> dict[str, Any]:
+    policy, policy_bytes, policy_sha256 = load_policy(args.policy)
+    _require_ready(policy)
+    inputs = validate_inputs(args)
+    environment_bytes, environment_sha256 = stable_file(args.environment_snapshot, "GitHub environment snapshot", MAX_RECEIPT_BYTES)
+    environment_value = strict_json_bytes(environment_bytes, "GitHub environment snapshot")
+    environment_authority = validate_environment_snapshot(environment_value, policy)
+    run_bytes, run_sha256 = stable_file(args.run_snapshot, "Two-Green run snapshot", MAX_RECEIPT_BYTES)
+    run_authority = validate_run(strict_json_bytes(run_bytes, "Two-Green run snapshot"), inputs)
+    artifact_bytes, artifact_metadata_sha256 = stable_file(args.artifact_snapshot, "Two-Green artifact snapshot", MAX_RECEIPT_BYTES)
+    artifact_authority = validate_artifact(strict_json_bytes(artifact_bytes, "Two-Green artifact snapshot"), inputs)
+    receipt, receipt_bytes, archive_size = extract_receipt(args.artifact_archive, inputs)
+    if archive_size != artifact_authority["archiveSizeBytes"]:
+        raise ApprovalError("Two-Green artifact archive size differs")
+    receipt_authority = validate_receipt(receipt, inputs)
+    if args.execution_environment != ENVIRONMENT_NAME:
+        raise ApprovalError("approval job did not run in the reviewed GitHub environment")
+    execution = {
+        "repository": FLEET_REPOSITORY,
+        "ref": FLEET_REF,
+        "protectedRef": args.execution_ref_protected == "true",
+        "event": args.execution_event,
+        "commit": _sha40(args.execution_sha, "Fleet execution SHA"),
+        "workflowRepository": args.workflow_repository,
+        "workflowRef": args.workflow_ref,
+        "workflowSha": _sha40(args.workflow_sha, "Fleet workflow SHA"),
+        "runId": _positive_decimal(args.execution_run_id, "Fleet run ID"),
+        "runAttempt": _positive_decimal(args.execution_run_attempt, "Fleet run attempt"),
+        "environment": ENVIRONMENT_NAME,
+    }
+    if (
+        execution["ref"] != args.execution_ref
+        or execution["protectedRef"] is not True
+        or execution["event"] != "workflow_dispatch"
+        or execution["workflowRepository"] != FLEET_REPOSITORY
+        or execution["workflowRef"] != f"{FLEET_REPOSITORY}/{WORKFLOW_PATH}@refs/heads/main"
+        or execution["workflowSha"] != execution["commit"]
+    ):
+        raise ApprovalError("Fleet approval execution is not exact protected main")
+    statement = {
+        "contractName": OUTPUT_CONTRACT,
+        "contractVersion": 1,
+        "status": "approved",
+        "approvalScope": "preview12_two_green_evidence_only",
+        "release": {"packageId": PACKAGE_ID, "versionName": VERSION_NAME, "versionCode": VERSION_CODE},
+        "androidSource": {"repository": ANDROID_REPOSITORY, "ref": ANDROID_REF, "commit": inputs["mainCommit"], "tree": inputs["mainTree"]},
+        "twoGreen": {
+            "workflowRun": run_authority,
+            "artifact": artifact_authority,
+            "receipt": receipt_authority,
+            "receiptSha256": hashlib.sha256(receipt_bytes).hexdigest(),
+            "runSnapshotSha256": run_sha256,
+            "artifactMetadataSnapshotSha256": artifact_metadata_sha256,
+        },
+        "fleetExecution": execution,
+        "environmentAuthority": {
+            **environment_authority,
+            "apiSnapshotSha256": environment_sha256,
+        },
+        "policyAuthority": {
+            "contract": POLICY_CONTRACT,
+            "sha256": policy_sha256,
+            "sizeBytes": len(policy_bytes),
+            "activationWasReady": True,
+        },
+        "twoGreenVerified": True,
+        "humanEnvironmentReviewRequired": True,
+        "humanEnvironmentGatePassed": True,
+        "signingAuthorized": False,
+        "publicationAuthorized": False,
+        "googlePlayUploadAuthorized": False,
+        "doesNotAuthorize": DOES_NOT_AUTHORIZE,
+    }
+    approval_sha256 = canonical_sha256(statement)
+    signature = sign_ed25519(canonical_bytes(statement), policy, environment)
+    return {**statement, "approvalSha256": approval_sha256, "signature": signature}
+
+
+def validate_approval(
+    value: Mapping[str, Any], policy: Mapping[str, Any] | None = None
+) -> None:
+    required = {
+        "contractName", "contractVersion", "status", "approvalScope", "release",
+        "androidSource", "twoGreen", "fleetExecution", "environmentAuthority",
+        "policyAuthority", "twoGreenVerified", "humanEnvironmentReviewRequired",
+        "humanEnvironmentGatePassed", "signingAuthorized", "publicationAuthorized",
+        "googlePlayUploadAuthorized", "doesNotAuthorize", "approvalSha256", "signature",
+    }
+    _exact_keys(value, required, "public approval")
+    if (
+        value.get("contractName") != OUTPUT_CONTRACT
+        or value.get("contractVersion") != 1
+        or value.get("status") != "approved"
+        or value.get("approvalScope") != "preview12_two_green_evidence_only"
+        or value.get("twoGreenVerified") is not True
+        or value.get("humanEnvironmentReviewRequired") is not True
+        or value.get("humanEnvironmentGatePassed") is not True
+        or value.get("signingAuthorized") is not False
+        or value.get("publicationAuthorized") is not False
+        or value.get("googlePlayUploadAuthorized") is not False
+        or value.get("doesNotAuthorize") != DOES_NOT_AUTHORIZE
+    ):
+        raise ApprovalError("public approval posture is invalid")
+    release = value.get("release")
+    if release != {
+        "packageId": PACKAGE_ID,
+        "versionName": VERSION_NAME,
+        "versionCode": VERSION_CODE,
+    }:
+        raise ApprovalError("public approval release identity differs")
+    source = value.get("androidSource")
+    if (
+        not isinstance(source, dict)
+        or set(source) != {"repository", "ref", "commit", "tree"}
+        or source.get("repository") != ANDROID_REPOSITORY
+        or source.get("ref") != ANDROID_REF
+    ):
+        raise ApprovalError("public approval Android source identity differs")
+    source_commit = _sha40(source.get("commit"), "public approval Android commit")
+    _sha40(source.get("tree"), "public approval Android tree")
+    two_green = value.get("twoGreen")
+    if not isinstance(two_green, dict) or set(two_green) != {
+        "workflowRun", "artifact", "receipt", "receiptSha256",
+        "runSnapshotSha256", "artifactMetadataSnapshotSha256",
+    }:
+        raise ApprovalError("public approval Two-Green fields differ")
+    run = two_green.get("workflowRun")
+    artifact = two_green.get("artifact")
+    receipt = two_green.get("receipt")
+    if (
+        not isinstance(run, dict)
+        or run.get("workflowName") != TWO_GREEN_WORKFLOW_NAME
+        or run.get("workflowPath") != TWO_GREEN_WORKFLOW_PATH
+        or run.get("event") != "workflow_dispatch"
+        or run.get("ref") != ANDROID_REF
+        or run.get("headSha") != source_commit
+        or run.get("status") != "completed"
+        or run.get("conclusion") != "success"
+        or not isinstance(artifact, dict)
+        or not isinstance(receipt, dict)
+        or receipt.get("contract") != TWO_GREEN_CONTRACT
+        or receipt.get("status") != "pass"
+        or receipt.get("eligible") is not True
+        or receipt.get("internalTestingEligible") is not True
+        or not SHA256.fullmatch(str(two_green.get("receiptSha256") or ""))
+        or not SHA256.fullmatch(str(two_green.get("runSnapshotSha256") or ""))
+        or not SHA256.fullmatch(str(two_green.get("artifactMetadataSnapshotSha256") or ""))
+    ):
+        raise ApprovalError("public approval Two-Green authority differs")
+    _positive(run.get("id"), "public approval Two-Green run ID")
+    _positive(run.get("attempt"), "public approval Two-Green run attempt")
+    _positive(artifact.get("id"), "public approval Two-Green artifact ID")
+    _sha256(artifact.get("archiveSha256"), "public approval Two-Green archive")
+    _sha256(receipt.get("eligibilitySha256"), "public approval eligibility")
+    _positive(receipt.get("reviewRunId"), "public approval review run ID")
+    _positive(receipt.get("mainRunId"), "public approval main run ID")
+    expected_artifact_name = (
+        "chummer-android-api36-two-green-eligibility-"
+        f"{receipt['reviewRunId']}-{receipt['mainRunId']}"
+    )
+    if artifact.get("name") != expected_artifact_name:
+        raise ApprovalError("public approval Two-Green artifact name differs")
+    execution = value.get("fleetExecution")
+    if (
+        not isinstance(execution, dict)
+        or execution.get("repository") != FLEET_REPOSITORY
+        or execution.get("ref") != FLEET_REF
+        or execution.get("protectedRef") is not True
+        or execution.get("event") != "workflow_dispatch"
+        or execution.get("workflowRepository") != FLEET_REPOSITORY
+        or execution.get("workflowRef")
+        != f"{FLEET_REPOSITORY}/{WORKFLOW_PATH}@refs/heads/main"
+        or execution.get("workflowSha") != execution.get("commit")
+        or execution.get("environment") != ENVIRONMENT_NAME
+    ):
+        raise ApprovalError("public approval Fleet execution authority differs")
+    _sha40(execution.get("commit"), "public approval Fleet commit")
+    _positive(execution.get("runId"), "public approval Fleet run ID")
+    _positive(execution.get("runAttempt"), "public approval Fleet run attempt")
+    environment_authority = value.get("environmentAuthority")
+    if (
+        not isinstance(environment_authority, dict)
+        or environment_authority.get("name") != ENVIRONMENT_NAME
+        or environment_authority.get("preventSelfReview") is not True
+        or environment_authority.get("protectedBranchesOnly") is not True
+        or type(environment_authority.get("requiredReviewerCount")) is not int
+        or environment_authority["requiredReviewerCount"] < 1
+        or type(environment_authority.get("humanUserReviewerCount")) is not int
+        or environment_authority["humanUserReviewerCount"] < 1
+    ):
+        raise ApprovalError("public approval environment authority differs")
+    _sha256(
+        environment_authority.get("reviewerIdentitySetSha256"),
+        "public approval reviewer identity set",
+    )
+    _sha256(
+        environment_authority.get("apiSnapshotSha256"),
+        "public approval environment snapshot",
+    )
+    policy_authority = value.get("policyAuthority")
+    if (
+        not isinstance(policy_authority, dict)
+        or policy_authority.get("contract") != POLICY_CONTRACT
+        or policy_authority.get("activationWasReady") is not True
+    ):
+        raise ApprovalError("public approval policy authority differs")
+    _sha256(policy_authority.get("sha256"), "public approval policy digest")
+    _positive(policy_authority.get("sizeBytes"), "public approval policy size")
+    statement = {key: member for key, member in value.items() if key not in {"approvalSha256", "signature"}}
+    if value.get("approvalSha256") != canonical_sha256(statement):
+        raise ApprovalError("public approval digest is invalid")
+    signature = value.get("signature")
+    if not isinstance(signature, dict) or set(signature) != {
+        "algorithm", "encoding", "publicKeySpkiDerBase64", "publicKeySpkiSha256", "signatureBase64"
+    } or signature.get("algorithm") != "Ed25519" or signature.get("encoding") != "base64":
+        raise ApprovalError("public approval signature fields are invalid")
+    try:
+        public_der = base64.b64decode(signature["publicKeySpkiDerBase64"], validate=True)
+        signature_bytes = base64.b64decode(signature["signatureBase64"], validate=True)
+    except (binascii.Error, ValueError, TypeError) as error:
+        raise ApprovalError("public approval signature is not strict Base64") from error
+    if hashlib.sha256(public_der).hexdigest() != signature.get("publicKeySpkiSha256"):
+        raise ApprovalError("public approval key digest differs")
+    if policy is not None:
+        _require_ready(policy)
+        if (
+            signature.get("publicKeySpkiSha256")
+            != policy["external_ed25519_key"]["expected_public_key_spki_sha256"]
+        ):
+            raise ApprovalError("public approval key differs from reviewed policy")
+    if len(public_der) != len(SPKI_ED25519_PREFIX) + 32 or not public_der.startswith(SPKI_ED25519_PREFIX) or len(signature_bytes) != 64:
+        raise ApprovalError("public approval is not an Ed25519 signature")
+    verify_ed25519(public_der, canonical_bytes(statement), signature_bytes)
+
+
+def write_output(path: Path, value: Mapping[str, Any]) -> None:
+    if path.name != OUTPUT_NAME or not path.is_absolute() or path.is_symlink():
+        raise ApprovalError(f"output must be an absolute non-symlink {OUTPUT_NAME}")
+    parent = path.parent
+    if parent.is_symlink() or parent.resolve(strict=True) != parent:
+        raise ApprovalError("output parent must be canonical and non-symlinked")
+    temporary: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="wb", dir=parent, prefix=f".{OUTPUT_NAME}.", delete=False) as stream:
+            temporary = stream.name
+            os.fchmod(stream.fileno(), 0o600)
+            stream.write(pretty_bytes(value))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        temporary = None
+    finally:
+        if temporary:
+            Path(temporary).unlink(missing_ok=True)
+
+
+def _input_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--two-green-run-id", required=True)
+    parser.add_argument("--two-green-run-attempt", required=True)
+    parser.add_argument("--two-green-artifact-id", required=True)
+    parser.add_argument("--two-green-artifact-sha256", required=True)
+    parser.add_argument("--two-green-receipt-sha256", required=True)
+    parser.add_argument("--review-run-id", required=True)
+    parser.add_argument("--main-run-id", required=True)
+    parser.add_argument("--main-commit", required=True)
+    parser.add_argument("--main-tree", required=True)
+    parser.add_argument("--version-name", required=True)
+    parser.add_argument("--version-code", required=True)
+
+
+def _execution_arguments(parser: argparse.ArgumentParser, *, environment: bool) -> None:
+    parser.add_argument("--execution-repository", required=True)
+    parser.add_argument("--execution-ref", required=True)
+    parser.add_argument("--execution-ref-protected", required=True)
+    parser.add_argument("--execution-event", required=True)
+    parser.add_argument("--execution-sha", required=True)
+    parser.add_argument("--workflow-repository", required=True)
+    parser.add_argument("--workflow-ref", required=True)
+    parser.add_argument("--workflow-sha", required=True)
+    if environment:
+        parser.add_argument("--execution-run-id", required=True)
+        parser.add_argument("--execution-run-attempt", required=True)
+        parser.add_argument("--execution-environment", required=True)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--policy", type=Path, required=True)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    preflight = subparsers.add_parser("preflight")
+    _input_arguments(preflight)
+    _execution_arguments(preflight, environment=False)
+    approve = subparsers.add_parser("approve")
+    _input_arguments(approve)
+    _execution_arguments(approve, environment=True)
+    approve.add_argument("--environment-snapshot", type=Path, required=True)
+    approve.add_argument("--run-snapshot", type=Path, required=True)
+    approve.add_argument("--artifact-snapshot", type=Path, required=True)
+    approve.add_argument("--artifact-archive", type=Path, required=True)
+    approve.add_argument("--output", type=Path, required=True)
+    verify = subparsers.add_parser("verify")
+    verify.add_argument("--approval", type=Path, required=True)
+    args = parser.parse_args(argv)
+    if args.command == "verify":
+        policy, _, policy_sha256 = load_policy(args.policy)
+        data, _ = stable_file(args.approval, "public approval", MAX_RECEIPT_BYTES)
+        value = strict_json_bytes(data, "public approval")
+        validate_approval(value, policy)
+        if value["policyAuthority"]["sha256"] != policy_sha256:
+            raise ApprovalError("public approval does not bind the reviewed policy bytes")
+        print("preview12_release_approval=verified signing_authorized=false publication_authorized=false google_play_upload_authorized=false")
+        return 0
+    policy, _, _ = load_policy(args.policy)
+    if args.command == "preflight":
+        result = validate_dispatch(policy, args)
+        print(json.dumps(result, sort_keys=True))
+        return 0
+    result = create_approval(args, os.environ)
+    validate_approval(result)
+    write_output(args.output, result)
+    print("preview12_release_approval=approved signing_authorized=false publication_authorized=false google_play_upload_authorized=false")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,34 @@
+{
+  "contract_name": "fleet.android_preview12_two_green_release_approval_policy.v1",
+  "contract_version": 1,
+  "state": "dormant_pending_environment_and_external_key",
+  "release": {"package_id": "com.myexternalbrain.chummer", "version_name": "0.1.0-preview.12", "version_code": 12},
+  "android_source": {"repository": "ArchonMegalon/chummer-android", "repository_id": 1331626697, "ref": "refs/heads/main"},
+  "two_green": {"workflow_name": "API 36 ordered review-to-main green eligibility", "workflow_path": ".github/workflows/api36-two-consecutive-green.yml", "receipt_contract": "chummer.android.api36-ordered-review-main-green-eligibility/v2", "receipt_file_name": "ANDROID_API36_TWO_GREEN_ELIGIBILITY.generated.json"},
+  "fleet_execution": {
+    "repository": "ArchonMegalon/fleet",
+    "ref": "refs/heads/main",
+    "protected_ref_required": true,
+    "event": "workflow_dispatch",
+    "workflow_path": ".github/workflows/android-preview12-two-green-release-approval.yml"
+  },
+  "github_environment": {
+    "name": "android-preview12-release-approval",
+    "configured": false,
+    "required_reviewers_required": true,
+    "minimum_required_reviewers": 1,
+    "human_user_reviewer_required": true,
+    "prevent_self_review_required": true,
+    "protected_branches_only": true
+  },
+  "external_ed25519_key": {
+    "configured": false,
+    "source": "github_environment_secret_only",
+    "secret_name": "ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64",
+    "expected_public_key_spki_sha256": null,
+    "private_key_persistence_allowed": false
+  },
+  "activation": {"enabled": false, "requires_separate_reviewed_contract_change": true},
+  "output": {"contract_name": "fleet.android_preview12_two_green_release_approval.v1", "approval_scope": "preview12_two_green_evidence_only", "public_json_only": true, "signing_authorized": false, "publication_authorized": false, "google_play_upload_authorized": false},
+  "separation": {"play_aab_signer": "strictly_separate", "accepts_aab_bytes": false, "accepts_play_credentials": false, "accepts_upload_keystore": false, "performs_artifact_signing": false, "performs_play_upload": false, "performs_publication": false}
+}

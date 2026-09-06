@@ -1,0 +1,164 @@
+name: Android Preview12 Two-Green Ed25519 release approval (dormant)
+
+on:
+  workflow_dispatch:
+    inputs:
+      two_green_run_id: {description: Exact successful Two-Green workflow run ID, required: true, type: string}
+      two_green_run_attempt: {description: Exact Two-Green workflow run attempt, required: true, type: string}
+      two_green_artifact_id: {description: Exact Two-Green eligibility artifact ID, required: true, type: string}
+      two_green_artifact_sha256: {description: Exact Two-Green artifact archive SHA-256, required: true, type: string}
+      two_green_receipt_sha256: {description: Exact Two-Green receipt SHA-256, required: true, type: string}
+      review_run_id: {description: Exact reviewed API-36 run ID bound by Two-Green, required: true, type: string}
+      main_run_id: {description: Exact main API-36 run ID bound by Two-Green, required: true, type: string}
+      main_commit: {description: Exact Android main commit bound by Two-Green, required: true, type: string}
+      main_tree: {description: Exact Android main tree bound by Two-Green, required: true, type: string}
+      version_name: {description: Must be 0.1.0-preview.12, required: true, type: string}
+      version_code: {description: Must be 12, required: true, type: string}
+
+permissions:
+  actions: read
+  contents: read
+  deployments: read
+
+concurrency:
+  group: preview12-two-green-release-approval-${{ inputs.main_tree }}-${{ inputs.two_green_artifact_id }}
+  cancel-in-progress: false
+
+jobs:
+  dormant-contract:
+    name: Require reviewed activation on protected Fleet main
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      environment: ${{ steps.contract.outputs.environment }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ArchonMegalon/fleet
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - id: contract
+        env:
+          EXECUTION_REPOSITORY: ${{ github.repository }}
+          EXECUTION_REF: ${{ github.ref }}
+          EXECUTION_REF_PROTECTED: ${{ github.ref_protected }}
+          EXECUTION_EVENT: ${{ github.event_name }}
+          EXECUTION_SHA: ${{ github.sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_REF: ${{ job.workflow_ref }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/android_preview12_two_green_release_approval.py \
+            --policy "$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json" \
+            preflight \
+            --two-green-run-id '${{ inputs.two_green_run_id }}' \
+            --two-green-run-attempt '${{ inputs.two_green_run_attempt }}' \
+            --two-green-artifact-id '${{ inputs.two_green_artifact_id }}' \
+            --two-green-artifact-sha256 '${{ inputs.two_green_artifact_sha256 }}' \
+            --two-green-receipt-sha256 '${{ inputs.two_green_receipt_sha256 }}' \
+            --review-run-id '${{ inputs.review_run_id }}' \
+            --main-run-id '${{ inputs.main_run_id }}' \
+            --main-commit '${{ inputs.main_commit }}' \
+            --main-tree '${{ inputs.main_tree }}' \
+            --version-name '${{ inputs.version_name }}' \
+            --version-code '${{ inputs.version_code }}' \
+            --execution-repository "$EXECUTION_REPOSITORY" \
+            --execution-ref "$EXECUTION_REF" \
+            --execution-ref-protected "$EXECUTION_REF_PROTECTED" \
+            --execution-event "$EXECUTION_EVENT" \
+            --execution-sha "$EXECUTION_SHA" \
+            --workflow-repository "$WORKFLOW_REPOSITORY" \
+            --workflow-ref "$WORKFLOW_REF" \
+            --workflow-sha "$WORKFLOW_SHA"
+          echo 'environment=android-preview12-release-approval' >>"$GITHUB_OUTPUT"
+
+  approve-public-json:
+    name: Human-reviewed Ed25519 approval of Two-Green JSON only
+    needs: dormant-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: ${{ needs.dormant-contract.outputs.environment }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ArchonMegalon/fleet
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Fetch exact public authority snapshots and Two-Green archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TWO_GREEN_RUN_ID: ${{ inputs.two_green_run_id }}
+          TWO_GREEN_ARTIFACT_ID: ${{ inputs.two_green_artifact_id }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/preview12-approval-evidence"
+          install -d -m 0700 "$evidence"
+          gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/ArchonMegalon/chummer-android/actions/runs/$TWO_GREEN_RUN_ID" >"$evidence/run.json"
+          gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/ArchonMegalon/chummer-android/actions/artifacts/$TWO_GREEN_ARTIFACT_ID" >"$evidence/artifact.json"
+          gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/ArchonMegalon/chummer-android/actions/artifacts/$TWO_GREEN_ARTIFACT_ID/zip" >"$evidence/artifact.zip"
+          gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
+            'repos/ArchonMegalon/fleet/environments/android-preview12-release-approval' >"$evidence/environment.json"
+      - name: Emit only the public, non-authorizing approval JSON
+        env:
+          ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64: ${{ secrets.ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64 }}
+          EXECUTION_REF_PROTECTED: ${{ github.ref_protected }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_REF: ${{ job.workflow_ref }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/preview12-approval-evidence"
+          output="$RUNNER_TEMP/preview12-approval-public"
+          install -d -m 0700 "$output"
+          python3 scripts/android_preview12_two_green_release_approval.py \
+            --policy "$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json" \
+            approve \
+            --two-green-run-id '${{ inputs.two_green_run_id }}' \
+            --two-green-run-attempt '${{ inputs.two_green_run_attempt }}' \
+            --two-green-artifact-id '${{ inputs.two_green_artifact_id }}' \
+            --two-green-artifact-sha256 '${{ inputs.two_green_artifact_sha256 }}' \
+            --two-green-receipt-sha256 '${{ inputs.two_green_receipt_sha256 }}' \
+            --review-run-id '${{ inputs.review_run_id }}' \
+            --main-run-id '${{ inputs.main_run_id }}' \
+            --main-commit '${{ inputs.main_commit }}' \
+            --main-tree '${{ inputs.main_tree }}' \
+            --version-name '${{ inputs.version_name }}' \
+            --version-code '${{ inputs.version_code }}' \
+            --execution-repository "$GITHUB_REPOSITORY" \
+            --execution-ref "$GITHUB_REF" \
+            --execution-ref-protected "$EXECUTION_REF_PROTECTED" \
+            --execution-event "$GITHUB_EVENT_NAME" \
+            --execution-sha "$GITHUB_SHA" \
+            --workflow-repository "$WORKFLOW_REPOSITORY" \
+            --workflow-ref "$WORKFLOW_REF" \
+            --workflow-sha "$WORKFLOW_SHA" \
+            --execution-run-id "$GITHUB_RUN_ID" \
+            --execution-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --execution-environment android-preview12-release-approval \
+            --environment-snapshot "$evidence/environment.json" \
+            --run-snapshot "$evidence/run.json" \
+            --artifact-snapshot "$evidence/artifact.json" \
+            --artifact-archive "$evidence/artifact.zip" \
+            --output "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json"
+          env -u ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64 \
+            python3 scripts/android_preview12_two_green_release_approval.py \
+              --policy "$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json" \
+              verify --approval "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json"
+          jq -e '.signingAuthorized == false and .publicationAuthorized == false and .googlePlayUploadAuthorized == false' \
+            "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json" >/dev/null
+      - name: Upload only the public approval JSON
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-preview12-two-green-release-approval-${{ inputs.main_tree }}
+          path: ${{ runner.temp }}/preview12-approval-public/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
