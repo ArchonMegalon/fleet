@@ -1,0 +1,60 @@
+name: Android Preview12 non-secret verifier
+on:
+  workflow_call:
+    inputs:
+      source_sha: {required: true, type: string}
+      fleet_verifier_sha: {required: true, type: string}
+      candidate_run_id: {required: true, type: string}
+      candidate_artifact_id: {required: true, type: string}
+      candidate_artifact_sha256: {required: true, type: string}
+      candidate_aab_sha256: {required: true, type: string}
+      verification_run_id: {required: true, type: string}
+      verification_artifact_id: {required: true, type: string}
+      verification_artifact_sha256: {required: true, type: string}
+      verification_receipt_sha256: {required: true, type: string}
+    outputs:
+      transaction_inputs_sha256:
+        description: Canonical SHA-256 binding every declared transaction input
+        value: ${{ jobs.contract.outputs.transaction_inputs_sha256 }}
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      transaction_inputs_sha256: ${{ steps.preflight.outputs.transaction_inputs_sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: {repository: ArchonMegalon/fleet, ref: "${{ job.workflow_sha }}", fetch-depth: 1, persist-credentials: false}
+      - id: preflight
+        env:
+          CALLER_REPOSITORY: ${{ github.repository }}
+          CALLER_REPOSITORY_ID: ${{ github.repository_id }}
+          CALLER_REF: ${{ github.ref }}
+          CALLER_SHA: ${{ github.sha }}
+          FLEET_VERIFIER_SHA: ${{ inputs.fleet_verifier_sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_REF: ${{ job.workflow_ref }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          CANDIDATE_ARTIFACT_SHA256: ${{ inputs.candidate_artifact_sha256 }}
+          CANDIDATE_AAB_SHA256: ${{ inputs.candidate_aab_sha256 }}
+          VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+          VERIFICATION_ARTIFACT_ID: ${{ inputs.verification_artifact_id }}
+          VERIFICATION_ARTIFACT_SHA256: ${{ inputs.verification_artifact_sha256 }}
+          VERIFICATION_RECEIPT_SHA256: ${{ inputs.verification_receipt_sha256 }}
+        run: >-
+          python3 scripts/android_preview12_signer.py --lock config/release/android-preview12-signer.lock.json
+          --toolchain-lock config/release/android-preview12-signer-toolchain.lock.json reusable-preflight
+          --caller-repository "$CALLER_REPOSITORY" --caller-repository-id "$CALLER_REPOSITORY_ID"
+          --caller-ref "$CALLER_REF" --caller-sha "$CALLER_SHA" --fleet-verifier-sha "$FLEET_VERIFIER_SHA"
+          --workflow-repository "$WORKFLOW_REPOSITORY"
+          --workflow-ref "$WORKFLOW_REF" --workflow-sha "$WORKFLOW_SHA" --source-sha "$SOURCE_SHA"
+          --candidate-run-id "$CANDIDATE_RUN_ID" --candidate-artifact-id "$CANDIDATE_ARTIFACT_ID"
+          --candidate-artifact-sha256 "$CANDIDATE_ARTIFACT_SHA256" --candidate-aab-sha256 "$CANDIDATE_AAB_SHA256"
+          --verification-run-id "$VERIFICATION_RUN_ID" --verification-artifact-id "$VERIFICATION_ARTIFACT_ID"
+          --verification-artifact-sha256 "$VERIFICATION_ARTIFACT_SHA256"
+          --verification-receipt-sha256 "$VERIFICATION_RECEIPT_SHA256" --github-output "$GITHUB_OUTPUT"
