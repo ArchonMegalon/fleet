@@ -1007,14 +1007,32 @@ def _select_authenticated_ledger_commit(
         selected, _ = _json_file(
             selected_path, "selected ledger commit response", limit, owner_only=True
         )
-        return _validate_authenticated_ledger_commit(
+        validated_selected = _validate_authenticated_ledger_commit(
             ledger, client, selected, subject, reservation, approval_raw
         )
-    _write_or_match(
-        selected_path, _pretty_json(validated_fresh),
-        "selected ledger commit response", limit,
-    )
-    return validated_fresh
+    else:
+        _write_or_match(
+            selected_path, _pretty_json(validated_fresh),
+            "selected ledger commit response", limit,
+        )
+        validated_selected = validated_fresh
+    # Every retained history file is evidence labelled as authenticated.  Do
+    # not promote a directory containing an injected or corrupt extra record,
+    # even when the fresh and selected responses themselves are valid.
+    for entry in sorted(os.scandir(directory), key=lambda item: item.name):
+        match = LEDGER_RESPONSE_NAME.fullmatch(entry.name)
+        if match is None:
+            continue
+        path = Path(entry.path)
+        value, raw = _json_file(
+            path, "authenticated ledger response history", limit, owner_only=True
+        )
+        if raw != _pretty_json(value) or hashlib.sha256(raw).hexdigest() != match.group(1):
+            raise RebuilderError("authenticated ledger response history is not content-addressed")
+        _validate_authenticated_ledger_commit(
+            ledger, client, value, subject, reservation, approval_raw
+        )
+    return validated_selected
 
 
 def require_rebuild_match(rebuilt_aab: Path, request: Mapping[str, Any], limit: int) -> dict[str, Any]:
@@ -1707,6 +1725,14 @@ def _validate_recovery_inventory(directory: Path, *, require_final: bool) -> Non
         if path.is_symlink() or not path.is_file() or metadata.st_uid != os.getuid() \
                 or stat.S_IMODE(metadata.st_mode) & 0o077:
             raise RebuilderError("protected signer recovery contains a noncanonical entry")
+        match = LEDGER_RESPONSE_NAME.fullmatch(name)
+        if match is not None:
+            raw = _stable_bytes(
+                path, "authenticated ledger response history", 8 * 1024 * 1024,
+                owner_only=True,
+            )
+            if hashlib.sha256(raw).hexdigest() != match.group(1):
+                raise RebuilderError("authenticated ledger response history name differs from bytes")
 
 
 def _quarantine_unverified_recovery(
@@ -2064,7 +2090,10 @@ def execute_protected_signer_transaction(
         lease.assert_exact()
         recovery.mkdir(mode=0o700)
         recovery.chmod(0o700)
-        _fsync_directory(output_dir.parent)
+        # The attempt entry lives under the authenticated recovery store, not
+        # beside the eventual output destination. Persist that actual parent
+        # before any credential can be admitted.
+        _fsync_directory(recovery.parent)
         recovery_created = True
         _recovery_write(
             recovery, "RESERVATION.generated.json",
@@ -2162,6 +2191,7 @@ def execute_protected_signer_transaction(
         )
         _validate_recovery_inventory(recovery, require_final=True)
         os.replace(recovery, output_dir)
+        _fsync_directory(recovery.parent)
         _fsync_directory(output_dir.parent)
         return audit
     except Exception:
@@ -2311,7 +2341,10 @@ def reconcile_protected_signer_transaction(
     _validate_recovery_inventory(directory, require_final=True)
     if directory == recovery:
         os.replace(recovery, output_dir)
-        _fsync_directory(output_dir.parent)
+    # Also repair an earlier promotion whose rename succeeded but whose source
+    # or destination parent fsync acknowledgement was lost.
+    _fsync_directory(recovery.parent)
+    _fsync_directory(output_dir.parent)
     return audit
 
 

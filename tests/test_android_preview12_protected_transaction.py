@@ -411,6 +411,13 @@ def test_reservation_precedes_key_admission_and_all_signing(tmp_path: Path, monk
     lock, lock_raw, lease = fixture(module, tmp_path, events)
     install_fakes(module, monkeypatch, events, lock, lock_raw)
     consumer = fake_consumer(module, lease, events)
+    original_fsync = module._fsync_directory
+
+    def observed_fsync(path):
+        events.append(f"fsync:{Path(path)}")
+        return original_fsync(path)
+
+    monkeypatch.setattr(module, "_fsync_directory", observed_fsync)
 
     def credentials(*_args):
         events.append("credentials")
@@ -425,9 +432,11 @@ def test_reservation_precedes_key_admission_and_all_signing(tmp_path: Path, monk
     )
     assert result["status"] == "verified"
     assert events.index("authenticate") < events.index("reserve") < events.index("credentials") < events.index("sign")
+    assert events.index(f"fsync:{lease.recovery_root}") < events.index("credentials")
     assert events.index("sign") < events.index("sidecar") < events.index("protected-validation")
     assert events.index("protected-validation") < events.index("android-v2") < events.index("external-v1") < events.index("commit")
     assert "abort" not in events
+    assert f"fsync:{tmp_path}" in events
 
 
 @pytest.mark.parametrize(
@@ -520,7 +529,11 @@ def test_failure_after_reservation_but_before_key_admission_aborts_and_cleans(
 
 
 @pytest.mark.parametrize(
-    "failure", ["lost-commit-ack", "commit-record", "audit", "audit-write", "promotion", "post-promotion"]
+    "failure", [
+        "lost-commit-ack", "commit-record", "audit", "audit-write",
+        "promotion", "post-promotion", "source-parent-fsync",
+        "destination-parent-fsync",
+    ]
 )
 def test_recovery_preserves_signed_evidence_and_never_replays_signing(
     tmp_path: Path, monkeypatch, failure: str,
@@ -532,6 +545,7 @@ def test_recovery_preserves_signed_evidence_and_never_replays_signing(
     consumer = fake_consumer(module, lease, events)
     output = tmp_path / "recovered-output"
     recovery = module._recovery_path(lease.recovery_root, "d" * 64)
+    fsync_calls: list[Path] = []
 
     if failure == "lost-commit-ack":
         client.fail_commit_once = True
@@ -568,7 +582,7 @@ def test_recovery_preserves_signed_evidence_and_never_replays_signing(
             return original(path, *args, **kwargs)
 
         monkeypatch.setattr(module, "_write_or_match", fail_audit_write)
-    else:
+    elif failure in {"promotion", "post-promotion"}:
         original_replace = module.os.replace
         state = {"failed": False}
 
@@ -581,6 +595,24 @@ def test_recovery_preserves_signed_evidence_and_never_replays_signing(
             return original_replace(source, destination)
 
         monkeypatch.setattr(module.os, "replace", fail_promotion)
+    else:
+        original_fsync = module._fsync_directory
+        state = {"failed": False}
+
+        failing_parent = (
+            lease.recovery_root
+            if failure == "source-parent-fsync"
+            else output.parent
+        )
+
+        def fail_source_parent_fsync(path):
+            fsync_calls.append(Path(path))
+            if Path(path) == failing_parent and output.exists() and not state["failed"]:
+                state["failed"] = True
+                raise OSError("source-parent fsync interrupted")
+            return original_fsync(path)
+
+        monkeypatch.setattr(module, "_fsync_directory", fail_source_parent_fsync)
 
     def credentials(*_args):
         events.append("credentials")
@@ -613,6 +645,9 @@ def test_recovery_preserves_signed_evidence_and_never_replays_signing(
     assert events.count("sign") == 1
     assert events.count("credentials") == 1
     assert client.commit_calls == 2
+    if failure in {"source-parent-fsync", "destination-parent-fsync"}:
+        assert state["failed"] is True
+        assert fsync_calls.count(failing_parent) >= 2
 
 
 def test_recovery_rejects_fresh_validation_drift_without_replaying_signing(
@@ -945,4 +980,21 @@ def test_real_draft11_status_recovery_and_direct_commit_keep_distinct_signed_env
     histories = sorted(tmp_path.glob("LEDGER_AUTHENTICATED_RESPONSE.*.generated.json"))
     assert len(histories) == 2
     assert {json.loads(path.read_text())["receipt"]["operation"] for path in histories} == {"status", "commit"}
-    assert len(verified) == 6
+    assert len(verified) == 12
+
+    injected = json.loads(json.dumps(status))
+    injected["receipt"]["reservationId"] = "rsv_injected_other_identity"
+    injected["receiptSha256"] = ledger.canonical_sha256(injected["receipt"])
+    injected_raw = module._pretty_json(injected)
+    protected_file(
+        tmp_path / (
+            "LEDGER_AUTHENTICATED_RESPONSE."
+            f"{hashlib.sha256(injected_raw).hexdigest()}.generated.json"
+        ),
+        injected_raw,
+    )
+    with pytest.raises(module.RebuilderError, match="reviewed adapter validation"):
+        module._select_authenticated_ledger_commit(
+            tmp_path, ledger, client, direct, subject, reservation,
+            approval_raw, 256 * 1024,
+        )
