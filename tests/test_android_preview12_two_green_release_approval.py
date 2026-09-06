@@ -61,6 +61,19 @@ def active_policy(tmp_path: Path) -> tuple[dict, Path, str]:
     return value, path, public_digest
 
 
+def enable_test_durable_reservation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise downstream approval logic with only the future replay gate simulated."""
+    original = approval._require_ready
+
+    def require_ready_with_test_reservation(policy):
+        value = json.loads(json.dumps(policy))
+        value["replay_protection"]["durable_external_reservation_configured"] = True
+        value["replay_protection"]["authority_complete"] = True
+        original(value)
+
+    monkeypatch.setattr(approval, "_require_ready", require_ready_with_test_reservation)
+
+
 def inputs() -> dict[str, object]:
     return {
         "approval_request_nonce": "9" * 64,
@@ -155,7 +168,9 @@ def archive(path: Path, data: bytes) -> bytes:
     return output
 
 
-def full_case(tmp_path: Path):
+def full_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None):
+    if monkeypatch is not None:
+        enable_test_durable_reservation(monkeypatch)
     policy_value, policy_path, public_digest = active_policy(tmp_path)
     receipt_value = receipt()
     receipt_bytes = write_json(tmp_path / "receipt.json", receipt_value)
@@ -217,6 +232,16 @@ def full_case(tmp_path: Path):
         "url": f"https://api.github.com/repos/{approval.ANDROID_REPOSITORY}/git/commits/{'a' * 40}",
         "tree": {"sha": "b" * 40},
     })
+    write_json(tmp_path / "fleet-main-branch.json", {
+        "name": "main",
+        "protected": True,
+        "commit": {"sha": "c" * 40},
+    })
+    write_json(tmp_path / "fleet-main-commit.json", {
+        "sha": "c" * 40,
+        "url": f"https://api.github.com/repos/{approval.FLEET_REPOSITORY}/git/commits/{'c' * 40}",
+        "tree": {"sha": "f" * 40},
+    })
     write_json(tmp_path / "approval-artifact-ledger.json", {
         "total_count": 0,
         "artifacts": [],
@@ -231,6 +256,8 @@ def full_case(tmp_path: Path):
         artifact_archive=(tmp_path / "artifact.zip").resolve(),
         android_main_branch_snapshot=(tmp_path / "android-main-branch.json").resolve(),
         android_main_commit_snapshot=(tmp_path / "android-main-commit.json").resolve(),
+        fleet_main_branch_snapshot=(tmp_path / "fleet-main-branch.json").resolve(),
+        fleet_main_commit_snapshot=(tmp_path / "fleet-main-commit.json").resolve(),
         approval_artifact_ledger_snapshot=(tmp_path / "approval-artifact-ledger.json").resolve(),
         output=(tmp_path / approval.OUTPUT_NAME).resolve(),
     )
@@ -246,6 +273,13 @@ def test_checked_in_policy_is_exact_dormant_and_contains_no_key_material():
     assert value["github_environment"]["configured"] is False
     assert value["external_ed25519_key"]["configured"] is False
     assert value["external_ed25519_key"]["expected_public_key_spki_sha256"] is None
+    assert value["replay_protection"]["durable_external_reservation_required"] is True
+    assert value["replay_protection"]["durable_reservation_subjects"] == [
+        "two_green_artifact_id",
+        "approval_request_nonce",
+    ]
+    assert value["replay_protection"]["durable_external_reservation_configured"] is False
+    assert value["replay_protection"]["authority_complete"] is False
     assert b"PRIVATE KEY" not in data
     assert base64.b64encode(TEST_PRIVATE_DER) not in data
 
@@ -257,6 +291,21 @@ def test_dormant_preflight_fails_before_environment_or_key_access():
         approval.validate_dispatch(value, args)
 
 
+def test_environment_key_activation_still_fails_without_durable_replay(tmp_path: Path):
+    policy, _, _ = active_policy(tmp_path)
+    args = argparse.Namespace(
+        **inputs(),
+        **{
+            key: value
+            for key, value in execution().items()
+            if not key.startswith("execution_run")
+            and key != "execution_environment"
+        },
+    )
+    with pytest.raises(approval.ApprovalError, match="durable external replay"):
+        approval.validate_dispatch(policy, args)
+
+
 @pytest.mark.parametrize("change", [
     {"execution_ref": "refs/heads/feature"},
     {"execution_ref_protected": "false"},
@@ -265,7 +314,10 @@ def test_dormant_preflight_fails_before_environment_or_key_access():
     {"version_name": "0.1.0-preview.13"},
     {"version_code": "13"},
 ])
-def test_active_preflight_rejects_context_or_release_substitution(tmp_path: Path, change):
+def test_active_preflight_rejects_context_or_release_substitution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change
+):
+    enable_test_durable_reservation(monkeypatch)
     policy, policy_path, _ = active_policy(tmp_path)
     values = {**inputs(), **execution(), **change}
     values.pop("execution_run_id", None)
@@ -275,6 +327,18 @@ def test_active_preflight_rejects_context_or_release_substitution(tmp_path: Path
     with pytest.raises(approval.ApprovalError):
         approval.validate_dispatch(policy, args)
     assert policy_path.exists()
+
+
+def test_future_ready_preflight_accepts_exact_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    enable_test_durable_reservation(monkeypatch)
+    policy, _, _ = active_policy(tmp_path)
+    values = {**inputs(), **execution()}
+    values.pop("execution_run_id")
+    values.pop("execution_run_attempt")
+    values.pop("execution_environment")
+    assert approval.validate_dispatch(policy, argparse.Namespace(**values))["ok"] is True
 
 
 def test_environment_requires_human_reviewer_self_review_prevention_and_protected_main(tmp_path: Path):
@@ -307,8 +371,10 @@ def test_environment_requires_human_reviewer_self_review_prevention_and_protecte
             approval.validate_environment_snapshot(changed, policy)
 
 
-def test_exact_two_green_receipt_emits_only_public_non_authorizing_approval(tmp_path: Path):
-    _, public_digest, _, args, environment = full_case(tmp_path)
+def test_exact_two_green_receipt_emits_only_public_non_authorizing_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _, public_digest, _, args, environment = full_case(tmp_path, monkeypatch)
     result = approval.create_approval(args, environment, now=NOW)
     approval.validate_approval(result, now=NOW)
     assert result["signature"]["publicKeySpkiSha256"] == public_digest
@@ -339,22 +405,24 @@ def test_receipt_substitution_fails_closed(tmp_path: Path, mutate, match):
         )
 
 
-def test_stale_or_future_evidence_fails_closed(tmp_path: Path):
-    _, _, _, args, environment = full_case(tmp_path)
+def test_stale_or_future_evidence_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _, _, _, args, environment = full_case(tmp_path, monkeypatch)
     run = json.loads(args.run_snapshot.read_text())
     run["updated_at"] = "2026-09-04T14:02:30Z"
     write_json(args.run_snapshot, run)
     with pytest.raises(approval.ApprovalError, match="stale"):
         approval.create_approval(args, environment, now=NOW)
 
-    _, _, _, args, environment = full_case(tmp_path)
+    _, _, _, args, environment = full_case(tmp_path, monkeypatch)
     artifact_value = json.loads(args.artifact_snapshot.read_text())
     artifact_value["created_at"] = "2026-09-06T14:01:00Z"
     write_json(args.artifact_snapshot, artifact_value)
     with pytest.raises(approval.ApprovalError, match="exact run attempt"):
         approval.create_approval(args, environment, now=NOW)
 
-    _, _, receipt_value, args, environment = full_case(tmp_path)
+    _, _, receipt_value, args, environment = full_case(tmp_path, monkeypatch)
     receipt_value["decisionTimeUtc"] = "2026-09-06T15:00:00Z"
     receipt_value["eligibilitySha256"] = approval.canonical_sha256(
         {key: value for key, value in receipt_value.items() if key != "eligibilitySha256"}
@@ -377,9 +445,9 @@ def test_stale_or_future_evidence_fails_closed(tmp_path: Path):
     ("android_main_commit_snapshot", lambda value: value["tree"].update(sha="d" * 40), "commit/tree authority"),
 ])
 def test_current_protected_android_main_is_exact(
-    tmp_path: Path, snapshot: str, mutate, match: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, snapshot: str, mutate, match: str
 ):
-    _, _, _, args, environment = full_case(tmp_path)
+    _, _, _, args, environment = full_case(tmp_path, monkeypatch)
     path = getattr(args, snapshot)
     value = json.loads(path.read_text())
     mutate(value)
@@ -388,8 +456,21 @@ def test_current_protected_android_main_is_exact(
         approval.create_approval(args, environment, now=NOW)
 
 
-def test_prior_approval_artifact_blocks_replay(tmp_path: Path):
-    _, _, _, args, environment = full_case(tmp_path)
+def test_rerun_of_old_active_fleet_sha_fails_after_main_deactivation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _, _, _, args, environment = full_case(tmp_path, monkeypatch)
+    branch = json.loads(args.fleet_main_branch_snapshot.read_text())
+    branch["commit"]["sha"] = "d" * 40
+    write_json(args.fleet_main_branch_snapshot, branch)
+    with pytest.raises(approval.ApprovalError, match="current Fleet main branch"):
+        approval.create_approval(args, environment, now=NOW)
+
+
+def test_prior_approval_artifact_blocks_replay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _, _, _, args, environment = full_case(tmp_path, monkeypatch)
     expected_name = approval.approval_artifact_name(approval.validate_inputs(args))
     write_json(args.approval_artifact_ledger_snapshot, {
         "total_count": 1,
@@ -419,8 +500,10 @@ def test_nonce_and_reviewed_pull_request_are_exact(tmp_path: Path):
         approval.validate_inputs(args)
 
 
-def test_public_approval_expires_for_consumers(tmp_path: Path):
-    _, _, _, args, environment = full_case(tmp_path)
+def test_public_approval_expires_for_consumers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _, _, _, args, environment = full_case(tmp_path, monkeypatch)
     result = approval.create_approval(args, environment, now=NOW)
     with pytest.raises(approval.ApprovalError, match="stale"):
         approval.validate_approval(
@@ -428,8 +511,10 @@ def test_public_approval_expires_for_consumers(tmp_path: Path):
         )
 
 
-def test_wrong_external_key_is_rejected_against_reviewed_public_digest(tmp_path: Path):
-    _, _, _, args, environment = full_case(tmp_path)
+def test_wrong_external_key_is_rejected_against_reviewed_public_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _, _, _, args, environment = full_case(tmp_path, monkeypatch)
     other_seed = bytes.fromhex("4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb")
     environment[approval.KEY_ENV_NAME] = base64.b64encode(
         bytes.fromhex("302e020100300506032b657004220420") + other_seed
@@ -438,8 +523,10 @@ def test_wrong_external_key_is_rejected_against_reviewed_public_digest(tmp_path:
         approval.create_approval(args, environment, now=NOW)
 
 
-def test_artifact_metadata_size_must_match_downloaded_exact_archive(tmp_path: Path):
-    _, _, _, args, environment = full_case(tmp_path)
+def test_artifact_metadata_size_must_match_downloaded_exact_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _, _, _, args, environment = full_case(tmp_path, monkeypatch)
     value = json.loads(args.artifact_snapshot.read_text())
     value["size_in_bytes"] += 1
     write_json(args.artifact_snapshot, value)
@@ -447,8 +534,10 @@ def test_artifact_metadata_size_must_match_downloaded_exact_archive(tmp_path: Pa
         approval.create_approval(args, environment, now=NOW)
 
 
-def test_public_approval_tamper_is_rejected(tmp_path: Path):
-    _, _, _, args, environment = full_case(tmp_path)
+def test_public_approval_tamper_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _, _, _, args, environment = full_case(tmp_path, monkeypatch)
     result = approval.create_approval(args, environment, now=NOW)
     result["androidSource"]["tree"] = "e" * 40
     with pytest.raises(approval.ApprovalError, match="authority differs"):
@@ -496,6 +585,8 @@ def test_workflow_is_dormant_separate_and_uploads_only_public_json():
     ):
         assert f'"${name}"' in text
     assert "approval-artifact-ledger.json" in text
+    assert "fleet-main-branch.json" in text
+    assert "fleet-main-commit.json" in text
     assert (
         "group: preview12-two-green-release-approval-"
         "${{ inputs.two_green_artifact_id }}"

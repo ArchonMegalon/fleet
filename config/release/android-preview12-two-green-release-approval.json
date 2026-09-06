@@ -1,14 +1,16 @@
 {
   "contract_name": "fleet.android_preview12_two_green_release_approval_policy.v1",
   "contract_version": 1,
-  "state": "dormant_pending_environment_and_external_key",
+  "state": "dormant_pending_environment_external_key_and_durable_replay",
   "release": {"package_id": "com.myexternalbrain.chummer", "version_name": "0.1.0-preview.12", "version_code": 12},
   "android_source": {"repository": "ArchonMegalon/chummer-android", "repository_id": 1331626697, "ref": "refs/heads/main"},
   "two_green": {"workflow_name": "API 36 ordered review-to-main green eligibility", "workflow_path": ".github/workflows/api36-two-consecutive-green.yml", "receipt_contract": "chummer.android.api36-ordered-review-main-green-eligibility/v2", "receipt_file_name": "ANDROID_API36_TWO_GREEN_ELIGIBILITY.generated.json"},
   "fleet_execution": {
     "repository": "ArchonMegalon/fleet",
+    "repository_id": 1176287728,
     "ref": "refs/heads/main",
     "protected_ref_required": true,
+    "current_main_snapshot_required": true,
     "event": "workflow_dispatch",
     "workflow_path": ".github/workflows/android-preview12-two-green-release-approval.yml"
   },
@@ -31,7 +33,15 @@
     "private_key_persistence_allowed": false
   },
   "freshness": {"maximum_evidence_age_seconds": 86400, "maximum_future_skew_seconds": 300},
-  "replay_protection": {"mode": "one_approval_artifact_per_two_green_artifact", "approval_request_nonce_required": true, "artifact_ledger_required": true},
+  "replay_protection": {
+    "mode": "artifact_observation_only_incomplete",
+    "approval_request_nonce_required": true,
+    "artifact_ledger_required": true,
+    "durable_external_reservation_required": true,
+    "durable_reservation_subjects": ["two_green_artifact_id", "approval_request_nonce"],
+    "durable_external_reservation_configured": false,
+    "authority_complete": false
+  },
   "activation": {"enabled": false, "requires_separate_reviewed_contract_change": true},
   "output": {"contract_name": "fleet.android_preview12_two_green_release_approval.v1", "approval_scope": "preview12_two_green_evidence_only", "public_json_only": true, "signing_authorized": false, "publication_authorized": false, "google_play_upload_authorized": false},
   "separation": {"play_aab_signer": "strictly_separate", "accepts_aab_bytes": false, "accepts_play_credentials": false, "accepts_upload_keystore": false, "performs_artifact_signing": false, "performs_play_upload": false, "performs_publication": false}

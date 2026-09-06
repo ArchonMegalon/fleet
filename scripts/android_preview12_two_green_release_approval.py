@@ -222,7 +222,7 @@ def expected_policy() -> dict[str, Any]:
     return {
         "contract_name": POLICY_CONTRACT,
         "contract_version": 1,
-        "state": "dormant_pending_environment_and_external_key",
+        "state": "dormant_pending_environment_external_key_and_durable_replay",
         "release": {"package_id": PACKAGE_ID, "version_name": VERSION_NAME,
                     "version_code": VERSION_CODE},
         "android_source": {"repository": ANDROID_REPOSITORY,
@@ -233,8 +233,11 @@ def expected_policy() -> dict[str, Any]:
             "receipt_contract": TWO_GREEN_CONTRACT,
             "receipt_file_name": RECEIPT_NAME,
         },
-        "fleet_execution": {"repository": FLEET_REPOSITORY, "ref": FLEET_REF,
-                            "protected_ref_required": True, "event": "workflow_dispatch",
+        "fleet_execution": {"repository": FLEET_REPOSITORY,
+                            "repository_id": 1176287728, "ref": FLEET_REF,
+                            "protected_ref_required": True,
+                            "current_main_snapshot_required": True,
+                            "event": "workflow_dispatch",
                             "workflow_path": WORKFLOW_PATH},
         "github_environment": {
             "name": ENVIRONMENT_NAME,
@@ -259,9 +262,15 @@ def expected_policy() -> dict[str, Any]:
             "maximum_future_skew_seconds": MAX_FUTURE_SKEW_SECONDS,
         },
         "replay_protection": {
-            "mode": "one_approval_artifact_per_two_green_artifact",
+            "mode": "artifact_observation_only_incomplete",
             "approval_request_nonce_required": True,
             "artifact_ledger_required": True,
+            "durable_external_reservation_required": True,
+            "durable_reservation_subjects": [
+                "two_green_artifact_id", "approval_request_nonce"
+            ],
+            "durable_external_reservation_configured": False,
+            "authority_complete": False,
         },
         "activation": {"enabled": False,
                        "requires_separate_reviewed_contract_change": True},
@@ -344,6 +353,16 @@ def _require_ready(policy: Mapping[str, Any]) -> None:
         reviewed_users = []
     if not reviewed_users:
         blockers.append("human user reviewer identities are not pinned")
+    replay = policy.get("replay_protection", {})
+    if (
+        not isinstance(replay, dict)
+        or replay.get("durable_external_reservation_required") is not True
+        or replay.get("durable_reservation_subjects")
+        != ["two_green_artifact_id", "approval_request_nonce"]
+        or replay.get("durable_external_reservation_configured") is not True
+        or replay.get("authority_complete") is not True
+    ):
+        blockers.append("durable external replay reservation authority is incomplete")
     if blockers:
         raise ApprovalError("; ".join(blockers))
 
@@ -595,6 +614,33 @@ def validate_android_main_snapshots(
     }
 
 
+def validate_fleet_main_snapshots(
+    branch: Mapping[str, Any], commit: Mapping[str, Any], execution_sha: str
+) -> dict[str, Any]:
+    execution_sha = _sha40(execution_sha, "Fleet execution SHA")
+    branch_commit = branch.get("commit")
+    if (
+        branch.get("name") != "main"
+        or branch.get("protected") is not True
+        or not isinstance(branch_commit, dict)
+        or branch_commit.get("sha") != execution_sha
+    ):
+        raise ApprovalError("current Fleet main branch authority differs")
+    tree = commit.get("tree")
+    expected_commit_url = (
+        f"https://api.github.com/repos/{FLEET_REPOSITORY}/git/commits/"
+        f"{execution_sha}"
+    )
+    if (
+        commit.get("sha") != execution_sha
+        or commit.get("url") != expected_commit_url
+        or not isinstance(tree, dict)
+    ):
+        raise ApprovalError("current Fleet main commit/tree authority differs")
+    tree_sha = _sha40(tree.get("sha"), "current Fleet main tree")
+    return {"protected": True, "commit": execution_sha, "tree": tree_sha}
+
+
 def validate_replay_snapshot(
     value: Mapping[str, Any], inputs: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -612,7 +658,7 @@ def validate_replay_snapshot(
     if matching:
         raise ApprovalError("Two-Green artifact was already approved")
     return {
-        "mode": "one_approval_artifact_per_two_green_artifact",
+        "mode": "artifact_observation_only_incomplete",
         "artifactName": expected_name,
         "priorApprovalArtifactCount": 0,
     }
@@ -873,6 +919,19 @@ def create_approval(
         strict_json_bytes(commit_bytes, "Android main commit snapshot"),
         inputs,
     )
+    fleet_branch_bytes, fleet_branch_sha256 = stable_file(
+        args.fleet_main_branch_snapshot, "Fleet main branch snapshot",
+        MAX_RECEIPT_BYTES,
+    )
+    fleet_commit_bytes, fleet_commit_sha256 = stable_file(
+        args.fleet_main_commit_snapshot, "Fleet main commit snapshot",
+        MAX_RECEIPT_BYTES,
+    )
+    fleet_main_authority = validate_fleet_main_snapshots(
+        strict_json_bytes(fleet_branch_bytes, "Fleet main branch snapshot"),
+        strict_json_bytes(fleet_commit_bytes, "Fleet main commit snapshot"),
+        args.execution_sha,
+    )
     replay_bytes, replay_sha256 = stable_file(
         args.approval_artifact_ledger_snapshot,
         "approval artifact ledger snapshot", MAX_RECEIPT_BYTES,
@@ -894,6 +953,11 @@ def create_approval(
         "runId": _positive_decimal(args.execution_run_id, "Fleet run ID"),
         "runAttempt": _positive_decimal(args.execution_run_attempt, "Fleet run attempt"),
         "environment": ENVIRONMENT_NAME,
+        "currentMainAuthority": {
+            **fleet_main_authority,
+            "branchApiSnapshotSha256": fleet_branch_sha256,
+            "commitApiSnapshotSha256": fleet_commit_sha256,
+        },
     }
     if (
         execution["ref"] != args.execution_ref
@@ -1095,6 +1159,11 @@ def validate_approval(
     execution = value.get("fleetExecution")
     if (
         not isinstance(execution, dict)
+        or set(execution) != {
+            "repository", "ref", "protectedRef", "event", "commit",
+            "workflowRepository", "workflowRef", "workflowSha", "runId",
+            "runAttempt", "environment", "currentMainAuthority",
+        }
         or execution.get("repository") != FLEET_REPOSITORY
         or execution.get("ref") != FLEET_REF
         or execution.get("protectedRef") is not True
@@ -1107,6 +1176,26 @@ def validate_approval(
     ):
         raise ApprovalError("public approval Fleet execution authority differs")
     _sha40(execution.get("commit"), "public approval Fleet commit")
+    fleet_current_main = execution.get("currentMainAuthority")
+    if (
+        not isinstance(fleet_current_main, dict)
+        or set(fleet_current_main) != {
+            "protected", "commit", "tree", "branchApiSnapshotSha256",
+            "commitApiSnapshotSha256",
+        }
+        or fleet_current_main.get("protected") is not True
+        or fleet_current_main.get("commit") != execution.get("commit")
+    ):
+        raise ApprovalError("public approval current Fleet main authority differs")
+    _sha40(fleet_current_main.get("tree"), "public approval Fleet main tree")
+    _sha256(
+        fleet_current_main.get("branchApiSnapshotSha256"),
+        "public approval Fleet branch snapshot",
+    )
+    _sha256(
+        fleet_current_main.get("commitApiSnapshotSha256"),
+        "public approval Fleet commit snapshot",
+    )
     _positive(execution.get("runId"), "public approval Fleet run ID")
     _positive(execution.get("runAttempt"), "public approval Fleet run attempt")
     environment_authority = value.get("environmentAuthority")
@@ -1146,7 +1235,7 @@ def validate_approval(
             "mode", "artifactName", "priorApprovalArtifactCount",
             "ledgerApiSnapshotSha256", "approvalRequestNonce",
         }
-        or replay.get("mode") != "one_approval_artifact_per_two_green_artifact"
+        or replay.get("mode") != "artifact_observation_only_incomplete"
         or replay.get("artifactName")
         != approval_artifact_name({"twoGreenArtifactId": artifact["id"]})
         or replay.get("priorApprovalArtifactCount") != 0
@@ -1261,6 +1350,8 @@ def main(argv: list[str] | None = None) -> int:
     approve.add_argument("--artifact-archive", type=Path, required=True)
     approve.add_argument("--android-main-branch-snapshot", type=Path, required=True)
     approve.add_argument("--android-main-commit-snapshot", type=Path, required=True)
+    approve.add_argument("--fleet-main-branch-snapshot", type=Path, required=True)
+    approve.add_argument("--fleet-main-commit-snapshot", type=Path, required=True)
     approve.add_argument(
         "--approval-artifact-ledger-snapshot", type=Path, required=True
     )

@@ -19,7 +19,8 @@ artifact for the same Two-Green artifact ID.
 
 The checked-in policy fails before the protected environment: it is not ready,
 activation is disabled, environment/key configuration is false, no public-key
-digest or human reviewer identity is pinned, and no key or
+digest or human reviewer identity is pinned, durable replay reservation is not
+implemented, and no key or
 repository/environment secret is included.
 
 Do not create an approval key in Fleet. A future operator must supply an existing
@@ -29,20 +30,26 @@ and is never included in the public JSON or Actions artifact.
 
 ## Activation transaction
 
-Activation requires a separate reviewed policy change: provision the
+Activation requires a separate reviewed implementation and policy change:
+add a durable external exactly-once reservation contract for both the Two-Green
+artifact ID and approval nonce that survives Actions artifact expiry or
+deletion, then provision the
 `android-preview12-release-approval` environment for protected branches, require
 at least one explicit human `User` reviewer, disallow Team reviewers and
 administrator bypass, prevent self-review, add the external key only there,
 pin the exact reviewer IDs/logins and the key's SPKI-DER SHA-256, set the two
 `configured` flags, `state: ready`, and `activation.enabled: true`, then land
-through protected Fleet `main`.
+through protected Fleet `main`. Merely changing the checked-in policy flags
+cannot activate the current implementation.
 
 The workflow then rechecks the live environment API response after the GitHub
 environment gate, verifies the exact Two-Green workflow run, artifact archive,
-receipt digest, current protected Android main commit/tree, evidence freshness,
-request nonce, and Preview12 version. A serialized artifact-ledger check permits
-only one public approval for each Two-Green artifact ID, after which the
-workflow emits one Ed25519-signed public JSON.
+receipt digest, current protected Android and Fleet main commit/tree, evidence freshness,
+request nonce, and Preview12 version. The serialized Actions-artifact ledger is
+only a best-effort duplicate observation because artifacts can expire or be
+deleted; it is not durable replay authority and cannot activate this lane. A
+future durable reservation must precede emission of an Ed25519-signed public
+JSON.
 
 The public JSON records that the protected environment gate passed and that its
 configured reviewer set matched the reviewed policy. It deliberately does not
