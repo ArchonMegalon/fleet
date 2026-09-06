@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -32,6 +33,9 @@ MINIMUM_SDK = 24
 TARGET_SDK = 36
 SOURCE_GRAPH_CONTRACT = "chummer.android.release-source-graph/v3"
 PROOF_EXCLUSION_CONTRACT = "chummer.android.release-aab-proof-exclusion/v1"
+HANDOFF_REQUEST_CONTRACT = "fleet.android_preview12_signed_content_handoff_request.v1"
+HANDOFF_RECEIPT_CONTRACT = "fleet.android_preview12_signed_content_handoff_receipt.v1"
+HANDOFF_AUDIT_CONTRACT = "fleet.android_preview12_signed_content_handoff_audit.v1"
 SOURCE_REPOSITORIES = {
     "chummer-android": ("app", "https://github.com/ArchonMegalon/chummer-android.git"),
     "chummer6-core": ("runtime", "https://github.com/ArchonMegalon/chummer6-core.git"),
@@ -170,9 +174,19 @@ def provisioning_blockers(lock, signer_image: str, toolchain, toolchain_bytes: b
         failures.append("verification proof-exclusion validator blob SHA is not provisioned")
     limits = lock.get("limits", {})
     for key in ("artifact_max_bytes", "candidate_max_bytes", "source_graph_max_bytes",
-                "verification_receipt_max_bytes", "api_json_max_bytes", "reservation_json_max_bytes"):
+                "verification_receipt_max_bytes", "api_json_max_bytes", "reservation_json_max_bytes",
+                "handoff_content_max_bytes", "handoff_json_max_bytes", "handoff_metadata_max_bytes"):
         if type(limits.get(key)) is not int or limits[key] < 1:
             failures.append(f"limits.{key} is not provisioned")
+    if (type(limits.get("handoff_content_max_bytes")) is int
+            and type(limits.get("candidate_max_bytes")) is int
+            and limits["handoff_content_max_bytes"] > limits["candidate_max_bytes"]) \
+            or (type(limits.get("handoff_json_max_bytes")) is int
+                and type(limits.get("api_json_max_bytes")) is int
+                and limits["handoff_json_max_bytes"] > limits["api_json_max_bytes"]) \
+            or (type(limits.get("handoff_metadata_max_bytes")) is int
+                and limits["handoff_metadata_max_bytes"] > 16 * 1024):
+        failures.append("private signed-content handoff size ceilings exceed the trusted bounds")
     if producer_only:
         return failures
     reservation = lock.get("reservation", {})
@@ -208,10 +222,26 @@ def provisioning_blockers(lock, signer_image: str, toolchain, toolchain_bytes: b
     handoff = lock.get("signed_content_handoff", {})
     if handoff.get("enabled") is not True:
         failures.append("private signed-content handoff is disabled")
-    if not str(handoff.get("private_content_addressed_endpoint") or "").startswith("https://"):
+    endpoint = str(handoff.get("private_content_addressed_endpoint") or "")
+    parsed_endpoint = urllib.parse.urlparse(endpoint)
+    if parsed_endpoint.scheme != "https" or not parsed_endpoint.hostname or parsed_endpoint.username \
+            or parsed_endpoint.password or parsed_endpoint.query or parsed_endpoint.fragment or endpoint.endswith("/"):
         failures.append("private signed-content handoff endpoint is not provisioned")
     if not HEX64.fullmatch(str(handoff.get("audited_implementation_sha256") or "")):
         failures.append("private signed-content handoff implementation is not provisioned")
+    if handoff.get("visibility") != "private_authenticated_only" \
+            or handoff.get("immutability") != "create_if_absent" \
+            or handoff.get("public_url_forbidden") is not True \
+            or handoff.get("request_contract") != HANDOFF_REQUEST_CONTRACT \
+            or handoff.get("receipt_contract") != HANDOFF_RECEIPT_CONTRACT:
+        failures.append("private signed-content handoff posture is not exact")
+    auth = handoff.get("auth", {})
+    if auth.get("token_type") != "jwt_bearer" or auth.get("server_signature_validation_required") is not True \
+            or not str(auth.get("issuer") or "").startswith("https://") \
+            or not isinstance(auth.get("audience"), str) or not auth.get("audience") \
+            or not isinstance(auth.get("scope"), str) or not re.fullmatch(r"[A-Za-z0-9:._/-]{1,200}", auth["scope"]) \
+            or type(auth.get("max_ttl_seconds")) is not int or not 1 <= auth["max_ttl_seconds"] <= 900:
+        failures.append("private signed-content handoff short-lived auth is not provisioned")
     envs, publication = lock.get("environments", {}), lock.get("publication", {})
     if tuple(envs.get(k) for k in ("intake", "signing", "play_upload")) != (
         "android-preview12-intake", "android-preview12-signing", "android-play-upload"
@@ -354,6 +384,177 @@ class ReservationClient:
                                     "reservation response")
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, SignerError) as error:
             raise SignerError("reservation outcome is indeterminate") from error
+
+
+def _base64url_json(segment: str, label: str, limit: int = 16 * 1024) -> dict[str, Any]:
+    if not segment or len(segment) > limit * 2 or not re.fullmatch(r"[A-Za-z0-9_-]+", segment):
+        raise SignerError(f"handoff bearer {label} is invalid")
+    try:
+        payload = base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
+    except (ValueError, binascii.Error) as error:
+        raise SignerError(f"handoff bearer {label} is invalid") from error
+    if len(payload) > limit:
+        raise SignerError(f"handoff bearer {label} exceeds the locked size limit")
+    return _json_object(payload, f"handoff bearer {label}")
+
+
+def _validate_handoff_bearer(token: str, auth: Mapping[str, Any], now: int | None = None) -> dict[str, str | int]:
+    if not token or len(token) > 16 * 1024:
+        raise SignerError("handoff bearer is missing or oversized")
+    parts = token.split(".")
+    if len(parts) != 3 or not parts[2]:
+        raise SignerError("handoff bearer is not a signed JWT")
+    header = _base64url_json(parts[0], "header")
+    claims = _base64url_json(parts[1], "claims")
+    if header.get("typ") not in (None, "JWT") or header.get("alg") not in ("RS256", "ES256", "EdDSA"):
+        raise SignerError("handoff bearer algorithm is not allowed")
+    current = int(time.time()) if now is None else now
+    issued, expires = claims.get("iat"), claims.get("exp")
+    if type(issued) is not int or type(expires) is not int or issued > current + 30 or expires <= current:
+        raise SignerError("handoff bearer lifetime is invalid")
+    maximum = auth.get("max_ttl_seconds")
+    if type(maximum) is not int or maximum < 1 or maximum > 900 or expires - issued > maximum:
+        raise SignerError("handoff bearer lifetime exceeds the locked maximum")
+    not_before = claims.get("nbf", issued)
+    if type(not_before) is not int or not_before > current + 30:
+        raise SignerError("handoff bearer is not active")
+    audience = claims.get("aud")
+    audiences = [audience] if isinstance(audience, str) else audience
+    scopes = str(claims.get("scope") or "").split()
+    expected = (auth.get("issuer"), auth.get("audience"), auth.get("scope"))
+    if claims.get("iss") != expected[0] or audiences != [expected[1]] or scopes != [expected[2]]:
+        raise SignerError("handoff bearer authority is not exact")
+    if not isinstance(claims.get("sub"), str) or not claims["sub"] \
+            or not isinstance(claims.get("jti"), str) or not claims["jti"]:
+        raise SignerError("handoff bearer identity is incomplete")
+    return {"issuer": expected[0], "audience": expected[1], "scope": expected[2],
+            "subject_sha256": hashlib.sha256(claims["sub"].encode()).hexdigest(),
+            "jti_sha256": hashlib.sha256(claims["jti"].encode()).hexdigest(), "expires_at": expires}
+
+
+class _StreamingFileBody:
+    def __init__(self, path: Path, limit: int):
+        self.path, self.limit = path, limit
+        self.total = 0
+        self.digest = hashlib.sha256()
+        self.finished = False
+
+    def __iter__(self):
+        with self.path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                self.total += len(chunk)
+                if self.total > self.limit:
+                    raise SignerError("signed content exceeds the locked handoff size limit")
+                self.digest.update(chunk)
+                yield chunk
+        self.finished = True
+
+    def assert_exact(self, expected_size: int, expected_sha256: str) -> None:
+        if not self.finished or self.total != expected_size or self.digest.hexdigest() != expected_sha256:
+            raise SignerError("signed content changed during private handoff")
+
+
+class SignedContentHandoffClient:
+    def __init__(self, endpoint: str, token: str, auth: Mapping[str, Any], json_limit: int,
+                 content_limit: int, metadata_limit: int, opener=None, now: int | None = None):
+        parsed = urllib.parse.urlparse(endpoint)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password \
+                or parsed.query or parsed.fragment or endpoint.endswith("/"):
+            raise SignerError("private signed-content handoff endpoint is invalid")
+        self.endpoint = endpoint
+        self.json_limit, self.content_limit, self.metadata_limit = json_limit, content_limit, metadata_limit
+        if min(json_limit, content_limit, metadata_limit) < 1 or metadata_limit > 16 * 1024:
+            raise SignerError("private signed-content handoff limits are invalid")
+        self.auth_audit = _validate_handoff_bearer(token, auth, now)
+        self.token = token
+        self.opener = opener or urllib.request.build_opener(_NoRedirect())
+
+    def _open(self, request: urllib.request.Request, label: str):
+        try:
+            response = self.opener.open(request, timeout=60)
+        except urllib.error.HTTPError as error:
+            error.close()
+            if error.code in (409, 412):
+                raise SignerError("private signed-content handoff rejected a conflicting immutable object") from error
+            raise SignerError(f"private signed-content {label} outcome is indeterminate") from error
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            raise SignerError(f"private signed-content {label} outcome is indeterminate") from error
+        if getattr(response, "headers", {}).get("Location"):
+            response.close()
+            raise SignerError("private signed-content handoff attempted a redirect")
+        return response
+
+    @staticmethod
+    def _status(response) -> int:
+        value = getattr(response, "status", None)
+        if value is None and hasattr(response, "getcode"):
+            value = response.getcode()
+        return int(value or 200)
+
+    def _headers(self, request_sha256: str, metadata: bytes | None = None) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {self.token}", "Accept": "application/json",
+            "Idempotency-Key": request_sha256, "User-Agent": "fleet-preview12-private-handoff/1"}
+        if metadata is not None:
+            encoded = base64.urlsafe_b64encode(metadata).decode().rstrip("=")
+            if len(encoded) > self.metadata_limit:
+                raise SignerError("private handoff metadata exceeds the locked size limit")
+            headers["X-Chummer-Handoff-Request"] = encoded
+            headers["X-Chummer-Handoff-Request-Sha256"] = request_sha256
+        return headers
+
+    def _read_json(self, response, label: str) -> dict[str, Any]:
+        with response:
+            return _json_object(_bounded_response_bytes(response, label, self.json_limit), label)
+
+    def create_and_verify(self, request_value: Mapping[str, Any], signed: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+        _validate_handoff_request(request_value)
+        metadata = _json_bytes(request_value)
+        request_sha256 = hashlib.sha256(metadata).hexdigest()
+        content = request_value["content_address"]
+        digest, size = str(content["sha256"]), int(content["size_bytes"])
+        if not HEX64.fullmatch(digest) or size < 1 or size > self.content_limit \
+                or signed.stat().st_size != size or _sha256(signed) != digest:
+            raise SignerError("private handoff signed content does not match its address")
+        object_url = f"{self.endpoint}/objects/sha256/{digest}"
+        body = _StreamingFileBody(signed, self.content_limit)
+        headers = {**self._headers(request_sha256, metadata), "Content-Type": "application/vnd.android.aab",
+            "Content-Length": str(size), "Digest": "sha-256=" + base64.b64encode(bytes.fromhex(digest)).decode(),
+            "If-None-Match": "*"}
+        create = urllib.request.Request(object_url, data=body, method="PUT", headers=headers)
+        response = self._open(create, "create")
+        if self._status(response) not in (200, 201):
+            response.close()
+            raise SignerError("private signed-content create response is not successful")
+        remote_receipt = self._read_json(response, "private signed-content create receipt")
+        body.assert_exact(size, digest)
+        expected_receipt = _handoff_service_receipt(request_value, request_sha256)
+        if remote_receipt != expected_receipt:
+            raise SignerError("private signed-content create receipt is not exact")
+        readback = self._open(urllib.request.Request(object_url, headers={**self._headers(request_sha256),
+            "Accept": "application/vnd.android.aab"}, method="GET"), "content readback")
+        if self._status(readback) != 200:
+            readback.close()
+            raise SignerError("private signed-content readback response is not successful")
+        declared = readback.headers.get("Content-Length") if getattr(readback, "headers", None) else None
+        if declared is not None and (not declared.isascii() or not declared.isdigit() or int(declared) != size):
+            readback.close()
+            raise SignerError("private signed-content readback length is not exact")
+        total, actual = 0, hashlib.sha256()
+        with readback:
+            while chunk := readback.read(1024 * 1024):
+                total += len(chunk)
+                if total > self.content_limit:
+                    raise SignerError("private signed-content readback exceeds the locked size limit")
+                actual.update(chunk)
+        if total != size or actual.hexdigest() != digest:
+            raise SignerError("private signed-content readback digest is not exact")
+        receipt_url = f"{self.endpoint}/receipts/sha256/{request_sha256}"
+        receipt_readback = self._open(urllib.request.Request(receipt_url,
+            headers=self._headers(request_sha256), method="GET"), "receipt readback")
+        if self._status(receipt_readback) != 200 \
+                or self._read_json(receipt_readback, "private signed-content receipt readback") != expected_receipt:
+            raise SignerError("private signed-content receipt readback is not exact")
+        return expected_receipt, self.auth_audit
 def _validate_run(run, run_id: int, source, source_sha: str, spec) -> None:
     expected = {"id": run_id, "run_attempt": spec["run_attempt"], "event": spec["event"],
                 "head_sha": source_sha, "head_branch": source["source_ref"].removeprefix("refs/heads/"),
@@ -777,6 +978,171 @@ def _pem_der(payload: str) -> bytes:
     if not match:
         raise SignerError("signed bundle did not expose a certificate")
     return base64.b64decode(re.sub(r"\s+", "", match.group(1)), validate=True)
+
+
+def _reservation_receipt(path: Path, lock, transaction_id: str, bindings: Mapping[str, Any]) \
+        -> tuple[dict[str, Any], bytes]:
+    raw = _bounded_file_bytes(path, "durable reservation receipt",
+                              int(lock["limits"]["reservation_json_max_bytes"]))
+    value = _json_object(raw, "durable reservation receipt")
+    request = {"contract_name": "fleet.android_preview12_reservation_request.v2",
+               "transaction_id": transaction_id, "bindings": bindings}
+    expected = {"contract_name": "fleet.android_preview12_reservation.v2", "decision": "reserved",
+        "created": True, "durable": True, "transaction_id": transaction_id,
+        "request_sha256": hashlib.sha256(_json_bytes(request)).hexdigest(), "bindings": bindings}
+    if value != expected:
+        raise SignerError("durable reservation receipt is missing or does not bind this transaction")
+    return value, raw
+
+
+def _validate_handoff_request(value: Mapping[str, Any]) -> None:
+    expected_fields = {"contract_name", "transaction_id", "content_address", "bindings", "visibility",
+        "immutability", "public_url", "publication_authorized", "play_upload_authorized"}
+    if not isinstance(value, Mapping) or set(value) != expected_fields \
+            or value.get("contract_name") != HANDOFF_REQUEST_CONTRACT \
+            or not HEX64.fullmatch(str(value.get("transaction_id") or "")) \
+            or value.get("visibility") != "private_authenticated_only" \
+            or value.get("immutability") != "create_if_absent" or value.get("public_url") is not None \
+            or value.get("publication_authorized") is not False or value.get("play_upload_authorized") is not False:
+        raise SignerError("private signed-content handoff request posture is not exact")
+    content, bindings = value.get("content_address"), value.get("bindings")
+    if not isinstance(content, dict) or set(content) != {"algorithm", "sha256", "size_bytes"} \
+            or content.get("algorithm") != "sha256" or not HEX64.fullmatch(str(content.get("sha256") or "")) \
+            or type(content.get("size_bytes")) is not int or content["size_bytes"] < 1 \
+            or not isinstance(bindings, dict):
+        raise SignerError("private signed-content handoff address is not exact")
+    digest_fields = {"candidate_artifact_sha256", "candidate_aab_sha256", "verification_artifact_sha256",
+        "verification_receipt_sha256", "source_graph_sha256",
+        "proof_exclusion_validation_output_sha256", "upload_certificate_sha256", "signer_contract_sha256",
+        "reservation_request_sha256", "reservation_receipt_sha256", "signed_attestation_sha256",
+        "signed_aab_sha256", "handoff_implementation_sha256", "handoff_endpoint_authority_sha256",
+        "handoff_auth_policy_sha256"}
+    if any(not HEX64.fullmatch(str(bindings.get(field) or "")) for field in digest_fields) \
+            or not HEX40.fullmatch(str(bindings.get("source_sha") or "")) \
+            or not HEX40.fullmatch(str(bindings.get("proof_exclusion_validator_blob_sha") or "")) \
+            or not HEX40.fullmatch(str(bindings.get("signer_execution_sha") or "")) \
+            or bindings.get("signed_aab_sha256") != content["sha256"] \
+            or bindings.get("signed_aab_size_bytes") != content["size_bytes"] \
+            or bindings.get("package_id") != PACKAGE_ID or bindings.get("version_name") != VERSION_NAME \
+            or bindings.get("version_code") != VERSION_CODE or bindings.get("minimum_sdk") != MINIMUM_SDK \
+            or bindings.get("target_sdk") != TARGET_SDK \
+            or not re.fullmatch(r"[^@]+@sha256:[0-9a-f]{64}", str(bindings.get("signer_image") or "")):
+        raise SignerError("private signed-content handoff bindings are not exact")
+    for field in ("candidate_run_id", "candidate_artifact_id", "verification_run_id",
+                  "verification_artifact_id"):
+        if type(bindings.get(field)) is not int or bindings[field] < 1:
+            raise SignerError("private signed-content handoff run/artifact identity is not exact")
+    if not isinstance(bindings.get("signer_run_id"), str) or not bindings["signer_run_id"].isdigit():
+        raise SignerError("private signed-content handoff signer run is not exact")
+
+
+def _handoff_service_receipt(request_value: Mapping[str, Any], request_sha256: str) -> dict[str, Any]:
+    return {"contract_name": HANDOFF_RECEIPT_CONTRACT, "state": "present", "durable": True,
+        "visibility": "private_authenticated_only", "immutability": "create_if_absent",
+        "request_sha256": request_sha256, "transaction_id": request_value["transaction_id"],
+        "content_address": request_value["content_address"], "bindings": request_value["bindings"],
+        "public_url": None, "publication_authorized": False, "play_upload_authorized": False}
+
+
+def _signed_attestation(path: Path, lock, transaction_id: str, bindings: Mapping[str, Any],
+                        reservation_sha256: str, runtime: Mapping[str, Any], signed: Path) -> tuple[dict[str, Any], bytes]:
+    raw = _bounded_file_bytes(path, "signed attestation", int(lock["limits"]["handoff_json_max_bytes"]))
+    value = _json_object(raw, "signed attestation")
+    expected = {"contract_name": "fleet.android_preview12_signed_attestation.v3",
+        "transaction_id": transaction_id, "bindings": bindings, "signed_file": signed.name,
+        "signed_sha256": _sha256(signed), "signed_size_bytes": signed.stat().st_size,
+        "reservation_receipt_sha256": reservation_sha256, "github_runtime": runtime,
+        "signing_invocations": 1, "ci_evidence_actions_artifact_uploaded": False,
+        "signed_content_handoff_performed": False, "play_upload_performed": False,
+        "publication_performed": False}
+    if value != expected:
+        raise SignerError("signed attestation is missing or does not bind the exact signed content")
+    return value, raw
+
+
+def _write_idempotent_receipt(path: Path, value: Mapping[str, Any], limit: int) -> None:
+    payload = (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
+    if len(payload) > limit:
+        raise SignerError("sanitized handoff audit exceeds the locked size limit")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with path.open("xb") as stream:
+            stream.write(payload)
+    except FileExistsError:
+        if _bounded_file_bytes(path, "existing handoff audit", limit) != payload:
+            raise SignerError("existing handoff audit conflicts with this immutable transaction")
+
+
+def handoff(args, lock, lock_bytes, toolchain, toolchain_bytes, environ, client=None,
+            runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> dict[str, Any]:
+    failures = provisioning_blockers(lock, args.running_image, toolchain, toolchain_bytes)
+    if failures:
+        raise SignerError("; ".join(failures))
+    candidate_dir, signed_dir = Path(args.candidate_dir), Path(args.signed_dir)
+    candidate = candidate_dir / lock["release"]["candidate_file_name"]
+    intake_receipt = _intake_receipt(candidate_dir, lock_bytes, candidate)
+    _installed_receipt(Path(args.installed_toolchain_receipt), lock, toolchain, toolchain_bytes)
+    runtime = _runtime(environ)
+    transaction_id, transaction_bindings = _transaction(lock, lock_bytes, intake_receipt, args.running_image)
+    reservation, reservation_raw = _reservation_receipt(
+        Path(args.reservation_receipt), lock, transaction_id, transaction_bindings)
+    signed = signed_dir / lock["release"]["signed_file_name"]
+    if not signed.is_file() or signed.stat().st_size < 1 \
+            or signed.stat().st_size > int(lock["limits"]["handoff_content_max_bytes"]):
+        raise SignerError("signed content is missing or exceeds the locked handoff size limit")
+    reservation_sha256 = hashlib.sha256(reservation_raw).hexdigest()
+    attestation, attestation_raw = _signed_attestation(signed_dir / "signed-attestation.json", lock,
+        transaction_id, transaction_bindings, reservation_sha256, runtime, signed)
+    clean_env = _tool_env(tempfile.mkdtemp(prefix="fleet-handoff-verify-"))
+    try:
+        verify = _checked(runner, ["/opt/jdk/bin/jarsigner", "-verify", "-verbose", "-certs", str(signed)],
+                          text=True, env=clean_env)
+        if "jar verified." not in verify.stdout:
+            raise SignerError("jarsigner did not verify the handoff bundle")
+        pem = _checked(runner, ["/opt/jdk/bin/keytool", "-printcert", "-jarfile", str(signed), "-rfc"],
+                       text=True, env=clean_env).stdout
+        if hashlib.sha256(_pem_der(pem)).hexdigest() != lock["signing"]["expected_upload_certificate_sha256"]:
+            raise SignerError("handoff bundle certificate does not match expected upload certificate")
+    finally:
+        shutil.rmtree(clean_env["HOME"], ignore_errors=True)
+    signed_sha256, signed_size = attestation["signed_sha256"], attestation["signed_size_bytes"]
+    handoff_spec = lock["signed_content_handoff"]
+    endpoint_authority_sha256 = hashlib.sha256(
+        handoff_spec["private_content_addressed_endpoint"].encode()).hexdigest()
+    bindings = {**transaction_bindings, "reservation_request_sha256": reservation["request_sha256"],
+        "reservation_receipt_sha256": reservation_sha256,
+        "signed_attestation_sha256": hashlib.sha256(attestation_raw).hexdigest(),
+        "signed_aab_sha256": signed_sha256, "signed_aab_size_bytes": signed_size,
+        "signer_execution_sha": runtime["sha"], "signer_run_id": runtime["run_id"],
+        "handoff_implementation_sha256": handoff_spec["audited_implementation_sha256"],
+        "handoff_endpoint_authority_sha256": endpoint_authority_sha256,
+        "handoff_auth_policy_sha256": hashlib.sha256(_json_bytes(handoff_spec["auth"])).hexdigest()}
+    request_value = {"contract_name": HANDOFF_REQUEST_CONTRACT, "transaction_id": transaction_id,
+        "content_address": {"algorithm": "sha256", "sha256": signed_sha256, "size_bytes": signed_size},
+        "bindings": bindings, "visibility": "private_authenticated_only", "immutability": "create_if_absent",
+        "public_url": None, "publication_authorized": False, "play_upload_authorized": False}
+    if client is None:
+        client = SignedContentHandoffClient(handoff_spec["private_content_addressed_endpoint"],
+            environ.get("ANDROID_PREVIEW12_HANDOFF_ACCESS_TOKEN", ""), handoff_spec["auth"],
+            int(lock["limits"]["handoff_json_max_bytes"]), int(lock["limits"]["handoff_content_max_bytes"]),
+            int(lock["limits"]["handoff_metadata_max_bytes"]))
+    service_receipt, auth_audit = client.create_and_verify(request_value, signed)
+    request_sha256 = hashlib.sha256(_json_bytes(request_value)).hexdigest()
+    if service_receipt != _handoff_service_receipt(request_value, request_sha256):
+        raise SignerError("private signed-content service receipt changed after readback")
+    audit = {"contract_name": HANDOFF_AUDIT_CONTRACT, "status": "verified",
+        "transaction_id": transaction_id, "request_sha256": request_sha256,
+        "service_receipt_sha256": hashlib.sha256(_json_bytes(service_receipt)).hexdigest(),
+        "content_address": request_value["content_address"], "bindings": bindings,
+        "endpoint_authority_sha256": endpoint_authority_sha256,
+        "auth_context_sha256": hashlib.sha256(_json_bytes(auth_audit)).hexdigest(),
+        "durable_readback_verified": True, "private_authenticated_only": True,
+        "public_url": None, "signed_aab_actions_artifact_uploaded": False,
+        "play_upload_performed": False, "publication_performed": False}
+    _write_idempotent_receipt(Path(args.output), audit, int(lock["limits"]["handoff_json_max_bytes"]))
+    return audit
+
+
 def sign(args, lock, lock_bytes, toolchain, toolchain_bytes, environ,
          runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> dict[str, Any]:
     failures = provisioning_blockers(lock, args.running_image, toolchain, toolchain_bytes)
@@ -788,15 +1154,7 @@ def sign(args, lock, lock_bytes, toolchain, toolchain_bytes, environ,
     _installed_receipt(Path(args.installed_toolchain_receipt), lock, toolchain, toolchain_bytes)
     runtime = _runtime(environ)
     transaction_id, bindings = _transaction(lock, lock_bytes, intake_receipt, args.running_image)
-    reservation = _json_object(_bounded_file_bytes(Path(args.reservation_receipt), "durable reservation receipt",
-                                                    int(lock["limits"]["reservation_json_max_bytes"])),
-                               "durable reservation receipt")
-    reservation_request = {"contract_name": "fleet.android_preview12_reservation_request.v2",
-                           "transaction_id": transaction_id, "bindings": bindings}
-    if reservation != {"contract_name": "fleet.android_preview12_reservation.v2", "decision": "reserved",
-        "created": True, "durable": True, "transaction_id": transaction_id,
-        "request_sha256": hashlib.sha256(_json_bytes(reservation_request)).hexdigest(), "bindings": bindings}:
-        raise SignerError("durable reservation receipt is missing or does not bind this transaction")
+    _, reservation_raw = _reservation_receipt(Path(args.reservation_receipt), lock, transaction_id, bindings)
     output_dir = Path(args.output_dir)
     if output_dir.exists():
         raise SignerError("signed output already exists")
@@ -845,7 +1203,9 @@ def sign(args, lock, lock_bytes, toolchain, toolchain_bytes, environ,
                     raise SignerError("signed bundle certificate does not match expected upload certificate")
                 attestation = {"contract_name": "fleet.android_preview12_signed_attestation.v3",
                     "transaction_id": transaction_id, "bindings": bindings, "signed_file": signed.name,
-                    "signed_sha256": _sha256(signed), "github_runtime": runtime, "signing_invocations": 1,
+                    "signed_sha256": _sha256(signed), "signed_size_bytes": signed.stat().st_size,
+                    "reservation_receipt_sha256": hashlib.sha256(reservation_raw).hexdigest(),
+                    "github_runtime": runtime, "signing_invocations": 1,
                     "ci_evidence_actions_artifact_uploaded": False, "signed_content_handoff_performed": False,
                     "play_upload_performed": False, "publication_performed": False}
                 (stage / "signed-attestation.json").write_text(json.dumps(attestation, sort_keys=True, indent=2) + "\n")
@@ -878,6 +1238,10 @@ def _parser() -> argparse.ArgumentParser:
     sign_parser = commands.add_parser("sign")
     for name in ("candidate-dir", "installed-toolchain-receipt", "reservation-receipt", "output-dir", "running-image"):
         sign_parser.add_argument(f"--{name}", required=True)
+    handoff_parser = commands.add_parser("handoff")
+    for name in ("candidate-dir", "signed-dir", "installed-toolchain-receipt", "reservation-receipt",
+                 "running-image", "output"):
+        handoff_parser.add_argument(f"--{name}", required=True)
     return parser
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
@@ -897,8 +1261,10 @@ def main(argv: list[str] | None = None) -> int:
                 ReservationClient(lock["reservation"]["broker_url"],
                                   os.environ.get("ANDROID_PREVIEW12_LEDGER_TOKEN", ""),
                                   int(lock["limits"]["reservation_json_max_bytes"])))
-        else:
+        elif args.command == "sign":
             value = sign(args, lock, lock_bytes, toolchain, toolchain_bytes, os.environ)
+        else:
+            value = handoff(args, lock, lock_bytes, toolchain, toolchain_bytes, os.environ)
     except (OSError, KeyError, TypeError, ValueError, binascii.Error, json.JSONDecodeError, zipfile.BadZipFile, SignerError) as error:
         print(f"android-preview12-signer: {error}", file=sys.stderr)
         return 2

@@ -76,7 +76,20 @@
   "signed_content_handoff": {
     "enabled": false,
     "private_content_addressed_endpoint": null,
-    "audited_implementation_sha256": null
+    "audited_implementation_sha256": null,
+    "visibility": "private_authenticated_only",
+    "immutability": "create_if_absent",
+    "public_url_forbidden": true,
+    "request_contract": "fleet.android_preview12_signed_content_handoff_request.v1",
+    "receipt_contract": "fleet.android_preview12_signed_content_handoff_receipt.v1",
+    "auth": {
+      "token_type": "jwt_bearer",
+      "issuer": null,
+      "audience": null,
+      "scope": null,
+      "max_ttl_seconds": null,
+      "server_signature_validation_required": true
+    }
   },
   "limits": {
     "artifact_max_bytes": 1073741824,
@@ -84,7 +97,10 @@
     "source_graph_max_bytes": 16777216,
     "verification_receipt_max_bytes": 1048576,
     "api_json_max_bytes": 1048576,
-    "reservation_json_max_bytes": 262144
+    "reservation_json_max_bytes": 262144,
+    "handoff_content_max_bytes": 536870912,
+    "handoff_json_max_bytes": 1048576,
+    "handoff_metadata_max_bytes": 16384
   },
   "publication": {
     "intake_actions_artifact_is_private_ci_evidence": true,
