@@ -25,55 +25,38 @@ HEX64 = re.compile(r"^[0-9a-f]{64}$")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 FLEET_REPOSITORY = "ArchonMegalon/fleet"
 ANDROID_REPOSITORY = "ArchonMegalon/chummer-android"
-VERIFIER_REF = f"{FLEET_REPOSITORY}/.github/workflows/android-preview12-verifier.yml@refs/heads/main"
+VERIFIER_PATH = f"{FLEET_REPOSITORY}/.github/workflows/android-preview12-verifier.yml"
 SIGNER_REF = f"{FLEET_REPOSITORY}/.github/workflows/android-preview12-signer.yml@refs/heads/main"
-
-
 class SignerError(RuntimeError):
     pass
-
-
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
 def _json_bytes(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
-
-
 def _load(path: Path, contract: str) -> tuple[dict[str, Any], bytes]:
     payload = path.read_bytes()
     value = json.loads(payload)
     if value.get("contract_name") != contract:
         raise SignerError(f"unexpected {contract} contract")
     return value, payload
-
-
 def _load_lock(path: Path):
     return _load(path, "fleet.android_preview12_signer_transaction.v2")
-
-
 def _load_toolchain(path: Path):
     return _load(path, "fleet.android_preview12_toolchain.v1")
-
-
 def _full_image(lock: Mapping[str, Any]) -> str | None:
     value = lock["toolchain"]
     return f"{value['image_repository']}@{value['image_digest']}" if value.get("image_digest") else None
-
-
 def _positive(value: Any, label: str) -> int:
     text = str(value)
     if not text.isascii() or not text.isdigit() or int(text) < 1:
         raise SignerError(f"{label} must be a positive integer")
     return int(text)
-
-
-def provisioning_blockers(lock, signer_image: str, toolchain, toolchain_bytes: bytes) -> list[str]:
+def provisioning_blockers(lock, signer_image: str, toolchain, toolchain_bytes: bytes,
+                          producer_only: bool = False) -> list[str]:
     failures: list[str] = []
     if lock.get("state") != "ready":
         failures.append("lock state is not ready")
@@ -111,6 +94,8 @@ def provisioning_blockers(lock, signer_image: str, toolchain, toolchain_bytes: b
         failures.append("producer toolchain closure is not provisioned")
     if not isinstance(verification.get("receipt_file_name"), str):
         failures.append("verification receipt file name is not provisioned")
+    if producer_only:
+        return failures
     reservation = lock.get("reservation", {})
     if reservation.get("enabled") is not True:
         failures.append("durable exactly-once reservation is disabled")
@@ -163,7 +148,54 @@ def provisioning_blockers(lock, signer_image: str, toolchain, toolchain_bytes: b
     return failures
 
 
-def preflight(args, lock, toolchain, toolchain_bytes: bytes) -> dict[str, Any]:
+INPUT_FIELDS = ("source_sha", "candidate_run_id", "candidate_artifact_id", "candidate_artifact_sha256",
+                "candidate_aab_sha256", "verification_run_id", "verification_artifact_id",
+                "verification_artifact_sha256", "verification_receipt_sha256")
+def _validated_inputs(args) -> tuple[dict[str, Any], str]:
+    values = {field: getattr(args, field) for field in INPUT_FIELDS}
+    values["source_sha"] = values["source_sha"].lower()
+    if not HEX40.fullmatch(values["source_sha"]):
+        raise SignerError("source_sha must be an exact commit")
+    for field in ("candidate_run_id", "candidate_artifact_id", "verification_run_id", "verification_artifact_id"):
+        values[field] = _positive(values[field], field)
+    for field in ("candidate_artifact_sha256", "candidate_aab_sha256", "verification_artifact_sha256",
+                  "verification_receipt_sha256"):
+        values[field] = values[field].lower()
+        if not HEX64.fullmatch(values[field]):
+            raise SignerError(f"{field} must be an exact SHA-256")
+    if values["candidate_run_id"] == values["verification_run_id"]:
+        raise SignerError("candidate and verification run IDs must be distinct")
+    if values["candidate_artifact_id"] == values["verification_artifact_id"]:
+        raise SignerError("candidate and verification artifact IDs must be distinct")
+    return values, hashlib.sha256(_json_bytes(values)).hexdigest()
+def _emit_preflight(lock, transaction_sha: str, github_output: str | None, signer: bool) -> dict[str, Any]:
+    values = {"transaction_inputs_sha256": transaction_sha}
+    if signer:
+        values.update(signer_image=_full_image(lock), intake_environment=lock["environments"]["intake"],
+                      signing_environment=lock["environments"]["signing"])
+    if github_output:
+        with Path(github_output).open("a", encoding="utf-8") as output:
+            for key, value in values.items():
+                output.write(f"{key}={value}\n")
+    return {"ok": True, **values, "play_upload_performed": False, "publication_performed": False}
+def reusable_preflight(args, lock, toolchain, toolchain_bytes: bytes) -> dict[str, Any]:
+    inputs, transaction_sha = _validated_inputs(args)
+    failures = provisioning_blockers(lock, "", toolchain, toolchain_bytes, producer_only=True)
+    source = lock.get("source", {})
+    expected = {"caller_repository": ANDROID_REPOSITORY, "caller_repository_id": str(source.get("repository_id")),
+                "caller_ref": source.get("source_ref"), "caller_sha": inputs["source_sha"],
+                "workflow_repository": FLEET_REPOSITORY, "workflow_ref": f"{VERIFIER_PATH}@{args.fleet_verifier_sha}",
+                "workflow_sha": args.fleet_verifier_sha}
+    for field, value in expected.items():
+        if getattr(args, field) != value:
+            failures.append(f"{field} is not the canonical reusable-verifier value")
+    if not HEX40.fullmatch(args.fleet_verifier_sha):
+        failures.append("caller did not pin an exact Fleet verifier commit")
+    if failures:
+        raise SignerError("; ".join(failures))
+    return _emit_preflight(lock, transaction_sha, args.github_output, False)
+def dispatch_preflight(args, lock, toolchain, toolchain_bytes: bytes) -> dict[str, Any]:
+    _, transaction_sha = _validated_inputs(args)
     failures = provisioning_blockers(lock, args.signer_image, toolchain, toolchain_bytes)
     expected = {
         "execution_repository": FLEET_REPOSITORY,
@@ -171,32 +203,19 @@ def preflight(args, lock, toolchain, toolchain_bytes: bytes) -> dict[str, Any]:
         "execution_ref_protected": "true",
         "execution_event": "workflow_dispatch",
         "workflow_repository": FLEET_REPOSITORY,
-        "workflow_ref": VERIFIER_REF,
+        "workflow_ref": SIGNER_REF,
     }
     for field, value in expected.items():
         if getattr(args, field) != value:
-            failures.append(f"{field} is not the protected Fleet verifier value")
+            failures.append(f"{field} is not the protected Fleet signer value")
     if not HEX40.fullmatch(args.execution_sha) or args.workflow_sha != args.execution_sha:
         failures.append("job_workflow_sha is not the exact Fleet execution SHA")
     if failures:
         raise SignerError("; ".join(failures))
-    values = {
-        "signer_image": _full_image(lock),
-        "intake_environment": lock["environments"]["intake"],
-        "signing_environment": lock["environments"]["signing"],
-    }
-    if args.github_output:
-        with Path(args.github_output).open("a", encoding="utf-8") as output:
-            for key, value in values.items():
-                output.write(f"{key}={value}\n")
-    return {"ok": True, **values, "play_upload_performed": False, "publication_performed": False}
-
-
+    return _emit_preflight(lock, transaction_sha, args.github_output, True)
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, fp, code, message, headers, new_url):  # noqa: ANN001
         return None
-
-
 class GitHubClient:
     def __init__(self, token: str):
         if not token:
@@ -227,8 +246,6 @@ class GitHubClient:
                 if total > limit:
                     raise SignerError("artifact exceeds locked size limit")
                 stream.write(chunk)
-
-
 class ReservationClient:
     def __init__(self, url: str, token: str):
         if not token:
@@ -245,8 +262,6 @@ class ReservationClient:
                 return json.load(response)
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
             raise SignerError("reservation outcome is indeterminate") from error
-
-
 def _validate_run(run, run_id: int, source, source_sha: str, spec) -> None:
     expected = {"id": run_id, "run_attempt": spec["run_attempt"], "event": spec["event"],
                 "head_sha": source_sha, "head_branch": source["source_ref"].removeprefix("refs/heads/"),
@@ -259,15 +274,11 @@ def _validate_run(run, run_id: int, source, source_sha: str, spec) -> None:
         repo = run.get(field) or {}
         if (repo.get("id"), repo.get("full_name")) != (source["repository_id"], source["repository"]):
             raise SignerError(f"run {run_id} has unexpected {field}")
-
-
 def _validate_workflow_blob(client, api: str, spec, source_sha: str) -> None:
     path = urllib.parse.quote(spec["workflow_path"], safe="/")
     value = client.get_json(f"{api}/contents/{path}?ref={source_sha}")
     if (value.get("path"), value.get("sha")) != (spec["workflow_path"], spec["workflow_blob_sha"]):
         raise SignerError("workflow path/blob SHA does not match the run commit")
-
-
 def _validate_artifact(value, artifact_id: int, run_id: int, name: str, digest: str, api: str) -> str:
     expected_url = f"{api}/actions/artifacts/{artifact_id}/zip"
     if (value.get("id"), value.get("name"), value.get("expired"), value.get("digest")) != (
@@ -276,8 +287,6 @@ def _validate_artifact(value, artifact_id: int, run_id: int, name: str, digest: 
     if value.get("workflow_run", {}).get("id") != run_id or value.get("archive_download_url") != expected_url:
         raise SignerError("artifact is not bound to the exact workflow run")
     return expected_url
-
-
 def _safe_member(bundle: zipfile.ZipFile, expected: str, limit: int) -> zipfile.ZipInfo:
     matches, seen = [], set()
     for member in bundle.infolist():
@@ -292,15 +301,11 @@ def _safe_member(bundle: zipfile.ZipFile, expected: str, limit: int) -> zipfile.
     if len(matches) != 1 or matches[0].file_size > limit:
         raise SignerError("artifact lacks exactly one bounded expected file")
     return matches[0]
-
-
 def _extract(archive: Path, expected: str, output: Path, limit: int) -> None:
     with zipfile.ZipFile(archive) as bundle:
         member = _safe_member(bundle, expected, limit)
         with bundle.open(member) as source, output.open("wb") as target:
             shutil.copyfileobj(source, target)
-
-
 def _assert_unsigned_aab(path: Path) -> None:
     try:
         with zipfile.ZipFile(path) as bundle:
@@ -310,8 +315,6 @@ def _assert_unsigned_aab(path: Path) -> None:
     signature = re.compile(r"^META-INF/[^/]+\.(SF|RSA|DSA|EC)$")
     if len(names) != len(set(names)) or any(signature.fullmatch(name) for name in names):
         raise SignerError("candidate is already signed or has duplicate members")
-
-
 def _producer_receipt_expected(lock, args, source_sha: str, digests: Mapping[str, str]) -> dict[str, Any]:
     source, candidate, verification = lock["source"], lock["source"]["candidate"], lock["source"]["verification"]
     return {
@@ -330,8 +333,6 @@ def _producer_receipt_expected(lock, args, source_sha: str, digests: Mapping[str
             "artifact_name": verification["artifact_name"]},
         "publication_authorized": False, "play_upload_authorized": False,
     }
-
-
 def intake(args, lock, lock_bytes: bytes, toolchain, toolchain_bytes: bytes, client) -> dict[str, Any]:
     failures = provisioning_blockers(lock, _full_image(lock) or "", toolchain, toolchain_bytes)
     if failures:
@@ -390,8 +391,6 @@ def intake(args, lock, lock_bytes: bytes, toolchain, toolchain_bytes: bytes, cli
             (stage / "intake-attestation.json").write_text(json.dumps(receipt, sort_keys=True, indent=2) + "\n")
             os.replace(stage, output_dir)
     return receipt
-
-
 def _installed_receipt(path: Path, lock, toolchain, toolchain_bytes: bytes) -> None:
     payload = path.read_bytes()
     if hashlib.sha256(payload).hexdigest() != lock["toolchain"]["installed_receipt_sha256"]:
@@ -402,8 +401,6 @@ def _installed_receipt(path: Path, lock, toolchain, toolchain_bytes: bytes) -> N
         "archives": [{key: item[key] for key in ("name", "version", "url", "sha256")} for item in toolchain["archives"]]}
     if actual != expected:
         raise SignerError("installed signer receipt does not match the full toolchain closure")
-
-
 def _intake_receipt(path: Path, lock_bytes: bytes, candidate: Path) -> dict[str, Any]:
     receipt = json.loads((path / "intake-attestation.json").read_text())
     if receipt.get("contract_name") != "fleet.android_preview12_trusted_intake.v2":
@@ -415,8 +412,6 @@ def _intake_receipt(path: Path, lock_bytes: bytes, candidate: Path) -> dict[str,
         raise SignerError("candidate changed after trusted intake")
     _assert_unsigned_aab(candidate)
     return receipt
-
-
 def _runtime(environ: Mapping[str, str]) -> dict[str, str | None]:
     value = {"repository": environ.get("GITHUB_REPOSITORY"), "event": environ.get("GITHUB_EVENT_NAME"),
         "sha": environ.get("GITHUB_SHA"), "workflow_repository": environ.get("FLEET_WORKFLOW_REPOSITORY"),
@@ -431,8 +426,6 @@ def _runtime(environ: Mapping[str, str]) -> dict[str, str | None]:
             or value["workflow_sha"] != value["sha"] or not str(value["run_id"] or "").isdigit():
         raise SignerError("runtime is not the Fleet-native protected GitHub-hosted signer")
     return value
-
-
 def _transaction(lock, lock_bytes: bytes, intake_receipt, image: str) -> tuple[str, dict[str, Any]]:
     candidate = intake_receipt["producer"]["candidate"]
     bindings = {"source_sha": intake_receipt["producer"]["source_sha"], "candidate_run_id": candidate["run_id"],
@@ -440,8 +433,6 @@ def _transaction(lock, lock_bytes: bytes, intake_receipt, image: str) -> tuple[s
         "candidate_aab_sha256": candidate["aab_sha256"], "upload_certificate_sha256": lock["signing"]["expected_upload_certificate_sha256"],
         "signer_image": image, "signer_contract_sha256": hashlib.sha256(lock_bytes).hexdigest()}
     return hashlib.sha256(_json_bytes(bindings)).hexdigest(), bindings
-
-
 def reserve(args, lock, lock_bytes, toolchain, toolchain_bytes, environ, client) -> dict[str, Any]:
     failures = provisioning_blockers(lock, args.running_image, toolchain, toolchain_bytes)
     if failures:
@@ -465,33 +456,23 @@ def reserve(args, lock, lock_bytes, toolchain, toolchain_bytes, environ, client)
     with output.open("x", encoding="utf-8") as stream:
         stream.write(json.dumps(response, sort_keys=True, indent=2) + "\n")
     return response
-
-
 def _checked(runner: Callable[..., subprocess.CompletedProcess], command: list[str], **kwargs):
     result = runner(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, **kwargs)
     if result.returncode:
         raise SignerError(f"trusted tool failed: {Path(command[0]).name}")
     return result
-
-
 def _tool_env(home: str) -> dict[str, str]:
     return {"HOME": home, "TMPDIR": home, "JAVA_HOME": "/opt/jdk", "PATH": "/opt/jdk/bin:/usr/bin:/bin",
             "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TZ": "UTC"}
-
-
 def _bundle_value(runner, candidate: Path, xpath: str, env) -> str:
     result = _checked(runner, ["/opt/jdk/bin/java", "-jar", "/opt/android-sdk/tools/bundletool.jar", "dump",
         "manifest", f"--bundle={candidate}", f"--xpath={xpath}"], text=True, env=env)
     return result.stdout.strip()
-
-
 def _pem_der(payload: str) -> bytes:
     match = re.search(r"-----BEGIN CERTIFICATE-----(.*?)-----END CERTIFICATE-----", payload, re.S)
     if not match:
         raise SignerError("signed bundle did not expose a certificate")
     return base64.b64decode(re.sub(r"\s+", "", match.group(1)), validate=True)
-
-
 def sign(args, lock, lock_bytes, toolchain, toolchain_bytes, environ,
          runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> dict[str, Any]:
     failures = provisioning_blockers(lock, args.running_image, toolchain, toolchain_bytes)
@@ -562,18 +543,22 @@ def sign(args, lock, lock_bytes, toolchain, toolchain_bytes, environ,
                 (stage / "signed-attestation.json").write_text(json.dumps(attestation, sort_keys=True, indent=2) + "\n")
                 os.replace(stage, output_dir)
     return attestation
-
-
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--lock", required=True, type=Path)
     parser.add_argument("--toolchain-lock", required=True, type=Path)
     commands = parser.add_subparsers(dest="command", required=True)
-    check = commands.add_parser("preflight")
+    reusable = commands.add_parser("reusable-preflight")
+    for name in ("caller-repository", "caller-repository-id", "caller-ref", "caller-sha", "fleet-verifier-sha", "workflow-repository",
+                 "workflow-ref", "workflow-sha", *[field.replace("_", "-") for field in INPUT_FIELDS]):
+        reusable.add_argument(f"--{name}", required=True)
+    reusable.add_argument("--github-output")
+    dispatch = commands.add_parser("dispatch-preflight")
     for name in ("signer-image", "execution-repository", "execution-ref", "execution-ref-protected",
-                 "execution-event", "execution-sha", "workflow-repository", "workflow-ref", "workflow-sha"):
-        check.add_argument(f"--{name}", required=True)
-    check.add_argument("--github-output")
+                 "execution-event", "execution-sha", "workflow-repository", "workflow-ref", "workflow-sha",
+                 *[field.replace("_", "-") for field in INPUT_FIELDS]):
+        dispatch.add_argument(f"--{name}", required=True)
+    dispatch.add_argument("--github-output")
     intake_parser = commands.add_parser("intake")
     for name in ("source-sha", "candidate-run-id", "candidate-artifact-id", "candidate-artifact-sha256",
                  "candidate-aab-sha256", "verification-run-id", "verification-artifact-id",
@@ -586,15 +571,15 @@ def _parser() -> argparse.ArgumentParser:
     for name in ("candidate-dir", "installed-toolchain-receipt", "reservation-receipt", "output-dir", "running-image"):
         sign_parser.add_argument(f"--{name}", required=True)
     return parser
-
-
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         lock, lock_bytes = _load_lock(args.lock)
         toolchain, toolchain_bytes = _load_toolchain(args.toolchain_lock)
-        if args.command == "preflight":
-            value = preflight(args, lock, toolchain, toolchain_bytes)
+        if args.command == "reusable-preflight":
+            value = reusable_preflight(args, lock, toolchain, toolchain_bytes)
+        elif args.command == "dispatch-preflight":
+            value = dispatch_preflight(args, lock, toolchain, toolchain_bytes)
         elif args.command == "intake":
             value = intake(args, lock, lock_bytes, toolchain, toolchain_bytes,
                 GitHubClient(os.environ.get("ANDROID_PREVIEW12_CANDIDATE_BROKER_TOKEN", "")))
@@ -608,7 +593,5 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     print(json.dumps(value, sort_keys=True))
     return 0
-
-
 if __name__ == "__main__":
     raise SystemExit(main())

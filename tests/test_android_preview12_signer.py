@@ -157,27 +157,74 @@ def _runtime():
         "GITHUB_RUN_ID": "301", "GITHUB_RUN_ATTEMPT": "1"}
 
 
+def _preflight_inputs():
+    return {"source_sha": "a" * 40, "candidate_run_id": "101", "candidate_artifact_id": "201",
+        "candidate_artifact_sha256": "3" * 64, "candidate_aab_sha256": "4" * 64,
+        "verification_run_id": "102", "verification_artifact_id": "202",
+        "verification_artifact_sha256": "5" * 64, "verification_receipt_sha256": "6" * 64}
+
+
+def _reusable_args(**changes):
+    values = {**_preflight_inputs(), "caller_repository": signer.ANDROID_REPOSITORY,
+        "caller_repository_id": "1331626697", "caller_ref": "refs/heads/release/preview12",
+        "caller_sha": "a" * 40, "workflow_repository": signer.FLEET_REPOSITORY,
+        "fleet_verifier_sha": "f" * 40, "workflow_ref": f"{signer.VERIFIER_PATH}@{'f' * 40}",
+        "workflow_sha": "f" * 40, "github_output": None}
+    values.update(changes)
+    return argparse.Namespace(**values)
+
+
+def _dispatch_args(image: str, **changes):
+    values = {**_preflight_inputs(), "signer_image": image, "execution_repository": signer.FLEET_REPOSITORY,
+        "execution_ref": "refs/heads/main", "execution_ref_protected": "true", "execution_event": "workflow_dispatch",
+        "execution_sha": "b" * 40, "workflow_repository": signer.FLEET_REPOSITORY,
+        "workflow_ref": signer.SIGNER_REF, "workflow_sha": "b" * 40, "github_output": None}
+    values.update(changes)
+    return argparse.Namespace(**values)
+
+
 def test_checked_in_contract_is_red_and_uses_canonical_source(tmp_path):
     lock, _ = signer._load_lock(LOCK)
     toolchain, toolchain_bytes = signer._load_toolchain(TOOLCHAIN)
     assert hashlib.sha256(toolchain_bytes).hexdigest() == lock["toolchain"]["lock_sha256"]
     assert hashlib.sha256(_installed_bytes(toolchain, toolchain_bytes)).hexdigest() == lock["toolchain"]["installed_receipt_sha256"]
-    args = argparse.Namespace(signer_image="", execution_repository=signer.FLEET_REPOSITORY,
-        execution_ref="refs/heads/main", execution_ref_protected="true", execution_event="workflow_dispatch",
-        execution_sha="b" * 40, workflow_repository=signer.FLEET_REPOSITORY,
-        workflow_ref=signer.VERIFIER_REF, workflow_sha="b" * 40, github_output=str(tmp_path / "output"))
+    args = _dispatch_args("")
+    args.github_output = str(tmp_path / "output")
     with pytest.raises(signer.SignerError) as error:
-        signer.preflight(args, lock, toolchain, toolchain_bytes)
+        signer.dispatch_preflight(args, lock, toolchain, toolchain_bytes)
     message = str(error.value)
     assert lock["source"]["repository"] == "ArchonMegalon/chummer-android"
     assert "found no Preview12 producer" in message and "artifact_name is not provisioned" in message
     assert "reservation is disabled" in message and "signed-content handoff is disabled" in message
     assert not Path(args.github_output).exists()
-    ready, _, _, _, _ = _ready(tmp_path)
-    args.signer_image = signer._full_image(ready)
-    args.workflow_sha = "c" * 40
-    with pytest.raises(signer.SignerError, match="job_workflow_sha is not the exact Fleet execution SHA"):
-        signer.preflight(args, ready, toolchain, toolchain_bytes)
+    with pytest.raises(signer.SignerError, match="lock state is not ready"):
+        signer.reusable_preflight(_reusable_args(), lock, toolchain, toolchain_bytes)
+
+
+def test_provisioned_android_reusable_and_fleet_dispatch_preflights_pass_separately(tmp_path):
+    lock, _, toolchain, toolchain_bytes, _ = _ready(tmp_path)
+    reusable = signer.reusable_preflight(_reusable_args(), lock, toolchain, toolchain_bytes)
+    dispatch = signer.dispatch_preflight(_dispatch_args(signer._full_image(lock)), lock, toolchain, toolchain_bytes)
+    assert reusable["transaction_inputs_sha256"] == dispatch["transaction_inputs_sha256"]
+    assert reusable.get("signer_image") is None and dispatch["signer_image"] == signer._full_image(lock)
+
+
+@pytest.mark.parametrize("field,value", [("caller_repository", "fork/android"), ("caller_sha", "b" * 40),
+    ("caller_ref", "refs/heads/main"), ("workflow_repository", "fork/fleet"),
+    ("workflow_ref", signer.SIGNER_REF), ("workflow_sha", "c" * 40), ("fleet_verifier_sha", "c" * 40)])
+def test_reusable_verifier_rejects_context_substitutions(tmp_path, field, value):
+    lock, _, toolchain, toolchain_bytes, _ = _ready(tmp_path)
+    with pytest.raises(signer.SignerError, match="canonical reusable-verifier|exact Fleet commit"):
+        signer.reusable_preflight(_reusable_args(**{field: value}), lock, toolchain, toolchain_bytes)
+
+
+@pytest.mark.parametrize("field,value", [("execution_repository", signer.ANDROID_REPOSITORY),
+    ("execution_ref", "refs/heads/release/preview12"), ("workflow_ref", f"{signer.VERIFIER_PATH}@{'f' * 40}"),
+    ("workflow_sha", "c" * 40)])
+def test_fleet_dispatch_rejects_repo_ref_or_workflow_sha_substitution(tmp_path, field, value):
+    lock, _, toolchain, toolchain_bytes, _ = _ready(tmp_path)
+    with pytest.raises(signer.SignerError, match="protected Fleet signer|exact Fleet execution SHA"):
+        signer.dispatch_preflight(_dispatch_args(signer._full_image(lock), **{field: value}), lock, toolchain, toolchain_bytes)
 
 
 @pytest.mark.parametrize("field,value", [("event", "pull_request_target"), ("run_attempt", 99),
@@ -323,7 +370,12 @@ def test_workflow_topology_has_no_signed_actions_artifact_or_play_lane():
     verifier_flow = (ROOT / ".github/workflows/android-preview12-verifier.yml").read_text()
     assert "workflow_call:" not in signer_flow and "workflow_dispatch:" in signer_flow
     assert "workflow_call:" in verifier_flow and "secrets." not in verifier_flow
+    for field in signer.INPUT_FIELDS:
+        assert f"${{{{ inputs.{field} }}}}" in verifier_flow
+        assert f"--{field.replace('_', '-')}" in verifier_flow
+    assert "${{ inputs.fleet_verifier_sha }}" in verifier_flow and "--fleet-verifier-sha" in verifier_flow
     assert signer_flow.count("actions/upload-artifact@") == 1
+    assert "uses: ./.github/workflows/android-preview12-verifier.yml" not in signer_flow
     assert "path: trusted-intake" in signer_flow and "path: signed-output" not in signer_flow
     assert signer.ANDROID_REPOSITORY in (ROOT / "config/release/android-preview12-signer.lock.json").read_text()
     assert "environment: android-play-upload" not in signer_flow

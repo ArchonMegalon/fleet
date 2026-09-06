@@ -20,17 +20,49 @@ concurrency:
   cancel-in-progress: false
 jobs:
   contract:
-    uses: ./.github/workflows/android-preview12-verifier.yml
-    with:
-      source_sha: ${{ inputs.source_sha }}
-      candidate_run_id: ${{ inputs.candidate_run_id }}
-      candidate_artifact_id: ${{ inputs.candidate_artifact_id }}
-      candidate_artifact_sha256: ${{ inputs.candidate_artifact_sha256 }}
-      candidate_aab_sha256: ${{ inputs.candidate_aab_sha256 }}
-      verification_run_id: ${{ inputs.verification_run_id }}
-      verification_artifact_id: ${{ inputs.verification_artifact_id }}
-      verification_artifact_sha256: ${{ inputs.verification_artifact_sha256 }}
-      verification_receipt_sha256: ${{ inputs.verification_receipt_sha256 }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      signer_image: ${{ steps.preflight.outputs.signer_image }}
+      intake_environment: ${{ steps.preflight.outputs.intake_environment }}
+      signing_environment: ${{ steps.preflight.outputs.signing_environment }}
+      transaction_inputs_sha256: ${{ steps.preflight.outputs.transaction_inputs_sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: {repository: ArchonMegalon/fleet, ref: "${{ job.workflow_sha }}", fetch-depth: 1, persist-credentials: false}
+      - id: preflight
+        env:
+          SIGNER_IMAGE: ${{ vars.ANDROID_PREVIEW12_SIGNER_IMAGE }}
+          EXECUTION_REPOSITORY: ${{ github.repository }}
+          EXECUTION_REF: ${{ github.ref }}
+          EXECUTION_REF_PROTECTED: ${{ github.ref_protected }}
+          EXECUTION_EVENT: ${{ github.event_name }}
+          EXECUTION_SHA: ${{ github.sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_REF: ${{ job.workflow_ref }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          CANDIDATE_ARTIFACT_SHA256: ${{ inputs.candidate_artifact_sha256 }}
+          CANDIDATE_AAB_SHA256: ${{ inputs.candidate_aab_sha256 }}
+          VERIFICATION_RUN_ID: ${{ inputs.verification_run_id }}
+          VERIFICATION_ARTIFACT_ID: ${{ inputs.verification_artifact_id }}
+          VERIFICATION_ARTIFACT_SHA256: ${{ inputs.verification_artifact_sha256 }}
+          VERIFICATION_RECEIPT_SHA256: ${{ inputs.verification_receipt_sha256 }}
+        run: >-
+          python3 scripts/android_preview12_signer.py --lock config/release/android-preview12-signer.lock.json
+          --toolchain-lock config/release/android-preview12-signer-toolchain.lock.json dispatch-preflight
+          --signer-image "$SIGNER_IMAGE" --execution-repository "$EXECUTION_REPOSITORY"
+          --execution-ref "$EXECUTION_REF" --execution-ref-protected "$EXECUTION_REF_PROTECTED"
+          --execution-event "$EXECUTION_EVENT" --execution-sha "$EXECUTION_SHA"
+          --workflow-repository "$WORKFLOW_REPOSITORY" --workflow-ref "$WORKFLOW_REF" --workflow-sha "$WORKFLOW_SHA"
+          --source-sha "$SOURCE_SHA" --candidate-run-id "$CANDIDATE_RUN_ID"
+          --candidate-artifact-id "$CANDIDATE_ARTIFACT_ID" --candidate-artifact-sha256 "$CANDIDATE_ARTIFACT_SHA256"
+          --candidate-aab-sha256 "$CANDIDATE_AAB_SHA256" --verification-run-id "$VERIFICATION_RUN_ID"
+          --verification-artifact-id "$VERIFICATION_ARTIFACT_ID"
+          --verification-artifact-sha256 "$VERIFICATION_ARTIFACT_SHA256"
+          --verification-receipt-sha256 "$VERIFICATION_RECEIPT_SHA256" --github-output "$GITHUB_OUTPUT"
 
   trusted-intake:
     needs: contract
