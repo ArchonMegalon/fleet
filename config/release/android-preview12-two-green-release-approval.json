@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.android_preview12_two_green_release_approval_policy.v1",
   "contract_version": 1,
-  "state": "dormant_pending_environment_external_keys_and_ledger_service",
+  "state": "dormant_pending_environment_signer_and_ledger_service",
   "release": {"package_id": "com.myexternalbrain.chummer", "version_name": "0.1.0-preview.12", "version_code": 12},
   "android_source": {"repository": "ArchonMegalon/chummer-android", "repository_id": 1331626697, "ref": "refs/heads/main"},
   "two_green": {"workflow_name": "API 36 ordered review-to-main green eligibility", "workflow_path": ".github/workflows/api36-two-consecutive-green.yml", "receipt_contract": "chummer.android.api36-ordered-review-main-green-eligibility/v2", "receipt_file_name": "ANDROID_API36_TWO_GREEN_ELIGIBILITY.generated.json"},
@@ -29,8 +29,26 @@
     "configured": false,
     "source": "github_environment_secret_only",
     "secret_name": "ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64",
-    "expected_public_key_spki_sha256": null,
+    "algorithm": "ed25519",
+    "key_id": "local-release-builder-2026",
+    "role": "android_internal_release_approver",
+    "approval_scope": "android_internal_release_preparation",
+    "trusted_public_key_path": "eng/trusted-release-approvers/local-release-builder-2026.public.pem",
+    "trusted_public_key_pem_sha256": "ed1fbe95fc7713bfc6d9d0fea21726c1ba3193533fc2d5523e054ad8fb86184c",
+    "public_key_spki_der_base64": "MCowBQYDK2VwAyEAB105wcYguHU3a/phMkbbRjhZ+Qhj8cdDTAvw/7t14sk=",
+    "expected_public_key_spki_sha256": "c46a4e9a224c8c77a4038bca83f7d9ed66146318d8b5c2c9fc81cd19fdd18ea7",
     "private_key_persistence_allowed": false
+  },
+  "android_consumer": {
+    "qualified_commit": "388425aceac266e06265e4c0c73a4058b052d316",
+    "qualified_tree": "175da843cfc2df3489d87dc153c186b9c8e4d803",
+    "verifier_path": "scripts/verify_api36_two_green_release_eligibility.py",
+    "contract_name": "chummer.android.two-green-release-approval/v1",
+    "canonical_json": "utf8_sort_keys_compact_no_trailing_newline",
+    "provenance_validator_path": "scripts/materialize-api36-two-green-eligibility.py",
+    "provenance_validator_sha256": "6129faf8f1cac0e540126a39cb46e16352387c370dbbd003e1fe5ace1edf4492",
+    "maximum_approval_lifetime_seconds": 43200,
+    "approval_clock_skew_seconds": 120
   },
   "freshness": {"maximum_evidence_age_seconds": 86400, "maximum_future_skew_seconds": 300},
   "replay_protection": {
@@ -65,6 +83,6 @@
     }
   },
   "activation": {"enabled": false, "requires_separate_reviewed_contract_change": true},
-  "output": {"contract_name": "fleet.android_preview12_two_green_release_approval.v1", "approval_scope": "preview12_two_green_evidence_only", "public_json_only": true, "signing_authorized": false, "publication_authorized": false, "google_play_upload_authorized": false},
+  "output": {"contract_name": "chummer.android.two-green-release-approval/v1", "key_id": "local-release-builder-2026", "role": "android_internal_release_approver", "approval_scope": "android_internal_release_preparation", "file_name": "ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json", "fleet_audit_contract_name": "fleet.android_preview12_two_green_release_approval.v1", "fleet_audit_file_name": "FLEET_ANDROID_PREVIEW12_APPROVAL_AUDIT.generated.json", "public_json_only": true, "signing_authorized": false, "publication_authorized": false, "google_play_upload_authorized": false},
   "separation": {"play_aab_signer": "strictly_separate", "accepts_aab_bytes": false, "accepts_play_credentials": false, "accepts_upload_keystore": false, "performs_artifact_signing": false, "performs_play_upload": false, "performs_publication": false}
 }

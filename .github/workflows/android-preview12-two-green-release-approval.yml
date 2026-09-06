@@ -175,7 +175,7 @@ jobs:
           set -euo pipefail
           output="$RUNNER_TEMP/preview12-approval-public"
           install -m 0600 "$output/recovered-public-approval.json" \
-            "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json"
+            "$output/ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json"
       - name: Emit only the public, non-authorizing approval JSON
         if: ${{ steps.reserve.outputs.recovered != 'true' }}
         env:
@@ -238,7 +238,8 @@ jobs:
             --fleet-main-branch-snapshot "$evidence/fleet-main-branch.json" \
             --fleet-main-commit-snapshot "$evidence/fleet-main-commit.json" \
             --approval-artifact-ledger-snapshot "$evidence/approval-artifact-ledger.json" \
-            --output "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json"
+            --output "$output/ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json" \
+            --audit-output "$output/FLEET_ANDROID_PREVIEW12_APPROVAL_AUDIT.generated.json"
       - id: commit
         name: Commit the exact public approval to the durable external ledger
         env:
@@ -265,7 +266,7 @@ jobs:
             --version-name "$VERSION_NAME" \
             --version-code "$VERSION_CODE" \
             --reservation-snapshot "$evidence/ledger-reservation.json" \
-            --approval "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json" \
+            --approval "$output/ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json" \
             --receipt-output "$evidence/ledger-commit.json" \
             --committed-approval-output "$output/ledger-committed-public-approval.json"
       - name: Abort an open reservation after an interrupted approval transaction
@@ -296,27 +297,32 @@ jobs:
             --reason-code workflow_interrupted \
             --receipt-output "$evidence/ledger-cleanup.json"
       - name: Verify only the public approval and committed ledger bytes
+        env:
+          EXPECTED_CHALLENGE_NONCE: ${{ inputs.approval_request_nonce }}
         run: |
           set -euo pipefail
           evidence="$RUNNER_TEMP/preview12-approval-evidence"
           output="$RUNNER_TEMP/preview12-approval-public"
           policy="$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json"
           cmp --silent \
-            "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json" \
+            "$output/ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json" \
             "$output/ledger-committed-public-approval.json"
           install -m 0600 "$evidence/ledger-commit.json" \
             "$output/ANDROID_PREVIEW12_APPROVAL_LEDGER_COMMIT.public.json"
           python3 scripts/android_preview12_two_green_release_approval.py \
             --policy "$policy" \
-            verify --approval "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json"
+            verify \
+            --approval "$output/ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json" \
+            --expected-challenge-nonce "$EXPECTED_CHALLENGE_NONCE"
           jq -e '.signingAuthorized == false and .publicationAuthorized == false and .googlePlayUploadAuthorized == false' \
-            "$output/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json" >/dev/null
-      - name: Upload only the public approval and signed commit receipt JSON
+            "$output/ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json" >/dev/null
+      - name: Upload the Android approval, Fleet audit, and signed commit receipt JSON
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: android-preview12-two-green-release-approval-${{ inputs.two_green_artifact_id }}
           path: |
-            ${{ runner.temp }}/preview12-approval-public/ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json
+            ${{ runner.temp }}/preview12-approval-public/ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json
+            ${{ runner.temp }}/preview12-approval-public/FLEET_ANDROID_PREVIEW12_APPROVAL_AUDIT.generated.json
             ${{ runner.temp }}/preview12-approval-public/ANDROID_PREVIEW12_APPROVAL_LEDGER_COMMIT.public.json
           if-no-files-found: error
           retention-days: 30

@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/android_preview12_two_green_release_approval.py"
 POLICY = ROOT / "config/release/android-preview12-two-green-release-approval.json"
 WORKFLOW = ROOT / ".github/workflows/android-preview12-two-green-release-approval.yml"
+ANDROID_388_FIXTURE = ROOT / "tests/fixtures/android-388425ace/release-approval-contract.json"
+ANDROID_388_PUBLIC_KEY = ROOT / "tests/fixtures/android-388425ace/local-release-builder-2026.public.pem"
 spec = importlib.util.spec_from_file_location("preview12_approval", SCRIPT)
 assert spec and spec.loader
 approval = importlib.util.module_from_spec(spec)
@@ -41,6 +43,32 @@ def write_json(path: Path, value: object) -> bytes:
     return data
 
 
+def _test_public_der() -> bytes:
+    key_fd = os.memfd_create("test-ed25519")
+    try:
+        os.write(key_fd, TEST_PRIVATE_DER)
+        os.lseek(key_fd, 0, os.SEEK_SET)
+        return approval._openssl(
+            ["pkey", "-inform", "DER", "-in", f"/proc/self/fd/{key_fd}", "-pubout", "-outform", "DER"],
+            pass_fds=(key_fd,),
+        )
+    finally:
+        os.close(key_fd)
+
+
+def use_test_approval_key(monkeypatch: pytest.MonkeyPatch) -> str:
+    public = _test_public_der()
+    digest = hashlib.sha256(public).hexdigest()
+    monkeypatch.setattr(
+        approval, "RELEASE_APPROVER_PUBLIC_KEY_SPKI_DER_BASE64",
+        base64.b64encode(public).decode(),
+    )
+    monkeypatch.setattr(
+        approval, "RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256", digest
+    )
+    return digest
+
+
 def active_policy(tmp_path: Path, *, durable: bool = False) -> tuple[dict, Path, str]:
     value = json.loads(POLICY.read_text())
     value["state"] = "ready"
@@ -48,18 +76,13 @@ def active_policy(tmp_path: Path, *, durable: bool = False) -> tuple[dict, Path,
     value["github_environment"]["expected_human_user_reviewers"] = REVIEWERS
     value["external_ed25519_key"]["configured"] = True
     value["activation"]["enabled"] = True
-    key_fd = os.memfd_create("test-ed25519")
-    try:
-        os.write(key_fd, TEST_PRIVATE_DER)
-        os.lseek(key_fd, 0, os.SEEK_SET)
-        public = approval._openssl(
-            ["pkey", "-inform", "DER", "-in", f"/proc/self/fd/{key_fd}", "-pubout", "-outform", "DER"],
-            pass_fds=(key_fd,),
-        )
-    finally:
-        os.close(key_fd)
-    public_digest = hashlib.sha256(public).hexdigest()
-    value["external_ed25519_key"]["expected_public_key_spki_sha256"] = public_digest
+    value["external_ed25519_key"]["public_key_spki_der_base64"] = (
+        approval.RELEASE_APPROVER_PUBLIC_KEY_SPKI_DER_BASE64
+    )
+    value["external_ed25519_key"]["expected_public_key_spki_sha256"] = (
+        approval.RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256
+    )
+    public_digest = approval.RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256
     if durable:
         key_fd = os.memfd_create("test-ledger-ed25519-public")
         try:
@@ -162,8 +185,8 @@ def inputs() -> dict[str, object]:
         "review_run_id": "101",
         "review_pull_request_number": "45",
         "main_run_id": "201",
-        "main_commit": "a" * 40,
-        "main_tree": "b" * 40,
+        "main_commit": approval.ANDROID_CONSUMER_COMMIT,
+        "main_tree": approval.ANDROID_CONSUMER_TREE,
         "version_name": approval.VERSION_NAME,
         "version_code": str(approval.VERSION_CODE),
     }
@@ -197,8 +220,8 @@ def receipt() -> dict:
         "publicationAuthorized": False,
         "googlePlayUploadAuthorized": False,
         "policyAuthority": {},
-        "sourceCommit": "a" * 40,
-        "sourceTree": "b" * 40,
+        "sourceCommit": approval.ANDROID_CONSUMER_COMMIT,
+        "sourceTree": approval.ANDROID_CONSUMER_TREE,
         "releaseIdentity": {
             "packageId": approval.PACKAGE_ID,
             "versionName": approval.VERSION_NAME,
@@ -206,16 +229,18 @@ def receipt() -> dict:
             "intentAuthority": "android_project_at_exact_main_tree",
         },
         "commonAuthority": {
-            "androidTree": "b" * 40,
+            "androidTree": approval.ANDROID_CONSUMER_TREE,
             "environmentCompatibilityStatus": "pass",
+            "dependencyGraph": {"sha256": "6" * 64},
+            "environmentPolicy": {"sha256": "7" * 64},
         },
         "reviewRun": {
             "run": {"id": 101, "status": "completed", "conclusion": "success"},
             "aggregateStatus": "pass",
         },
         "mainRun": {
-            "run": {"id": 201, "headSha": "a" * 40, "status": "completed", "conclusion": "success"},
-            "p0EventSha": "a" * 40,
+            "run": {"id": 201, "headSha": approval.ANDROID_CONSUMER_COMMIT, "status": "completed", "conclusion": "success"},
+            "p0EventSha": approval.ANDROID_CONSUMER_COMMIT,
             "aggregateStatus": "pass",
         },
         "decisionTimeUtc": "2026-09-06T14:02:00Z",
@@ -246,6 +271,8 @@ def archive(path: Path, data: bytes) -> bytes:
 
 
 def full_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None):
+    if monkeypatch is not None:
+        use_test_approval_key(monkeypatch)
     policy_value, policy_path, public_digest = active_policy(
         tmp_path, durable=monkeypatch is not None
     )
@@ -262,7 +289,7 @@ def full_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None):
         "path": approval.TWO_GREEN_WORKFLOW_PATH,
         "event": "workflow_dispatch",
         "head_branch": "main",
-        "head_sha": "a" * 40,
+        "head_sha": approval.ANDROID_CONSUMER_COMMIT,
         "status": "completed",
         "conclusion": "success",
         "created_at": "2026-09-06T14:02:10Z",
@@ -281,7 +308,7 @@ def full_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None):
         "size_in_bytes": len(archive_bytes),
         "url": f"https://api.github.com/repos/{approval.ANDROID_REPOSITORY}/actions/artifacts/401",
         "archive_download_url": f"https://api.github.com/repos/{approval.ANDROID_REPOSITORY}/actions/artifacts/401/zip",
-        "workflow_run": {"id": 301, "head_sha": "a" * 40},
+        "workflow_run": {"id": 301, "head_sha": approval.ANDROID_CONSUMER_COMMIT},
         "created_at": "2026-09-06T14:02:35Z",
         "expires_at": "2026-10-06T14:02:35Z",
     }
@@ -302,12 +329,12 @@ def full_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None):
     write_json(tmp_path / "android-main-branch.json", {
         "name": "main",
         "protected": True,
-        "commit": {"sha": "a" * 40},
+        "commit": {"sha": approval.ANDROID_CONSUMER_COMMIT},
     })
     write_json(tmp_path / "android-main-commit.json", {
-        "sha": "a" * 40,
-        "url": f"https://api.github.com/repos/{approval.ANDROID_REPOSITORY}/git/commits/{'a' * 40}",
-        "tree": {"sha": "b" * 40},
+        "sha": approval.ANDROID_CONSUMER_COMMIT,
+        "url": f"https://api.github.com/repos/{approval.ANDROID_REPOSITORY}/git/commits/{approval.ANDROID_CONSUMER_COMMIT}",
+        "tree": {"sha": approval.ANDROID_CONSUMER_TREE},
     })
     write_json(tmp_path / "fleet-main-branch.json", {
         "name": "main",
@@ -338,6 +365,7 @@ def full_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None):
         fleet_main_commit_snapshot=(tmp_path / "fleet-main-commit.json").resolve(),
         approval_artifact_ledger_snapshot=(tmp_path / "approval-artifact-ledger.json").resolve(),
         output=(tmp_path / approval.OUTPUT_NAME).resolve(),
+        audit_output=(tmp_path / approval.AUDIT_OUTPUT_NAME).resolve(),
     )
     if monkeypatch is not None:
         write_json(
@@ -355,7 +383,14 @@ def test_checked_in_policy_is_exact_dormant_and_contains_no_key_material():
     assert value["activation"]["enabled"] is False
     assert value["github_environment"]["configured"] is False
     assert value["external_ed25519_key"]["configured"] is False
-    assert value["external_ed25519_key"]["expected_public_key_spki_sha256"] is None
+    assert value["external_ed25519_key"]["key_id"] == "local-release-builder-2026"
+    assert value["external_ed25519_key"]["expected_public_key_spki_sha256"] == (
+        approval.RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256
+    )
+    assert value["android_consumer"]["qualified_commit"] == approval.ANDROID_CONSUMER_COMMIT
+    assert value["android_consumer"]["provenance_validator_sha256"] == (
+        approval.PROVENANCE_VALIDATOR_SHA256
+    )
     assert value["replay_protection"]["durable_external_reservation_required"] is True
     assert value["replay_protection"]["durable_reservation_subjects"] == [
         "two_green_artifact_id",
@@ -395,17 +430,9 @@ def test_environment_key_activation_still_fails_without_durable_replay(tmp_path:
 
 def test_ready_policy_rejects_shared_approval_and_ledger_signing_key(tmp_path: Path):
     policy, policy_path, approval_digest = active_policy(tmp_path, durable=True)
-    key_fd = os.memfd_create("test-shared-ed25519-public")
-    try:
-        os.write(key_fd, TEST_PRIVATE_DER)
-        os.lseek(key_fd, 0, os.SEEK_SET)
-        approval_public = approval._openssl(
-            ["pkey", "-inform", "DER", "-in", f"/proc/self/fd/{key_fd}",
-             "-pubout", "-outform", "DER"],
-            pass_fds=(key_fd,),
-        )
-    finally:
-        os.close(key_fd)
+    approval_public = base64.b64decode(
+        policy["external_ed25519_key"]["public_key_spki_der_base64"], validate=True
+    )
     ledger_policy = policy["replay_protection"]["external_ledger"]
     ledger_policy["receipt_public_key_spki_der_base64"] = base64.b64encode(
         approval_public
@@ -485,10 +512,26 @@ def test_exact_two_green_receipt_emits_only_public_non_authorizing_approval(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     _, public_digest, _, args, environment = full_case(tmp_path, monkeypatch)
-    result = approval.create_approval(args, environment, now=NOW)
-    approval.validate_approval(result, now=NOW)
-    assert result["signature"]["publicKeySpkiSha256"] == public_digest
-    assert result["twoGreenVerified"] is True
+    result, audit = approval.create_approval_bundle(args, environment, now=NOW)
+    approval.validate_approval(
+        result, policy=approval.load_policy(args.policy)[0],
+        audit_receipt=audit, expected_challenge_nonce="9" * 64, now=NOW,
+    )
+    assert set(result) == {
+        "contractName", "algorithm", "keyId", "role", "approvalScope",
+        "generatedAtUtc", "expiresAtUtc", "challengeNonce",
+        "provenanceValidatorSha256", "provenanceReplaySha256",
+        "receiptSha256", "eligibilitySha256", "sourceCommit", "sourceTree",
+        "versionName", "versionCode", "dependencyGraphSha256",
+        "environmentPolicySha256", "signingAuthorized",
+        "publicationAuthorized", "googlePlayUploadAuthorized", "signatureBase64",
+    }
+    assert result["contractName"] == "chummer.android.two-green-release-approval/v1"
+    assert result["keyId"] == "local-release-builder-2026"
+    assert result["role"] == "android_internal_release_approver"
+    assert result["approvalScope"] == "android_internal_release_preparation"
+    assert result["provenanceReplaySha256"] == approval.canonical_sha256(audit)
+    assert public_digest == approval.RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256
     assert result["signingAuthorized"] is False
     assert result["publicationAuthorized"] is False
     assert result["googlePlayUploadAuthorized"] is False
@@ -497,6 +540,89 @@ def test_exact_two_green_receipt_emits_only_public_non_authorizing_approval(
     assert b"keystore" not in serialized.lower()
     assert b'"aab"' not in serialized.lower()
     assert b'"aabsha256"' not in serialized.lower()
+
+
+def test_android_388_fixture_matches_fleet_policy_and_signed_byte_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    fixture = json.loads(ANDROID_388_FIXTURE.read_text())
+    pem = ANDROID_388_PUBLIC_KEY.read_bytes()
+    assert hashlib.sha256(pem).hexdigest() == fixture["publicKeyPemSha256"]
+    completed = subprocess.run(
+        ["openssl", "pkey", "-pubin", "-outform", "DER"],
+        input=pem, check=True, capture_output=True,
+    )
+    assert base64.b64encode(completed.stdout).decode() == fixture["publicKeySpkiDerBase64"]
+    assert hashlib.sha256(completed.stdout).hexdigest() == fixture["publicKeySpkiDerSha256"]
+    policy = approval.expected_policy()
+    assert policy["android_consumer"]["qualified_commit"] == fixture["androidCommit"]
+    assert policy["android_consumer"]["qualified_tree"] == fixture["androidTree"]
+    assert policy["android_consumer"]["provenance_validator_sha256"] == fixture[
+        "provenanceValidatorSha256"
+    ]
+    assert policy["external_ed25519_key"]["trusted_public_key_pem_sha256"] == fixture[
+        "publicKeyPemSha256"
+    ]
+    assert policy["external_ed25519_key"]["expected_public_key_spki_sha256"] == fixture[
+        "publicKeySpkiDerSha256"
+    ]
+
+    _, _, _, args, environment = full_case(tmp_path, monkeypatch)
+    result, audit = approval.create_approval_bundle(args, environment, now=NOW)
+    unsigned = {key: value for key, value in result.items() if key != "signatureBase64"}
+    assert sorted(unsigned) == fixture["signedFields"]
+    assert set(result) == {*fixture["signedFields"], fixture["signatureField"]}
+    reference_bytes = json.dumps(
+        unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    assert approval.android_canonical_bytes(unsigned) == reference_bytes
+    assert not reference_bytes.endswith(b"\n")
+    approval.validate_approval(
+        result,
+        policy=approval.load_policy(args.policy)[0],
+        audit_receipt=audit,
+        expected_challenge_nonce="9" * 64,
+        now=NOW,
+    )
+
+
+@pytest.mark.parametrize(
+    "mutate,match",
+    [
+        (lambda value: value.update(provenanceValidatorSha256="0" * 64), "source/version"),
+        (lambda value: value.update(sourceCommit="0" * 40), "source/version"),
+        (lambda value: value.update(versionCode=13), "source/version"),
+        (lambda value: value.update(receiptSha256="0" * 64), "claims differ"),
+        (lambda value: value.update(unexpected=True), "fields are not exact"),
+    ],
+)
+def test_android_388_consumer_rejects_validly_resigned_contract_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutate, match: str
+):
+    policy, _, _, args, environment = full_case(tmp_path, monkeypatch)
+    result, audit = approval.create_approval_bundle(args, environment, now=NOW)
+    mutate(result)
+    unsigned = {key: value for key, value in result.items() if key != "signatureBase64"}
+    result["signatureBase64"] = approval.sign_ed25519(
+        approval.android_canonical_bytes(unsigned), policy, environment
+    )["signatureBase64"]
+    with pytest.raises(approval.ApprovalError, match=match):
+        approval.validate_approval(
+            result, policy=policy, audit_receipt=audit,
+            expected_challenge_nonce="9" * 64, now=NOW,
+        )
+
+
+def test_android_388_consumer_rejects_replayed_challenge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    policy, _, _, args, environment = full_case(tmp_path, monkeypatch)
+    result, audit = approval.create_approval_bundle(args, environment, now=NOW)
+    with pytest.raises(approval.ApprovalError, match="replayed"):
+        approval.validate_approval(
+            result, policy=policy, audit_receipt=audit,
+            expected_challenge_nonce="8" * 64, now=NOW,
+        )
 
 
 @pytest.mark.parametrize("mutate,match", [
@@ -649,8 +775,8 @@ def test_public_approval_tamper_is_rejected(
 ):
     _, _, _, args, environment = full_case(tmp_path, monkeypatch)
     result = approval.create_approval(args, environment, now=NOW)
-    result["androidSource"]["tree"] = "e" * 40
-    with pytest.raises(approval.ApprovalError, match="authority differs"):
+    result["sourceTree"] = "e" * 40
+    with pytest.raises(approval.ApprovalError, match="source/version authority differs"):
         approval.validate_approval(result, now=NOW)
 
 
@@ -678,6 +804,7 @@ def test_workflow_is_dormant_separate_and_uploads_only_public_json():
     assert approval.KEY_ENV_NAME in text
     assert approval.approval_ledger.CREDENTIAL_ENV_NAME in text
     assert approval.OUTPUT_NAME in text
+    assert approval.AUDIT_OUTPUT_NAME in text
     assert "ANDROID_PREVIEW12_UPLOAD_KEYSTORE" not in text
     assert "ANDROID_PREVIEW12_KEYSTORE_PASSWORD" not in text
     assert "deployments: read" in text
@@ -743,7 +870,7 @@ def test_workflow_is_dormant_separate_and_uploads_only_public_json():
     reserve_at = text.index("--policy \"$policy\" reserve")
     approve_at = text.index("--policy \"$policy\" approve")
     commit_at = text.index("--policy \"$policy\" commit")
-    upload_at = text.index("- name: Upload only the public approval and signed commit receipt JSON")
+    upload_at = text.index("- name: Upload the Android approval, Fleet audit, and signed commit receipt JSON")
     assert reserve_at < approve_at < commit_at < upload_at
     assert 'cmp --silent' in text
     assert (
@@ -754,7 +881,7 @@ def test_workflow_is_dormant_separate_and_uploads_only_public_json():
         "name: android-preview12-two-green-release-approval-"
         "${{ inputs.two_green_artifact_id }}"
     ) in text
-    upload_block = text.split("- name: Upload only the public approval and signed commit receipt JSON", 1)[1]
+    upload_block = text.split("- name: Upload the Android approval, Fleet audit, and signed commit receipt JSON", 1)[1]
     assert approval.OUTPUT_NAME in upload_block
     assert "ANDROID_PREVIEW12_APPROVAL_LEDGER_COMMIT.public.json" in upload_block
     assert "preview12-approval-evidence" not in upload_block

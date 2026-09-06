@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify Preview12 Two-Green evidence and sign only a public approval JSON.
+"""Verify Preview12 Two-Green evidence and emit Android's exact approval JSON.
 
 This lane never accepts an AAB, upload keystore, Play credential, or publication
 target.  Its Ed25519 key is accepted only from the protected GitHub environment
@@ -30,7 +30,8 @@ except ModuleNotFoundError:  # Direct execution places scripts/ on sys.path.
 
 
 POLICY_CONTRACT = "fleet.android_preview12_two_green_release_approval_policy.v1"
-OUTPUT_CONTRACT = "fleet.android_preview12_two_green_release_approval.v1"
+FLEET_AUDIT_CONTRACT = "fleet.android_preview12_two_green_release_approval.v1"
+OUTPUT_CONTRACT = "chummer.android.two-green-release-approval/v1"
 TWO_GREEN_CONTRACT = "chummer.android.api36-ordered-review-main-green-eligibility/v2"
 FLEET_REPOSITORY = "ArchonMegalon/fleet"
 ANDROID_REPOSITORY = "ArchonMegalon/chummer-android"
@@ -40,12 +41,37 @@ WORKFLOW_PATH = ".github/workflows/android-preview12-two-green-release-approval.
 TWO_GREEN_WORKFLOW_NAME = "API 36 ordered review-to-main green eligibility"
 TWO_GREEN_WORKFLOW_PATH = ".github/workflows/api36-two-consecutive-green.yml"
 RECEIPT_NAME = "ANDROID_API36_TWO_GREEN_ELIGIBILITY.generated.json"
-OUTPUT_NAME = "ANDROID_PREVIEW12_TWO_GREEN_RELEASE_APPROVAL.public.json"
+OUTPUT_NAME = "ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json"
+AUDIT_OUTPUT_NAME = "FLEET_ANDROID_PREVIEW12_APPROVAL_AUDIT.generated.json"
 ENVIRONMENT_NAME = "android-preview12-release-approval"
 KEY_ENV_NAME = "ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64"
 PACKAGE_ID = "com.myexternalbrain.chummer"
 VERSION_NAME = "0.1.0-preview.12"
 VERSION_CODE = 12
+ANDROID_CONSUMER_COMMIT = "388425aceac266e06265e4c0c73a4058b052d316"
+ANDROID_CONSUMER_TREE = "175da843cfc2df3489d87dc153c186b9c8e4d803"
+RELEASE_APPROVER_KEY_ID = "local-release-builder-2026"
+RELEASE_APPROVER_ROLE = "android_internal_release_approver"
+RELEASE_APPROVAL_SCOPE = "android_internal_release_preparation"
+RELEASE_APPROVER_PUBLIC_KEY_PATH = (
+    "eng/trusted-release-approvers/local-release-builder-2026.public.pem"
+)
+RELEASE_APPROVER_PUBLIC_KEY_PEM_SHA256 = (
+    "ed1fbe95fc7713bfc6d9d0fea21726c1ba3193533fc2d5523e054ad8fb86184c"
+)
+RELEASE_APPROVER_PUBLIC_KEY_SPKI_DER_BASE64 = (
+    "MCowBQYDK2VwAyEAB105wcYguHU3a/phMkbbRjhZ+Qhj8cdDTAvw/7t14sk="
+)
+RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256 = (
+    "c46a4e9a224c8c77a4038bca83f7d9ed66146318d8b5c2c9fc81cd19fdd18ea7"
+)
+PROVENANCE_VALIDATOR_PATH = "scripts/materialize-api36-two-green-eligibility.py"
+PROVENANCE_VALIDATOR_SHA256 = (
+    "6129faf8f1cac0e540126a39cb46e16352387c370dbbd003e1fe5ace1edf4492"
+)
+APPROVAL_LIFETIME_SECONDS = 6 * 60 * 60
+MAX_APPROVAL_LIFETIME_SECONDS = 12 * 60 * 60
+APPROVAL_CLOCK_SKEW_SECONDS = 2 * 60
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 ARTIFACT_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -65,6 +91,13 @@ class ApprovalError(RuntimeError):
 
 def canonical_bytes(value: object) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+
+def android_canonical_bytes(value: object) -> bytes:
+    """Canonical bytes consumed by Android 388425ace (no trailing newline)."""
+    return json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
 
 
 def pretty_bytes(value: object) -> bytes:
@@ -227,7 +260,7 @@ def expected_policy() -> dict[str, Any]:
     return {
         "contract_name": POLICY_CONTRACT,
         "contract_version": 1,
-        "state": "dormant_pending_environment_external_keys_and_ledger_service",
+        "state": "dormant_pending_environment_signer_and_ledger_service",
         "release": {"package_id": PACKAGE_ID, "version_name": VERSION_NAME,
                     "version_code": VERSION_CODE},
         "android_source": {"repository": ANDROID_REPOSITORY,
@@ -259,8 +292,26 @@ def expected_policy() -> dict[str, Any]:
             "configured": False,
             "source": "github_environment_secret_only",
             "secret_name": KEY_ENV_NAME,
-            "expected_public_key_spki_sha256": None,
+            "algorithm": "ed25519",
+            "key_id": RELEASE_APPROVER_KEY_ID,
+            "role": RELEASE_APPROVER_ROLE,
+            "approval_scope": RELEASE_APPROVAL_SCOPE,
+            "trusted_public_key_path": RELEASE_APPROVER_PUBLIC_KEY_PATH,
+            "trusted_public_key_pem_sha256": RELEASE_APPROVER_PUBLIC_KEY_PEM_SHA256,
+            "public_key_spki_der_base64": RELEASE_APPROVER_PUBLIC_KEY_SPKI_DER_BASE64,
+            "expected_public_key_spki_sha256": RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256,
             "private_key_persistence_allowed": False,
+        },
+        "android_consumer": {
+            "qualified_commit": ANDROID_CONSUMER_COMMIT,
+            "qualified_tree": ANDROID_CONSUMER_TREE,
+            "verifier_path": "scripts/verify_api36_two_green_release_eligibility.py",
+            "contract_name": OUTPUT_CONTRACT,
+            "canonical_json": "utf8_sort_keys_compact_no_trailing_newline",
+            "provenance_validator_path": PROVENANCE_VALIDATOR_PATH,
+            "provenance_validator_sha256": PROVENANCE_VALIDATOR_SHA256,
+            "maximum_approval_lifetime_seconds": MAX_APPROVAL_LIFETIME_SECONDS,
+            "approval_clock_skew_seconds": APPROVAL_CLOCK_SKEW_SECONDS,
         },
         "freshness": {
             "maximum_evidence_age_seconds": MAX_EVIDENCE_AGE_SECONDS,
@@ -282,7 +333,12 @@ def expected_policy() -> dict[str, Any]:
                        "requires_separate_reviewed_contract_change": True},
         "output": {
             "contract_name": OUTPUT_CONTRACT,
-            "approval_scope": "preview12_two_green_evidence_only",
+            "key_id": RELEASE_APPROVER_KEY_ID,
+            "role": RELEASE_APPROVER_ROLE,
+            "approval_scope": RELEASE_APPROVAL_SCOPE,
+            "file_name": OUTPUT_NAME,
+            "fleet_audit_contract_name": FLEET_AUDIT_CONTRACT,
+            "fleet_audit_file_name": AUDIT_OUTPUT_NAME,
             "public_json_only": True,
             "signing_authorized": False,
             "publication_authorized": False,
@@ -326,8 +382,6 @@ def load_policy(path: Path) -> tuple[dict[str, Any], bytes, str]:
         observed_key_digest = value.get("external_ed25519_key", {}).get(
             "expected_public_key_spki_sha256"
         ) if isinstance(value.get("external_ed25519_key"), dict) else None
-        if SHA256.fullmatch(str(observed_key_digest or "")):
-            active["external_ed25519_key"]["expected_public_key_spki_sha256"] = observed_key_digest
         if (
             observed_ledger is not None
             and observed_key_digest
@@ -369,6 +423,20 @@ def _require_ready(policy: Mapping[str, Any]) -> None:
         str(key.get("expected_public_key_spki_sha256") or "")
     ) is None:
         blockers.append("external Ed25519 public-key digest is not pinned")
+    elif (
+        key.get("algorithm") != "ed25519"
+        or key.get("key_id") != RELEASE_APPROVER_KEY_ID
+        or key.get("role") != RELEASE_APPROVER_ROLE
+        or key.get("approval_scope") != RELEASE_APPROVAL_SCOPE
+        or key.get("trusted_public_key_path") != RELEASE_APPROVER_PUBLIC_KEY_PATH
+        or key.get("trusted_public_key_pem_sha256")
+        != RELEASE_APPROVER_PUBLIC_KEY_PEM_SHA256
+        or key.get("public_key_spki_der_base64")
+        != RELEASE_APPROVER_PUBLIC_KEY_SPKI_DER_BASE64
+        or key.get("expected_public_key_spki_sha256")
+        != RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256
+    ):
+        blockers.append("external Ed25519 key differs from Android's pinned approver")
     try:
         reviewed_users = _reviewer_list(
             environment.get("expected_human_user_reviewers")
@@ -458,6 +526,11 @@ def validate_inputs(args: argparse.Namespace) -> dict[str, Any]:
     }
     if (values["versionName"], values["versionCode"]) != (VERSION_NAME, VERSION_CODE):
         raise ApprovalError("release identity is not exact Preview12/code12")
+    if (
+        values["mainCommit"] != ANDROID_CONSUMER_COMMIT
+        or values["mainTree"] != ANDROID_CONSUMER_TREE
+    ):
+        raise ApprovalError("Android source is not the qualified 388425ace consumer")
     if values["reviewRunId"] == values["mainRunId"]:
         raise ApprovalError("review and main run IDs must be distinct")
     return values
@@ -831,6 +904,16 @@ def validate_receipt(
     common = value.get("commonAuthority")
     if not isinstance(common, dict) or common.get("androidTree") != inputs["mainTree"] or common.get("environmentCompatibilityStatus") != "pass":
         raise ApprovalError("Two-Green common tree/environment authority differs")
+    dependency_graph = common.get("dependencyGraph")
+    environment_policy = common.get("environmentPolicy")
+    if not isinstance(dependency_graph, dict) or not isinstance(environment_policy, dict):
+        raise ApprovalError("Two-Green receipt omits Android consumer authority")
+    dependency_graph_sha256 = _sha256(
+        dependency_graph.get("sha256"), "Two-Green dependency graph digest"
+    )
+    environment_policy_sha256 = _sha256(
+        environment_policy.get("sha256"), "Two-Green environment policy digest"
+    )
     policy_authority = value.get("policyAuthority")
     if (
         not isinstance(policy_authority, dict)
@@ -857,6 +940,8 @@ def validate_receipt(
         "reviewPullRequestNumber": inputs["reviewPullRequestNumber"],
         "reviewRunId": inputs["reviewRunId"],
         "mainRunId": inputs["mainRunId"],
+        "dependencyGraphSha256": dependency_graph_sha256,
+        "environmentPolicySha256": environment_policy_sha256,
         "status": "pass",
         "eligible": True,
         "internalTestingEligible": True,
@@ -955,7 +1040,7 @@ def verify_ed25519(public_der: bytes, message: bytes, signature: bytes) -> None:
         os.close(signature_fd)
 
 
-def create_approval(
+def _create_fleet_audit_receipt(
     args: argparse.Namespace, environment: Mapping[str, str], *,
     now: datetime | None = None
 ) -> dict[str, Any]:
@@ -1062,7 +1147,7 @@ def create_approval(
     ):
         raise ApprovalError("Fleet approval execution is not exact protected main")
     statement = {
-        "contractName": OUTPUT_CONTRACT,
+        "contractName": FLEET_AUDIT_CONTRACT,
         "contractVersion": 1,
         "status": "approved",
         "approvalScope": "preview12_two_green_evidence_only",
@@ -1123,341 +1208,209 @@ def create_approval(
         "googlePlayUploadAuthorized": False,
         "doesNotAuthorize": DOES_NOT_AUTHORIZE,
     }
-    approval_sha256 = canonical_sha256(statement)
-    signature = sign_ed25519(canonical_bytes(statement), policy, environment)
-    return {**statement, "approvalSha256": approval_sha256, "signature": signature}
+    return statement
+
+
+def release_approval_unsigned(
+    audit_receipt: Mapping[str, Any],
+    *,
+    generated_at_utc: str,
+    expires_at_utc: str,
+    challenge_nonce: str,
+) -> dict[str, Any]:
+    """Project Fleet evidence into Android 388425ace's exact signed fields."""
+    source = audit_receipt.get("androidSource")
+    release = audit_receipt.get("release")
+    two_green = audit_receipt.get("twoGreen")
+    receipt = two_green.get("receipt") if isinstance(two_green, dict) else None
+    if not all(isinstance(value, dict) for value in (source, release, two_green, receipt)):
+        raise ApprovalError("Fleet audit receipt cannot project Android approval authority")
+    return {
+        "contractName": OUTPUT_CONTRACT,
+        "algorithm": "ed25519",
+        "keyId": RELEASE_APPROVER_KEY_ID,
+        "role": RELEASE_APPROVER_ROLE,
+        "approvalScope": RELEASE_APPROVAL_SCOPE,
+        "generatedAtUtc": generated_at_utc,
+        "expiresAtUtc": expires_at_utc,
+        "challengeNonce": _sha256(challenge_nonce, "release approval challenge nonce"),
+        "provenanceValidatorSha256": PROVENANCE_VALIDATOR_SHA256,
+        "provenanceReplaySha256": canonical_sha256(audit_receipt),
+        "receiptSha256": _sha256(
+            two_green.get("receiptSha256"), "Two-Green receipt digest"
+        ),
+        "eligibilitySha256": _sha256(
+            receipt.get("eligibilitySha256"), "Two-Green eligibility digest"
+        ),
+        "sourceCommit": _sha40(source.get("commit"), "Android source commit"),
+        "sourceTree": _sha40(source.get("tree"), "Android source tree"),
+        "versionName": release.get("versionName"),
+        "versionCode": release.get("versionCode"),
+        "dependencyGraphSha256": _sha256(
+            receipt.get("dependencyGraphSha256"), "Two-Green dependency graph digest"
+        ),
+        "environmentPolicySha256": _sha256(
+            receipt.get("environmentPolicySha256"), "Two-Green environment policy digest"
+        ),
+        "signingAuthorized": False,
+        "publicationAuthorized": False,
+        "googlePlayUploadAuthorized": False,
+    }
+
+
+def create_approval_bundle(
+    args: argparse.Namespace,
+    environment: Mapping[str, str],
+    *,
+    now: datetime | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    now = now or datetime.now(timezone.utc)
+    audit_receipt = _create_fleet_audit_receipt(args, environment, now=now)
+    generated_at_utc = _iso(now)
+    expires_at_utc = _iso(now + timedelta(seconds=APPROVAL_LIFETIME_SECONDS))
+    unsigned = release_approval_unsigned(
+        audit_receipt,
+        generated_at_utc=generated_at_utc,
+        expires_at_utc=expires_at_utc,
+        challenge_nonce=audit_receipt["approvalRequestNonce"],
+    )
+    policy, _, _ = load_policy(args.policy)
+    signature = sign_ed25519(android_canonical_bytes(unsigned), policy, environment)
+    approval = {**unsigned, "signatureBase64": signature["signatureBase64"]}
+    validate_approval(
+        approval,
+        policy=policy,
+        audit_receipt=audit_receipt,
+        expected_challenge_nonce=audit_receipt["approvalRequestNonce"],
+        now=now,
+    )
+    return approval, audit_receipt
+
+
+def create_approval(
+    args: argparse.Namespace,
+    environment: Mapping[str, str],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    approval, _ = create_approval_bundle(args, environment, now=now)
+    return approval
 
 
 def validate_approval(
-    value: Mapping[str, Any], policy: Mapping[str, Any] | None = None, *,
-    now: datetime | None = None
+    value: Mapping[str, Any],
+    policy: Mapping[str, Any] | None = None,
+    *,
+    audit_receipt: Mapping[str, Any] | None = None,
+    expected_challenge_nonce: str | None = None,
+    now: datetime | None = None,
 ) -> None:
-    now = now or datetime.now(timezone.utc)
-    if now.tzinfo != timezone.utc:
-        raise ApprovalError("approval verification clock must be UTC")
-    required = {
-        "contractName", "contractVersion", "status", "approvalScope",
-        "approvalRequestNonce", "approvedAtUtc", "release",
-        "androidSource", "twoGreen", "fleetExecution", "environmentAuthority",
-        "freshnessAuthority", "replayProtection", "policyAuthority",
-        "twoGreenVerified", "humanEnvironmentReviewRequired",
-        "configuredHumanReviewerSetPinned", "protectedEnvironmentGatePassed",
-        "actualApprovalActorRecorded", "signingAuthorized",
-        "publicationAuthorized", "googlePlayUploadAuthorized", "doesNotAuthorize",
-        "approvalSha256", "signature",
+    """Validate exactly the approval accepted by Android at 388425ace."""
+    fields = {
+        "contractName", "algorithm", "keyId", "role", "approvalScope",
+        "generatedAtUtc", "expiresAtUtc", "challengeNonce",
+        "provenanceValidatorSha256", "provenanceReplaySha256",
+        "receiptSha256", "eligibilitySha256", "sourceCommit", "sourceTree",
+        "versionName", "versionCode", "dependencyGraphSha256",
+        "environmentPolicySha256", "signingAuthorized",
+        "publicationAuthorized", "googlePlayUploadAuthorized", "signatureBase64",
     }
-    _exact_keys(value, required, "public approval")
+    _exact_keys(value, fields, "Android release approval")
     if (
         value.get("contractName") != OUTPUT_CONTRACT
-        or value.get("contractVersion") != 1
-        or value.get("status") != "approved"
-        or value.get("approvalScope") != "preview12_two_green_evidence_only"
-        or SHA256.fullmatch(str(value.get("approvalRequestNonce") or "")) is None
-        or value.get("twoGreenVerified") is not True
-        or value.get("humanEnvironmentReviewRequired") is not True
-        or value.get("configuredHumanReviewerSetPinned") is not True
-        or value.get("protectedEnvironmentGatePassed") is not True
-        or value.get("actualApprovalActorRecorded") is not False
+        or value.get("algorithm") != "ed25519"
+        or value.get("keyId") != RELEASE_APPROVER_KEY_ID
+        or value.get("role") != RELEASE_APPROVER_ROLE
+        or value.get("approvalScope") != RELEASE_APPROVAL_SCOPE
         or value.get("signingAuthorized") is not False
         or value.get("publicationAuthorized") is not False
         or value.get("googlePlayUploadAuthorized") is not False
-        or value.get("doesNotAuthorize") != DOES_NOT_AUTHORIZE
     ):
-        raise ApprovalError("public approval posture is invalid")
-    effective_policy = policy or expected_policy()
-    _fresh_timestamp(
-        value.get("approvedAtUtc"), "public approval time", now=now,
-        policy=effective_policy,
-    )
-    release = value.get("release")
-    if release != {
-        "packageId": PACKAGE_ID,
-        "versionName": VERSION_NAME,
-        "versionCode": VERSION_CODE,
-    }:
-        raise ApprovalError("public approval release identity differs")
-    source = value.get("androidSource")
+        raise ApprovalError("Android release approval posture is invalid")
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo != timezone.utc:
+        raise ApprovalError("approval verification clock must be UTC")
+    generated = _timestamp(value.get("generatedAtUtc"), "release approval generation")
+    expires = _timestamp(value.get("expiresAtUtc"), "release approval expiry")
     if (
-        not isinstance(source, dict)
-        or set(source) != {"repository", "ref", "commit", "tree", "currentMainAuthority"}
-        or source.get("repository") != ANDROID_REPOSITORY
-        or source.get("ref") != ANDROID_REF
+        generated > current + timedelta(seconds=APPROVAL_CLOCK_SKEW_SECONDS)
+        or expires <= generated
+        or expires - generated > timedelta(seconds=MAX_APPROVAL_LIFETIME_SECONDS)
+        or current >= expires
     ):
-        raise ApprovalError("public approval Android source identity differs")
-    source_commit = _sha40(source.get("commit"), "public approval Android commit")
-    source_tree = _sha40(source.get("tree"), "public approval Android tree")
-    current_main = source.get("currentMainAuthority")
+        raise ApprovalError("Android release approval is stale or outside its lifetime")
     if (
-        not isinstance(current_main, dict)
-        or set(current_main) != {
-            "protected", "commit", "tree", "branchApiSnapshotSha256",
-            "commitApiSnapshotSha256",
-        }
-        or current_main.get("protected") is not True
-        or current_main.get("commit") != source_commit
-        or current_main.get("tree") != source_tree
+        value.get("sourceCommit") != ANDROID_CONSUMER_COMMIT
+        or value.get("sourceTree") != ANDROID_CONSUMER_TREE
+        or value.get("versionName") != VERSION_NAME
+        or value.get("versionCode") != VERSION_CODE
+        or value.get("provenanceValidatorSha256") != PROVENANCE_VALIDATOR_SHA256
     ):
-        raise ApprovalError("public approval current Android main authority differs")
-    _sha256(
-        current_main.get("branchApiSnapshotSha256"),
-        "public approval Android branch snapshot",
-    )
-    _sha256(
-        current_main.get("commitApiSnapshotSha256"),
-        "public approval Android commit snapshot",
-    )
-    two_green = value.get("twoGreen")
-    if not isinstance(two_green, dict) or set(two_green) != {
-        "workflowRun", "artifact", "receipt", "receiptSha256",
-        "runSnapshotSha256", "artifactMetadataSnapshotSha256",
-    }:
-        raise ApprovalError("public approval Two-Green fields differ")
-    run = two_green.get("workflowRun")
-    artifact = two_green.get("artifact")
-    receipt = two_green.get("receipt")
-    if (
-        not isinstance(run, dict)
-        or run.get("workflowName") != TWO_GREEN_WORKFLOW_NAME
-        or run.get("workflowPath") != TWO_GREEN_WORKFLOW_PATH
-        or run.get("event") != "workflow_dispatch"
-        or run.get("ref") != ANDROID_REF
-        or run.get("headSha") != source_commit
-        or run.get("status") != "completed"
-        or run.get("conclusion") != "success"
-        or not isinstance(artifact, dict)
-        or not isinstance(receipt, dict)
-        or receipt.get("contract") != TWO_GREEN_CONTRACT
-        or receipt.get("status") != "pass"
-        or receipt.get("eligible") is not True
-        or receipt.get("internalTestingEligible") is not True
-        or receipt.get("reviewPullRequestNumber") is None
-        or not SHA256.fullmatch(str(two_green.get("receiptSha256") or ""))
-        or not SHA256.fullmatch(str(two_green.get("runSnapshotSha256") or ""))
-        or not SHA256.fullmatch(str(two_green.get("artifactMetadataSnapshotSha256") or ""))
-    ):
-        raise ApprovalError("public approval Two-Green authority differs")
-    _positive(run.get("id"), "public approval Two-Green run ID")
-    _positive(run.get("attempt"), "public approval Two-Green run attempt")
-    _positive(artifact.get("id"), "public approval Two-Green artifact ID")
-    _sha256(artifact.get("archiveSha256"), "public approval Two-Green archive")
-    _sha256(receipt.get("eligibilitySha256"), "public approval eligibility")
-    _positive(receipt.get("reviewRunId"), "public approval review run ID")
-    _positive(receipt.get("mainRunId"), "public approval main run ID")
-    _positive(
-        receipt.get("reviewPullRequestNumber"),
-        "public approval review pull request number",
-    )
-    expected_artifact_name = (
-        "chummer-android-api36-two-green-eligibility-"
-        f"{receipt['reviewRunId']}-{receipt['mainRunId']}"
-    )
-    if artifact.get("name") != expected_artifact_name:
-        raise ApprovalError("public approval Two-Green artifact name differs")
-    execution = value.get("fleetExecution")
-    if (
-        not isinstance(execution, dict)
-        or set(execution) != {
-            "repository", "ref", "protectedRef", "event", "commit",
-            "workflowRepository", "workflowRef", "workflowSha", "runId",
-            "runAttempt", "environment", "currentMainAuthority",
-        }
-        or execution.get("repository") != FLEET_REPOSITORY
-        or execution.get("ref") != FLEET_REF
-        or execution.get("protectedRef") is not True
-        or execution.get("event") != "workflow_dispatch"
-        or execution.get("workflowRepository") != FLEET_REPOSITORY
-        or execution.get("workflowRef")
-        != f"{FLEET_REPOSITORY}/{WORKFLOW_PATH}@refs/heads/main"
-        or execution.get("workflowSha") != execution.get("commit")
-        or execution.get("environment") != ENVIRONMENT_NAME
-    ):
-        raise ApprovalError("public approval Fleet execution authority differs")
-    _sha40(execution.get("commit"), "public approval Fleet commit")
-    fleet_current_main = execution.get("currentMainAuthority")
-    if (
-        not isinstance(fleet_current_main, dict)
-        or set(fleet_current_main) != {
-            "protected", "commit", "tree", "branchApiSnapshotSha256",
-            "commitApiSnapshotSha256",
-        }
-        or fleet_current_main.get("protected") is not True
-        or fleet_current_main.get("commit") != execution.get("commit")
-    ):
-        raise ApprovalError("public approval current Fleet main authority differs")
-    _sha40(fleet_current_main.get("tree"), "public approval Fleet main tree")
-    _sha256(
-        fleet_current_main.get("branchApiSnapshotSha256"),
-        "public approval Fleet branch snapshot",
-    )
-    _sha256(
-        fleet_current_main.get("commitApiSnapshotSha256"),
-        "public approval Fleet commit snapshot",
-    )
-    _positive(execution.get("runId"), "public approval Fleet run ID")
-    _positive(execution.get("runAttempt"), "public approval Fleet run attempt")
-    environment_authority = value.get("environmentAuthority")
-    if (
-        not isinstance(environment_authority, dict)
-        or environment_authority.get("name") != ENVIRONMENT_NAME
-        or environment_authority.get("preventSelfReview") is not True
-        or environment_authority.get("administratorsCanBypass") is not False
-        or environment_authority.get("protectedBranchesOnly") is not True
-        or environment_authority.get("configuredHumanReviewerSetPinned") is not True
-        or environment_authority.get("actualApprovalActorRecorded") is not False
-        or type(environment_authority.get("requiredReviewerCount")) is not int
-        or environment_authority["requiredReviewerCount"] < 1
-        or type(environment_authority.get("humanUserReviewerCount")) is not int
-        or environment_authority["humanUserReviewerCount"] < 1
-    ):
-        raise ApprovalError("public approval environment authority differs")
-    _sha256(
-        environment_authority.get("reviewerIdentitySetSha256"),
-        "public approval reviewer identity set",
-    )
-    _sha256(
-        environment_authority.get("apiSnapshotSha256"),
-        "public approval environment snapshot",
-    )
-    freshness = value.get("freshnessAuthority")
-    if freshness != {
-        "maximumEvidenceAgeSeconds": effective_policy["freshness"]["maximum_evidence_age_seconds"],
-        "maximumFutureSkewSeconds": effective_policy["freshness"]["maximum_future_skew_seconds"],
-        "checkedAtUtc": value.get("approvedAtUtc"),
-    }:
-        raise ApprovalError("public approval freshness authority differs")
-    replay = value.get("replayProtection")
-    if (
-        not isinstance(replay, dict)
-        or set(replay) != {
-            "mode", "serviceIdentity", "reservationId", "reservationState",
-            "reservationRevision", "reservationRequestId",
-            "reservationCreatedAtUtc", "reservationLeaseExpiresAtUtc",
-            "reservationSubjectSha256", "reservationReceiptSha256",
-            "reservationSnapshotSha256", "uniquenessSubjects",
-            "durabilityClass", "exactlyOnce", "receiptPublicKeySpkiSha256",
-            "approvalRequestNonce", "githubArtifactObservation",
-        }
-        or replay.get("mode") != "durable_external_exactly_once"
-        or replay.get("reservationState") != "reserved"
-        or replay.get("uniquenessSubjects") != approval_ledger.UNIQUENESS_SUBJECTS
-        or replay.get("durabilityClass") != "external_durable"
-        or replay.get("exactlyOnce") is not True
-        or replay.get("approvalRequestNonce") != value.get("approvalRequestNonce")
-    ):
-        raise ApprovalError("public approval replay protection differs")
-    if (
-        not isinstance(replay.get("serviceIdentity"), str)
-        or approval_ledger.SERVICE_ID.fullmatch(replay["serviceIdentity"]) is None
-        or not isinstance(replay.get("reservationId"), str)
-        or approval_ledger.RESERVATION_ID.fullmatch(replay["reservationId"]) is None
-    ):
-        raise ApprovalError("public approval durable ledger identity differs")
-    _positive(replay.get("reservationRevision"), "public approval ledger revision")
-    reservation_created = _timestamp(
-        replay.get("reservationCreatedAtUtc"), "public approval ledger reservation time"
-    )
-    reservation_expires = _timestamp(
-        replay.get("reservationLeaseExpiresAtUtc"), "public approval ledger lease expiry"
-    )
-    if reservation_expires != reservation_created + timedelta(
-        seconds=effective_policy["replay_protection"]["external_ledger"]["reservation_lease_seconds"]
-    ):
-        raise ApprovalError("public approval durable ledger lease differs")
+        raise ApprovalError("Android release approval source/version authority differs")
     for field in (
-        "reservationRequestId", "reservationSubjectSha256",
-        "reservationReceiptSha256", "reservationSnapshotSha256",
-        "receiptPublicKeySpkiSha256",
+        "challengeNonce", "provenanceReplaySha256", "receiptSha256",
+        "eligibilitySha256", "dependencyGraphSha256", "environmentPolicySha256",
     ):
-        _sha256(replay.get(field), f"public approval {field}")
-    observation = replay.get("githubArtifactObservation")
+        _sha256(value.get(field), f"Android release approval {field}")
     if (
-        not isinstance(observation, dict)
-        or set(observation) != {
-            "mode", "artifactName", "priorApprovalArtifactCount",
-            "ledgerApiSnapshotSha256", "authoritative",
-        }
-        or observation.get("mode") != "artifact_observation_only_incomplete"
-        or observation.get("artifactName")
-        != approval_artifact_name({"twoGreenArtifactId": artifact["id"]})
-        or observation.get("priorApprovalArtifactCount") != 0
-        or observation.get("authoritative") is not False
+        expected_challenge_nonce is not None
+        and value.get("challengeNonce") != expected_challenge_nonce
     ):
-        raise ApprovalError("public approval GitHub artifact observation differs")
-    _sha256(observation.get("ledgerApiSnapshotSha256"), "public approval artifact ledger snapshot")
-    policy_authority = value.get("policyAuthority")
+        raise ApprovalError("Android release approval challenge nonce was replayed")
     if (
-        not isinstance(policy_authority, dict)
-        or policy_authority.get("contract") != POLICY_CONTRACT
-        or policy_authority.get("activationWasReady") is not True
+        audit_receipt is not None
+        and value.get("provenanceReplaySha256") != canonical_sha256(audit_receipt)
     ):
-        raise ApprovalError("public approval policy authority differs")
-    _sha256(policy_authority.get("sha256"), "public approval policy digest")
-    _positive(policy_authority.get("sizeBytes"), "public approval policy size")
-    expected_ledger_subject = approval_ledger.make_subject(
-        approval_request_nonce=value["approvalRequestNonce"],
-        two_green_artifact_id=artifact["id"],
-        two_green_artifact_sha256=artifact["archiveSha256"],
-        two_green_receipt_sha256=two_green["receiptSha256"],
-        main_tree=source_tree,
-        policy_sha256=policy_authority["sha256"],
-        version_name=release["versionName"],
-        version_code=release["versionCode"],
-    )
-    expected_reservation_request = approval_ledger._request(
-        "reserve", expected_ledger_subject
-    )
+        raise ApprovalError("Android release approval replay provenance differs")
+    if audit_receipt is not None:
+        expected_unsigned = release_approval_unsigned(
+            audit_receipt,
+            generated_at_utc=value["generatedAtUtc"],
+            expires_at_utc=value["expiresAtUtc"],
+            challenge_nonce=value["challengeNonce"],
+        )
+        if any(value.get(field) != member for field, member in expected_unsigned.items()):
+            raise ApprovalError("Android release approval claims differ from Fleet evidence")
+    effective_policy = policy or expected_policy()
+    key = effective_policy.get("external_ed25519_key")
+    if not isinstance(key, dict):
+        raise ApprovalError("Android release approver key policy is missing")
     if (
-        replay.get("reservationSubjectSha256")
-        != expected_reservation_request["subjectSha256"]
-        or replay.get("reservationRequestId")
-        != expected_reservation_request["requestId"]
+        key.get("key_id") != RELEASE_APPROVER_KEY_ID
+        or key.get("public_key_spki_der_base64")
+        != RELEASE_APPROVER_PUBLIC_KEY_SPKI_DER_BASE64
+        or key.get("expected_public_key_spki_sha256")
+        != RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256
     ):
-        raise ApprovalError("public approval durable reservation binding differs")
-    if policy is not None:
-        ledger_policy = policy["replay_protection"]["external_ledger"]
-        if (
-            replay.get("serviceIdentity")
-            != ledger_policy["expected_service_identity"]
-            or replay.get("receiptPublicKeySpkiSha256")
-            != ledger_policy["receipt_public_key_spki_sha256"]
-        ):
-            raise ApprovalError("public approval durable ledger policy identity differs")
-    statement = {key: member for key, member in value.items() if key not in {"approvalSha256", "signature"}}
-    if value.get("approvalSha256") != canonical_sha256(statement):
-        raise ApprovalError("public approval digest is invalid")
-    signature = value.get("signature")
-    if not isinstance(signature, dict) or set(signature) != {
-        "algorithm", "encoding", "publicKeySpkiDerBase64", "publicKeySpkiSha256", "signatureBase64"
-    } or signature.get("algorithm") != "Ed25519" or signature.get("encoding") != "base64":
-        raise ApprovalError("public approval signature fields are invalid")
+        raise ApprovalError("Android release approver public-key pin differs")
     try:
-        public_der = base64.b64decode(signature["publicKeySpkiDerBase64"], validate=True)
-        signature_bytes = base64.b64decode(signature["signatureBase64"], validate=True)
-    except (binascii.Error, ValueError, TypeError) as error:
-        raise ApprovalError("public approval signature is not strict Base64") from error
-    if hashlib.sha256(public_der).hexdigest() != signature.get("publicKeySpkiSha256"):
-        raise ApprovalError("public approval key digest differs")
-    if policy is not None:
-        _require_ready(policy)
-        if (
-            signature.get("publicKeySpkiSha256")
-            != policy["external_ed25519_key"]["expected_public_key_spki_sha256"]
-        ):
-            raise ApprovalError("public approval key differs from reviewed policy")
-    if len(public_der) != len(SPKI_ED25519_PREFIX) + 32 or not public_der.startswith(SPKI_ED25519_PREFIX) or len(signature_bytes) != 64:
-        raise ApprovalError("public approval is not an Ed25519 signature")
-    verify_ed25519(public_der, canonical_bytes(statement), signature_bytes)
+        public_der = base64.b64decode(
+            key["public_key_spki_der_base64"], validate=True
+        )
+        signature = base64.b64decode(value.get("signatureBase64"), validate=True)
+    except (binascii.Error, TypeError, ValueError) as error:
+        raise ApprovalError("Android release approval signature is not strict Base64") from error
+    if (
+        len(public_der) != len(SPKI_ED25519_PREFIX) + 32
+        or not public_der.startswith(SPKI_ED25519_PREFIX)
+        or hashlib.sha256(public_der).hexdigest()
+        != key["expected_public_key_spki_sha256"]
+        or len(signature) != 64
+    ):
+        raise ApprovalError("Android release approval Ed25519 authority differs")
+    unsigned = {key: member for key, member in value.items() if key != "signatureBase64"}
+    verify_ed25519(public_der, android_canonical_bytes(unsigned), signature)
 
 
-def write_output(path: Path, value: Mapping[str, Any]) -> None:
-    if path.name != OUTPUT_NAME or not path.is_absolute() or path.is_symlink():
-        raise ApprovalError(f"output must be an absolute non-symlink {OUTPUT_NAME}")
+def write_output(path: Path, value: Mapping[str, Any], *, expected_name: str = OUTPUT_NAME) -> None:
+    if path.name != expected_name or not path.is_absolute() or path.is_symlink():
+        raise ApprovalError(f"output must be an absolute non-symlink {expected_name}")
     parent = path.parent
     if parent.is_symlink() or parent.resolve(strict=True) != parent:
         raise ApprovalError("output parent must be canonical and non-symlinked")
     temporary: str | None = None
     try:
-        with tempfile.NamedTemporaryFile(mode="wb", dir=parent, prefix=f".{OUTPUT_NAME}.", delete=False) as stream:
+        with tempfile.NamedTemporaryFile(mode="wb", dir=parent, prefix=f".{expected_name}.", delete=False) as stream:
             temporary = stream.name
             os.fchmod(stream.fileno(), 0o600)
             stream.write(pretty_bytes(value))
@@ -1524,16 +1477,30 @@ def main(argv: list[str] | None = None) -> int:
         "--approval-artifact-ledger-snapshot", type=Path, required=True
     )
     approve.add_argument("--output", type=Path, required=True)
+    approve.add_argument("--audit-output", type=Path, required=True)
     verify = subparsers.add_parser("verify")
     verify.add_argument("--approval", type=Path, required=True)
+    verify.add_argument("--audit-receipt", type=Path)
+    verify.add_argument("--expected-challenge-nonce")
     args = parser.parse_args(argv)
     if args.command == "verify":
-        policy, _, policy_sha256 = load_policy(args.policy)
+        policy, _, _ = load_policy(args.policy)
         data, _ = stable_file(args.approval, "public approval", MAX_RECEIPT_BYTES)
         value = strict_json_bytes(data, "public approval")
-        validate_approval(value, policy)
-        if value["policyAuthority"]["sha256"] != policy_sha256:
-            raise ApprovalError("public approval does not bind the reviewed policy bytes")
+        audit_receipt = None
+        if args.audit_receipt is not None:
+            audit_data, _ = stable_file(
+                args.audit_receipt, "Fleet approval audit receipt", MAX_RECEIPT_BYTES
+            )
+            audit_receipt = strict_json_bytes(
+                audit_data, "Fleet approval audit receipt"
+            )
+        validate_approval(
+            value,
+            policy,
+            audit_receipt=audit_receipt,
+            expected_challenge_nonce=args.expected_challenge_nonce,
+        )
         print("preview12_release_approval=verified signing_authorized=false publication_authorized=false google_play_upload_authorized=false")
         return 0
     policy, _, _ = load_policy(args.policy)
@@ -1541,9 +1508,15 @@ def main(argv: list[str] | None = None) -> int:
         result = validate_dispatch(policy, args)
         print(json.dumps(result, sort_keys=True))
         return 0
-    result = create_approval(args, os.environ)
-    validate_approval(result)
+    result, audit_receipt = create_approval_bundle(args, os.environ)
+    validate_approval(
+        result,
+        policy,
+        audit_receipt=audit_receipt,
+        expected_challenge_nonce=result["challengeNonce"],
+    )
     write_output(args.output, result)
+    write_output(args.audit_output, audit_receipt, expected_name=AUDIT_OUTPUT_NAME)
     print("preview12_release_approval=approved signing_authorized=false publication_authorized=false google_play_upload_authorized=false")
     return 0
 

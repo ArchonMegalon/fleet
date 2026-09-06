@@ -6,9 +6,21 @@ Two-Green receipt. It is deliberately separate from the Play AAB signer.
 It approves only that the exact Android main tree and Preview12/code12 identity
 are backed by the exact successful reviewed and main API-36 Two-Green evidence.
 
-It never accepts, signs, uploads, or publishes an AAB. Its output always keeps
+It never accepts, signs, uploads, or publishes an AAB. Its primary output is
+the exact `chummer.android.two-green-release-approval/v1` contract consumed by
+the qualified Android `388425aceac266e06265e4c0c73a4058b052d316` release
+verifier. It always keeps
 `signingAuthorized`, `publicationAuthorized`, and
 `googlePlayUploadAuthorized` false.
+
+Android requires an exact compact object: `local-release-builder-2026`, role
+`android_internal_release_approver`, scope
+`android_internal_release_preparation`, Ed25519 over sorted compact UTF-8 JSON
+without a trailing newline, and no extra fields. The approval binds the raw
+Two-Green receipt digest and eligibility digest, source commit/tree,
+Preview12/code12, dependency graph, environment policy, challenge nonce,
+expiry, the qualified provenance-validator digest, and Fleet's independent
+provenance replay receipt digest.
 
 Every request also binds a fresh 256-bit approval nonce, a live protected
 Android `main` commit/tree snapshot, and one exact Two-Green artifact. The
@@ -67,8 +79,11 @@ unrelated credential from entering the same parent-shell environment. The
 ledger receipt-signing key is independently held by the external service and
 must be distinct from the approval-signing key.
 
-The final GitHub artifact exposes exactly two public files: the signed approval
-and the signed durable commit receipt. The latter binds the same reservation
+The final GitHub artifact exposes the Android-compatible signed approval, the
+separate Fleet audit receipt when this run performed the signing operation, and
+the signed durable commit receipt. A recovery run restores the exact previously
+committed Android approval and does not invent a replacement Fleet audit
+receipt. The durable receipt binds the same reservation
 ID, a monotonic terminal revision, the exact stored approval bytes, and the
 prior signed reservation-receipt digest. It is evidence only; it does not grant
 signing, upload, processing, distribution, or publication authority.
@@ -76,16 +91,20 @@ signing, upload, processing, distribution, or publication authority.
 ## Dormant state
 
 The checked-in policy fails before the protected environment: it is not ready,
-activation is disabled, environment/key configuration is false, no public-key
-digest or human reviewer identity is pinned, and the ledger URL, hostname,
+activation is disabled, environment/private-key configuration is false, no
+human reviewer identity is pinned, and the ledger URL, hostname,
 service identity, bearer credential and receipt-verification public key are all
-unset. No key or
-repository/environment secret is included.
+unset. Android's existing public release-approver key, key ID, consumer commit,
+consumer tree, verifier contract, and provenance-validator digest are pinned as
+public authority. No private key or repository/environment secret is included.
 
-Do not create an approval key in Fleet. A future operator must supply an existing
-Ed25519 PKCS#8 private key only as the protected environment secret named by the
-policy. It stays in memory, is checked against the reviewed public-key digest,
-and is never included in the public JSON or Actions artifact.
+Do not create an approval key in Fleet. If the prior
+`local-release-builder-2026` private key is remounted, it may be supplied only
+as the protected environment secret named by the policy. It stays in memory,
+is checked against Android's pinned public key, and is never included in the
+public JSON or Actions artifact. If that private key is unavailable, a new key
+requires a separate reviewed requalification of both Android's verifier pin and
+this Fleet policy; changing Fleet alone cannot make Android accept it.
 
 ## Activation transaction
 
@@ -97,7 +116,8 @@ credential, then provision the
 `android-preview12-release-approval` environment for protected branches, require
 at least one explicit human `User` reviewer, disallow Team reviewers and
 administrator bypass, prevent self-review, add the external key only there,
-pin the exact reviewer IDs/logins and the key's SPKI-DER SHA-256, set the two
+pin the exact reviewer IDs/logins, retain Android's exact key ID/public-key and
+consumer-contract pins, set the two
 approval `configured` flags, the ledger `configured` flag and replay authority,
 `state: ready`, and `activation.enabled: true`, then land
 through protected Fleet `main`. Merely changing the checked-in policy flags
@@ -111,9 +131,11 @@ serialized Actions-artifact ledger is only a best-effort duplicate observation
 because artifacts can expire or be deleted; it is not replay authority and
 cannot substitute for the external ledger.
 
-The public JSON records that the protected environment gate passed and that its
-configured reviewer set matched the reviewed policy. It deliberately does not
-claim or identify the individual account that approved that deployment.
+The separate Fleet audit JSON records that the protected environment gate
+passed and that its configured reviewer set matched the reviewed policy. Its
+canonical SHA-256 is signed into the Android approval as
+`provenanceReplaySha256`. It deliberately does not claim or identify the
+individual account that approved that deployment.
 
 ## Explicit non-authority
 
