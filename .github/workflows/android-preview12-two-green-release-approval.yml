@@ -40,6 +40,17 @@ jobs:
           persist-credentials: false
       - id: contract
         env:
+          TWO_GREEN_RUN_ID: ${{ inputs.two_green_run_id }}
+          TWO_GREEN_RUN_ATTEMPT: ${{ inputs.two_green_run_attempt }}
+          TWO_GREEN_ARTIFACT_ID: ${{ inputs.two_green_artifact_id }}
+          TWO_GREEN_ARTIFACT_SHA256: ${{ inputs.two_green_artifact_sha256 }}
+          TWO_GREEN_RECEIPT_SHA256: ${{ inputs.two_green_receipt_sha256 }}
+          REVIEW_RUN_ID: ${{ inputs.review_run_id }}
+          MAIN_RUN_ID: ${{ inputs.main_run_id }}
+          MAIN_COMMIT: ${{ inputs.main_commit }}
+          MAIN_TREE: ${{ inputs.main_tree }}
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ inputs.version_code }}
           EXECUTION_REPOSITORY: ${{ github.repository }}
           EXECUTION_REF: ${{ github.ref }}
           EXECUTION_REF_PROTECTED: ${{ github.ref_protected }}
@@ -53,17 +64,17 @@ jobs:
           python3 scripts/android_preview12_two_green_release_approval.py \
             --policy "$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json" \
             preflight \
-            --two-green-run-id '${{ inputs.two_green_run_id }}' \
-            --two-green-run-attempt '${{ inputs.two_green_run_attempt }}' \
-            --two-green-artifact-id '${{ inputs.two_green_artifact_id }}' \
-            --two-green-artifact-sha256 '${{ inputs.two_green_artifact_sha256 }}' \
-            --two-green-receipt-sha256 '${{ inputs.two_green_receipt_sha256 }}' \
-            --review-run-id '${{ inputs.review_run_id }}' \
-            --main-run-id '${{ inputs.main_run_id }}' \
-            --main-commit '${{ inputs.main_commit }}' \
-            --main-tree '${{ inputs.main_tree }}' \
-            --version-name '${{ inputs.version_name }}' \
-            --version-code '${{ inputs.version_code }}' \
+            --two-green-run-id "$TWO_GREEN_RUN_ID" \
+            --two-green-run-attempt "$TWO_GREEN_RUN_ATTEMPT" \
+            --two-green-artifact-id "$TWO_GREEN_ARTIFACT_ID" \
+            --two-green-artifact-sha256 "$TWO_GREEN_ARTIFACT_SHA256" \
+            --two-green-receipt-sha256 "$TWO_GREEN_RECEIPT_SHA256" \
+            --review-run-id "$REVIEW_RUN_ID" \
+            --main-run-id "$MAIN_RUN_ID" \
+            --main-commit "$MAIN_COMMIT" \
+            --main-tree "$MAIN_TREE" \
+            --version-name "$VERSION_NAME" \
+            --version-code "$VERSION_CODE" \
             --execution-repository "$EXECUTION_REPOSITORY" \
             --execution-ref "$EXECUTION_REF" \
             --execution-ref-protected "$EXECUTION_REF_PROTECTED" \
@@ -107,6 +118,17 @@ jobs:
       - name: Emit only the public, non-authorizing approval JSON
         env:
           ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64: ${{ secrets.ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64 }}
+          TWO_GREEN_RUN_ID: ${{ inputs.two_green_run_id }}
+          TWO_GREEN_RUN_ATTEMPT: ${{ inputs.two_green_run_attempt }}
+          TWO_GREEN_ARTIFACT_ID: ${{ inputs.two_green_artifact_id }}
+          TWO_GREEN_ARTIFACT_SHA256: ${{ inputs.two_green_artifact_sha256 }}
+          TWO_GREEN_RECEIPT_SHA256: ${{ inputs.two_green_receipt_sha256 }}
+          REVIEW_RUN_ID: ${{ inputs.review_run_id }}
+          MAIN_RUN_ID: ${{ inputs.main_run_id }}
+          MAIN_COMMIT: ${{ inputs.main_commit }}
+          MAIN_TREE: ${{ inputs.main_tree }}
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ inputs.version_code }}
           EXECUTION_REF_PROTECTED: ${{ github.ref_protected }}
           WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
           WORKFLOW_REF: ${{ job.workflow_ref }}
@@ -119,17 +141,17 @@ jobs:
           python3 scripts/android_preview12_two_green_release_approval.py \
             --policy "$GITHUB_WORKSPACE/config/release/android-preview12-two-green-release-approval.json" \
             approve \
-            --two-green-run-id '${{ inputs.two_green_run_id }}' \
-            --two-green-run-attempt '${{ inputs.two_green_run_attempt }}' \
-            --two-green-artifact-id '${{ inputs.two_green_artifact_id }}' \
-            --two-green-artifact-sha256 '${{ inputs.two_green_artifact_sha256 }}' \
-            --two-green-receipt-sha256 '${{ inputs.two_green_receipt_sha256 }}' \
-            --review-run-id '${{ inputs.review_run_id }}' \
-            --main-run-id '${{ inputs.main_run_id }}' \
-            --main-commit '${{ inputs.main_commit }}' \
-            --main-tree '${{ inputs.main_tree }}' \
-            --version-name '${{ inputs.version_name }}' \
-            --version-code '${{ inputs.version_code }}' \
+            --two-green-run-id "$TWO_GREEN_RUN_ID" \
+            --two-green-run-attempt "$TWO_GREEN_RUN_ATTEMPT" \
+            --two-green-artifact-id "$TWO_GREEN_ARTIFACT_ID" \
+            --two-green-artifact-sha256 "$TWO_GREEN_ARTIFACT_SHA256" \
+            --two-green-receipt-sha256 "$TWO_GREEN_RECEIPT_SHA256" \
+            --review-run-id "$REVIEW_RUN_ID" \
+            --main-run-id "$MAIN_RUN_ID" \
+            --main-commit "$MAIN_COMMIT" \
+            --main-tree "$MAIN_TREE" \
+            --version-name "$VERSION_NAME" \
+            --version-code "$VERSION_CODE" \
             --execution-repository "$GITHUB_REPOSITORY" \
             --execution-ref "$GITHUB_REF" \
             --execution-ref-protected "$EXECUTION_REF_PROTECTED" \

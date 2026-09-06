@@ -8,6 +8,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import zipfile
 
 import pytest
@@ -327,6 +328,32 @@ def test_workflow_is_dormant_separate_and_uploads_only_public_json():
     assert "deployments: read" in text
     assert "google-github-actions/auth" not in text
     assert "play" not in text.lower().replace("googleplayuploadauthorized", "")
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        marker = re.match(r"^(\s*)run:\s*\|\s*$", line)
+        if marker is None:
+            continue
+        indentation = len(marker.group(1))
+        body: list[str] = []
+        for candidate in lines[index + 1:]:
+            if candidate.strip() and len(candidate) - len(candidate.lstrip()) <= indentation:
+                break
+            body.append(candidate)
+        assert "${{ inputs." not in "\n".join(body)
+    for name in (
+        "TWO_GREEN_RUN_ID",
+        "TWO_GREEN_RUN_ATTEMPT",
+        "TWO_GREEN_ARTIFACT_ID",
+        "TWO_GREEN_ARTIFACT_SHA256",
+        "TWO_GREEN_RECEIPT_SHA256",
+        "REVIEW_RUN_ID",
+        "MAIN_RUN_ID",
+        "MAIN_COMMIT",
+        "MAIN_TREE",
+        "VERSION_NAME",
+        "VERSION_CODE",
+    ):
+        assert f'"${name}"' in text
     upload_block = text.split("- name: Upload only the public approval JSON", 1)[1]
     assert approval.OUTPUT_NAME in upload_block
     assert "preview12-approval-evidence" not in upload_block
