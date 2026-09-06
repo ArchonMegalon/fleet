@@ -7,253 +7,288 @@ import importlib.util
 import io
 import json
 import subprocess
+import urllib.error
 import zipfile
 from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/android_preview12_signer.py"
 LOCK = ROOT / "config/release/android-preview12-signer.lock.json"
 TOOLCHAIN = ROOT / "config/release/android-preview12-signer-toolchain.lock.json"
+spec = importlib.util.spec_from_file_location("android_preview12_signer", SCRIPT)
+assert spec and spec.loader
+signer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(signer)
 
 
-def _load_module():
-    spec = importlib.util.spec_from_file_location("android_preview12_signer", SCRIPT)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def _installed_bytes(toolchain, toolchain_bytes: bytes) -> bytes:
+    value = {"contract_name": "fleet.android_preview12_installed_toolchain.v1",
+        "lock_sha256": hashlib.sha256(toolchain_bytes).hexdigest(), "base_images": toolchain["base_images"],
+        "archives": [{key: item[key] for key in ("name", "version", "url", "sha256")} for item in toolchain["archives"]]}
+    return (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
 
 
-signer = _load_module()
-
-
-def _ready_lock(tmp_path: Path, certificate: bytes = b"upload-certificate"):
-    lock = json.loads(LOCK.read_text(encoding="utf-8"))
+def _ready(tmp_path: Path, certificate: bytes = b"certificate"):
+    lock = json.loads(LOCK.read_text())
+    toolchain, toolchain_bytes = signer._load_toolchain(TOOLCHAIN)
     lock["state"] = "ready"
-    lock["source"]["candidate_workflow_path"] = ".github/workflows/android-preview12-candidate.yml"
-    lock["source"]["verification_workflow_path"] = ".github/workflows/android-preview12-verify.yml"
-    lock["signing"]["enabled"] = True
-    lock["signing"]["signature_algorithm"] = "SHA256withRSA"
-    lock["signing"]["expected_upload_certificate_sha256"] = hashlib.sha256(certificate).hexdigest()
-    lock["toolchain"]["image_digest"] = "sha256:" + "1" * 64
-    path = tmp_path / "ready-lock.json"
-    payload = json.dumps(lock, sort_keys=True).encode()
-    path.write_bytes(payload)
-    return lock, payload, path
+    lock["release"].update(candidate_file_name="chummer-android-0.1.0-preview.12-unsigned.aab",
+                           signed_file_name="chummer-android-0.1.0-preview.12-signed.aab")
+    source = lock["source"]
+    source["source_ref"] = "refs/heads/release/preview12"
+    source["discovery_receipt"]["preview12_workflow_found"] = True
+    source["candidate"].update(workflow_id=401, workflow_path=".github/workflows/preview12-aab.yml",
+        workflow_blob_sha="c" * 40, event="push", run_attempt=1,
+        artifact_name="chummer-android-preview12-arm64-unsigned-101-1",
+        producer_toolchain_closure_sha256="e" * 64)
+    source["verification"].update(workflow_id=402, workflow_path=".github/workflows/preview12-verify.yml",
+        workflow_blob_sha="d" * 40, event="workflow_dispatch", run_attempt=1,
+        artifact_name="chummer-android-preview12-verification-102-1", receipt_file_name="eligibility.json")
+    lock["reservation"].update(enabled=True, broker_url="https://ledger.example.test/v1/reserve",
+                                audited_implementation_sha256="f" * 64)
+    lock["signing"].update(enabled=True, signature_algorithm="SHA256withRSA",
+        expected_upload_certificate_sha256=hashlib.sha256(certificate).hexdigest())
+    lock["toolchain"].update(image_digest="sha256:" + "1" * 64,
+        installed_receipt_sha256=hashlib.sha256(_installed_bytes(toolchain, toolchain_bytes)).hexdigest())
+    lock["signed_content_handoff"].update(enabled=True,
+        private_content_addressed_endpoint="https://handoff.example.test/sha256",
+        audited_implementation_sha256="2" * 64)
+    lock_bytes = (json.dumps(lock, sort_keys=True) + "\n").encode()
+    lock_path = tmp_path / "lock.json"
+    lock_path.write_bytes(lock_bytes)
+    installed = tmp_path / "installed.json"
+    installed.write_bytes(_installed_bytes(toolchain, toolchain_bytes))
+    return lock, lock_bytes, toolchain, toolchain_bytes, installed
 
 
-def _toolchain():
-    return signer._load_toolchain(TOOLCHAIN)
-
-
-def _aab_bytes() -> bytes:
+def _aab() -> bytes:
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as bundle:
-        bundle.writestr("base/manifest/AndroidManifest.xml", b"compiled-manifest")
+        bundle.writestr("base/manifest/AndroidManifest.xml", b"compiled")
         bundle.writestr("BundleConfig.pb", b"config")
     return output.getvalue()
 
 
-def _artifact_bytes(candidate: bytes) -> bytes:
+def _zip(name: str, payload: bytes) -> bytes:
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as bundle:
-        bundle.writestr("chummer6-preview12.aab", candidate)
+        bundle.writestr(name, payload)
     return output.getvalue()
 
 
-def _intake_args(tmp_path: Path, artifact: bytes, candidate: bytes):
-    return argparse.Namespace(
-        source_sha="a" * 40,
-        candidate_run_id="101",
-        verification_run_id="102",
-        artifact_id="201",
-        artifact_sha256=hashlib.sha256(artifact).hexdigest(),
-        candidate_sha256=hashlib.sha256(candidate).hexdigest(),
-        output_dir=str(tmp_path / "trusted-intake"),
-    )
+def _args(tmp_path, candidate_archive, candidate, verification_archive, verification_receipt):
+    return argparse.Namespace(source_sha="a" * 40, candidate_run_id="101", candidate_artifact_id="201",
+        candidate_artifact_sha256=hashlib.sha256(candidate_archive).hexdigest(),
+        candidate_aab_sha256=hashlib.sha256(candidate).hexdigest(), verification_run_id="102",
+        verification_artifact_id="202", verification_artifact_sha256=hashlib.sha256(verification_archive).hexdigest(),
+        verification_receipt_sha256=hashlib.sha256(verification_receipt).hexdigest(),
+        output_dir=str(tmp_path / "intake"))
 
 
-class FakeGitHubClient:
-    def __init__(self, responses: dict[str, dict], artifact: bytes):
-        self.responses = responses
-        self.artifact = artifact
-        self.downloads = 0
-
-    def get_json(self, url: str):
-        return self.responses[url]
-
-    def download_to(self, url: str, output: Path, max_bytes: int):
-        assert url == "https://api.github.com/repos/ArchonMegalon/chummer6-mobile/actions/artifacts/201/zip"
-        assert len(self.artifact) <= max_bytes
-        self.downloads += 1
-        output.write_bytes(self.artifact)
+def _run(run_id: int, source, spec):
+    return {"id": run_id, "run_attempt": 1, "event": spec["event"], "head_sha": "a" * 40,
+        "head_branch": "release/preview12", "workflow_id": spec["workflow_id"], "path": spec["workflow_path"],
+        "status": "completed", "conclusion": "success",
+        "repository": {"id": 1331626697, "full_name": signer.ANDROID_REPOSITORY},
+        "head_repository": {"id": 1331626697, "full_name": signer.ANDROID_REPOSITORY}}
 
 
-def _green_run(run_id: int, workflow_path: str) -> dict:
-    return {
-        "id": run_id,
-        "head_sha": "a" * 40,
-        "head_branch": "main",
-        "status": "completed",
-        "conclusion": "success",
-        "path": workflow_path,
-        "repository": {"full_name": "ArchonMegalon/chummer6-mobile"},
-    }
+def _producer_receipt(lock, args):
+    digests = {"candidate_artifact": args.candidate_artifact_sha256, "candidate_aab": args.candidate_aab_sha256,
+        "verification_artifact": args.verification_artifact_sha256,
+        "verification_receipt": args.verification_receipt_sha256}
+    return signer._producer_receipt_expected(lock, args, args.source_sha, digests)
 
 
-def _responses(args, lock) -> dict[str, dict]:
-    api = "https://api.github.com/repos/ArchonMegalon/chummer6-mobile"
-    return {
-        f"{api}/actions/runs/101": _green_run(101, lock["source"]["candidate_workflow_path"]),
-        f"{api}/actions/runs/102": _green_run(102, lock["source"]["verification_workflow_path"]),
-        f"{api}/actions/artifacts/201": {
-            "id": 201,
-            "name": "android-preview12-unsigned",
-            "expired": False,
-            "digest": "sha256:" + args.artifact_sha256,
-            "workflow_run": {"id": 101},
-            "archive_download_url": f"{api}/actions/artifacts/201/zip",
-        },
-    }
+class FakeGitHub:
+    def __init__(self, values, downloads):
+        self.values, self.downloads, self.download_count = values, downloads, 0
+
+    def get_json(self, url):
+        return self.values[url]
+
+    def download_to(self, url, output, limit):
+        payload = self.downloads[url]
+        assert len(payload) <= limit
+        self.download_count += 1
+        output.write_bytes(payload)
 
 
-def test_checked_in_lock_fails_closed_without_creating_output(tmp_path: Path) -> None:
+def _case(tmp_path, mutate=None):
+    lock, lock_bytes, toolchain, toolchain_bytes, installed = _ready(tmp_path)
+    candidate = _aab()
+    placeholder = b"{}"
+    args0 = _args(tmp_path, _zip(lock["release"]["candidate_file_name"], candidate), candidate,
+                  _zip("eligibility.json", placeholder), placeholder)
+    receipt = (json.dumps(_producer_receipt(lock, args0), sort_keys=True, indent=2) + "\n").encode()
+    candidate_archive = _zip(lock["release"]["candidate_file_name"], candidate)
+    verification_archive = _zip("eligibility.json", receipt)
+    args = _args(tmp_path, candidate_archive, candidate, verification_archive, receipt)
+    receipt = (json.dumps(_producer_receipt(lock, args), sort_keys=True, indent=2) + "\n").encode()
+    verification_archive = _zip("eligibility.json", receipt)
+    args = _args(tmp_path, candidate_archive, candidate, verification_archive, receipt)
+    # The receipt intentionally does not bind its own archive or file digest, so this converges after one rebuild.
+    api = f"https://api.github.com/repos/{signer.ANDROID_REPOSITORY}"
+    values = {}
+    for kind, run_id in (("candidate", 101), ("verification", 102)):
+        values[f"{api}/actions/runs/{run_id}"] = _run(run_id, lock["source"], lock["source"][kind])
+        path = lock["source"][kind]["workflow_path"]
+        values[f"{api}/contents/{path}?ref={'a' * 40}"] = {"path": path, "sha": lock["source"][kind]["workflow_blob_sha"]}
+    for kind, artifact_id, run_id, digest in (("candidate", 201, 101, args.candidate_artifact_sha256),
+                                               ("verification", 202, 102, args.verification_artifact_sha256)):
+        url = f"{api}/actions/artifacts/{artifact_id}/zip"
+        values[f"{api}/actions/artifacts/{artifact_id}"] = {"id": artifact_id,
+            "name": lock["source"][kind]["artifact_name"], "expired": False, "digest": f"sha256:{digest}",
+            "workflow_run": {"id": run_id}, "archive_download_url": url}
+    if mutate:
+        mutate(values, args, receipt)
+    downloads = {f"{api}/actions/artifacts/201/zip": candidate_archive,
+                 f"{api}/actions/artifacts/202/zip": verification_archive}
+    return lock, lock_bytes, toolchain, toolchain_bytes, installed, args, candidate, FakeGitHub(values, downloads)
+
+
+def _runtime():
+    return {"GITHUB_REPOSITORY": signer.FLEET_REPOSITORY, "GITHUB_EVENT_NAME": "workflow_dispatch",
+        "GITHUB_SHA": "b" * 40, "FLEET_WORKFLOW_REPOSITORY": signer.FLEET_REPOSITORY,
+        "FLEET_WORKFLOW_REF": signer.SIGNER_REF, "FLEET_WORKFLOW_SHA": "b" * 40,
+        "RUNNER_ENVIRONMENT": "github-hosted", "FLEET_SIGNING_ENVIRONMENT": "android-preview12-signing",
+        "GITHUB_RUN_ID": "301", "GITHUB_RUN_ATTEMPT": "1"}
+
+
+def test_checked_in_contract_is_red_and_uses_canonical_source(tmp_path):
     lock, _ = signer._load_lock(LOCK)
-    toolchain, toolchain_bytes = _toolchain()
-    github_output = tmp_path / "github-output"
-    args = argparse.Namespace(
-        signer_image="",
-        execution_repository="ArchonMegalon/fleet",
-        execution_ref="refs/heads/main",
-        execution_ref_protected="true",
-        workflow_ref=signer.WORKFLOW_REF,
-        workflow_sha="b" * 40,
-        github_output=str(github_output),
-    )
-    with pytest.raises(signer.SignerError) as failure:
+    toolchain, toolchain_bytes = signer._load_toolchain(TOOLCHAIN)
+    assert hashlib.sha256(toolchain_bytes).hexdigest() == lock["toolchain"]["lock_sha256"]
+    assert hashlib.sha256(_installed_bytes(toolchain, toolchain_bytes)).hexdigest() == lock["toolchain"]["installed_receipt_sha256"]
+    args = argparse.Namespace(signer_image="", execution_repository=signer.FLEET_REPOSITORY,
+        execution_ref="refs/heads/main", execution_ref_protected="true", execution_event="workflow_dispatch",
+        execution_sha="b" * 40, workflow_repository=signer.FLEET_REPOSITORY,
+        workflow_ref=signer.VERIFIER_REF, workflow_sha="b" * 40, github_output=str(tmp_path / "output"))
+    with pytest.raises(signer.SignerError) as error:
         signer.preflight(args, lock, toolchain, toolchain_bytes)
-    message = str(failure.value)
-    assert "signer OCI digest is not provisioned" in message
-    assert "signing is disabled" in message
-    assert "expected upload certificate" in message
-    assert "signature algorithm" in message
-    assert not github_output.exists()
+    message = str(error.value)
+    assert lock["source"]["repository"] == "ArchonMegalon/chummer-android"
+    assert "found no Preview12 producer" in message and "artifact_name is not provisioned" in message
+    assert "reservation is disabled" in message and "signed-content handoff is disabled" in message
+    assert not Path(args.github_output).exists()
+    ready, _, _, _, _ = _ready(tmp_path)
+    args.signer_image = signer._full_image(ready)
+    args.workflow_sha = "c" * 40
+    with pytest.raises(signer.SignerError, match="job_workflow_sha is not the exact Fleet execution SHA"):
+        signer.preflight(args, ready, toolchain, toolchain_bytes)
 
 
-def test_intake_requires_two_exact_green_runs_before_download_or_mutation(tmp_path: Path) -> None:
-    lock, lock_bytes, _ = _ready_lock(tmp_path)
-    toolchain, toolchain_bytes = _toolchain()
-    candidate = _aab_bytes()
-    artifact = _artifact_bytes(candidate)
-    args = _intake_args(tmp_path, artifact, candidate)
-    responses = _responses(args, lock)
-    responses[next(key for key in responses if key.endswith("runs/102"))]["conclusion"] = "failure"
-    client = FakeGitHubClient(responses, artifact)
-    with pytest.raises(signer.SignerError, match="unexpected conclusion"):
+@pytest.mark.parametrize("field,value", [("event", "pull_request_target"), ("run_attempt", 99),
+    ("workflow_id", 999), ("head_branch", "main"), ("head_repository", {"id": 1, "full_name": "fork/repo"})])
+def test_hostile_verification_run_rejected_before_download_or_mutation(tmp_path, field, value):
+    def mutate(values, args, receipt):
+        run = next(item for url, item in values.items() if url.endswith("runs/102"))
+        run[field] = value
+    lock, lock_bytes, toolchain, toolchain_bytes, _, args, _, client = _case(tmp_path, mutate)
+    with pytest.raises(signer.SignerError, match="run 102 has unexpected"):
         signer.intake(args, lock, lock_bytes, toolchain, toolchain_bytes, client)
-    assert client.downloads == 0
+    assert client.download_count == 0 and not Path(args.output_dir).exists()
+
+
+def test_logical_artifact_name_is_exact_and_rejected_before_download(tmp_path):
+    def mutate(values, args, receipt):
+        next(item for url, item in values.items() if url.endswith("artifacts/201"))["name"] = "lookalike"
+    lock, lock_bytes, toolchain, toolchain_bytes, _, args, _, client = _case(tmp_path, mutate)
+    with pytest.raises(signer.SignerError, match="artifact identity/digest"):
+        signer.intake(args, lock, lock_bytes, toolchain, toolchain_bytes, client)
+    assert client.download_count == 0 and not Path(args.output_dir).exists()
+
+
+def test_intake_requires_candidate_bound_producer_attestation(tmp_path):
+    lock, lock_bytes, toolchain, toolchain_bytes, _, args, _, client = _case(tmp_path)
+    verification_url = next(url for url in client.downloads if url.endswith("202/zip"))
+    bad = json.loads(zipfile.ZipFile(io.BytesIO(client.downloads[verification_url])).read("eligibility.json"))
+    bad["candidate"]["artifact_id"] = 999
+    bad_bytes = (json.dumps(bad, sort_keys=True, indent=2) + "\n").encode()
+    archive = _zip("eligibility.json", bad_bytes)
+    client.downloads[verification_url] = archive
+    artifact_meta = next(item for url, item in client.values.items() if url.endswith("artifacts/202"))
+    args.verification_artifact_sha256 = hashlib.sha256(archive).hexdigest()
+    args.verification_receipt_sha256 = hashlib.sha256(bad_bytes).hexdigest()
+    artifact_meta["digest"] = "sha256:" + args.verification_artifact_sha256
+    with pytest.raises(signer.SignerError, match="does not bind the exact candidate"):
+        signer.intake(args, lock, lock_bytes, toolchain, toolchain_bytes, client)
     assert not Path(args.output_dir).exists()
 
 
-def test_missing_broker_credential_fails_before_intake_mutation(tmp_path: Path) -> None:
-    with pytest.raises(signer.SignerError, match="credential is missing"):
-        signer.GitHubClient("")
-    assert list(tmp_path.iterdir()) == []
-
-
-def test_intake_binds_exact_run_artifact_and_candidate_digests(tmp_path: Path) -> None:
-    lock, lock_bytes, _ = _ready_lock(tmp_path)
-    toolchain, toolchain_bytes = _toolchain()
-    candidate = _aab_bytes()
-    artifact = _artifact_bytes(candidate)
-    args = _intake_args(tmp_path, artifact, candidate)
-    client = FakeGitHubClient(_responses(args, lock), artifact)
+def test_exact_intake_succeeds_with_both_artifacts(tmp_path):
+    lock, lock_bytes, toolchain, toolchain_bytes, _, args, candidate, client = _case(tmp_path)
     receipt = signer.intake(args, lock, lock_bytes, toolchain, toolchain_bytes, client)
-    output = Path(args.output_dir)
-    assert client.downloads == 1
-    assert (output / "chummer6-preview12.aab").read_bytes() == candidate
-    assert receipt["source_sha"] == "a" * 40
-    assert receipt["candidate_run_id"] == 101
-    assert receipt["verification_run_id"] == 102
-    assert receipt["artifact_id"] == 201
-    assert receipt["publication"] is False and receipt["upload"] is False
+    assert client.download_count == 2
+    assert (Path(args.output_dir) / lock["release"]["candidate_file_name"]).read_bytes() == candidate
+    assert receipt["producer"]["candidate"]["artifact_id"] == 201
+    assert receipt["signed_aab_actions_artifact_uploaded"] is False
 
 
-def _write_intake(path: Path, candidate: bytes, lock_bytes: bytes) -> None:
+def _write_intake(path, lock, lock_bytes, candidate):
     path.mkdir()
-    (path / "chummer6-preview12.aab").write_bytes(candidate)
-    receipt = {
-        "contract_name": "fleet.android_preview12_trusted_intake.v1",
-        "source_sha": "a" * 40,
-        "artifact_id": 201,
-        "candidate_sha256": hashlib.sha256(candidate).hexdigest(),
-        "signer_contract_sha256": hashlib.sha256(lock_bytes).hexdigest(),
-    }
-    (path / "intake-attestation.json").write_text(json.dumps(receipt), encoding="utf-8")
+    (path / lock["release"]["candidate_file_name"]).write_bytes(candidate)
+    producer = {"source_sha": "a" * 40, "candidate": {"run_id": 101, "artifact_id": 201,
+        "artifact_sha256": "3" * 64, "aab_sha256": hashlib.sha256(candidate).hexdigest()}}
+    value = {"contract_name": "fleet.android_preview12_trusted_intake.v2", "producer": producer,
+             "signer_contract_sha256": hashlib.sha256(lock_bytes).hexdigest()}
+    (path / "intake-attestation.json").write_text(json.dumps(value))
+    return value
 
 
-def _github_runtime() -> dict[str, str]:
-    return {
-        "GITHUB_REPOSITORY": "ArchonMegalon/fleet",
-        "FLEET_WORKFLOW_REPOSITORY": "ArchonMegalon/fleet",
-        "FLEET_WORKFLOW_REF": signer.WORKFLOW_REF,
-        "FLEET_WORKFLOW_SHA": "b" * 40,
-        "RUNNER_ENVIRONMENT": "github-hosted",
-        "FLEET_SIGNING_ENVIRONMENT": "android-preview12-signing",
-        "GITHUB_RUN_ID": "301",
-        "GITHUB_RUN_ATTEMPT": "1",
-    }
+def _reserve_args(tmp_path, installed, image):
+    return argparse.Namespace(candidate_dir=str(tmp_path / "intake"), installed_toolchain_receipt=str(installed),
+                              running_image=image, output=str(tmp_path / "reservation.json"))
 
 
-def test_missing_signing_material_cannot_mutate_candidate_or_output(tmp_path: Path) -> None:
-    lock, lock_bytes, _ = _ready_lock(tmp_path)
-    toolchain, toolchain_bytes = _toolchain()
-    candidate = _aab_bytes()
-    intake_dir = tmp_path / "intake"
-    _write_intake(intake_dir, candidate, lock_bytes)
-    output = tmp_path / "signed"
-    args = argparse.Namespace(
-        candidate_dir=str(intake_dir), output_dir=str(output), running_image=signer._full_image(lock)
-    )
-    with pytest.raises(signer.SignerError, match="signing material is incomplete"):
-        signer.sign(args, lock, lock_bytes, toolchain, toolchain_bytes, _github_runtime())
-    assert (intake_dir / "chummer6-preview12.aab").read_bytes() == candidate
-    assert not output.exists()
+@pytest.mark.parametrize("decision", ["duplicate", "indeterminate"])
+def test_duplicate_or_indeterminate_reservation_rejects_without_output(tmp_path, decision):
+    lock, lock_bytes, toolchain, toolchain_bytes, installed = _ready(tmp_path)
+    _write_intake(tmp_path / "intake", lock, lock_bytes, _aab())
+    class Client:
+        def reserve(self, request):
+            return {"decision": decision}
+    args = _reserve_args(tmp_path, installed, signer._full_image(lock))
+    with pytest.raises(signer.SignerError, match=f"reservation rejected: {decision}"):
+        signer.reserve(args, lock, lock_bytes, toolchain, toolchain_bytes, _runtime(), Client())
+    assert not Path(args.output).exists()
 
 
-def test_non_github_hosted_runtime_cannot_reach_signing_material(tmp_path: Path) -> None:
-    lock, lock_bytes, _ = _ready_lock(tmp_path)
-    toolchain, toolchain_bytes = _toolchain()
-    candidate = _aab_bytes()
-    intake_dir = tmp_path / "intake"
-    _write_intake(intake_dir, candidate, lock_bytes)
-    output = tmp_path / "signed"
-    args = argparse.Namespace(
-        candidate_dir=str(intake_dir), output_dir=str(output), running_image=signer._full_image(lock)
-    )
-    runtime = _github_runtime()
-    runtime["RUNNER_ENVIRONMENT"] = "self-hosted"
-    with pytest.raises(signer.SignerError, match="not the protected Fleet GitHub-hosted lane"):
-        signer.sign(args, lock, lock_bytes, toolchain, toolchain_bytes, runtime)
-    assert (intake_dir / "chummer6-preview12.aab").read_bytes() == candidate
-    assert not output.exists()
+def _reservation(lock, lock_bytes, intake, image):
+    transaction, bindings = signer._transaction(lock, lock_bytes, intake, image)
+    request = {"contract_name": "fleet.android_preview12_reservation_request.v1",
+               "transaction_id": transaction, "bindings": bindings}
+    return {"contract_name": "fleet.android_preview12_reservation.v1", "decision": "reserved", "created": True,
+        "durable": True, "transaction_id": transaction,
+        "request_sha256": hashlib.sha256(signer._json_bytes(request)).hexdigest(), "bindings": bindings}
 
 
-def test_success_path_invokes_jarsigner_once_and_emits_non_upload_attestation(tmp_path: Path) -> None:
-    certificate = b"expected-upload-cert"
-    lock, lock_bytes, _ = _ready_lock(tmp_path, certificate)
-    toolchain, toolchain_bytes = _toolchain()
-    candidate = _aab_bytes()
-    intake_dir = tmp_path / "intake"
-    _write_intake(intake_dir, candidate, lock_bytes)
-    calls: list[list[str]] = []
+def test_installed_toolchain_receipt_rejected_before_candidate_tools_or_key_access(tmp_path):
+    lock, lock_bytes, toolchain, toolchain_bytes, installed = _ready(tmp_path)
+    intake = _write_intake(tmp_path / "intake", lock, lock_bytes, _aab())
+    reservation = tmp_path / "reservation.json"
+    reservation.write_text(json.dumps(_reservation(lock, lock_bytes, intake, signer._full_image(lock))))
+    installed.write_text("{}")
+    calls = []
+    args = argparse.Namespace(candidate_dir=str(tmp_path / "intake"), installed_toolchain_receipt=str(installed),
+        reservation_receipt=str(reservation), output_dir=str(tmp_path / "signed"), running_image=signer._full_image(lock))
+    with pytest.raises(signer.SignerError, match="installed signer receipt digest mismatch"):
+        signer.sign(args, lock, lock_bytes, toolchain, toolchain_bytes, _runtime(), lambda c, **k: calls.append(c))
+    assert calls == [] and not Path(args.output_dir).exists()
+
+
+def test_secret_free_parsing_precedes_key_access_and_password_env_is_minimal(tmp_path):
+    certificate = b"certificate"
+    lock, lock_bytes, toolchain, toolchain_bytes, installed = _ready(tmp_path, certificate)
+    intake = _write_intake(tmp_path / "intake", lock, lock_bytes, _aab())
+    reservation = tmp_path / "reservation.json"
+    reservation.write_text(json.dumps(_reservation(lock, lock_bytes, intake, signer._full_image(lock))))
+    calls = []
     pem = "-----BEGIN CERTIFICATE-----\n" + base64.b64encode(certificate).decode() + "\n-----END CERTIFICATE-----\n"
-
     def runner(command, **kwargs):
-        calls.append(command)
+        calls.append((command, kwargs.get("env", {})))
         if command[0].endswith("java"):
             stdout = "Preview12\n" if "versionName" in command[-1] else "12\n"
         elif command[0].endswith("keytool") and "-exportcert" in command:
@@ -265,57 +300,31 @@ def test_success_path_invokes_jarsigner_once_and_emits_non_upload_attestation(tm
         else:
             stdout = "" if kwargs.get("text") else b""
         return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
-
-    output = tmp_path / "signed"
-    args = argparse.Namespace(
-        candidate_dir=str(intake_dir), output_dir=str(output), running_image=signer._full_image(lock)
-    )
-    environ = {
-        "ANDROID_PREVIEW12_UPLOAD_KEYSTORE_B64": base64.b64encode(b"keystore").decode(),
-        "ANDROID_PREVIEW12_KEYSTORE_PASSWORD": "store-password",
-        "ANDROID_PREVIEW12_KEY_PASSWORD": "key-password",
-        **_github_runtime(),
-    }
-    attestation = signer.sign(
-        args, lock, lock_bytes, toolchain, toolchain_bytes, environ, runner
-    )
-    sign_calls = [call for call in calls if call[0].endswith("jarsigner") and "-verify" not in call]
-    assert len(sign_calls) == 1
-    assert attestation["signing_invocations"] == 1
-    assert attestation["publication"] is False and attestation["upload"] is False
-    assert (output / "chummer6-preview12-signed.aab").exists()
-    assert json.loads((output / "signed-attestation.json").read_text())["transaction_id"]
+    args = argparse.Namespace(candidate_dir=str(tmp_path / "intake"), installed_toolchain_receipt=str(installed),
+        reservation_receipt=str(reservation), output_dir=str(tmp_path / "signed"), running_image=signer._full_image(lock))
+    environ = {**_runtime(), "ANDROID_PREVIEW12_UPLOAD_KEYSTORE_B64": base64.b64encode(b"key").decode(),
+        "ANDROID_PREVIEW12_KEYSTORE_PASSWORD": "store-secret", "ANDROID_PREVIEW12_KEY_PASSWORD": "key-secret",
+        "UNTRUSTED_PARENT_ENV": "must-not-pass"}
+    value = signer.sign(args, lock, lock_bytes, toolchain, toolchain_bytes, environ, runner)
+    assert [Path(call[0][0]).name for call in calls[:2]] == ["java", "java"]
+    assert all("UNTRUSTED_PARENT_ENV" not in env for _, env in calls)
+    assert all("FLEET_STOREPASS" not in env and "FLEET_KEYPASS" not in env for _, env in calls[:2])
+    export_env = next(env for cmd, env in calls if "-exportcert" in cmd)
+    sign_env = next(env for cmd, env in calls if Path(cmd[0]).name == "jarsigner" and "-verify" not in cmd)
+    verify_env = next(env for cmd, env in calls if "-verify" in cmd)
+    assert export_env["FLEET_STOREPASS"] == "store-secret" and "FLEET_KEYPASS" not in export_env
+    assert sign_env["FLEET_STOREPASS"] == "store-secret" and sign_env["FLEET_KEYPASS"] == "key-secret"
+    assert "FLEET_STOREPASS" not in verify_env and value["signing_invocations"] == 1
+    assert value["signed_content_handoff_performed"] is False
 
 
-def test_toolchain_and_workflow_are_immutable_and_play_upload_is_absent() -> None:
-    lock = json.loads(LOCK.read_text(encoding="utf-8"))
-    toolchain = json.loads(TOOLCHAIN.read_text(encoding="utf-8"))
-    dockerfile = (ROOT / "containers/android-preview12-signer/Dockerfile").read_text(encoding="utf-8")
-    workflow = (ROOT / ".github/workflows/android-preview12-signer.yml").read_text(encoding="utf-8")
-    assert lock["release"]["version_name"] == "Preview12"
-    assert lock["release"]["version_code"] == 12
-    assert hashlib.sha256(TOOLCHAIN.read_bytes()).hexdigest() == lock["toolchain"]["lock_sha256"]
-    assert "image_digest" not in toolchain
-    assert "android-preview12-signer.lock.json" not in dockerfile
-    for image in toolchain["base_images"]:
-        assert signer.HEX64.fullmatch(image["digest"].removeprefix("sha256:"))
-        assert f"{image['reference']}@{image['digest']}" in dockerfile
-    for archive in toolchain["archives"]:
-        assert signer.HEX64.fullmatch(archive["sha256"])
-        assert "latest" not in archive["url"]
-    for action_sha in (
-        "11d5960a326750d5838078e36cf38b85af677262",
-        "ea165f8d65b6e75b540449e92b4886f43607fa02",
-        "d3f86a106a0bac45b974a628896c90dbdf5c8093",
-    ):
-        assert action_sha in workflow
-    assert "repository: ArchonMegalon/fleet" in workflow
-    assert "repository: ArchonMegalon/chummer6-mobile" not in workflow
-    assert workflow.count("actions/checkout@") == 2
-    assert "environment: ${{ needs.contract.outputs.intake_environment }}" in workflow
-    assert "environment: ${{ needs.contract.outputs.signing_environment }}" in workflow
-    assert "needs: contract" in workflow
-    assert "environment: android-play-upload" not in workflow
-    assert "contents: write" not in workflow
-    assert "packages: write" not in workflow
-    assert '--source-sha "${{ inputs.source_sha }}"' not in workflow
+def test_workflow_topology_has_no_signed_actions_artifact_or_play_lane():
+    signer_flow = (ROOT / ".github/workflows/android-preview12-signer.yml").read_text()
+    verifier_flow = (ROOT / ".github/workflows/android-preview12-verifier.yml").read_text()
+    assert "workflow_call:" not in signer_flow and "workflow_dispatch:" in signer_flow
+    assert "workflow_call:" in verifier_flow and "secrets." not in verifier_flow
+    assert signer_flow.count("actions/upload-artifact@") == 1
+    assert "path: trusted-intake" in signer_flow and "path: signed-output" not in signer_flow
+    assert signer.ANDROID_REPOSITORY in (ROOT / "config/release/android-preview12-signer.lock.json").read_text()
+    assert "environment: android-play-upload" not in signer_flow
+    assert "contents: write" not in signer_flow + verifier_flow

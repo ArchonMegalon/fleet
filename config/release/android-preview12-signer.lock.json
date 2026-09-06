@@ -1,25 +1,56 @@
 {
-  "contract_name": "fleet.android_preview12_signer_transaction.v1",
-  "contract_version": 1,
-  "state": "blocked_pending_provisioning",
+  "contract_name": "fleet.android_preview12_signer_transaction.v2",
+  "contract_version": 2,
+  "state": "blocked_pending_preview12_producer_and_signer_services",
   "release": {
     "version_name": "Preview12",
     "version_code": 12,
-    "candidate_file_name": "chummer6-preview12.aab",
-    "signed_file_name": "chummer6-preview12-signed.aab"
+    "candidate_file_name": null,
+    "signed_file_name": null
   },
   "source": {
-    "repository": "ArchonMegalon/chummer6-mobile",
-    "branch": "main",
-    "artifact_name": "android-preview12-unsigned",
-    "candidate_workflow_path": null,
-    "verification_workflow_path": null
+    "repository": "ArchonMegalon/chummer-android",
+    "repository_id": 1331626697,
+    "source_ref": null,
+    "candidate": {
+      "workflow_id": null,
+      "workflow_path": null,
+      "workflow_blob_sha": null,
+      "event": null,
+      "run_attempt": null,
+      "artifact_name": null,
+      "producer_toolchain_closure_sha256": null
+    },
+    "verification": {
+      "workflow_id": null,
+      "workflow_path": null,
+      "workflow_blob_sha": null,
+      "event": null,
+      "run_attempt": null,
+      "artifact_name": null,
+      "receipt_file_name": null
+    },
+    "discovery_receipt": {
+      "remote_main_sha": "eb4d37ee95eee808a4c2269f1d3f3b5631eb3129",
+      "preview12_workflow_found": false,
+      "active_workflows": [
+        {"id": 334405532, "path": ".github/workflows/api36-editing-e2e.yml", "blob_sha": "3a82fbbcbf3b58ca9b49e4fd21e995e5de68b755"},
+        {"id": 350039780, "path": ".github/workflows/api36-two-consecutive-green.yml", "blob_sha": "5fe588e47aaa53eb639bca65d1470cb4dff13089"},
+        {"id": 344652049, "path": ".github/workflows/internal-phone-beta-package-compile.yml", "blob_sha": "4d941fccabf51a54c05ae863c38bea5d3caf6455"},
+        {"id": 339863405, "path": ".github/workflows/preview9-arm64-aab.yml", "blob_sha": "d726b3e7b936306c1afb9ac5cea9a8e7bdad45ab"}
+      ]
+    }
   },
   "environments": {
     "intake": "android-preview12-intake",
     "signing": "android-preview12-signing",
     "play_upload": "android-play-upload",
     "play_upload_enabled": false
+  },
+  "reservation": {
+    "enabled": false,
+    "broker_url": null,
+    "audited_implementation_sha256": null
   },
   "signing": {
     "enabled": false,
@@ -31,16 +62,20 @@
   "toolchain": {
     "lock_path": "config/release/android-preview12-signer-toolchain.lock.json",
     "lock_sha256": "f40fb8a2d254900a2eac3da50ebd57f251528a69e4d14597d7a6ead1a4420b7a",
+    "installed_receipt_sha256": "746197ae0b5d720e8e70ac628429e0d8f0ddc774691cbba5058e661f2d8258e5",
     "image_repository": "ghcr.io/archonmegalon/fleet-android-preview12-signer",
     "image_digest": null,
     "platform": "linux/amd64"
   },
-  "limits": {
-    "artifact_max_bytes": 1073741824,
-    "candidate_max_bytes": 536870912
+  "signed_content_handoff": {
+    "enabled": false,
+    "private_content_addressed_endpoint": null,
+    "audited_implementation_sha256": null
   },
+  "limits": {"artifact_max_bytes": 1073741824, "candidate_max_bytes": 536870912},
   "publication": {
-    "github_artifact_is_private_ci_evidence": true,
+    "intake_actions_artifact_is_private_ci_evidence": true,
+    "signed_aab_actions_artifact": false,
     "registry_publication": false,
     "play_upload": false,
     "github_release": false

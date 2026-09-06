@@ -1,0 +1,59 @@
+name: Android Preview12 non-secret verifier
+
+on:
+  workflow_call:
+    inputs:
+      source_sha: {required: true, type: string}
+      candidate_run_id: {required: true, type: string}
+      candidate_artifact_id: {required: true, type: string}
+      candidate_artifact_sha256: {required: true, type: string}
+      candidate_aab_sha256: {required: true, type: string}
+      verification_run_id: {required: true, type: string}
+      verification_artifact_id: {required: true, type: string}
+      verification_artifact_sha256: {required: true, type: string}
+      verification_receipt_sha256: {required: true, type: string}
+    outputs:
+      signer_image:
+        value: ${{ jobs.contract.outputs.signer_image }}
+      intake_environment:
+        value: ${{ jobs.contract.outputs.intake_environment }}
+      signing_environment:
+        value: ${{ jobs.contract.outputs.signing_environment }}
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      signer_image: ${{ steps.preflight.outputs.signer_image }}
+      intake_environment: ${{ steps.preflight.outputs.intake_environment }}
+      signing_environment: ${{ steps.preflight.outputs.signing_environment }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ArchonMegalon/fleet
+          ref: ${{ job.workflow_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - id: preflight
+        env:
+          SIGNER_IMAGE: ${{ vars.ANDROID_PREVIEW12_SIGNER_IMAGE }}
+          EXECUTION_REPOSITORY: ${{ github.repository }}
+          EXECUTION_REF: ${{ github.ref }}
+          EXECUTION_REF_PROTECTED: ${{ github.ref_protected }}
+          EXECUTION_EVENT: ${{ github.event_name }}
+          EXECUTION_SHA: ${{ github.sha }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_REF: ${{ job.workflow_ref }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: >-
+          python3 scripts/android_preview12_signer.py
+          --lock config/release/android-preview12-signer.lock.json
+          --toolchain-lock config/release/android-preview12-signer-toolchain.lock.json
+          preflight --signer-image "$SIGNER_IMAGE"
+          --execution-repository "$EXECUTION_REPOSITORY" --execution-ref "$EXECUTION_REF"
+          --execution-ref-protected "$EXECUTION_REF_PROTECTED" --execution-event "$EXECUTION_EVENT"
+          --execution-sha "$EXECUTION_SHA" --workflow-repository "$WORKFLOW_REPOSITORY"
+          --workflow-ref "$WORKFLOW_REF" --workflow-sha "$WORKFLOW_SHA"
+          --github-output "$GITHUB_OUTPUT"

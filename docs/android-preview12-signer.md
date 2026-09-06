@@ -1,97 +1,56 @@
-# Android Preview12 protected signer groundwork
+# Android Preview12 signer groundwork
 
-Fleet owns this signing transaction; the mobile repository owns the unsigned
-build recipe. The checked-in lane is intentionally blocked. It cannot enter an
-environment, download candidate bytes, read a signing secret, sign, upload to
-Play, publish to Registry, or create a GitHub release in its current state.
+Fleet owns signing. `android-preview12-signer.yml` is Fleet-native
+`workflow_dispatch`; its reusable verifier is non-secret. The checked-in lock is
+red, so its contract job fails before an environment, broker token, ledger,
+signing key, candidate download, signature, or upload can be reached.
 
-## Trust split
+## What is actually known
 
-The workflow has three jobs on separate fresh GitHub-hosted runners:
+The canonical producer is repository ID `1331626697`,
+`ArchonMegalon/chummer-android`. Discovery at remote `main`
+`eb4d37ee95eee808a4c2269f1d3f3b5631eb3129` found four active workflows, all
+recorded with their real Actions ID, path, and Git blob SHA in the transaction
+lock. None is a Preview12 producer. Preview9 and an unmerged Preview10 branch
+show naming conventions, but they are not Preview12 authority. Therefore the
+Preview12 workflow ID/path/blob SHA, source ref/event/attempt, logical artifact
+name, exact AAB filename, producer closure digest, and candidate-bound verifier
+artifact are null prerequisites rather than guesses.
 
-`workflow_call` is intentionally accepted only when the caller also executes in
-`ArchonMegalon/fleet`; mobile hands over IDs and digests through Fleet release
-orchestration rather than importing Fleet environment secrets into an app-repo
-run. The `job.workflow_*` identity is used to check out and attest the exact
-reusable-workflow commit.
+The future intake validates both run records (including repository and head
+repository IDs, event, ref, attempt, workflow ID/path/blob SHA, source SHA, and
+green state), both exact artifact IDs/names/archive digests, the AAB digest, and
+a producer attestation binding that entire transaction plus the producer
+toolchain closure. It checks out no app code and executes no candidate content.
 
-1. `contract` checks out the exact Fleet workflow commit and fails unless the
-   workflow came from protected Fleet `main`, every toolchain input is locked,
-   the final signer OCI digest is locked, and signing was explicitly enabled.
-2. `trusted-intake` is reachable only after that check. Its separate
-   `android-preview12-intake` environment supplies one credential with read-only
-   access to the exact mobile Actions run and artifact APIs. It checks two
-   distinct successful runs at the same exact source SHA, the locked workflow
-   paths, artifact ID/name/API digest/download digest, candidate digest, and an
-   unsigned AAB. It never checks out the mobile repository or executes anything
-   from the candidate artifact.
-3. `sign-once` downloads only the sanitized intake artifact and runs inside the
-   digest selected by the contract job. The image contains the trusted Fleet
-   transaction program. It checks exact `Preview12` / version code `12`, checks
-   the keystore certificate before mutation, invokes `jarsigner` once, verifies
-   the resulting certificate, and emits the signed AAB plus an attestation whose
-   publication and upload fields are both `false`.
+## Secret and output boundaries
 
-The one-day GitHub artifacts are private CI evidence, not a public client shelf.
-There is deliberately no Play upload job and no job targeting
-`android-play-upload`.
+The signer image contains a SHA-256-locked JDK, .NET SDK, Android platform and
+build-tools, and bundletool closure. Before key access, the signer verifies the
+installed-image receipt, sanitized intake, Fleet-native `job.workflow_sha`,
+GitHub-hosted runtime, exact Preview12/code12 manifest, and a newly-created
+durable ledger reservation. Duplicate or indeterminate reservation outcomes are
+terminal. Bundle parsing and signature verification receive a constructed
+secret-free environment; the store password reaches only certificate export
+and signing, and the key password reaches only the one `jarsigner` invocation.
 
-## Immutable toolchain closure
+The sole Actions artifact is one-day sanitized intake/evidence transport. The
+signed AAB is never sent through `actions/upload-artifact`. Play upload,
+Registry publication, GitHub release, and the Play environment are absent. A
+separate future implementation must hand signed bytes to a private store at a
+content-addressed SHA-256 endpoint and return a durable receipt; it is not an
+Actions evidence upload or a Play upload.
 
-`config/release/android-preview12-signer-toolchain.lock.json` pins the amd64
-Python and .NET SDK base manifests and every downloaded JDK, Android SDK
-platform, Android build-tools, and bundletool input by SHA-256. The transaction
-lock pins that build-input manifest by SHA-256. Keeping the final OCI digest in
-the separate transaction lock avoids an impossible self-referential image
-digest. The Dockerfile downloads only the locked archives, verifies each digest
-before extraction, and records the resolved closure in
-`/opt/fleet-signer/toolchain-installed.json`.
+## Prerequisites for a later activation change
 
-The image definition can be tested without publishing it:
+An independently reviewed change must supply the actual Preview12 producer and
+candidate-bound verifier values above; producer closure receipt; audited
+exactly-once broker URL/implementation; upload certificate fingerprint and key
+algorithm; published signer image digest (the installed receipt is pinned);
+and an audited private content-addressed handoff implementation. Operators must
+then separately create reviewer-protected Fleet intake/signing environments and
+least-privilege broker, ledger, handoff, and upload-key secrets. Only after all
+receipts exist may another protected change set `state` and feature gates ready.
 
-```bash
-docker build --platform linux/amd64 \
-  --file containers/android-preview12-signer/Dockerfile \
-  --tag fleet-android-preview12-signer:local .
-```
-
-Do not put keystores, passwords, broker tokens, or certificate material in the
-image, build context, repository, workflow inputs, or artifacts.
-
-## Exact prerequisites before enabling
-
-An authorized operator must complete all of the following in order. None were
-created or exercised while this groundwork was implemented.
-
-1. Review and build the linux/amd64 image, publish that non-secret toolchain
-   image through an approved container lane, and record its immutable
-   `sha256:...` manifest digest in the lock.
-2. Record the exact two distinct mobile workflow paths that produce the
-   unsigned candidate and independent green verification.
-3. Have the upload-key custodian derive and independently verify the SHA-256 of
-   the DER upload certificate, identify its RSA or EC key type, then record the
-   non-secret fingerprint and matching allowed SHA-256 signature algorithm in
-   the lock.
-4. Create `android-preview12-intake` in Fleet with required reviewers, protected
-   `main` only, no self-approval, and
-   `ANDROID_PREVIEW12_CANDIDATE_BROKER_TOKEN`. The token must be independently
-   scoped to Actions run/artifact read access for only
-   `ArchonMegalon/chummer6-mobile`.
-5. Create `android-preview12-signing` in Fleet with required reviewers,
-   protected `main` only, no self-approval, and the three upload-key secrets
-   named in the workflow. It must not contain Registry, Play, release, package,
-   deployment, or repository-write credentials.
-6. Set Fleet variable `ANDROID_PREVIEW12_SIGNER_IMAGE` to the exact
-   `repository@sha256:digest` recorded in the lock.
-7. Add a durable external reservation/receipt store keyed by source SHA,
-   artifact ID, candidate digest, certificate digest, and signer image digest
-   before claiming replay-proof exactly-once semantics across separate workflow
-   runs. The current concurrency key prevents overlap and the code invokes the
-   signer once per transaction, but one-day CI retention is not a durable
-   cross-run transaction ledger.
-8. Only after the preceding receipts are reviewed, change lock state to `ready`
-   and signing to enabled in a separately approved protected-path change.
-
-Keep `android-play-upload` absent or disabled. A later Play transaction must be
-a separate environment and workflow with its own approval and cannot be added
-to this signer transaction.
+Keep `android-play-upload` disabled. Play delivery remains a later, separately
+approved transaction with no credentials or job in this signer workflow.
