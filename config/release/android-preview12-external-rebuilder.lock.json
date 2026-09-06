@@ -1,0 +1,113 @@
+{
+  "contract_name": "fleet.android_preview12_external_rebuilder_lock.v1",
+  "contract_version": 1,
+  "state": "dormant",
+  "release": {
+    "package_id": "com.myexternalbrain.chummer",
+    "version_name": "0.1.0-preview.12",
+    "version_code": 12,
+    "minimum_sdk": 24,
+    "target_sdk": 36
+  },
+  "android_authority": {
+    "repository": "https://github.com/ArchonMegalon/chummer-android.git",
+    "commit": "388425aceac266e06265e4c0c73a4058b052d316",
+    "tree": "175da843cfc2df3489d87dc153c186b9c8e4d803",
+    "build_script": {
+      "path": "scripts/build-release.sh",
+      "sha256": "d5fc151deb566f20a335c5852cae7c346ac3a9eac8eee81bd551438e81778623"
+    },
+    "attestation_consumer": {
+      "path": "scripts/sign_android_release_build_attestation.py",
+      "sha256": "c97da3e54af0356726fdef70f1fc7dffa224a560b2a92b5eadfa50ca83dd28d6",
+      "contract_name": "chummer.android.release-build-attestation/v2"
+    },
+    "two_green_verifier": {
+      "path": "scripts/verify_api36_two_green_release_eligibility.py",
+      "sha256": "5980c7978042762bf39c9a232cf421fd2c5cffb0adc565973356cb9a4b645c1d"
+    },
+    "source_graph_verifier": {
+      "path": "scripts/verify_release_source_graph.py",
+      "sha256": "6105498b843e45474677dc5e0e3df1ff5c573d32c04647210b569db6a0ce9088"
+    }
+  },
+  "toolchain": {
+    "platform": "linux/amd64",
+    "dotnet": {
+      "version": "10.0.110",
+      "tree_sha256": "9ad400dd17fa8f84001bf5fd35ee2ce2d1b2c847fd20d39a15051f8f5fa64d81",
+      "file_count": 8899,
+      "size_bytes": 4232503090
+    },
+    "java": {
+      "version": "17.0.20.1",
+      "tree_sha256": "a49293b17c15c197fbb89a89b98a7fe949ffbe794fd35d22118e736768f5a6e1",
+      "file_count": 454,
+      "size_bytes": 333699498
+    },
+    "android_sdk": {
+      "api_level": 36,
+      "build_tools_version": "36.0.0",
+      "tree_sha256": "31d8de20b961f0963b97bc1c029c0c334d97beadc9321578551fbacdf19eb404",
+      "file_count": 11670,
+      "size_bytes": 463020707
+    },
+    "bundletool_sha256": "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29",
+    "builder_image": null,
+    "signer_image": null,
+    "installed_closure_receipt_sha256": null
+  },
+  "approval_authority": {
+    "key_id": "local-release-builder-2026",
+    "role": "android_internal_release_builder",
+    "scope": "android_internal_release_artifact_binding",
+    "public_key_path": "eng/trusted-release-approvers/local-release-builder-2026.public.pem",
+    "public_key_sha256": "ed1fbe95fc7713bfc6d9d0fea21726c1ba3193533fc2d5523e054ad8fb86184c",
+    "public_key_spki_sha256": "c46a4e9a224c8c77a4038bca83f7d9ed66146318d8b5c2c9fc81cd19fdd18ea7",
+    "private_key_secret": null,
+    "rotation_requires_android_merge_and_requalification": true
+  },
+  "upload_key": {
+    "expected_certificate_sha256": "d9c4b635121544d5522abf1ec2dfda3c1938aab93d6726bb93c9871ec9ed1d15",
+    "key_alias": null,
+    "signature_algorithm": "SHA256withRSA",
+    "digest_algorithm": "SHA-256",
+    "keystore_secret": null,
+    "store_password_secret": null,
+    "key_password_secret": null
+  },
+  "rebuild": {
+    "enabled": false,
+    "network_policy": "github_and_nuget_exact_authority_only",
+    "ambient_siblings_allowed": false,
+    "builder_credential_mounts_allowed": false,
+    "builder_runs_in_separate_job": true,
+    "deterministic_unsigned_digest_match_required": true,
+    "full_test_suite_required": true
+  },
+  "reservation": {
+    "adapter_contract": "fleet.android_preview12_approval_ledger_policy.v1",
+    "adapter_path": "scripts/android_preview12_approval_ledger.py",
+    "adapter_sha256": null,
+    "configured": false,
+    "policy_path": "config/release/android-preview12-two-green-release-approval.json",
+    "policy_sha256": null,
+    "protocol_source": "reviewed_fleet_draft_11_pending_merge",
+    "signed_receipts_required": true
+  },
+  "outputs": {
+    "android_attestation_contract": "chummer.android.release-build-attestation/v2",
+    "fleet_audit_contract": "fleet.android_preview12_external_rebuild_audit.v3",
+    "signed_content_handoff_required": true,
+    "signed_content_handoff_enabled": false,
+    "publication_authorized": false,
+    "google_play_upload_authorized": false
+  },
+  "limits": {
+    "json_bytes": 8388608,
+    "aab_bytes": 536870912,
+    "git_timeout_seconds": 900,
+    "build_timeout_seconds": 10800,
+    "reservation_timeout_seconds": 30
+  }
+}
