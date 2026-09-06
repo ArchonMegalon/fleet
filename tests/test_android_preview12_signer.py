@@ -432,6 +432,16 @@ def _rewrite_intake_graph(path: Path, lock, mutate) -> dict:
     (lambda graph: graph["releaseIdentity"].update(packageId="org.attacker.lookalike"), "source graph identity"),
     (lambda graph: next(row for row in graph["repositories"] if row["name"] == "chummer-android")
         .update(commit="b" * 40), "exact Android source"),
+    (lambda graph: graph.update(packagePins=[None]), "packagePins is malformed"),
+    (lambda graph: graph["packagePins"].append(dict(graph["packagePins"][0])), "packagePins is malformed"),
+    (lambda graph: graph.update(dependencyClosure=[{"package_id": "Chummer.Run.Contracts",
+        "dependencies": ["Chummer.Play.Contracts", "Chummer.Play.Contracts"]}]),
+     "dependency closure is malformed"),
+    (lambda graph: graph.update(generator={"path": "../hostile.py", "sha256": "7" * 64,
+        "size_bytes": 1}), "generator authority is not exact"),
+    (lambda graph: graph.update(presentationSource={"repository": "lookalike-ui"}),
+     "presentation authority is not exact"),
+    (lambda graph: graph.update(doesNotAssert=["tester_installation"]), "non-claims are not exact"),
 ])
 def test_hostile_source_graph_is_rejected_before_candidate_tools_or_key_access(tmp_path, mutation, error):
     lock, lock_bytes, toolchain, toolchain_bytes, installed = _ready(tmp_path)
@@ -552,6 +562,46 @@ def test_secret_free_parsing_precedes_key_access_and_password_env_is_minimal(tmp
     assert sign_env["FLEET_STOREPASS"] == "store-secret" and sign_env["FLEET_KEYPASS"] == "key-secret"
     assert "FLEET_STOREPASS" not in verify_env and value["signing_invocations"] == 1
     assert value["signed_content_handoff_performed"] is False
+
+
+def test_manifest_validation_and_signing_use_a_digest_pinned_private_candidate(tmp_path):
+    certificate = b"certificate"
+    lock, lock_bytes, toolchain, toolchain_bytes, installed = _ready(tmp_path, certificate)
+    original = _aab()
+    intake = _write_intake(tmp_path / "intake", lock, lock_bytes, original)
+    candidate = tmp_path / "intake" / lock["release"]["candidate_file_name"]
+    reservation = tmp_path / "reservation.json"
+    reservation.write_text(json.dumps(_reservation(lock, lock_bytes, intake, signer._full_image(lock))))
+    calls = []
+    pem = "-----BEGIN CERTIFICATE-----\n" + base64.b64encode(certificate).decode() + "\n-----END CERTIFICATE-----\n"
+    expected = {"/manifest/@package": signer.PACKAGE_ID,
+        "/manifest/@android:versionName": signer.VERSION_NAME,
+        "/manifest/@android:versionCode": str(signer.VERSION_CODE),
+        "/manifest/uses-sdk/@android:minSdkVersion": str(signer.MINIMUM_SDK),
+        "/manifest/uses-sdk/@android:targetSdkVersion": str(signer.TARGET_SDK)}
+    def runner(command, **kwargs):
+        calls.append(command)
+        if command[0].endswith("java"):
+            if len([call for call in calls if call[0].endswith("java")]) == 1:
+                candidate.write_bytes(_aab() + b"hostile-replacement")
+            stdout = expected[command[-1].removeprefix("--xpath=")] + "\n"
+        elif command[0].endswith("keytool") and "-exportcert" in command:
+            stdout = certificate
+        elif command[0].endswith("keytool"):
+            stdout = pem
+        elif command[0].endswith("jarsigner") and "-verify" in command:
+            stdout = "jar verified.\n"
+        else:
+            stdout = "" if kwargs.get("text") else b""
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+    output_dir = tmp_path / "signed"
+    args = argparse.Namespace(candidate_dir=str(tmp_path / "intake"), installed_toolchain_receipt=str(installed),
+        reservation_receipt=str(reservation), output_dir=str(output_dir), running_image=signer._full_image(lock))
+    environ = {**_runtime(), "ANDROID_PREVIEW12_UPLOAD_KEYSTORE_B64": base64.b64encode(b"key").decode(),
+        "ANDROID_PREVIEW12_KEYSTORE_PASSWORD": "store-secret", "ANDROID_PREVIEW12_KEY_PASSWORD": "key-secret"}
+    signer.sign(args, lock, lock_bytes, toolchain, toolchain_bytes, environ, runner)
+    assert candidate.read_bytes() != original
+    assert (output_dir / lock["release"]["signed_file_name"]).read_bytes() == original
 
 
 class _HttpResponse(io.BytesIO):

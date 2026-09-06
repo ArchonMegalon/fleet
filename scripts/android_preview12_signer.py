@@ -446,10 +446,46 @@ def _validate_source_graph(value: dict[str, Any], raw: bytes, lock, source_sha: 
         by_name[name] = row
     if set(by_name) != set(SOURCE_REPOSITORIES) or by_name["chummer-android"]["commit"] != source_sha:
         raise SignerError("release source graph does not bind the exact Android source")
-    if not isinstance(value.get("packagePins"), list) or not value["packagePins"] \
-            or not isinstance(value.get("ownerPackagePins"), list) or not value["ownerPackagePins"] \
-            or not isinstance(value.get("dependencyClosure"), list) or not value["dependencyClosure"]:
+    generator = value.get("generator")
+    if not isinstance(generator, dict) or set(generator) != {"path", "sha256", "size_bytes"} \
+            or not isinstance(generator.get("path"), str) \
+            or PurePosixPath(generator["path"]).is_absolute() or ".." in PurePosixPath(generator["path"]).parts \
+            or "\\" in generator["path"] or not generator["path"].startswith("scripts/") \
+            or not HEX64.fullmatch(str(generator.get("sha256") or "")) \
+            or type(generator.get("size_bytes")) is not int or generator["size_bytes"] < 1:
+        raise SignerError("release source graph generator authority is not exact")
+    for label in ("packagePins", "ownerPackagePins"):
+        rows = value.get(label)
+        if not isinstance(rows, list) or not rows:
+            raise SignerError("release source graph package closure is absent")
+        identities: set[str] = set()
+        for row in rows:
+            package_id = row.get("package_id") if isinstance(row, dict) else None
+            if not isinstance(package_id, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,200}", package_id) \
+                    or package_id in identities:
+                raise SignerError(f"release source graph {label} is malformed or ambiguous")
+            identities.add(package_id)
+    closure = value.get("dependencyClosure")
+    if not isinstance(closure, list) or not closure:
         raise SignerError("release source graph package closure is absent")
+    closure_identities: set[str] = set()
+    for row in closure:
+        package_id = row.get("package_id") if isinstance(row, dict) else None
+        dependencies = row.get("dependencies") if isinstance(row, dict) else None
+        if not isinstance(package_id, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,200}", package_id) \
+                or package_id in closure_identities or not isinstance(dependencies, list) \
+                or any(not isinstance(item, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,200}", item)
+                       for item in dependencies) or len(dependencies) != len(set(dependencies)):
+            raise SignerError("release source graph dependency closure is malformed or ambiguous")
+        closure_identities.add(package_id)
+    presentation = value.get("presentationSource")
+    if not isinstance(presentation, dict) or presentation.get("repository") != "chummer6-ui":
+        raise SignerError("release source graph presentation authority is not exact")
+    exclusions = value.get("doesNotAssert")
+    if not isinstance(exclusions, list) or any(not isinstance(item, str) or not item for item in exclusions) \
+            or len(exclusions) != len(set(exclusions)) \
+            or not {"google_play_upload", "tester_installation"}.issubset(exclusions):
+        raise SignerError("release source graph non-claims are not exact")
     if not isinstance(release.get("source_graph_file_name"), str):
         raise SignerError("release source graph file name is unavailable")
 def _validate_proof_exclusion(value: Any, lock, candidate_sha256: str, source_graph_sha256: str) -> str:
@@ -723,6 +759,19 @@ def _validate_candidate_manifest(runner, candidate: Path, env) -> None:
     for xpath, value in expected.items():
         if _bundle_value(runner, candidate, xpath, env) != value:
             raise SignerError(f"candidate manifest is not exact for {xpath}")
+def _pin_candidate(candidate: Path, output: Path, expected_sha256: str, limit: int) -> None:
+    digest = hashlib.sha256()
+    total = 0
+    with candidate.open("rb") as source, output.open("xb") as target:
+        while chunk := source.read(1024 * 1024):
+            total += len(chunk)
+            if total > limit:
+                raise SignerError("candidate exceeds locked size limit while pinning")
+            digest.update(chunk)
+            target.write(chunk)
+    if digest.hexdigest() != expected_sha256:
+        raise SignerError("candidate changed before secret-free manifest validation")
+    _assert_unsigned_aab(output)
 def _pem_der(payload: str) -> bytes:
     match = re.search(r"-----BEGIN CERTIFICATE-----(.*?)-----END CERTIFICATE-----", payload, re.S)
     if not match:
@@ -753,7 +802,11 @@ def sign(args, lock, lock_bytes, toolchain, toolchain_bytes, environ,
         raise SignerError("signed output already exists")
     with tempfile.TemporaryDirectory(prefix="fleet-secret-free-") as scratch:
         clean_env = _tool_env(scratch)
-        _validate_candidate_manifest(runner, candidate, clean_env)
+        pinned_candidate = Path(scratch) / candidate.name
+        expected_candidate_sha256 = intake_receipt["producer"]["candidate"]["aab_sha256"]
+        _pin_candidate(candidate, pinned_candidate, expected_candidate_sha256,
+                       int(lock["limits"]["candidate_max_bytes"]))
+        _validate_candidate_manifest(runner, pinned_candidate, clean_env)
         names = ("ANDROID_PREVIEW12_UPLOAD_KEYSTORE_B64", "ANDROID_PREVIEW12_KEYSTORE_PASSWORD",
                  "ANDROID_PREVIEW12_KEY_PASSWORD")
         if any(not environ.get(name) for name in names):
@@ -776,7 +829,7 @@ def sign(args, lock, lock_bytes, toolchain, toolchain_bytes, environ,
             output_dir.parent.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(prefix=f".{output_dir.name}-", dir=output_dir.parent) as stage_name:
                 stage, signed = Path(stage_name), Path(stage_name) / lock["release"]["signed_file_name"]
-                shutil.copyfile(candidate, signed)
+                shutil.copyfile(pinned_candidate, signed)
                 sign_env = {**cert_env, "FLEET_KEYPASS": environ[names[2]]}
                 _checked(runner, ["/opt/jdk/bin/jarsigner", "-keystore", str(keystore), "-storepass:env",
                     "FLEET_STOREPASS", "-keypass:env", "FLEET_KEYPASS", "-sigalg",
