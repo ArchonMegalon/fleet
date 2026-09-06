@@ -22,6 +22,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import types
 from typing import Any, Callable, Mapping
 
 
@@ -33,6 +34,7 @@ SOURCE_GRAPH_CONTRACT = "chummer.android.release-source-graph/v3"
 LEDGER_POLICY_CONTRACT = "fleet.android_preview12_approval_ledger_policy.v1"
 EXTERNAL_SIGNER_ATTESTATION_CONTRACT = "chummer.android.external-release-signer-attestation/v1"
 REBUILD_HANDOFF_CONTRACT = "fleet.android_preview12_external_rebuild_handoff.v1"
+RECOVERY_CONTRACT = "fleet.android_preview12_external_signer_recovery.v1"
 PACKAGE_ID = "com.myexternalbrain.chummer"
 VERSION_NAME = "0.1.0-preview.12"
 VERSION_CODE = 12
@@ -158,6 +160,14 @@ def _write_exclusive(path: Path, raw: bytes) -> None:
     except Exception:
         path.unlink(missing_ok=True)
         raise
+
+
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def load_lock(path: Path) -> tuple[dict[str, Any], bytes]:
@@ -648,6 +658,11 @@ def sign_aab(unsigned_aab: Path, output: Path, lock: Mapping[str, Any], keystore
              store_password_file: Path, key_password_file: Path, java_root: Path, *,
              runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> dict[str, Any]:
     upload = lock["upload_key"]
+    # Capture immutable candidate bytes before the first signing credential is
+    # opened. The transaction admits credentials only after reservation.
+    unsigned_raw = _stable_bytes(
+        unsigned_aab, "unsigned AAB", lock["limits"]["aab_bytes"], owner_only=True
+    )
     for path, label in ((keystore, "upload keystore"), (store_password_file, "store password"),
                         (key_password_file, "key password")):
         _secret_file(path, label)
@@ -663,10 +678,7 @@ def sign_aab(unsigned_aab: Path, output: Path, lock: Mapping[str, Any], keystore
         env=env, label="upload certificate extraction").stdout
     if hashlib.sha256(certificate).hexdigest() != UPLOAD_CERTIFICATE_SHA256:
         raise RebuilderError("upload keystore is not the recovered legacy Play identity")
-    _write_exclusive(
-        output,
-        _stable_bytes(unsigned_aab, "unsigned AAB", lock["limits"]["aab_bytes"], owner_only=True),
-    )
+    _write_exclusive(output, unsigned_raw)
     try:
         _checked(runner, [os.fspath(jarsigner), "-keystore", os.fspath(keystore), "-storetype", "PKCS12",
             "-storepass:env", "FLEET_STOREPASS", "-keypass:env", "FLEET_KEYPASS", "-sigalg",
@@ -839,17 +851,38 @@ def load_reviewed_ledger(fleet_root: Path, lock: Mapping[str, Any], environment:
         raise RebuilderError("Fleet signer root is not canonical")
     adapter = fleet_root.joinpath(*PurePosixPath(reservation["adapter_path"]).parts)
     policy_path = fleet_root.joinpath(*PurePosixPath(reservation["policy_path"]).parts)
-    if _sha256_file(adapter, "reviewed approval-ledger adapter", 2 * 1024 * 1024) \
-            != reservation["adapter_sha256"] \
+    for path, label in (
+        (adapter, "reviewed approval-ledger adapter"),
+        (policy_path, "reviewed approval-ledger policy"),
+    ):
+        for ancestor in (path, *path.parents):
+            metadata = ancestor.stat()
+            if metadata.st_uid != 0 or stat.S_IMODE(metadata.st_mode) & 0o022:
+                raise RebuilderError(f"{label} is not in a root-owned immutable runtime")
+            if ancestor == fleet_root:
+                break
+        else:
+            raise RebuilderError(f"{label} escapes the protected Fleet root")
+    adapter_raw = _stable_bytes(adapter, "reviewed approval-ledger adapter", 2 * 1024 * 1024)
+    if hashlib.sha256(adapter_raw).hexdigest() != reservation["adapter_sha256"] \
             or _sha256_file(policy_path, "reviewed approval-ledger policy", 1024 * 1024) \
             != reservation["policy_sha256"]:
         raise RebuilderError("reviewed durable approval-ledger bytes differ from lock")
-    spec = importlib.util.spec_from_file_location("fleet_preview12_reviewed_ledger", adapter)
-    if spec is None or spec.loader is None:
-        raise RebuilderError("reviewed durable approval-ledger adapter cannot be loaded")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module_name = "fleet_preview12_reviewed_ledger"
+    module = types.ModuleType(module_name)
+    module.__file__ = os.fspath(adapter)
+    prior = sys.modules.get(module_name)
+    sys.modules[module_name] = module
+    try:
+        exec(compile(adapter_raw, os.fspath(adapter), "exec"), module.__dict__)
+    finally:
+        if prior is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = prior
     policy, policy_sha256 = module.load_policy(policy_path)
+    if policy_sha256 != reservation["policy_sha256"]:
+        raise RebuilderError("reviewed durable approval-ledger policy changed during load")
     ledger_policy = module.validate_ledger_policy(
         policy["replay_protection"]["external_ledger"], require_configured=True
     )
@@ -889,13 +922,17 @@ def commit_signing_attempt(client, subject: Mapping[str, Any], reservation: Mapp
         external_attestation, "external signer v1 attestation", 32 * 1024, owner_only=True
     )
     committed = client.commit(subject, raw, reservation)
+    _validate_ledger_commit(committed, raw)
+    return committed
+
+
+def _validate_ledger_commit(committed: Mapping[str, Any], approval_raw: bytes) -> None:
     receipt = committed.get("receipt", {})
     approval = receipt.get("approval", {})
     if receipt.get("state") != "committed" \
-            or approval.get("sha256") != hashlib.sha256(raw).hexdigest() \
-            or approval.get("sizeBytes") != len(raw):
+            or approval.get("sha256") != hashlib.sha256(approval_raw).hexdigest() \
+            or approval.get("sizeBytes") != len(approval_raw):
         raise RebuilderError("durable ledger did not commit exact external signer v1 bytes")
-    return committed
 
 
 def require_rebuild_match(rebuilt_aab: Path, request: Mapping[str, Any], limit: int) -> dict[str, Any]:
@@ -1229,6 +1266,860 @@ def validate_local_rebuild_handoff(directory: Path, lock: Mapping[str, Any]) -> 
     _sha40(bindings.get("sourceCommit"), "rebuild source commit")
     _sha40(bindings.get("sourceTree"), "rebuild source tree")
     return handoff, paths
+
+
+class AuthenticatedRebuildHandoff:
+    """In-memory capability returned only by a protected provenance verifier.
+
+    This is deliberately not a serialized authority contract.  The future
+    protected workflow owns authentication of the immutable artifact and
+    supplies an assertion that rechecks its pinned bytes throughout signing.
+    """
+
+    __slots__ = ("handoff", "paths", "toolchain", "provenance", "java_root", "assert_exact")
+
+    def __init__(
+        self,
+        handoff: Mapping[str, Any],
+        paths: Mapping[str, Path],
+        toolchain: Mapping[str, Any],
+        provenance: Mapping[str, Any],
+        java_root: Path,
+        assert_exact: Callable[[], None],
+    ) -> None:
+        self.handoff = handoff
+        self.paths = paths
+        self.toolchain = toolchain
+        self.provenance = provenance
+        self.java_root = java_root
+        self.assert_exact = assert_exact
+
+
+def _validate_authenticated_handoff(
+    lease: AuthenticatedRebuildHandoff, lock: Mapping[str, Any], lock_raw: bytes, *,
+    attempt_id: str, two_green_artifact_id: int, two_green_artifact_sha256: str,
+) -> None:
+    expected_provenance_fields = {
+        "authorityClass", "lockSha256", "artifactClosureSha256", "builderImage",
+        "signerImage", "builderCredentialMountsPresent",
+        "builderExecutionProvenanceAuthenticated", "protectedSignerRuntimeVerified",
+        "consumerBytesRootOwnedImmutable", "ledgerAdapterBytesRootOwnedImmutable",
+        "attemptId", "twoGreenArtifactId", "twoGreenArtifactSha256",
+    }
+    provenance = lease.provenance
+    if not isinstance(provenance, Mapping) or set(provenance) != expected_provenance_fields \
+            or provenance.get("authorityClass") != "authenticated_immutable_workflow_artifact" \
+            or provenance.get("lockSha256") != hashlib.sha256(lock_raw).hexdigest() \
+            or not HEX64.fullmatch(str(provenance.get("artifactClosureSha256") or "")) \
+            or provenance.get("builderImage") != lock["toolchain"]["builder_image"] \
+            or provenance.get("signerImage") != lock["toolchain"]["signer_image"] \
+            or provenance.get("builderCredentialMountsPresent") is not False \
+            or provenance.get("attemptId") != attempt_id \
+            or provenance.get("twoGreenArtifactId") != two_green_artifact_id \
+            or provenance.get("twoGreenArtifactSha256") != two_green_artifact_sha256 \
+            or any(provenance.get(name) is not True for name in (
+                "builderExecutionProvenanceAuthenticated", "protectedSignerRuntimeVerified",
+                "consumerBytesRootOwnedImmutable", "ledgerAdapterBytesRootOwnedImmutable",
+            )):
+        raise RebuilderError("protected rebuild handoff provenance is not authenticated and exact")
+    handoff = lease.handoff
+    bindings = handoff.get("bindings")
+    expected_binding_fields = {
+        "lockSha256", "requestSha256", "sourceGraphSha256", "unsignedAabSha256",
+        "unsignedAabSizeBytes", "twoGreenReceiptSha256", "twoGreenApprovalSha256",
+        "toolchainClosureSha256", "sourceCommit", "sourceTree",
+    }
+    if handoff.get("contractName") != REBUILD_HANDOFF_CONTRACT \
+            or handoff.get("releaseIdentity") != {
+                "packageId": PACKAGE_ID, "versionName": VERSION_NAME, "versionCode": VERSION_CODE
+            } \
+            or not isinstance(bindings, Mapping) or set(bindings) != expected_binding_fields \
+            or bindings.get("lockSha256") != provenance["lockSha256"] \
+            or bindings.get("toolchainClosureSha256") \
+            != lease.toolchain.get("builderClosureSha256"):
+        raise RebuilderError("authenticated handoff differs from current lock or toolchain closure")
+    exact_toolchain_fields = {
+        "platform", "dotnet", "java", "android_sdk", "bundletoolSha256",
+        "installedClosureReceiptSha256", "reportedBuilderImage", "plannedSignerImage",
+        "builderExecutionProvenanceAuthenticated", "protectedSignerRuntimeVerified",
+        "builderClosureSha256", "closureSha256",
+    }
+    if set(lease.toolchain) != exact_toolchain_fields:
+        raise RebuilderError("protected full toolchain closure fields are not exact")
+    for name in ("dotnet", "java", "android_sdk"):
+        expected = lock["toolchain"][name]
+        if lease.toolchain.get(name) != {
+            "treeSha256": expected["tree_sha256"],
+            "fileCount": expected["file_count"],
+            "sizeBytes": expected["size_bytes"],
+        }:
+            raise RebuilderError(f"protected {name} closure differs from lock")
+    if lease.toolchain.get("platform") != lock["toolchain"]["platform"] \
+            or lease.toolchain.get("bundletoolSha256") != lock["toolchain"]["bundletool_sha256"] \
+            or lease.toolchain.get("installedClosureReceiptSha256") \
+            != lock["toolchain"]["installed_closure_receipt_sha256"]:
+        raise RebuilderError("protected auxiliary toolchain closure differs from lock")
+    builder_toolchain = {
+        name: value for name, value in lease.toolchain.items()
+        if name not in {"builderClosureSha256", "closureSha256"}
+    }
+    builder_toolchain["builderExecutionProvenanceAuthenticated"] = False
+    builder_toolchain["protectedSignerRuntimeVerified"] = False
+    if hashlib.sha256(_canonical_json(builder_toolchain)).hexdigest() \
+            != lease.toolchain.get("builderClosureSha256"):
+        raise RebuilderError("protected handoff changed the authenticated builder closure")
+    full_toolchain = dict(lease.toolchain)
+    claimed_full_closure = full_toolchain.pop("closureSha256", None)
+    if not isinstance(claimed_full_closure, str) or not HEX64.fullmatch(claimed_full_closure) \
+            or hashlib.sha256(_canonical_json(full_toolchain)).hexdigest() != claimed_full_closure:
+        raise RebuilderError("protected full toolchain closure digest is not canonical")
+    if lease.toolchain.get("builderExecutionProvenanceAuthenticated") is not True \
+            or lease.toolchain.get("protectedSignerRuntimeVerified") is not True \
+            or lease.toolchain.get("reportedBuilderImage") != provenance["builderImage"] \
+            or lease.toolchain.get("plannedSignerImage") != provenance["signerImage"]:
+        raise RebuilderError("authenticated handoff did not promote protected runtime provenance")
+    expected_paths = {
+        "unsignedAab", "sourceGraph", "buildSidecar", "twoGreenReceipt",
+        "twoGreenApproval", "externalSignerRequest",
+    }
+    expected_path_names = {
+        "unsignedAab": f"chummer-android-{VERSION_NAME}-unsigned.aab",
+        "sourceGraph": f"chummer-android-{VERSION_NAME}-source-graph.json",
+        "buildSidecar": f"chummer-android-{VERSION_NAME}-unsigned.aab.sha256",
+        "twoGreenReceipt": "ANDROID_API36_TWO_GREEN_ELIGIBILITY.generated.json",
+        "twoGreenApproval": "ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json",
+        "externalSignerRequest": "ANDROID_EXTERNAL_SIGNER_REQUEST.generated.json",
+    }
+    if set(lease.paths) != expected_paths or any(
+        not isinstance(path, Path) or not path.is_absolute() for path in lease.paths.values()
+    ) or any(lease.paths[name].name != expected for name, expected in expected_path_names.items()):
+        raise RebuilderError("authenticated handoff path inventory is not exact")
+    actual_bindings = {
+        "lockSha256": hashlib.sha256(lock_raw).hexdigest(),
+        "requestSha256": _sha256_file(
+            lease.paths["externalSignerRequest"], "authenticated external signer request",
+            lock["limits"]["json_bytes"], owner_only=True,
+        ),
+        "sourceGraphSha256": _sha256_file(
+            lease.paths["sourceGraph"], "authenticated source graph",
+            lock["limits"]["json_bytes"], owner_only=True,
+        ),
+        "unsignedAabSha256": _sha256_file(
+            lease.paths["unsignedAab"], "authenticated unsigned AAB",
+            lock["limits"]["aab_bytes"], owner_only=True,
+        ),
+        "unsignedAabSizeBytes": lease.paths["unsignedAab"].stat().st_size,
+        "twoGreenReceiptSha256": _sha256_file(
+            lease.paths["twoGreenReceipt"], "authenticated two-green receipt",
+            lock["limits"]["json_bytes"], owner_only=True,
+        ),
+        "twoGreenApprovalSha256": _sha256_file(
+            lease.paths["twoGreenApproval"], "authenticated two-green approval",
+            lock["limits"]["json_bytes"], owner_only=True,
+        ),
+        "toolchainClosureSha256": lease.toolchain["builderClosureSha256"],
+        "sourceCommit": lock["android_authority"]["commit"],
+        "sourceTree": lock["android_authority"]["tree"],
+    }
+    if dict(bindings) != actual_bindings:
+        raise RebuilderError("authenticated handoff byte or source-authority binding differs")
+    java_digest, java_count, java_size = _tree_digest(
+        lease.java_root, "protected signer Java closure"
+    )
+    expected_java = lock["toolchain"]["java"]
+    if (java_digest, java_count, java_size) != (
+        expected_java["tree_sha256"], expected_java["file_count"], expected_java["size_bytes"]
+    ):
+        raise RebuilderError("protected signer Java closure differs from lock")
+    lease.assert_exact()
+
+
+def _admit_signing_paths(value: Mapping[str, Any]) -> dict[str, Path]:
+    expected = {"keystore", "storePassword", "keyPassword", "ownerPrivateKey"}
+    if not isinstance(value, Mapping) or set(value) != expected:
+        raise RebuilderError("protected credential admission did not return the exact path inventory")
+    paths = {name: path for name, path in value.items() if isinstance(path, Path)}
+    if set(paths) != expected or any(not path.is_absolute() for path in paths.values()):
+        raise RebuilderError("protected credential admission returned a noncanonical path")
+    return paths
+
+
+def _validate_protected_output_path(output_dir: Path, *, allow_existing: bool = False) -> None:
+    if not output_dir.is_absolute() or output_dir.is_symlink() \
+            or output_dir.parent.is_symlink() \
+            or output_dir.parent.resolve(strict=True) != output_dir.parent \
+            or output_dir.parent.stat().st_uid != os.getuid() \
+            or stat.S_IMODE(output_dir.parent.stat().st_mode) & 0o077 \
+            or (output_dir.exists() and not allow_existing):
+        raise RebuilderError("protected signer output is not canonical below one owner-only directory")
+    if output_dir.exists() and (
+        not output_dir.is_dir() or output_dir.resolve(strict=True) != output_dir
+        or output_dir.stat().st_uid != os.getuid()
+        or stat.S_IMODE(output_dir.stat().st_mode) & 0o077
+    ):
+        raise RebuilderError("existing protected signer output is not one owner-only directory")
+
+
+def _validate_pre_signing_inputs(
+    lease: AuthenticatedRebuildHandoff, lock: Mapping[str, Any], android: Any,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], bytes, bytes]:
+    """Replay every public semantic gate before a signing credential is admitted."""
+
+    request, graph = validate_external_request(
+        lease.paths["externalSignerRequest"], lease.paths["sourceGraph"],
+        lock["limits"]["json_bytes"],
+    )
+    rebuilt = require_rebuild_match(
+        lease.paths["unsignedAab"], request, lock["limits"]["aab_bytes"]
+    )
+    rows = validate_source_graph(graph)
+    android_row = rows["chummer-android"]
+    if (android_row["commit"], android_row["tree"], android_row["repository"]) != (
+        lock["android_authority"]["commit"], lock["android_authority"]["tree"],
+        lock["android_authority"]["repository"],
+    ):
+        raise RebuilderError("authenticated source graph is not the qualified Android authority")
+    if _sha256_file(
+        lease.paths["buildSidecar"], "authenticated producer sidecar", 64 * 1024,
+        owner_only=True,
+    ) != request["buildSidecar"]["sha256"]:
+        raise RebuilderError("authenticated producer sidecar differs from the signer request")
+    try:
+        claims = android._artifact_claims(
+            lease.paths["unsignedAab"], lease.paths["sourceGraph"],
+            lease.paths["buildSidecar"], lease.paths["twoGreenReceipt"],
+            lease.paths["twoGreenApproval"],
+        )
+        identity = claims["graph"]["releaseIdentity"]
+        qualification = android.VERIFY.verify_release_eligibility(
+            lease.paths["twoGreenReceipt"], lease.paths["twoGreenApproval"],
+            android_root=android.ROOT,
+            expected_version_name=identity["versionName"],
+            expected_version_code=identity["versionCode"],
+            source_graph_path=lease.paths["sourceGraph"],
+        )
+    except Exception as error:
+        raise RebuilderError("authenticated Android pre-signing eligibility replay failed") from error
+    bindings = lease.handoff["bindings"]
+    if claims.get("sourceCommit") != bindings["sourceCommit"] \
+            or claims.get("sourceTree") != bindings["sourceTree"] \
+            or claims.get("aab") != {
+                "fileName": request["unsignedAab"]["fileName"],
+                "sha256": rebuilt["sha256"], "sizeBytes": rebuilt["sizeBytes"],
+            } \
+            or claims.get("sourceGraph") != {
+                "fileName": request["sourceGraph"]["fileName"],
+                "sha256": bindings["sourceGraphSha256"],
+                "sizeBytes": request["sourceGraph"]["sizeBytes"],
+            } \
+            or claims.get("buildSidecar", {}).get("sha256") != request["buildSidecar"]["sha256"] \
+            or claims.get("twoGreen") != {
+                "receiptSha256": bindings["twoGreenReceiptSha256"],
+                "approvalSha256": bindings["twoGreenApprovalSha256"],
+            }:
+        raise RebuilderError("Android pre-signing artifact claims differ from authenticated handoff")
+    if qualification.get("sourceCommit") != bindings["sourceCommit"] \
+            or qualification.get("sourceTree") != bindings["sourceTree"] \
+            or qualification.get("receiptSha256") != bindings["twoGreenReceiptSha256"] \
+            or qualification.get("eligible") is not True \
+            or qualification.get("internalTestingEligible") is not True \
+            or qualification.get("publicationAuthorized") is not False \
+            or qualification.get("googlePlayUploadAuthorized") is not False:
+        raise RebuilderError("two-green eligibility is not exact for the authenticated handoff")
+    request_raw = _stable_bytes(
+        lease.paths["externalSignerRequest"], "authenticated external signer request",
+        lock["limits"]["json_bytes"], owner_only=True,
+    )
+    graph_raw = _stable_bytes(
+        lease.paths["sourceGraph"], "authenticated source graph",
+        lock["limits"]["json_bytes"], owner_only=True,
+    )
+    lease.assert_exact()
+    return request, graph, rebuilt, request_raw, graph_raw
+
+
+def _recovery_path(output_dir: Path, attempt_id: str) -> Path:
+    return output_dir.parent / f".{output_dir.name}.recovery-{attempt_id}"
+
+
+def _recovery_write(directory: Path, name: str, value: Mapping[str, Any]) -> Path:
+    path = directory / name
+    _write_exclusive(path, _pretty_json(value))
+    _fsync_directory(directory)
+    return path
+
+
+def _recovery_read(directory: Path, name: str, limit: int) -> tuple[dict[str, Any], bytes]:
+    if not directory.is_absolute() or directory.is_symlink() or not directory.is_dir() \
+            or directory.resolve(strict=True) != directory \
+            or directory.stat().st_uid != os.getuid() \
+            or stat.S_IMODE(directory.stat().st_mode) & 0o077:
+        raise RebuilderError("protected signer recovery directory is not canonical and owner-only")
+    return _json_file(
+        directory / name, f"protected signer recovery {name}", limit, owner_only=True
+    )
+
+
+def _write_or_match(path: Path, raw: bytes, label: str, limit: int) -> None:
+    if path.exists():
+        if _stable_bytes(path, label, limit, owner_only=True) != raw:
+            raise RebuilderError(f"existing {label} differs from recovered transaction")
+        return
+    _write_exclusive(path, raw)
+    _fsync_directory(path.parent)
+
+
+def _validate_recovery_inventory(directory: Path, *, require_final: bool) -> None:
+    required = {
+        "RESERVATION.generated.json",
+        "ATTESTED.generated.json",
+        "LEDGER_COMMIT_INTENT.generated.json",
+        f"chummer-android-{VERSION_NAME}-signed.aab",
+        f"chummer-android-{VERSION_NAME}-signed.aab.sha256",
+        "ANDROID_RELEASE_BUILD_ATTESTATION.v2.json",
+        "ANDROID_EXTERNAL_SIGNER_ATTESTATION.v1.json",
+    }
+    optional = {
+        "LEDGER_COMMIT.generated.json",
+        "FLEET_ANDROID_PREVIEW12_EXTERNAL_REBUILD_AUDIT.v3.json",
+    }
+    actual = {entry.name for entry in os.scandir(directory)}
+    if not required.issubset(actual) or not actual.issubset(required | optional) \
+            or (require_final and actual != required | optional):
+        raise RebuilderError("protected signer recovery inventory is incomplete or contaminated")
+    for name in actual:
+        path = directory / name
+        metadata = path.lstat()
+        if path.is_symlink() or not path.is_file() or metadata.st_uid != os.getuid() \
+                or stat.S_IMODE(metadata.st_mode) & 0o077:
+            raise RebuilderError("protected signer recovery contains a noncanonical entry")
+
+
+def _reservation_record(
+    lock_raw: bytes, lease: AuthenticatedRebuildHandoff, subject: Mapping[str, Any],
+    reservation: Mapping[str, Any], output_dir: Path, attempt_id: str,
+    two_green_artifact_id: int, two_green_artifact_sha256: str,
+) -> dict[str, Any]:
+    return {
+        "contractName": RECOVERY_CONTRACT,
+        "contractVersion": 1,
+        "phase": "reserved",
+        "attemptId": attempt_id,
+        "outputName": output_dir.name,
+        "twoGreenArtifactId": two_green_artifact_id,
+        "twoGreenArtifactSha256": two_green_artifact_sha256,
+        "lockSha256": hashlib.sha256(lock_raw).hexdigest(),
+        "artifactClosureSha256": lease.provenance["artifactClosureSha256"],
+        "subject": dict(subject),
+        "reservation": dict(reservation),
+    }
+
+
+def _attested_record(
+    lock_raw: bytes, lease: AuthenticatedRebuildHandoff, signed: Mapping[str, Any],
+    rebuilt: Mapping[str, Any], request_raw: bytes, graph_raw: bytes,
+    signed_path: Path, signed_sidecar: Path, android_v2_path: Path,
+    external_v1_path: Path, attempt_id: str,
+) -> dict[str, Any]:
+    return {
+        "contractName": RECOVERY_CONTRACT,
+        "contractVersion": 1,
+        "phase": "attested",
+        "attemptId": attempt_id,
+        "signedAab": dict(signed),
+        "bindings": {
+            "lockSha256": hashlib.sha256(lock_raw).hexdigest(),
+            "artifactClosureSha256": lease.provenance["artifactClosureSha256"],
+            "requestSha256": hashlib.sha256(request_raw).hexdigest(),
+            "sourceGraphSha256": hashlib.sha256(graph_raw).hexdigest(),
+            "unsignedAabSha256": rebuilt["sha256"],
+            "toolchainClosureSha256": lease.toolchain["closureSha256"],
+            "signedAabSha256": _sha256_file(
+                signed_path, "recovery signed AAB", 512 * 1024 * 1024, owner_only=True
+            ),
+            "signedSidecarSha256": _sha256_file(
+                signed_sidecar, "recovery signed sidecar", 64 * 1024, owner_only=True
+            ),
+            "androidV2Sha256": _sha256_file(
+                android_v2_path, "recovery Android v2", 8 * 1024 * 1024, owner_only=True
+            ),
+            "externalV1Sha256": _sha256_file(
+                external_v1_path, "recovery external v1", 32 * 1024, owner_only=True
+            ),
+        },
+    }
+
+
+def validate_external_signer_attestation(
+    android: Any, path: Path, request: Mapping[str, Any], rebuilt: Mapping[str, Any],
+    signed: Mapping[str, Any], graph_raw: bytes, toolchain: Mapping[str, Any],
+    android_v2_path: Path, approval_authority: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Verify the exact public v1 response using Android's pinned Ed25519 key."""
+
+    value, raw = _json_file(
+        path, "external signer v1 attestation", 32 * 1024, owner_only=True
+    )
+    if raw != _pretty_json(value):
+        raise RebuilderError("external signer v1 bytes are not exact pretty JSON")
+    expected_fields = {
+        "contractName", "algorithm", "keyId", "role", "attestationScope",
+        "generatedAtUtc", "challengeNonce", "releaseIdentity", "unsignedAabSha256",
+        "signedAabSha256", "signedAabSizeBytes", "sourceGraphSha256",
+        "expectedUploadCertificateSha256", "fullToolchainClosureSha256",
+        "androidReleaseBuildAttestation", "publicationAuthorized",
+        "googlePlayUploadAuthorized", "signatureBase64",
+    }
+    if set(value) != expected_fields:
+        raise RebuilderError("external signer v1 fields are not exact")
+    generated = value.get("generatedAtUtc")
+    try:
+        parsed = datetime.fromisoformat(str(generated).removesuffix("Z") + "+00:00")
+    except ValueError as error:
+        raise RebuilderError("external signer v1 timestamp is not canonical UTC") from error
+    if not isinstance(generated, str) or not generated.endswith("Z") \
+            or parsed.tzinfo is None \
+            or parsed.microsecond != 0 \
+            or parsed.astimezone(UTC).isoformat().replace("+00:00", "Z") != generated:
+        raise RebuilderError("external signer v1 timestamp is not canonical UTC")
+    challenge = value.get("challengeNonce")
+    if not isinstance(challenge, str) or not HEX64.fullmatch(challenge):
+        raise RebuilderError("external signer v1 challenge is not exact")
+    expected_unsigned = {
+        "contractName": EXTERNAL_SIGNER_ATTESTATION_CONTRACT,
+        "algorithm": "ed25519",
+        "keyId": approval_authority["key_id"],
+        "role": approval_authority["role"],
+        "attestationScope": approval_authority["scope"],
+        "generatedAtUtc": generated,
+        "challengeNonce": challenge,
+        "releaseIdentity": dict(request["releaseIdentity"]),
+        "unsignedAabSha256": rebuilt["sha256"],
+        "signedAabSha256": signed["sha256"],
+        "signedAabSizeBytes": signed["sizeBytes"],
+        "sourceGraphSha256": hashlib.sha256(graph_raw).hexdigest(),
+        "expectedUploadCertificateSha256": UPLOAD_CERTIFICATE_SHA256,
+        "fullToolchainClosureSha256": toolchain["closureSha256"],
+        "androidReleaseBuildAttestation": {
+            "contractName": ANDROID_ATTESTATION_CONTRACT,
+            "sha256": _sha256_file(
+                android_v2_path, "external signer Android v2", 8 * 1024 * 1024,
+                owner_only=True,
+            ),
+        },
+        "publicationAuthorized": False,
+        "googlePlayUploadAuthorized": False,
+    }
+    unsigned = dict(value)
+    signature = unsigned.pop("signatureBase64")
+    if unsigned != expected_unsigned:
+        raise RebuilderError("external signer v1 claims differ from the recovered transaction")
+    try:
+        android.VERIFY._verify_ed25519_signature(
+            unsigned, signature, label="external signer v1"
+        )
+    except Exception as error:
+        raise RebuilderError("external signer v1 detached signature is invalid") from error
+    return value
+
+
+def _expected_ledger_subject(
+    ledger: Any, lease: AuthenticatedRebuildHandoff, policy_sha256: str, *,
+    attempt_id: str, two_green_artifact_id: int, two_green_artifact_sha256: str,
+    json_limit: int,
+) -> dict[str, Any]:
+    return ledger.make_subject(
+        approval_request_nonce=attempt_id,
+        two_green_artifact_id=two_green_artifact_id,
+        two_green_artifact_sha256=two_green_artifact_sha256,
+        two_green_receipt_sha256=_sha256_file(
+            lease.paths["twoGreenReceipt"], "two-green receipt", json_limit, owner_only=True
+        ),
+        main_tree=str(lease.handoff["bindings"]["sourceTree"]),
+        policy_sha256=policy_sha256,
+        version_name=VERSION_NAME,
+        version_code=VERSION_CODE,
+    )
+
+
+def _validate_recovery_records(
+    directory: Path, lock: Mapping[str, Any], lock_raw: bytes,
+    lease: AuthenticatedRebuildHandoff, expected_subject: Mapping[str, Any],
+    request_raw: bytes, graph_raw: bytes, rebuilt: Mapping[str, Any], *,
+    output_dir: Path, attempt_id: str, two_green_artifact_id: int,
+    two_green_artifact_sha256: str,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Path]]:
+    reservation_record, _ = _recovery_read(
+        directory, "RESERVATION.generated.json", lock["limits"]["json_bytes"]
+    )
+    expected_reservation_fields = {
+        "contractName", "contractVersion", "phase", "attemptId", "outputName",
+        "twoGreenArtifactId", "twoGreenArtifactSha256", "lockSha256",
+        "artifactClosureSha256", "subject", "reservation",
+    }
+    if set(reservation_record) != expected_reservation_fields \
+            or reservation_record.get("contractName") != RECOVERY_CONTRACT \
+            or reservation_record.get("contractVersion") != 1 \
+            or reservation_record.get("phase") != "reserved" \
+            or reservation_record.get("attemptId") != attempt_id \
+            or reservation_record.get("outputName") != output_dir.name \
+            or reservation_record.get("twoGreenArtifactId") != two_green_artifact_id \
+            or reservation_record.get("twoGreenArtifactSha256") != two_green_artifact_sha256 \
+            or reservation_record.get("lockSha256") != hashlib.sha256(lock_raw).hexdigest() \
+            or reservation_record.get("artifactClosureSha256") \
+            != lease.provenance["artifactClosureSha256"] \
+            or reservation_record.get("subject") != expected_subject \
+            or reservation_record.get("reservation", {}).get("receipt", {}).get("state") != "reserved":
+        raise RebuilderError("protected signer recovery reservation is not exact")
+
+    attested_record, _ = _recovery_read(
+        directory, "ATTESTED.generated.json", lock["limits"]["json_bytes"]
+    )
+    if set(attested_record) != {
+        "contractName", "contractVersion", "phase", "attemptId", "signedAab", "bindings"
+    } or attested_record.get("contractName") != RECOVERY_CONTRACT \
+            or attested_record.get("contractVersion") != 1 \
+            or attested_record.get("phase") != "attested" \
+            or attested_record.get("attemptId") != attempt_id:
+        raise RebuilderError("protected signer recovery attestation marker is not exact")
+    paths = {
+        "signedAab": directory / f"chummer-android-{VERSION_NAME}-signed.aab",
+        "signedSidecar": directory / f"chummer-android-{VERSION_NAME}-signed.aab.sha256",
+        "androidV2": directory / "ANDROID_RELEASE_BUILD_ATTESTATION.v2.json",
+        "externalV1": directory / "ANDROID_EXTERNAL_SIGNER_ATTESTATION.v1.json",
+        "commitIntent": directory / "LEDGER_COMMIT_INTENT.generated.json",
+        "ledgerCommit": directory / "LEDGER_COMMIT.generated.json",
+        "audit": directory / "FLEET_ANDROID_PREVIEW12_EXTERNAL_REBUILD_AUDIT.v3.json",
+    }
+    signed = attested_record.get("signedAab")
+    if not isinstance(signed, dict) or signed != {
+        "sha256": _sha256_file(
+            paths["signedAab"], "recovered signed AAB", lock["limits"]["aab_bytes"], owner_only=True
+        ),
+        "sizeBytes": paths["signedAab"].stat().st_size,
+        "uploadCertificateSha256": UPLOAD_CERTIFICATE_SHA256,
+    }:
+        raise RebuilderError("recovered signed AAB differs from its attested identity")
+    expected_bindings = {
+        "lockSha256": hashlib.sha256(lock_raw).hexdigest(),
+        "artifactClosureSha256": lease.provenance["artifactClosureSha256"],
+        "requestSha256": hashlib.sha256(request_raw).hexdigest(),
+        "sourceGraphSha256": hashlib.sha256(graph_raw).hexdigest(),
+        "unsignedAabSha256": rebuilt["sha256"],
+        "toolchainClosureSha256": lease.toolchain["closureSha256"],
+        "signedAabSha256": signed["sha256"],
+        "signedSidecarSha256": _sha256_file(
+            paths["signedSidecar"], "recovered signed sidecar", 64 * 1024, owner_only=True
+        ),
+        "androidV2Sha256": _sha256_file(
+            paths["androidV2"], "recovered Android v2", lock["limits"]["json_bytes"], owner_only=True
+        ),
+        "externalV1Sha256": _sha256_file(
+            paths["externalV1"], "recovered external v1", 32 * 1024, owner_only=True
+        ),
+    }
+    if attested_record.get("bindings") != expected_bindings:
+        raise RebuilderError("recovered signed evidence differs from its exclusive journal")
+    intent, _ = _recovery_read(
+        directory, "LEDGER_COMMIT_INTENT.generated.json", lock["limits"]["json_bytes"]
+    )
+    if intent != {
+        "contractName": RECOVERY_CONTRACT,
+        "contractVersion": 1,
+        "phase": "commit-intent",
+        "attemptId": attempt_id,
+        "externalV1Sha256": expected_bindings["externalV1Sha256"],
+    }:
+        raise RebuilderError("protected signer recovery commit intent is not exact")
+    _validate_recovery_inventory(directory, require_final=False)
+    return dict(reservation_record["reservation"]), dict(signed), paths
+
+
+def execute_protected_signer_transaction(
+    lock_path: Path,
+    authenticate_handoff: Callable[[Mapping[str, Any], bytes], AuthenticatedRebuildHandoff],
+    load_consumer: Callable[[], Any],
+    fleet_root: Path,
+    ledger_environment: Mapping[str, str],
+    admit_signing_credentials: Callable[[Mapping[str, Any], Mapping[str, Any]], Mapping[str, Any]],
+    protected_validation_factory: Callable[..., Mapping[str, Any]],
+    output_dir: Path,
+    *,
+    attempt_id: str,
+    two_green_artifact_id: int,
+    two_green_artifact_sha256: str,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> dict[str, Any]:
+    """Compose one dormant protected sign-once transaction.
+
+    The callback capabilities are test seams, not runtime provenance.  A future
+    protected owner workflow must construct them from immutable job evidence.
+    """
+
+    lock, lock_raw = load_lock(lock_path)
+    failures = validate_lock(lock, lock_raw)
+    if failures:
+        raise RebuilderError("; ".join(failures))
+    _sha256(attempt_id, "protected signer attempt")
+    _sha256(two_green_artifact_sha256, "two-green artifact")
+    if type(two_green_artifact_id) is not int or two_green_artifact_id < 1:
+        raise RebuilderError("two-green artifact ID must be a positive integer")
+    _validate_protected_output_path(output_dir)
+    recovery = _recovery_path(output_dir, attempt_id)
+    if recovery.exists() or recovery.is_symlink():
+        raise RebuilderError("protected signer recovery already exists; reconciliation is required")
+
+    lease = authenticate_handoff(lock, lock_raw)
+    if not isinstance(lease, AuthenticatedRebuildHandoff):
+        raise RebuilderError("protected provenance verifier returned no authenticated handoff")
+    _validate_authenticated_handoff(
+        lease, lock, lock_raw, attempt_id=attempt_id,
+        two_green_artifact_id=two_green_artifact_id,
+        two_green_artifact_sha256=two_green_artifact_sha256,
+    )
+    android = load_consumer()
+    if getattr(android, "CONTRACT", None) != ANDROID_ATTESTATION_CONTRACT:
+        raise RebuilderError("protected Android consumer contract differs")
+    request, _graph, rebuilt, request_raw, graph_raw = _validate_pre_signing_inputs(
+        lease, lock, android
+    )
+    ledger, client, policy_sha256 = load_reviewed_ledger(
+        fleet_root, lock, ledger_environment
+    )
+    subject, reservation = reserve_signing_attempt(
+        ledger, client, attempt_id=attempt_id,
+        two_green_artifact_id=two_green_artifact_id,
+        two_green_artifact_sha256=two_green_artifact_sha256,
+        two_green_receipt_sha256=lease.handoff["bindings"]["twoGreenReceiptSha256"],
+        main_tree=str(lease.handoff["bindings"]["sourceTree"]),
+        policy_sha256=policy_sha256,
+    )
+
+    credential_admission_started = False
+    recovery_created = False
+    try:
+        lease.assert_exact()
+        recovery.mkdir(mode=0o700)
+        recovery.chmod(0o700)
+        _fsync_directory(output_dir.parent)
+        recovery_created = True
+        _recovery_write(
+            recovery, "RESERVATION.generated.json",
+            _reservation_record(
+                lock_raw, lease, subject, reservation, output_dir, attempt_id,
+                two_green_artifact_id, two_green_artifact_sha256,
+            ),
+        )
+        credential_admission_started = True
+        credentials = _admit_signing_paths(
+            admit_signing_credentials(reservation, lease.provenance)
+        )
+        lease.assert_exact()
+        signed_path = recovery / f"chummer-android-{VERSION_NAME}-signed.aab"
+        signed = sign_aab(
+            lease.paths["unsignedAab"], signed_path, lock, credentials["keystore"],
+            credentials["storePassword"], credentials["keyPassword"],
+            lease.java_root, runner=runner,
+        )
+        signed_sidecar = recovery / f"{signed_path.name}.sha256"
+        materialize_signed_sidecar(
+            signed_path, lease.paths["sourceGraph"], signed_sidecar,
+            lock["limits"]["aab_bytes"],
+        )
+        lease.assert_exact()
+        protected_validation = protected_validation_factory(
+            android=android, signed_aab=signed_path,
+            source_graph=lease.paths["sourceGraph"], sidecar=signed_sidecar,
+            two_green_receipt=lease.paths["twoGreenReceipt"],
+            approval=lease.paths["twoGreenApproval"],
+        )
+        android_v2_path = recovery / "ANDROID_RELEASE_BUILD_ATTESTATION.v2.json"
+        android_v2_attestation(
+            android, signed_path, lease.paths["sourceGraph"], signed_sidecar,
+            lease.paths["twoGreenReceipt"], lease.paths["twoGreenApproval"],
+            protected_validation, credentials["ownerPrivateKey"], android_v2_path,
+            runner=runner,
+        )
+        external_v1_path = recovery / "ANDROID_EXTERNAL_SIGNER_ATTESTATION.v1.json"
+        external_signer_attestation(
+            request, rebuilt, signed, graph_raw, lease.toolchain, android_v2_path,
+            credentials["ownerPrivateKey"], lock["approval_authority"],
+            external_v1_path, runner=runner,
+        )
+        validate_external_signer_attestation(
+            android, external_v1_path, request, rebuilt, signed, graph_raw,
+            lease.toolchain, android_v2_path, lock["approval_authority"],
+        )
+        lease.assert_exact()
+        _recovery_write(
+            recovery, "ATTESTED.generated.json",
+            _attested_record(
+                lock_raw, lease, signed, rebuilt, request_raw, graph_raw,
+                signed_path, signed_sidecar, android_v2_path, external_v1_path,
+                attempt_id,
+            ),
+        )
+        _recovery_write(
+            recovery, "LEDGER_COMMIT_INTENT.generated.json",
+            {
+                "contractName": RECOVERY_CONTRACT, "contractVersion": 1,
+                "phase": "commit-intent", "attemptId": attempt_id,
+                "externalV1Sha256": _sha256_file(
+                    external_v1_path, "external signer v1 attestation", 32 * 1024,
+                    owner_only=True,
+                ),
+            },
+        )
+        _validate_recovery_inventory(recovery, require_final=False)
+        ledger_commit = commit_signing_attempt(
+            client, subject, reservation, external_v1_path
+        )
+        _write_or_match(
+            recovery / "LEDGER_COMMIT.generated.json", _pretty_json(ledger_commit),
+            "ledger commit recovery receipt", lock["limits"]["json_bytes"],
+        )
+        audit = fleet_audit(
+            lock, lock_raw, request_raw, graph_raw, rebuilt, signed,
+            lease.toolchain, ledger_commit, android_v2_path, external_v1_path,
+        )
+        _write_or_match(
+            recovery / "FLEET_ANDROID_PREVIEW12_EXTERNAL_REBUILD_AUDIT.v3.json",
+            _pretty_json(audit), "Fleet external rebuild audit",
+            lock["limits"]["json_bytes"],
+        )
+        _validate_recovery_inventory(recovery, require_final=True)
+        os.replace(recovery, output_dir)
+        _fsync_directory(output_dir.parent)
+        return audit
+    except Exception:
+        if not credential_admission_started:
+            try:
+                client.abort(subject, "protected_signer_failed", reservation)
+            except Exception:
+                pass
+            finally:
+                if recovery_created:
+                    shutil.rmtree(recovery, ignore_errors=True)
+        # Once credential admission begins the private recovery directory is
+        # retained.  It is the only copy of the signed bytes and sign-once
+        # evidence; reconciliation never accepts signing credentials.
+        raise
+
+
+def reconcile_protected_signer_transaction(
+    lock_path: Path,
+    authenticate_handoff: Callable[[Mapping[str, Any], bytes], AuthenticatedRebuildHandoff],
+    load_consumer: Callable[[], Any],
+    fleet_root: Path,
+    ledger_environment: Mapping[str, str],
+    protected_validation_factory: Callable[..., Mapping[str, Any]],
+    output_dir: Path,
+    *,
+    attempt_id: str,
+    two_green_artifact_id: int,
+    two_green_artifact_sha256: str,
+) -> dict[str, Any]:
+    """Recover commit/audit/promotion without admitting keys or signing again."""
+
+    lock, lock_raw = load_lock(lock_path)
+    failures = validate_lock(lock, lock_raw)
+    if failures:
+        raise RebuilderError("; ".join(failures))
+    _sha256(attempt_id, "protected signer attempt")
+    _sha256(two_green_artifact_sha256, "two-green artifact")
+    if type(two_green_artifact_id) is not int or two_green_artifact_id < 1:
+        raise RebuilderError("two-green artifact ID must be a positive integer")
+    _validate_protected_output_path(output_dir, allow_existing=True)
+    recovery = _recovery_path(output_dir, attempt_id)
+    if output_dir.exists() and recovery.exists():
+        raise RebuilderError("both completed output and recovery directory exist")
+    directory = output_dir if output_dir.exists() else recovery
+    if not directory.exists():
+        raise RebuilderError("no protected signer recovery evidence exists")
+
+    lease = authenticate_handoff(lock, lock_raw)
+    if not isinstance(lease, AuthenticatedRebuildHandoff):
+        raise RebuilderError("protected provenance verifier returned no authenticated handoff")
+    _validate_authenticated_handoff(
+        lease, lock, lock_raw, attempt_id=attempt_id,
+        two_green_artifact_id=two_green_artifact_id,
+        two_green_artifact_sha256=two_green_artifact_sha256,
+    )
+    android = load_consumer()
+    if getattr(android, "CONTRACT", None) != ANDROID_ATTESTATION_CONTRACT:
+        raise RebuilderError("protected Android consumer contract differs")
+    request, _graph, rebuilt, request_raw, graph_raw = _validate_pre_signing_inputs(
+        lease, lock, android
+    )
+    ledger, client, policy_sha256 = load_reviewed_ledger(
+        fleet_root, lock, ledger_environment
+    )
+    subject = _expected_ledger_subject(
+        ledger, lease, policy_sha256, attempt_id=attempt_id,
+        two_green_artifact_id=two_green_artifact_id,
+        two_green_artifact_sha256=two_green_artifact_sha256,
+        json_limit=lock["limits"]["json_bytes"],
+    )
+    reservation, signed, paths = _validate_recovery_records(
+        directory, lock, lock_raw, lease, subject, request_raw, graph_raw, rebuilt,
+        output_dir=output_dir, attempt_id=attempt_id,
+        two_green_artifact_id=two_green_artifact_id,
+        two_green_artifact_sha256=two_green_artifact_sha256,
+    )
+    fresh_validation = protected_validation_factory(
+        android=android, signed_aab=paths["signedAab"],
+        source_graph=lease.paths["sourceGraph"], sidecar=paths["signedSidecar"],
+        two_green_receipt=lease.paths["twoGreenReceipt"],
+        approval=lease.paths["twoGreenApproval"],
+    )
+    try:
+        recovered_v2, _ = _json_file(
+            paths["androidV2"], "recovered Android v2",
+            lock["limits"]["json_bytes"], owner_only=True,
+        )
+        fresh_validation = android._validate_validation_claims(dict(fresh_validation))
+        recovered_validation = android._validate_validation_claims(
+            dict(recovered_v2.get("protectedValidation", {}))
+        )
+        if fresh_validation != recovered_validation:
+            raise RebuilderError("fresh protected validation differs from recovered Android v2")
+        android.verify(
+            paths["androidV2"], paths["signedAab"], lease.paths["sourceGraph"],
+            paths["signedSidecar"], lease.paths["twoGreenReceipt"],
+            lease.paths["twoGreenApproval"],
+        )
+    except Exception as error:
+        if isinstance(error, RebuilderError):
+            raise
+        raise RebuilderError("recovered Android v2 evidence failed exact consumer verification") from error
+    validate_external_signer_attestation(
+        android, paths["externalV1"], request, rebuilt, signed, graph_raw,
+        lease.toolchain, paths["androidV2"], lock["approval_authority"],
+    )
+    lease.assert_exact()
+
+    # Always go through the reviewed signed ledger adapter.  A local recovery
+    # file can never substitute for service-authenticated status/commit replay.
+    ledger_commit = commit_signing_attempt(
+        client, subject, reservation, paths["externalV1"]
+    )
+    _write_or_match(
+        paths["ledgerCommit"], _pretty_json(ledger_commit),
+        "ledger commit recovery receipt", lock["limits"]["json_bytes"],
+    )
+    audit = fleet_audit(
+        lock, lock_raw, request_raw, graph_raw, rebuilt, signed,
+        lease.toolchain, ledger_commit, paths["androidV2"], paths["externalV1"],
+    )
+    _write_or_match(
+        paths["audit"], _pretty_json(audit), "Fleet external rebuild audit",
+        lock["limits"]["json_bytes"],
+    )
+    _validate_recovery_inventory(directory, require_final=True)
+    if directory == recovery:
+        os.replace(recovery, output_dir)
+        _fsync_directory(output_dir.parent)
+    return audit
 
 
 def contract_check(lock_path: Path) -> dict[str, Any]:

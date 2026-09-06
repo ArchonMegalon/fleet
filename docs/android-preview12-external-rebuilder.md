@@ -41,14 +41,25 @@ mounts, then bind the transferred bytes to exact workflow/artifact provenance.
 The protected signer must use a root-owned pinned Android consumer and must not
 execute builder-controlled code after keys become available.
 
-The checked-in helpers are not a protected signer transaction. A later owner
-workflow must structurally enforce this order: durable reservation; immutable
-handoff capture and revalidation; credential admission; AAB signing; signed
-sidecar creation; fresh protected validation; Android v2 attestation; external
-v1 response; ledger commit; and separate Fleet audit. The reservation must
-happen before any keystore, password, or owner private-key read. The Android
-consumer and ledger adapter must be loaded from root-owned immutable bytes,
-not from the writable handoff or checkout.
+The checked-in module now contains a non-CLI transaction composition that
+structurally enforces this order: authenticate and revalidate the immutable
+handoff and protected provenance; replay the exact request, source, unsigned
+AAB, sidecar, and two-green eligibility; durably reserve; admit credentials;
+sign the AAB; create the signed sidecar; run fresh protected validation; emit
+Android v2 and external v1; commit the exact external-v1 bytes; and emit Fleet
+audit v3. The reservation occurs before any keystore, password, or owner
+private-key read. The Android consumer and ledger adapter must be loaded from
+root-owned immutable bytes, not from the writable handoff or checkout.
+
+The workflow-owned capability must also bind the attempt ID and exact
+two-green artifact ID and digest. Supplying fresh caller values cannot reserve
+or sign the same authenticated handoff again.
+
+The composition is still dormant because Fleet does not yet provide the
+protected workflow-owned provenance authenticator, immutable root-owned
+consumer/adapter loader, or credential-admission callback. Those are capability
+inputs rather than CLI flags, and caller-supplied JSON booleans are not accepted
+as authority.
 
 The resulting local toolchain object deliberately records both
 `builderExecutionProvenanceAuthenticated = false` and
@@ -65,6 +76,25 @@ remains `pending_merge`, so checked-in code fails closed. The existing adapter
 owns reservation, replay rejection, signed receipts, bounded retry, and
 lost-response recovery. Exact public external-signer v1 bytes are committed to
 that ledger.
+
+After credential admission, signed bytes and their attestations remain in a
+deterministic owner-only recovery directory until promotion succeeds. An
+exclusive reservation record, attested-byte record, and commit-intent record
+bind that recovery transaction. Failures after a commit acknowledgement, a
+lost commit acknowledgement, Fleet-audit materialization, audit persistence,
+or directory promotion retain the signed AAB and sidecars. The separate
+reconciliation function accepts no credential callback and never signs: it
+revalidates current handoff and two-green semantics, reruns protected
+validation, verifies Android v2 and external v1 with the pinned public key,
+and replays the exact commit through Draft #11's signed ledger adapter before
+finishing audit and promotion. A local ledger-response file can never replace
+that service-authenticated replay.
+
+If failure occurs after key admission but before complete v2/v1 evidence is
+journaled, the private bytes are retained for operator diagnosis and explicit
+abort; the code does not silently delete them or attempt a second signature.
+The future owner workflow must provide durable private recovery storage and
+authenticate that storage as part of its signer-runtime provenance.
 
 ## Keys and rotation
 
@@ -85,6 +115,8 @@ new Android consumer, then update this lock in a separate reviewed change.
 - supply immutable builder and signer images plus an installed-closure receipt;
 - prove the builder job has no signer credential mounts;
 - add authenticated immutable artifact provenance between jobs;
+- provide durable owner-only signer recovery storage and bind it to the exact
+  protected job/image/attempt rather than trusting caller-authored files;
 - bind the protected signer runtime and its root-owned Android consumer to that
   provenance before producing full-toolchain or Android-v2 authority;
 - produce the signed-AAB two-line sidecar inside the protected signer
@@ -96,7 +128,9 @@ new Android consumer, then update this lock in a separate reviewed change.
 - configure a private immutable signed-content handoff with readback;
 - configure protected secret descriptors for the recovered old upload key and
   the qualified Android v2 owner key;
-- review and test the protected workflow composition.
+- wire the tested composition callbacks to a real protected owner workflow;
+- separately qualify any Android v2 owner-key rotation before updating the
+  lock or admitting the rotated key.
 
 Play upload and publication remain false even after those items are complete;
 they require their existing separate owner transactions.
