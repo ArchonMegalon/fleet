@@ -151,8 +151,9 @@ jobs:
           --reservation-receipt "$RUNNER_TEMP/reservation.json" --output-dir "$RUNNER_TEMP/signed-output"
           --running-image "$LOCKED_SIGNER_IMAGE"
       - name: Hand off signed content to the private immutable store and verify readback
+        # Activation blocker: an audited per-job JIT workload-identity exchange must
+        # inject ANDROID_PREVIEW12_HANDOFF_ACCESS_TOKEN into this step; no static secret is accepted here.
         env:
-          ANDROID_PREVIEW12_HANDOFF_ACCESS_TOKEN: ${{ secrets.ANDROID_PREVIEW12_HANDOFF_ACCESS_TOKEN }}
           FLEET_SIGNING_ENVIRONMENT: ${{ needs.contract.outputs.signing_environment }}
           FLEET_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
           FLEET_WORKFLOW_REF: ${{ job.workflow_ref }}

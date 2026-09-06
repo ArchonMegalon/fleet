@@ -60,7 +60,8 @@ def _ready(tmp_path: Path, certificate: bytes = b"certificate"):
         private_content_addressed_endpoint="https://handoff.example.test/sha256",
         audited_implementation_sha256="2" * 64)
     lock["signed_content_handoff"]["auth"].update(issuer="https://identity.example.test",
-        audience="fleet-preview12-handoff", scope="signed-content:create", max_ttl_seconds=300)
+        audience="fleet-preview12-handoff", scope="signed-content:create", max_ttl_seconds=300,
+        issuance_mode="jit_workload_identity_exchange", audited_issuer_integration_sha256="3" * 64)
     lock_bytes = (json.dumps(lock, sort_keys=True) + "\n").encode()
     lock_path = tmp_path / "lock.json"
     lock_path.write_bytes(lock_bytes)
@@ -245,6 +246,8 @@ def test_checked_in_contract_is_red_and_uses_canonical_source(tmp_path):
     assert lock["signed_content_handoff"]["audited_implementation_sha256"] is None
     assert lock["signed_content_handoff"]["auth"] == {"token_type": "jwt_bearer", "issuer": None,
         "audience": None, "scope": None, "max_ttl_seconds": None,
+        "issuance_mode": None, "jit_per_job_required": True, "static_secret_forbidden": True,
+        "audited_issuer_integration_sha256": None,
         "server_signature_validation_required": True}
     assert "found no Preview12 producer" in message and "artifact_name is not provisioned" in message
     assert "reservation is disabled" in message and "signed-content handoff is disabled" in message
@@ -378,7 +381,7 @@ def test_duplicate_or_indeterminate_reservation_rejects_without_output(tmp_path,
     assert not Path(args.output).exists()
 
 
-def test_reservation_created_or_reused_normalizes_to_same_durable_evidence(tmp_path):
+def test_reused_reservation_stops_before_any_key_or_handoff_output(tmp_path):
     lock, lock_bytes, toolchain, toolchain_bytes, installed = _ready(tmp_path)
     _write_intake(tmp_path / "intake", lock, lock_bytes, _aab())
     args = _reserve_args(tmp_path, installed, signer._full_image(lock))
@@ -393,9 +396,12 @@ def test_reservation_created_or_reused_normalizes_to_same_durable_evidence(tmp_p
                 "request_sha256": hashlib.sha256(signer._json_bytes(request)).hexdigest(),
                 "bindings": request["bindings"]}
 
+    with pytest.raises(signer.SignerError, match="sign-once policy forbids key access"):
+        signer.reserve(args, lock, lock_bytes, toolchain, toolchain_bytes, _runtime(), Client(False))
+    assert not Path(args.output).exists()
+
     created = signer.reserve(args, lock, lock_bytes, toolchain, toolchain_bytes, _runtime(), Client(True))
-    reused = signer.reserve(args, lock, lock_bytes, toolchain, toolchain_bytes, _runtime(), Client(False))
-    assert created == reused == json.loads(Path(args.output).read_text())
+    assert created == json.loads(Path(args.output).read_text())
     assert "created" not in created and created["state"] == "reserved"
 
 
@@ -771,6 +777,9 @@ def test_handoff_rejects_replacement_of_pinned_file_between_verification_and_upl
     ({"exp": 1_800_000_400}, "lifetime exceeds"),
     ({"exp": 1_799_999_999}, "lifetime is invalid"),
     ({"iat": 1_800_000_020, "exp": 1_800_000_010}, "lifetime is invalid"),
+    ({"iat": 1_800_000_010, "exp": 1_800_000_010}, "lifetime is invalid"),
+    ({"nbf": 1_800_000_010, "exp": 1_800_000_010}, "not active"),
+    ({"nbf": 1_800_000_011, "exp": 1_800_000_010}, "not active"),
 ])
 def test_handoff_bearer_is_short_lived_and_exactly_scoped(changes, error):
     auth = {"issuer": "https://identity.example.test", "audience": "fleet-preview12-handoff",
@@ -1070,7 +1079,8 @@ def test_workflow_topology_has_no_signed_actions_artifact_or_play_lane():
     assert signer.ANDROID_REPOSITORY in (ROOT / "config/release/android-preview12-signer.lock.json").read_text()
     assert "environment: android-play-upload" not in signer_flow
     assert "contents: write" not in signer_flow + verifier_flow
-    assert "ANDROID_PREVIEW12_HANDOFF_ACCESS_TOKEN" in signer_flow
+    assert "secrets.ANDROID_PREVIEW12_HANDOFF_ACCESS_TOKEN" not in signer_flow
+    assert "audited per-job JIT workload-identity exchange" in signer_flow
     assert " handoff --candidate-dir trusted-intake" in signer_flow
     assert "private-handoff-audit.json" in signer_flow
     assert "path: signed-output" not in signer_flow and "path: private-handoff-audit.json" not in signer_flow
@@ -1078,3 +1088,8 @@ def test_workflow_topology_has_no_signed_actions_artifact_or_play_lane():
     assert "ANDROID_PREVIEW12_UPLOAD_KEYSTORE_B64" not in handoff_step
     assert "ANDROID_PREVIEW12_KEYSTORE_PASSWORD" not in handoff_step
     assert "ANDROID_PREVIEW12_KEY_PASSWORD" not in handoff_step
+    reserve_offset = signer_flow.index("- name: Reserve durable exactly-once transaction")
+    sign_offset = signer_flow.index("- name: Sign once after all non-secret and reservation gates")
+    handoff_offset = signer_flow.index("- name: Hand off signed content")
+    assert reserve_offset < sign_offset < handoff_offset
+    assert "continue-on-error" not in signer_flow[reserve_offset:sign_offset]

@@ -19,17 +19,20 @@ Before key access the signer verifies installed toolchain, Fleet job SHA,
 GitHub-hosted runtime, package/version/code/SDK manifest identity, source graph,
 proof exclusion, and a new durable reservation. The reservation transaction
 binds both candidate and verification run/artifact/digest authorities, including
-the verification receipt and source graph. A broker may report either a newly
-created or an already-existing exact reservation; Fleet normalizes both to the
-same immutable local evidence, so an exact workflow retry does not require a
-second signing slot. Any non-exact or indeterminate result stops. Candidate
-tools receive a secret-free environment.
+the verification receipt and source graph. Only `created: true` permits the
+key-bearing step. An already-existing reservation fails closed before signing
+or handoff, even when every binding matches; a later dispatch may not create a
+second signature. Recovery across dispatches requires a separately designed
+durable prior-signed-evidence protocol and is not authorized by this lane. Any
+non-exact or indeterminate reservation result also stops. Candidate tools
+receive a secret-free environment.
 
 After signing, the same protected job must complete the private content-addressed
 handoff. It creates the immutable object at its SHA-256 address with
-`If-None-Match: *` and a stable idempotency key. A retry may receive the same
-normalized `present` receipt; a different request at the same address is a hard
-conflict. If the PUT response is lost, or the server returns `409`/`412`, the
+`If-None-Match: *` and a stable idempotency key. Within the original sign-once
+job, an ambiguous PUT result may reconcile to the same normalized `present`
+receipt; a different request at the same address is a hard conflict. If the PUT
+response is lost, or the server returns `409`/`412`, the
 client performs bounded authenticated GETs of both the object and its durable
 request receipt. It accepts the retry only when the bytes, address, transaction,
 request digest, and every binding are exact; otherwise it fails closed. The
@@ -58,7 +61,8 @@ The handoff request binds all of the following without relying on a filename:
 The bearer accepted by the client must be a signed JWT whose three segments are
 strict canonical base64url without whitespace. Its issuer, audience, single
 required scope, issued-at/not-before/expiry window, and maximum lifetime match
-the lock; `iat` cannot follow `exp`. Lifetime is capped at 15 minutes.
+the lock; both `iat` and `nbf` must strictly precede `exp`. Lifetime is capped at
+15 minutes.
 Client-side claim checks are defence in depth; the private handoff service
 remains responsible for authenticating the JWT signature and enforcing
 create-only scope. Header-construction and HTTP client errors are sanitized
@@ -66,12 +70,19 @@ without exception chaining because some runtimes include the raw Authorization
 value in those errors. The token, subject, JTI, raw endpoint, and HTTP bodies are
 never written to the sanitized audit receipt.
 
+A static GitHub secret containing a nominally short-lived token is not an
+activation-ready issuer. Activation requires an audited per-job JIT workload-
+identity exchange, bound in the lock by issuance mode and implementation digest,
+which delivers a newly minted scoped token only to the handoff step. The checked-
+in issuance mode and issuer-integration digest remain null, so preflight fails
+before any key or network action.
+
 Only sanitized intake uses Actions artifacts. Signed output and the handoff audit
 remain runner-local; no signed Actions artifact, Play lane, Registry publication,
 GitHub release, or public URL exists. Activation still requires the actual
 producer and verifier tuple, OCI digest, audited reservation/handoff services,
 upload certificate/algorithm, protected Fleet environments, and least-privilege
 short-lived auth. The checked-in lock keeps producer names, image digest,
-reservation endpoint, handoff endpoint, issuer/audience/scope, upload certificate,
-signing, and signed-content handoff disabled or null. This groundwork does not
+reservation endpoint, handoff endpoint, issuer/audience/scope/JIT issuance,
+upload certificate, signing, and signed-content handoff disabled or null. This groundwork does not
 create keys, configure environments, deploy services, sign an AAB, or upload it.

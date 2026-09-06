@@ -238,6 +238,9 @@ def provisioning_blockers(lock, signer_image: str, toolchain, toolchain_bytes: b
         failures.append("private signed-content handoff posture is not exact")
     auth = handoff.get("auth", {})
     if auth.get("token_type") != "jwt_bearer" or auth.get("server_signature_validation_required") is not True \
+            or auth.get("issuance_mode") != "jit_workload_identity_exchange" \
+            or auth.get("jit_per_job_required") is not True or auth.get("static_secret_forbidden") is not True \
+            or not HEX64.fullmatch(str(auth.get("audited_issuer_integration_sha256") or "")) \
             or not str(auth.get("issuer") or "").startswith("https://") \
             or not isinstance(auth.get("audience"), str) or not auth.get("audience") \
             or not isinstance(auth.get("scope"), str) or not re.fullmatch(r"[A-Za-z0-9:._/-]{1,200}", auth["scope"]) \
@@ -441,14 +444,14 @@ def _validate_handoff_bearer(token: str, auth: Mapping[str, Any], now: int | Non
         raise SignerError("handoff bearer algorithm is not allowed")
     current = int(time.time()) if now is None else now
     issued, expires = claims.get("iat"), claims.get("exp")
-    if type(issued) is not int or type(expires) is not int or issued > expires \
+    if type(issued) is not int or type(expires) is not int or issued >= expires \
             or issued > current + 30 or expires <= current:
         raise SignerError("handoff bearer lifetime is invalid")
     maximum = auth.get("max_ttl_seconds")
     if type(maximum) is not int or maximum < 1 or maximum > 900 or expires - issued > maximum:
         raise SignerError("handoff bearer lifetime exceeds the locked maximum")
     not_before = claims.get("nbf", issued)
-    if type(not_before) is not int or not_before > current + 30:
+    if type(not_before) is not int or not_before >= expires or not_before > current + 30:
         raise SignerError("handoff bearer is not active")
     audience = claims.get("aud")
     audiences = [audience] if isinstance(audience, str) else audience
@@ -1110,10 +1113,11 @@ def reserve(args, lock, lock_bytes, toolchain, toolchain_bytes, environ, client)
                      "transaction_id": transaction_id, "bindings": bindings}
     response = client.reserve(request_value)
     expected = {"contract_name": "fleet.android_preview12_reservation.v2", "decision": "reserved",
-        "created": response.get("created") if isinstance(response, dict) else None,
-        "durable": True, "transaction_id": transaction_id,
+        "created": True, "durable": True, "transaction_id": transaction_id,
         "request_sha256": hashlib.sha256(_json_bytes(request_value)).hexdigest(), "bindings": bindings}
-    if type(expected["created"]) is not bool or response != expected:
+    if response == {**expected, "created": False}:
+        raise SignerError("reservation already exists; sign-once policy forbids key access")
+    if response != expected:
         decision = response.get("decision", "indeterminate") if isinstance(response, dict) else "indeterminate"
         raise SignerError(f"reservation rejected: {decision}")
     evidence = {"contract_name": RESERVATION_EVIDENCE_CONTRACT, "state": "reserved", "durable": True,

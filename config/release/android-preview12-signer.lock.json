@@ -88,6 +88,10 @@
       "audience": null,
       "scope": null,
       "max_ttl_seconds": null,
+      "issuance_mode": null,
+      "jit_per_job_required": true,
+      "static_secret_forbidden": true,
+      "audited_issuer_integration_sha256": null,
       "server_signature_validation_required": true
     }
   },
