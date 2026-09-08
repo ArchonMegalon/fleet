@@ -396,14 +396,89 @@ def test_fleet_audit_rejects_secret_bearing_nested_output(tmp_path: Path) -> Non
         )
 
 
-def test_real_android_v2_consumer_binding_when_exact_checkout_is_available() -> None:
+@pytest.mark.parametrize("prior_bytecode_posture", [False, True])
+def test_real_android_v2_consumer_binding_when_exact_checkout_is_available(
+    monkeypatch, prior_bytecode_posture: bool,
+) -> None:
     module = load_module()
     value = os.environ.get("CHUMMER_ANDROID_388_ROOT")
     if not value:
         pytest.skip("exact Android consumer checkout not supplied")
+    monkeypatch.setattr(module.sys, "dont_write_bytecode", prior_bytecode_posture)
+    monkeypatch.setenv("CHUMMER_RELEASE_REPO_ROOT", "caller-posture-must-be-restored")
     consumer = module.validate_android_consumer(Path(value), json.loads(LOCK.read_text()))
     assert consumer.CONTRACT == module.ANDROID_ATTESTATION_CONTRACT
     assert consumer._pretty({"b": 2, "a": 1}) == b'{\n  "a": 1,\n  "b": 2\n}\n'
+    assert module.sys.dont_write_bytecode is prior_bytecode_posture
+    assert os.environ["CHUMMER_RELEASE_REPO_ROOT"] == "caller-posture-must-be-restored"
+    module._validate_android_consumer_inputs(Path(value), json.loads(LOCK.read_text())["android_authority"]["commit"])
+
+
+@pytest.mark.parametrize("tamper", [
+    "helper", "staged-helper", "assume-unchanged-helper", "helper-symlink",
+    "ignored-bytecode", "untracked-module", "eng-policy", "missing-helper",
+])
+def test_consumer_rejects_unpinned_import_inputs_before_loading(
+    tmp_path: Path, monkeypatch, tamper: str,
+) -> None:
+    module = load_module()
+    root = tmp_path / "consumer"
+    root.mkdir()
+    scripts = root / "scripts"
+    scripts.mkdir()
+    (root / "eng").mkdir()
+    lock = json.loads(LOCK.read_text())
+    authority = lock["android_authority"]
+    for name in ("build_script", "attestation_consumer", "two_green_verifier", "source_graph_verifier"):
+        binding = authority[name]
+        raw = b"# trusted test fixture, never executed\n"
+        (root / binding["path"]).write_bytes(raw)
+        binding["sha256"] = hashlib.sha256(raw).hexdigest()
+    helper = scripts / "verify_release_private_key_hygiene.py"
+    helper.write_bytes(b"# transitive helper\n")
+    policy = root / "eng" / "api36-proof-environment-authority.json"
+    policy.write_bytes(b'{}\n')
+    (root / ".gitignore").write_text("__pycache__/\n")
+
+    def git(*args):
+        return module._git(subprocess.run, ["-C", str(root), *args], timeout=30)
+
+    git("init", "--quiet")
+    git("remote", "add", "origin", authority["repository"])
+    git("add", ".")
+    git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+        "-c", "commit.gpgSign=false", "commit", "--quiet", "-m", "Test consumer")
+    authority["commit"] = git("rev-parse", "HEAD")
+    authority["tree"] = git("rev-parse", "HEAD^{tree}")
+    if tamper == "assume-unchanged-helper":
+        git("update-index", "--assume-unchanged", "scripts/verify_release_private_key_hygiene.py")
+    if tamper in ("helper", "staged-helper", "assume-unchanged-helper"):
+        helper.write_bytes(b"raise RuntimeError('untrusted helper must not execute')\n")
+        if tamper == "staged-helper":
+            git("add", str(helper))
+    elif tamper == "helper-symlink":
+        # Even a symlink to the correct bytes is not the committed regular file.
+        target = tmp_path / "helper-copy.py"
+        target.write_bytes(helper.read_bytes())
+        helper.unlink()
+        helper.symlink_to(target)
+    elif tamper == "ignored-bytecode":
+        cache = scripts / "__pycache__"
+        cache.mkdir()
+        (cache / "verify_release_private_key_hygiene.cpython-312.pyc").write_bytes(b"untrusted cache")
+    elif tamper == "untracked-module":
+        (scripts / "unreviewed.py").write_bytes(b"# must not enter import path\n")
+    elif tamper == "eng-policy":
+        policy.write_bytes(b'{"changed":true}\n')
+    elif tamper == "missing-helper":
+        helper.unlink()
+
+    def reject_import(*args, **kwargs):
+        pytest.fail("unverified Android code reached the Python loader")
+
+    monkeypatch.setattr(module.importlib.util, "spec_from_file_location", reject_import)
+    with pytest.raises(module.RebuilderError, match="consumer (input|closure)"):
+        module.validate_android_consumer(root, lock)
 
 
 def test_signed_sidecar_is_accepted_by_real_android_consumer_when_available(tmp_path: Path) -> None:

@@ -41,6 +41,17 @@ mounts, then bind the transferred bytes to exact workflow/artifact provenance.
 The protected signer must use a root-owned pinned Android consumer and must not
 execute builder-controlled code after keys become available.
 
+Before loading that consumer, Fleet verifies every regular file below its
+`scripts/` and `eng/` directories against the exact pinned Git commit's blob
+objects, not merely the four direct lock entries or a clean working-tree
+status. This includes transitively imported helpers and policy files. Missing,
+modified, staged, assume-unchanged, symlinked, extra or ignored bytecode inputs
+fail before Python loading. Imported bytecode is not an authority: use a pristine
+checkout without `__pycache__`, and the loader suppresses new bytecode writes.
+The closure is checked again after loading. These checks do not replace the
+still-required root-owned immutable filesystem and isolated protected process;
+a writable checkout does not acquire signer authority by passing this preflight.
+
 The checked-in module now contains a non-CLI transaction composition that
 structurally enforces this order: authenticate and revalidate the immutable
 handoff and protected provenance; replay the exact request, source, unsigned

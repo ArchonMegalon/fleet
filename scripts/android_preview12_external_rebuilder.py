@@ -590,6 +590,64 @@ def verify_toolchain(
     return {**closure, "closureSha256": hashlib.sha256(_canonical_json(closure)).hexdigest()}
 
 
+def _validate_android_consumer_inputs(android_root: Path, commit: str) -> None:
+    """Check import/helper/policy bytes against Git objects, not index status.
+
+    The protected caller still owns process and filesystem immutability. This
+    preflight does not turn a caller-writable checkout into a signer capability.
+    """
+    tree = _git(subprocess.run, ["-C", os.fspath(android_root), "ls-tree", "-r", "-z",
+        "--full-tree", commit, "--", "scripts", "eng"], timeout=30, binary=True)
+    if not tree or len(tree) > 1024 * 1024:
+        raise RebuilderError("Android consumer closure inventory is missing or oversized")
+    expected: dict[str, tuple[str, str]] = {}
+    directories: set[str] = set()
+    for entry in tree.split(b"\0"):
+        if not entry:
+            continue
+        try:
+            metadata, raw_path = entry.split(b"\t", 1)
+            mode, kind, blob = metadata.decode("ascii").split(" ")
+            relative = raw_path.decode("utf-8")
+            path = PurePosixPath(relative)
+        except (ValueError, UnicodeDecodeError) as error:
+            raise RebuilderError("Android consumer closure inventory is malformed") from error
+        if kind != "blob" or mode not in ("100644", "100755") or not HEX40.fullmatch(blob) \
+                or path.is_absolute() or ".." in path.parts or "\\" in relative \
+                or path.parts[0] not in ("scripts", "eng") or str(path) != relative \
+                or relative in expected:
+            raise RebuilderError("Android consumer closure inventory is not exact regular files")
+        expected[relative] = (mode, blob)
+        directories.update(str(parent) for parent in path.parents if str(parent) != ".")
+    observed: set[str] = set()
+    for top in ("scripts", "eng"):
+        folder = android_root / top
+        if folder.is_symlink() or not folder.is_dir() or folder.resolve(strict=True) != folder:
+            raise RebuilderError("Android consumer input directory is not canonical")
+        for base, children, files in os.walk(folder, followlinks=False):
+            parent = Path(base)
+            for name in children:
+                child = parent / name
+                if child.is_symlink() or child.relative_to(android_root).as_posix() not in directories:
+                    raise RebuilderError("Android consumer closure has an unreviewed directory")
+            for name in files:
+                path = parent / name
+                relative = path.relative_to(android_root).as_posix()
+                if relative not in expected:
+                    raise RebuilderError("Android consumer closure has an unreviewed file")
+                raw = _stable_bytes(path, "Android consumer input", 8 * 1024 * 1024)
+                # Git's object ID binds bytes directly, ignoring assume-unchanged,
+                # staged replacements, clean filters and stat-cache shortcuts.
+                blob = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw,
+                                    usedforsecurity=False).hexdigest()
+                mode, expected_blob = expected[relative]
+                if blob != expected_blob or bool(path.stat().st_mode & 0o111) != (mode == "100755"):
+                    raise RebuilderError("Android consumer input bytes or mode differ from qualified commit")
+                observed.add(relative)
+    if observed != set(expected):
+        raise RebuilderError("Android consumer closure is incomplete")
+
+
 def validate_android_consumer(android_root: Path, lock: Mapping[str, Any]):
     android = lock["android_authority"]
     if android_root.is_symlink() or not android_root.is_dir() or android_root.resolve(strict=True) != android_root:
@@ -599,6 +657,7 @@ def validate_android_consumer(android_root: Path, lock: Mapping[str, Any]):
     remote = _git(subprocess.run, ["-C", os.fspath(android_root), "remote", "get-url", "origin"], timeout=30)
     if (head, tree, remote) != (android["commit"], android["tree"], android["repository"]):
         raise RebuilderError("Android consumer checkout differs from qualified authority")
+    _validate_android_consumer_inputs(android_root, android["commit"])
     for binding_name in ("build_script", "attestation_consumer", "two_green_verifier", "source_graph_verifier"):
         binding = android[binding_name]
         path = android_root.joinpath(*PurePosixPath(binding["path"]).parts)
@@ -606,7 +665,9 @@ def validate_android_consumer(android_root: Path, lock: Mapping[str, Any]):
             raise RebuilderError(f"Android {binding_name} bytes differ from lock")
     consumer_path = android_root / android["attestation_consumer"]["path"]
     prior_release_root = os.environ.get("CHUMMER_RELEASE_REPO_ROOT")
+    prior_bytecode_posture = sys.dont_write_bytecode
     os.environ["CHUMMER_RELEASE_REPO_ROOT"] = os.fspath(android_root)
+    sys.dont_write_bytecode = True
     try:
         spec = importlib.util.spec_from_file_location("fleet_android_v2_consumer", consumer_path)
         if spec is None or spec.loader is None:
@@ -614,10 +675,12 @@ def validate_android_consumer(android_root: Path, lock: Mapping[str, Any]):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
     finally:
+        sys.dont_write_bytecode = prior_bytecode_posture
         if prior_release_root is None:
             os.environ.pop("CHUMMER_RELEASE_REPO_ROOT", None)
         else:
             os.environ["CHUMMER_RELEASE_REPO_ROOT"] = prior_release_root
+    _validate_android_consumer_inputs(android_root, android["commit"])
     approval = lock["approval_authority"]
     public_key = android_root.joinpath(*PurePosixPath(approval["public_key_path"]).parts)
     if module.CONTRACT != ANDROID_ATTESTATION_CONTRACT \
