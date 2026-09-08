@@ -6,9 +6,11 @@ from datetime import UTC, datetime
 import hashlib
 import importlib.util
 import json
+import marshal
 import os
 from pathlib import Path
 import stat
+import struct
 import subprocess
 from types import SimpleNamespace
 
@@ -480,6 +482,72 @@ def test_consumer_rejects_unpinned_import_inputs_before_loading(
     monkeypatch.setattr(module.importlib.util, "spec_from_file_location", reject_import)
     with pytest.raises(module.RebuilderError, match="consumer (input|closure)"):
         module.validate_android_consumer(root, lock)
+
+
+@pytest.mark.parametrize("cached_input", ["consumer", "transitive-helper"])
+def test_consumer_rejects_external_bytecode_cache_before_execution(
+    tmp_path: Path, monkeypatch, cached_input: str,
+) -> None:
+    module = load_module()
+    root = tmp_path / "consumer"
+    (root / "scripts").mkdir(parents=True)
+    (root / "eng").mkdir()
+    lock = json.loads(LOCK.read_text())
+    authority = lock["android_authority"]
+    for name in ("build_script", "attestation_consumer", "two_green_verifier", "source_graph_verifier"):
+        (root / authority[name]["path"]).write_bytes(b"# qualified synthetic input\n")
+    helper = root / "scripts" / "verify_release_private_key_hygiene.py"
+    helper.write_bytes(b"# qualified synthetic transitive helper\n")
+    consumer = root / authority["attestation_consumer"]["path"]
+    consumer.write_text(
+        "import importlib.util\n"
+        f"spec = importlib.util.spec_from_file_location('fixture_helper', {str(helper)!r})\n"
+        "helper = importlib.util.module_from_spec(spec)\n"
+        "spec.loader.exec_module(helper)\n"
+        "raise AssertionError('fixture source must not execute with an external cache')\n"
+    )
+    for name in ("build_script", "attestation_consumer", "two_green_verifier", "source_graph_verifier"):
+        binding = authority[name]
+        binding["sha256"] = hashlib.sha256((root / binding["path"]).read_bytes()).hexdigest()
+
+    def git(*args):
+        return module._git(subprocess.run, ["-C", str(root), *args], timeout=30)
+
+    git("init", "--quiet")
+    git("remote", "add", "origin", authority["repository"])
+    git("add", ".")
+    git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+        "-c", "commit.gpgSign=false", "commit", "--quiet", "-m", "Test consumer")
+    authority["commit"] = git("rev-parse", "HEAD")
+    authority["tree"] = git("rev-parse", "HEAD^{tree}")
+    external_cache = tmp_path / "outside-cache"
+    monkeypatch.setattr(module.sys, "pycache_prefix", str(external_cache))
+    monkeypatch.setattr(module.sys, "dont_write_bytecode", True)
+    target = consumer if cached_input == "consumer" else helper
+    cache = Path(importlib.util.cache_from_source(str(target)))
+    assert cache.is_relative_to(external_cache) and not cache.is_relative_to(root)
+    cache.parent.mkdir(parents=True)
+    metadata = target.stat()
+    # Valid timestamp-mode cache for the unchanged Git-bound source. Only its
+    # marshalled code differs; no real signing input or credential is involved.
+    poisoned = compile("raise RuntimeError('poisoned external bytecode executed')\n", str(target), "exec")
+    header = importlib.util.MAGIC_NUMBER + struct.pack(
+        "<III", 0, int(metadata.st_mtime) & 0xffffffff, metadata.st_size & 0xffffffff
+    )
+    cache.write_bytes(header + marshal.dumps(poisoned))
+    module._validate_android_consumer_inputs(root, authority["commit"])
+    observed_error = None
+    try:
+        module.validate_android_consumer(root, lock)
+    except Exception as error:
+        observed_error = error
+    assert isinstance(observed_error, module.RebuilderError), (
+        f"protected loader observed {type(observed_error).__name__}: {observed_error}"
+    )
+    assert "bytecode cache" in str(observed_error)
+    assert module.sys.pycache_prefix == str(external_cache)
+    assert module.sys.dont_write_bytecode is True
+    assert git("status", "--porcelain") == ""
 
 
 def test_signed_sidecar_is_accepted_by_real_android_consumer_when_available(tmp_path: Path) -> None:

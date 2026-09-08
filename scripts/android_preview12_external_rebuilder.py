@@ -649,6 +649,11 @@ def _validate_android_consumer_inputs(android_root: Path, commit: str) -> None:
 
 
 def validate_android_consumer(android_root: Path, lock: Mapping[str, Any]):
+    # SourceFileLoader may READ timestamp/hash-valid caches even when writes
+    # are disabled. A prefix outside scripts/eng is outside the checked blob
+    # closure, so reject it before any direct or transitive consumer import.
+    if sys.pycache_prefix is not None:
+        raise RebuilderError("Android consumer bytecode cache prefix is not permitted")
     android = lock["android_authority"]
     if android_root.is_symlink() or not android_root.is_dir() or android_root.resolve(strict=True) != android_root:
         raise RebuilderError("Android consumer checkout is not canonical")

@@ -48,6 +48,10 @@ status. This includes transitively imported helpers and policy files. Missing,
 modified, staged, assume-unchanged, symlinked, extra or ignored bytecode inputs
 fail before Python loading. Imported bytecode is not an authority: use a pristine
 checkout without `__pycache__`, and the loader suppresses new bytecode writes.
+It also rejects any configured `sys.pycache_prefix` before loading: disabling
+cache writes does not disable reads from an external bytecode-cache directory.
+This includes prefixes supplied programmatically or with Python's `-X` option,
+not merely the environment variables excluded by isolated interpreter startup.
 The closure is checked again after loading. These checks do not replace the
 still-required root-owned immutable filesystem and isolated protected process;
 a writable checkout does not acquire signer authority by passing this preflight.
