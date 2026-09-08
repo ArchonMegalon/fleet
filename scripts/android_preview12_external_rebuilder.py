@@ -2177,6 +2177,13 @@ def execute_protected_signer_transaction(
             admit_signing_credentials(reservation, lease.provenance)
         )
         lease.assert_exact()
+        # Reject unusable approval custody before consuming the AAB signing
+        # operation. Later attestation checks remain necessary as well.
+        expected_spki = lock["approval_authority"]["public_key_spki_sha256"]
+        if getattr(android, "_fleet_expected_spki_sha256", None) != expected_spki:
+            raise RebuilderError("Android approval key binding differs from the qualified lock")
+        _owner_key_matches(runner, credentials["ownerPrivateKey"], expected_spki)
+        lease.assert_exact()
         signed_path = recovery / f"chummer-android-{VERSION_NAME}-signed.aab"
         signed = sign_aab(
             lease.paths["unsignedAab"], signed_path, lock, credentials["keystore"],

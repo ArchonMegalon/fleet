@@ -279,6 +279,7 @@ def fake_consumer(module, lease, events):
 
     return SimpleNamespace(
         CONTRACT=module.ANDROID_ATTESTATION_CONTRACT,
+        _fleet_expected_spki_sha256=json.loads(LOCK.read_text())["approval_authority"]["public_key_spki_sha256"],
         ROOT=lease.java_root.parent,
         VERIFY=SimpleNamespace(verify_release_eligibility=eligibility),
         _artifact_claims=claims,
@@ -381,6 +382,7 @@ def install_fakes(module, monkeypatch, events, lock, lock_raw):
         module, "load_reviewed_ledger",
         lambda *_args: (events.append("load-ledger") or Ledger, client, "c" * 64),
     )
+    monkeypatch.setattr(module, "_owner_key_matches", lambda *_args, **_kwargs: events.append("owner-key-preflight"))
     monkeypatch.setattr(module, "sign_aab", lambda _unsigned, output, *_args, **_kwargs: (
         events.append("sign"), module._write_exclusive(output, b"signed"),
         {"sha256": hashlib.sha256(b"signed").hexdigest(), "sizeBytes": 6,
@@ -432,11 +434,81 @@ def test_reservation_precedes_key_admission_and_all_signing(tmp_path: Path, monk
     )
     assert result["status"] == "verified"
     assert events.index("authenticate") < events.index("reserve") < events.index("credentials") < events.index("sign")
+    assert events.index("credentials") < events.index("owner-key-preflight") < events.index("sign")
     assert events.index(f"fsync:{lease.recovery_root}") < events.index("credentials")
     assert events.index("sign") < events.index("sidecar") < events.index("protected-validation")
     assert events.index("protected-validation") < events.index("android-v2") < events.index("external-v1") < events.index("commit")
     assert "abort" not in events
     assert f"fsync:{tmp_path}" in events
+
+
+@pytest.mark.parametrize("failure", ["missing-key", "malformed-key", "wrong-key", "missing-binding", "wrong-binding"])
+def test_owner_key_rejected_before_any_aab_signing(tmp_path: Path, monkeypatch, request, failure: str) -> None:
+    module = load_module()
+    events: list[str] = []
+    lock, lock_raw, lease = fixture(module, tmp_path, events)
+    real_key_check = module._owner_key_matches
+    install_fakes(module, monkeypatch, events, lock, lock_raw)
+    consumer = fake_consumer(module, lease, events)
+    key = tmp_path / "disposable-test-only-owner-key.pem"
+    request.addfinalizer(lambda: key.unlink(missing_ok=True))
+    if failure == "malformed-key":
+        protected_file(key, b"not-a-private-key\n")
+    elif failure == "wrong-key":
+        subprocess.run(
+            ["/usr/bin/openssl", "genpkey", "-algorithm", "ED25519", "-out", os.fspath(key)],
+            check=True, capture_output=True, timeout=20,
+            env={"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"},
+        )
+        key.chmod(0o600)
+    elif failure == "missing-binding":
+        del consumer._fleet_expected_spki_sha256
+    elif failure == "wrong-binding":
+        consumer._fleet_expected_spki_sha256 = "0" * 64
+
+    def observed_key_check(*args):
+        events.append("owner-key-read")
+        return real_key_check(*args)
+
+    monkeypatch.setattr(module, "_owner_key_matches", observed_key_check)
+
+    def credentials(*_args):
+        events.append("credentials")
+        return {"keystore": tmp_path / "keystore", "storePassword": tmp_path / "storePassword",
+                "keyPassword": tmp_path / "keyPassword", "ownerPrivateKey": key}
+
+    output = tmp_path / "must-not-be-signed"
+    with pytest.raises(module.RebuilderError):
+        module.execute_protected_signer_transaction(
+            tmp_path / "lock.json", lambda *_: lease, lambda: consumer,
+            tmp_path, {}, credentials, lambda **_: {"status": "pass"}, output,
+            attempt_id="d" * 64, two_green_artifact_id=123,
+            two_green_artifact_sha256="e" * 64,
+        )
+    assert events.count("reserve") == events.count("credentials") == 1
+    assert "sign" not in events and "android-v2" not in events and "external-v1" not in events
+    assert "commit" not in events and "abort" not in events
+    assert not output.exists()
+    recovery = module._recovery_path(lease.recovery_root, "d" * 64)
+    assert recovery.is_dir()
+    assert not (recovery / f"chummer-android-{module.VERSION_NAME}-signed.aab").exists()
+    quarantine = json.loads((recovery / "QUARANTINED.generated.json").read_text())
+    assert quarantine["verified"] is False
+    assert quarantine["reconciliationEligible"] is False
+    assert quarantine["publicationAuthorized"] is False
+    with pytest.raises(module.RebuilderError, match="already has a journal"):
+        module.execute_protected_signer_transaction(
+            tmp_path / "lock.json", lambda *_: lease, lambda: consumer,
+            tmp_path, {}, credentials, lambda **_: {"status": "pass"}, tmp_path / "another-output",
+            attempt_id="d" * 64, two_green_artifact_id=123,
+            two_green_artifact_sha256="e" * 64,
+        )
+    assert events.count("reserve") == events.count("credentials") == 1
+    assert "sign" not in events
+    if failure.endswith("binding"):
+        assert "owner-key-read" not in events
+    else:
+        assert events.index("credentials") < events.index("owner-key-read")
 
 
 @pytest.mark.parametrize(

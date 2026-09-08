@@ -68,6 +68,14 @@ root-owned immutable bytes, not from the writable handoff or checkout. The ledge
 loader checks every ancestor up to the filesystem root as well as its own files;
 a root-owned Fleet directory below a replaceable parent is not protected authority.
 
+After that durable reservation and credential admission, the transaction checks
+that the loaded Android consumer and lock agree on the approval public SPKI and
+that the admitted owner private key derives that exact public identity. This
+happens before AAB signing, so a missing, malformed, or wrong owner key cannot
+leave a partially signed AAB. The later detached-attestation key checks remain
+in place. Failure still quarantines the reserved attempt; it does not grant
+permission to retry signing, rotate trust, or reuse the reservation.
+
 The workflow-owned capability must also bind the attempt ID and exact
 two-green artifact ID and digest. Supplying fresh caller values cannot reserve
 or sign the same authenticated handoff again.
