@@ -60,7 +60,9 @@ sign the AAB; create the signed sidecar; run fresh protected validation; emit
 Android v2 and external v1; commit the exact external-v1 bytes; and emit Fleet
 audit v3. The reservation occurs before any keystore, password, or owner
 private-key read. The Android consumer and ledger adapter must be loaded from
-root-owned immutable bytes, not from the writable handoff or checkout.
+root-owned immutable bytes, not from the writable handoff or checkout. The ledger
+loader checks every ancestor up to the filesystem root as well as its own files;
+a root-owned Fleet directory below a replaceable parent is not protected authority.
 
 The workflow-owned capability must also bind the attempt ID and exact
 two-green artifact ID and digest. Supplying fresh caller values cannot reserve

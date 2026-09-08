@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import stat
 import subprocess
 from types import SimpleNamespace
 
@@ -495,3 +496,51 @@ def test_signed_sidecar_is_accepted_by_real_android_consumer_when_available(tmp_
     claims = consumer._sidecar_claims(sidecar, signed, graph_path)
     assert claims["rawSha256"] == hashlib.sha256(raw).hexdigest()
     assert claims[f"artifacts/{signed.name}"] == hashlib.sha256(signed.read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("ancestor_kind", ["trusted-parent", "writable-parent", "nonroot-parent"])
+def test_reviewed_ledger_checks_full_runtime_ancestry_before_loading(
+    tmp_path: Path, monkeypatch, ancestor_kind: str,
+) -> None:
+    module = load_module()
+    root = tmp_path / "replaceable-parent" / "fleet"
+    root.mkdir(parents=True)
+    lock = json.loads(LOCK.read_text())
+    adapter = root / lock["reservation"]["adapter_path"]
+    policy = root / lock["reservation"]["policy_path"]
+    for path in (adapter, policy):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"test-only, must not be loaded")
+    real_stat = Path.stat
+
+    def observed_stat(path, *args, **kwargs):
+        actual = real_stat(path, *args, **kwargs)
+        # Model a root-owned runtime underneath an unsafe ancestor. No real
+        # ownership or permission change is required on the execution host.
+        fields = list(actual)
+        fields[4] = 0
+        fields[0] = stat.S_IFMT(actual.st_mode) | (0o755 if stat.S_ISDIR(actual.st_mode) else 0o644)
+        if path == root.parent:
+            if ancestor_kind == "writable-parent":
+                fields[0] |= 0o020
+            elif ancestor_kind == "nonroot-parent":
+                fields[4] = 1001
+        return os.stat_result(fields)
+
+    monkeypatch.setattr(Path, "stat", observed_stat)
+
+    class ExpectedReadReached(Exception):
+        pass
+
+    def reject_read(*args, **kwargs):
+        if ancestor_kind == "trusted-parent":
+            raise ExpectedReadReached
+        pytest.fail("replaceable protected runtime reached ledger byte loading")
+
+    monkeypatch.setattr(module, "_stable_bytes", reject_read)
+    if ancestor_kind == "trusted-parent":
+        with pytest.raises(ExpectedReadReached):
+            module.load_reviewed_ledger(root, lock, {})
+        return
+    with pytest.raises(module.RebuilderError, match="ancestry is not immutable root-owned"):
+        module.load_reviewed_ledger(root, lock, {})

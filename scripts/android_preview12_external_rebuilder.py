@@ -908,8 +908,9 @@ def load_reviewed_ledger(fleet_root: Path, lock: Mapping[str, Any], environment:
     """
 
     reservation = lock["reservation"]
-    if not fleet_root.is_absolute() or fleet_root.is_symlink() or fleet_root.resolve(strict=True) != fleet_root:
-        raise RebuilderError("Fleet signer root is not canonical")
+    # The runtime root itself can be replaced through a writable/non-root
+    # parent. Reuse the full ancestry check, not only the files below the root.
+    fleet_root = _trusted_root(fleet_root, "Fleet signer runtime")
     adapter = fleet_root.joinpath(*PurePosixPath(reservation["adapter_path"]).parts)
     policy_path = fleet_root.joinpath(*PurePosixPath(reservation["policy_path"]).parts)
     for path, label in (
