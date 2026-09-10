@@ -90,11 +90,52 @@ The workflow-owned capability must also bind the attempt ID and exact
 two-green artifact ID and digest. Supplying fresh caller values cannot reserve
 or sign the same authenticated handoff again.
 
-The composition is still dormant because Fleet does not yet provide the
-protected workflow-owned provenance authenticator, immutable root-owned
-consumer/adapter loader, or credential-admission callback. Those are capability
-inputs rather than CLI flags, and caller-supplied JSON booleans are not accepted
-as authority.
+`PreservedProtectedValidation` is the concrete, key-free consumer/validation
+composition for both execute and reconcile. Supply its `load_consumer` method
+and the same object as `protected_validation_factory`. Construction requires
+explicit `lock_path`, `workspace_root`, `source_graph`, `package_authority`,
+`authority_root`, `bundletool`, public `upload_certificate`,
+`java_tool_observation`, and exact `dotnet_root`, `java_root`, `android_sdk_root`.
+There is no CLI, builder callback, or private-key argument for this composition.
+
+The workspace is an independently retained complete eight-repository checkout
+with contained Git storage, not the deleted disposable builder workspace. All
+preserved roots and relevant entries must be root-owned, non-group-writable,
+canonical and on read-only mounts; nested writable mounts fail closed. Complete
+Git-object byte comparison also rejects ignored or assume-unchanged source
+drift, using bounded two-pass streaming for Git blobs. Retained repositories
+must be fully materialized plain independent clones, not filtered rebuild
+checkouts: alternate/shallow/worktree/replacement storage, promisor packs,
+active hooks and helper-capable Git configuration are rejected before Git runs.
+The package authority and its retained inputs are verified with the real
+qualified Android source-graph implementation. Exact consumer ROOT, code and
+validator closure, public input hashes, tool roots/trees, and public upload
+certificate are checked before credential admission and again around validation.
+The transaction additionally binds the same loader, lock bytes, graph digest,
+and authenticated Java root before reserving any signing attempt.
+
+The factory invokes Android's actual `_artifact_claims`, current eligibility
+verifier, `_protected_validation`, and `_validate_validation_claims`; it never
+synthesizes a passing dictionary. `java_tool_observation` is the separate Android
+`chummer.android.local-unsigned-toolchain-observation/v1` input, **not** Fleet's
+installed-archive inventory or evidence that installed tree pins were observed.
+Missing real packages, tools, signed artifacts or validations fail closed.
+
+The qualified 7cef consumer still has its own symlink rejection in
+`sign_android_release_build_attestation.py`'s `_trusted_tree_digest`: it checks
+mode 022 before the link branch, so an otherwise valid root-owned 0777 internal
+link fails. Fleet's repaired hasher does not replace this sealed consumer code.
+The focused test executes that actual rejection; any required Android repair
+needs its own review and requalification. Modeled read-only flags in temporary
+tests are not deployment evidence, and no successful protected release build is
+claimed by these tests.
+
+The composition remains dormant: a protected workflow-owned provenance
+authenticator, actual preserved mounts/installed toolchain, immutable ledger
+adapter, and credential-admission callback are still required. The factory
+neither authenticates the workspace provisioner nor proves absence of unrelated
+mounts in the surrounding process. Those are protected-runtime responsibilities,
+not caller JSON booleans or authority conferred by local filesystem checks.
 
 The resulting local toolchain object deliberately records both
 `builderExecutionProvenanceAuthenticated = false` and

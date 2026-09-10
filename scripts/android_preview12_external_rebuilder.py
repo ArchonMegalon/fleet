@@ -11,6 +11,7 @@ import argparse
 import base64
 import binascii
 from collections import deque
+import configparser
 from datetime import UTC, datetime
 import hashlib
 import importlib.util
@@ -557,7 +558,7 @@ def _file_identity(metadata: os.stat_result) -> tuple[int, ...]:
             metadata.st_size, metadata.st_mtime_ns, metadata.st_ctime_ns)
 
 
-def _stable_file_sha256(path: Path, metadata: os.stat_result, label: str) -> str:
+def _stable_file_digest(path: Path, metadata: os.stat_result, label: str, *, git_blob: bool = False) -> str:
     """Two bounded reads detect persistent drift hidden by timestamp granularity.
 
     Agreement is not an atomic snapshot or a substitute for immutable custody.
@@ -579,7 +580,10 @@ def _stable_file_sha256(path: Path, metadata: os.stat_result, label: str) -> str
                 for pass_index in range(2):
                     if pass_index:
                         stream.seek(0)
-                    digest, consumed = hashlib.sha256(), 0
+                    digest = hashlib.sha1(usedforsecurity=False) if git_blob else hashlib.sha256()
+                    if git_blob:
+                        digest.update(b"blob " + str(metadata.st_size).encode("ascii") + b"\0")
+                    consumed = 0
                     while chunk := stream.read(1024 * 1024):
                         consumed += len(chunk)
                         if consumed > metadata.st_size:
@@ -599,6 +603,10 @@ def _stable_file_sha256(path: Path, metadata: os.stat_result, label: str) -> str
         return verified_digest
     except (OSError, ValueError):
         raise RebuilderError(changed) from None
+
+
+def _stable_file_sha256(path: Path, metadata: os.stat_result, label: str) -> str:
+    return _stable_file_digest(path, metadata, label)
 
 
 def _tree_digest(root: Path, label: str) -> tuple[str, int, int]:
@@ -820,6 +828,303 @@ def validate_android_consumer(android_root: Path, lock: Mapping[str, Any]):
         raise RebuilderError("Android v2 consumer authority differs from lock")
     module._fleet_expected_spki_sha256 = approval["public_key_spki_sha256"]
     return module
+
+
+def _preserved_path(path: Path, label: str, *, directory: bool = False) -> None:
+    """Require actual read-only mounts, not caller assertions of custody."""
+    try:
+        if not isinstance(path, Path) or not path.is_absolute() or path.is_symlink() \
+                or path.resolve(strict=True) != path \
+                or not (path.is_dir() if directory else path.is_file()):
+            raise RebuilderError(f"{label} is not a canonical preserved input")
+        _trusted_root(path if directory else path.parent, label)
+        metadata = path.stat()
+        if metadata.st_uid != 0 or stat.S_IMODE(metadata.st_mode) & 0o022 \
+                or not os.statvfs(path).f_flag & os.ST_RDONLY:
+            raise RebuilderError(f"{label} is not root-owned read-only custody")
+    except (OSError, RuntimeError, ValueError) as error:
+        if isinstance(error, RebuilderError):
+            raise
+        raise RebuilderError(f"{label} preserved input is unavailable") from None
+
+
+def _preserved_tree(root: Path, label: str) -> None:
+    # Checking just a mount root admits a writable nested bind mount. Inspect
+    # every actual entry, including Git metadata; never follow links in walks.
+    _preserved_path(root, label, directory=True)
+    pending, count = [root], 0
+    while pending:
+        current = pending.pop()
+        for path in current.iterdir():
+            count += 1
+            if count > 250_000:
+                raise RebuilderError(f"{label} preserved inventory is oversized")
+            if path.is_symlink():
+                if path.lstat().st_uid != 0:
+                    raise RebuilderError(f"{label} link is not root-owned")
+                _resolve_tree_link(root, path, os.readlink(path), label)
+                if not os.statvfs(path).f_flag & os.ST_RDONLY:
+                    raise RebuilderError(f"{label} link reaches a writable mount")
+            else:
+                is_directory = path.is_dir()
+                _preserved_path(path, label, directory=is_directory)
+                if is_directory:
+                    pending.append(path)
+
+
+def _preserved_git_storage(root: Path, repository: str | None = None) -> None:
+    """Plain detached clones only: no external storage or executable config."""
+    if not (root / ".git").is_dir() or (root / ".git").is_symlink():
+        raise RebuilderError("preserved source requires independent contained Git storage")
+    for relative in ("objects/info/alternates", "objects/info/http-alternates", "commondir", "gitdir",
+                     "shallow", "worktrees", "modules", "info/grafts", "refs/replace"):
+        path = root / ".git" / relative
+        if path.exists() or path.is_symlink():
+            raise RebuilderError("preserved Git storage references an external or replacement authority")
+    hooks = root / ".git/hooks"
+    if hooks.exists() and (hooks.is_symlink() or not hooks.is_dir()
+                           or any(path.is_symlink() or not path.is_file() or not path.name.endswith(".sample")
+                                  for path in hooks.iterdir())):
+        raise RebuilderError("preserved Git storage contains active hooks")
+    packs = root / ".git/objects/pack"
+    if packs.exists() and (packs.is_symlink() or not packs.is_dir()
+                           or any(path.name.endswith(".promisor") for path in packs.iterdir())):
+        raise RebuilderError("preserved Git storage is a partial clone")
+    path = root / ".git/config"
+    raw = _stable_bytes(path, "preserved Git config", 64 * 1024)
+    parser = configparser.ConfigParser(interpolation=None, strict=True, delimiters=("=",),
+                                       empty_lines_in_values=False)
+    try:
+        parser.read_string(raw.decode("utf-8", errors="strict"))
+        if parser.defaults() or set(parser.sections()) - {"core", 'remote "origin"'} or "core" not in parser:
+            raise ValueError()
+        core = dict(parser["core"])
+        if set(core) - {"repositoryformatversion", "bare", "filemode", "logallrefupdates", "ignorecase",
+                        "precomposeunicode", "symlinks"} \
+                or core.get("repositoryformatversion") != "0" or core.get("bare") != "false" \
+                or any(value not in ("true", "false") for key, value in core.items()
+                       if key != "repositoryformatversion"):
+            raise ValueError()
+        if 'remote "origin"' in parser:
+            remote = dict(parser['remote "origin"'])
+            if set(remote) != {"url", "fetch"} or remote["fetch"] != "+refs/heads/*:refs/remotes/origin/*" \
+                    or remote["url"] not in {value[2] for value in REPOSITORIES.values()} \
+                    or (repository is not None and remote["url"] != repository):
+                raise ValueError()
+        elif repository is not None:
+            raise ValueError()
+    except (ValueError, UnicodeDecodeError, configparser.Error):
+        raise RebuilderError("preserved Git config is not an exact helper-free clone") from None
+
+
+def _preserved_repository_bytes(root: Path, commit: str) -> None:
+    """Bind all tracked source bytes, including assume-unchanged/ignored drift."""
+    _preserved_git_storage(root)
+    listing = _git(subprocess.run, ["-C", os.fspath(root), "ls-tree", "-r", "-z", "--full-tree", commit],
+                   timeout=30, binary=True)
+    if not listing or len(listing) > 8 * 1024 * 1024:
+        raise RebuilderError("preserved source Git inventory is missing or oversized")
+    expected, parents = {}, set()
+    for entry in listing.split(b"\0"):
+        if not entry:
+            continue
+        try:
+            metadata, raw_path = entry.split(b"\t", 1)
+            mode, kind, blob = metadata.decode("ascii").split(" ")
+            relative = raw_path.decode("utf-8")
+            path = PurePosixPath(relative)
+        except (ValueError, UnicodeDecodeError):
+            raise RebuilderError("preserved source Git inventory is malformed") from None
+        if kind != "blob" or mode not in ("100644", "100755", "120000") \
+                or not HEX40.fullmatch(blob) or path.is_absolute() or ".." in path.parts \
+                or "\\" in relative or str(path) != relative or relative in expected or ".git" in path.parts:
+            raise RebuilderError("preserved source Git inventory is not exact")
+        expected[relative] = (mode, blob)
+        parents.update(str(parent) for parent in path.parents if str(parent) != ".")
+    observed = set()
+    for base, directories, files in os.walk(root, followlinks=False):
+        parent = Path(base)
+        if parent == root:
+            directories.remove(".git")
+        for name in list(directories):
+            path = parent / name
+            if path.is_symlink():
+                directories.remove(name)
+                files.append(name)
+            elif path.relative_to(root).as_posix() not in parents:
+                raise RebuilderError("preserved source has an unreviewed directory")
+        for name in files:
+            path = parent / name
+            relative = path.relative_to(root).as_posix()
+            if relative not in expected:
+                raise RebuilderError("preserved source has an unreviewed file")
+            mode, blob = expected[relative]
+            if path.is_symlink():
+                if mode != "120000":
+                    raise RebuilderError("preserved source file became a link")
+                raw = os.fsencode(os.readlink(path))
+                _resolve_tree_link(root, path, os.fsdecode(raw), "preserved source")
+                actual = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw,
+                                      usedforsecurity=False).hexdigest()
+            else:
+                if mode == "120000" or bool(path.stat().st_mode & 0o111) != (mode == "100755"):
+                    raise RebuilderError("preserved source mode differs from Git")
+                actual = _stable_file_digest(path, path.lstat(), "preserved source", git_blob=True)
+            if actual != blob:
+                raise RebuilderError("preserved source bytes differ from Git")
+            observed.add(relative)
+    if observed != set(expected):
+        raise RebuilderError("preserved source is incomplete")
+
+
+class PreservedProtectedValidation:
+    """Concrete, key-free composition for both protected transaction seams.
+
+    Use this object's load_consumer and this callable together. Its independently
+    retained read-only workspace is NOT the disposable unsigned builder root.
+    It grants no provenance/signing authority and never replaces Android checks.
+    """
+
+    def __init__(self, lock_path: Path, *, workspace_root: Path, source_graph: Path,
+                 package_authority: Path, authority_root: Path, bundletool: Path,
+                 upload_certificate: Path, java_tool_observation: Path,
+                 dotnet_root: Path, java_root: Path, android_sdk_root: Path) -> None:
+        self.workspace_root, self.authority_root = workspace_root, authority_root
+        self.files = {
+            "lock": lock_path, "source_graph": source_graph, "package_authority": package_authority,
+            "bundletool": bundletool, "upload_certificate": upload_certificate,
+            "java_tool_observation": java_tool_observation,
+        }
+        self.tool_roots = {"dotnet": dotnet_root, "java": java_root, "android_sdk": android_sdk_root}
+        self._limits = {"bundletool": 64 * 1024 * 1024, "upload_certificate": 1024 * 1024}
+        self._bindings = self._capture_inputs()
+        self.lock, _ = load_lock(lock_path)
+        self.graph, _ = _json_file(source_graph, "preserved source graph", 8 * 1024 * 1024, owner_only=True)
+        self._check_source()
+        self.android = validate_android_consumer(workspace_root / "chummer-android", self.lock)
+        self._functions = {name: getattr(self.android, name) for name in (
+            "_artifact_claims", "_protected_validation", "_validate_validation_claims",
+        )}
+        self._check_exact()
+
+    def _capture_inputs(self) -> dict[str, str]:
+        for root in (self.workspace_root, self.authority_root, *self.tool_roots.values()):
+            _preserved_tree(root, "protected validation root")
+        roots = [self.workspace_root, self.authority_root, *self.tool_roots.values()]
+        if any(left == right or left.is_relative_to(right) or right.is_relative_to(left)
+               for index, left in enumerate(roots) for right in roots[index + 1:]):
+            raise RebuilderError("preserved validation roots must be disjoint")
+        result = {}
+        for name, path in self.files.items():
+            _preserved_path(path, f"preserved {name}")
+            result[name] = _sha256_file(path, f"preserved {name}", self._limits.get(name, 8 * 1024 * 1024),
+                                        owner_only=name != "lock")
+        if not self.files["package_authority"].is_relative_to(self.authority_root):
+            raise RebuilderError("package authority is outside its preserved authority root")
+        return result
+
+    def _check_source(self) -> None:
+        rows = validate_source_graph(self.graph)
+        for name, (_role, relative, repository) in REPOSITORIES.items():
+            _preserved_git_storage(self.workspace_root / relative, repository)
+        roots = verify_source_checkout_graph(self.graph, self.workspace_root, timeout=30)
+        permitted = {str(parent) for root in roots.values()
+                     for parent in (root, *root.parents) if parent.is_relative_to(self.workspace_root)}
+        for base, directories, files in os.walk(self.workspace_root, followlinks=False):
+            parent = Path(base)
+            if parent in roots.values():
+                directories[:] = []
+                continue
+            if files or any(str(parent / name) not in permitted for name in directories):
+                raise RebuilderError("preserved workspace contains unrelated input")
+        for name, root in roots.items():
+            _preserved_repository_bytes(root, rows[name]["commit"])
+
+    def _check_exact(self) -> None:
+        if self._capture_inputs() != self._bindings:
+            raise RebuilderError("preserved validation input bytes changed")
+        self._check_source()
+        android = self.android
+        if android.ROOT != self.workspace_root / "chummer-android" \
+                or Path(android.__file__) != android.ROOT / self.lock["android_authority"]["attestation_consumer"]["path"] \
+                or any(getattr(android, name) is not function for name, function in self._functions.items()):
+            raise RebuilderError("protected validation consumer instance changed")
+        _validate_android_consumer_inputs(android.ROOT, self.lock["android_authority"]["commit"])
+        rows = validate_source_graph(self.graph)
+        python = android._trusted_system_executable(Path("/usr/bin/python3"), "protected Python")
+        _preserved_path(python, "protected Python")
+        # Execute the actual qualified verifier in an isolated process; do not
+        # let an ambient Git config/helper environment alter its source checks.
+        android._run_validator(
+            [os.fspath(python), "-I", "-E", "-S", os.fspath(android.ROOT / "scripts/verify_release_source_graph.py"),
+             "--android-root", os.fspath(android.ROOT), "--workspace-root", os.fspath(self.workspace_root),
+             "--package-authority", os.fspath(self.files["package_authority"]),
+             "--authority-root", os.fspath(self.authority_root), "--expected-version-name", VERSION_NAME,
+             "--expected-version-code", str(VERSION_CODE), "--verify-existing", os.fspath(self.files["source_graph"])],
+            {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C", "GIT_CONFIG_NOSYSTEM": "1",
+             "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_NO_REPLACE_OBJECTS": "1",
+             **{REVISION_VARIABLES[name]: row["commit"] for name, row in rows.items()}},
+            "preserved canonical source/package graph", 120)
+        if self._bindings["bundletool"] != self.lock["toolchain"]["bundletool_sha256"]:
+            raise RebuilderError("preserved bundletool differs from qualified lock")
+        openssl = android._trusted_system_executable(Path("/usr/bin/openssl"), "protected openssl")
+        _preserved_path(openssl, "protected openssl")
+        certificate = subprocess.run(
+            [os.fspath(openssl), "x509", "-in", os.fspath(self.files["upload_certificate"]),
+             "-noout", "-fingerprint", "-sha256"],
+            check=False, capture_output=True, text=True, timeout=20,
+            env={"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"})
+        fingerprint = certificate.stdout.strip().removeprefix("sha256 Fingerprint=").removeprefix("SHA256 Fingerprint=")
+        if certificate.returncode != 0 or fingerprint.replace(":", "").lower() != UPLOAD_CERTIFICATE_SHA256:
+            raise RebuilderError("preserved public upload certificate differs")
+        # Observation is not the installed-archive receipt. Android checks its
+        # real tools and probes; Fleet additionally binds all three locked trees.
+        observed = android._load_trusted_java_toolchain(self.files["java_tool_observation"])
+        if observed["tools"]["java"] != self.tool_roots["java"] / "bin/java" \
+                or observed["dotnet"] != self.tool_roots["dotnet"] / "dotnet":
+            raise RebuilderError("preserved tool observation uses different tool roots")
+        for name, root in self.tool_roots.items():
+            pin = self.lock["toolchain"][name]
+            if _tree_digest(root, f"preserved {name}") != (pin["tree_sha256"], pin["file_count"], pin["size_bytes"]):
+                raise RebuilderError("preserved tool tree differs from qualified lock")
+
+    def bind_transaction(self, lock_raw: bytes, lease: Any, load_consumer: Any) -> None:
+        # Binding happens before ledger reservation/credentials in both paths.
+        # This does not authenticate the preserved workspace's provisioner.
+        if load_consumer != self.load_consumer \
+                or hashlib.sha256(lock_raw).hexdigest() != self._bindings["lock"] \
+                or lease.handoff["bindings"]["sourceGraphSha256"] != self._bindings["source_graph"] \
+                or lease.java_root != self.tool_roots["java"]:
+            raise RebuilderError("preserved validation differs from authenticated transaction")
+        self._check_exact()
+
+    def load_consumer(self) -> Any:
+        self._check_exact()
+        return self.android
+
+    def __call__(self, *, android: Any, signed_aab: Path, source_graph: Path,
+                 sidecar: Path, two_green_receipt: Path, approval: Path) -> Mapping[str, Any]:
+        if android is not self.android:
+            raise RebuilderError("protected validation requires its exact preserved consumer")
+        self._check_exact()
+        if _sha256_file(source_graph, "protected source graph", 8 * 1024 * 1024, owner_only=True) \
+                != self._bindings["source_graph"]:
+            raise RebuilderError("protected source graph differs from preserved workspace")
+        claims = self._functions["_artifact_claims"](
+            signed_aab, source_graph, sidecar, two_green_receipt, approval)
+        android.VERIFY.verify_release_eligibility(
+            two_green_receipt, approval, android_root=android.ROOT,
+            expected_version_name=VERSION_NAME, expected_version_code=VERSION_CODE,
+            source_graph_path=source_graph)
+        result = self._functions["_protected_validation"](
+            claims, signed_aab, source_graph, two_green_receipt, approval,
+            workspace_root=self.workspace_root, package_authority=self.files["package_authority"],
+            authority_root=self.authority_root, bundletool=self.files["bundletool"],
+            upload_certificate=self.files["upload_certificate"],
+            java_tool_authority=self.files["java_tool_observation"])
+        result = self._functions["_validate_validation_claims"](result)
+        self._check_exact()
+        return result
 
 
 def _checked(runner: Callable[..., subprocess.CompletedProcess], command: list[str], *, env: Mapping[str, str],
@@ -2354,6 +2659,8 @@ def execute_protected_signer_transaction(
         raise RebuilderError("protected recovery store and final output are not on one filesystem")
     if recovery.exists() or recovery.is_symlink():
         raise RebuilderError("protected signer attempt already has a journal; reconciliation is required")
+    if isinstance(protected_validation_factory, PreservedProtectedValidation):
+        protected_validation_factory.bind_transaction(lock_raw, lease, load_consumer)
     android = load_consumer()
     if getattr(android, "CONTRACT", None) != ANDROID_ATTESTATION_CONTRACT:
         raise RebuilderError("protected Android consumer contract differs")
@@ -2561,6 +2868,8 @@ def reconcile_protected_signer_transaction(
     directory = output_dir if output_dir.exists() else recovery
     if not directory.exists():
         raise RebuilderError("no protected signer recovery evidence exists")
+    if isinstance(protected_validation_factory, PreservedProtectedValidation):
+        protected_validation_factory.bind_transaction(lock_raw, lease, load_consumer)
     android = load_consumer()
     if getattr(android, "CONTRACT", None) != ANDROID_ATTESTATION_CONTRACT:
         raise RebuilderError("protected Android consumer contract differs")

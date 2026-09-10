@@ -7,11 +7,16 @@ No final OCI identity, protected custody, approval or signing receipt is emitted
 from __future__ import annotations
 
 import json
+import io
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+import stat
+import struct
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
+import zipfile
 
 
 SDK_VERSION = "10.0.110"
@@ -24,7 +29,6 @@ PACKS = {
     "Microsoft.Android.Sdk.Linux": ("36.1.69", "35.0.105"),
     "Microsoft.Android.Ref.36": ("36.1.69",),
     "Microsoft.Maui.Sdk": ("10.0.20", "9.0.120"),
-    "Microsoft.Maui.Controls": ("10.0.20",),
     "Microsoft.NET.Runtime.MonoAOTCompiler.Task": ("10.0.12", "9.0.20"),
     "Microsoft.NET.Runtime.MonoTargets.Sdk": ("10.0.12", "9.0.20"),
     **{f"Microsoft.NETCore.App.Runtime.Mono.android-{abi}": ("10.0.12", "9.0.20")
@@ -32,11 +36,147 @@ PACKS = {
     **{f"Microsoft.NETCore.App.Runtime.AOT.linux-x64.Cross.android-{abi}": ("10.0.12", "9.0.20")
        for abi in ("arm", "arm64", "x86", "x64")},
 }
+LIBRARY_PACKS = {"Microsoft.Maui.Controls": "10.0.20"}
 
 
 def require_directory(path: Path) -> None:
     if path.is_symlink() or not path.is_dir() or path.resolve(strict=True) != path:
         raise RuntimeError(f"missing or noncanonical toolchain directory: {path}")
+
+
+def _unique_json_fields(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise RuntimeError("workload manifest contains duplicate fields")
+        result[key] = value
+    return result
+
+
+def _bounded_zip_directory(source, size: int) -> None:
+    # Bound the central directory before ZipFile allocates per-member objects.
+    # This small library package must not need ZIP64 or multi-disk packaging.
+    source.seek(max(0, size - 65557))
+    tail = source.read(65557)
+    offset = tail.rfind(b"PK\x05\x06")
+    if offset < 0 or len(tail) - offset < 22:
+        raise ValueError("missing bounded ZIP directory")
+    disk, start_disk, count_disk, count, directory_size, directory_offset, comment = struct.unpack_from("<4H2IH", tail, offset + 4)
+    end_offset = size - len(tail) + offset
+    if (disk or start_disk or not 0 < count == count_disk <= 4096 or directory_size > 8 * 1024 * 1024
+            or directory_offset + directory_size != end_offset or offset + 22 + comment != len(tail)):
+        raise ValueError("unbounded ZIP directory")
+    source.seek(directory_offset)
+    remaining = directory_size
+    for _ in range(count):
+        header = source.read(46)
+        if len(header) != 46 or header[:4] != b"PK\x01\x02":
+            raise ValueError("invalid ZIP member directory")
+        name, extra, comment = struct.unpack_from("<3H", header, 28)
+        consumed = 46 + name + extra + comment
+        if not 0 < name <= 1024 or consumed > remaining:
+            raise ValueError("unbounded ZIP member directory")
+        source.seek(name + extra + comment, 1)
+        remaining -= consumed
+    if remaining:
+        raise ValueError("ambiguous ZIP directory count")
+    source.seek(0)
+
+
+def _bounded_zip(source, size):
+    _bounded_zip_directory(source, size)
+    return zipfile.ZipFile(source)
+
+
+def verify_library_pack(dotnet_root: Path, package_id: str, version: str) -> None:
+    # SDK WorkloadResolver installs Library packs as single nupkg files here,
+    # not as extracted SDK pack directories or a persistent NuGet global cache.
+    path = dotnet_root / "library-packs" / f"{package_id.lower()}.{version}.nupkg"
+    require_directory(path.parent)
+    failure = f"missing, unsafe or mismatched installed library pack: {path}"
+    if path.is_symlink() or not path.is_file() or path.resolve(strict=True) != path:
+        raise RuntimeError(failure)
+    before = path.stat()
+    if not 0 < before.st_size <= 64 * 1024 * 1024:
+        raise RuntimeError(failure)
+    identity = lambda value: (value.st_dev, value.st_ino, value.st_mode, value.st_uid,
+                              value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+    try:
+        with path.open("rb") as source:
+            captured = source.read(64 * 1024 * 1024 + 1)
+            if len(captured) != before.st_size or identity(os.fstat(source.fileno())) != identity(before):
+                raise RuntimeError(failure)
+        # Bound and parse one owned archive snapshot; a replaced central
+        # directory cannot invalidate the admission bounds between two reads.
+        with io.BytesIO(captured) as source, _bounded_zip(source, len(captured)) as archive:
+            entries = archive.infolist()
+            if not entries or len(entries) > 4096:
+                raise RuntimeError(failure)
+            names, total, nuspecs = {}, 0, []
+            for entry in entries:
+                raw_name = entry.filename
+                name = raw_name.removesuffix("/")
+                relative = PurePosixPath(name)
+                mode = stat.S_IFMT(entry.external_attr >> 16)
+                if (raw_name != entry.orig_filename or "\x00" in raw_name or "\\" in name or ":" in name
+                        or not name or relative.is_absolute() or ".." in relative.parts
+                        or str(relative) != name or name.casefold() in names
+                        or mode not in (0, stat.S_IFREG, stat.S_IFDIR)
+                        or (mode == stat.S_IFDIR and not entry.is_dir())
+                        or (mode == stat.S_IFREG and entry.is_dir()) or entry.flag_bits & 1
+                        or (entry.is_dir() and entry.file_size != 0)
+                        or entry.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)):
+                    raise RuntimeError(failure)
+                names[name.casefold()] = entry.is_dir()
+                total += entry.file_size
+                if total > 512 * 1024 * 1024 or entry.file_size > 128 * 1024 * 1024:
+                    raise RuntimeError(failure)
+                if name.casefold().endswith(".nuspec"):
+                    nuspecs.append(entry)
+            for name in names:
+                if any(str(parent) in names and not names[str(parent)] for parent in PurePosixPath(name).parents):
+                    raise RuntimeError(failure)
+            if (len(nuspecs) != 1 or nuspecs[0].filename.casefold() != f"{package_id}.nuspec".casefold()
+                    or nuspecs[0].is_dir() or nuspecs[0].file_size > 256 * 1024):
+                raise RuntimeError(failure)
+            # Stream every member to EOF for CRC/truncation checks without
+            # extracting anything. Only the bounded nuspec is retained.
+            nuspec = bytearray()
+            for entry in entries:
+                consumed = 0
+                with archive.open(entry) as member:
+                    while chunk := member.read(1024 * 1024):
+                        consumed += len(chunk)
+                        if consumed > entry.file_size:
+                            raise RuntimeError(failure)
+                        if entry is nuspecs[0]:
+                            nuspec.extend(chunk)
+                if consumed != entry.file_size:
+                    raise RuntimeError(failure)
+            text = bytes(nuspec).decode("utf-8-sig", errors="strict")
+            if "<!DOCTYPE" in text.upper() or "<!ENTITY" in text.upper():
+                raise RuntimeError(failure)
+            root = ET.fromstring(text)
+            if root.tag.rsplit("}", 1)[-1] != "package":
+                raise RuntimeError(failure)
+            namespace = root.tag[:-len("package")]
+
+            def one_child(parent, name):
+                matches = [child for child in parent if child.tag.rsplit("}", 1)[-1] == name]
+                if len(matches) != 1 or matches[0].tag != namespace + name:
+                    raise RuntimeError(failure)
+                return matches[0]
+
+            metadata = one_child(root, "metadata")
+            for name, expected in (("id", package_id), ("version", version)):
+                element = one_child(metadata, name)
+                if element.text != expected or len(element) or element.attrib:
+                    raise RuntimeError(failure)
+            if (path.is_symlink()
+                    or path.resolve(strict=True) != path or identity(path.stat()) != identity(before)):
+                raise RuntimeError(failure)
+    except (OSError, ValueError, struct.error, ET.ParseError, zipfile.BadZipFile, NotImplementedError):
+        raise RuntimeError(failure) from None
 
 
 def _installed_pack_diagnostic(packs: Path) -> dict:
@@ -85,9 +225,16 @@ def verify_installed_versions(dotnet_root: Path, java_root: Path, android_root: 
         require_directory(path.parent)
         if path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024:
             raise RuntimeError("workload manifest missing or unsafe")
-        value = json.loads(path.read_bytes())
+        value = json.loads(path.read_bytes(), object_pairs_hook=_unique_json_fields)
         if not isinstance(value, dict) or value.get("version") != version:
             raise RuntimeError("workload manifest version differs")
+        if name == "microsoft.net.sdk.maui":
+            declarations = value.get("packs")
+            for package_id, package_version in LIBRARY_PACKS.items():
+                declaration = declarations.get(package_id) if isinstance(declarations, dict) else None
+                if (not isinstance(declaration, dict) or declaration.get("kind") != "library"
+                        or declaration.get("version") != package_version):
+                    raise RuntimeError(f"workload library declaration differs: {package_id} {package_version}")
     for name, versions in PACKS.items():
         for version in versions:
             try:
@@ -95,6 +242,8 @@ def verify_installed_versions(dotnet_root: Path, java_root: Path, android_root: 
             except RuntimeError:
                 print(json.dumps(_installed_pack_diagnostic(dotnet_root / "packs"), sort_keys=True), file=sys.stderr)
                 raise
+    for package_id, version in LIBRARY_PACKS.items():
+        verify_library_pack(dotnet_root, package_id, version)
     for path in (android_root / "platforms/android-36/android.jar",
                  *(android_root / "build-tools/36.0.0" / name for name in ("aapt2", "apksigner", "zipalign"))):
         if path.is_symlink() or not path.is_file():

@@ -7,6 +7,9 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import stat
+import struct
+import zipfile
 
 import pytest
 
@@ -25,6 +28,18 @@ def load(path, name):
 
 BOOT = load(RECIPE / "bootstrap.py", "rebuilder_bootstrap_test")
 FIXTURES = load(ROOT / "tests/test_android_preview12_toolchain_installer.py", "rebuilder_offline_archives")
+
+
+def nuspec(package_id="Microsoft.Maui.Controls", version="10.0.20", namespace=True):
+    attribute = ' xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd"' if namespace else ""
+    return (f'<?xml version="1.0" encoding="utf-8"?><package{attribute}><metadata>'
+            f'<id>{package_id}</id><version>{version}</version><description>Offline fixture only</description>'
+            '</metadata></package>').encode()
+
+
+def library_zip(xml=None, extra=()):
+    return FIXTURES.zip_bytes([("Microsoft.Maui.Controls.nuspec", nuspec() if xml is None else xml),
+                               ("lib/net10.0/_._", b""), *extra])
 
 
 def prepare(tmp_path, monkeypatch, fault=None):
@@ -56,10 +71,23 @@ def prepare(tmp_path, monkeypatch, fault=None):
         for name, version in BOOT.MANIFESTS.items():
             path = dotnet / "sdk-manifests/10.0.100" / name / version / "WorkloadManifest.json"
             path.parent.mkdir(parents=True)
-            path.write_text(json.dumps({"version": version}))
+            content = {"version": version}
+            if name == "microsoft.net.sdk.maui":
+                content["packs"] = {"Microsoft.Maui.Controls": {
+                    "kind": "sdk" if fault == "library-kind" else "library",
+                    "version": "10.0.19" if fault == "library-manifest-version" else "10.0.20",
+                }}
+            path.write_text(json.dumps(content))
+            if name == "microsoft.net.sdk.maui" and fault == "library-duplicate-kind":
+                path.write_text(path.read_text().replace('"kind": "library"', '"kind": "sdk", "kind": "library"'))
         for name, versions in BOOT.PACKS.items():
             for version in versions:
                 (dotnet / "packs" / name / version).mkdir(parents=True, exist_ok=True)
+        library = dotnet / "library-packs/microsoft.maui.controls.10.0.20.nupkg"
+        library.parent.mkdir()
+        library.write_bytes(library_zip())
+        if fault == "library-missing":
+            library.unlink()
         if fault == "manifest-version":
             path = dotnet / "sdk-manifests/10.0.100/microsoft.net.sdk.android/36.1.69/WorkloadManifest.json"
             path.write_text('{"version":"36.1.68"}')
@@ -122,16 +150,108 @@ def test_real_tiny_offline_archives_and_explicit_workload_orchestration(tmp_path
     assert "sha512" in inventory["archives"][0] and "sha256" not in inventory["archives"][0]
     assert sum(command[1:3] == ["workload", "install"] for command in calls) == 1
     assert not any("restore" in command or "update" in command for command in calls)
+    assert (tmp_path / "opt/dotnet/library-packs/microsoft.maui.controls.10.0.20.nupkg").is_file()
+    assert not (tmp_path / "opt/dotnet/packs/Microsoft.Maui.Controls").exists()
+    assert BOOT.LIBRARY_PACKS == {"Microsoft.Maui.Controls": "10.0.20"}
 
 
 @pytest.mark.parametrize("fault", ["sdk-version", "extra-sdk", "workload-version", "java-version",
-                                   "manifest-version", "missing-pack", "linked-pack", "missing-api", "workload-failure"])
+                                   "manifest-version", "missing-pack", "linked-pack", "missing-api", "workload-failure",
+                                   "library-kind", "library-manifest-version", "library-missing", "library-duplicate-kind"])
 def test_bootstrap_version_or_install_failure_cannot_report_success(tmp_path, monkeypatch, fault):
     execute, calls, _ = prepare(tmp_path, monkeypatch, fault)
     with pytest.raises((RuntimeError, subprocess.CalledProcessError)):
         execute()
     if fault in ("sdk-version", "extra-sdk"):
         assert not any(command[1:3] == ["workload", "install"] for command in calls)
+
+
+@pytest.mark.parametrize("namespace", [False, True])
+def test_real_library_zip_nuspec_identity_is_verified_without_extraction(tmp_path, namespace):
+    library = tmp_path / "library-packs/microsoft.maui.controls.10.0.20.nupkg"
+    library.parent.mkdir()
+    library.write_bytes(library_zip(nuspec(namespace=namespace)))
+    before = library.read_bytes()
+    BOOT.verify_library_pack(tmp_path, "Microsoft.Maui.Controls", "10.0.20")
+    assert library.read_bytes() == before
+    assert list(library.parent.iterdir()) == [library]
+
+
+@pytest.mark.parametrize("fault", ["id", "version", "duplicate-id", "duplicate-version", "doctype", "entity",
+                                   "extra-nuspec", "nested-nuspec", "duplicate-entry", "escape", "absolute",
+                                   "backslash", "link-entry", "file-parent", "corrupt-zip", "corrupt-crc",
+                                   "symlink", "linked-parent", "missing", "oversized-nuspec"])
+def test_library_archive_cannot_pass_by_filename_alone(tmp_path, fault):
+    library = tmp_path / "library-packs/microsoft.maui.controls.10.0.20.nupkg"
+    library.parent.mkdir()
+    xml, extra = nuspec(), []
+    if fault == "id":
+        xml = nuspec(package_id="Microsoft.Maui.Other")
+    elif fault == "version":
+        xml = nuspec(version="10.0.19")
+    elif fault == "duplicate-id":
+        xml = xml.replace(b"</id>", b"</id><id>Microsoft.Maui.Controls</id>")
+    elif fault == "duplicate-version":
+        xml = xml.replace(b"</version>", b"</version><version>10.0.20</version>")
+    elif fault in ("doctype", "entity"):
+        xml = b'<!DOCTYPE package [<!ENTITY value "unsafe">]>' + xml[xml.index(b"<package"):]
+    elif fault == "oversized-nuspec":
+        xml += b" " * (256 * 1024)
+    elif fault in ("extra-nuspec", "duplicate-entry", "escape", "absolute", "backslash", "file-parent"):
+        extra = {
+            "extra-nuspec": [("Other.nuspec", nuspec())],
+            "duplicate-entry": [("LIB/net10.0/_._", b"shadow")],
+            "escape": [("../escape", b"unsafe")], "absolute": [("/escape", b"unsafe")],
+            "backslash": [("folder\\escape", b"unsafe")], "file-parent": [("lib", b"not a directory")],
+        }[fault]
+    raw = library_zip(xml, extra)
+    if fault == "nested-nuspec":
+        raw = FIXTURES.zip_bytes([("nested/Microsoft.Maui.Controls.nuspec", xml)])
+    elif fault == "corrupt-zip":
+        raw = b"not a ZIP"
+    elif fault == "corrupt-crc":
+        assert b"Offline fixture only" in raw
+        raw = raw.replace(b"Offline fixture only", b"Altered fixture only", 1)
+    elif fault == "link-entry":
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w") as archive:
+            archive.writestr("Microsoft.Maui.Controls.nuspec", xml)
+            entry = zipfile.ZipInfo("link")
+            entry.create_system = 3
+            entry.external_attr = (stat.S_IFLNK | 0o777) << 16
+            archive.writestr(entry, "../outside")
+        raw = output.getvalue()
+    library.write_bytes(raw)
+    if fault == "missing":
+        library.unlink()
+    elif fault == "symlink":
+        other = tmp_path / "same-package.nupkg"
+        library.rename(other)
+        library.symlink_to(other)
+    elif fault == "linked-parent":
+        directory = tmp_path / "elsewhere"
+        library.parent.rename(directory)
+        library.parent.symlink_to(directory, target_is_directory=True)
+    with pytest.raises(RuntimeError):
+        BOOT.verify_library_pack(tmp_path, "Microsoft.Maui.Controls", "10.0.20")
+
+
+@pytest.mark.parametrize("fault", ["excessive-count", "lying-count", "oversized-archive"])
+def test_library_zip_bounds_are_checked_before_zipfile_allocations(tmp_path, monkeypatch, fault):
+    path = tmp_path / "library-packs/microsoft.maui.controls.10.0.20.nupkg"
+    path.parent.mkdir()
+    raw = bytearray(library_zip())
+    if fault != "oversized-archive":
+        offset = raw.rfind(b"PK\x05\x06")
+        count = 4097 if fault == "excessive-count" else 4096
+        struct.pack_into("<2H", raw, offset + 8, count, count)
+    path.write_bytes(raw)
+    if fault == "oversized-archive":
+        with path.open("r+b") as stream:
+            stream.truncate(64 * 1024 * 1024 + 1)  # Sparse, no large allocation.
+    monkeypatch.setattr(BOOT.zipfile, "ZipFile", lambda *args, **kw: pytest.fail("unbounded ZIP constructor"))
+    with pytest.raises(RuntimeError):
+        BOOT.verify_library_pack(tmp_path, "Microsoft.Maui.Controls", "10.0.20")
 
 
 def test_missing_pack_reports_exact_path_and_non_authoritative_directory_inventory(tmp_path, monkeypatch, capsys):
