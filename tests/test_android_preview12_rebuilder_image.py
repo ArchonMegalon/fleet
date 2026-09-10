@@ -93,6 +93,7 @@ def prepare(tmp_path, monkeypatch, fault=None):
             if fault == "workload-failure":
                 raise subprocess.CalledProcessError(1, command)
             populate()
+            (Path(environment["NUGET_PACKAGES"]) / "microsoft.maui.controls/10.0.20").mkdir(parents=True)
             return subprocess.CompletedProcess(command, 0, "offline modeled workload install")
         if command[1:] == ["--version"]:
             output = "10.0.111" if fault == "sdk-version" else "10.0.110"
@@ -131,6 +132,49 @@ def test_bootstrap_version_or_install_failure_cannot_report_success(tmp_path, mo
         execute()
     if fault in ("sdk-version", "extra-sdk"):
         assert not any(command[1:3] == ["workload", "install"] for command in calls)
+
+
+def test_missing_pack_reports_exact_path_and_non_authoritative_directory_inventory(tmp_path, monkeypatch, capsys):
+    execute, _, _ = prepare(tmp_path, monkeypatch, "missing-pack")
+    with pytest.raises(RuntimeError, match=r"Microsoft.NETCore.App.Runtime.Mono.android-arm64/10\.0\.12"):
+        execute()
+    output = capsys.readouterr().err
+    inventory, nuget = [json.loads(line) for line in output.splitlines()]
+    assert inventory["diagnostic"] == "non_authoritative_installed_pack_directories"
+    row = next(row for row in inventory["packs"] if row["name"] == "Microsoft.NETCore.App.Runtime.Mono.android-arm64")
+    assert row["versions"] == ["9.0.20"]
+    assert inventory["truncated"] is False
+    assert nuget["diagnostic"] == "non_authoritative_private_nuget_directories"
+    assert nuget["packs"] == [{"name": "microsoft.maui.controls", "versions": ["10.0.20"]}]
+    assert len(output) < 34 * 1024
+
+
+def test_pack_diagnostic_is_bounded_and_does_not_read_files_or_follow_links(tmp_path, monkeypatch):
+    packs = tmp_path / "packs"
+    packs.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "not-a-pack").mkdir()
+    (packs / "linked-package").symlink_to(outside, target_is_directory=True)
+    (packs / "ignored-file").write_bytes(b"DO-NOT-READ-FILE-CONTENTS")
+    for index in range(260):
+        (packs / f"Pack{index:03}").mkdir()
+    monkeypatch.setattr(Path, "read_bytes", lambda self: pytest.fail("diagnostic read file contents"))
+    monkeypatch.setattr(Path, "read_text", lambda self, **kw: pytest.fail("diagnostic read file contents"))
+    inventory = BOOT._installed_pack_diagnostic(packs)
+    assert inventory["truncated"] is True
+    assert len(inventory["packs"]) <= 256
+    assert all(row["name"] not in ("linked-package", "ignored-file", "not-a-pack") for row in inventory["packs"])
+    assert len(json.dumps(inventory)) <= 17 * 1024
+
+
+def test_noncanonical_pack_reports_exact_path(tmp_path):
+    directory = tmp_path / "real"
+    directory.mkdir()
+    path = tmp_path / "linked"
+    path.symlink_to(directory, target_is_directory=True)
+    with pytest.raises(RuntimeError, match=f"directory: {path}"):
+        BOOT.require_directory(path)
 
 
 def test_recipe_binds_exact_archive_metadata_and_keeps_old_image_untouched():

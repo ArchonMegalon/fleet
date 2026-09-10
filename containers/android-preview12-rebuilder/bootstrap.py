@@ -7,8 +7,10 @@ No final OCI identity, protected custody, approval or signing receipt is emitted
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 
@@ -34,7 +36,36 @@ PACKS = {
 
 def require_directory(path: Path) -> None:
     if path.is_symlink() or not path.is_dir() or path.resolve(strict=True) != path:
-        raise RuntimeError("missing or noncanonical toolchain directory")
+        raise RuntimeError(f"missing or noncanonical toolchain directory: {path}")
+
+
+def _installed_pack_diagnostic(packs: Path) -> dict:
+    """Bounded directory names only: not file contents or installed authority."""
+    result = {"diagnostic": "non_authoritative_installed_pack_directories", "packs": [], "truncated": False}
+
+    def names(path, limit):
+        found = []
+        if path.is_symlink():
+            raise OSError("linked inventory directory")
+        with os.scandir(path) as entries:
+            for index, entry in enumerate(entries):
+                if index == limit:
+                    result["truncated"] = True
+                    break
+                if entry.is_dir(follow_symlinks=False):
+                    found.append(entry.name)
+        return sorted(found)
+
+    try:
+        for name in names(packs, 256):
+            row = {"name": name[:128], "versions": [value[:128] for value in names(packs / name, 32)]}
+            if len(json.dumps(result)) + len(json.dumps(row)) > 16 * 1024:
+                result["truncated"] = True
+                break
+            result["packs"].append(row)
+    except OSError:
+        result["unavailable"] = True
+    return result
 
 
 def verify_installed_versions(dotnet_root: Path, java_root: Path, android_root: Path, probe) -> None:
@@ -59,7 +90,11 @@ def verify_installed_versions(dotnet_root: Path, java_root: Path, android_root: 
             raise RuntimeError("workload manifest version differs")
     for name, versions in PACKS.items():
         for version in versions:
-            require_directory(dotnet_root / "packs" / name / version)
+            try:
+                require_directory(dotnet_root / "packs" / name / version)
+            except RuntimeError:
+                print(json.dumps(_installed_pack_diagnostic(dotnet_root / "packs"), sort_keys=True), file=sys.stderr)
+                raise
     for path in (android_root / "platforms/android-36/android.jar",
                  *(android_root / "build-tools/36.0.0" / name for name in ("aapt2", "apksigner", "zipalign"))):
         if path.is_symlink() or not path.is_file():
@@ -97,7 +132,19 @@ def bootstrap(installer: Path, manifest: Path, receipt: Path, dotnet_root: Path,
         probe([str(dotnet_root / "dotnet"), "workload", "install", "android", "maui-android",
                "--version", WORKLOAD_VERSION, "--source", NUGET_SOURCE,
                "--configfile", str(config), "--disable-parallel"])
-        verify_installed_versions(dotnet_root, java_root, android_root, probe)
+        try:
+            verify_installed_versions(dotnet_root, java_root, android_root, probe)
+        except RuntimeError:
+            # Observe only this transaction's generated private cache, never
+            # ambient NUGET_PACKAGES or a caller-controlled external directory.
+            nuget = cache / "nuget"
+            if (not cache.is_symlink() and cache.resolve(strict=True) == cache
+                    and cache.stat().st_uid == os.getuid() and not cache.stat().st_mode & 0o077
+                    and not nuget.is_symlink()):
+                diagnostic = _installed_pack_diagnostic(nuget)
+                diagnostic["diagnostic"] = "non_authoritative_private_nuget_directories"
+                print(json.dumps(diagnostic, sort_keys=True), file=sys.stderr)
+            raise
 
 
 if __name__ == "__main__":
