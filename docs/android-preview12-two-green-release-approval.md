@@ -8,7 +8,7 @@ are backed by the exact successful reviewed and main API-36 Two-Green evidence.
 
 It never accepts, signs, uploads, or publishes an AAB. Its primary output is
 the exact `chummer.android.two-green-release-approval/v1` contract consumed by
-the qualified Android `388425aceac266e06265e4c0c73a4058b052d316` release
+the qualified Android `7cef6a715867cab8000483b08db9aad2e817f63d` release
 verifier. It always keeps
 `signingAuthorized`, `publicationAuthorized`, and
 `googlePlayUploadAuthorized` false.
@@ -19,8 +19,16 @@ Android requires an exact compact object: `local-release-builder-2026`, role
 without a trailing newline, and no extra fields. The approval binds the raw
 Two-Green receipt digest and eligibility digest, source commit/tree,
 Preview12/code12, dependency graph, environment policy, challenge nonce,
-expiry, the qualified provenance-validator digest, and Fleet's independent
-provenance replay receipt digest.
+expiry, the qualified provenance-validator digest, and Fleet's adapter audit
+receipt digest (the existing `provenanceReplaySha256` field).
+
+The current input is the exact Two-Green v3 wizard-only receipt, with all seven
+journeys, the qualified workflow/environment/gate/policy bindings, and the exact
+canonical dependency graph. The historical Android `388425ace` fixture remains
+only a public-key and approval-v1 byte-shape fixture; it is not current evidence.
+The existing workflow audits authenticated hosted Two-Green artifact metadata
+and bytes. It does **not** run Android's local source/archive provenance replay;
+pinning that validator's hash does not mean it was executed by Fleet.
 
 Every request also binds a fresh 256-bit approval nonce, a live protected
 Android `main` commit/tree snapshot, and one exact Two-Green artifact. The
@@ -151,6 +159,12 @@ passed and that its configured reviewer set matched the reviewed policy. Its
 canonical SHA-256 is signed into the Android approval as
 `provenanceReplaySha256`. It deliberately does not claim or identify the
 individual account that approved that deployment.
+
+Local current-consumer compatibility tests may receive
+`CHUMMER_ANDROID_CURRENT_ROOT` and `CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT`.
+They execute the full current Android release-eligibility consumer with the
+original receipt and an explicitly synthetic RFC 8032 approval key. They do not
+grant approval, establish protected custody, or reattest hosted provenance.
 
 ## Explicit non-authority
 

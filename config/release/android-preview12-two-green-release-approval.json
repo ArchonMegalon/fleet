@@ -4,7 +4,7 @@
   "state": "dormant_pending_environment_signer_and_ledger_service",
   "release": {"package_id": "com.myexternalbrain.chummer", "version_name": "0.1.0-preview.12", "version_code": 12},
   "android_source": {"repository": "ArchonMegalon/chummer-android", "repository_id": 1331626697, "ref": "refs/heads/main"},
-  "two_green": {"workflow_name": "API 36 ordered review-to-main green eligibility", "workflow_path": ".github/workflows/api36-two-consecutive-green.yml", "receipt_contract": "chummer.android.api36-ordered-review-main-green-eligibility/v2", "receipt_file_name": "ANDROID_API36_TWO_GREEN_ELIGIBILITY.generated.json"},
+  "two_green": {"workflow_name": "API 36 ordered review-to-main green eligibility", "workflow_path": ".github/workflows/api36-two-consecutive-green.yml", "receipt_contract": "chummer.android.api36-ordered-review-main-green-eligibility/v3", "receipt_file_name": "ANDROID_API36_TWO_GREEN_ELIGIBILITY.generated.json"},
   "fleet_execution": {
     "repository": "ArchonMegalon/fleet",
     "repository_id": 1176287728,
@@ -52,13 +52,13 @@
     "private_key_persistence_allowed": false
   },
   "android_consumer": {
-    "qualified_commit": "388425aceac266e06265e4c0c73a4058b052d316",
-    "qualified_tree": "175da843cfc2df3489d87dc153c186b9c8e4d803",
+    "qualified_commit": "7cef6a715867cab8000483b08db9aad2e817f63d",
+    "qualified_tree": "534f6dc0cde043fb78475c35e9116a727a9e95f5",
     "verifier_path": "scripts/verify_api36_two_green_release_eligibility.py",
     "contract_name": "chummer.android.two-green-release-approval/v1",
     "canonical_json": "utf8_sort_keys_compact_no_trailing_newline",
     "provenance_validator_path": "scripts/materialize-api36-two-green-eligibility.py",
-    "provenance_validator_sha256": "6129faf8f1cac0e540126a39cb46e16352387c370dbbd003e1fe5ace1edf4492",
+    "provenance_validator_sha256": "d0e1938107a3794a44648286b8b97d1ac3db64daa30509f1e63fe78018d3f4c7",
     "maximum_approval_lifetime_seconds": 43200,
     "approval_clock_skew_seconds": 120
   },

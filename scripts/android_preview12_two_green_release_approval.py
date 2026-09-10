@@ -32,7 +32,7 @@ except ModuleNotFoundError:  # Direct execution places scripts/ on sys.path.
 POLICY_CONTRACT = "fleet.android_preview12_two_green_release_approval_policy.v1"
 FLEET_AUDIT_CONTRACT = "fleet.android_preview12_two_green_release_approval.v1"
 OUTPUT_CONTRACT = "chummer.android.two-green-release-approval/v1"
-TWO_GREEN_CONTRACT = "chummer.android.api36-ordered-review-main-green-eligibility/v2"
+TWO_GREEN_CONTRACT = "chummer.android.api36-ordered-review-main-green-eligibility/v3"
 FLEET_REPOSITORY = "ArchonMegalon/fleet"
 ANDROID_REPOSITORY = "ArchonMegalon/chummer-android"
 FLEET_REF = "refs/heads/main"
@@ -49,8 +49,8 @@ CROSS_REPO_TOKEN_ENV_NAME = "ANDROID_PREVIEW12_CROSS_REPO_ACTIONS_READ_TOKEN"
 PACKAGE_ID = "com.myexternalbrain.chummer"
 VERSION_NAME = "0.1.0-preview.12"
 VERSION_CODE = 12
-ANDROID_CONSUMER_COMMIT = "388425aceac266e06265e4c0c73a4058b052d316"
-ANDROID_CONSUMER_TREE = "175da843cfc2df3489d87dc153c186b9c8e4d803"
+ANDROID_CONSUMER_COMMIT = "7cef6a715867cab8000483b08db9aad2e817f63d"
+ANDROID_CONSUMER_TREE = "534f6dc0cde043fb78475c35e9116a727a9e95f5"
 RELEASE_APPROVER_KEY_ID = "local-release-builder-2026"
 RELEASE_APPROVER_ROLE = "android_internal_release_approver"
 RELEASE_APPROVAL_SCOPE = "android_internal_release_preparation"
@@ -68,7 +68,42 @@ RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256 = (
 )
 PROVENANCE_VALIDATOR_PATH = "scripts/materialize-api36-two-green-eligibility.py"
 PROVENANCE_VALIDATOR_SHA256 = (
-    "6129faf8f1cac0e540126a39cb46e16352387c370dbbd003e1fe5ace1edf4492"
+    "d0e1938107a3794a44648286b8b97d1ac3db64daa30509f1e63fe78018d3f4c7"
+)
+# Public metadata of the exact qualified consumer, not locally executed Android
+# provenance replay. The workflow authenticates the original hosted artifact.
+QUALIFIED_DEPENDENCY_GRAPH_SHA256 = "083c8caf3ad2702fa17c3d7924a48f02987d90d2ffbd2b29f547ea615125266e"
+WIZARD_AUTHORITY_CLASS = "internal_phone_beta_sr5_wizard_only"
+WIZARD_PROOF_SCOPE = "sr5_wizards_only"
+WIZARD_AGGREGATE_SCHEMA = "chummer.android.api36-sr5-wizard-e2e-aggregate/v2"
+WIZARD_JOURNEYS = (
+    "creation-prerequisite", "career-active-skill-advance", "career-weapon-fire",
+    "before-run-edge", "playtime-short-burst", "downtime-calendar", "after-run-settlement",
+)
+QUALIFIED_WORKFLOW = {
+    "path": ".github/workflows/api36-editing-e2e.yml",
+    "sha256": "a92da1991eb9892133e0de39233e4bbcf5426334890ba62da2cf4276ab311c9c", "sizeBytes": 33162,
+}
+QUALIFIED_ENVIRONMENT_POLICY = {
+    "schema": "chummer.android.api36-proof-environment-authority/v2",
+    "sha256": "73358001efe1e8fbcc9c15258169586d1c71a2f8b3ca40085de84adf4fad5b8e", "sizeBytes": 1301,
+}
+QUALIFIED_TWO_GREEN_POLICY = {
+    "path": "eng/api36-two-consecutive-green-authority.json", "publicationAuthorized": False,
+    "schema": "chummer.android.api36-ordered-review-main-green-policy/v3",
+    "sha256": "be2daf41ce4ad59f417bf592fcf0da7f2c716d7deee0fb51f90b5f3cc57ec01a", "sizeBytes": 2752,
+}
+QUALIFIED_WIZARD_GATE = {
+    "schema": "chummer.android.api36-sr5-wizard-gate-binding/v1",
+    "contractPath": "eng/api36-sr5-wizard-gate-authority.json",
+    "contractSha256": "c867b4fd8c2a771e3ddb4c3e20c0b843ea87510a197b476c7ce75dc013fec7b4",
+    "authorityClass": WIZARD_AUTHORITY_CLASS, "proofScope": WIZARD_PROOF_SCOPE,
+    "publicationAuthorized": False, "requiredJourneyCount": 7, "requiredJourneys": list(WIZARD_JOURNEYS),
+}
+TWO_GREEN_EXCLUSIONS = (
+    "google_play_upload", "google_play_processing", "tester_distribution", "tester_installation",
+    "release_signing", "public_release_readiness", "publication_authority",
+    "zero_intervening_workflow_runs", "non_android_dependency_commit_tree_reconstruction",
 )
 APPROVAL_LIFETIME_SECONDS = 6 * 60 * 60
 MAX_APPROVAL_LIFETIME_SECONDS = 12 * 60 * 60
@@ -95,7 +130,7 @@ def canonical_bytes(value: object) -> bytes:
 
 
 def android_canonical_bytes(value: object) -> bytes:
-    """Canonical bytes consumed by Android 388425ace (no trailing newline)."""
+    """Canonical bytes consumed by qualified Android 7cef6a71 (no trailing newline)."""
     return json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
@@ -559,7 +594,7 @@ def validate_inputs(args: argparse.Namespace) -> dict[str, Any]:
         values["mainCommit"] != ANDROID_CONSUMER_COMMIT
         or values["mainTree"] != ANDROID_CONSUMER_TREE
     ):
-        raise ApprovalError("Android source is not the qualified 388425ace consumer")
+        raise ApprovalError("Android source is not the qualified 7cef6a71 consumer")
     if values["reviewRunId"] == values["mainRunId"]:
         raise ApprovalError("review and main run IDs must be distinct")
     return values
@@ -933,6 +968,21 @@ def validate_receipt(
     common = value.get("commonAuthority")
     if not isinstance(common, dict) or common.get("androidTree") != inputs["mainTree"] or common.get("environmentCompatibilityStatus") != "pass":
         raise ApprovalError("Two-Green common tree/environment authority differs")
+    _exact_keys(common, {
+        "androidTree", "authorityClass", "proofScope", "dependencyGraph", "workflow", "wizardGate",
+        "aggregateSchema", "requiredJourneys", "environmentPolicy", "buildEnvironmentCompatibilitySha256",
+        "journeyEnvironmentCompatibilitySha256", "environmentCompatibilityStatus",
+    }, "Two-Green common authority")
+    expected_bindings = {
+        "authorityClass": WIZARD_AUTHORITY_CLASS, "proofScope": WIZARD_PROOF_SCOPE,
+        "aggregateSchema": WIZARD_AGGREGATE_SCHEMA, "requiredJourneys": list(WIZARD_JOURNEYS),
+        "workflow": QUALIFIED_WORKFLOW, "wizardGate": QUALIFIED_WIZARD_GATE,
+        "environmentPolicy": QUALIFIED_ENVIRONMENT_POLICY,
+    }
+    if any(canonical_bytes(common[field]) != canonical_bytes(expected) for field, expected in expected_bindings.items()):
+        raise ApprovalError("Two-Green qualified wizard/source authority differs")
+    for field in ("buildEnvironmentCompatibilitySha256", "journeyEnvironmentCompatibilitySha256"):
+        _sha256(common[field], "Two-Green environment compatibility digest")
     dependency_graph = common.get("dependencyGraph")
     environment_policy = common.get("environmentPolicy")
     if not isinstance(dependency_graph, dict) or not isinstance(environment_policy, dict):
@@ -940,25 +990,22 @@ def validate_receipt(
     dependency_graph_sha256 = _sha256(
         dependency_graph.get("sha256"), "Two-Green dependency graph digest"
     )
+    _exact_keys(dependency_graph, {"mode", "sources", "sha256"}, "Two-Green dependency graph")
+    if dependency_graph_sha256 != QUALIFIED_DEPENDENCY_GRAPH_SHA256 or canonical_sha256({
+        "mode": dependency_graph["mode"], "sources": dependency_graph["sources"],
+    }) != dependency_graph_sha256:
+        raise ApprovalError("Two-Green qualified dependency graph differs")
     environment_policy_sha256 = _sha256(
         environment_policy.get("sha256"), "Two-Green environment policy digest"
     )
     policy_authority = value.get("policyAuthority")
-    if (
-        not isinstance(policy_authority, dict)
-        or policy_authority.get("schema")
-        != "chummer.android.api36-ordered-review-main-green-policy/v2"
-        or policy_authority.get("path")
-        != "eng/api36-two-consecutive-green-authority.json"
-        or policy_authority.get("publicationAuthorized") is not False
-    ):
+    if canonical_bytes(policy_authority) != canonical_bytes(QUALIFIED_TWO_GREEN_POLICY):
         raise ApprovalError("Two-Green policy authority differs")
     _sha256(policy_authority.get("sha256"), "Two-Green policy digest")
     _positive(policy_authority.get("sizeBytes"), "Two-Green policy size")
     does_not_assert = value.get("doesNotAssert")
-    for required_exclusion in ("google_play_upload", "release_signing", "publication_authority"):
-        if not isinstance(does_not_assert, list) or required_exclusion not in does_not_assert:
-            raise ApprovalError("Two-Green receipt omits a required non-authority boundary")
+    if does_not_assert != list(TWO_GREEN_EXCLUSIONS):
+        raise ApprovalError("Two-Green receipt omits a required non-authority boundary")
     unsigned = {key: member for key, member in value.items() if key != "eligibilitySha256"}
     if value.get("eligibilitySha256") != canonical_sha256(unsigned):
         raise ApprovalError("Two-Green eligibility digest is invalid")
@@ -1292,7 +1339,7 @@ def release_approval_unsigned(
     expires_at_utc: str,
     challenge_nonce: str,
 ) -> dict[str, Any]:
-    """Project Fleet evidence into Android 388425ace's exact signed fields."""
+    """Project the hosted-artifact audit into Android 7cef6a71's exact signed fields."""
     source = audit_receipt.get("androidSource")
     release = audit_receipt.get("release")
     two_green = audit_receipt.get("twoGreen")
@@ -1379,7 +1426,7 @@ def validate_approval(
     expected_challenge_nonce: str | None = None,
     now: datetime | None = None,
 ) -> None:
-    """Validate exactly the approval accepted by Android at 388425ace."""
+    """Validate exactly the approval accepted by Android at 7cef6a71."""
     fields = {
         "contractName", "algorithm", "keyId", "role", "approvalScope",
         "generatedAtUtc", "expiresAtUtc", "challengeNonce",

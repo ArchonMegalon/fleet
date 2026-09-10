@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import copy
 from datetime import datetime, timezone
 import hashlib
 import importlib.util
@@ -211,6 +212,31 @@ def execution(**changes) -> dict[str, object]:
     return value
 
 
+def qualified_dependency_graph() -> dict:
+    # Public source identities of the qualified graph, not a fabricated hash-only graph.
+    identities = {
+        "core-content": ("core", "1d8cf694d0412b3bd9f4a241fb95244fad341160", "3f39863d2ae5db4d6d7b3d07185e33bf240db330"),
+        "core-runtime": ("core", "f7500ef8c2f597bac67bc3f53620d50b7a17d00a", "ee0ba10b3156c5879d1b7e59d86b1619a0f26a9b"),
+        "hub": ("hub", "894cb12281eb1315a202c7f1ac5d7de9f70e5fd6", "2d0b95446db74ee0acf46b930e8013d987122bd6"),
+        "media": ("media-factory", "415c8163d3d90b1211e4014fef332bdec6d75f73", "841a2b8bf3180fada9c3978a6478e3826d75ee2b"),
+        "presentation": ("ui", "f7d671e8e1fd9ba630b74564c203077e6f162fa7", "62a8711e128b920dacd541ad18f9fd5d6d9194b0"),
+        "registry": ("hub-registry", "af9a7e19c3bf331e96411dfb8f9e7820a98cab29", "ada0ad6341d34eea0f407ef2b109f6368b6752e2"),
+        "ui-kit": ("ui-kit", "d51ecd99cf72098d4adc8db0192bff7bf9fd8e61", "1c9837c579a52c40fe49c70db9e4f7aff2af0143"),
+    }
+    sources = {
+        name: {"repository": f"https://github.com/ArchonMegalon/chummer6-{repo}.git", "commit": commit, "tree": tree}
+        for name, (repo, commit, tree) in identities.items()
+    }
+    sources["android"] = {
+        "repository": "https://github.com/ArchonMegalon/chummer-android.git",
+        "tree": approval.ANDROID_CONSUMER_TREE,
+    }
+    graph = {"mode": {"localCompatibilityTree": True, "packageOnly": False}, "sources": sources}
+    graph["sha256"] = approval.canonical_sha256(graph)
+    assert graph["sha256"] == approval.QUALIFIED_DEPENDENCY_GRAPH_SHA256
+    return graph
+
+
 def receipt() -> dict:
     value = {
         "schema": approval.TWO_GREEN_CONTRACT,
@@ -232,8 +258,16 @@ def receipt() -> dict:
         "commonAuthority": {
             "androidTree": approval.ANDROID_CONSUMER_TREE,
             "environmentCompatibilityStatus": "pass",
-            "dependencyGraph": {"sha256": "6" * 64},
-            "environmentPolicy": {"sha256": "7" * 64},
+            "dependencyGraph": qualified_dependency_graph(),
+            "environmentPolicy": copy.deepcopy(approval.QUALIFIED_ENVIRONMENT_POLICY),
+            "authorityClass": approval.WIZARD_AUTHORITY_CLASS,
+            "proofScope": approval.WIZARD_PROOF_SCOPE,
+            "aggregateSchema": approval.WIZARD_AGGREGATE_SCHEMA,
+            "requiredJourneys": list(approval.WIZARD_JOURNEYS),
+            "workflow": copy.deepcopy(approval.QUALIFIED_WORKFLOW),
+            "wizardGate": copy.deepcopy(approval.QUALIFIED_WIZARD_GATE),
+            "buildEnvironmentCompatibilitySha256": "6" * 64,
+            "journeyEnvironmentCompatibilitySha256": "7" * 64,
         },
         "reviewRun": {
             "run": {"id": 101, "status": "completed", "conclusion": "success"},
@@ -249,15 +283,9 @@ def receipt() -> dict:
             "repository": approval.ANDROID_REPOSITORY,
             "number": 45,
         },
-        "doesNotAssert": ["google_play_upload", "release_signing", "publication_authority"],
+        "doesNotAssert": list(approval.TWO_GREEN_EXCLUSIONS),
     }
-    value["policyAuthority"] = {
-        "path": "eng/api36-two-consecutive-green-authority.json",
-        "publicationAuthorized": False,
-        "schema": "chummer.android.api36-ordered-review-main-green-policy/v2",
-        "sha256": "8" * 64,
-        "sizeBytes": 1024,
-    }
+    value["policyAuthority"] = copy.deepcopy(approval.QUALIFIED_TWO_GREEN_POLICY)
     value["eligibilitySha256"] = approval.canonical_sha256(value)
     return value
 
@@ -626,7 +654,24 @@ def test_exact_two_green_receipt_emits_only_public_non_authorizing_approval(
     assert b'"aabsha256"' not in serialized.lower()
 
 
-def test_android_388_fixture_matches_fleet_policy_and_signed_byte_contract(
+def test_only_the_exact_public_fixture_is_exempt_from_key_file_ignores():
+    public_fixture = ANDROID_388_PUBLIC_KEY.relative_to(ROOT).as_posix()
+    private_paths = [
+        "tests/fixtures/android-388425ace/private.pem",
+        "tests/fixtures/android-388425ace/private.key",
+        "tests/fixtures/android-388425ace/upload.p12",
+        "tests/fixtures/other/public.pem",
+    ]
+    result = subprocess.run(
+        ["git", "-C", str(ROOT), "check-ignore", "--no-index", "--stdin"],
+        input="\n".join([public_fixture, *private_paths]) + "\n",
+        text=True, capture_output=True, check=False,
+    )
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == private_paths
+
+
+def test_historical_android_388_key_and_output_shape_remain_compatible(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     fixture = json.loads(ANDROID_388_FIXTURE.read_text())
@@ -639,9 +684,10 @@ def test_android_388_fixture_matches_fleet_policy_and_signed_byte_contract(
     assert base64.b64encode(completed.stdout).decode() == fixture["publicKeySpkiDerBase64"]
     assert hashlib.sha256(completed.stdout).hexdigest() == fixture["publicKeySpkiDerSha256"]
     policy = approval.expected_policy()
-    assert policy["android_consumer"]["qualified_commit"] == fixture["androidCommit"]
-    assert policy["android_consumer"]["qualified_tree"] == fixture["androidTree"]
-    assert policy["android_consumer"]["provenance_validator_sha256"] == fixture[
+    # This immutable fixture describes the old consumer, not current qualification.
+    assert policy["android_consumer"]["qualified_commit"] != fixture["androidCommit"]
+    assert policy["android_consumer"]["qualified_tree"] != fixture["androidTree"]
+    assert policy["android_consumer"]["provenance_validator_sha256"] != fixture[
         "provenanceValidatorSha256"
     ]
     assert policy["external_ed25519_key"]["trusted_public_key_pem_sha256"] == fixture[
@@ -680,7 +726,7 @@ def test_android_388_fixture_matches_fleet_policy_and_signed_byte_contract(
         (lambda value: value.update(unexpected=True), "fields are not exact"),
     ],
 )
-def test_android_388_consumer_rejects_validly_resigned_contract_drift(
+def test_current_adapter_rejects_validly_resigned_contract_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutate, match: str
 ):
     policy, _, _, args, environment = full_case(tmp_path, monkeypatch)
@@ -697,7 +743,7 @@ def test_android_388_consumer_rejects_validly_resigned_contract_drift(
         )
 
 
-def test_android_388_consumer_rejects_replayed_challenge(
+def test_current_adapter_rejects_replayed_challenge(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     policy, _, _, args, environment = full_case(tmp_path, monkeypatch)
@@ -710,13 +756,13 @@ def test_android_388_consumer_rejects_replayed_challenge(
 
 
 @pytest.mark.skipif(
-    not os.environ.get("CHUMMER_ANDROID_388_ROOT"),
-    reason="exact Android 388425ace checkout not supplied",
+    not os.environ.get("CHUMMER_ANDROID_CURRENT_ROOT"),
+    reason="exact current qualified Android checkout not supplied",
 )
-def test_exact_android_388_verifier_accepts_fleet_bytes(
+def test_exact_current_android_signature_verifier_accepts_fleet_bytes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    android_root = Path(os.environ["CHUMMER_ANDROID_388_ROOT"]).resolve(strict=True)
+    android_root = Path(os.environ["CHUMMER_ANDROID_CURRENT_ROOT"]).resolve(strict=True)
     head = subprocess.run(
         ["git", "-C", str(android_root), "rev-parse", "HEAD"],
         check=True, capture_output=True, text=True,
@@ -724,7 +770,7 @@ def test_exact_android_388_verifier_accepts_fleet_bytes(
     assert head == approval.ANDROID_CONSUMER_COMMIT
     consumer_path = android_root / "scripts/verify_api36_two_green_release_eligibility.py"
     specification = importlib.util.spec_from_file_location(
-        "android_388_release_consumer", consumer_path
+        "android_current_release_consumer_signature_test", consumer_path
     )
     assert specification and specification.loader
     consumer = importlib.util.module_from_spec(specification)
