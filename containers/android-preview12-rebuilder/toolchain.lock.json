@@ -1,0 +1,48 @@
+{
+  "contract_name": "fleet.android_preview12_toolchain.v1",
+  "contract_version": 1,
+  "platform": "linux/amd64",
+  "base_images": [{
+    "name": "runtime-deps",
+    "version": "10.0.10-noble-amd64",
+    "reference": "mcr.microsoft.com/dotnet/runtime-deps:10.0.10-noble-amd64",
+    "digest": "sha256:e6508f4bfffe893467e70c54b68a2d28b93fc5d1a69f3de0a3ce69d131ca274e"
+  }],
+  "archives": [
+    {
+      "name": "dotnet-sdk",
+      "version": "10.0.110",
+      "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.110/dotnet-sdk-10.0.110-linux-x64.tar.gz",
+      "sha512": "05e5a22cef9f41748bbd63602a6b595322b91214d03b9a00da43d698501648136f1fb2a4fe6ce6ad9c684aa1698376821c8753af0c42e336b8f753f6c078fb28",
+      "format": "tar.gz", "destination": "/opt/dotnet", "strip_components": 0
+    },
+    {
+      "name": "temurin-jdk",
+      "version": "17.0.20.1+1",
+      "url": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_linux_hotspot_17.0.20.1_1.tar.gz",
+      "sha256": "3808d1d15e3ec6bd5b84057fb5d84c33d8a1536a258146bcea2e603fc726e08e",
+      "format": "tar.gz", "destination": "/opt/jdk", "strip_components": 1
+    },
+    {
+      "name": "android-sdk-platform",
+      "version": "36-r02",
+      "url": "https://dl.google.com/android/repository/platform-36_r02.zip",
+      "sha256": "37607369a28c5b640b3a7998868d45898ebcb777565a0e85f9acf36f29631d2e",
+      "format": "zip", "destination": "/opt/android-sdk/platforms/android-36", "strip_components": 1
+    },
+    {
+      "name": "android-build-tools",
+      "version": "36.0.0",
+      "url": "https://dl.google.com/android/repository/build-tools_r36_linux.zip",
+      "sha256": "5d9ac77fb6ff43d9da518a337b4fcf8f9097113df531d99ccefe80ef7ce8250b",
+      "format": "zip", "destination": "/opt/android-sdk/build-tools/36.0.0", "strip_components": 1
+    },
+    {
+      "name": "bundletool",
+      "version": "1.18.3",
+      "url": "https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar",
+      "sha256": "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29",
+      "format": "file", "destination": "/opt/android-sdk/tools/bundletool.jar", "strip_components": 0
+    }
+  ]
+}

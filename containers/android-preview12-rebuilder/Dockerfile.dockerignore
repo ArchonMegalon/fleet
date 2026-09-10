@@ -1,0 +1,19 @@
+# Deny by default, including untracked credentials and caches in a Fleet checkout.
+# Re-open only necessary parents, then exclude their contents before exact files.
+**
+!containers/
+containers/**
+!containers/android-preview12-rebuilder/
+containers/android-preview12-rebuilder/**
+!containers/android-preview12-rebuilder/Dockerfile
+!containers/android-preview12-rebuilder/Dockerfile.dockerignore
+!containers/android-preview12-rebuilder/ubuntu.sources
+!containers/android-preview12-rebuilder/ubuntu-InRelease.SHA256SUMS
+!containers/android-preview12-rebuilder/toolchain.lock.json
+!containers/android-preview12-rebuilder/bootstrap.py
+!containers/android-preview12-signer/
+containers/android-preview12-signer/**
+!containers/android-preview12-signer/install_toolchain.py
+!scripts/
+scripts/**
+!scripts/android_preview12_external_rebuilder.py

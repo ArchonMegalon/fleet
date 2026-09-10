@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+from collections import deque
 from datetime import UTC, datetime
 import hashlib
 import importlib.util
@@ -497,6 +498,109 @@ def _trusted_root(path: Path, label: str) -> Path:
     return path
 
 
+def _resolve_tree_link(root: Path, path: Path, target: str, label: str) -> None:
+    """Walk every hop inside the sealed tree, not merely the final realpath."""
+    location = list(path.parent.relative_to(root).parts)
+    pending = deque()
+    hops = 0
+
+    def enqueue(text: str) -> None:
+        nonlocal location
+        value = PurePosixPath(text)
+        if not text:
+            raise RebuilderError(f"{label} contains an unresolved symlink")
+        if value.is_absolute():
+            if not value.is_relative_to(root):
+                raise RebuilderError(f"{label} symlink escapes its trusted root")
+            location = []
+            value = value.relative_to(root)
+        pending.extendleft(reversed(value.parts))
+
+    try:
+        enqueue(target)
+        while pending:
+            part = pending.popleft()
+            if part == "..":
+                if not location:
+                    raise RebuilderError(f"{label} symlink escapes its trusted root")
+                location.pop()
+                continue
+            candidate = root.joinpath(*location, part)
+            metadata = candidate.lstat()
+            if metadata.st_uid != 0:
+                raise RebuilderError(f"{label} symlink reaches non-root-owned content")
+            if stat.S_ISLNK(metadata.st_mode):
+                hops += 1
+                if hops > 64:
+                    raise RebuilderError(f"{label} contains a cyclic or excessive-hop symlink")
+                enqueue(os.readlink(candidate))
+            else:
+                if stat.S_IMODE(metadata.st_mode) & 0o022:
+                    raise RebuilderError(f"{label} symlink reaches writable content")
+                if not (stat.S_ISREG(metadata.st_mode) or stat.S_ISDIR(metadata.st_mode)):
+                    raise RebuilderError(f"{label} symlink reaches unsupported content")
+                if pending and not stat.S_ISDIR(metadata.st_mode):
+                    raise RebuilderError(f"{label} contains an unresolved symlink")
+                location.append(part)
+        # Preserve kernel lookup semantics too: PurePosixPath normalizes a
+        # trailing slash or '/.', which must not make a file into a directory.
+        final = path.stat()
+        if (final.st_uid != 0 or stat.S_IMODE(final.st_mode) & 0o022
+                or not (stat.S_ISREG(final.st_mode) or stat.S_ISDIR(final.st_mode))):
+            raise RebuilderError(f"{label} symlink reaches unsafe content")
+    except (OSError, ValueError):
+        raise RebuilderError(f"{label} contains an unresolved symlink") from None
+
+
+def _file_identity(metadata: os.stat_result) -> tuple[int, ...]:
+    return (metadata.st_dev, metadata.st_ino, metadata.st_mode, metadata.st_uid,
+            metadata.st_size, metadata.st_mtime_ns, metadata.st_ctime_ns)
+
+
+def _stable_file_sha256(path: Path, metadata: os.stat_result, label: str) -> str:
+    """Two bounded reads detect persistent drift hidden by timestamp granularity.
+
+    Agreement is not an atomic snapshot or a substitute for immutable custody.
+    """
+    expected = _file_identity(metadata)
+    changed = f"{label} changed while hashing"
+    try:
+        if _file_identity(path.lstat()) != expected:
+            raise RebuilderError(changed)
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                             | getattr(os, "O_NONBLOCK", 0))
+        try:
+            if _file_identity(os.fstat(descriptor)) != expected:
+                raise RebuilderError(changed)
+            verified_digest = None
+            # The descriptor remains ours even if constructing/closing the
+            # stream fails. O_NONBLOCK also prevents a raced FIFO from hanging.
+            with os.fdopen(descriptor, "rb", buffering=0, closefd=False) as stream:
+                for pass_index in range(2):
+                    if pass_index:
+                        stream.seek(0)
+                    digest, consumed = hashlib.sha256(), 0
+                    while chunk := stream.read(1024 * 1024):
+                        consumed += len(chunk)
+                        if consumed > metadata.st_size:
+                            raise RebuilderError(changed)
+                        digest.update(chunk)
+                    if consumed != metadata.st_size or _file_identity(os.fstat(descriptor)) != expected:
+                        raise RebuilderError(changed)
+                    current_digest = digest.hexdigest()
+                    if verified_digest is not None and current_digest != verified_digest:
+                        raise RebuilderError(changed)
+                    verified_digest = current_digest
+        finally:
+            os.close(descriptor)
+        if _file_identity(path.lstat()) != expected:
+            raise RebuilderError(changed)
+        assert verified_digest is not None
+        return verified_digest
+    except (OSError, ValueError):
+        raise RebuilderError(changed) from None
+
+
 def _tree_digest(root: Path, label: str) -> tuple[str, int, int]:
     root = _trusted_root(root, label)
     digest, count, total = hashlib.sha256(), 0, 0
@@ -507,12 +611,15 @@ def _tree_digest(root: Path, label: str) -> tuple[str, int, int]:
             path = Path(entry.path)
             relative = path.relative_to(root).as_posix()
             metadata = entry.stat(follow_symlinks=False)
-            if metadata.st_uid != 0 or stat.S_IMODE(metadata.st_mode) & 0o022:
+            is_link = stat.S_ISLNK(metadata.st_mode)
+            # Linux symlink mode is normally 0777 and is not a writable-target
+            # permission grant. Ownership still matters; real entries below
+            # this root (including link targets) retain the strict mode check.
+            if metadata.st_uid != 0 or (not is_link and stat.S_IMODE(metadata.st_mode) & 0o022):
                 raise RebuilderError(f"{label} contains writable or non-root-owned content")
-            if entry.is_symlink():
+            if is_link:
                 target = os.readlink(path)
-                if not path.resolve(strict=True).is_relative_to(root):
-                    raise RebuilderError(f"{label} symlink escapes its trusted root")
+                _resolve_tree_link(root, path, target, label)
                 row = f"L\0{relative}\0{stat.S_IMODE(metadata.st_mode):o}\0{target}\n".encode()
             elif entry.is_dir(follow_symlinks=False):
                 pending.append(path)
@@ -522,11 +629,9 @@ def _tree_digest(root: Path, label: str) -> tuple[str, int, int]:
                 total += metadata.st_size
                 if count > 250_000 or total > 16 * 1024 * 1024 * 1024:
                     raise RebuilderError(f"{label} exceeds its closure bound")
-                raw = path.read_bytes()
-                if len(raw) != metadata.st_size:
-                    raise RebuilderError(f"{label} changed while hashing")
+                file_digest = _stable_file_sha256(path, metadata, label)
                 row = (f"F\0{relative}\0{stat.S_IMODE(metadata.st_mode):o}\0{metadata.st_size}\0"
-                       f"{hashlib.sha256(raw).hexdigest()}\n").encode()
+                       f"{file_digest}\n").encode()
             else:
                 raise RebuilderError(f"{label} contains unsupported filesystem content")
             digest.update(row)
