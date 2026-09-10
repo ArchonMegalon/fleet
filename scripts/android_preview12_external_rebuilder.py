@@ -46,6 +46,12 @@ MINIMUM_SDK = 24
 TARGET_SDK = 36
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
+OCI_DIGEST_IMAGE = re.compile(
+    r"(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+    r"(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*(?::[1-9][0-9]{0,4})?/)?"
+    r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*"
+    r"(?:/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*@sha256:[0-9a-f]{64}"
+)
 UPLOAD_CERTIFICATE_SHA256 = "d9c4b635121544d5522abf1ec2dfda3c1938aab93d6726bb93c9871ec9ed1d15"
 REPOSITORIES = {
     "chummer-android": ("app", "chummer-android", "https://github.com/ArchonMegalon/chummer-android.git"),
@@ -276,9 +282,16 @@ def validate_lock(lock: Mapping[str, Any], lock_bytes: bytes, builder_image: str
             failures.append(f"reservation.{name} is not one safe Fleet-relative path")
     if reservation.get("policy_path") != SIGNING_LEDGER_POLICY_PATH:
         failures.append("binary signing must select its separate ledger policy")
-    for name in ("builder_image", "signer_image", "installed_closure_receipt_sha256"):
-        if not toolchain.get(name):
-            failures.append(f"toolchain.{name} is not configured")
+    for name in ("builder_image", "signer_image"):
+        image = toolchain.get(name)
+        if not isinstance(image, str) or OCI_DIGEST_IMAGE.fullmatch(image) is None:
+            failures.append(f"toolchain.{name} is not one digest-pinned OCI repository")
+        elif ":" in image.split("/", 1)[0] and "/" in image \
+                and int(image.split("/", 1)[0].rsplit(":", 1)[1]) > 65535:
+            failures.append(f"toolchain.{name} registry port is invalid")
+    receipt_digest = toolchain.get("installed_closure_receipt_sha256")
+    if not isinstance(receipt_digest, str) or HEX64.fullmatch(receipt_digest) is None:
+        failures.append("toolchain.installed_closure_receipt_sha256 is not a lowercase SHA-256")
     if toolchain.get("builder_image") and builder_image is not None \
             and builder_image != toolchain.get("builder_image"):
         failures.append("reported builder image differs from lock")
@@ -1253,6 +1266,20 @@ def _copy_protected(source: Path, destination: Path, label: str, limit: int) -> 
     _write_exclusive(destination, raw)
 
 
+def _validate_authority_feed_paths(authority_root: Path, owner_feed: Path) -> None:
+    """Match Android's existing owner_feed.parent routing, not a second verifier."""
+    for path in (authority_root, owner_feed):
+        try:
+            valid = isinstance(path, Path) and path.is_absolute() and not path.is_symlink() \
+                and path.is_dir() and path.resolve(strict=True) == path
+        except (OSError, RuntimeError):
+            valid = False
+        if not valid:
+            raise RebuilderError("package authority root and feed must be canonical existing directories")
+    if owner_feed.parent != authority_root:
+        raise RebuilderError("package authority root must equal the owner feed parent")
+
+
 def _run_independent_rebuild(
     lock: Mapping[str, Any],
     workspace: Path,
@@ -1272,6 +1299,7 @@ def _run_independent_rebuild(
     *,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> tuple[Path, Path]:
+    _validate_authority_feed_paths(authority_root, owner_feed)
     build_input_root.mkdir(mode=0o700)
     (build_input_root / "nuget-packages").mkdir(mode=0o700)
     (build_input_root / "unsigned-child-home").mkdir(mode=0o700)
@@ -1335,6 +1363,7 @@ def prepare_rebuild_handoff(
 ) -> dict[str, Any]:
     """Run the secret-free rebuild stage in a job with no credential mounts."""
 
+    _validate_authority_feed_paths(authority_root, owner_feed)
     lock, lock_raw = load_lock(lock_path)
     failures = validate_lock(lock, lock_raw, reported_builder_image)
     if failures:
