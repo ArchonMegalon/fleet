@@ -1,6 +1,6 @@
 """Cross-repo serialization/signature contract, not release or build evidence.
 
-Run with CHUMMER_ANDROID_388_ROOT pointing to the exact locked Android checkout.
+Run with CHUMMER_ANDROID_CURRENT_ROOT pointing to the exact locked Android checkout.
 Artifact and qualification fixtures are synthetic; Android's schema, validation,
 canonicalization, and cryptographic verification are the real pinned code.
 All key material is disposable test-only material in pytest's temporary root.
@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture
 def real_consumer(tmp_path: Path, monkeypatch, request):
-    configured = os.environ.get("CHUMMER_ANDROID_388_ROOT")
+    configured = os.environ.get("CHUMMER_ANDROID_CURRENT_ROOT")
     if not configured:
         pytest.skip("requires an explicit exact-locked Android checkout")
     path = ROOT / "scripts/android_preview12_external_rebuilder.py"

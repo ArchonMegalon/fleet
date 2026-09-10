@@ -404,7 +404,7 @@ def test_real_android_v2_consumer_binding_when_exact_checkout_is_available(
     monkeypatch, prior_bytecode_posture: bool,
 ) -> None:
     module = load_module()
-    value = os.environ.get("CHUMMER_ANDROID_388_ROOT")
+    value = os.environ.get("CHUMMER_ANDROID_CURRENT_ROOT")
     if not value:
         pytest.skip("exact Android consumer checkout not supplied")
     monkeypatch.setattr(module.sys, "dont_write_bytecode", prior_bytecode_posture)
@@ -552,7 +552,7 @@ def test_consumer_rejects_external_bytecode_cache_before_execution(
 
 def test_signed_sidecar_is_accepted_by_real_android_consumer_when_available(tmp_path: Path) -> None:
     module = load_module()
-    value = os.environ.get("CHUMMER_ANDROID_388_ROOT")
+    value = os.environ.get("CHUMMER_ANDROID_CURRENT_ROOT")
     if not value:
         pytest.skip("exact Android consumer checkout not supplied")
     tmp_path.chmod(0o700)

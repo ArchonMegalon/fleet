@@ -6,7 +6,7 @@ publish anything.
 
 ## Contract boundary
 
-The implementation pins Android commit `388425aceac266e06265e4c0c73a4058b052d316`
+The implementation pins Android commit `7cef6a715867cab8000483b08db9aad2e817f63d`
 and its exact consumer bytes. It treats these as different artifacts:
 
 1. Android's non-authoritative external-signer request v1;
@@ -18,6 +18,16 @@ and its exact consumer bytes. It treats these as different artifacts:
 
 The v1 external-signer response does not replace Android v2. Fleet audit v3 is
 never presented to Android as release authority.
+
+Current consumer tests require `CHUMMER_ANDROID_CURRENT_ROOT` pointing to the
+exact clean qualified checkout. The separate original-receipt integration also
+requires `CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT`: the unchanged qualified
+TwoGreen v3 receipt. It calls the actual guarded loader and full Android
+`VERIFY.verify_release_eligibility`, substituting only a published RFC test-key
+trust pin and a synthetic compatibility approval. No validator is mocked there;
+no APK provenance replay, release build, protected approval or custody is claimed.
+The existing `real_v2_consumer` tests remain serialization/signature tests with
+synthetic artifact and qualification claims, not release qualification.
 
 ## Required execution split
 
