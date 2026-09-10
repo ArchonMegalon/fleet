@@ -100,7 +100,37 @@ Draft PR #11. Its adapter and policy digests remain null, and its policy source
 remains `pending_merge`, so checked-in code fails closed. The existing adapter
 owns reservation, replay rejection, signed receipts, bounded retry, and
 lost-response recovery. Exact public external-signer v1 bytes are committed to
-that ledger.
+a **separate binary-signing ledger**, never PR11's approval-issuance store.
+
+The existing lock selects `config/release/android-preview12-binary-signing-ledger.json`.
+That dormant policy reuses the unchanged wire-policy representation and pins the
+actual approval-policy bytes for comparison. Loading requires immutable runtime
+ancestry and exact hashes for the adapter and both policies. It rejects shared
+HTTPS origin, service identity or receipt SPKI, and either receipt key reused
+for approval/attestation signing. Null comparison/adapter/policy pins and dormant
+state do not authorize any runtime. No Android authority pins change here.
+
+Both execution and reconciliation require only
+`ANDROID_PREVIEW12_BINARY_SIGNING_LEDGER_BEARER_TOKEN`. The loader maps this
+signing-only capability into the unchanged client's internal credential slot;
+an ambient `ANDROID_PREVIEW12_APPROVAL_LEDGER_BEARER_TOKEN` is rejected before
+client construction. Provisioning must ensure genuinely different bearer values,
+not merely different secret names. The consumer does not read the other secret
+or pretend to prove custody from configuration.
+
+Deploy the existing ledger service with a separate protected database, service
+identity, database startup pin and receipt-signing capability. The unchanged
+store rejects opening an approval database under a signing service/database
+identity; it never resets a database or relaxes permanent artifact/nonce
+uniqueness. Database identity is not a wire-receipt field, so actual independent
+storage, TLS routing, credentials, backups and protected admission remain
+deployment requirements. Changing only a nonce, policy hash or namespace on the
+same database is not isolation. A reserve still does not prove exclusive signer
+execution; existing protected handoff/recovery admission remains necessary.
+
+Focused integration tests accept `FLEET_PR11_LEDGER_TEST_ROOT` pointing to the
+exact reviewed PR11 client/store source. They use real temporary SQLite stores
+and published RFC signature fixtures; they do not deploy services or sign AABs.
 
 After credential admission, signed bytes and their attestations remain in a
 deterministic owner-only recovery store until promotion succeeds. The store is

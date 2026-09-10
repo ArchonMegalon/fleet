@@ -32,6 +32,10 @@ ANDROID_ATTESTATION_CONTRACT = "chummer.android.release-build-attestation/v2"
 FLEET_AUDIT_CONTRACT = "fleet.android_preview12_external_rebuild_audit.v3"
 SOURCE_GRAPH_CONTRACT = "chummer.android.release-source-graph/v3"
 LEDGER_POLICY_CONTRACT = "fleet.android_preview12_approval_ledger_policy.v1"
+SIGNING_LEDGER_POLICY_CONTRACT = "fleet.android_preview12_binary_signing_ledger_policy.v1"
+SIGNING_LEDGER_POLICY_PATH = "config/release/android-preview12-binary-signing-ledger.json"
+APPROVAL_LEDGER_POLICY_PATH = "config/release/android-preview12-two-green-release-approval.json"
+SIGNING_LEDGER_CREDENTIAL_INPUT = "ANDROID_PREVIEW12_BINARY_SIGNING_LEDGER_BEARER_TOKEN"
 EXTERNAL_SIGNER_ATTESTATION_CONTRACT = "chummer.android.external-release-signer-attestation/v1"
 REBUILD_HANDOFF_CONTRACT = "fleet.android_preview12_external_rebuild_handoff.v1"
 RECOVERY_CONTRACT = "fleet.android_preview12_external_signer_recovery.v1"
@@ -270,6 +274,8 @@ def validate_lock(lock: Mapping[str, Any], lock_bytes: bytes, builder_image: str
         if not isinstance(value, str) or PurePosixPath(value).is_absolute() \
                 or ".." in PurePosixPath(value).parts or "\\" in value:
             failures.append(f"reservation.{name} is not one safe Fleet-relative path")
+    if reservation.get("policy_path") != SIGNING_LEDGER_POLICY_PATH:
+        failures.append("binary signing must select its separate ledger policy")
     for name in ("builder_image", "signer_image", "installed_closure_receipt_sha256"):
         if not toolchain.get(name):
             failures.append(f"toolchain.{name} is not configured")
@@ -905,10 +911,91 @@ def external_signer_attestation(
     return result
 
 
+def _immutable_ledger_path(fleet_root: Path, relative: str, label: str) -> Path:
+    if not isinstance(relative, str) or not relative or PurePosixPath(relative).is_absolute() \
+            or ".." in PurePosixPath(relative).parts or "\\" in relative \
+            or PurePosixPath(relative).as_posix() != relative:
+        raise RebuilderError(f"{label} is not one canonical Fleet-relative path")
+    path = fleet_root.joinpath(*PurePosixPath(relative).parts)
+    for ancestor in (path, *path.parents):
+        metadata = ancestor.stat()
+        if ancestor.is_symlink() or metadata.st_uid != 0 or stat.S_IMODE(metadata.st_mode) & 0o022:
+            raise RebuilderError(f"{label} is not in a root-owned immutable runtime")
+        if ancestor == fleet_root:
+            return path
+    raise RebuilderError(f"{label} escapes the protected Fleet root")
+
+
+def _validate_signing_ledger_wrapper(policy: Mapping[str, Any]) -> Mapping[str, Any]:
+    if set(policy) != {
+        "contract_name", "contract_version", "state", "approval_policy", "credential_input", "replay_protection",
+    } or policy.get("contract_name") != SIGNING_LEDGER_POLICY_CONTRACT \
+            or type(policy.get("contract_version")) is not int or policy["contract_version"] != 1 \
+            or policy.get("state") != "ready" \
+            or policy.get("credential_input") != SIGNING_LEDGER_CREDENTIAL_INPUT:
+        raise RebuilderError("separate binary-signing ledger policy is not exact and ready")
+    binding = policy.get("approval_policy")
+    if not isinstance(binding, dict) or set(binding) != {"path", "sha256"} \
+            or binding.get("path") != APPROVAL_LEDGER_POLICY_PATH:
+        raise RebuilderError("signing ledger lacks the exact approval-policy comparison binding")
+    _sha256(binding.get("sha256"), "pinned approval-policy comparison digest")
+    replay = policy.get("replay_protection")
+    if not isinstance(replay, dict) or set(replay) != {"external_ledger"}:
+        raise RebuilderError("binary-signing ledger replay fields are not exact")
+    return binding
+
+
+def _validate_ledger_separation(module, signing_policy, approval_policy, lock):
+    """Compare actual pinned policy data, not a caller-asserted lane name."""
+    if approval_policy.get("contract_name") != "fleet.android_preview12_two_green_release_approval_policy.v1" \
+            or type(approval_policy.get("contract_version")) is not int \
+            or approval_policy.get("contract_version") != 1 or approval_policy.get("state") != "ready":
+        raise RebuilderError("pinned comparison is not the PR11 approval policy")
+    output = approval_policy.get("output", {})
+    if not isinstance(output, dict) \
+            or output.get("contract_name") != "chummer.android.two-green-release-approval/v1" \
+            or any(output.get(key) is not False for key in (
+                "signing_authorized", "publication_authorized", "google_play_upload_authorized",
+            )):
+        raise RebuilderError("pinned comparison does not retain approval-only authority")
+    replay = approval_policy.get("replay_protection")
+    key = approval_policy.get("external_ed25519_key")
+    attestation = lock.get("approval_authority")
+    if not isinstance(replay, dict) or "external_ledger" not in replay \
+            or not isinstance(key, dict) or key.get("configured") is not True \
+            or not isinstance(attestation, dict):
+        raise RebuilderError("pinned approval/signing comparison fields are invalid")
+    try:
+        signing = module.validate_ledger_policy(
+            signing_policy["replay_protection"]["external_ledger"], require_configured=True
+        )
+        approval = module.validate_ledger_policy(replay["external_ledger"], require_configured=True)
+    except module.LedgerError:
+        raise RebuilderError("pinned lane ledger authority is invalid") from None
+    if any(signing[name] == approval[name] for name in (
+        "base_url", "expected_service_identity", "receipt_public_key_spki_sha256",
+    )):
+        raise RebuilderError("approval and binary-signing ledgers are not independently bound")
+    approval_spki = _sha256(key.get("expected_public_key_spki_sha256"), "approval signing SPKI")
+    try:
+        approval_der = base64.b64decode(key.get("public_key_spki_der_base64"), validate=True)
+    except (ValueError, TypeError):
+        raise RebuilderError("pinned approval public key is invalid") from None
+    if len(approval_der) != 44 or not approval_der.startswith(bytes.fromhex("302a300506032b6570032100")) \
+            or hashlib.sha256(approval_der).hexdigest() != approval_spki:
+        raise RebuilderError("pinned approval public key digest differs")
+    attestation_spki = _sha256(attestation.get("public_key_spki_sha256"), "attestation signing SPKI")
+    if {signing["receipt_public_key_spki_sha256"], approval["receipt_public_key_spki_sha256"]} \
+            & {approval_spki, attestation_spki}:
+        raise RebuilderError("ledger receipt key is reused for approval or attestation signing")
+    return signing
+
+
 def load_reviewed_ledger(fleet_root: Path, lock: Mapping[str, Any], environment: Mapping[str, str]):
     """Load Draft #11's reviewed signed/no-redirect ledger after it is merged.
 
     The checked-in lock has null digests and therefore cannot reach this code.
+    Both policy byte identities are transitively bound by the existing lock.
     No endpoint or response dialect is implemented by this module.
     """
 
@@ -916,25 +1003,20 @@ def load_reviewed_ledger(fleet_root: Path, lock: Mapping[str, Any], environment:
     # The runtime root itself can be replaced through a writable/non-root
     # parent. Reuse the full ancestry check, not only the files below the root.
     fleet_root = _trusted_root(fleet_root, "Fleet signer runtime")
-    adapter = fleet_root.joinpath(*PurePosixPath(reservation["adapter_path"]).parts)
-    policy_path = fleet_root.joinpath(*PurePosixPath(reservation["policy_path"]).parts)
-    for path, label in (
-        (adapter, "reviewed approval-ledger adapter"),
-        (policy_path, "reviewed approval-ledger policy"),
-    ):
-        for ancestor in (path, *path.parents):
-            metadata = ancestor.stat()
-            if metadata.st_uid != 0 or stat.S_IMODE(metadata.st_mode) & 0o022:
-                raise RebuilderError(f"{label} is not in a root-owned immutable runtime")
-            if ancestor == fleet_root:
-                break
-        else:
-            raise RebuilderError(f"{label} escapes the protected Fleet root")
+    if reservation.get("policy_path") != SIGNING_LEDGER_POLICY_PATH:
+        raise RebuilderError("binary signing cannot use the approval-ledger policy")
+    adapter = _immutable_ledger_path(fleet_root, reservation["adapter_path"], "reviewed approval-ledger adapter")
+    policy_path = _immutable_ledger_path(fleet_root, reservation["policy_path"], "reviewed signing-ledger policy")
     adapter_raw = _stable_bytes(adapter, "reviewed approval-ledger adapter", 2 * 1024 * 1024)
+    signing_policy, signing_raw = _json_file(policy_path, "reviewed signing-ledger policy", 256 * 1024)
     if hashlib.sha256(adapter_raw).hexdigest() != reservation["adapter_sha256"] \
-            or _sha256_file(policy_path, "reviewed approval-ledger policy", 1024 * 1024) \
-            != reservation["policy_sha256"]:
+            or hashlib.sha256(signing_raw).hexdigest() != reservation["policy_sha256"]:
         raise RebuilderError("reviewed durable approval-ledger bytes differ from lock")
+    binding = _validate_signing_ledger_wrapper(signing_policy)
+    approval_path = _immutable_ledger_path(fleet_root, binding["path"], "pinned comparison approval policy")
+    approval_policy, approval_raw = _json_file(approval_path, "pinned comparison approval policy", 256 * 1024)
+    if hashlib.sha256(approval_raw).hexdigest() != binding["sha256"]:
+        raise RebuilderError("actual approval policy differs from signing comparison pin")
     module_name = "fleet_preview12_reviewed_ledger"
     module = types.ModuleType(module_name)
     module.__file__ = os.fspath(adapter)
@@ -950,10 +1032,15 @@ def load_reviewed_ledger(fleet_root: Path, lock: Mapping[str, Any], environment:
     policy, policy_sha256 = module.load_policy(policy_path)
     if policy_sha256 != reservation["policy_sha256"]:
         raise RebuilderError("reviewed durable approval-ledger policy changed during load")
-    ledger_policy = module.validate_ledger_policy(
-        policy["replay_protection"]["external_ledger"], require_configured=True
-    )
-    client = module.DurableApprovalLedgerClient(ledger_policy, environment)
+    ledger_policy = _validate_ledger_separation(module, policy, approval_policy, lock)
+    # Never fall back to the approval lane's credential. The protected signing
+    # job supplies its own capability; only the unchanged client's slot is mapped.
+    if module.CREDENTIAL_ENV_NAME in environment:
+        raise RebuilderError("approval-ledger credential must not enter the signing lane")
+    token = environment.get(SIGNING_LEDGER_CREDENTIAL_INPUT)
+    if environment is os.environ:
+        os.environ.pop(SIGNING_LEDGER_CREDENTIAL_INPUT, None)
+    client = module.DurableApprovalLedgerClient(ledger_policy, {module.CREDENTIAL_ENV_NAME: token})
     return module, client, policy_sha256
 
 

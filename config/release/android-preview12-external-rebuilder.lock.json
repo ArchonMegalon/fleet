@@ -90,7 +90,7 @@
     "adapter_path": "scripts/android_preview12_approval_ledger.py",
     "adapter_sha256": null,
     "configured": false,
-    "policy_path": "config/release/android-preview12-two-green-release-approval.json",
+    "policy_path": "config/release/android-preview12-binary-signing-ledger.json",
     "policy_sha256": null,
     "protocol_source": "reviewed_fleet_draft_11_pending_merge",
     "signed_receipts_required": true
