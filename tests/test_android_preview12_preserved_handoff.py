@@ -134,6 +134,61 @@ def test_real_writable_environment_cannot_admit_handoff(fleet, tmp_path):
         fleet.PreservedRebuildHandoff(lock, directory)
 
 
+@pytest.mark.parametrize("returned_kind", ["preserved", "metadata", "none"])
+def test_transaction_rejects_non_authenticated_handoff_before_privileged_work(
+    fleet, tmp_path, mount_model, monkeypatch, returned_kind,
+):
+    lock_path, directory, _, handoff_path = handoff_inputs(fleet, tmp_path)
+    lock_raw = lock_path.read_bytes()
+    lock = json.loads(lock_raw)
+    if returned_kind == "preserved":
+        returned = fleet.PreservedRebuildHandoff(lock_path, directory)
+        returned.assert_exact()
+    elif returned_kind == "metadata":
+        returned = json.loads(handoff_path.read_bytes())
+    else:
+        returned = None
+    assert not isinstance(returned, fleet.AuthenticatedRebuildHandoff)
+    assert "external rebuilder lock is dormant" in fleet.validate_lock(lock, lock_raw)
+    events = []
+
+    def modeled_lock_admission(value, raw):
+        # Model only the earlier configuration gate to reach the real return-
+        # type boundary. Neither custody nor producer provenance is promoted.
+        assert value == lock and raw == lock_raw
+        events.append("modeled-lock-admission")
+        return []
+
+    def authenticate(value, raw):
+        assert value == lock and raw == lock_raw
+        events.append("authenticate")
+        return returned
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("unqualified handoff reached consumer, ledger, credentials or signing")
+
+    monkeypatch.setattr(fleet, "validate_lock", modeled_lock_admission)
+    for name in ("load_reviewed_ledger", "reserve_signing_attempt", "sign_aab"):
+        monkeypatch.setattr(fleet, name, forbidden)
+    output = tmp_path / "must-not-be-signed"
+    paths_before = set(tmp_path.rglob("*"))
+    with pytest.raises(
+        fleet.RebuilderError,
+        match="^protected provenance verifier returned no authenticated handoff$",
+    ):
+        fleet.execute_protected_signer_transaction(
+            lock_path, authenticate, forbidden, tmp_path, {}, forbidden,
+            forbidden, output, attempt_id="d" * 64,
+            two_green_artifact_id=123, two_green_artifact_sha256="e" * 64,
+        )
+    assert events == ["modeled-lock-admission", "authenticate"]
+    assert not output.exists()
+    assert set(tmp_path.rglob("*")) == paths_before  # No recovery or output paths.
+    assert lock_path.read_bytes() == lock_raw
+    if returned_kind == "preserved":
+        returned.assert_exact()
+
+
 @pytest.mark.parametrize("fault", ["extra", "missing", "link", "directory", "relative", "root-link"])
 def test_closed_canonical_physical_inventory(fleet, tmp_path, mount_model, fault):
     lock, directory, paths, _ = handoff_inputs(fleet, tmp_path)
