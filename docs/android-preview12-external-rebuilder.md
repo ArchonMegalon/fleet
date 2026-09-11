@@ -4,6 +4,10 @@ This lane is non-operational groundwork for an independent Preview12 rebuild
 and signer. Checked-in configuration cannot rebuild, sign, hand off, upload, or
 publish anything.
 
+The missing production authentication seam is specified for review in
+[protected runtime policy proposal](android-preview12-protected-runtime-policy.md).
+That proposal is not an approved trust policy or activation evidence.
+
 ## Contract boundary
 
 The implementation pins Android commit `7cef6a715867cab8000483b08db9aad2e817f63d`
