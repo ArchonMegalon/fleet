@@ -691,6 +691,17 @@ def _bind_auxiliary_toolchain(
     }
 
 
+def _measured_toolchain_closure(
+    lock: Mapping[str, Any], observed: Mapping[str, Any], bundletool: Path,
+    installed_closure_receipt: Path, reported_builder_image: str,
+) -> dict[str, Any]:
+    auxiliary = _bind_auxiliary_toolchain(
+        lock, bundletool, installed_closure_receipt, reported_builder_image
+    )
+    closure = {"platform": "linux/amd64", **observed, **auxiliary}
+    return {**closure, "closureSha256": hashlib.sha256(_canonical_json(closure)).hexdigest()}
+
+
 def verify_toolchain(
     lock: Mapping[str, Any], dotnet_root: Path, java_root: Path, android_sdk_root: Path,
     bundletool: Path, installed_closure_receipt: Path, reported_builder_image: str, *,
@@ -715,11 +726,9 @@ def verify_toolchain(
     if not (android_sdk_root / "platforms/android-36/android.jar").is_file() \
             or not (android_sdk_root / "build-tools/36.0.0/aapt2").is_file():
         raise RebuilderError("trusted Android API/build-tools 36 closure is incomplete")
-    auxiliary = _bind_auxiliary_toolchain(
-        lock, bundletool, installed_closure_receipt, reported_builder_image
+    return _measured_toolchain_closure(
+        lock, observed, bundletool, installed_closure_receipt, reported_builder_image
     )
-    closure = {"platform": "linux/amd64", **observed, **auxiliary}
-    return {**closure, "closureSha256": hashlib.sha256(_canonical_json(closure)).hexdigest()}
 
 
 def _validate_android_consumer_inputs(android_root: Path, commit: str) -> None:
@@ -988,12 +997,14 @@ class PreservedProtectedValidation:
     def __init__(self, lock_path: Path, *, workspace_root: Path, source_graph: Path,
                  package_authority: Path, authority_root: Path, bundletool: Path,
                  upload_certificate: Path, java_tool_observation: Path,
+                 installed_closure_receipt: Path,
                  dotnet_root: Path, java_root: Path, android_sdk_root: Path) -> None:
         self.workspace_root, self.authority_root = workspace_root, authority_root
         self.files = {
             "lock": lock_path, "source_graph": source_graph, "package_authority": package_authority,
             "bundletool": bundletool, "upload_certificate": upload_certificate,
             "java_tool_observation": java_tool_observation,
+            "installed_closure_receipt": installed_closure_receipt,
         }
         self.tool_roots = {"dotnet": dotnet_root, "java": java_root, "android_sdk": android_sdk_root}
         self._limits = {"bundletool": 64 * 1024 * 1024, "upload_certificate": 1024 * 1024}
@@ -1007,7 +1018,17 @@ class PreservedProtectedValidation:
         )}
         self._check_exact()
 
-    def _capture_inputs(self) -> dict[str, str]:
+    def _capture_installed_closure_receipt(self) -> tuple[tuple[int, ...], str]:
+        path = self.files["installed_closure_receipt"]
+        _preserved_path(path, "preserved installed closure receipt")
+        before = _file_identity(path.stat())
+        digest = _sha256_file(path, "preserved installed closure receipt", 8 * 1024 * 1024, owner_only=True)
+        _preserved_path(path, "preserved installed closure receipt")
+        if before != _file_identity(path.stat()):
+            raise RebuilderError("preserved installed closure receipt changed while being captured")
+        return before, digest
+
+    def _capture_inputs(self) -> dict[str, Any]:
         for root in (self.workspace_root, self.authority_root, *self.tool_roots.values()):
             _preserved_tree(root, "protected validation root")
         roots = [self.workspace_root, self.authority_root, *self.tool_roots.values()]
@@ -1016,6 +1037,9 @@ class PreservedProtectedValidation:
             raise RebuilderError("preserved validation roots must be disjoint")
         result = {}
         for name, path in self.files.items():
+            if name == "installed_closure_receipt":
+                result[name] = self._capture_installed_closure_receipt()
+                continue
             _preserved_path(path, f"preserved {name}")
             result[name] = _sha256_file(path, f"preserved {name}", self._limits.get(name, 8 * 1024 * 1024),
                                         owner_only=name != "lock")
@@ -1040,7 +1064,7 @@ class PreservedProtectedValidation:
         for name, root in roots.items():
             _preserved_repository_bytes(root, rows[name]["commit"])
 
-    def _check_exact(self) -> None:
+    def _check_exact(self) -> dict[str, Any]:
         if self._capture_inputs() != self._bindings:
             raise RebuilderError("preserved validation input bytes changed")
         self._check_source()
@@ -1083,10 +1107,22 @@ class PreservedProtectedValidation:
         if observed["tools"]["java"] != self.tool_roots["java"] / "bin/java" \
                 or observed["dotnet"] != self.tool_roots["dotnet"] / "dotnet":
             raise RebuilderError("preserved tool observation uses different tool roots")
+        measured = {}
         for name, root in self.tool_roots.items():
             pin = self.lock["toolchain"][name]
-            if _tree_digest(root, f"preserved {name}") != (pin["tree_sha256"], pin["file_count"], pin["size_bytes"]):
+            digest, count, size = _tree_digest(root, f"preserved {name}")
+            if (digest, count, size) != (pin["tree_sha256"], pin["file_count"], pin["size_bytes"]):
                 raise RebuilderError("preserved tool tree differs from qualified lock")
+            measured[name] = {"treeSha256": digest, "fileCount": count, "sizeBytes": size}
+        # Reuse these measurements: do not reread the multi-gigabyte tool trees.
+        # Locked image strings bind the closure, never the current runtime.
+        closure = _measured_toolchain_closure(
+            self.lock, measured, self.files["bundletool"], self.files["installed_closure_receipt"],
+            self.lock["toolchain"]["builder_image"],
+        )
+        if self._capture_installed_closure_receipt() != self._bindings["installed_closure_receipt"]:
+            raise RebuilderError("preserved installed closure receipt changed during validation")
+        return closure
 
     def bind_transaction(self, lock_raw: bytes, lease: Any, load_consumer: Any) -> None:
         # Binding happens before ledger reservation/credentials in both paths.
@@ -1096,7 +1132,11 @@ class PreservedProtectedValidation:
                 or lease.handoff["bindings"]["sourceGraphSha256"] != self._bindings["source_graph"] \
                 or lease.java_root != self.tool_roots["java"]:
             raise RebuilderError("preserved validation differs from authenticated transaction")
-        self._check_exact()
+        closure = self._check_exact()
+        if lease.handoff["bindings"].get("toolchainClosureSha256") != closure["closureSha256"] \
+                or lease.toolchain.get("builderClosureSha256") != closure["closureSha256"] \
+                or lease.toolchain.get("installedClosureReceiptSha256") != closure["installedClosureReceiptSha256"]:
+            raise RebuilderError("preserved measured toolchain differs from authenticated handoff")
 
     def load_consumer(self) -> Any:
         self._check_exact()

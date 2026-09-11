@@ -1,7 +1,9 @@
 """Real filesystem/qualified-consumer rejection tests, not a release proof.
 
-Only stat ownership/mount flags are modeled for unprivileged temporary fixtures.
-No test turns a production validator failure into a successful validation claim.
+Custody metadata is modeled for unprivileged temporary fixtures. The isolated
+toolchain tests additionally label modeled prior Android/provenance gates; the
+new receipt, tree hashing and transaction binding checks remain real. No test
+claims successful qualified-consumer validation or protected runtime authority.
 """
 from __future__ import annotations
 
@@ -93,6 +95,7 @@ def inputs(fleet, tmp_path):
         "bundletool": protected(tmp_path / "bundletool.jar"),
         "upload_certificate": protected(tmp_path / "public-upload-certificate.pem"),
         "java_tool_observation": protected(tmp_path / "java-observation.json", b"{}"),
+        "installed_closure_receipt": protected(tmp_path / "installed-closure.json", b'{"offline":"fixture"}\n'),
     }
 
 
@@ -102,7 +105,8 @@ def capture_only(fleet, values):
     value = object.__new__(fleet.PreservedProtectedValidation)
     value.workspace_root, value.authority_root = values["workspace_root"], values["authority_root"]
     value.files = {name: values["lock_path" if name == "lock" else name] for name in (
-        "lock", "source_graph", "package_authority", "bundletool", "upload_certificate", "java_tool_observation")}
+        "lock", "source_graph", "package_authority", "bundletool", "upload_certificate", "java_tool_observation",
+        "installed_closure_receipt")}
     value.tool_roots = {name: values[f"{name}_root"] for name in ("dotnet", "java", "android_sdk")}
     value._limits = {}
     return value
@@ -264,13 +268,257 @@ def test_input_capture_binds_every_separate_public_input(fleet, tmp_path, mount_
     values = inputs(fleet, tmp_path)
     value = capture_only(fleet, values)
     first = value._capture_inputs()
-    assert set(first) == {"lock", "source_graph", "package_authority", "bundletool", "upload_certificate", "java_tool_observation"}
+    assert set(first) == {"lock", "source_graph", "package_authority", "bundletool", "upload_certificate",
+                          "java_tool_observation", "installed_closure_receipt"}
     for name, path in value.files.items():
         original = path.read_bytes()
         path.write_bytes(original + b"drift")
         assert value._capture_inputs()[name] != first[name]
         path.write_bytes(original)
-    assert value._capture_inputs() == first
+    after = value._capture_inputs()
+    assert {key: row for key, row in after.items() if key != "installed_closure_receipt"} \
+        == {key: row for key, row in first.items() if key != "installed_closure_receipt"}
+    assert after["installed_closure_receipt"][1] == first["installed_closure_receipt"][1]
+    assert after["installed_closure_receipt"][0] != first["installed_closure_receipt"][0]
+
+
+def modeled_toolchain_boundary(fleet, tmp_path, monkeypatch):
+    """Exercise real _check_exact toolchain work, not a qualified factory.
+
+    Prior source/Android consumer and public-certificate operations are modeled
+    explicitly. No receipt/path/hash/tree/closure or bind_transaction gate is
+    replaced. The tiny tool files are never executed.
+    """
+    values = inputs(fleet, tmp_path)
+    value = capture_only(fleet, values)
+    value.lock = json.loads(values["lock_path"].read_bytes())
+    value.graph = json.loads(values["source_graph"].read_bytes())
+    observed = {}
+    for name, root in value.tool_roots.items():
+        protected(root / "tiny-nonexecuted-tool", name.encode())
+        digest, count, size = fleet._tree_digest(root, f"offline {name}")
+        value.lock["toolchain"][name].update(tree_sha256=digest, file_count=count, size_bytes=size)
+        observed[name] = {"treeSha256": digest, "fileCount": count, "sizeBytes": size}
+    value.lock["toolchain"].update(
+        bundletool_sha256=hashlib.sha256(values["bundletool"].read_bytes()).hexdigest(),
+        installed_closure_receipt_sha256=hashlib.sha256(values["installed_closure_receipt"].read_bytes()).hexdigest(),
+        builder_image="offline-builder@sha256:" + "a" * 64,
+        signer_image="offline-signer@sha256:" + "b" * 64,
+    )
+    protected(values["lock_path"], json.dumps(value.lock).encode())
+    value._bindings = value._capture_inputs()
+    events, traversals = [], []
+    public_tools = {name: protected(tmp_path / f"nonexecuted-{name}") for name in ("python3", "openssl")}
+    android_root = value.workspace_root / "chummer-android"
+    value.android = SimpleNamespace(
+        ROOT=android_root,
+        __file__=str(android_root / value.lock["android_authority"]["attestation_consumer"]["path"]),
+        _trusted_system_executable=lambda path, label: public_tools[path.name],
+        _run_validator=lambda *args: events.append("modeled-source-validator"),
+        _load_trusted_java_toolchain=lambda path: {
+            "tools": {"java": value.tool_roots["java"] / "bin/java"},
+            "dotnet": value.tool_roots["dotnet"] / "dotnet",
+        },
+    )
+    value._functions = {}
+    monkeypatch.setattr(value, "_check_source", lambda: events.append("modeled-source-check"))
+    monkeypatch.setattr(fleet, "_validate_android_consumer_inputs", lambda *args: events.append("modeled-consumer-inputs"))
+
+    def public_certificate(command, **kwargs):
+        assert command == [str(public_tools["openssl"]), "x509", "-in", str(values["upload_certificate"]),
+                           "-noout", "-fingerprint", "-sha256"]
+        events.append("modeled-public-certificate")
+        return subprocess.CompletedProcess(command, 0, "sha256 Fingerprint=" + fleet.UPLOAD_CERTIFICATE_SHA256)
+
+    monkeypatch.setattr(fleet.subprocess, "run", public_certificate)
+    actual_tree_digest = fleet._tree_digest
+
+    def measured(root, label):
+        traversals.append(root)
+        return actual_tree_digest(root, label)
+
+    monkeypatch.setattr(fleet, "_tree_digest", measured)
+    expected = {
+        "platform": "linux/amd64", **observed,
+        "bundletoolSha256": value.lock["toolchain"]["bundletool_sha256"],
+        "installedClosureReceiptSha256": value.lock["toolchain"]["installed_closure_receipt_sha256"],
+        "reportedBuilderImage": value.lock["toolchain"]["builder_image"],
+        "plannedSignerImage": value.lock["toolchain"]["signer_image"],
+        "builderExecutionProvenanceAuthenticated": False, "protectedSignerRuntimeVerified": False,
+    }
+    expected["closureSha256"] = hashlib.sha256(
+        json.dumps(expected, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    ).hexdigest()
+    lease = SimpleNamespace(
+        handoff={"bindings": {"sourceGraphSha256": value._bindings["source_graph"],
+                              "toolchainClosureSha256": expected["closureSha256"]}},
+        toolchain={"builderClosureSha256": expected["closureSha256"],
+                   "installedClosureReceiptSha256": expected["installedClosureReceiptSha256"]},
+        java_root=value.tool_roots["java"],
+    )
+    return value, values, lease, expected, events, traversals
+
+
+def test_installed_closure_receipt_is_mandatory(fleet, tmp_path, monkeypatch):
+    values = inputs(fleet, tmp_path)
+    del values["installed_closure_receipt"]
+    monkeypatch.setattr(fleet.PreservedProtectedValidation, "_capture_inputs",
+                        lambda self: pytest.fail("missing mandatory argument must precede capture"))
+    with pytest.raises(TypeError, match="installed_closure_receipt"):
+        fleet.PreservedProtectedValidation(**values)
+
+
+@pytest.mark.parametrize("fault", ["missing", "symlink", "writable", "foreign", "mode"])
+def test_installed_closure_receipt_requires_preserved_custody(fleet, tmp_path, mount_model, fault):
+    values = inputs(fleet, tmp_path)
+    path = values["installed_closure_receipt"]
+    if fault == "missing":
+        path.unlink()
+    elif fault == "symlink":
+        path.unlink()
+        path.symlink_to(protected(tmp_path / "other-receipt"))
+    elif fault == "writable":
+        mount_model[0].add(path)
+    elif fault == "foreign":
+        mount_model[1].add(path)
+    else:
+        path.chmod(0o644)  # Root-owned/read-only still must be owner-only.
+    with pytest.raises(fleet.RebuilderError):
+        capture_only(fleet, values)._capture_inputs()
+
+
+def test_installed_closure_receipt_rejects_real_writable_environment(fleet, tmp_path):
+    value = capture_only(fleet, inputs(fleet, tmp_path))
+    assert not os.statvfs(tmp_path).f_flag & os.ST_RDONLY
+    with pytest.raises(fleet.RebuilderError):
+        value._capture_installed_closure_receipt()
+
+
+def test_measured_closure_reuses_three_real_tree_measurements_without_provenance(
+    fleet, tmp_path, tree, mount_model, monkeypatch,
+):
+    value, values, lease, expected, _, traversals = modeled_toolchain_boundary(fleet, tmp_path, monkeypatch)
+    assert value._check_exact() == expected
+    assert traversals == list(value.tool_roots.values())
+    assert expected["builderExecutionProvenanceAuthenticated"] is False
+    assert expected["protectedSignerRuntimeVerified"] is False
+    before = json.dumps(lease.toolchain, sort_keys=True)
+    traversals.clear()
+    value.bind_transaction(values["lock_path"].read_bytes(), lease, value.load_consumer)
+    assert traversals == list(value.tool_roots.values())
+    assert json.dumps(lease.toolchain, sort_keys=True) == before
+    assert not isinstance(lease, fleet.AuthenticatedRebuildHandoff)
+
+
+@pytest.mark.parametrize("fault", ["bytes", "same-bytes-replacement", "wrong-lock-digest", "tree-bytes"])
+def test_installed_closure_receipt_and_live_tool_bytes_cannot_drift(
+    fleet, tmp_path, tree, mount_model, monkeypatch, fault,
+):
+    value, values, _, _, _, traversals = modeled_toolchain_boundary(fleet, tmp_path, monkeypatch)
+    path = values["installed_closure_receipt"]
+    if fault == "bytes":
+        path.write_bytes(path.read_bytes() + b"drift")
+    elif fault == "same-bytes-replacement":
+        replacement = protected(tmp_path / "replacement", path.read_bytes())
+        replacement.replace(path)
+    elif fault == "wrong-lock-digest":
+        # A wrong digest present at initial admission, not only later drift.
+        value.lock["toolchain"]["installed_closure_receipt_sha256"] = "0" * 64
+        protected(values["lock_path"], json.dumps(value.lock).encode())
+        value._bindings = value._capture_inputs()
+    else:
+        (value.tool_roots["dotnet"] / "tiny-nonexecuted-tool").write_bytes(b"changed tool")
+    with pytest.raises(fleet.RebuilderError, match="input bytes changed|receipt differs|tool tree differs"):
+        value._check_exact()
+    if fault in ("bytes", "same-bytes-replacement"):
+        assert traversals == []
+
+
+def test_installed_closure_receipt_replacement_during_measurement_is_rejected(
+    fleet, tmp_path, tree, mount_model, monkeypatch,
+):
+    value, values, _, _, _, _ = modeled_toolchain_boundary(fleet, tmp_path, monkeypatch)
+    path = values["installed_closure_receipt"]
+    replacement = protected(tmp_path / "replacement", path.read_bytes())
+    actual = fleet._measured_toolchain_closure
+
+    def replace_after_measurement(*args):
+        result = actual(*args)
+        replacement.replace(path)
+        return result
+
+    monkeypatch.setattr(fleet, "_measured_toolchain_closure", replace_after_measurement)
+    with pytest.raises(fleet.RebuilderError, match="receipt changed during validation"):
+        value._check_exact()
+
+
+@pytest.mark.parametrize("field", ["handoff", "builder", "both", "receipt"])
+def test_measured_closure_rejects_mismatched_transaction_claims(
+    fleet, tmp_path, tree, mount_model, monkeypatch, field,
+):
+    value, values, lease, _, _, _ = modeled_toolchain_boundary(fleet, tmp_path, monkeypatch)
+    if field in ("handoff", "both"):
+        lease.handoff["bindings"]["toolchainClosureSha256"] = "0" * 64
+    if field in ("builder", "both"):
+        lease.toolchain["builderClosureSha256"] = "0" * 64
+    if field == "receipt":
+        lease.toolchain["installedClosureReceiptSha256"] = "0" * 64
+    with pytest.raises(fleet.RebuilderError, match="measured toolchain differs"):
+        value.bind_transaction(values["lock_path"].read_bytes(), lease, value.load_consumer)
+
+
+@pytest.mark.parametrize("operation", ["execute", "reconcile"])
+def test_measured_closure_rejects_before_privileged_transaction_work(
+    fleet, tmp_path, tree, mount_model, monkeypatch, operation,
+):
+    value, values, claims, _, events, _ = modeled_toolchain_boundary(fleet, tmp_path, monkeypatch)
+    claims.handoff["bindings"]["toolchainClosureSha256"] = "0" * 64
+    claims.toolchain["builderClosureSha256"] = "0" * 64  # Coherently wrong, not inconsistent metadata.
+    recovery_root = tmp_path / "recovery"
+    recovery_root.mkdir(mode=0o700)
+    attempt = "d" * 64
+    if operation == "reconcile":
+        (recovery_root / attempt).mkdir(mode=0o700)
+    # Explicitly model ONLY earlier configuration/authentication to reach the
+    # real preserved binding. This capability is synthetic, never production.
+    lease = fleet.AuthenticatedRebuildHandoff(
+        claims.handoff, {}, claims.toolchain, {}, claims.java_root, recovery_root, lambda: None)
+    assert "external rebuilder lock is dormant" in fleet.validate_lock(
+        value.lock, values["lock_path"].read_bytes())
+    monkeypatch.setattr(fleet, "validate_lock", lambda *args: [])
+    monkeypatch.setattr(fleet, "_validate_authenticated_handoff",
+                        lambda *args, **kwargs: events.append("modeled-earlier-authentication"))
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("unbound toolchain reached consumer, ledger, credentials or signing")
+
+    for name in ("load_reviewed_ledger", "reserve_signing_attempt", "sign_aab"):
+        monkeypatch.setattr(fleet, name, forbidden)
+    monkeypatch.setattr(value, "load_consumer", forbidden)
+    output = tmp_path / "must-not-exist"
+
+    def fixture_paths(root):
+        # The tree fixture models os.scandir for measured metadata. Use the
+        # actual directory names here without depending on its return protocol.
+        paths = set()
+        for name in os.listdir(root):
+            path = root / name
+            paths.add(path)
+            if path.is_dir() and not path.is_symlink():
+                paths.update(fixture_paths(path))
+        return paths
+
+    paths_before = fixture_paths(tmp_path)
+    args = [values["lock_path"], lambda *args: lease, value.load_consumer, tmp_path, {}]
+    if operation == "execute":
+        args.append(forbidden)  # credential admission
+    args.extend([value, output])
+    with pytest.raises(fleet.RebuilderError, match="measured toolchain differs"):
+        getattr(fleet, f"{operation}_protected_signer_transaction")(
+            *args, attempt_id=attempt, two_green_artifact_id=123, two_green_artifact_sha256="e" * 64)
+    assert "modeled-earlier-authentication" in events and "modeled-public-certificate" in events
+    assert fixture_paths(tmp_path) == paths_before
+    assert not output.exists()
 
 
 @pytest.mark.parametrize("fault", ["overlap", "foreign-authority", "deleted-workspace", "incomplete-source"])
