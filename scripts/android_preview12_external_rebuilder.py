@@ -1963,6 +1963,126 @@ def validate_local_rebuild_handoff(directory: Path, lock: Mapping[str, Any]) -> 
     return handoff, paths
 
 
+class PreservedRebuildHandoff:
+    """Retain exact local handoff inputs without authenticating their producer.
+
+    This is NOT an authenticated capability or a release receipt. A future
+    protected caller must independently authenticate provenance, toolchains and
+    isolation before using this object's byte assertion in its own capability.
+    No signing, approval, publication or upload authority is granted here.
+    """
+
+    __slots__ = ("_lock_path", "_directory", "_limits", "_snapshot", "_handoff", "_paths")
+
+    def __init__(self, lock_path: Path, directory: Path) -> None:
+        self._lock_path, self._directory = lock_path, directory
+        try:
+            first_lock = self._file_snapshot(lock_path, "preserved handoff lock", 1024 * 1024)
+            lock, lock_raw = load_lock(lock_path)
+            json_limit, aab_limit = lock["limits"]["json_bytes"], lock["limits"]["aab_bytes"]
+            if type(json_limit) is not int or not 0 < json_limit <= 8 * 1024 * 1024 \
+                    or type(aab_limit) is not int or not 0 < aab_limit <= 512 * 1024 * 1024:
+                raise RebuilderError("preserved handoff input bounds are not exact")
+            self._limits = types.MappingProxyType({
+                "FLEET_ANDROID_PREVIEW12_REBUILD_HANDOFF.generated.json": json_limit,
+                f"chummer-android-{VERSION_NAME}-unsigned.aab": aab_limit,
+                f"chummer-android-{VERSION_NAME}-source-graph.json": json_limit,
+                f"chummer-android-{VERSION_NAME}-unsigned.aab.sha256": 64 * 1024,
+                "ANDROID_API36_TWO_GREEN_ELIGIBILITY.generated.json": json_limit,
+                "ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json": json_limit,
+                "ANDROID_EXTERNAL_SIGNER_REQUEST.generated.json": json_limit,
+            })
+            before = self._capture()
+            if before["lock"] != first_lock or first_lock[1] != hashlib.sha256(lock_raw).hexdigest():
+                raise RebuilderError("preserved handoff lock changed during admission")
+            handoff, paths = validate_local_rebuild_handoff(directory, lock)
+            request, graph = validate_external_request(paths["externalSignerRequest"], paths["sourceGraph"], json_limit)
+            android = validate_source_graph(graph)["chummer-android"]
+            bindings = handoff["bindings"]
+            if bindings["lockSha256"] != first_lock[1] \
+                    or any(bindings[f"source{field.title()}"] != lock["android_authority"][field]
+                           or android[field] != lock["android_authority"][field] for field in ("commit", "tree")) \
+                    or request["buildSidecar"]["sha256"] != before[paths["buildSidecar"].name][1]:
+                raise RebuilderError("preserved handoff lock, source or sidecar binding differs")
+            if self._capture() != before:
+                raise RebuilderError("preserved handoff inputs changed during admission")
+            self._snapshot = types.MappingProxyType(before)
+            self._handoff = self._freeze(handoff)
+            self._paths = types.MappingProxyType(dict(paths))
+        except (OSError, KeyError, TypeError, ValueError):
+            raise RebuilderError("preserved handoff inputs are unavailable or malformed") from None
+
+    @staticmethod
+    def _freeze(value: Any) -> Any:
+        # Detach every level; a read-only outer dict alone still exposes nested
+        # mutable maps/lists to a later caller.
+        if isinstance(value, dict):
+            return types.MappingProxyType({name: PreservedRebuildHandoff._freeze(item)
+                                           for name, item in value.items()})
+        if isinstance(value, list):
+            return tuple(PreservedRebuildHandoff._freeze(item) for item in value)
+        return value
+
+    @staticmethod
+    def _identity(metadata: Any) -> tuple[int, ...]:
+        return tuple(getattr(metadata, name) for name in (
+            "st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns",
+            "st_mode", "st_uid", "st_gid", "st_nlink",
+        ))
+
+    @classmethod
+    def _file_snapshot(cls, path: Path, label: str, limit: int) -> tuple[tuple[int, ...], str]:
+        _preserved_path(path, label)
+        before = cls._identity(path.stat())
+        digest = _sha256_file(path, label, limit)
+        _preserved_path(path, label)
+        if before != cls._identity(path.stat()):
+            raise RebuilderError("preserved handoff input changed while being captured")
+        return before, digest
+
+    def _inventory(self) -> None:
+        names = set()
+        for path in self._directory.iterdir():
+            if path.name not in self._limits or path.is_symlink() or not path.is_file():
+                raise RebuilderError("preserved handoff physical inventory is not exact")
+            names.add(path.name)
+            if len(names) > len(self._limits):
+                raise RebuilderError("preserved handoff physical inventory is oversized")
+        if names != set(self._limits):
+            raise RebuilderError("preserved handoff physical inventory is incomplete")
+
+    def _capture(self) -> dict[str, Any]:
+        try:
+            _preserved_path(self._directory, "preserved handoff directory", directory=True)
+            root_before = self._identity(self._directory.stat())
+            self._inventory()
+            _preserved_tree(self._directory, "preserved handoff directory")
+            result = {"directory": root_before, "lock": self._file_snapshot(
+                self._lock_path, "preserved handoff lock", 1024 * 1024,
+            )}
+            for name, limit in self._limits.items():
+                result[name] = self._file_snapshot(self._directory / name, "preserved handoff input", limit)
+            self._inventory()
+            if root_before != self._identity(self._directory.stat()):
+                raise RebuilderError("preserved handoff directory changed while being captured")
+            return result
+        except OSError:
+            raise RebuilderError("preserved handoff input is unavailable") from None
+
+    @property
+    def handoff(self) -> Mapping[str, Any]:
+        return self._handoff
+
+    @property
+    def paths(self) -> Mapping[str, Path]:
+        return self._paths
+
+    def assert_exact(self) -> None:
+        """Reject changed custody, inventory, bytes or identity; never recapture."""
+        if self._capture() != self._snapshot:
+            raise RebuilderError("preserved handoff inputs differ from the admitted snapshot")
+
+
 def _recovery_store_identity(recovery_root: Path) -> str:
     """Bind one protected journal store independently of the output destination."""
 
