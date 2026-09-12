@@ -11,15 +11,15 @@
   },
   "android_authority": {
     "repository": "https://github.com/ArchonMegalon/chummer-android.git",
-    "commit": "7cef6a715867cab8000483b08db9aad2e817f63d",
-    "tree": "534f6dc0cde043fb78475c35e9116a727a9e95f5",
+    "commit": "8ea0da6092ede167c65b7e059df40fe88ac6f026",
+    "tree": "dba9e14fe892a9794df60eeff254d1f907c926b8",
     "build_script": {
       "path": "scripts/build-release.sh",
       "sha256": "61ea9fa04338889f78e26de26a90b392c5f16def2a4150a64a94e9d4fadd5ca9"
     },
     "attestation_consumer": {
       "path": "scripts/sign_android_release_build_attestation.py",
-      "sha256": "c97da3e54af0356726fdef70f1fc7dffa224a560b2a92b5eadfa50ca83dd28d6",
+      "sha256": "b31bec9cfd198214250a645c346f4bb46f7c4d4f5b0856ca618862f24cfabe93",
       "contract_name": "chummer.android.release-build-attestation/v2"
     },
     "two_green_verifier": {
@@ -28,7 +28,7 @@
     },
     "source_graph_verifier": {
       "path": "scripts/verify_release_source_graph.py",
-      "sha256": "8370498e00eefa8e08570f9ca1329b17ac85b429b7afba7fe8860dd262283406"
+      "sha256": "c15f60db34f6becfe60ddfd749da1b50d457cf5777232e26a7513bdc068d983e"
     }
   },
   "toolchain": {

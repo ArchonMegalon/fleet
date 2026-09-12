@@ -17,10 +17,10 @@ import pytest
 
 import test_android_preview12_external_rebuilder as fixture
 
-COMMIT = "7cef6a715867cab8000483b08db9aad2e817f63d"
-TREE = "534f6dc0cde043fb78475c35e9116a727a9e95f5"
-RECEIPT_SHA = "ce3a64d3bebd9a51eb7c6528491d55f8082ba21948d5570bee61cb08abf964f2"
-ELIGIBILITY_SHA = "02bf7c59adc83d66bd24e6081f4c760cbf3b1f7d751c85b7a0cf5357ee506768"
+COMMIT = "8ea0da6092ede167c65b7e059df40fe88ac6f026"
+TREE = "dba9e14fe892a9794df60eeff254d1f907c926b8"
+RECEIPT_SHA = "ce610801b27a7b5942c462ce5d10b2e6a3cb230bf4e29924979e37f706e1119b"
+ELIGIBILITY_SHA = "5e875d040489714d2d9a7acaf32e4c52a485b8363f73353a8bcbc17d06f73be7"
 PROVENANCE_SHA = "d0e1938107a3794a44648286b8b97d1ac3db64daa30509f1e63fe78018d3f4c7"
 RFC_DER = bytes.fromhex("302e020100300506032b657004220420" +
     "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
@@ -115,8 +115,12 @@ def test_original_v3_receipt_passes_full_consumer_through_guarded_loader(loaded_
     assert result["publicationAuthorized"] is False and result["googlePlayUploadAuthorized"] is False
 
 
-@pytest.mark.parametrize("mutation", ["scope", "missing-journey", "runtime-content"])
-def test_validly_resigned_original_drift_fails_full_current_consumer(loaded_original, tmp_path, monkeypatch, mutation):
+@pytest.mark.parametrize(("mutation", "expected_error"), [
+    ("scope", "two-green aggregate authority differs from the governed gate"),
+    ("missing-journey", "two-green aggregate authority differs from the governed gate"),
+    ("runtime-content", "two-green dependency commit differs: core-content"),
+])
+def test_validly_resigned_original_drift_fails_full_current_consumer(loaded_original, tmp_path, monkeypatch, mutation, expected_error):
     root, _, _, receipt, verifier = loaded_original
     common = receipt["commonAuthority"]
     if mutation == "scope":
@@ -126,14 +130,18 @@ def test_validly_resigned_original_drift_fails_full_current_consumer(loaded_orig
     else:
         graph = common["dependencyGraph"]
         graph["sources"]["core-content"] = dict(graph["sources"]["core-runtime"])
-        graph["sha256"] = hashlib.sha256(verifier._canonical_json_bytes({k: v for k, v in graph.items() if k != "sha256"})).hexdigest()
+        graph["sha256"] = verifier.TWO_GREEN.canonical_sha256({k: v for k, v in graph.items() if k != "sha256"})
     receipt.pop("eligibilitySha256")
-    receipt["eligibilitySha256"] = hashlib.sha256(verifier._canonical_json_bytes(receipt)).hexdigest()
+    # Eligibility and dependency digests use the materializer's newline-bearing
+    # canonical bytes, not the detached approval's canonical signing bytes.
+    # Reach the intended semantic rejection with a valid digest and signature.
+    receipt["eligibilitySha256"] = verifier.TWO_GREEN.canonical_sha256(receipt)
     raw = verifier._canonical_json_bytes(receipt)
     receipt_path = tmp_path / "changed-receipt.json"
     receipt_path.write_bytes(raw)
     receipt_path.chmod(0o600)
     approval_path, now = synthetic_approval(tmp_path, monkeypatch, verifier, receipt, raw)
     verifier._verify_release_approval(approval_path, receipt_raw=raw, receipt=receipt, now=now)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as error:
         verify(verifier, root, receipt_path, approval_path, now)
+    assert str(error.value) == expected_error

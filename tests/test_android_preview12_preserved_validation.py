@@ -7,6 +7,7 @@ claims successful qualified-consumer validation or protected runtime authority.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -578,7 +579,7 @@ def actual_consumer(fleet):
     return fleet.validate_android_consumer(root, lock)
 
 
-def test_real_7cef_protected_entry_rejects_deleted_builder_workspace(actual_consumer, tmp_path):
+def test_real_current_protected_entry_rejects_deleted_builder_workspace(actual_consumer, tmp_path):
     android = actual_consumer
     aab, graph = protected(tmp_path / "signed.aab"), protected(tmp_path / "source-graph.json", b"{}")
     claims = {"aab": {"sha256": hashlib.sha256(aab.read_bytes()).hexdigest()},
@@ -592,7 +593,7 @@ def test_real_7cef_protected_entry_rejects_deleted_builder_workspace(actual_cons
             java_tool_authority=tmp_path / "missing-observation.json")
 
 
-def test_real_7cef_tool_observation_does_not_accept_archive_inventory(actual_consumer, tmp_path):
+def test_real_current_tool_observation_does_not_accept_archive_inventory(actual_consumer, tmp_path):
     inventory = protected(tmp_path / "archive-inventory.json", json.dumps({
         "contract_name": "fleet.android_preview12_installed_toolchain.v1", "archives": [],
     }).encode())
@@ -600,15 +601,75 @@ def test_real_7cef_tool_observation_does_not_accept_archive_inventory(actual_con
         actual_consumer._load_trusted_java_toolchain(inventory)
 
 
-def test_real_7cef_still_rejects_valid_0777_tool_links(actual_consumer, tree):
-    _fleet_model, root, _overrides = tree
-    protected(root / "real-file")
-    assert actual_consumer._trusted_tree_digest(root, "qualified Android tool closure")[1] == 1
+@pytest.fixture
+def current_consumer_tree(actual_consumer, tmp_path, monkeypatch):
+    """Model ownership/ancestry around real descriptor-based current-consumer IO."""
+    root = tmp_path / "current-tool-tree"
+    root.mkdir(mode=0o755)
+    real_stat, real_scandir, real_fstat = Path.stat, os.scandir, os.fstat
+
+    def metadata(path, value):
+        fields = {name: getattr(value, name) for name in dir(value) if name.startswith("st_")}
+        fields["st_uid"] = 0
+        if path in root.parents:
+            fields["st_mode"] &= ~0o022  # Model ancestry, not an actual protected /tmp.
+        return SimpleNamespace(**fields)
+
+    class Entry:
+        def __init__(self, entry, parent):
+            self.entry, self.name, self.path = entry, entry.name, parent / entry.name
+
+        def stat(self, *, follow_symlinks=True):
+            return metadata(self.path, self.entry.stat(follow_symlinks=follow_symlinks))
+
+    @contextmanager
+    def scandir(path):
+        parent = Path(os.readlink(f"/proc/self/fd/{path}")) if isinstance(path, int) else Path(path)
+        with real_scandir(path) as entries:
+            yield (Entry(entry, parent) for entry in entries)
+
+    monkeypatch.setattr(Path, "stat", lambda path, *, follow_symlinks=True:
+                        metadata(path, real_stat(path, follow_symlinks=follow_symlinks)))
+    monkeypatch.setattr(os, "fstat", lambda descriptor: metadata(None, real_fstat(descriptor)))
+    monkeypatch.setattr(os, "scandir", scandir)
+    return root
+
+
+def test_real_current_consumer_admits_and_hashes_safe_0777_tool_link(actual_consumer, current_consumer_tree):
+    root = current_consumer_tree
+    raw = b"payload"
+    protected(root / "real-file", raw)
+    before = actual_consumer._trusted_tree_digest(root, "qualified Android tool closure")
+    assert before[1:] == (1, len(raw))
     link = root / "contained-link"
     link.symlink_to("real-file")
     assert stat.S_IMODE(link.lstat().st_mode) == 0o777
-    # This is an actual qualified-consumer failure, not Fleet's repaired hash.
-    # Ownership/ancestry are modeled, while the same real file/link/0777 mode
-    # remain. The actual consumer passes the regular file immediately above.
-    with pytest.raises(ValueError, match="writable or non-root-owned content"):
+    # Literal expected rows, not Fleet's hasher or a substituted Android result.
+    expected = hashlib.sha256(
+        b"L\0contained-link\0" + b"777\0real-file\n"
+        + f"F\0real-file\0{0o600:o}\0{len(raw)}\0{hashlib.sha256(raw).hexdigest()}\n".encode()
+    ).hexdigest()
+    observed = actual_consumer._trusted_tree_digest(root, "qualified Android tool closure")
+    assert observed == (expected, 1, len(raw)) and observed[0] != before[0]
+
+
+@pytest.mark.parametrize("fault", ["escape", "cycle", "writable-target"])
+def test_real_current_consumer_rejects_unsafe_tool_links(actual_consumer, current_consumer_tree, fault):
+    root = current_consumer_tree
+    target = protected(root / "real-file", b"payload")
+    assert actual_consumer._trusted_tree_digest(root, "qualified Android tool closure")[1] == 1
+    link = root / "a-link"  # Visit the link before the target file.
+    if fault == "escape":
+        outside = protected(root.parent / "outside-file", b"outside")
+        link.symlink_to(outside)
+        failure = "symlink escapes its trusted root"
+    elif fault == "cycle":
+        link.symlink_to("other-link")
+        (root / "other-link").symlink_to("a-link")
+        failure = "cyclic or excessive-hop symlink"
+    else:
+        target.chmod(0o622)
+        link.symlink_to("real-file")
+        failure = "symlink reaches writable content"
+    with pytest.raises(ValueError, match=failure):
         actual_consumer._trusted_tree_digest(root, "qualified Android tool closure")

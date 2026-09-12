@@ -10,8 +10,10 @@ That proposal is not an approved trust policy or activation evidence.
 
 ## Contract boundary
 
-The implementation pins Android commit `7cef6a715867cab8000483b08db9aad2e817f63d`
-and its exact consumer bytes. It treats these as different artifacts:
+The implementation pins Android commit `8ea0da6092ede167c65b7e059df40fe88ac6f026`,
+tree `dba9e14fe892a9794df60eeff254d1f907c926b8`, and its exact consumer bytes.
+This dormant consumer rebind does not qualify a builder/signer image or activate
+signing. It treats these as different artifacts:
 
 1. Android's non-authoritative external-signer request v1;
 2. Android's exact `chummer.android.release-build-attestation/v2`, using the
@@ -26,7 +28,14 @@ never presented to Android as release authority.
 Current consumer tests require `CHUMMER_ANDROID_CURRENT_ROOT` pointing to the
 exact clean qualified checkout. The separate original-receipt integration also
 requires `CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT`: the unchanged qualified
-TwoGreen v3 receipt. It calls the actual guarded loader and full Android
+TwoGreen v3 receipt from hosted workflow `34723623558`, artifact `10306679223`.
+The receipt file SHA-256 is
+`ce610801b27a7b5942c462ce5d10b2e6a3cb230bf4e29924979e37f706e1119b`;
+its canonical eligibility digest is
+`5e875d040489714d2d9a7acaf32e4c52a485b8363f73353a8bcbc17d06f73be7`.
+It binds review run `34716647057` and later main run `34720323198` for the
+same tree and seven SR5 wizard journeys; publication and Play upload remain
+unauthorized. The integration calls the actual guarded loader and full Android
 `VERIFY.verify_release_eligibility`, substituting only a published RFC test-key
 trust pin and a synthetic compatibility approval. No validator is mocked there;
 no APK provenance replay, release build, protected approval or custody is claimed.
@@ -130,14 +139,16 @@ file identity are rechecked; it does not replace `java_tool_observation` or
 authenticate builder execution or protected signer runtime provenance.
 Missing real packages, tools, signed artifacts or validations fail closed.
 
-The qualified 7cef consumer still has its own symlink rejection in
-`sign_android_release_build_attestation.py`'s `_trusted_tree_digest`: it checks
-mode 022 before the link branch, so an otherwise valid root-owned 0777 internal
-link fails. Fleet's repaired hasher does not replace this sealed consumer code.
-The focused test executes that actual rejection; any required Android repair
-needs its own review and requalification. Modeled read-only flags in temporary
-tests are not deployment evidence, and no successful protected release build is
-claimed by these tests.
+The pinned 8ea consumer's `sign_android_release_build_attestation.py`
+`_trusted_tree_digest` distinguishes symlinks before checking writable mode bits.
+A root-owned 0777 link is not rejected merely for its link mode: the actual
+`_trusted_tree_link` checks every hop for containment and ownership, rejects
+unresolved or excessive-hop links, and requires safe target type and permissions.
+Regular files and directories retain the root-owned, non-writable checks.
+This is the inspected current consumer behavior, not Fleet substituting its own
+hasher or evidence of an operational protected toolchain. Modeled ownership and
+read-only flags in temporary tests are not deployment evidence, and no successful
+protected release build is claimed by these tests.
 
 The composition remains dormant: a protected workflow-owned provenance
 authenticator, actual preserved mounts/installed toolchain, immutable ledger
