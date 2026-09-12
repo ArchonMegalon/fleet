@@ -99,7 +99,8 @@ composition for both execute and reconcile. Supply its `load_consumer` method
 and the same object as `protected_validation_factory`. Construction requires
 explicit `lock_path`, `workspace_root`, `source_graph`, `package_authority`,
 `authority_root`, `bundletool`, public `upload_certificate`,
-`java_tool_observation`, and exact `dotnet_root`, `java_root`, `android_sdk_root`.
+`java_tool_observation`, `installed_closure_receipt`, and exact `dotnet_root`,
+`java_root`, `android_sdk_root`.
 There is no CLI, builder callback, or private-key argument for this composition.
 
 The workspace is an independently retained complete eight-repository checkout
@@ -123,6 +124,10 @@ verifier, `_protected_validation`, and `_validate_validation_claims`; it never
 synthesizes a passing dictionary. `java_tool_observation` is the separate Android
 `chummer.android.local-unsigned-toolchain-observation/v1` input, **not** Fleet's
 installed-archive inventory or evidence that installed tree pins were observed.
+The mandatory `installed_closure_receipt` is a separate preserved file, bound by
+`toolchain.installed_closure_receipt_sha256` in the reviewed lock. Its bytes and
+file identity are rechecked; it does not replace `java_tool_observation` or
+authenticate builder execution or protected signer runtime provenance.
 Missing real packages, tools, signed artifacts or validations fail closed.
 
 The qualified 7cef consumer still has its own symlink rejection in
