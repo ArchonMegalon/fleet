@@ -7,6 +7,8 @@ secrets/
 config/accounts.yaml
 *.key
 *.pem
+# Exact, already-pinned public verification fixture; never admit other key files.
+!tests/fixtures/android-388425ace/local-release-builder-2026.public.pem
 *.p12
 *.auth.json
 auth.json
