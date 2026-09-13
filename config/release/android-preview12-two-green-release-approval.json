@@ -17,11 +17,11 @@
   "github_environment": {
     "name": "android-preview12-release-approval",
     "configured": false,
-    "required_reviewers_required": true,
-    "minimum_required_reviewers": 1,
-    "human_user_reviewer_required": true,
+    "required_reviewers_required": false,
+    "minimum_required_reviewers": 0,
+    "human_user_reviewer_required": false,
     "expected_human_user_reviewers": [],
-    "prevent_self_review_required": true,
+    "prevent_self_review_required": false,
     "administrators_can_bypass_allowed": false,
     "protected_branches_only": true
   },

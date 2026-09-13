@@ -269,29 +269,14 @@ def _fresh_timestamp(
     return parsed, str(value)
 
 
-def _reviewer_list(value: object, label: str) -> list[dict[str, object]]:
-    if not isinstance(value, list):
-        raise ApprovalError(f"{label} must be a list")
-    output: list[dict[str, object]] = []
-    for row in value:
-        if not isinstance(row, dict) or set(row) != {"id", "login"}:
-            raise ApprovalError(f"{label} contains a malformed identity")
-        reviewer_id = row.get("id")
-        login = row.get("login")
-        if (
-            type(reviewer_id) is not int
-            or reviewer_id <= 0
-            or not isinstance(login, str)
-            or not login
-            or login != login.strip()
-            or login.casefold().endswith("[bot]")
-        ):
-            raise ApprovalError(f"{label} contains a non-human identity")
-        output.append({"id": reviewer_id, "login": login})
-    ordered = sorted(output, key=lambda row: (row["id"], row["login"]))
-    if output != ordered or len({row["id"] for row in output}) != len(output):
-        raise ApprovalError(f"{label} must be unique and canonically ordered")
-    return output
+def _validate_environment_policy(value: object) -> None:
+    expected = expected_policy()["github_environment"]
+    if not isinstance(value, dict) or type(value.get("configured")) is not bool:
+        raise ApprovalError("approval environment differs from the closed zero-reviewer policy")
+    expected["configured"] = value["configured"]
+    # JSON equality is intentional: Python treats False == 0 and True == 1.
+    if canonical_bytes(value) != canonical_bytes(expected):
+        raise ApprovalError("approval environment differs from the closed zero-reviewer policy")
 
 
 def expected_policy() -> dict[str, Any]:
@@ -318,11 +303,11 @@ def expected_policy() -> dict[str, Any]:
         "github_environment": {
             "name": ENVIRONMENT_NAME,
             "configured": False,
-            "required_reviewers_required": True,
-            "minimum_required_reviewers": 1,
-            "human_user_reviewer_required": True,
+            "required_reviewers_required": False,
+            "minimum_required_reviewers": 0,
+            "human_user_reviewer_required": False,
             "expected_human_user_reviewers": [],
-            "prevent_self_review_required": True,
+            "prevent_self_review_required": False,
             "administrators_can_bypass_allowed": False,
             "protected_branches_only": True,
         },
@@ -409,6 +394,7 @@ def expected_policy() -> dict[str, Any]:
 def load_policy(path: Path) -> tuple[dict[str, Any], bytes, str]:
     data, digest = stable_file(path, "approval policy", MAX_RECEIPT_BYTES)
     value = strict_json_bytes(data, "approval policy")
+    _validate_environment_policy(value.get("github_environment"))
     expected = expected_policy()
     if value != expected:
         # Activation is deliberately the only accepted deviation from the dormant template.
@@ -441,17 +427,6 @@ def load_policy(path: Path) -> tuple[dict[str, Any], bytes, str]:
             raise ApprovalError(
                 "approval and durable-ledger receipt keys must be distinct"
             )
-        observed_reviewers = value.get("github_environment", {}).get(
-            "expected_human_user_reviewers"
-        ) if isinstance(value.get("github_environment"), dict) else None
-        try:
-            reviewed_users = _reviewer_list(
-                observed_reviewers, "reviewed human user identities"
-            )
-        except ApprovalError:
-            reviewed_users = []
-        if reviewed_users:
-            active["github_environment"]["expected_human_user_reviewers"] = reviewed_users
         if value != active:
             raise ApprovalError("approval policy differs from the closed dormant/ready contract")
     return value, data, digest
@@ -504,15 +479,9 @@ def _require_ready(policy: Mapping[str, Any]) -> None:
     ):
         blockers.append("external Ed25519 key differs from Android's pinned approver")
     try:
-        reviewed_users = _reviewer_list(
-            environment.get("expected_human_user_reviewers")
-            if isinstance(environment, dict) else None,
-            "reviewed human user identities",
-        )
-    except ApprovalError:
-        reviewed_users = []
-    if not reviewed_users:
-        blockers.append("human user reviewer identities are not pinned")
+        _validate_environment_policy(environment)
+    except ApprovalError as error:
+        blockers.append(str(error))
     replay = policy.get("replay_protection", {})
     if (
         not isinstance(replay, dict)
@@ -603,59 +572,34 @@ def validate_inputs(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def validate_environment_snapshot(value: Mapping[str, Any], policy: Mapping[str, Any]) -> dict[str, Any]:
+    _validate_environment_policy(policy.get("github_environment"))
     expected_url = f"https://api.github.com/repos/{FLEET_REPOSITORY}/environments/{ENVIRONMENT_NAME}"
     if value.get("name") != ENVIRONMENT_NAME or value.get("url") != expected_url:
         raise ApprovalError("GitHub environment identity differs")
     if value.get("can_admins_bypass") is not False:
         raise ApprovalError("approval environment permits administrator bypass")
     branch = value.get("deployment_branch_policy")
-    if not isinstance(branch, dict) or branch.get("protected_branches") is not True or branch.get("custom_branch_policies") is not False:
+    if not isinstance(branch, dict) or set(branch) != {"protected_branches", "custom_branch_policies"} or branch.get("protected_branches") is not True or branch.get("custom_branch_policies") is not False:
         raise ApprovalError("approval environment is not restricted to protected branches")
     rules = value.get("protection_rules")
-    if not isinstance(rules, list):
-        raise ApprovalError("approval environment protection rules are missing")
-    reviewer_rules = [row for row in rules if isinstance(row, dict) and row.get("type") == "required_reviewers"]
-    if len(reviewer_rules) != 1:
-        raise ApprovalError("approval environment must have exactly one required-reviewer rule")
-    rule = reviewer_rules[0]
-    reviewers = rule.get("reviewers")
-    minimum = policy["github_environment"]["minimum_required_reviewers"]
-    if rule.get("prevent_self_review") is not True or not isinstance(reviewers, list) or len(reviewers) < minimum:
-        raise ApprovalError("approval environment lacks human review or self-review prevention")
-    reviewer_types: list[str] = []
-    human_users: list[dict[str, object]] = []
-    for row in reviewers:
-        if not isinstance(row, dict) or row.get("type") != "User":
-            raise ApprovalError("approval environment reviewer is not an explicit User")
-        reviewer = row.get("reviewer")
-        if not isinstance(reviewer, dict) or type(reviewer.get("id")) is not int or reviewer["id"] <= 0:
-            raise ApprovalError("approval environment reviewer identity is malformed")
-        reviewer_types.append(row["type"])
-        login = reviewer.get("login")
-        if (
-            not isinstance(login, str)
-            or not login
-            or login.casefold().endswith("[bot]")
-        ):
-            raise ApprovalError("approval environment user reviewer is not a human account")
-        human_users.append({"id": reviewer["id"], "login": login})
-    human_users = sorted(human_users, key=lambda row: (row["id"], row["login"]))
-    if len(human_users) < 1:
-        raise ApprovalError("approval environment has no explicit human user reviewer")
-    expected_users = _reviewer_list(
-        policy["github_environment"]["expected_human_user_reviewers"],
-        "reviewed human user identities",
-    )
-    if human_users != expected_users:
-        raise ApprovalError("approval environment reviewer identities differ from policy")
+    if not isinstance(rules, list) or len(rules) != 1 or not isinstance(rules[0], dict):
+        raise ApprovalError("approval environment must have only its branch-policy rule")
+    rule = rules[0]
+    if (
+        rule.get("type") != "branch_policy"
+        or type(rule.get("id")) is not int or rule["id"] < 1
+        or set(rule) - {"id", "node_id", "type"}
+        or ("node_id" in rule and (not isinstance(rule["node_id"], str) or not rule["node_id"]))
+    ):
+        raise ApprovalError("approval environment protection rule differs from zero-reviewer branch policy")
     return {
         "name": ENVIRONMENT_NAME,
-        "requiredReviewerCount": len(reviewers),
-        "reviewerTypes": sorted(reviewer_types),
-        "humanUserReviewerCount": len(human_users),
-        "reviewerIdentitySetSha256": canonical_sha256(human_users),
-        "configuredHumanReviewerSetPinned": True,
-        "preventSelfReview": True,
+        "requiredReviewerCount": 0,
+        "reviewerTypes": [],
+        "humanUserReviewerCount": 0,
+        "reviewerIdentitySetSha256": canonical_sha256([]),
+        "configuredHumanReviewerSetPinned": False,
+        "preventSelfReview": False,
         "administratorsCanBypass": False,
         "protectedBranchesOnly": True,
         "actualApprovalActorRecorded": False,
@@ -1322,8 +1266,8 @@ def _create_fleet_audit_receipt(
             "activationWasReady": True,
         },
         "twoGreenVerified": True,
-        "humanEnvironmentReviewRequired": True,
-        "configuredHumanReviewerSetPinned": True,
+        "humanEnvironmentReviewRequired": False,
+        "configuredHumanReviewerSetPinned": False,
         "protectedEnvironmentGatePassed": True,
         "actualApprovalActorRecorded": False,
         "signingAuthorized": False,

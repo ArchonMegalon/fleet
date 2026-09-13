@@ -8,8 +8,9 @@ are backed by the exact successful reviewed and main API-36 Two-Green evidence.
 
 It never accepts, signs, uploads, or publishes an AAB. Its primary output is
 the exact `chummer.android.two-green-release-approval/v1` contract consumed by
-the qualified Android `7cef6a715867cab8000483b08db9aad2e817f63d` release
-verifier. It always keeps
+the bound Android `411e0205378966c73e064ba34f68ca65ed426ab6` release
+verifier. This is provisional PR-source compatibility, not qualified main
+or hosted eligibility. It always keeps
 `signingAuthorized`, `publicationAuthorized`, and
 `googlePlayUploadAuthorized` false.
 
@@ -112,8 +113,8 @@ signing, upload, processing, distribution, or publication authority.
 ## Dormant state
 
 The checked-in policy fails before the protected environment: it is not ready,
-activation is disabled, environment/private-key configuration is false, no
-human reviewer identity is pinned, cross-repository Actions credential
+activation is disabled, environment/private-key configuration is false,
+cross-repository Actions credential
 configuration is false, and the ledger URL, hostname,
 service identity, bearer credential and receipt-verification public key are all
 unset. Android's existing public release-approver key, key ID, consumer commit,
@@ -135,10 +136,11 @@ and independently review a durable external ledger that implements the checked
 contract, provision its exact HTTPS origin, allowlisted hostname, logical
 service identity, Ed25519 receipt public key and environment-only bearer
 credential, then provision the
-`android-preview12-release-approval` environment for protected branches, require
-at least one explicit human `User` reviewer, disallow Team reviewers and
-administrator bypass, prevent self-review, add the external key only there,
-pin the exact reviewer IDs/logins, retain Android's exact key ID/public-key and
+`android-preview12-release-approval` environment for protected branches with
+administrator bypass disabled and exactly its branch-policy protection rule.
+The owner's zero-manual-review policy requires no reviewer rule or identities;
+reintroduced reviewer rules fail closed. Add the external key only there and
+retain Android's exact key ID/public-key and
 consumer-contract pins, set the two
 approval `configured` flags, the ledger `configured` flag and replay authority,
 the cross-repository credential's `configured` flag,
@@ -154,17 +156,22 @@ serialized Actions-artifact ledger is only a best-effort duplicate observation
 because artifacts can expire or be deleted; it is not replay authority and
 cannot substitute for the external ledger.
 
-The separate Fleet audit JSON records that the protected environment gate
-passed and that its configured reviewer set matched the reviewed policy. Its
+The separate Fleet audit JSON records that the exact environment's automated
+branch/no-bypass checks passed. It reports zero reviewer counts, an empty
+reviewer list, no pinned human reviewer set, no self-review requirement, and
+`humanEnvironmentReviewRequired: false`. `protectedEnvironmentGatePassed`
+does not mean a human approved anything. Its
 canonical SHA-256 is signed into the Android approval as
-`provenanceReplaySha256`. It deliberately does not claim or identify the
-individual account that approved that deployment.
+`provenanceReplaySha256`. It does not claim a human approval or record an
+approval actor.
 
-Local current-consumer compatibility tests may receive
-`CHUMMER_ANDROID_CURRENT_ROOT` and `CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT`.
-They execute the full current Android release-eligibility consumer with the
-original receipt and an explicitly synthetic RFC 8032 approval key. They do not
-grant approval, establish protected custody, or reattest hosted provenance.
+Local current-consumer compatibility tests use `CHUMMER_ANDROID_CURRENT_ROOT`
+and explicitly synthetic RFC 8032 signatures. They exercise the actual Android
+signature consumer and graph normalizer, and prove that synthetic CI metadata
+does not qualify as full eligibility. Full original-receipt tests remain skipped
+until a genuine matching receipt is independently acquired and pinned; supplying
+`CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT` alone cannot qualify this PR source.
+These tests do not grant approval, establish protected custody, or reattest hosted provenance.
 
 ## Explicit non-authority
 

@@ -35,7 +35,6 @@ TEST_PRIVATE_DER = bytes.fromhex("302e020100300506032b657004220420") + TEST_SEED
 LEDGER_TEST_SEED = bytes.fromhex("4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb")
 LEDGER_TEST_PRIVATE_DER = bytes.fromhex("302e020100300506032b657004220420") + LEDGER_TEST_SEED
 NOW = datetime(2026, 9, 6, 14, 10, tzinfo=timezone.utc)
-REVIEWERS = [{"id": 17, "login": "reviewer"}]
 
 
 def write_json(path: Path, value: object) -> bytes:
@@ -74,7 +73,6 @@ def active_policy(tmp_path: Path, *, durable: bool = False) -> tuple[dict, Path,
     value = json.loads(POLICY.read_text())
     value["state"] = "ready"
     value["github_environment"]["configured"] = True
-    value["github_environment"]["expected_human_user_reviewers"] = REVIEWERS
     value["cross_repo_actions_read"]["configured"] = True
     value["external_ed25519_key"]["configured"] = True
     value["activation"]["enabled"] = True
@@ -299,6 +297,18 @@ def archive(path: Path, data: bytes) -> bytes:
     return output
 
 
+def zero_reviewer_environment() -> dict:
+    # Public shape observed by the operator; fixture data is not an API receipt.
+    return {
+        "id": 21501373212,
+        "name": approval.ENVIRONMENT_NAME,
+        "url": f"https://api.github.com/repos/{approval.FLEET_REPOSITORY}/environments/{approval.ENVIRONMENT_NAME}",
+        "can_admins_bypass": False,
+        "deployment_branch_policy": {"protected_branches": True, "custom_branch_policies": False},
+        "protection_rules": [{"id": 64964992, "type": "branch_policy"}],
+    }
+
+
 def full_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None):
     if monkeypatch is not None:
         use_test_approval_key(monkeypatch)
@@ -341,17 +351,7 @@ def full_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None):
         "created_at": "2026-09-06T14:02:35Z",
         "expires_at": "2026-10-06T14:02:35Z",
     }
-    environment_value = {
-        "name": approval.ENVIRONMENT_NAME,
-        "url": f"https://api.github.com/repos/{approval.FLEET_REPOSITORY}/environments/{approval.ENVIRONMENT_NAME}",
-        "can_admins_bypass": False,
-        "deployment_branch_policy": {"protected_branches": True, "custom_branch_policies": False},
-        "protection_rules": [{
-            "type": "required_reviewers",
-            "prevent_self_review": True,
-            "reviewers": [{"type": "User", "reviewer": REVIEWERS[0]}],
-        }],
-    }
+    environment_value = zero_reviewer_environment()
     write_json(tmp_path / "run.json", run)
     write_json(tmp_path / "artifact.json", artifact_value)
     write_json(tmp_path / "environment.json", environment_value)
@@ -411,6 +411,12 @@ def test_checked_in_policy_is_exact_dormant_and_contains_no_key_material():
     assert value["state"].startswith("dormant")
     assert value["activation"]["enabled"] is False
     assert value["github_environment"]["configured"] is False
+    assert value["github_environment"]["required_reviewers_required"] is False
+    assert type(value["github_environment"]["minimum_required_reviewers"]) is int
+    assert value["github_environment"]["minimum_required_reviewers"] == 0
+    assert value["github_environment"]["human_user_reviewer_required"] is False
+    assert value["github_environment"]["expected_human_user_reviewers"] == []
+    assert value["github_environment"]["prevent_self_review_required"] is False
     assert value["cross_repo_actions_read"]["configured"] is False
     assert value["cross_repo_actions_read"]["secret_name"] == (
         approval.CROSS_REPO_TOKEN_ENV_NAME
@@ -590,34 +596,69 @@ def test_future_ready_preflight_accepts_exact_context(
     assert approval.validate_dispatch(policy, argparse.Namespace(**values))["ok"] is True
 
 
-def test_environment_requires_human_reviewer_self_review_prevention_and_protected_main(tmp_path: Path):
-    policy, _, _ = active_policy(tmp_path)
-    base = {
+@pytest.mark.parametrize("node_id", [None, "ENPR_public_fixture"])
+def test_zero_reviewer_environment_preserves_automated_protection(tmp_path: Path, node_id):
+    policy, _, _ = active_policy(tmp_path, durable=True)
+    base = zero_reviewer_environment()
+    if node_id is not None:
+        base["protection_rules"][0]["node_id"] = node_id
+    assert approval.validate_environment_snapshot(base, policy) == {
         "name": approval.ENVIRONMENT_NAME,
-        "url": f"https://api.github.com/repos/{approval.FLEET_REPOSITORY}/environments/{approval.ENVIRONMENT_NAME}",
-        "can_admins_bypass": False,
-        "deployment_branch_policy": {"protected_branches": True, "custom_branch_policies": False},
-        "protection_rules": [{"type": "required_reviewers", "prevent_self_review": True,
-                              "reviewers": [{"type": "User", "reviewer": REVIEWERS[0]}]}],
+        "requiredReviewerCount": 0, "reviewerTypes": [], "humanUserReviewerCount": 0,
+        "reviewerIdentitySetSha256": approval.canonical_sha256([]),
+        "configuredHumanReviewerSetPinned": False, "preventSelfReview": False,
+        "administratorsCanBypass": False, "protectedBranchesOnly": True,
+        "actualApprovalActorRecorded": False,
     }
-    assert approval.validate_environment_snapshot(base, policy)["requiredReviewerCount"] == 1
-    for mutation in (
-        lambda value: value["protection_rules"].clear(),
-        lambda value: value["protection_rules"][0].update(prevent_self_review=False),
-        lambda value: value["deployment_branch_policy"].update(protected_branches=False),
-        lambda value: value.update(can_admins_bypass=True),
-        lambda value: value["protection_rules"][0].update(reviewers=[]),
-        lambda value: value["protection_rules"][0].update(reviewers=[{"type": "Team", "reviewer": {"id": 7}}]),
-        lambda value: value["protection_rules"][0].update(reviewers=[
-            {"type": "User", "reviewer": REVIEWERS[0]},
-            {"type": "Team", "reviewer": {"id": 8}},
-        ]),
-        lambda value: value["protection_rules"][0]["reviewers"][0]["reviewer"].update(id=18),
-    ):
-        changed = json.loads(json.dumps(base))
-        mutation(changed)
-        with pytest.raises(approval.ApprovalError):
-            approval.validate_environment_snapshot(changed, policy)
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda v: v.update(name="other"),
+    lambda v: v.update(url="https://api.github.com/repos/other/fleet/environments/other"),
+    lambda v: v.update(can_admins_bypass=True),
+    lambda v: v.update(can_admins_bypass=0),
+    lambda v: v["deployment_branch_policy"].update(protected_branches=False),
+    lambda v: v["deployment_branch_policy"].update(protected_branches=1),
+    lambda v: v["deployment_branch_policy"].update(custom_branch_policies=True),
+    lambda v: v["deployment_branch_policy"].update(custom_branch_policies=0),
+    lambda v: v.update(deployment_branch_policy=None),
+    lambda v: v.update(protection_rules=None),
+    lambda v: v["protection_rules"].clear(),
+    lambda v: v["protection_rules"].append(dict(v["protection_rules"][0])),
+    lambda v: v["protection_rules"].append({"type": "required_reviewers", "reviewers": []}),
+    lambda v: v["protection_rules"][0].update(type="required_reviewers", reviewers=[]),
+    lambda v: v["protection_rules"][0].update(type="wait_timer"),
+    lambda v: v["protection_rules"][0].update(id=True),
+    lambda v: v["protection_rules"][0].update(id=0),
+    lambda v: v["protection_rules"][0].update(node_id=False),
+    lambda v: v["protection_rules"][0].update(prevent_self_review=True),
+])
+def test_zero_reviewer_environment_rejects_drift(tmp_path: Path, mutate):
+    policy, _, _ = active_policy(tmp_path, durable=True)
+    value = zero_reviewer_environment()
+    mutate(value)
+    with pytest.raises(approval.ApprovalError):
+        approval.validate_environment_snapshot(value, policy)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("required_reviewers_required", True), ("required_reviewers_required", 0),
+    ("minimum_required_reviewers", False), ("minimum_required_reviewers", 0.0),
+    ("minimum_required_reviewers", 1), ("minimum_required_reviewers", "0"),
+    ("human_user_reviewer_required", True), ("human_user_reviewer_required", 0),
+    ("expected_human_user_reviewers", [{"id": 17, "login": "obsolete-reviewer"}]),
+    ("prevent_self_review_required", True), ("prevent_self_review_required", 0),
+    ("configured", 1), ("administrators_can_bypass_allowed", 0),
+    ("protected_branches_only", 1),
+])
+def test_closed_zero_reviewer_policy_rejects_reintroduced_gates_and_malformed_flags(tmp_path: Path, field, value):
+    policy, path, _ = active_policy(tmp_path, durable=True)
+    policy["github_environment"][field] = value
+    write_json(path, policy)
+    with pytest.raises(approval.ApprovalError, match="zero-reviewer"):
+        approval.load_policy(path)
+    with pytest.raises(approval.ApprovalError, match="zero-reviewer"):
+        approval._require_ready(policy)
 
 
 def test_exact_two_green_receipt_emits_only_public_non_authorizing_approval(
@@ -643,6 +684,16 @@ def test_exact_two_green_receipt_emits_only_public_non_authorizing_approval(
     assert result["role"] == "android_internal_release_approver"
     assert result["approvalScope"] == "android_internal_release_preparation"
     assert result["provenanceReplaySha256"] == approval.canonical_sha256(audit)
+    assert audit["humanEnvironmentReviewRequired"] is False
+    assert audit["configuredHumanReviewerSetPinned"] is False
+    assert audit["protectedEnvironmentGatePassed"] is True
+    assert audit["actualApprovalActorRecorded"] is False
+    assert audit["environmentAuthority"]["requiredReviewerCount"] == 0
+    assert audit["environmentAuthority"]["reviewerTypes"] == []
+    assert audit["environmentAuthority"]["humanUserReviewerCount"] == 0
+    assert audit["environmentAuthority"]["reviewerIdentitySetSha256"] == approval.canonical_sha256([])
+    assert audit["environmentAuthority"]["configuredHumanReviewerSetPinned"] is False
+    assert audit["environmentAuthority"]["preventSelfReview"] is False
     assert public_digest == approval.RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256
     assert result["signingAuthorized"] is False
     assert result["publicationAuthorized"] is False
@@ -972,6 +1023,8 @@ def test_missing_or_tampered_durable_reservation_blocks_approval(
 
 def test_workflow_is_dormant_separate_and_uploads_only_public_json():
     text = WORKFLOW.read_text()
+    assert "name: Protected-environment Ed25519 approval of Two-Green JSON only" in text
+    assert "Human-reviewed" not in text
     assert "dormant-contract" in text
     assert "environment: ${{ needs.dormant-contract.outputs.environment }}" in text
     assert "github.ref_protected" in text

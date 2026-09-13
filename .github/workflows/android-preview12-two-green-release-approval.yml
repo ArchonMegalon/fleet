@@ -92,7 +92,7 @@ jobs:
           echo 'environment=android-preview12-release-approval' >>"$GITHUB_OUTPUT"
 
   approve-public-json:
-    name: Human-reviewed Ed25519 approval of Two-Green JSON only
+    name: Protected-environment Ed25519 approval of Two-Green JSON only
     needs: dormant-contract
     runs-on: ubuntu-24.04
     timeout-minutes: 10
