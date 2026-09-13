@@ -49,8 +49,10 @@ CROSS_REPO_TOKEN_ENV_NAME = "ANDROID_PREVIEW12_CROSS_REPO_ACTIONS_READ_TOKEN"
 PACKAGE_ID = "com.myexternalbrain.chummer"
 VERSION_NAME = "0.1.0-preview.12"
 VERSION_CODE = 12
-ANDROID_CONSUMER_COMMIT = "7cef6a715867cab8000483b08db9aad2e817f63d"
-ANDROID_CONSUMER_TREE = "534f6dc0cde043fb78475c35e9116a727a9e95f5"
+# Provisional PR-source compatibility only. The dormant policy does not qualify
+# this commit as protected main or supply its missing hosted Two-Green evidence.
+ANDROID_CONSUMER_COMMIT = "411e0205378966c73e064ba34f68ca65ed426ab6"
+ANDROID_CONSUMER_TREE = "4a7cf04c2d0a1cbf04da8b889ac673153c779c7a"
 RELEASE_APPROVER_KEY_ID = "local-release-builder-2026"
 RELEASE_APPROVER_ROLE = "android_internal_release_approver"
 RELEASE_APPROVAL_SCOPE = "android_internal_release_preparation"
@@ -70,9 +72,9 @@ PROVENANCE_VALIDATOR_PATH = "scripts/materialize-api36-two-green-eligibility.py"
 PROVENANCE_VALIDATOR_SHA256 = (
     "d0e1938107a3794a44648286b8b97d1ac3db64daa30509f1e63fe78018d3f4c7"
 )
-# Public metadata of the exact qualified consumer, not locally executed Android
+# Public metadata of the exactly bound consumer, not locally executed Android
 # provenance replay. The workflow authenticates the original hosted artifact.
-QUALIFIED_DEPENDENCY_GRAPH_SHA256 = "083c8caf3ad2702fa17c3d7924a48f02987d90d2ffbd2b29f547ea615125266e"
+QUALIFIED_DEPENDENCY_GRAPH_SHA256 = "68f3df01e2cefc8071da799ed9646cdf0f36458510b76994450bf365e7e1fdcf"
 WIZARD_AUTHORITY_CLASS = "internal_phone_beta_sr5_wizard_only"
 WIZARD_PROOF_SCOPE = "sr5_wizards_only"
 WIZARD_AGGREGATE_SCHEMA = "chummer.android.api36-sr5-wizard-e2e-aggregate/v2"
@@ -82,7 +84,7 @@ WIZARD_JOURNEYS = (
 )
 QUALIFIED_WORKFLOW = {
     "path": ".github/workflows/api36-editing-e2e.yml",
-    "sha256": "a92da1991eb9892133e0de39233e4bbcf5426334890ba62da2cf4276ab311c9c", "sizeBytes": 33162,
+    "sha256": "7bcc851e57ef1dd55e5d7bd1ee12cd3f438466bafead3348fab6cef1ee9970f9", "sizeBytes": 33162,
 }
 QUALIFIED_ENVIRONMENT_POLICY = {
     "schema": "chummer.android.api36-proof-environment-authority/v2",
@@ -130,7 +132,7 @@ def canonical_bytes(value: object) -> bytes:
 
 
 def android_canonical_bytes(value: object) -> bytes:
-    """Canonical bytes consumed by qualified Android 7cef6a71 (no trailing newline)."""
+    """Canonical bytes consumed by the bound Android source (no trailing newline)."""
     return json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
@@ -594,7 +596,7 @@ def validate_inputs(args: argparse.Namespace) -> dict[str, Any]:
         values["mainCommit"] != ANDROID_CONSUMER_COMMIT
         or values["mainTree"] != ANDROID_CONSUMER_TREE
     ):
-        raise ApprovalError("Android source is not the qualified 7cef6a71 consumer")
+        raise ApprovalError("Android source is not the exactly bound consumer")
     if values["reviewRunId"] == values["mainRunId"]:
         raise ApprovalError("review and main run IDs must be distinct")
     return values
@@ -1339,7 +1341,7 @@ def release_approval_unsigned(
     expires_at_utc: str,
     challenge_nonce: str,
 ) -> dict[str, Any]:
-    """Project the hosted-artifact audit into Android 7cef6a71's exact signed fields."""
+    """Project the hosted-artifact audit into Android's exact signed fields."""
     source = audit_receipt.get("androidSource")
     release = audit_receipt.get("release")
     two_green = audit_receipt.get("twoGreen")
@@ -1426,7 +1428,7 @@ def validate_approval(
     expected_challenge_nonce: str | None = None,
     now: datetime | None = None,
 ) -> None:
-    """Validate exactly the approval accepted by Android at 7cef6a71."""
+    """Validate the approval against the exactly bound Android consumer."""
     fields = {
         "contractName", "algorithm", "keyId", "role", "approvalScope",
         "generatedAtUtc", "expiresAtUtc", "challengeNonce",

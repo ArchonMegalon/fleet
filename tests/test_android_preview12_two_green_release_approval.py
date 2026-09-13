@@ -213,13 +213,13 @@ def execution(**changes) -> dict[str, object]:
 
 
 def qualified_dependency_graph() -> dict:
-    # Public source identities of the qualified graph, not a fabricated hash-only graph.
+    # Exact provisional source metadata, not hosted eligibility or a hash-only graph.
     identities = {
         "core-content": ("core", "1d8cf694d0412b3bd9f4a241fb95244fad341160", "3f39863d2ae5db4d6d7b3d07185e33bf240db330"),
-        "core-runtime": ("core", "f7500ef8c2f597bac67bc3f53620d50b7a17d00a", "ee0ba10b3156c5879d1b7e59d86b1619a0f26a9b"),
-        "hub": ("hub", "894cb12281eb1315a202c7f1ac5d7de9f70e5fd6", "2d0b95446db74ee0acf46b930e8013d987122bd6"),
+        "core-runtime": ("core", "3bc5fe725fd2bbbad0333c5c7a3f849e53808c4f", "a39d4ccd8e1ba08c22c57339fe13bfc72aa191c7"),
+        "hub": ("hub", "e35db6feca8f194161302064a9f77d4f8e60fe14", "58a03c18139ed860c442fad05ba4af8f33d6bd5b"),
         "media": ("media-factory", "415c8163d3d90b1211e4014fef332bdec6d75f73", "841a2b8bf3180fada9c3978a6478e3826d75ee2b"),
-        "presentation": ("ui", "f7d671e8e1fd9ba630b74564c203077e6f162fa7", "62a8711e128b920dacd541ad18f9fd5d6d9194b0"),
+        "presentation": ("ui", "56b5e2178d87a81cbe0a7e126eda756ac2e9cfa1", "7eea8d4aa307012c854838a369911ba6cc8d5eac"),
         "registry": ("hub-registry", "af9a7e19c3bf331e96411dfb8f9e7820a98cab29", "ada0ad6341d34eea0f407ef2b109f6368b6752e2"),
         "ui-kit": ("ui-kit", "d51ecd99cf72098d4adc8db0192bff7bf9fd8e61", "1c9837c579a52c40fe49c70db9e4f7aff2af0143"),
     }
@@ -757,7 +757,7 @@ def test_current_adapter_rejects_replayed_challenge(
 
 @pytest.mark.skipif(
     not os.environ.get("CHUMMER_ANDROID_CURRENT_ROOT"),
-    reason="exact current qualified Android checkout not supplied",
+    reason="exact bound Android checkout not supplied for signature compatibility",
 )
 def test_exact_current_android_signature_verifier_accepts_fleet_bytes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
