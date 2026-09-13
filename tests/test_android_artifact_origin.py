@@ -26,6 +26,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from scripts import android_artifact_origin as origin
 from scripts import android_preview12_external_rebuilder as fleet
+from test_android_preview12_preserved_handoff import handoff_inputs
+from test_android_preview12_preserved_validation import mount_model, protected
 
 NOW = datetime(2026, 9, 13, 10, 0, tzinfo=UTC)
 SUBJECT = b"stand-in unit fixture only, not a real signed artifact\n"
@@ -315,6 +317,198 @@ def test_bundle_parser_and_execution_budget_admission(tmp_path):
     assert not fixture.marker.exists()
     for kwargs in ({"timeout_seconds": float("nan")}, {"timeout_seconds": True}, {"stdout_limit": 0}, {"stderr_limit": 65537}):
         with pytest.raises(origin.OriginError, match="bounds"): fixture.verify(**kwargs)
+
+
+def retained_origin_fixture(tmp_path, *, mode="success", mutation="", output_change=None):
+    # Real seven-file bytes and validation, modeled custody metadata supplied by
+    # the caller's mount_model fixture, NON-CRYPTOGRAPHIC subprocess stand-in.
+    # Expected policy is a test admission, not a production policy selector.
+    inputs = tmp_path / "retained"
+    inputs.mkdir(mode=0o700)
+    lock, directory, paths, manifest = handoff_inputs(fleet, inputs)
+    expected_raw = manifest.read_bytes()
+    admitted = replace(policy(), subject_name=manifest.name, subject_sha256=sha(expected_raw))
+    retained = fleet.PreservedRebuildHandoff(lock, directory)
+    value = response()
+    value[0]["verificationResult"]["statement"]["subject"] = [
+        {"name": manifest.name, "digest": {"sha256": sha(expected_raw)}}]
+    if output_change is not None:
+        output_change(value)
+    tools = tmp_path / "stand-in"
+    tools.mkdir(mode=0o700)
+    fixture = standin(tools, value=value, mode=mode,
+        mutation=f"assert Path(args[2]).read_bytes()=={expected_raw!r}\n{mutation}")
+    def verify(**kwargs):
+        return origin.verify_rebuild_handoff_origin(
+            retained, admitted, *fixture.pins[1:], now=NOW, **kwargs)
+    return SimpleNamespace(retained=retained, policy=admitted, manifest=manifest,
+        files={"lock": lock, "manifest": manifest, **paths}, fixture=fixture, verify=verify)
+
+
+def test_retained_handoff_composition_uses_real_byte_checks_and_subprocess_not_release_authority(
+    tmp_path, mount_model, monkeypatch,
+):
+    fixture = retained_origin_fixture(tmp_path)
+    before = {name: path.read_bytes() for name, path in fixture.files.items()}
+    def forbidden(*args, **kwargs):
+        pytest.fail("origin-only composition reached consumer, capability, ledger or signing")
+    for name in ("AuthenticatedRebuildHandoff", "PreservedProtectedValidation", "load_reviewed_ledger",
+                 "reserve_signing_attempt", "sign_aab", "execute_protected_signer_transaction"):
+        monkeypatch.setattr(fleet, name, forbidden)
+    facts = fixture.verify()
+    assert type(facts) is origin.OriginFacts
+    assert facts.policy is fixture.policy
+    assert facts.policy.subject_name == "FLEET_ANDROID_PREVIEW12_REBUILD_HANDOFF.generated.json"
+    assert facts.policy.subject_sha256 == sha(before["manifest"])
+    assert facts.bundle_sha256 == fixture.fixture.pins[1].sha256
+    assert facts.verifier_sha256 == fixture.fixture.pins[2].sha256
+    assert facts.trusted_root_sha256 == fixture.fixture.pins[3].sha256
+    assert facts.verified_timestamps == (("TimestampAuthority", "2026-09-13T09:59:00Z"),)
+    assert facts.checked_at == NOW and fixture.fixture.marker.is_file()
+    assert before == {name: path.read_bytes() for name, path in fixture.files.items()}
+    assert fixture.retained.handoff["eligibleForProtectedSigner"] is False
+    assert not hasattr(facts, "provenance") and not hasattr(facts, "job_id")
+    with pytest.raises(FrozenInstanceError):
+        facts.policy = policy()
+    fixture.retained.assert_exact()
+
+
+@pytest.mark.parametrize("change", ["name", "path-name", "wrong-digest", "other-subject-digest"])
+def test_handoff_origin_requires_independently_expected_exact_subject_before_execution(tmp_path, mount_model, change):
+    fixture = retained_origin_fixture(tmp_path)
+    values = {"name": {"subject_name": "fixture.bin"},
+        "path-name": {"subject_name": "handoff/" + fixture.manifest.name},
+        "wrong-digest": {"subject_sha256": "0" * 64},
+        "other-subject-digest": {"subject_sha256": sha(fixture.files["unsignedAab"].read_bytes())}}
+    with pytest.raises(origin.OriginError, match="policy differs from the retained handoff subject"):
+        origin.verify_rebuild_handoff_origin(fixture.retained, replace(fixture.policy, **values[change]),
+            *fixture.fixture.pins[1:], now=NOW)
+    assert not fixture.fixture.marker.exists()
+
+
+@pytest.mark.parametrize("kind", ["none", "metadata", "duck", "subclass"])
+def test_handoff_origin_rejects_non_preserved_objects_before_callbacks_or_execution(tmp_path, kind):
+    def forbidden(*args, **kwargs):
+        pytest.fail("unadmitted handoff object was called")
+    class Impostor(fleet.PreservedRebuildHandoff):
+        def assert_exact(self):
+            forbidden()
+    retained = {"none": None, "metadata": {},
+        "duck": SimpleNamespace(assert_exact=forbidden),
+        "subclass": object.__new__(Impostor)}[kind]
+    with pytest.raises(origin.OriginError, match="handoff and origin policy admission are required"):
+        origin.verify_rebuild_handoff_origin(retained, policy(), None, None, None, now=NOW)
+
+
+@pytest.mark.parametrize("bad_policy", [None, {}, SimpleNamespace(subject_sha256="0" * 64)])
+def test_handoff_origin_does_not_construct_missing_policy_from_retained_inputs(tmp_path, mount_model, bad_policy):
+    fixture = retained_origin_fixture(tmp_path)
+    with pytest.raises(origin.OriginError, match="handoff and origin policy admission are required"):
+        origin.verify_rebuild_handoff_origin(fixture.retained, bad_policy, *fixture.fixture.pins[1:], now=NOW)
+    assert not fixture.fixture.marker.exists()
+
+
+@pytest.mark.parametrize("name", ["lock", "manifest", "unsignedAab", "sourceGraph", "buildSidecar",
+                                 "twoGreenReceipt", "twoGreenApproval", "externalSignerRequest"])
+def test_handoff_origin_rejects_each_changed_retained_input_before_execution(tmp_path, mount_model, name):
+    fixture = retained_origin_fixture(tmp_path)
+    path = fixture.files[name]
+    protected(path, path.read_bytes() + b"\n")
+    with pytest.raises(origin.OriginError, match="handoff no longer matches"):
+        fixture.verify()
+    assert not fixture.fixture.marker.exists()
+
+
+@pytest.mark.parametrize("name", ["lock", "manifest", "unsignedAab", "sourceGraph", "buildSidecar",
+                                 "twoGreenReceipt", "twoGreenApproval", "externalSignerRequest"])
+@pytest.mark.parametrize("mode", ["success", "signature-failure"])
+def test_handoff_origin_full_final_fence_even_when_real_subprocess_fails(tmp_path, mount_model, name, mode):
+    # The stand-in itself changes a retained file after reading the private
+    # subject copy; no verifier/custody callback bypasses the production chain.
+    names = {"lock": "../lock.json", "manifest": "FLEET_ANDROID_PREVIEW12_REBUILD_HANDOFF.generated.json",
+        "unsignedAab": f"chummer-android-{fleet.VERSION_NAME}-unsigned.aab",
+        "sourceGraph": f"chummer-android-{fleet.VERSION_NAME}-source-graph.json",
+        "buildSidecar": f"chummer-android-{fleet.VERSION_NAME}-unsigned.aab.sha256",
+        "twoGreenReceipt": "ANDROID_API36_TWO_GREEN_ELIGIBILITY.generated.json",
+        "twoGreenApproval": "ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json",
+        "externalSignerRequest": "ANDROID_EXTERNAL_SIGNER_REQUEST.generated.json"}
+    path = tmp_path / "retained" / "handoff" / names[name]
+    fixture = retained_origin_fixture(tmp_path, mode=mode,
+        mutation=f"p=Path({str(path)!r});p.write_bytes(p.read_bytes()+b'\\n')")
+    with pytest.raises(origin.OriginError, match="handoff no longer matches") as caught:
+        fixture.verify()
+    assert fixture.fixture.marker.is_file()
+    assert "PRIVATE" not in str(caught.value)
+
+
+@pytest.mark.parametrize("name", ["manifest", "unsignedAab"])
+def test_handoff_origin_rejects_same_byte_inode_replacement_during_verification(tmp_path, mount_model, name):
+    filename = "FLEET_ANDROID_PREVIEW12_REBUILD_HANDOFF.generated.json" if name == "manifest" \
+        else f"chummer-android-{fleet.VERSION_NAME}-unsigned.aab"
+    path = tmp_path / "retained" / "handoff" / filename
+    replacement = tmp_path / "new-inode"
+    fixture = retained_origin_fixture(tmp_path, mutation=
+        f"p=Path({str(path)!r});q=Path({str(replacement)!r});q.write_bytes(p.read_bytes());q.chmod(0o600);q.replace(p)")
+    raw, inode = path.read_bytes(), path.stat().st_ino
+    with pytest.raises(origin.OriginError, match="handoff no longer matches"):
+        fixture.verify()
+    assert fixture.fixture.marker.is_file()
+    assert path.read_bytes() == raw and path.stat().st_ino != inode
+
+
+@pytest.mark.parametrize("fault", ["extra", "missing", "symlink", "writable"])
+def test_handoff_origin_does_not_reduce_full_preservation_to_manifest_hash(tmp_path, mount_model, fault):
+    fixture = retained_origin_fixture(tmp_path)
+    path = fixture.files["unsignedAab"]
+    if fault == "extra":
+        protected(path.parent / "extra", b"not admitted")
+    elif fault == "missing":
+        path.unlink()
+    elif fault == "symlink":
+        outside = protected(tmp_path / "outside", path.read_bytes())
+        path.unlink()
+        path.symlink_to(outside)
+    else:
+        mount_model[0].add(path)
+    assert sha(fixture.manifest.read_bytes()) == fixture.policy.subject_sha256
+    with pytest.raises(origin.OriginError, match="handoff no longer matches"):
+        fixture.verify()
+    assert not fixture.fixture.marker.exists()
+
+
+def test_handoff_origin_does_not_repin_semantically_equal_changed_manifest(tmp_path, mount_model):
+    fixture = retained_origin_fixture(tmp_path)
+    raw = fixture.manifest.read_bytes()
+    protected(fixture.manifest, raw + b"\n")
+    assert json.loads(raw) == json.loads(fixture.manifest.read_bytes())
+    changed_policy = replace(fixture.policy, subject_sha256=sha(fixture.manifest.read_bytes()))
+    with pytest.raises(origin.OriginError, match="handoff no longer matches"):
+        origin.verify_rebuild_handoff_origin(fixture.retained, changed_policy, *fixture.fixture.pins[1:], now=NOW)
+    assert fixture.retained.artifact_closure_sha256 == sha(raw)
+    assert not fixture.fixture.marker.exists()
+
+
+def test_handoff_origin_retains_signature_failure_when_preservation_stays_exact(tmp_path, mount_model):
+    fixture = retained_origin_fixture(tmp_path, mode="signature-failure")
+    with pytest.raises(origin.OriginError, match="cryptographic verification failed") as caught:
+        fixture.verify()
+    assert fixture.fixture.marker.is_file() and "PRIVATE" not in str(caught.value)
+    fixture.retained.assert_exact()
+
+
+@pytest.mark.parametrize("field", ["name", "digest"])
+def test_handoff_origin_rejects_wrong_authenticated_subject_despite_correct_input_policy(tmp_path, mount_model, field):
+    def change(value):
+        subject = value[0]["verificationResult"]["statement"]["subject"][0]
+        if field == "name":
+            subject["name"] = "other-manifest.json"
+        else:
+            subject["digest"]["sha256"] = "0" * 64
+    fixture = retained_origin_fixture(tmp_path, output_change=change)
+    with pytest.raises(origin.OriginError, match="subject"):
+        fixture.verify()
+    assert fixture.fixture.marker.is_file()
+    fixture.retained.assert_exact()
 
 
 # Real fixtures from the cli/cli v2.97.0 tracked test corpus. These public

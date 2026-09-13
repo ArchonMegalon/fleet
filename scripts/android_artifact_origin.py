@@ -2,9 +2,11 @@
 
 The caller must independently admit this module, its imported Fleet helper,
 policy, verifier, trust root and stable input custody. Nothing here selects a
-workflow, installs tools, authenticates a protected runtime, defines an artifact
-closure, or constructs AuthenticatedRebuildHandoff. gh implements Sigstore; this
-module checks its verified output, not an unverified bundle's asserted claims.
+workflow, installs tools, authenticates a protected runtime, or constructs
+AuthenticatedRebuildHandoff. The handoff composition uses only the existing
+preserved root-manifest closure, never an inferred transport archive. gh
+implements Sigstore; this module checks its verified output, not an unverified
+bundle's asserted claims.
 POSIX process groups bound ordinary child execution, not hostile-code escape.
 """
 from __future__ import annotations
@@ -353,3 +355,37 @@ def verify_origin(
         return OriginFacts(policy, bundle.sha256, verifier.sha256, trusted_root.sha256, timestamps, now)
     except OSError:
         raise OriginError("origin verification files are unavailable") from None
+
+
+def verify_rebuild_handoff_origin(
+    retained: _fleet.PreservedRebuildHandoff, policy: OriginPolicy,
+    bundle: PinnedFile, verifier: PinnedFile, trusted_root: PinnedFile, *, now: datetime,
+    timeout_seconds: float = 30, stdout_limit: int = 1024 * 1024, stderr_limit: int = 65536,
+) -> OriginFacts:
+    """Verify origin of the exact retained manifest and its existing byte closure.
+
+    Policy (including expected subject SHA) is independently admitted, never
+    derived from the candidate. Full handoff checks bracket the real verifier,
+    including its failure path. The execution timeout bounds the verifier, not
+    these byte-bounded filesystem checks. Custody must remain independently
+    admitted and quiescent; the returned facts are not producer-job attribution,
+    runtime authentication, credential isolation or signing permission.
+    """
+    if type(retained) is not _fleet.PreservedRebuildHandoff or type(policy) is not OriginPolicy:
+        raise OriginError("preserved handoff and origin policy admission are required")
+    policy.__post_init__()
+    try:
+        retained.assert_exact()
+        if policy.subject_name != "FLEET_ANDROID_PREVIEW12_REBUILD_HANDOFF.generated.json" \
+                or policy.subject_sha256 != retained.artifact_closure_sha256:
+            raise OriginError("origin policy differs from the retained handoff subject")
+        subject = PinnedFile(retained.artifact_subject_path, retained.artifact_closure_sha256)
+        try:
+            return verify_origin(
+                policy, subject, bundle, verifier, trusted_root, now=now,
+                timeout_seconds=timeout_seconds, stdout_limit=stdout_limit, stderr_limit=stderr_limit,
+            )
+        finally:
+            retained.assert_exact()
+    except _fleet.RebuilderError:
+        raise OriginError("preserved rebuild handoff no longer matches its admission") from None

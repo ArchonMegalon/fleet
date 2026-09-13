@@ -41,7 +41,10 @@ Before a Fleet verifier is implemented, the reviewed non-secret admission must f
 Reject ambiguous/multiple subjects or statements, unsupported predicates, malformed evidence, untrusted chains, stale evidence, and any mismatch under the reviewed freshness policy.
 Compare authenticated statement contents with independently acquired transport metadata and exact local bytes; transport metadata alone cannot authenticate the statement.
 Reuse existing bounded download/extraction and canonical validation mechanisms; do not introduce a second digest or serialization dialect.
-The existing `artifactClosureSha256` field needs an explicitly reviewed subject/closure derivation before implementation: its current shape check does not define authenticated closure semantics.
+The `artifactClosureSha256` subject/closure derivation is defined below and composed
+with the existing origin verifier. This does not select a trusted producer,
+workflow, current subject digest or runtime authority; those admissions remain
+independent and unresolved. The transaction's shape check alone is insufficient.
 If available evidence cannot bind a required job/subject fact, stop; do not infer it from environment variables or invent a certificate claim.
 
 ## Closed transported inventory
@@ -62,6 +65,30 @@ ANDROID_EXTERNAL_SIGNER_REQUEST.generated.json
 Bind exact source commit/tree, source graph, request, unsigned AAB bytes/size and sidecar, two-green receipt/approval and their artifact identity, lock bytes, and measured toolchain closure through existing validators.
 Recheck canonical roots, closed inventory, stable file identity and bytes through `PreservedRebuildHandoff.assert_exact`; detached mappings do not exempt later rechecks.
 Two-green eligibility/approval still requires the actual pinned Android consumer and its existing trust policy; a GitHub-success flag is not release approval.
+
+### Exact attested closure subject
+
+Use the existing `FLEET_ANDROID_PREVIEW12_REBUILD_HANDOFF.generated.json` as the
+attested subject. `artifactClosureSha256` means SHA-256 of its exact preserved raw
+bytes, not a reserialized mapping, a new envelope or an arbitrary archive digest.
+The full existing seven-file inventory must validate before using this root:
+the descriptor binds the AAB, source graph, external request, two-green receipt
+and approval directly; the validated request binds the sidecar transitively.
+The separate lock is bound by the descriptor and independently pinned as before.
+Changing JSON whitespace changes the subject even if its parsed meaning matches.
+
+`verify_rebuild_handoff_origin` composes the preserved subject with the existing
+`verify_origin` cryptographic path. The caller independently supplies exact
+`OriginPolicy`, verifier and trust-root pins, bundle pin and clock. Subject name
+and expected digest must match that admission; they are not silently selected
+from the candidate. Full retained input checks run before and after verification,
+including verification failure. Success returns existing origin-only facts.
+
+This authenticates who attested the validated byte closure, not which job emitted
+it, protected runtime custody, release eligibility or permission to sign. An OIDC
+job acknowledgment from the same workflow still does not prove artifact production.
+The trusted controller must bind actual capture/emission and authenticated job
+identity before constructing `AuthenticatedRebuildHandoff`; that join is unfinished.
 
 ## B. Protected runtime and custody, independently established
 
@@ -112,7 +139,7 @@ Retain qualified-current-Android integration requirements; optional historical-c
 
 ## Ordered implementation and activation prerequisites
 
-1. Security/owner review selects the missing Fleet origin policy, subject/closure meaning, job-evidence composition and independent runtime authority. Record exact non-secret admissions; unresolved/null inputs fail closed.
+1. Security/owner review selects the missing Fleet origin policy, exact subject admission, job-evidence composition and independent runtime authority. Use the closure derivation above, but do not infer the expected subject digest or producer identity from untrusted bytes. Record exact non-secret admissions; unresolved/null inputs fail closed.
 2. Implement and test the real provenance verifier and its caller of the existing transaction using those reviewed inputs. Offline source/tests need no credentials; this proposal alone is insufficient authority to mint capabilities.
 3. Obtain non-writer review, merge through normal checks, then qualify immutable builder/signer images and installed closures against the exact admitted source/tools. A source-only pass is not runtime qualification.
 4. Separately authorize and provision protected jobs, reviewer controls, runtime evidence, ledger services, JIT identity exchange, credential custody and durable recovery. No provider activation or approval is implied here.

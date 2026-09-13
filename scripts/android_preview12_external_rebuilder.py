@@ -2117,6 +2117,22 @@ class PreservedRebuildHandoff:
     def paths(self) -> Mapping[str, Path]:
         return self._paths
 
+    @property
+    def artifact_subject_path(self) -> Path:
+        """Exact retained root manifest; reading this property does not re-admit it."""
+        return self._directory / "FLEET_ANDROID_PREVIEW12_REBUILD_HANDOFF.generated.json"
+
+    @property
+    def artifact_closure_sha256(self) -> str:
+        """Original raw root-manifest SHA256, NOT a transport archive digest.
+
+        The admitted closed seven-file handoff binds five payloads directly and
+        the sidecar through its request. Its root's exact bytes therefore bind
+        that closure, but do not authenticate a producer or grant authority.
+        Callers must assert_exact around use; this value never refreshes itself.
+        """
+        return self._snapshot[self.artifact_subject_path.name][1]
+
     def assert_exact(self) -> None:
         """Reject changed custody, inventory, bytes or identity; never recapture."""
         if self._capture() != self._snapshot:

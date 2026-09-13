@@ -126,12 +126,60 @@ def test_modeled_custody_retains_local_bytes_without_promoting_authority(fleet, 
     assert json.loads(paths["twoGreenReceipt"].read_bytes())["eligible"] is False
 
 
+def test_subject_properties_expose_exact_retained_raw_manifest_without_authority(fleet, tmp_path, mount_model):
+    lock, directory, _, manifest = handoff_inputs(fleet, tmp_path)
+    raw = manifest.read_bytes()
+    retained = fleet.PreservedRebuildHandoff(lock, directory)
+    assert retained.artifact_subject_path == manifest
+    assert retained.artifact_closure_sha256 == hashlib.sha256(raw).hexdigest()
+    assert retained.artifact_closure_sha256 != hashlib.sha256(
+        json.dumps(json.loads(raw), separators=(",", ":"), sort_keys=True).encode()).hexdigest()
+    assert retained.artifact_subject_path not in retained.paths.values()
+    with pytest.raises(AttributeError):
+        retained.artifact_subject_path = tmp_path / "different"
+    with pytest.raises(AttributeError):
+        retained.artifact_closure_sha256 = "0" * 64
+    # Semantically identical JSON is different attestation subject bytes. The
+    # getter is the original admission, not a fresh digest of changed input.
+    protected(manifest, raw + b"\n")
+    assert json.loads(manifest.read_bytes()) == json.loads(raw)
+    assert retained.artifact_closure_sha256 == hashlib.sha256(raw).hexdigest()
+    with pytest.raises(fleet.RebuilderError):
+        retained.assert_exact()
+
+
 def test_real_writable_environment_cannot_admit_handoff(fleet, tmp_path):
     # No stat or mount model here: real writable custody must fail closed.
     lock, directory, _, _ = handoff_inputs(fleet, tmp_path)
     assert not os.statvfs(directory).f_flag & os.ST_RDONLY
     with pytest.raises(fleet.RebuilderError):
         fleet.PreservedRebuildHandoff(lock, directory)
+
+
+def test_manifest_closure_binds_sidecar_transitively_through_exact_request(fleet, tmp_path, mount_model):
+    lock, directory, paths, manifest = handoff_inputs(fleet, tmp_path)
+    original = fleet.PreservedRebuildHandoff(lock, directory)
+    original_sha = original.artifact_closure_sha256
+    assert "buildSidecarSha256" not in original.handoff["bindings"]
+    sidecar = paths["buildSidecar"]
+    protected(sidecar, sidecar.read_bytes() + b"\n")
+    with pytest.raises(fleet.RebuilderError):
+        fleet.PreservedRebuildHandoff(lock, directory)
+    rewrite(paths["externalSignerRequest"], lambda value: value["buildSidecar"].update(
+        sha256=hashlib.sha256(sidecar.read_bytes()).hexdigest()))
+    with pytest.raises(fleet.RebuilderError):
+        fleet.PreservedRebuildHandoff(lock, directory)
+    rewrite(manifest, lambda value: value["bindings"].update(
+        requestSha256=hashlib.sha256(paths["externalSignerRequest"].read_bytes()).hexdigest()))
+    # Only a complete newly admitted byte closure has a new root subject. This
+    # is still local byte retention, not eligibility or authenticated origin.
+    fresh = fleet.PreservedRebuildHandoff(lock, directory)
+    fresh.assert_exact()
+    assert fresh.artifact_closure_sha256 != original_sha
+    assert fresh.artifact_closure_sha256 == hashlib.sha256(manifest.read_bytes()).hexdigest()
+    assert original.artifact_closure_sha256 == original_sha
+    with pytest.raises(fleet.RebuilderError):
+        original.assert_exact()
 
 
 @pytest.mark.parametrize("returned_kind", ["preserved", "metadata", "none"])
