@@ -11,7 +11,7 @@ authentication, an artifact closure, or AuthenticatedRebuildHandoff. These froze
 observations are ordinary forgeable data, not authorization capabilities. Mount
 source inode checks do not inspect or authenticate their contents/descendants.
 The configuration digest is a validated semantic projection, not raw inspect
-byte identity: unordered Mounts are sorted and OomKillDisable false/null means
+byte identity: unordered Mounts/Binds are sorted and OomKillDisable false/null means
 the unset/default (OOM killing not disabled); all other recipe fields stay exact.
 """
 from __future__ import annotations
@@ -441,7 +441,15 @@ def _configuration(value, container_id, policy):
     _same(host.get("Tmpfs") or {}, {row.target: row.options for row in policy.tmpfs}, "host-tmpfs")
     expected_binds = [f"{row.source}:{row.target}:{'ro' if row.read_only else 'rw'},rprivate" for row in policy.binds]
     _require(host.get("Binds") is None or type(host["Binds"]) is list, "host-binds")
-    _same(host.get("Binds") or [], expected_binds, "host-binds")
+    binds = host.get("Binds") or []
+    _require(len(binds) == len(expected_binds) and all(type(row) is str for row in binds), "host-binds")
+    # Policy targets are unique and nonoverlapping. Docker may reorder these
+    # declarations; compare exact strings with multiplicity, never a set or
+    # parsed/repaired paths and modes. Preserve the daemon's detached input.
+    canonical_binds = sorted(binds)
+    _same(canonical_binds, sorted(expected_binds), "host-binds")
+    if host.get("Binds") is not None:
+        normalized_host["Binds"] = canonical_binds
     _require(host.get("Mounts") is None or type(host["Mounts"]) is list and not host["Mounts"], "host-mount-api")
     # Legacy --tmpfs declarations are absent from top-level Mounts even at
     # CREATED. They are bound above, never invented from a nonexistent row.

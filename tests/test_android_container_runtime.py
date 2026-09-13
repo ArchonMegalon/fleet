@@ -526,3 +526,100 @@ def test_oom_default_field_must_still_be_present(policy, phase):
     del row["HostConfig"]["OomKillDisable"]
     with pytest.raises(runtime.RuntimeObservationError, match="^host-config-fields$"):
         runtime._validate(row, CID, policy, phase, NOW + 4*10**9)
+
+
+@pytest.fixture
+def multiple_binds(policy, tmp_path):
+    second, third = tmp_path / "second", tmp_path / "third"
+    second.mkdir()
+    third.mkdir()
+    combined = replace(policy, binds=policy.binds + (
+        runtime.BindMount(str(second), "/second", True),
+        runtime.BindMount(str(third), "/third", False),))
+    row = inspection(policy)
+    row["HostConfig"]["Binds"].extend([
+        str(second) + ":/second:ro,rprivate", str(third) + ":/third:rw,rprivate"])
+    row["Mounts"].extend([
+        {"Type": "bind", "Source": str(second), "Destination": "/second",
+         "Mode": "ro,rprivate", "RW": False, "Propagation": "rprivate"},
+        {"Type": "bind", "Source": str(third), "Destination": "/third",
+         "Mode": "rw,rprivate", "RW": True, "Propagation": "rprivate"},])
+    return combined, row
+
+
+@pytest.mark.parametrize("phase", ["created", "exited"])
+def test_host_bind_reversal_preserves_exact_digest_and_raw_input(multiple_binds, phase):
+    policy, row = multiple_binds
+    if phase == "exited":
+        row["State"].update(Status=phase, StartedAt=STARTED, FinishedAt=FINISHED)
+    original = deepcopy(row)
+    reversed_row = deepcopy(row)
+    reversed_row["HostConfig"]["Binds"].reverse()
+    reversed_input = deepcopy(reversed_row)
+    assert runtime._validate(row, CID, policy, phase, NOW + 4*10**9) == \
+        runtime._validate(reversed_row, CID, policy, phase, NOW + 4*10**9)
+    assert row == original and reversed_row == reversed_input
+
+
+@pytest.mark.parametrize("initial_order,terminal_order", [
+    ((0, 1, 2), (2, 1, 0)), ((2, 1, 0), (0, 1, 2)), ((1, 2, 0), (2, 0, 1)),
+])
+def test_host_bind_orders_across_samples_and_completion_are_semantically_equal(
+        multiple_binds, monkeypatch, initial_order, terminal_order):
+    policy, row = multiple_binds
+    initial, terminal = deepcopy(row), deepcopy(row)
+    initial["HostConfig"]["Binds"] = [row["HostConfig"]["Binds"][i] for i in initial_order]
+    terminal["HostConfig"]["Binds"] = [row["HostConfig"]["Binds"][i] for i in terminal_order]
+    terminal["State"].update(Status="exited", StartedAt=STARTED, FinishedAt=FINISHED)
+    second_initial, second_terminal = deepcopy(initial), deepcopy(terminal)
+    second_initial["HostConfig"]["Binds"].reverse()
+    second_terminal["HostConfig"]["Binds"].reverse()
+    second_terminal["Mounts"].reverse()
+    snapshots = [deepcopy(value) for value in (initial, second_initial, terminal, second_terminal)]
+    calls = samples(monkeypatch, [initial, second_initial, terminal, second_terminal],
+                    [NOW, NOW, NOW + 4*10**9, NOW + 4*10**9])
+    before = runtime.observe_created(CID, policy)
+    after = runtime.observe_exited(CID, policy, before)
+    assert calls == [CID] * 4 and before.configuration_sha256 == after.configuration_sha256
+    assert [initial, second_initial, terminal, second_terminal] == snapshots
+
+
+@pytest.mark.parametrize("phase", ["created", "exited"])
+@pytest.mark.parametrize("change", [
+    "absent", "null", "empty", "missing", "extra", "duplicate-extra", "duplicate-replacement",
+    "tuple", "string", "null-row", "number-row", "bool-row", "dict-row", "list-row",
+    "empty-row", "wrong-source", "wrong-target", "wrong-mode", "missing-mode",
+    "reordered-mode", "wrong-propagation", "dot-segment", "trailing-space", "control",
+])
+def test_host_bind_multiset_rejects_missing_extra_duplicate_or_changed_strings(multiple_binds, phase, change):
+    policy, row = multiple_binds
+    if phase == "exited":
+        row["State"].update(Status=phase, StartedAt=STARTED, FinishedAt=FINISHED)
+    host, binds = row["HostConfig"], row["HostConfig"]["Binds"]
+    if change == "absent": del host["Binds"]
+    elif change == "null": host["Binds"] = None
+    elif change == "empty": host["Binds"] = []
+    elif change == "missing": binds.pop()
+    elif change == "extra": binds.append("/extra:/extra:ro,rprivate")
+    elif change == "duplicate-extra": binds.append(binds[0])
+    elif change == "duplicate-replacement": binds[-1] = binds[0]
+    elif change == "tuple": host["Binds"] = tuple(binds)
+    elif change == "string": host["Binds"] = binds[0]
+    elif change == "null-row": binds[0] = None
+    elif change == "number-row": binds[0] = 0
+    elif change == "bool-row": binds[0] = False
+    elif change == "dict-row": binds[0] = {"source": "not-a-bind"}
+    elif change == "list-row": binds[0] = [binds[0]]
+    elif change == "empty-row": binds[0] = ""
+    elif change == "wrong-source": binds[0] = "/other:/chummer-input:ro,rprivate"
+    elif change == "wrong-target": binds[0] = binds[0].replace(":/chummer-input:", ":/other:")
+    elif change == "wrong-mode": binds[0] = binds[0].replace(":ro,", ":rw,")
+    elif change == "missing-mode": binds[0] = binds[0].removesuffix(":ro,rprivate")
+    elif change == "reordered-mode": binds[0] = binds[0].replace(":ro,rprivate", ":rprivate,ro")
+    elif change == "wrong-propagation": binds[0] = binds[0].replace("rprivate", "rshared")
+    elif change == "dot-segment": binds[0] = binds[0].replace(":/chummer-input:", ":/./chummer-input:")
+    elif change == "trailing-space": binds[0] += " "
+    elif change == "control": binds[0] += "\n"
+    else: pytest.fail("unknown test mutation")
+    with pytest.raises(runtime.RuntimeObservationError, match="^host-binds$"):
+        runtime._validate(row, CID, policy, phase, NOW + 4*10**9)
