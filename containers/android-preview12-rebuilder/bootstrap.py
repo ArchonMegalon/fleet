@@ -20,7 +20,8 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 
-SDK_VERSION = "10.0.110"
+SDK_VERSION = "10.0.111"
+BUNDLED_RUNTIME_VERSION = "10.0.11"
 WORKLOAD_VERSION = "10.0.112"
 NUGET_SOURCE = "https://api.nuget.org/v3/index.json"
 MANIFESTS = {"microsoft.net.sdk.android": "36.1.69", "microsoft.net.sdk.maui": "10.0.20",
@@ -44,6 +45,68 @@ PLATFORM_TOOLS_VERSION = "37.0.1"
 def require_directory(path: Path) -> None:
     if path.is_symlink() or not path.is_dir() or path.resolve(strict=True) != path:
         raise RuntimeError(f"missing or noncanonical toolchain directory: {path}")
+
+
+def verify_sdk_bundled_metadata(dotnet_root: Path) -> None:
+    # Inspect the pinned SDK's declarations, not an evaluated MSBuild project
+    # or an installed-workload/targeting-pack closure. No SDK process is run.
+    path = dotnet_root / "sdk" / SDK_VERSION / "Microsoft.NETCoreSdk.BundledVersions.props"
+    require_directory(path.parent)
+    failure = f"missing, unsafe or mismatched SDK bundled metadata: {path}"
+    identity = lambda value: (value.st_dev, value.st_ino, value.st_mode, value.st_uid,
+                              value.st_gid, value.st_nlink, value.st_size,
+                              value.st_mtime_ns, value.st_ctime_ns)
+    try:
+        before = path.lstat()
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or not 0 < before.st_size <= 256 * 1024 or path.resolve(strict=True) != path):
+            raise ValueError("file admission")
+        with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as source:
+            if identity(os.fstat(source.fileno())) != identity(before):
+                raise ValueError("file identity")
+            raw = source.read(256 * 1024 + 1)
+            if len(raw) != before.st_size or identity(os.fstat(source.fileno())) != identity(before):
+                raise ValueError("file changed")
+        text = raw.decode("utf-8-sig", errors="strict")
+        # Expat can autodetect NUL-interleaved UTF-16 after re-encoding str;
+        # reject XML-forbidden controls before the textual declaration scan.
+        if any(ord(char) < 32 and char not in "\t\r\n" for char in text):
+            raise ValueError("XML controls")
+        if "<!DOCTYPE" in text.upper() or "<!ENTITY" in text.upper():
+            raise ValueError("XML declarations")
+        root = ET.fromstring(text)
+        if root.tag != "Project" or root.attrib or len(list(root.iter())) > 4096:
+            raise ValueError("XML shape")
+        parents = {child: parent for parent in root.iter() for child in parent}
+
+        def declarations(name):
+            return [node for node in root.iter() if node.tag.rsplit("}", 1)[-1].casefold() == name.casefold()]
+
+        def direct_group(node, name):
+            group = parents.get(node)
+            return (group is not None and group.tag == name and not group.attrib
+                    and parents.get(group) is root)
+
+        for name, expected in (("NETCoreSdkVersion", SDK_VERSION),
+                               ("BundledNETCoreAppPackageVersion", BUNDLED_RUNTIME_VERSION)):
+            nodes = declarations(name)
+            if (len(nodes) != 1 or nodes[0].tag != name or nodes[0].attrib or len(nodes[0])
+                    or not direct_group(nodes[0], "PropertyGroup") or nodes[0].text != expected):
+                raise ValueError(name)
+        linkers = [node for node in declarations("KnownILLinkPack")
+                   if node.get("TargetFramework", "").casefold() == "net10.0"]
+        if (len(linkers) != 1 or linkers[0].tag != "KnownILLinkPack" or len(linkers[0])
+                or not direct_group(linkers[0], "ItemGroup") or linkers[0].attrib != {
+                    "Include": "Microsoft.NET.ILLink.Tasks", "TargetFramework": "net10.0",
+                    "ILLinkPackVersion": BUNDLED_RUNTIME_VERSION}):
+            raise ValueError("net10.0 KnownILLinkPack")
+        require_directory(path.parent)
+        if identity(path.lstat()) != identity(before) or path.resolve(strict=True) != path:
+            raise ValueError("file changed")
+    except (OSError, UnicodeError, ET.ParseError):
+        raise RuntimeError(failure) from None
+    except ValueError as error:
+        raise RuntimeError(f"{failure} ({error})") from None
 
 
 def verify_platform_tools(android_root: Path) -> None:
@@ -269,8 +332,8 @@ def _installed_pack_diagnostic(packs: Path) -> dict:
 def verify_installed_versions(dotnet_root: Path, java_root: Path, android_root: Path, probe) -> None:
     require_directory(dotnet_root / "sdk")
     if sorted(path.name for path in (dotnet_root / "sdk").iterdir()) != [SDK_VERSION]:
-        raise RuntimeError("installed SDK set differs from exact SDK 10.0.110")
-    require_directory(dotnet_root / "sdk" / SDK_VERSION)
+        raise RuntimeError(f"installed SDK set differs from exact SDK {SDK_VERSION}")
+    verify_sdk_bundled_metadata(dotnet_root)
     if probe([str(dotnet_root / "dotnet"), "--version"]) != SDK_VERSION:
         raise RuntimeError("SDK version probe differs")
     if probe([str(dotnet_root / "dotnet"), "workload", "--version"]) != WORKLOAD_VERSION:
@@ -335,6 +398,7 @@ def bootstrap(installer: Path, manifest: Path, receipt: Path, dotnet_root: Path,
         require_directory(dotnet_root / "sdk")
         if sorted(path.name for path in (dotnet_root / "sdk").iterdir()) != [SDK_VERSION]:
             raise RuntimeError("unexpected SDK before workload installation")
+        verify_sdk_bundled_metadata(dotnet_root)
         if probe([str(dotnet_root / "dotnet"), "--version"]) != SDK_VERSION:
             raise RuntimeError("SDK version probe differs")
         probe([str(dotnet_root / "dotnet"), "workload", "install", "android", "maui-android",

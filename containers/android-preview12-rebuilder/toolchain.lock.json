@@ -11,9 +11,9 @@
   "archives": [
     {
       "name": "dotnet-sdk",
-      "version": "10.0.110",
-      "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.110/dotnet-sdk-10.0.110-linux-x64.tar.gz",
-      "sha512": "05e5a22cef9f41748bbd63602a6b595322b91214d03b9a00da43d698501648136f1fb2a4fe6ce6ad9c684aa1698376821c8753af0c42e336b8f753f6c078fb28",
+      "version": "10.0.111",
+      "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.111/dotnet-sdk-10.0.111-linux-x64.tar.gz",
+      "sha512": "aae221be96a3b510d5b6fffefc69d8ad2fa595a1430299419316bb71c65f260a457ca9af24d044e1709b28a9118798caafec535ccfe58f7767c5acb735c00392",
       "format": "tar.gz", "destination": "/opt/dotnet", "strip_components": 0
     },
     {
