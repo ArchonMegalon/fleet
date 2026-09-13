@@ -14,8 +14,9 @@ authentication, an artifact closure, or AuthenticatedRebuildHandoff. These froze
 observations are ordinary forgeable data, not authorization capabilities. Mount
 source inode checks do not inspect or authenticate their contents/descendants.
 The configuration digest is a validated semantic projection, not raw inspect
-byte identity: unordered Mounts/Binds are sorted and OomKillDisable false/null means
-the unset/default (OOM killing not disabled); all other recipe fields stay exact.
+byte identity: unordered Mounts/Binds and unique-name Env entries are sorted,
+Labels null/{} are equivalent, and OomKillDisable false/null means the unset/default
+(OOM killing not disabled); all other recipe fields stay exact.
 """
 from __future__ import annotations
 
@@ -400,13 +401,23 @@ def _configuration(value, container_id, policy):
     expected_config = {
         "Hostname": container_id[:12], "Domainname": "", "User": policy.user,
         "AttachStdin": False, "AttachStdout": policy.attach_stdout, "AttachStderr": policy.attach_stderr,
-        "Tty": False, "OpenStdin": False, "StdinOnce": False, "Env": list(policy.environment),
+        "Tty": False, "OpenStdin": False, "StdinOnce": False, "Env": sorted(policy.environment),
         "Cmd": list(policy.command), "Image": policy.requested_image, "Volumes": None,
         "WorkingDir": policy.workdir, "Entrypoint": list(policy.entrypoint), "Labels": dict(policy.labels),
     }
     # API1.55 may encode an empty map as null. No nonempty implicit volume,
     # healthcheck, OnBuild or other image-config extension is accepted.
     normalized_config = dict(config)
+    environment = config.get("Env")
+    _require(type(environment) is list and len(environment) <= 128 and all(
+        _text(entry) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", entry)
+        for entry in environment), "container-config")
+    names = [entry.split("=", 1)[0] for entry in environment]
+    _require(len(names) == len(set(names)), "container-config")
+    # Docker may reorder Env when merging image defaults with explicit entries.
+    # Reject duplicate names before comparing full byte-exact strings; never
+    # collapse entries into a mapping or repair names/values. Keep input intact.
+    normalized_config["Env"] = sorted(environment)
     if "Labels" in normalized_config and normalized_config["Labels"] is None:
         normalized_config["Labels"] = {}
     _same(normalized_config, expected_config, "container-config")
@@ -484,7 +495,7 @@ def _configuration(value, container_id, policy):
         _same(endpoint[key], "" if key in empty else None if key in nulls else 0, "container-network")
     _require(all(type(endpoint[key]) is str and re.fullmatch(r"(?:[0-9a-f]{64})?", endpoint[key])
                  for key in ("NetworkID", "EndpointID")), "container-network")
-    return _digest({"Config": config, "HostConfig": normalized_host, "Mounts": canonical_mounts, "Image": value["Image"],
+    return _digest({"Config": normalized_config, "HostConfig": normalized_host, "Mounts": canonical_mounts, "Image": value["Image"],
                     "Path": value["Path"], "Args": value["Args"]})
 
 

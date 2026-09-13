@@ -712,3 +712,163 @@ def test_process_role_change_cannot_reuse_prior_observation(policy, monkeypatch)
     monkeypatch.setattr(runtime, "_inspect", lambda _: pytest.fail("changed admission must precede transport"))
     with pytest.raises(runtime.RuntimeObservationError, match="^prior-observation$"):
         runtime.observe_exited(CID, signer, before)
+
+
+@pytest.fixture
+def environment_inputs(policy):
+    environment = ("PATH=/usr/bin:/bin", "APP_UID=1654", "EMPTY=",
+                   "OPTIONS=alpha=beta value", "UNICODE=caf\u00e9", "lower_case=unchanged")
+    admitted = replace(policy, environment=environment)
+    row = inspection(policy)
+    row["Config"]["Env"] = list(environment)
+    return admitted, row
+
+
+@pytest.mark.parametrize("phase", ["created", "exited"])
+def test_environment_reordering_preserves_exact_digest_and_snapshot(environment_inputs, phase):
+    policy, row = environment_inputs
+    if phase == "exited":
+        row["State"].update(Status=phase, StartedAt=STARTED, FinishedAt=FINISHED)
+    reordered = deepcopy(row)
+    reordered["Config"]["Env"].reverse()
+    snapshots = deepcopy([row, reordered])
+    original_lists = [row["Config"]["Env"], reordered["Config"]["Env"]]
+    assert runtime._validate(row, CID, policy, phase, NOW + 4*10**9) == \
+        runtime._validate(reordered, CID, policy, phase, NOW + 4*10**9)
+    assert [row, reordered] == snapshots
+    assert all(value["Config"]["Env"] is original for value, original in zip((row, reordered), original_lists))
+    assert tuple(row["Config"]["Env"]) == policy.environment
+
+
+@pytest.mark.parametrize("first_order,last_order", [
+    ((0, 1, 2, 3, 4, 5), (5, 4, 3, 2, 1, 0)),
+    ((2, 0, 5, 1, 4, 3), (1, 5, 3, 0, 2, 4)),
+    ((5, 4, 3, 2, 1, 0), (0, 1, 2, 3, 4, 5)),
+])
+def test_environment_order_is_stable_across_both_samples_and_completion(
+        environment_inputs, monkeypatch, first_order, last_order):
+    policy, template = environment_inputs
+    rows = [deepcopy(template) for _ in range(4)]
+    orders = (first_order, tuple(reversed(first_order)), last_order, tuple(reversed(last_order)))
+    for index, (row, order) in enumerate(zip(rows, orders)):
+        row["Config"]["Env"] = [policy.environment[i] for i in order]
+        if index >= 2:
+            row["State"].update(Status="exited", StartedAt=STARTED, FinishedAt=FINISHED)
+    snapshots = deepcopy(rows)
+    # Tuple samples return these very dictionaries, not helper-made deep copies:
+    # any in-place normalization inside the observer would change snapshots.
+    calls = samples(monkeypatch, [(row, (10, 20, 30)) for row in rows],
+                    [NOW, NOW, NOW + 4*10**9, NOW + 4*10**9])
+    created = runtime.observe_created(CID, policy)
+    exited = runtime.observe_exited(CID, policy, created)
+    assert calls == [CID] * 4 and rows == snapshots
+    assert created.configuration_sha256 == exited.configuration_sha256
+    assert created.policy_sha256 == exited.policy_sha256 == runtime._digest(runtime.asdict(policy))
+
+
+@pytest.mark.parametrize("phase", ["created", "exited"])
+def test_public_sdk_probe_image_environment_merge_order_regression(policy, phase):
+    # Public values and exact observed ordering from the real CREATED rejection.
+    # All other inspect fields are UNIT models; this does not execute an SDK.
+    environment = (
+        "PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "LANG=C.UTF-8", "GPG_KEY=7169605F62C751356D054A26A821E680E5FA6305",
+        "PYTHON_VERSION=3.12.14",
+        "PYTHON_SHA256=5c8462af5790baf43a321a1559dbe0db06d1be4300fb85fb53c40060668e548a",
+        "DOTNET_CLI_HOME=/tmp/dotnet-cli", "DOTNET_PROCESSOR_COUNT=1",
+        "DOTNET_CLI_TELEMETRY_OPTOUT=1", "DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1",
+        "DOTNET_NOLOGO=1", "DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=true",
+        "DOTNET_CLI_USE_MSBUILD_SERVER=0", "MSBUILDDISABLENODEREUSE=1",
+        "JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=1 -Duser.home=/tmp/java-home -Djava.io.tmpdir=/tmp",
+    )
+    admitted = replace(policy, environment=environment)
+    requested, observed = inspection(policy, phase), inspection(policy, phase)
+    requested["Config"]["Env"] = list(environment)
+    observed["Config"]["Env"] = [environment[i] for i in (7, 8, 12, 13, 2, 3, 4, 5, 6, 9, 10, 11, 0, 1)]
+    snapshot = deepcopy(observed)
+    assert observed["Config"]["Env"] != requested["Config"]["Env"]
+    assert runtime._validate(requested, CID, admitted, phase, NOW + 4*10**9) == \
+        runtime._validate(observed, CID, admitted, phase, NOW + 4*10**9)
+    assert observed == snapshot
+
+
+@pytest.mark.parametrize("phase", ["created", "exited"])
+@pytest.mark.parametrize("change", [
+    "absent", "null", "empty", "missing", "extra", "duplicate-extra", "duplicate-same", "duplicate-different",
+    "tuple", "string", "dict", "null-row", "number-row", "bool-row", "dict-row", "list-row", "empty-row",
+    "no-equals", "empty-name", "digit-name", "dash-name", "space-name", "unicode-name",
+    "name-case", "value-change", "value-space", "unicode-value-change", "control", "surrogate", "overlong",
+])
+def test_environment_normalization_rejects_nonexact_or_ambiguous_entries(environment_inputs, phase, change):
+    policy, row = environment_inputs
+    if phase == "exited":
+        row["State"].update(Status=phase, StartedAt=STARTED, FinishedAt=FINISHED)
+    config, environment = row["Config"], row["Config"]["Env"]
+    if change == "absent": del config["Env"]
+    elif change == "null": config["Env"] = None
+    elif change == "empty": config["Env"] = []
+    elif change == "missing": environment.pop()
+    elif change == "extra": environment.append("EXTRA=" + SECRET)
+    elif change == "duplicate-extra": environment.append(environment[0])
+    elif change == "duplicate-same": environment[-1] = environment[0]
+    elif change == "duplicate-different": environment[-1] = "PATH=" + SECRET
+    elif change == "tuple": config["Env"] = tuple(environment)
+    elif change == "string": config["Env"] = environment[0]
+    elif change == "dict": config["Env"] = {"PATH": SECRET}
+    elif change == "null-row": environment[0] = None
+    elif change == "number-row": environment[0] = 0
+    elif change == "bool-row": environment[0] = False
+    elif change == "dict-row": environment[0] = {"PATH": SECRET}
+    elif change == "list-row": environment[0] = ["PATH=" + SECRET]
+    elif change == "empty-row": environment[0] = ""
+    elif change == "no-equals": environment[0] = SECRET
+    elif change == "empty-name": environment[0] = "=" + SECRET
+    elif change == "digit-name": environment[0] = "1PATH=" + SECRET
+    elif change == "dash-name": environment[0] = "BAD-NAME=" + SECRET
+    elif change == "space-name": environment[0] = " PATH=" + SECRET
+    elif change == "unicode-name": environment[0] = "P\u00c4TH=" + SECRET
+    elif change == "name-case": environment[0] = environment[0].replace("PATH=", "Path=")
+    elif change == "value-change": environment[0] = "PATH=" + SECRET
+    elif change == "value-space": environment[0] += " "
+    elif change == "unicode-value-change": environment[4] = "UNICODE=cafe\u0301"
+    elif change == "control": environment[0] += "\n" + SECRET
+    elif change == "surrogate": environment[0] += "\ud800"
+    elif change == "overlong": environment[0] = "PATH=" + "x" * 4096
+    else: pytest.fail("unknown test mutation")
+    snapshot = deepcopy(row)
+    with pytest.raises(runtime.RuntimeObservationError, match="^container-config$") as error:
+        runtime._validate(row, CID, policy, phase, NOW + 4*10**9)
+    assert str(error.value) == "container-config" and SECRET not in repr(error.value)
+    assert row == snapshot
+
+
+@pytest.mark.parametrize("phase", ["created", "exited"])
+def test_empty_environment_still_requires_an_explicit_empty_list(policy, phase):
+    admitted = replace(policy, environment=())
+    row = inspection(policy, phase)
+    row["Config"]["Env"] = []
+    runtime._validate(row, CID, admitted, phase, NOW + 4*10**9)
+    row["Config"]["Env"] = None
+    with pytest.raises(runtime.RuntimeObservationError, match="^container-config$"):
+        runtime._validate(row, CID, admitted, phase, NOW + 4*10**9)
+
+
+@pytest.mark.parametrize("phase", ["created", "exited"])
+def test_already_admitted_empty_label_forms_share_normalized_configuration_digest(policy, phase):
+    empty, null = inspection(policy, phase), inspection(policy, phase)
+    null["Config"]["Labels"] = None
+    snapshots = deepcopy([empty, null])
+    assert runtime._validate(empty, CID, policy, phase, NOW + 4*10**9) == \
+        runtime._validate(null, CID, policy, phase, NOW + 4*10**9)
+    assert [empty, null] == snapshots
+
+
+def test_environment_order_normalization_does_not_change_policy_replay_binding(policy, monkeypatch):
+    row = inspection(policy)
+    samples(monkeypatch, [row, row])
+    before = runtime.observe_created(CID, policy)
+    reordered_policy = replace(policy, environment=tuple(reversed(policy.environment)))
+    assert before.policy_sha256 != runtime._digest(runtime.asdict(reordered_policy))
+    monkeypatch.setattr(runtime, "_inspect", lambda _: pytest.fail("changed policy must precede transport"))
+    with pytest.raises(runtime.RuntimeObservationError, match="^prior-observation$"):
+        runtime.observe_exited(CID, reordered_policy, before)
