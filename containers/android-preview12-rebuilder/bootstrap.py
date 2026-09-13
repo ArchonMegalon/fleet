@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import json
 import io
+import ctypes
+import hashlib
 import os
 from pathlib import Path, PurePosixPath
+import re
 import stat
 import struct
 import subprocess
@@ -19,13 +22,18 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 
-SDK_VERSION = "10.0.110"
+SDK_VERSION = "10.0.111"
+BUNDLED_RUNTIME_VERSION = "10.0.11"
+TARGETING_PACK = "Microsoft.NETCore.App.Ref"
+TARGETING_PACK_VERSION = "10.0.12"
+TARGETING_PACK_STAGING = Path("/opt/fleet-targeting-pack-staging") / TARGETING_PACK / TARGETING_PACK_VERSION
 WORKLOAD_VERSION = "10.0.112"
 NUGET_SOURCE = "https://api.nuget.org/v3/index.json"
 MANIFESTS = {"microsoft.net.sdk.android": "36.1.69", "microsoft.net.sdk.maui": "10.0.20",
              "microsoft.net.workload.mono.toolchain.current": "10.0.112",
              "microsoft.net.workload.mono.toolchain.net9": "10.0.112"}
 PACKS = {
+    TARGETING_PACK: (TARGETING_PACK_VERSION,),
     "Microsoft.Android.Sdk.Linux": ("36.1.69", "35.0.105"),
     "Microsoft.Android.Ref.36": ("36.1.69",),
     "Microsoft.Maui.Sdk": ("10.0.20", "9.0.120"),
@@ -37,11 +45,295 @@ PACKS = {
        for abi in ("arm", "arm64", "x86", "x64")},
 }
 LIBRARY_PACKS = {"Microsoft.Maui.Controls": "10.0.20"}
+PLATFORM_TOOLS_VERSION = "37.0.1"
 
 
 def require_directory(path: Path) -> None:
     if path.is_symlink() or not path.is_dir() or path.resolve(strict=True) != path:
         raise RuntimeError(f"missing or noncanonical toolchain directory: {path}")
+
+
+def verify_sdk_bundled_metadata(dotnet_root: Path) -> None:
+    # Inspect the pinned SDK's declarations, not an evaluated MSBuild project
+    # or an installed-workload/targeting-pack closure. No SDK process is run.
+    path = dotnet_root / "sdk" / SDK_VERSION / "Microsoft.NETCoreSdk.BundledVersions.props"
+    require_directory(path.parent)
+    failure = f"missing, unsafe or mismatched SDK bundled metadata: {path}"
+    identity = lambda value: (value.st_dev, value.st_ino, value.st_mode, value.st_uid,
+                              value.st_gid, value.st_nlink, value.st_size,
+                              value.st_mtime_ns, value.st_ctime_ns)
+    try:
+        before = path.lstat()
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or not 0 < before.st_size <= 256 * 1024 or path.resolve(strict=True) != path):
+            raise ValueError("file admission")
+        with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as source:
+            if identity(os.fstat(source.fileno())) != identity(before):
+                raise ValueError("file identity")
+            raw = source.read(256 * 1024 + 1)
+            if len(raw) != before.st_size or identity(os.fstat(source.fileno())) != identity(before):
+                raise ValueError("file changed")
+        text = raw.decode("utf-8-sig", errors="strict")
+        # Expat can autodetect NUL-interleaved UTF-16 after re-encoding str;
+        # reject XML-forbidden controls before the textual declaration scan.
+        if any(ord(char) < 32 and char not in "\t\r\n" for char in text):
+            raise ValueError("XML controls")
+        if "<!DOCTYPE" in text.upper() or "<!ENTITY" in text.upper():
+            raise ValueError("XML declarations")
+        root = ET.fromstring(text)
+        if root.tag != "Project" or root.attrib or len(list(root.iter())) > 4096:
+            raise ValueError("XML shape")
+        parents = {child: parent for parent in root.iter() for child in parent}
+
+        def declarations(name):
+            return [node for node in root.iter() if node.tag.rsplit("}", 1)[-1].casefold() == name.casefold()]
+
+        def direct_group(node, name):
+            group = parents.get(node)
+            return (group is not None and group.tag == name and not group.attrib
+                    and parents.get(group) is root)
+
+        for name, expected in (("NETCoreSdkVersion", SDK_VERSION),
+                               ("BundledNETCoreAppPackageVersion", BUNDLED_RUNTIME_VERSION)):
+            nodes = declarations(name)
+            if (len(nodes) != 1 or nodes[0].tag != name or nodes[0].attrib or len(nodes[0])
+                    or not direct_group(nodes[0], "PropertyGroup") or nodes[0].text != expected):
+                raise ValueError(name)
+        linkers = [node for node in declarations("KnownILLinkPack")
+                   if node.get("TargetFramework", "").casefold() == "net10.0"]
+        if (len(linkers) != 1 or linkers[0].tag != "KnownILLinkPack" or len(linkers[0])
+                or not direct_group(linkers[0], "ItemGroup") or linkers[0].attrib != {
+                    "Include": "Microsoft.NET.ILLink.Tasks", "TargetFramework": "net10.0",
+                    "ILLinkPackVersion": BUNDLED_RUNTIME_VERSION}):
+            raise ValueError("net10.0 KnownILLinkPack")
+        require_directory(path.parent)
+        if identity(path.lstat()) != identity(before) or path.resolve(strict=True) != path:
+            raise ValueError("file changed")
+    except (OSError, UnicodeError, ET.ParseError):
+        raise RuntimeError(failure) from None
+    except ValueError as error:
+        raise RuntimeError(f"{failure} ({error})") from None
+
+
+def verify_targeting_pack(directory: Path, *, public_modes: bool = True) -> dict:
+    # Bounded inspection of the checksum-admitted ZIP's extracted payload.
+    # This is not NuGet signature verification or installed-tree authority.
+    failure = f"missing, unsafe or mismatched targeting pack: {directory}"
+    identity = lambda value: (value.st_dev, value.st_ino, value.st_mode, value.st_uid,
+                              value.st_gid, value.st_nlink, value.st_size,
+                              value.st_mtime_ns, value.st_ctime_ns)
+    metadata_names = {f"{TARGETING_PACK}.nuspec", "Microsoft.NETCore.App.versions.txt",
+                      "data/FrameworkList.xml", "data/PlatformManifest.txt", "data/PackageOverrides.txt"}
+    inventory, identities, metadata, aliases = {}, {}, {}, set()
+    pending, total = [directory], 0
+    try:
+        require_directory(directory)
+        owner = directory.stat().st_uid
+        while pending:
+            path = pending.pop()
+            relative = path.relative_to(directory).as_posix()
+            before = path.lstat()
+            mode = stat.S_IMODE(before.st_mode)
+            is_directory = stat.S_ISDIR(before.st_mode)
+            if (len(inventory) >= 512 or len(path.relative_to(directory).parts) > 8
+                    or path.resolve(strict=True) != path or before.st_uid != owner
+                    or relative.casefold() in aliases
+                    or (public_modes and mode != (0o755 if is_directory else 0o644))):
+                raise ValueError("tree admission")
+            aliases.add(relative.casefold())
+            identities[relative] = identity(before)
+            if is_directory:
+                with os.scandir(path) as entries:
+                    for entry in entries:
+                        if (len(pending) + len(inventory) >= 512
+                                or re.fullmatch(r"[A-Za-z0-9_.\[\]-]{1,255}", entry.name) is None):
+                            raise ValueError("tree bounds or name")
+                        pending.append(path / entry.name)
+                inventory[relative] = (True, mode, before.st_size, "")
+                continue
+            if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                    or not 0 <= before.st_size <= 8 * 1024 * 1024
+                    or (before.st_size == 0 and relative != "useSharedDesignerContext.txt")):
+                raise ValueError("file admission")
+            total += before.st_size
+            if total > 64 * 1024 * 1024 or (relative in metadata_names and before.st_size > 256 * 1024):
+                raise ValueError("payload bounds")
+            digest, chunks, remaining = hashlib.sha256(), [], before.st_size
+            with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as source:
+                if identity(os.fstat(source.fileno())) != identity(before):
+                    raise ValueError("file identity")
+                while remaining:
+                    chunk = source.read(min(remaining, 1024 * 1024))
+                    if not chunk:
+                        raise ValueError("truncated file")
+                    remaining -= len(chunk)
+                    digest.update(chunk)
+                    if relative in metadata_names:
+                        chunks.append(chunk)
+                if source.read(1) or identity(os.fstat(source.fileno())) != identity(before):
+                    raise ValueError("file changed")
+            inventory[relative] = (False, mode, before.st_size, digest.hexdigest())
+            if relative in metadata_names:
+                metadata[relative] = b"".join(chunks)
+        if set(metadata) != metadata_names:
+            raise ValueError("required data or nuspec missing")
+
+        def xml(raw):
+            text = raw.decode("utf-8-sig", errors="strict")
+            if (any(ord(char) < 32 and char not in "\t\r\n" for char in text)
+                    or "<!DOCTYPE" in text.upper() or "<!ENTITY" in text.upper()):
+                raise ValueError("XML declarations or controls")
+            root = ET.fromstring(text)
+            if len(list(root.iter())) > 2048:
+                raise ValueError("XML bounds")
+            return root
+
+        nuspec = xml(metadata[f"{TARGETING_PACK}.nuspec"])
+        namespace = "{http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd}"
+        sections = nuspec.findall(namespace + "metadata")
+        if nuspec.tag != namespace + "package" or len(sections) != 1:
+            raise ValueError("nuspec shape")
+        for name, expected in (("id", TARGETING_PACK), ("version", TARGETING_PACK_VERSION)):
+            nodes = sections[0].findall(namespace + name)
+            if len(nodes) != 1 or nodes[0].attrib or len(nodes[0]) or nodes[0].text != expected:
+                raise ValueError("nuspec " + name)
+        versions = metadata["Microsoft.NETCore.App.versions.txt"].decode("ascii").splitlines()
+        if len(versions) != 2 or not re.fullmatch(r"[0-9a-f]{40}", versions[0]) or versions[1] != TARGETING_PACK_VERSION:
+            raise ValueError("package versions")
+        framework = xml(metadata["data/FrameworkList.xml"])
+        if (framework.tag != "FileList" or framework.attrib != {
+                "TargetFrameworkIdentifier": ".NETCoreApp", "TargetFrameworkVersion": "10.0",
+                "FrameworkName": "Microsoft.NETCore.App", "Name": ".NET Runtime"}):
+            raise ValueError("framework identity")
+        declared, managed = set(), set()
+        for node in framework:
+            name, kind = node.get("Path", ""), node.get("Type")
+            prefix = "ref/net10.0/" if kind == "Managed" else "analyzers/dotnet/"
+            if (node.tag != "File" or len(node) or kind not in ("Managed", "Analyzer")
+                    or name in declared or not name.startswith(prefix) or not name.endswith(".dll")
+                    or name not in inventory or inventory[name][0]):
+                raise ValueError("framework declaration or payload")
+            declared.add(name)
+            if kind == "Managed":
+                managed.add(name)
+        actual = {name for name, row in inventory.items() if not row[0] and name.startswith("ref/") and name.endswith(".dll")}
+        if (managed != actual or not {"ref/net10.0/System.Runtime.dll", "ref/net10.0/netstandard.dll"} <= managed):
+            raise ValueError("incomplete reference payload")
+        for relative, before in identities.items():
+            path = directory / relative
+            if path.resolve(strict=True) != path or identity(path.lstat()) != before:
+                raise ValueError("tree changed")
+        return inventory
+    except (OSError, UnicodeError, ValueError, ET.ParseError) as error:
+        raise RuntimeError(f"{failure} ({type(error).__name__}: {str(error)[:160]})") from None
+
+
+def _rename_targeting_pack(source: Path, destination: Path) -> None:
+    # Linux image build only. Fail closed if atomic no-replace is unavailable;
+    # neither replacement of an empty destination nor EXDEV copy is allowed.
+    rename = ctypes.CDLL(None, use_errno=True).renameat2
+    rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    rename.restype = ctypes.c_int
+    if rename(-100, os.fsencode(source), -100, os.fsencode(destination), 1) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error))
+
+
+def promote_targeting_pack(staging: Path, dotnet_root: Path) -> None:
+    require_directory(dotnet_root)
+    if (staging.name != TARGETING_PACK_VERSION or staging.parent.name != TARGETING_PACK
+            or staging.is_relative_to(dotnet_root) or dotnet_root.is_relative_to(staging)):
+        raise RuntimeError("targeting pack staging must be exact and disjoint from SDK")
+    destination = dotnet_root / "packs" / TARGETING_PACK / TARGETING_PACK_VERSION
+    if os.path.lexists(destination):
+        raise RuntimeError(f"targeting pack destination already exists: {destination}")
+    inventory = verify_targeting_pack(staging, public_modes=False)
+    # Only this checksum-admitted public pack is normalized, never global umask.
+    for relative, row in inventory.items():
+        path = staging / relative
+        flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | (os.O_DIRECTORY if row[0] else 0)
+        descriptor = os.open(path, flags)
+        try:
+            value = os.fstat(descriptor)
+            if (path.resolve(strict=True) != path or value.st_size != row[2]
+                    or not (stat.S_ISDIR(value.st_mode) if row[0] else stat.S_ISREG(value.st_mode))):
+                raise RuntimeError("targeting pack changed before mode normalization")
+            os.fchmod(descriptor, 0o755 if row[0] else 0o644)
+        finally:
+            os.close(descriptor)
+    normalized = verify_targeting_pack(staging)
+    if {name: (row[0], row[2:]) for name, row in normalized.items()} != {
+            name: (row[0], row[2:]) for name, row in inventory.items()}:
+        raise RuntimeError("targeting pack payload changed during mode normalization")
+    for parent in (dotnet_root / "packs", destination.parent):
+        if not parent.exists() and not parent.is_symlink():
+            parent.mkdir(mode=0o755)
+            parent.chmod(0o755)
+        require_directory(parent)
+        if stat.S_IMODE(parent.stat().st_mode) != 0o755:
+            raise RuntimeError(f"targeting pack parent is not public/traversable: {parent}")
+    try:
+        _rename_targeting_pack(staging, destination)
+    except (OSError, AttributeError) as error:
+        raise RuntimeError(f"targeting pack no-replace promotion failed: {type(error).__name__}") from None
+    if verify_targeting_pack(destination) != normalized:
+        raise RuntimeError("targeting pack payload changed during promotion")
+
+
+def verify_platform_tools(android_root: Path) -> None:
+    # Metadata/version checks only: invoking adb can create keys or start a
+    # daemon. Archive hashes, not this check, admit the installed tool bytes.
+    directory = android_root / "platform-tools"
+    require_directory(directory)
+    failure = f"missing, unsafe or mismatched Android platform-tools: {directory}"
+    identity = lambda value: (value.st_dev, value.st_ino, value.st_mode, value.st_uid,
+                              value.st_gid, value.st_nlink, value.st_size,
+                              value.st_mtime_ns, value.st_ctime_ns)
+
+    def checked_file(name):
+        path = directory / name
+        value = path.lstat()
+        if (not stat.S_ISREG(value.st_mode) or value.st_nlink != 1 or value.st_size <= 0
+                or path.resolve(strict=True) != path
+                or (name != "source.properties" and not value.st_mode & 0o111)):
+            raise RuntimeError(failure)
+        return value
+
+    try:
+        before = {name: checked_file(name) for name in ("adb", "fastboot", "source.properties")}
+        properties = directory / "source.properties"
+        if before["source.properties"].st_size > 4096:
+            raise RuntimeError(failure)
+        # NONBLOCK avoids hanging if a regular file is replaced by a FIFO
+        # between lstat and open; NOFOLLOW rejects a replaced final symlink.
+        with os.fdopen(os.open(properties, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as source:
+            if identity(os.fstat(source.fileno())) != identity(before["source.properties"]):
+                raise RuntimeError(failure)
+            raw = source.read(4097)
+            if (len(raw) != before["source.properties"].st_size
+                    or identity(os.fstat(source.fileno())) != identity(before["source.properties"])):
+                raise RuntimeError(failure)
+        text = raw.decode("ascii", errors="strict")
+        if any(ord(char) < 32 and char not in "\t\r\n" or ord(char) == 127 for char in text):
+            raise RuntimeError(failure)
+        fields = {}
+        for line in text.splitlines():
+            line = line.strip(" \t")
+            if not line or line.startswith(("#", "!")):
+                continue
+            # Admit the archive's plain key=value dialect, not escaped keys,
+            # continuations or alternate delimiters with ambiguous revisions.
+            match = re.fullmatch(r"([A-Za-z0-9_.-]+)[ \t]*=[ \t]*([^\\]*)", line)
+            if match is None or match[1] in fields:
+                raise RuntimeError(failure)
+            fields[match[1]] = match[2].strip(" \t")
+        if fields.get("Pkg.Revision") != PLATFORM_TOOLS_VERSION:
+            raise RuntimeError(failure)
+        require_directory(directory)
+        if any(identity(checked_file(name)) != identity(value) for name, value in before.items()):
+            raise RuntimeError(failure)
+    except (OSError, UnicodeError, ValueError):
+        raise RuntimeError(failure) from None
 
 
 def _unique_json_fields(pairs):
@@ -211,8 +503,9 @@ def _installed_pack_diagnostic(packs: Path) -> dict:
 def verify_installed_versions(dotnet_root: Path, java_root: Path, android_root: Path, probe) -> None:
     require_directory(dotnet_root / "sdk")
     if sorted(path.name for path in (dotnet_root / "sdk").iterdir()) != [SDK_VERSION]:
-        raise RuntimeError("installed SDK set differs from exact SDK 10.0.110")
-    require_directory(dotnet_root / "sdk" / SDK_VERSION)
+        raise RuntimeError(f"installed SDK set differs from exact SDK {SDK_VERSION}")
+    verify_sdk_bundled_metadata(dotnet_root)
+    verify_targeting_pack(dotnet_root / "packs" / TARGETING_PACK / TARGETING_PACK_VERSION)
     if probe([str(dotnet_root / "dotnet"), "--version"]) != SDK_VERSION:
         raise RuntimeError("SDK version probe differs")
     if probe([str(dotnet_root / "dotnet"), "workload", "--version"]) != WORKLOAD_VERSION:
@@ -244,6 +537,7 @@ def verify_installed_versions(dotnet_root: Path, java_root: Path, android_root: 
                 raise
     for package_id, version in LIBRARY_PACKS.items():
         verify_library_pack(dotnet_root, package_id, version)
+    verify_platform_tools(android_root)
     for path in (android_root / "platforms/android-36/android.jar",
                  *(android_root / "build-tools/36.0.0" / name for name in ("aapt2", "apksigner", "zipalign"))):
         if path.is_symlink() or not path.is_file():
@@ -276,6 +570,8 @@ def bootstrap(installer: Path, manifest: Path, receipt: Path, dotnet_root: Path,
         require_directory(dotnet_root / "sdk")
         if sorted(path.name for path in (dotnet_root / "sdk").iterdir()) != [SDK_VERSION]:
             raise RuntimeError("unexpected SDK before workload installation")
+        verify_sdk_bundled_metadata(dotnet_root)
+        promote_targeting_pack(TARGETING_PACK_STAGING, dotnet_root)
         if probe([str(dotnet_root / "dotnet"), "--version"]) != SDK_VERSION:
             raise RuntimeError("SDK version probe differs")
         probe([str(dotnet_root / "dotnet"), "workload", "install", "android", "maui-android",

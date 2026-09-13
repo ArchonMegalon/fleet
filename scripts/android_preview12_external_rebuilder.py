@@ -2103,8 +2103,8 @@ def _validate_authority_feed_paths(authority_root: Path, owner_feed: Path) -> No
         raise RebuilderError("package authority root must equal the owner feed parent")
 
 
-def _validate_offline_nuget_feed(path: Path | None, *separate_roots: Path) -> None:
-    """Admit transport only; Android owns package selection and byte validation."""
+def _validate_offline_feed(path: Path | None, *separate_roots: Path, kind: str) -> None:
+    """Admit transport only; Android owns input selection and byte validation."""
     if path is None:
         return
     try:
@@ -2122,19 +2122,44 @@ def _validate_offline_nuget_feed(path: Path | None, *separate_roots: Path) -> No
             if path == root or path in root.parents or root in path.parents:
                 raise ValueError
     except (OSError, RuntimeError, ValueError):
-        raise RebuilderError("offline NuGet feed must be a safe canonical owned directory disjoint from rebuild inputs and outputs") from None
+        raise RebuilderError(f"offline {kind} feed must be a safe canonical owned directory disjoint from rebuild inputs and outputs") from None
 
 
-def _require_offline_nuget_consumer(lock: Mapping[str, Any], workspace: Path) -> None:
+def _validate_offline_nuget_feed(path: Path | None, *separate_roots: Path) -> None:
+    _validate_offline_feed(path, *separate_roots, kind="NuGet")
+
+
+def _validate_offline_feeds(nuget: Path | None, aar: Path | None, *separate_roots: Path) -> None:
+    _validate_offline_nuget_feed(nuget, *separate_roots)
+    # Admission above precedes the symmetric ancestor/equality check against AARs.
+    _validate_offline_feed(aar, *separate_roots, *((nuget,) if nuget is not None else ()), kind="AAR")
+
+
+def _require_offline_feed_consumer(lock: Mapping[str, Any], workspace: Path, kind: str) -> None:
     """Check the already-bound script's capability without creating authority."""
     binding = lock["android_authority"]["build_script"]
     script = workspace / "chummer-android/scripts/build-release.sh"
-    raw = _stable_bytes(script, "Android offline NuGet build script", 8 * 1024 * 1024)
+    raw = _stable_bytes(script, f"Android offline {kind} build script", 8 * 1024 * 1024)
     if binding["path"] != "scripts/build-release.sh" or hashlib.sha256(raw).hexdigest() != binding["sha256"]:
-        raise RebuilderError("Android offline NuGet build script bytes differ from lock")
-    active_lines = b"\n".join(line for line in raw.splitlines() if not line.lstrip().startswith(b"#"))
-    if not re.search(rb'\$(?:CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_FEED\b|\{CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_FEED[}:])', active_lines):
-        raise RebuilderError("bound Android build script does not support offline NuGet input")
+        raise RebuilderError(f"Android offline {kind} build script bytes differ from lock")
+    variable = f"CHUMMER_ANDROID_RELEASE_OFFLINE_{kind.upper()}_FEED".encode("ascii")
+    reference = rb"\$(?:" + variable + rb"\b|\{" + variable + rb"[}:])"
+    # A capability marker, not a shell execution proof: ignore comments, literal
+    # single quotes and escaped dollars while recognizing ordinary expansions.
+    tokens = re.finditer(
+        rb"'[^']*'|\\.|\#[^\n]*|(?P<quoted>\"(?:[^\"\\]|\\.)*\")|(?P<reference>" + reference + rb")", raw)
+    if not any(token.lastgroup == "reference" or (
+        token.lastgroup == "quoted" and re.search(reference, re.sub(rb"\\.", b"", token.group()))
+    ) for token in tokens):
+        raise RebuilderError(f"bound Android build script does not support offline {kind} input")
+
+
+def _require_offline_nuget_consumer(lock: Mapping[str, Any], workspace: Path) -> None:
+    _require_offline_feed_consumer(lock, workspace, "NuGet")
+
+
+def _require_offline_aar_consumer(lock: Mapping[str, Any], workspace: Path) -> None:
+    _require_offline_feed_consumer(lock, workspace, "AAR")
 
 
 def _run_independent_rebuild(
@@ -2156,14 +2181,18 @@ def _run_independent_rebuild(
     *,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     offline_nuget_feed: Path | None = None,
+    offline_aar_feed: Path | None = None,
 ) -> tuple[Path, Path]:
     _validate_authority_feed_paths(authority_root, owner_feed)
-    _validate_offline_nuget_feed(
-        offline_nuget_feed, authority_root, workspace, build_input_root, package_authority,
+    _validate_offline_feeds(
+        offline_nuget_feed, offline_aar_feed, authority_root, workspace, build_input_root, package_authority,
         ui_authority_receipt, toolchain_authority, dotnet_root, java_root, android_sdk_root,
+        two_green_receipt, approval, bundletool, upload_certificate,
     )
     if offline_nuget_feed is not None:
         _require_offline_nuget_consumer(lock, workspace)
+    if offline_aar_feed is not None:
+        _require_offline_aar_consumer(lock, workspace)
     build_input_root.mkdir(mode=0o700)
     (build_input_root / "nuget-packages").mkdir(mode=0o700)
     (build_input_root / "unsigned-child-home").mkdir(mode=0o700)
@@ -2198,6 +2227,8 @@ def _run_independent_rebuild(
     }
     if offline_nuget_feed is not None:
         environment["CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_FEED"] = os.fspath(offline_nuget_feed)
+    if offline_aar_feed is not None:
+        environment["CHUMMER_ANDROID_RELEASE_OFFLINE_AAR_FEED"] = os.fspath(offline_aar_feed)
     build_script = workspace / "chummer-android/scripts/build-release.sh"
     stdout_path, stderr_path = build_input_root / "build.stdout", build_input_root / "build.stderr"
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
@@ -2228,13 +2259,17 @@ def prepare_rebuild_handoff(
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     offline_source_manifest: Path | None = None,
     offline_nuget_feed: Path | None = None,
+    offline_aar_feed: Path | None = None,
 ) -> dict[str, Any]:
     """Run the secret-free rebuild stage in a job with no credential mounts."""
 
     _validate_authority_feed_paths(authority_root, owner_feed)
-    _validate_offline_nuget_feed(
-        offline_nuget_feed, authority_root, output_dir, package_authority,
+    _validate_offline_feeds(
+        offline_nuget_feed, offline_aar_feed, authority_root, output_dir, package_authority,
         ui_authority_receipt, toolchain_authority, dotnet_root, java_root, android_sdk_root,
+        lock_path, external_request, producer_unsigned_aab, producer_source_graph, producer_sidecar,
+        two_green_receipt, approval, bundletool, upload_certificate,
+        *((offline_source_manifest,) if offline_source_manifest is not None else ()),
     )
     lock, lock_raw = load_lock(lock_path)
     failures = validate_unsigned_rebuild_lock(lock, lock_raw, reported_builder_image)
@@ -2286,6 +2321,8 @@ def prepare_rebuild_handoff(
         android = validate_android_consumer(workspace / "chummer-android", lock)
         if offline_nuget_feed is not None:
             _require_offline_nuget_consumer(lock, workspace)
+        if offline_aar_feed is not None:
+            _require_offline_aar_consumer(lock, workspace)
         toolchain = verify_unsigned_toolchain(
             lock, dotnet_root, java_root, android_sdk_root,
             bundletool, toolchain_authority, reported_builder_image, runner=runner,
@@ -2301,6 +2338,7 @@ def prepare_rebuild_handoff(
             ui_authority_receipt, toolchain_authority, bundletool, upload_certificate,
             dotnet_root, java_root, android_sdk_root, stage / "build-input", runner=runner,
             offline_nuget_feed=offline_nuget_feed,
+            offline_aar_feed=offline_aar_feed,
         )
         rebuilt = require_rebuild_match(rebuilt_aab, request, lock["limits"]["aab_bytes"])
         rebuilt_graph_value = _json_file(
@@ -3569,11 +3607,19 @@ def contract_check(lock_path: Path) -> dict[str, Any]:
             "google_play_upload_performed": False, "publication_performed": False}
 
 
-def _offline_nuget_feed_argument(value: str) -> Path:
+def _offline_feed_argument(value: str, kind: str) -> Path:
     path = Path(value)
     if os.fspath(path) != value:
-        raise argparse.ArgumentTypeError("offline NuGet feed path must not contain aliases or be empty")
+        raise argparse.ArgumentTypeError(f"offline {kind} feed path must not contain aliases or be empty")
     return path
+
+
+def _offline_nuget_feed_argument(value: str) -> Path:
+    return _offline_feed_argument(value, "NuGet")
+
+
+def _offline_aar_feed_argument(value: str) -> Path:
+    return _offline_feed_argument(value, "AAR")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -3599,6 +3645,10 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument(
         "--offline-nuget-feed", type=_offline_nuget_feed_argument,
         help="absolute canonical directory of offline packages; Android selects and validates the restore inputs",
+    )
+    prepare.add_argument(
+        "--offline-aar-feed", type=_offline_aar_feed_argument,
+        help="absolute canonical directory of offline Android archives; Android owns manifest and byte validation",
     )
     return parser
 
@@ -3631,6 +3681,7 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.builder_image,
                 offline_source_manifest=arguments.offline_source_manifest,
                 offline_nuget_feed=arguments.offline_nuget_feed,
+                offline_aar_feed=arguments.offline_aar_feed,
             )
     except (OSError, KeyError, TypeError, ValueError, subprocess.SubprocessError, RebuilderError) as error:
         print(f"android-preview12-external-rebuilder: {error}", file=sys.stderr)
