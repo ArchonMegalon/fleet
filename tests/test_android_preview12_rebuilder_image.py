@@ -322,6 +322,31 @@ def test_recipe_binds_exact_archive_metadata_and_keeps_old_image_untouched():
                               "microsoft.net.workload.mono.toolchain.net9": "10.0.112"}
 
 
+def test_os_build_tools_target_stops_before_sdk_install_and_preserves_default_stage():
+    # Recipe boundary only. Real image identity, tool execution and installed
+    # SDK closure still need their own observed runtime receipts.
+    docker = (RECIPE / "Dockerfile").read_text()
+    base = json.loads((RECIPE / "toolchain.lock.json").read_bytes())["base_images"][0]
+    assert [line for line in docker.splitlines() if line.startswith("FROM ")] == [
+        f'FROM {base["reference"]}@{base["digest"]} AS os-build-tools',
+        "FROM os-build-tools AS release-rebuilder",
+    ]
+    tools, release = docker.split("FROM os-build-tools AS release-rebuilder\n")
+    assert "# END SNAPSHOT BOOTSTRAP" in tools
+    assert [line for line in tools.splitlines() if line.startswith("COPY ")] == [
+        "COPY containers/android-preview12-rebuilder/ubuntu.sources /opt/fleet-rebuilder/ubuntu.sources",
+        "COPY containers/android-preview12-rebuilder/ubuntu-InRelease.SHA256SUMS /opt/fleet-rebuilder/ubuntu-InRelease.SHA256SUMS",
+    ]
+    assert sum(line.startswith("RUN ") for line in tools.splitlines()) == 1
+    assert all(token not in tools for token in (
+        "install_toolchain.py", "bootstrap.py", "workload install", "ENTRYPOINT", "--mount=",
+    ))
+    assert "dpkg-query -W > /opt/fleet-rebuilder/os-package-inventory.txt" in tools
+    assert "RUN /usr/bin/python3 -I -E -S /opt/fleet-rebuilder/bootstrap.py" in release
+    assert "&& /usr/bin/python3 -I -E -S /opt/fleet-rebuilder/android_preview12_external_rebuilder.py --help" in release
+    assert release.rstrip().endswith('CMD ["--help"]')
+
+
 @pytest.mark.parametrize("fault", [None, "corrupt", "missing", "extra"])
 def test_actual_apt_recipe_block_checks_downloaded_bytes_before_install(tmp_path, fault):
     # Execute the actual RUN block with an offline apt stand-in. This does not

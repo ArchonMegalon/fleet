@@ -1,5 +1,5 @@
 # Dormant, credential-free image recipe. No image build or tree authority is implied.
-FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.10-noble-amd64@sha256:e6508f4bfffe893467e70c54b68a2d28b93fc5d1a69f3de0a3ce69d131ca274e
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.10-noble-amd64@sha256:e6508f4bfffe893467e70c54b68a2d28b93fc5d1a69f3de0a3ce69d131ca274e AS os-build-tools
 
 COPY containers/android-preview12-rebuilder/ubuntu.sources /opt/fleet-rebuilder/ubuntu.sources
 COPY containers/android-preview12-rebuilder/ubuntu-InRelease.SHA256SUMS /opt/fleet-rebuilder/ubuntu-InRelease.SHA256SUMS
@@ -20,6 +20,11 @@ RUN set -eu; \
     dpkg-query -W > /opt/fleet-rebuilder/os-package-inventory.txt; \
     case "$apt_lists" in /tmp/fleet-rebuilder-apt.????????) rm -rf -- "$apt_lists" ;; *) exit 1 ;; esac
 # END SNAPSHOT BOOTSTRAP
+
+# Explicit target for hosts that already have separately qualified, read-only
+# SDK trees. Building os-build-tools neither installs SDKs nor admits a builder.
+# The default final stage retains the complete toolchain bootstrap below.
+FROM os-build-tools AS release-rebuilder
 
 COPY containers/android-preview12-signer/install_toolchain.py /opt/fleet-rebuilder/install_toolchain.py
 COPY containers/android-preview12-rebuilder/toolchain.lock.json /opt/fleet-rebuilder/toolchain.lock.json
