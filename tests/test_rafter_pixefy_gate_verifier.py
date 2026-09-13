@@ -10,6 +10,7 @@ from unittest import mock
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "verify_committed_rafter_pixefy_ci_receipt.py"
+WORKFLOW_PATH = MODULE_PATH.parents[1] / ".github/workflows/release-qa-rafter-pixefy.yml"
 
 
 def _load_module():
@@ -59,6 +60,66 @@ def _live_manifest(version: str = "run-20260601-070650") -> dict:
 
 
 class RafterPixefyGateVerifierTests(unittest.TestCase):
+    def test_workflow_keeps_all_pr_source_checks_and_exact_release_triggers(self) -> None:
+        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        self.assertEqual(workflow.split("\non:\n", 1)[1].split("\njobs:\n", 1)[0], """  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/release-qa-rafter-pixefy.yml"
+      - "_completion/ltd_inventory/RAFTER_TIER3_LTDS_ENTRY.generated.json"
+      - "_completion/ltd_inventory/PIXEFY_TIER3_LTDS_ENTRY.generated.json"
+      - "_completion/rafter/**"
+      - "_completion/pixefy/**"
+      - "_completion/rafter_pixefy/**"
+      - "providers/rafter/**"
+      - "providers/pixefy/**"
+      - "scripts/rafter_pixefy_common.py"
+      - "scripts/verify_committed_rafter_pixefy_ci_receipt.py"
+      - "scripts/verify_ltds_rafter_pixefy_entries.py"
+      - "scripts/final_rafter_pixefy_qa_stack_verdict.py"
+      - "tests/test_rafter_pixefy_gate_verifier.py"
+  pull_request:
+    branches:
+      - main
+""")
+
+    def test_required_source_jobs_have_no_event_or_step_conditions(self) -> None:
+        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        source_jobs = workflow.split("\njobs:\n", 1)[1].split("\n  rafter-security-gate:\n", 1)[0]
+        self.assertNotIn("if:", source_jobs)
+        self.assertNotIn("needs:", source_jobs)
+        self.assertNotIn("continue-on-error", source_jobs)
+        for name in ("verify-ltd-inventory", "verifier-regression-tests"):
+            self.assertIn(f"  {name}:\n    runs-on: ubuntu-latest\n", source_jobs)
+        self.assertIn("run: python3 scripts/verify_ltds_rafter_pixefy_entries.py\n", source_jobs)
+        self.assertIn("run: python3 -m unittest tests.test_rafter_pixefy_gate_verifier\n", source_jobs)
+        self.assertIn("git diff --exit-code --", source_jobs)
+
+    def test_live_gold_jobs_keep_dependencies_and_only_explicit_release_events(self) -> None:
+        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        condition = "    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}\n"
+        self.assertEqual(workflow.count(condition), 3)
+        self.assertEqual(workflow.count("if:"), 3)
+        self.assertNotIn("continue-on-error", workflow)
+        for name, comment, dependencies, command in (
+            ("rafter-security-gate", "    # PRs validate source; these jobs attest the live public desktop release.\n",
+             ["verify-ltd-inventory", "verifier-regression-tests"],
+             "scripts/verify_committed_rafter_pixefy_ci_receipt.py Rafter"),
+            ("pixefy-visual-gate", "", ["verify-ltd-inventory", "verifier-regression-tests"],
+             "scripts/verify_committed_rafter_pixefy_ci_receipt.py Pixefy"),
+            ("final-rafter-pixefy-verdict", "", ["rafter-security-gate", "pixefy-visual-gate"],
+             "scripts/final_rafter_pixefy_qa_stack_verdict.py"),
+        ):
+            with self.subTest(job=name):
+                self.assertIn(f"  {name}:\n" + comment + condition +
+                    "    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    needs:\n" +
+                    "".join(f"      - {dependency}\n" for dependency in dependencies), workflow)
+                self.assertIn(f"        run: python3 {command}\n", workflow)
+
     def test_live_release_alignment_rejects_version_drift(self) -> None:
         module = _load_module()
         failures: list[str] = []
