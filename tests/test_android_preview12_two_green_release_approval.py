@@ -423,7 +423,7 @@ def test_checked_in_policy_is_exact_dormant_and_contains_no_key_material():
     )
     assert value["cross_repo_actions_read"]["github_token_fallback_allowed"] is False
     assert value["external_ed25519_key"]["configured"] is False
-    assert value["external_ed25519_key"]["key_id"] == "local-release-builder-2026"
+    assert value["external_ed25519_key"]["key_id"] == "fleet-release-approver-2026-09"
     assert value["external_ed25519_key"]["expected_public_key_spki_sha256"] == (
         approval.RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256
     )
@@ -444,6 +444,55 @@ def test_checked_in_policy_is_exact_dormant_and_contains_no_key_material():
     assert value["replay_protection"]["external_ledger"]["allowed_hosts"] == []
     assert b"PRIVATE KEY" not in data
     assert base64.b64encode(TEST_PRIVATE_DER) not in data
+
+
+def test_public_approver_rotation_pins_exact_identity_without_consumer_qualification():
+    policy, _, _ = approval.load_policy(POLICY.resolve())
+    key = policy["external_ed25519_key"]
+    assert key["key_id"] == policy["output"]["key_id"] == "fleet-release-approver-2026-09"
+    assert key["trusted_public_key_path"] == (
+        "eng/trusted-release-approvers/fleet-release-approver-2026-09.public.pem"
+    )
+    assert key["public_key_spki_der_base64"] == (
+        "MCowBQYDK2VwAyEAfQlc4wil/fVVadQd7QwlJhaEdVoovi6pkR6AICaeAZ0="
+    )
+    public_der = base64.b64decode(key["public_key_spki_der_base64"], validate=True)
+    assert public_der.startswith(approval.SPKI_ED25519_PREFIX)
+    assert len(public_der) == 44
+    assert hashlib.sha256(public_der).hexdigest() == key["expected_public_key_spki_sha256"] == (
+        "b0afed082c23ee1af1c828dde5b28ffa4061ceaa71d1bab4c11927ff142f43a3"
+    )
+    public_pem = subprocess.run(
+        ["openssl", "pkey", "-pubin", "-inform", "DER", "-outform", "PEM"],
+        input=public_der, check=True, capture_output=True,
+    ).stdout
+    assert hashlib.sha256(public_pem).hexdigest() == key["trusted_public_key_pem_sha256"] == (
+        "0ccffb5997e10dea7531894e00a2376f8da309a8e50da00199ffc3073de85dcb"
+    )
+    # This public-pin staging does not claim the old consumer trusts the new key.
+    assert policy["android_consumer"]["qualified_commit"] == "411e0205378966c73e064ba34f68ca65ed426ab6"
+    assert policy["android_consumer"]["qualified_tree"] == "4a7cf04c2d0a1cbf04da8b889ac673153c779c7a"
+    assert key["configured"] is False
+    assert policy["activation"]["enabled"] is False
+    for field in ("signing_authorized", "publication_authorized", "google_play_upload_authorized"):
+        assert policy["output"][field] is False
+
+
+@pytest.mark.parametrize("field,fixture_field", [
+    ("key_id", "keyId"), ("trusted_public_key_path", "publicKeyPemPath"),
+    ("trusted_public_key_pem_sha256", "publicKeyPemSha256"),
+    ("public_key_spki_der_base64", "publicKeySpkiDerBase64"),
+    ("expected_public_key_spki_sha256", "publicKeySpkiDerSha256"),
+])
+def test_current_policy_rejects_each_legacy_approval_pin(tmp_path: Path, field, fixture_field):
+    fixture = json.loads(ANDROID_388_FIXTURE.read_text())
+    policy, path, _ = active_policy(tmp_path, durable=True)
+    policy["external_ed25519_key"][field] = fixture[fixture_field]
+    write_json(path, policy)
+    with pytest.raises(approval.ApprovalError, match="closed dormant/ready contract"):
+        approval.load_policy(path.resolve())
+    with pytest.raises(approval.ApprovalError, match="differs from Android's pinned approver"):
+        approval._require_ready(policy)
 
 
 def test_dormant_preflight_fails_before_environment_or_key_access():
@@ -680,7 +729,7 @@ def test_exact_two_green_receipt_emits_only_public_non_authorizing_approval(
         "publicationAuthorized", "googlePlayUploadAuthorized", "signatureBase64",
     }
     assert result["contractName"] == "chummer.android.two-green-release-approval/v1"
-    assert result["keyId"] == "local-release-builder-2026"
+    assert result["keyId"] == "fleet-release-approver-2026-09"
     assert result["role"] == "android_internal_release_approver"
     assert result["approvalScope"] == "android_internal_release_preparation"
     assert result["provenanceReplaySha256"] == approval.canonical_sha256(audit)
@@ -741,10 +790,12 @@ def test_historical_android_388_key_and_output_shape_remain_compatible(
     assert policy["android_consumer"]["provenance_validator_sha256"] != fixture[
         "provenanceValidatorSha256"
     ]
-    assert policy["external_ed25519_key"]["trusted_public_key_pem_sha256"] == fixture[
+    assert policy["external_ed25519_key"]["key_id"] != fixture["keyId"]
+    assert policy["external_ed25519_key"]["trusted_public_key_path"] != fixture["publicKeyPemPath"]
+    assert policy["external_ed25519_key"]["trusted_public_key_pem_sha256"] != fixture[
         "publicKeyPemSha256"
     ]
-    assert policy["external_ed25519_key"]["expected_public_key_spki_sha256"] == fixture[
+    assert policy["external_ed25519_key"]["expected_public_key_spki_sha256"] != fixture[
         "publicKeySpkiDerSha256"
     ]
 
@@ -770,6 +821,14 @@ def test_historical_android_388_key_and_output_shape_remain_compatible(
 @pytest.mark.parametrize(
     "mutate,match",
     [
+        (lambda value: value.update(keyId="local-release-builder-2026"), "posture"),
+        (lambda value: value.update(keyId="unknown-approver"), "posture"),
+        (lambda value: value.update(role="android_release_builder"), "posture"),
+        (lambda value: value.update(approvalScope="android_artifact_signing"), "posture"),
+        (lambda value: value.update(contractName="chummer.android.release-build-attestation/v1"), "posture"),
+        (lambda value: value.update(signingAuthorized=True), "posture"),
+        (lambda value: value.update(publicationAuthorized=True), "posture"),
+        (lambda value: value.update(googlePlayUploadAuthorized=True), "posture"),
         (lambda value: value.update(provenanceValidatorSha256="0" * 64), "source/version"),
         (lambda value: value.update(sourceCommit="0" * 40), "source/version"),
         (lambda value: value.update(versionCode=13), "source/version"),
@@ -808,9 +867,9 @@ def test_current_adapter_rejects_replayed_challenge(
 
 @pytest.mark.skipif(
     not os.environ.get("CHUMMER_ANDROID_CURRENT_ROOT"),
-    reason="exact bound Android checkout not supplied for signature compatibility",
+    reason="exact bound legacy Android checkout not supplied for new-key rejection",
 )
-def test_exact_current_android_signature_verifier_accepts_fleet_bytes(
+def test_exact_pinned_legacy_android_consumer_rejects_new_approver(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     android_root = Path(os.environ["CHUMMER_ANDROID_CURRENT_ROOT"]).resolve(strict=True)
@@ -827,27 +886,18 @@ def test_exact_current_android_signature_verifier_accepts_fleet_bytes(
     consumer = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(consumer)
 
+    assert consumer.RELEASE_APPROVER_KEY_ID == "local-release-builder-2026"
+    assert consumer.RELEASE_APPROVER_KEY_ID != approval.RELEASE_APPROVER_KEY_ID
     _, _, receipt_value, args, environment = full_case(tmp_path, monkeypatch)
-    result, audit = approval.create_approval_bundle(args, environment, now=NOW)
+    result, _ = approval.create_approval_bundle(args, environment, now=NOW)
     approval.write_output(args.output, result)
-    test_public = subprocess.run(
-        ["openssl", "pkey", "-inform", "DER", "-pubout"],
-        input=TEST_PRIVATE_DER, check=True, capture_output=True,
-    ).stdout
-    public_path = tmp_path / "android-consumer-test-public.pem"
-    public_path.write_bytes(test_public)
-    public_path.chmod(0o600)
-    monkeypatch.setattr(consumer, "RELEASE_APPROVER_PUBLIC_KEY", public_path)
-    monkeypatch.setattr(
-        consumer, "RELEASE_APPROVER_PUBLIC_KEY_SHA256",
-        hashlib.sha256(test_public).hexdigest(),
-    )
+    # No consumer key/identity patch: the retained source does not admit the
+    # new approver, regardless of the Fleet fixture's valid TEST signature.
     receipt_raw = (tmp_path / "receipt.json").read_bytes()
-    verified = consumer._verify_release_approval(
-        args.output, receipt_raw=receipt_raw, receipt=receipt_value, now=NOW
-    )
-    assert verified["contractName"] == approval.OUTPUT_CONTRACT
-    assert verified["provenanceReplaySha256"] == approval.canonical_sha256(audit)
+    with pytest.raises(ValueError, match="protected release approval posture is invalid"):
+        consumer._verify_release_approval(
+            args.output, receipt_raw=receipt_raw, receipt=receipt_value, now=NOW
+        )
 
 
 @pytest.mark.parametrize("mutate,match", [

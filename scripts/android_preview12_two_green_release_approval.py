@@ -51,22 +51,24 @@ VERSION_NAME = "0.1.0-preview.12"
 VERSION_CODE = 12
 # Provisional PR-source compatibility only. The dormant policy does not qualify
 # this commit as protected main or supply its missing hosted Two-Green evidence.
+# It also predates the separate approver below: reconcile this consumer only
+# after the Android approval-only trust change has real source/qualification.
 ANDROID_CONSUMER_COMMIT = "411e0205378966c73e064ba34f68ca65ed426ab6"
 ANDROID_CONSUMER_TREE = "4a7cf04c2d0a1cbf04da8b889ac673153c779c7a"
-RELEASE_APPROVER_KEY_ID = "local-release-builder-2026"
+RELEASE_APPROVER_KEY_ID = "fleet-release-approver-2026-09"
 RELEASE_APPROVER_ROLE = "android_internal_release_approver"
 RELEASE_APPROVAL_SCOPE = "android_internal_release_preparation"
 RELEASE_APPROVER_PUBLIC_KEY_PATH = (
-    "eng/trusted-release-approvers/local-release-builder-2026.public.pem"
+    "eng/trusted-release-approvers/fleet-release-approver-2026-09.public.pem"
 )
 RELEASE_APPROVER_PUBLIC_KEY_PEM_SHA256 = (
-    "ed1fbe95fc7713bfc6d9d0fea21726c1ba3193533fc2d5523e054ad8fb86184c"
+    "0ccffb5997e10dea7531894e00a2376f8da309a8e50da00199ffc3073de85dcb"
 )
 RELEASE_APPROVER_PUBLIC_KEY_SPKI_DER_BASE64 = (
-    "MCowBQYDK2VwAyEAB105wcYguHU3a/phMkbbRjhZ+Qhj8cdDTAvw/7t14sk="
+    "MCowBQYDK2VwAyEAfQlc4wil/fVVadQd7QwlJhaEdVoovi6pkR6AICaeAZ0="
 )
 RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256 = (
-    "c46a4e9a224c8c77a4038bca83f7d9ed66146318d8b5c2c9fc81cd19fdd18ea7"
+    "b0afed082c23ee1af1c828dde5b28ffa4061ceaa71d1bab4c11927ff142f43a3"
 )
 PROVENANCE_VALIDATOR_PATH = "scripts/materialize-api36-two-green-eligibility.py"
 PROVENANCE_VALIDATOR_SHA256 = (
