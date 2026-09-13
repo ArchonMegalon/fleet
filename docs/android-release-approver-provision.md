@@ -16,8 +16,13 @@ The two dispatch modes use separate jobs in the fixed environment
 `ArchonMegalon/fleet` (ID `1176287728`). Generate never receives an existing
 private secret. It creates an Ed25519 key in Python memory, serializes canonical
 PKCS8 DER as Base64 in memory, and seals that ASCII value with Libsodium to the
-actual GitHub environment public key. Both key bytes and ID must match an
-authenticated GitHub metadata read. A dispatcher-supplied substitute fails.
+reviewed GitHub environment public key pinned in the helper. Both public bytes
+and key ID came from the operator's authenticated API read and are enforced by
+source before generation or private-key access. A dispatcher cannot substitute
+another recipient. The runner does not claim to refresh environment metadata.
+The operator must recheck environment identity/protection and this exact
+recipient before dispatch and import. A rotated key requires a new reviewed pin;
+there is no runtime override or fallback.
 
 Only a closed-schema JSON observation containing sealed ciphertext, public key,
 and exact workflow/run/destination bindings is uploaded. Retention is one day.
@@ -27,19 +32,23 @@ controller must independently bind the successful hosted run, job, workflow
 source, artifact ID, and archive digest before importing any ciphertext.
 
 GitHub's environment-secret PUT is create-or-update, not atomic create-only.
-Workflow concurrency serializes only these jobs. An administrator or another
+Workflow concurrency serializes key dispatches separately from PR/main tests.
+An administrator or another
 writer could change the slot between a GET and PUT. Use one coordinated operator,
 check the exact slot immediately before the one import, and never blindly retry
 a write or generate another key after a lost acknowledgment. The independent
 prove dispatch determines whether the expected key was actually injected.
 
-The workflow has no admin write token. It uses `GITHUB_TOKEN` only for
-authenticated metadata GETs before key access. Actual environment-public-key
-GET permission must be observed on the protected run; a denial stops before
-generation. There is no anonymous fallback, token substitution, or assumed
-environment-secret write capability. Dependencies are exact hashed CPython 3.12
-Linux wheels installed before secret injection. Metadata is fetched again after
-installation. The final process performs no network calls or subprocesses.
+The workflow has no admin token. It uses `GITHUB_TOKEN` with `contents: read`
+only for labeled authenticated current-main GETs before and after installing
+the exact hashed CPython 3.12 Linux wheels. It makes no environment or secret
+public-key GETs. Protected run
+[34783917379](https://github.com/ArchonMegalon/fleet/actions/runs/34783917379)
+failed with HTTP 403 before generation under the former API-read design; that
+failure remains evidence, not a successful provisioning observation. This
+reviewed source-pin path replaces that unsupported read assumption. There is no
+403 fallback, fabricated environment snapshot, or credential substitution.
+The final key process performs no network calls or subprocesses.
 
 Python and the GitHub-hosted runner are the volatile-memory trust boundary:
 immutable byte copies are not guaranteed to be zeroized, and environment secret
@@ -61,9 +70,18 @@ GitHub-encrypted ciphertext. Set `task_packet` to a fresh private local director
 set -euo pipefail
 task_packet=$(mktemp -d)
 task_api=repos/ArchonMegalon/fleet/environments/android-preview12-release-approval
-task_sha=$(gh api repos/ArchonMegalon/fleet/branches/main --jq .commit.sha)
+task_pin_id=3380204578043523366
+task_pin_key='KehADg5PaYNI/6mRiXvHp3Nwk2h+F55K0cMJWv/Dcz8='
+gh api repos/ArchonMegalon/fleet > "$task_packet/repository.json"
+jq -e '.id == 1176287728 and .full_name == "ArchonMegalon/fleet"' "$task_packet/repository.json"
+gh api repos/ArchonMegalon/fleet/branches/main > "$task_packet/main.before-dispatch.json"
+jq -e '.name == "main" and .protected == true' "$task_packet/main.before-dispatch.json"
+task_sha=$(jq -r .commit.sha "$task_packet/main.before-dispatch.json")
 task_nonce=$(openssl rand -hex 32)
+gh api "$task_api" > "$task_packet/environment.before-dispatch.json"
+jq -e '.id == 21501373212 and .name == "android-preview12-release-approval" and .url == "https://api.github.com/repos/ArchonMegalon/fleet/environments/android-preview12-release-approval" and .can_admins_bypass == false and .deployment_branch_policy == {protected_branches:true,custom_branch_policies:false} and any(.protection_rules[]; .type == "branch_policy")' "$task_packet/environment.before-dispatch.json"
 gh api "$task_api/secrets/public-key" > "$task_packet/recipient.json"
+jq -e --arg id "$task_pin_id" --arg key "$task_pin_key" '.key_id == $id and .key == $key' "$task_packet/recipient.json"
 gh api "$task_api/secrets?per_page=100" > "$task_packet/slots.before.json"
 jq -e '.total_count <= 100 and all(.secrets[]; .name != "ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64")' "$task_packet/slots.before.json"
 jq -n --arg sha "$task_sha" --arg nonce "$task_nonce" --slurpfile key "$task_packet/recipient.json" \
@@ -122,9 +140,11 @@ set -euo pipefail
   --execution-sha "$task_sha" --run-id "$task_run" --run-attempt 1 \
   --recipient-key-id "$(jq -r .key_id "$task_packet/recipient.json")" \
   --recipient-public-key "$(jq -r .key "$task_packet/recipient.json")"
-# Re-read immediately before import: unchanged recipient and exact empty slot.
+# Re-read immediately before import: exact protected environment, recipient, empty slot.
+gh api "$task_api" > "$task_packet/environment.before-import.json"
+jq -e '.id == 21501373212 and .name == "android-preview12-release-approval" and .url == "https://api.github.com/repos/ArchonMegalon/fleet/environments/android-preview12-release-approval" and .can_admins_bypass == false and .deployment_branch_policy == {protected_branches:true,custom_branch_policies:false} and any(.protection_rules[]; .type == "branch_policy")' "$task_packet/environment.before-import.json"
 gh api "$task_api/secrets/public-key" > "$task_packet/recipient.before-import.json"
-jq -e --slurpfile old "$task_packet/recipient.json" '.key_id == $old[0].key_id and .key == $old[0].key' "$task_packet/recipient.before-import.json"
+jq -e --arg id "$task_pin_id" --arg key "$task_pin_key" --slurpfile old "$task_packet/recipient.json" '.key_id == $id and .key == $key and .key_id == $old[0].key_id and .key == $old[0].key' "$task_packet/recipient.before-import.json"
 gh api "$task_api/secrets?per_page=100" > "$task_packet/slots.before-import.json"
 jq -e '.total_count <= 100 and all(.secrets[]; .name != "ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64")' "$task_packet/slots.before-import.json"
 jq '{key_id:.recipientKeyId, encrypted_value:.encryptedValue}' "$task_packet/generate.json" > "$task_packet/import.json"
@@ -148,15 +168,23 @@ metadata to reconcile the administrative race or lost acknowledgment.
 
 ## Prove independent injection
 
-Use the same generation nonce and exact observed SPKI. Re-read the current main
-SHA and environment encryption key, preserving the reviewed generation receipt.
+Use the same generation nonce and exact observed SPKI. Re-read protected main,
+environment identity/protection, recipient, and the existing secret's metadata,
+preserving the reviewed generation receipt. No plaintext secret is retrieved.
 The proof binds its own run/attempt/source and the fixed destination, so it may
 run on a later separately reviewed main that contains this same workflow.
 
 ```bash
 set -euo pipefail
-task_proof_sha=$(gh api repos/ArchonMegalon/fleet/branches/main --jq .commit.sha)
+gh api repos/ArchonMegalon/fleet/branches/main > "$task_packet/main.before-proof.json"
+jq -e '.name == "main" and .protected == true' "$task_packet/main.before-proof.json"
+task_proof_sha=$(jq -r .commit.sha "$task_packet/main.before-proof.json")
+gh api "$task_api" > "$task_packet/environment.before-proof.json"
+jq -e '.id == 21501373212 and .name == "android-preview12-release-approval" and .url == "https://api.github.com/repos/ArchonMegalon/fleet/environments/android-preview12-release-approval" and .can_admins_bypass == false and .deployment_branch_policy == {protected_branches:true,custom_branch_policies:false} and any(.protection_rules[]; .type == "branch_policy")' "$task_packet/environment.before-proof.json"
 gh api "$task_api/secrets/public-key" > "$task_packet/proof-recipient.json"
+jq -e --arg id "$task_pin_id" --arg key "$task_pin_key" '.key_id == $id and .key == $key' "$task_packet/proof-recipient.json"
+gh api "$task_api/secrets?per_page=100" > "$task_packet/slots.before-proof.json"
+jq -e '.total_count <= 100 and ([.secrets[] | select(.name == "ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64")] | length) == 1' "$task_packet/slots.before-proof.json"
 jq -n --arg sha "$task_proof_sha" --arg nonce "$task_nonce" \
   --slurpfile key "$task_packet/proof-recipient.json" --slurpfile generated "$task_packet/generate.json" \
   '{ref:"main",inputs:{mode:"prove",request_nonce:$nonce,expected_execution_sha:$sha,recipient_key_id:$key[0].key_id,recipient_public_key:$key[0].key,expected_public_key_spki:$generated[0].publicKeySpkiDerBase64}}' \

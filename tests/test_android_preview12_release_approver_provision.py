@@ -52,13 +52,6 @@ def environment(directory, mode="generate"):
 def snapshots(directory, env):
     (directory / "approver-main.json").write_text(json.dumps({"name": "main", "protected": True,
                                                             "commit": {"sha": env["EXECUTION_SHA"]}}))
-    (directory / "approver-environment.json").write_text(json.dumps({
-        "id": int(P.ENVIRONMENT_ID), "name": P.ENVIRONMENT, "can_admins_bypass": False,
-        "deployment_branch_policy": {"protected_branches": True, "custom_branch_policies": False},
-    }))
-    (directory / "approver-environment-public-key.json").write_text(json.dumps({
-        "key_id": env["RECIPIENT_KEY_ID"], "key": env["RECIPIENT_PUBLIC_KEY"],
-    }))
 
 
 class PrivateReadGuard(dict):
@@ -75,6 +68,13 @@ class PrivateReadGuard(dict):
 
 class ProvisionTests(unittest.TestCase):
     def setUp(self):
+        # Explicit fixture-only substitution. No test has GitHub's recipient
+        # private key and operational generation is never executed locally.
+        for name, value in (("RECIPIENT_KEY_ID", "123456"),
+                            ("RECIPIENT_PUBLIC_KEY", P.b64(TEST_RECIPIENT.public_key.encode()))):
+            pin = patch.object(P, name, value)
+            pin.start()
+            self.addCleanup(pin.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.directory = Path(self.temporary.name)
@@ -161,7 +161,7 @@ class ProvisionTests(unittest.TestCase):
 
     def test_recipient_low_order_point_precedes_key_generation(self):
         for bad in (b"\0" * 32, b"\x01" + b"\0" * 31):
-            context = P.execution({**self.env, "RECIPIENT_PUBLIC_KEY": P.b64(bad)})
+            context = {**P.execution(self.env), "recipientPublicKeyBase64": P.b64(bad)}
             with patch.object(Ed25519PrivateKey, "generate", side_effect=AssertionError("generated too early")) as generate:
                 with self.assertRaises(Exception):
                     P.generate(context)
@@ -227,12 +227,7 @@ class ProvisionTests(unittest.TestCase):
 
     def test_snapshots_fail_closed_before_generation_or_private_read(self):
         cases = [("approver-main.json", "protected", False), ("approver-main.json", "name", "other"),
-                 ("approver-main.json", "commit", {"sha": "c" * 40}),
-                 ("approver-environment.json", "id", 1), ("approver-environment.json", "name", "other"),
-                 ("approver-environment.json", "can_admins_bypass", True),
-                 ("approver-environment-public-key.json", "key_id", "5678"),
-                 ("approver-environment-public-key.json", "key", P.b64(PrivateKey(bytes(range(64, 96))).public_key.encode())),
-                 ("approver-environment.json", "deployment_branch_policy", None)]
+                 ("approver-main.json", "commit", {"sha": "c" * 40})]
         for filename, key, value in cases:
             snapshots(self.directory, self.env)
             path = self.directory / filename
@@ -274,7 +269,7 @@ class ProvisionTests(unittest.TestCase):
             self.assertEqual(self.invoke("generate")[0], 1)
             second.assert_not_called()
         self.assertEqual(output.read_bytes(), first)
-        self.assertEqual({p.name for p in self.directory.iterdir()}, {P.OUTPUT, "approver-main.json", "approver-environment.json", "approver-environment-public-key.json"})
+        self.assertEqual({p.name for p in self.directory.iterdir()}, {P.OUTPUT, "approver-main.json"})
 
     def test_runtime_command_cannot_switch_dispatch_mode(self):
         with patch.object(P, "prove", side_effect=AssertionError("private read")) as prove:
@@ -327,7 +322,14 @@ class ProvisionTests(unittest.TestCase):
         self.assertEqual(raw.count("--only-binary=:all: --require-hashes --no-deps"), 3)
         self.assertEqual(raw.count("path: ${{ runner.temp }}/" + P.OUTPUT), 2)
         self.assertEqual(raw.count("retention-days: 1"), 2)
-        self.assertEqual(raw.count("/environments/android-preview12-release-approval/secrets/public-key >"), 4)
+        self.assertNotIn("/environments/", raw)
+        self.assertNotIn("approver-environment", raw)
+        self.assertNotIn("deployments: read", raw)
+        self.assertEqual(raw.count("repos/ArchonMegalon/fleet/branches/main >"), 4)
+        self.assertEqual(raw.count("Checking authenticated Fleet main before dependency installation"), 2)
+        self.assertEqual(raw.count("Checking authenticated Fleet main after dependency installation"), 2)
+        self.assertIn("github.event_name == 'workflow_dispatch' && 'android-preview12-release-approval-key-provision'", raw)
+        self.assertIn("format('android-release-approver-verify-{0}', github.ref)", raw)
         for namespace in ("repository", "ref", "sha"):
             self.assertEqual(raw.count("${{ job.workflow_" + namespace + " }}"), 4)
         self.assertNotIn("id-token:", raw)
@@ -344,6 +346,38 @@ class ProvisionTests(unittest.TestCase):
                     break
                 run_lines.append(line)
             self.assertNotIn("${{", "\n".join(run_lines))
+
+
+class ProductionPinTests(unittest.TestCase):
+    """Read-only tests of the real public pin; no fixture patch of its constants."""
+
+    def test_unpatched_public_pin_is_exact_and_admits_only_public_context(self):
+        self.assertEqual(P.RECIPIENT_KEY_ID, "3380204578043523366")
+        self.assertEqual(P.RECIPIENT_PUBLIC_KEY, "KehADg5PaYNI/6mRiXvHp3Nwk2h+F55K0cMJWv/Dcz8=")
+        selected = {**environment(Path("/tmp")), "RECIPIENT_KEY_ID": P.RECIPIENT_KEY_ID,
+                    "RECIPIENT_PUBLIC_KEY": P.RECIPIENT_PUBLIC_KEY}
+        with patch.object(Ed25519PrivateKey, "generate", side_effect=AssertionError("operational generation forbidden")) as generate:
+            context = P.execution(selected)
+            self.assertEqual(context["recipientKeyId"], P.RECIPIENT_KEY_ID)
+            self.assertEqual(context["recipientPublicKeyBase64"], P.RECIPIENT_PUBLIC_KEY)
+            generate.assert_not_called()
+
+    def test_unpatched_pin_rejects_each_override_before_key_access(self):
+        for mode in ("generate", "prove"):
+            original = {**environment(Path("/tmp"), mode), "RECIPIENT_KEY_ID": P.RECIPIENT_KEY_ID,
+                        "RECIPIENT_PUBLIC_KEY": P.RECIPIENT_PUBLIC_KEY}
+            cases = ({"RECIPIENT_KEY_ID": "123456"},
+                     {"RECIPIENT_PUBLIC_KEY": P.b64(TEST_RECIPIENT.public_key.encode())},
+                     {"RECIPIENT_KEY_ID": "123456", "RECIPIENT_PUBLIC_KEY": P.b64(TEST_RECIPIENT.public_key.encode())})
+            for change in cases:
+                with self.subTest(mode=mode, fields=sorted(change)), self.assertRaises(P.ProvisionError):
+                    P.execution(PrivateReadGuard({**original, **change}))
+            context = P.execution(PrivateReadGuard(original))
+            forged = {**context, "recipientKeyId": "123456", "recipientPublicKeyBase64": P.b64(TEST_RECIPIENT.public_key.encode())}
+            with patch.object(Ed25519PrivateKey, "generate", side_effect=AssertionError("operational generation forbidden")) as generate:
+                with self.assertRaises(P.ProvisionError):
+                    P.generate(forged) if mode == "generate" else P.prove(forged, PrivateReadGuard(original))
+                generate.assert_not_called()
 
 
 if __name__ == "__main__":
