@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import errno
 import importlib.util
 import io
 import json
@@ -73,9 +74,44 @@ def metadata_fixture(tmp_path, raw=None):
     return path
 
 
+def targeting_zip():
+    # Real tiny ZIP/extraction, but nonexecuted reference/analyzer fixture bytes.
+    namespace = "http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd"
+    framework = ('<FileList TargetFrameworkIdentifier=".NETCoreApp" TargetFrameworkVersion="10.0" '
+                 'FrameworkName="Microsoft.NETCore.App" Name=".NET Runtime">'
+                 '<File Type="Managed" Path="ref/net10.0/System.Runtime.dll" />'
+                 '<File Type="Managed" Path="ref/net10.0/netstandard.dll" />'
+                 '<File Type="Analyzer" Path="analyzers/dotnet/cs/Fixture.dll" /></FileList>')
+    return FIXTURES.zip_bytes([
+        ("Microsoft.NETCore.App.Ref.nuspec", (f'<package xmlns="{namespace}"><metadata>'
+         '<id>Microsoft.NETCore.App.Ref</id><version>10.0.12</version></metadata></package>').encode()),
+        ("Microsoft.NETCore.App.versions.txt", b"a" * 40 + b"\n10.0.12\n"),
+        ("data/FrameworkList.xml", framework.encode()),
+        ("data/PlatformManifest.txt", b"System.Runtime.dll|Microsoft.NETCore.App.Ref|10.0.0.0|10.0.12\n"),
+        ("data/PackageOverrides.txt", b"Microsoft.CSharp|4.7.0\n"),
+        ("ref/net10.0/System.Runtime.dll", b"nonexecuted System.Runtime reference fixture"),
+        ("ref/net10.0/netstandard.dll", b"nonexecuted netstandard reference fixture"),
+        ("ref/net10.0/System.Runtime.xml", b"<doc />"),
+        ("analyzers/dotnet/cs/Fixture.dll", b"nonexecuted analyzer fixture"),
+        ("useSharedDesignerContext.txt", b""),
+    ])
+
+
+def targeting_fixture(tmp_path):
+    archive = tmp_path / "targeting.zip"
+    archive.write_bytes(targeting_zip())
+    staging = tmp_path / "staging" / BOOT.TARGETING_PACK / BOOT.TARGETING_PACK_VERSION
+    staging.mkdir(parents=True)
+    FIXTURES.INSTALL._extract_zip(archive, staging, 0)
+    dotnet = tmp_path / "dotnet"
+    dotnet.mkdir()
+    return staging, dotnet, dotnet / "packs" / BOOT.TARGETING_PACK / BOOT.TARGETING_PACK_VERSION
+
+
 def prepare(tmp_path, monkeypatch, fault=None):
     value = json.loads((RECIPE / "toolchain.lock.json").read_bytes())
     archives = {
+        "netcore-app-ref": targeting_zip(),
         "dotnet-sdk": FIXTURES.tar_bytes([
             ("dotnet", "file", b"tiny nonexecuted SDK fixture"),
             (f"sdk/{BOOT.SDK_VERSION}/fixture", "file", b"version directory"),
@@ -97,6 +133,8 @@ def prepare(tmp_path, monkeypatch, fault=None):
         entry[algorithm] = hashlib.new(algorithm, raw).hexdigest()
         entry["destination"] = str(tmp_path / entry["destination"].lstrip("/"))
         urls[entry["url"]] = raw
+        if entry["name"] == "netcore-app-ref":
+            monkeypatch.setattr(BOOT, "TARGETING_PACK_STAGING", Path(entry["destination"]))
     manifest, receipt = tmp_path / "manifest.json", tmp_path / "inventory.json"
     manifest.write_text(json.dumps(value))
     dotnet, java, android = (tmp_path / "opt" / name for name in ("dotnet", "jdk", "android-sdk"))
@@ -138,6 +176,8 @@ def prepare(tmp_path, monkeypatch, fault=None):
             (android / "platform-tools").rename(android / "not-platform-tools")
         if fault == "bundled-after-install":
             (dotnet / "sdk" / BOOT.SDK_VERSION / "Microsoft.NETCoreSdk.BundledVersions.props").unlink()
+        if fault == "targeting-after-install":
+            (dotnet / "packs" / BOOT.TARGETING_PACK / BOOT.TARGETING_PACK_VERSION / "ref/net10.0/System.Runtime.dll").unlink()
 
     def runner(command, **kwargs):
         calls.append(command)
@@ -152,8 +192,12 @@ def prepare(tmp_path, monkeypatch, fault=None):
             assert FIXTURES.INSTALL.main() == 0  # Real installer, real tar/zip/file extraction.
             if fault == "extra-sdk":
                 (dotnet / "sdk/10.0.110").mkdir()
+            if fault == "targeting-before-install":
+                (BOOT.TARGETING_PACK_STAGING / "data/FrameworkList.xml").unlink()
             return subprocess.CompletedProcess(command, 0, "")
         if command[1:3] == ["workload", "install"]:
+            assert not BOOT.TARGETING_PACK_STAGING.exists()
+            BOOT.verify_targeting_pack(dotnet / "packs" / BOOT.TARGETING_PACK / BOOT.TARGETING_PACK_VERSION)
             assert command[3:9] == ["android", "maui-android", "--version", "10.0.112", "--source", BOOT.NUGET_SOURCE]
             config = Path(command[command.index("--configfile") + 1]).read_text()
             assert "<clear/>" in config and BOOT.NUGET_SOURCE in config
@@ -202,13 +246,112 @@ def test_real_tiny_offline_archives_and_explicit_workload_orchestration(tmp_path
 @pytest.mark.parametrize("fault", ["sdk-version", "extra-sdk", "workload-version", "java-version",
                                    "manifest-version", "missing-pack", "linked-pack", "missing-api", "workload-failure",
                                    "library-kind", "library-manifest-version", "library-missing", "library-duplicate-kind",
-                                   "missing-platform-tools", "bundled-before-install", "bundled-after-install"])
+                                   "missing-platform-tools", "bundled-before-install", "bundled-after-install",
+                                   "targeting-before-install", "targeting-after-install"])
 def test_bootstrap_version_or_install_failure_cannot_report_success(tmp_path, monkeypatch, fault):
     execute, calls, _ = prepare(tmp_path, monkeypatch, fault)
     with pytest.raises((RuntimeError, subprocess.CalledProcessError)):
         execute()
-    if fault in ("sdk-version", "extra-sdk", "bundled-before-install"):
+    if fault in ("sdk-version", "extra-sdk", "bundled-before-install", "targeting-before-install"):
         assert not any(command[1:3] == ["workload", "install"] for command in calls)
+
+
+def test_targeting_pack_promotes_complete_tiny_zip_with_public_modes(tmp_path):
+    staging, dotnet, destination = targeting_fixture(tmp_path)
+    before = BOOT.verify_targeting_pack(staging, public_modes=False)
+    for name, row in before.items():
+        (staging / name).chmod(0o700 if row[0] else 0o600)
+    with pytest.raises(RuntimeError, match="tree admission"):
+        BOOT.verify_targeting_pack(staging)
+    BOOT.promote_targeting_pack(staging, dotnet)
+    after = BOOT.verify_targeting_pack(destination)
+    assert not staging.exists()
+    assert {name: row[2:] for name, row in before.items()} == {name: row[2:] for name, row in after.items()}
+    assert all(row[1] == (0o755 if row[0] else 0o644) for row in after.values())
+    assert destination.parent.stat().st_mode & 0o777 == 0o755
+    assert (dotnet / "packs").stat().st_mode & 0o777 == 0o755
+
+
+@pytest.mark.parametrize("name", ["data/FrameworkList.xml", "data/PlatformManifest.txt", "data/PackageOverrides.txt",
+                                  "Microsoft.NETCore.App.Ref.nuspec", "ref/net10.0/System.Runtime.dll",
+                                  "analyzers/dotnet/cs/Fixture.dll"])
+def test_targeting_pack_missing_required_payload_cannot_promote(tmp_path, name):
+    staging, dotnet, destination = targeting_fixture(tmp_path)
+    (staging / name).unlink()
+    with pytest.raises(RuntimeError, match="targeting pack"):
+        BOOT.promote_targeting_pack(staging, dotnet)
+    assert staging.is_dir() and not destination.exists()
+
+
+@pytest.mark.parametrize("fault", ["empty", "symlink", "hardlink", "fifo", "directory", "wrong-version",
+                                   "duplicate-id", "omitted-declaration", "wrong-framework", "linked-root", "overlap"])
+def test_targeting_pack_hostile_payload_cannot_promote(tmp_path, fault):
+    staging, dotnet, destination = targeting_fixture(tmp_path)
+    path = staging / "ref/net10.0/System.Runtime.dll"
+    if fault == "hardlink":
+        os.link(path, tmp_path / "extra-link")
+    elif fault in ("empty", "symlink", "fifo", "directory"):
+        path.unlink()
+        if fault == "empty":
+            path.touch()
+        elif fault == "symlink":
+            path.symlink_to(staging / "ref/net10.0/netstandard.dll")
+        elif fault == "fifo":
+            os.mkfifo(path)
+        else:
+            path.mkdir()
+    elif fault in ("wrong-version", "duplicate-id"):
+        path = staging / "Microsoft.NETCore.App.Ref.nuspec"
+        raw = path.read_bytes()
+        path.write_bytes(raw.replace(b"10.0.12", b"10.0.11") if fault == "wrong-version" else
+                         raw.replace(b"</metadata>", b"<id>Microsoft.NETCore.App.Ref</id></metadata>"))
+    elif fault in ("omitted-declaration", "wrong-framework"):
+        path = staging / "data/FrameworkList.xml"
+        path.write_bytes(path.read_bytes().replace(b'<File Type="Managed" Path="ref/net10.0/System.Runtime.dll" />', b"")
+                         if fault == "omitted-declaration" else path.read_bytes().replace(b'"10.0"', b'"9.0"'))
+    elif fault == "linked-root":
+        original = staging.with_name("original")
+        staging.rename(original)
+        staging.symlink_to(original, target_is_directory=True)
+    else:
+        dotnet = staging.parent
+    with pytest.raises(RuntimeError):
+        BOOT.promote_targeting_pack(staging, dotnet)
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize("kind", ["empty-directory", "file", "symlink"])
+def test_targeting_pack_destination_is_never_overwritten(tmp_path, kind):
+    staging, dotnet, destination = targeting_fixture(tmp_path)
+    destination.parent.mkdir(parents=True)
+    if kind == "empty-directory":
+        destination.mkdir()
+    elif kind == "file":
+        destination.write_bytes(b"existing")
+    else:
+        destination.symlink_to(tmp_path / "absent")
+    before = destination.lstat()
+    with pytest.raises(RuntimeError, match="already exists"):
+        BOOT.promote_targeting_pack(staging, dotnet)
+    assert destination.lstat() == before and staging.is_dir()
+
+
+@pytest.mark.parametrize("fault", ["destination-race", "cross-device"])
+def test_targeting_pack_atomic_rename_has_no_replace_or_copy_fallback(tmp_path, monkeypatch, fault):
+    staging, dotnet, destination = targeting_fixture(tmp_path)
+    rename = BOOT._rename_targeting_pack
+
+    def fail_promotion(source, target):
+        if fault == "cross-device":
+            raise OSError(errno.EXDEV, "synthetic cross-device boundary")
+        target.mkdir()
+        rename(source, target)
+
+    monkeypatch.setattr(BOOT, "_rename_targeting_pack", fail_promotion)
+    with pytest.raises(RuntimeError, match="no-replace promotion failed"):
+        BOOT.promote_targeting_pack(staging, dotnet)
+    assert staging.is_dir()
+    assert list(destination.iterdir()) == [] if fault == "destination-race" else not destination.exists()
 
 
 def test_bundled_metadata_selects_exact_net10_declarations_without_execution(tmp_path):
@@ -591,6 +734,15 @@ def test_recipe_binds_exact_archive_metadata_and_keeps_old_image_untouched():
     assert archives["dotnet-sdk"]["url"] == "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.111/dotnet-sdk-10.0.111-linux-x64.tar.gz"
     assert archives["dotnet-sdk"]["strip_components"] == 0
     assert archives["dotnet-sdk"]["sha512"] == "aae221be96a3b510d5b6fffefc69d8ad2fa595a1430299419316bb71c65f260a457ca9af24d044e1709b28a9118798caafec535ccfe58f7767c5acb735c00392"
+    assert archives["netcore-app-ref"] == {
+        "name": "netcore-app-ref", "version": "10.0.12",
+        "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/10.0.12/microsoft.netcore.app.ref.10.0.12.nupkg",
+        "sha256": "bf6e0a1fa7b5ce6a9bbfb7191d2c3151c2d6f812eafabee833fd000c1293b872",
+        "format": "zip", "destination": "/opt/fleet-targeting-pack-staging/Microsoft.NETCore.App.Ref/10.0.12",
+        "strip_components": 0,
+    }
+    assert str(BOOT.TARGETING_PACK_STAGING) == archives["netcore-app-ref"]["destination"]
+    assert BOOT.PACKS["Microsoft.NETCore.App.Ref"] == ("10.0.12",)
     assert archives["temurin-jdk"]["version"] == "17.0.20.1+1"
     assert archives["temurin-jdk"]["sha256"] == "3808d1d15e3ec6bd5b84057fb5d84c33d8a1536a258146bcea2e603fc726e08e"
     assert archives["android-sdk-platform"]["sha256"] == "37607369a28c5b640b3a7998868d45898ebcb777565a0e85f9acf36f29631d2e"
