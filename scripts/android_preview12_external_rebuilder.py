@@ -15,15 +15,19 @@ import configparser
 from datetime import UTC, datetime
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import selectors
 import shutil
+import signal
 import stat
 import subprocess
 import sys
 import tempfile
+import time
 import types
 from typing import Any, Callable, Mapping
 
@@ -75,6 +79,13 @@ REVISION_VARIABLES = {
     "chummer6-media-factory": "CHUMMER_MEDIA_FACTORY_REVISION",
     "chummer6-design": "CHUMMER_DESIGN_REVISION",
 }
+# Transport limits only. Pack/object expansion and checkout disk usage still
+# require an external filesystem quota; these do not bound expanded source.
+OFFLINE_MANIFEST_BYTES = 64 * 1024
+OFFLINE_BUNDLE_BYTES = 512 * 1024 * 1024
+OFFLINE_TOTAL_BUNDLE_BYTES = 2 * 1024 * 1024 * 1024
+OFFLINE_GIT_OUTPUT_BYTES = 8 * 1024 * 1024
+OFFLINE_GIT_TIMEOUT_SECONDS = 900
 
 
 class RebuilderError(RuntimeError):
@@ -493,6 +504,13 @@ def checkout_source_graph(graph: Mapping[str, Any], workspace: Path, *,
 def verify_source_checkout_graph(graph: Mapping[str, Any], workspace: Path, *,
                                  runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
                                  timeout: int = 900) -> dict[str, Path]:
+    return _verify_source_checkout_graph(
+        graph, workspace, lambda args, **kwargs: _git(runner, args, **kwargs), timeout=timeout,
+    )
+
+
+def _verify_source_checkout_graph(graph: Mapping[str, Any], workspace: Path,
+                                  git: Callable[..., bytes | str], *, timeout: int) -> dict[str, Path]:
     rows = validate_source_graph(graph)
     roots: dict[str, Path] = {}
     for name, (_role, relative, repository) in REPOSITORIES.items():
@@ -500,11 +518,11 @@ def verify_source_checkout_graph(graph: Mapping[str, Any], workspace: Path, *,
         if root.is_symlink() or not root.is_dir() or root.resolve(strict=True) != root:
             raise RebuilderError(f"independent source checkout is missing or noncanonical: {name}")
         row = rows[name]
-        status = _git(runner, ["-C", os.fspath(root), "status", "--porcelain", "--untracked-files=all"], timeout=timeout)
-        head = _git(runner, ["-C", os.fspath(root), "rev-parse", "HEAD^{commit}"], timeout=timeout)
-        tree = _git(runner, ["-C", os.fspath(root), "rev-parse", "HEAD^{tree}"], timeout=timeout)
-        remote = _git(runner, ["-C", os.fspath(root), "remote", "get-url", "origin"], timeout=timeout)
-        listing = _git(runner, ["-C", os.fspath(root), "ls-tree", "-r", "-z", "--full-tree", "HEAD"],
+        status = git(["-C", os.fspath(root), "status", "--porcelain", "--untracked-files=all"], timeout=timeout)
+        head = git(["-C", os.fspath(root), "rev-parse", "HEAD^{commit}"], timeout=timeout)
+        tree = git(["-C", os.fspath(root), "rev-parse", "HEAD^{tree}"], timeout=timeout)
+        remote = git(["-C", os.fspath(root), "remote", "get-url", "origin"], timeout=timeout)
+        listing = git(["-C", os.fspath(root), "ls-tree", "-r", "-z", "--full-tree", "HEAD"],
                        timeout=timeout, binary=True)
         assert isinstance(listing, bytes)
         if status or head != row["commit"] or tree != row["tree"] or remote != repository \
@@ -512,6 +530,289 @@ def verify_source_checkout_graph(graph: Mapping[str, Any], workspace: Path, *,
             raise RebuilderError(f"independent source checkout differs from source graph: {name}")
         roots[name] = root
     return roots
+
+
+def _offline_git(arguments: list[str], *, timeout: int, binary: bool = False) -> bytes | str:
+    """Local Git only, with bounded capture and content-free failures.
+
+    Use Popen here so output is bounded while the process runs, not after a
+    potentially unlimited subprocess.run(capture_output=True) allocation.
+    """
+    environment = {
+        "PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C", "HOME": "/nonexistent",
+        "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_ATTR_NOSYSTEM": "1",
+        "GIT_NO_REPLACE_OBJECTS": "1", "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "/bin/false",
+        "GIT_ALLOW_PROTOCOL": "", "GIT_PROTOCOL_FROM_USER": "0",
+    }
+    command = ["/usr/bin/git", "-c", "protocol.allow=never", "-c", "core.hooksPath=/dev/null",
+               "-c", "core.attributesFile=/dev/null", "-c", "core.autocrlf=false",
+               "-c", "init.templateDir=", "-c", "gc.auto=0", "-c", "maintenance.auto=false",
+               *arguments]
+    process, leader_reserved = None, False
+    try:
+        if type(timeout) is not int or timeout < 1:
+            raise RebuilderError("offline Git timeout is invalid")
+        deadline = time.monotonic() + min(timeout, OFFLINE_GIT_TIMEOUT_SECONDS)
+        process = subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL, umask=0o077,
+                                   start_new_session=True,
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        leader_reserved = True
+        assert process.stdout is not None
+        output = bytearray()
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ)
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RebuilderError("offline Git operation exceeded its time limit")
+                for key, _ in selector.select(min(remaining, 1)):
+                    chunk = os.read(key.fd, min(64 * 1024, OFFLINE_GIT_OUTPUT_BYTES + 1 - len(output)))
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                    else:
+                        output.extend(chunk)
+                        if len(output) > OFFLINE_GIT_OUTPUT_BYTES:
+                            raise RebuilderError("offline Git operation exceeded its output limit")
+        # Observe exit without releasing the leader PID. Cleanup can then
+        # signal only our still-owned process group, before wait() reaps it.
+        while True:
+            try:
+                status = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG)
+            except ChildProcessError:
+                leader_reserved = False
+                raise RebuilderError("offline Git process ownership changed") from None
+            if status is not None:
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RebuilderError("offline Git operation exceeded its time limit")
+            time.sleep(min(remaining, 0.01))
+        if status.si_code != os.CLD_EXITED or status.si_status != 0:
+            raise RebuilderError("offline Git operation failed")
+        return bytes(output) if binary else output.decode("utf-8", errors="strict").strip()
+    except (OSError, ValueError, subprocess.SubprocessError):
+        raise RebuilderError("offline Git operation failed") from None
+    finally:
+        if process is not None:
+            try:
+                # Git may have started index-pack. Reap our entire private
+                # process group, never a caller's or an unrelated session.
+                if leader_reserved:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                process.wait(timeout=5)
+                if process.stdout is not None:
+                    process.stdout.close()
+            except (OSError, subprocess.SubprocessError):
+                raise RebuilderError("offline Git process cleanup failed") from None
+
+
+def _offline_input_identity(path: Path, limit: int) -> os.stat_result:
+    """Admit one canonical, unlinked regular input and its actual ancestors."""
+    if not path.is_absolute() or path.resolve(strict=True) != path:
+        raise RebuilderError("offline source input path is not canonical")
+    for ancestor in path.parents:
+        if not stat.S_ISDIR(ancestor.lstat().st_mode):
+            raise RebuilderError("offline source input ancestry is not canonical")
+    metadata = path.lstat()
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1 \
+            or metadata.st_size < 1 or metadata.st_size > limit:
+        raise RebuilderError("offline source input is not one bounded unlinked regular file")
+    return metadata
+
+
+def _copy_offline_input(path: Path, metadata: os.stat_result, output: Any, limit: int) -> str:
+    """Copy through a stable descriptor, checking both descriptor and pathname."""
+    expected = _file_identity(metadata)
+    if _file_identity(_offline_input_identity(path, limit)) != expected:
+        raise RebuilderError("offline source input changed before snapshot")
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        if _file_identity(os.fstat(descriptor)) != expected or os.fstat(descriptor).st_nlink != 1:
+            raise RebuilderError("offline source input changed before snapshot")
+        digest, consumed = hashlib.sha256(), 0
+        while chunk := os.read(descriptor, min(1024 * 1024, metadata.st_size + 1 - consumed)):
+            consumed += len(chunk)
+            if consumed > metadata.st_size or consumed > limit:
+                raise RebuilderError("offline source input grew during snapshot")
+            output.write(chunk)
+            digest.update(chunk)
+        if consumed != metadata.st_size or _file_identity(os.fstat(descriptor)) != expected \
+                or os.fstat(descriptor).st_nlink != 1 \
+                or _file_identity(_offline_input_identity(path, limit)) != expected:
+            raise RebuilderError("offline source input changed during snapshot")
+        return digest.hexdigest()
+    finally:
+        os.close(descriptor)
+
+
+def _offline_manifest(path: Path, workspace: Path) -> dict[str, tuple[Path, os.stat_result, str]]:
+    # This exact mapping is transport data, not a signed release contract or
+    # authentication of the party supplying expected hashes.
+    metadata = _offline_input_identity(path, OFFLINE_MANIFEST_BYTES)
+    raw = io.BytesIO()
+    _copy_offline_input(path, metadata, raw, OFFLINE_MANIFEST_BYTES)
+    try:
+        manifest = _strict_json(raw.getvalue(), "offline source manifest")
+    except RebuilderError:
+        # Duplicate keys and other JSON diagnostics may contain hostile text.
+        raise RebuilderError("offline source manifest is not strict JSON") from None
+    if set(manifest) != set(REPOSITORIES):
+        raise RebuilderError("offline source manifest repository inventory is not exact")
+    inputs, total = {}, 0
+    for name, row in manifest.items():
+        if not isinstance(row, dict) or set(row) != {"path", "sha256", "size_bytes"} \
+                or not isinstance(row["path"], str) or len(row["path"]) > 4096 \
+                or not isinstance(row["sha256"], str) or not HEX64.fullmatch(row["sha256"]) \
+                or type(row["size_bytes"]) is not int or not 0 < row["size_bytes"] <= OFFLINE_BUNDLE_BYTES:
+            raise RebuilderError("offline source manifest row is not exact")
+        source = Path(row["path"])
+        if str(source) != row["path"]:
+            raise RebuilderError("offline source bundle path is not canonical")
+        identity = _offline_input_identity(source, OFFLINE_BUNDLE_BYTES)
+        if identity.st_size != row["size_bytes"]:
+            raise RebuilderError("offline source bundle size differs from manifest")
+        total += identity.st_size
+        if total > OFFLINE_TOTAL_BUNDLE_BYTES:
+            raise RebuilderError("offline source bundle inventory exceeds its byte limit")
+        inputs[name] = (source, identity, row["sha256"])
+    if any(input_path == workspace or input_path.is_relative_to(workspace)
+           or workspace.is_relative_to(input_path) for input_path in (path, *(item[0] for item in inputs.values()))):
+        raise RebuilderError("offline source inputs overlap the output workspace")
+    return inputs
+
+
+def _remove_owned_directory(path: Path, identity: os.stat_result) -> None:
+    """Never delete a replacement placed at an exclusively created pathname."""
+    descriptor = None
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        current = os.fstat(descriptor)
+        if (current.st_dev, current.st_ino) != (identity.st_dev, identity.st_ino):
+            return
+        # Anchor child removal to the owned directory descriptor, even if a
+        # caller renames its pathname while cleanup is running.
+        for name in os.listdir(descriptor):
+            child = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+            if stat.S_ISDIR(child.st_mode):
+                shutil.rmtree(name, dir_fd=descriptor)
+            else:
+                os.unlink(name, dir_fd=descriptor)
+        current = path.lstat()
+        if (current.st_dev, current.st_ino) == (identity.st_dev, identity.st_ino):
+            os.rmdir(path)
+    except FileNotFoundError:
+        pass
+    except (OSError, RuntimeError, ValueError):
+        raise RebuilderError("offline source cleanup failed") from None
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                raise RebuilderError("offline source cleanup failed") from None
+
+
+def _offline_bundle_header(path: Path) -> None:
+    """Reject prerequisite/filtered transports even if a small pack is complete.
+
+    Git still verifies the actual header, pack and full object closure below.
+    This bounded capability check adds no release authority.
+    """
+    with path.open("rb") as stream:
+        first = stream.readline(32)
+        if first not in (b"# v2 git bundle\n", b"# v3 git bundle\n"):
+            raise RebuilderError("offline bundle version is unsupported")
+        consumed = len(first)
+        while consumed <= OFFLINE_MANIFEST_BYTES:
+            line = stream.readline(OFFLINE_MANIFEST_BYTES + 1 - consumed)
+            consumed += len(line)
+            if not line or consumed > OFFLINE_MANIFEST_BYTES:
+                break
+            if line == b"\n":
+                return
+            if line.startswith(b"-") or (line.startswith(b"@") and line != b"@object-format=sha1\n"):
+                raise RebuilderError("offline bundle requires partial or unsupported source transport")
+    raise RebuilderError("offline bundle header is missing or oversized")
+
+
+def _offline_workspace_parent(parent: Path) -> None:
+    """Keep staged pathnames beneath private, owner-controlled ancestry.
+
+    A trusted sticky ancestor such as /tmp is allowed: its entries are also
+    required to be owned by this user or root. A writable non-sticky ancestor
+    would let another user replace an otherwise private child directory.
+    """
+    identity = parent.lstat()
+    if identity.st_uid != os.getuid() or stat.S_IMODE(identity.st_mode) & 0o077:
+        raise RebuilderError("offline source workspace parent is not private")
+    for ancestor in (parent, *parent.parents):
+        metadata = ancestor.lstat()
+        if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid not in (0, os.getuid()) \
+                or (stat.S_IMODE(metadata.st_mode) & 0o022 and not metadata.st_mode & stat.S_ISVTX):
+            raise RebuilderError("offline source workspace ancestry is not owner-controlled")
+
+
+def checkout_source_graph_from_bundles(graph: Mapping[str, Any], workspace: Path, manifest_path: Path, *,
+                                       timeout: int = 900) -> dict[str, Path]:
+    """Snapshot all eight complete bundles, then materialize exact local sources.
+
+    No network, SDK or NuGet work occurs here. This transport does not establish
+    producer authentication, protected custody, signing or release eligibility.
+    The caller must provide a filesystem quota for expanded Git/source bytes.
+    """
+    workspace_identity = stage_identity = None
+    stage = None
+    try:
+        rows = validate_source_graph(graph)
+        if not workspace.is_absolute() or workspace.exists() or workspace.is_symlink() \
+                or workspace.parent.resolve(strict=True) != workspace.parent \
+                or not workspace.parent.is_dir():
+            raise RebuilderError("offline source workspace must be a new canonical absolute path")
+        _offline_workspace_parent(workspace.parent)
+        inputs = _offline_manifest(manifest_path, workspace)
+        stage = Path(tempfile.mkdtemp(prefix=".offline-source-", dir=workspace.parent))
+        stage_identity = stage.lstat()
+        snapshots = {}
+        # Complete every size/hash snapshot before creating any checkout.
+        for name, (source, metadata, expected_digest) in inputs.items():
+            snapshot = stage / (name + ".bundle")
+            with snapshot.open("xb") as output:
+                actual = _copy_offline_input(source, metadata, output, OFFLINE_BUNDLE_BYTES)
+                output.flush()
+                os.fsync(output.fileno())
+            snapshot.chmod(0o400)
+            if actual != expected_digest:
+                raise RebuilderError("offline source bundle digest differs from manifest")
+            _offline_bundle_header(snapshot)
+            snapshots[name] = snapshot
+        workspace.mkdir(mode=0o700)
+        workspace_identity = workspace.lstat()
+        for name, (_role, relative, repository) in REPOSITORIES.items():
+            root = workspace / relative
+            root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            _offline_git(["init", "--quiet", "--template=", os.fspath(root)], timeout=timeout)
+            command = ["-C", os.fspath(root)]
+            _offline_git([*command, "bundle", "verify", os.fspath(snapshots[name])], timeout=timeout)
+            _offline_git([*command, "bundle", "unbundle", os.fspath(snapshots[name])], timeout=timeout)
+            _offline_git([*command, "fsck", "--full", "--strict", "--no-reflogs", rows[name]["commit"]], timeout=timeout)
+            _offline_git([*command, "remote", "add", "origin", repository], timeout=timeout)
+            _preserved_git_storage(root, repository)
+            _offline_git([*command, "checkout", "--quiet", "--detach", rows[name]["commit"]], timeout=timeout)
+        roots = _verify_source_checkout_graph(graph, workspace, _offline_git, timeout=timeout)
+        for name, root in roots.items():
+            _preserved_repository_bytes(root, rows[name]["commit"], git=_offline_git,
+                                        owner_uid=os.getuid(), timeout=timeout)
+        return roots
+    except (OSError, RuntimeError, ValueError, TypeError, subprocess.SubprocessError):
+        if workspace_identity is not None:
+            _remove_owned_directory(workspace, workspace_identity)
+        raise RebuilderError("offline source bundle materialization failed") from None
+    finally:
+        if stage is not None and stage_identity is not None:
+            _remove_owned_directory(stage, stage_identity)
 
 
 def _trusted_root(path: Path, label: str) -> Path:
@@ -524,7 +825,7 @@ def _trusted_root(path: Path, label: str) -> Path:
     return path
 
 
-def _resolve_tree_link(root: Path, path: Path, target: str, label: str) -> None:
+def _resolve_tree_link(root: Path, path: Path, target: str, label: str, *, owner_uid: int = 0) -> None:
     """Walk every hop inside the sealed tree, not merely the final realpath."""
     location = list(path.parent.relative_to(root).parts)
     pending = deque()
@@ -553,7 +854,7 @@ def _resolve_tree_link(root: Path, path: Path, target: str, label: str) -> None:
                 continue
             candidate = root.joinpath(*location, part)
             metadata = candidate.lstat()
-            if metadata.st_uid != 0:
+            if metadata.st_uid != owner_uid:
                 raise RebuilderError(f"{label} symlink reaches non-root-owned content")
             if stat.S_ISLNK(metadata.st_mode):
                 hops += 1
@@ -571,7 +872,7 @@ def _resolve_tree_link(root: Path, path: Path, target: str, label: str) -> None:
         # Preserve kernel lookup semantics too: PurePosixPath normalizes a
         # trailing slash or '/.', which must not make a file into a directory.
         final = path.stat()
-        if (final.st_uid != 0 or stat.S_IMODE(final.st_mode) & 0o022
+        if (final.st_uid != owner_uid or stat.S_IMODE(final.st_mode) & 0o022
                 or not (stat.S_ISREG(final.st_mode) or stat.S_ISDIR(final.st_mode))):
             raise RebuilderError(f"{label} symlink reaches unsafe content")
     except (OSError, ValueError):
@@ -996,11 +1297,13 @@ def _preserved_git_storage(root: Path, repository: str | None = None) -> None:
         raise RebuilderError("preserved Git config is not an exact helper-free clone") from None
 
 
-def _preserved_repository_bytes(root: Path, commit: str) -> None:
+def _preserved_repository_bytes(root: Path, commit: str, *, git: Callable[..., bytes | str] | None = None,
+                                owner_uid: int = 0, timeout: int = 30) -> None:
     """Bind all tracked source bytes, including assume-unchanged/ignored drift."""
     _preserved_git_storage(root)
-    listing = _git(subprocess.run, ["-C", os.fspath(root), "ls-tree", "-r", "-z", "--full-tree", commit],
-                   timeout=30, binary=True)
+    operation = git or (lambda args, **kwargs: _git(subprocess.run, args, **kwargs))
+    listing = operation(["-C", os.fspath(root), "ls-tree", "-r", "-z", "--full-tree", commit],
+                        timeout=timeout, binary=True)
     if not listing or len(listing) > 8 * 1024 * 1024:
         raise RebuilderError("preserved source Git inventory is missing or oversized")
     expected, parents = {}, set()
@@ -1042,7 +1345,7 @@ def _preserved_repository_bytes(root: Path, commit: str) -> None:
                 if mode != "120000":
                     raise RebuilderError("preserved source file became a link")
                 raw = os.fsencode(os.readlink(path))
-                _resolve_tree_link(root, path, os.fsdecode(raw), "preserved source")
+                _resolve_tree_link(root, path, os.fsdecode(raw), "preserved source", owner_uid=owner_uid)
                 actual = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw,
                                       usedforsecurity=False).hexdigest()
             else:
@@ -1880,6 +2183,7 @@ def prepare_rebuild_handoff(
     upload_certificate: Path, dotnet_root: Path, java_root: Path,
     android_sdk_root: Path, output_dir: Path, reported_builder_image: str, *,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    offline_source_manifest: Path | None = None,
 ) -> dict[str, Any]:
     """Run the secret-free rebuild stage in a job with no credential mounts."""
 
@@ -1925,7 +2229,12 @@ def prepare_rebuild_handoff(
         source_graph_copy = stage / "producer-source-graph.json"
         _write_exclusive(source_graph_copy, graph_raw)
         workspace = stage / "workspace"
-        checkout_source_graph(graph, workspace, runner=runner, timeout=lock["limits"]["git_timeout_seconds"])
+        if offline_source_manifest is None:
+            checkout_source_graph(graph, workspace, runner=runner, timeout=lock["limits"]["git_timeout_seconds"])
+        else:
+            checkout_source_graph_from_bundles(
+                graph, workspace, offline_source_manifest, timeout=lock["limits"]["git_timeout_seconds"],
+            )
         android = validate_android_consumer(workspace / "chummer-android", lock)
         toolchain = verify_unsigned_toolchain(
             lock, dotnet_root, java_root, android_sdk_root,
@@ -3225,6 +3534,10 @@ def _parser() -> argparse.ArgumentParser:
     ):
         prepare.add_argument(f"--{name}", required=True, type=Path)
     prepare.add_argument("--builder-image", required=True)
+    prepare.add_argument(
+        "--offline-source-manifest", type=Path,
+        help="absolute JSON path mapping all eight repositories to path, sha256 and size_bytes; source transport only",
+    )
     return parser
 
 
@@ -3254,6 +3567,7 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.dotnet_root.absolute(), arguments.java_root.absolute(),
                 arguments.android_sdk_root.absolute(), arguments.output_dir.absolute(),
                 arguments.builder_image,
+                offline_source_manifest=arguments.offline_source_manifest,
             )
     except (OSError, KeyError, TypeError, ValueError, subprocess.SubprocessError, RebuilderError) as error:
         print(f"android-preview12-external-rebuilder: {error}", file=sys.stderr)

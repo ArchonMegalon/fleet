@@ -486,7 +486,8 @@ def test_both_toolchain_entrypoints_reject_changed_build_inputs(observations, fa
         measure(observations, unsigned=unsigned, image=image)
 
 
-def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(tmp_path, monkeypatch):
+@pytest.mark.parametrize("offline", [False, True])
+def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(tmp_path, monkeypatch, offline):
     inputs = tmp_path / "inputs"
     inputs.mkdir(mode=0o700)
     _, _, paths, _ = handoff_inputs(fleet, inputs)
@@ -505,10 +506,17 @@ def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(
         events.append("unsigned-configuration")
         return actual_unsigned(*selected)
     monkeypatch.setattr(fleet, "validate_unsigned_rebuild_lock", validate)
-    def checkout(graph, workspace, **kwargs):
+    manifest = tmp_path / "source-manifest.json"
+    if offline:
+        args["offline_source_manifest"] = manifest
+    def checkout(graph, workspace, *positional, **kwargs):
         events.append("modeled-checkout")
+        assert positional == ((manifest,) if offline else ())
+        assert kwargs == ({"timeout": lock["limits"]["git_timeout_seconds"]} if offline else {
+            "runner": forbidden, "timeout": lock["limits"]["git_timeout_seconds"]})
         workspace.mkdir(mode=0o700)
-    monkeypatch.setattr(fleet, "checkout_source_graph", checkout)
+    monkeypatch.setattr(fleet, "checkout_source_graph_from_bundles" if offline else "checkout_source_graph", checkout)
+    monkeypatch.setattr(fleet, "checkout_source_graph" if offline else "checkout_source_graph_from_bundles", forbidden)
     consumer = SimpleNamespace(VERIFY=SimpleNamespace(verify_release_eligibility=lambda *a, **k: {
         "sourceCommit": lock["android_authority"]["commit"], "sourceTree": lock["android_authority"]["tree"]}),
         _sidecar_claims=lambda *a: {})
@@ -535,3 +543,23 @@ def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(
     assert all(result[name] is False for name in ("signingPerformed", "publicationAuthorized", "googlePlayUploadAuthorized"))
     assert copied["unsignedAab"].read_bytes() == paths["unsignedAab"].read_bytes()
     assert result["bindings"]["lockSha256"] == hashlib.sha256(args["lock_path"].read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("manifest", [None, "/absolute/source-manifest.json", "relative-manifest.json"])
+def test_prepare_cli_propagates_optional_manifest_without_normalizing_relative_input(tmp_path, monkeypatch, capsys, manifest):
+    args = prepare_arguments(tmp_path, configured())
+    argv = ["--lock", str(args["lock_path"]), "prepare-rebuild"]
+    for name, value in args.items():
+        if name == "lock_path":
+            continue
+        argv += ["--builder-image" if name == "reported_builder_image" else "--" + name.replace("_", "-"), str(value)]
+    if manifest is not None:
+        argv += ["--offline-source-manifest", manifest]
+    observed = []
+    def prepare(*positional, **kwargs):
+        observed.append(kwargs)
+        return {"unitFixture": True}
+    monkeypatch.setattr(fleet, "prepare_rebuild_handoff", prepare)
+    assert fleet.main(argv) == 0
+    assert observed == [{"offline_source_manifest": Path(manifest) if manifest is not None else None}]
+    assert json.loads(capsys.readouterr().out) == {"unitFixture": True}
