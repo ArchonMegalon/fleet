@@ -623,3 +623,92 @@ def test_host_bind_multiset_rejects_missing_extra_duplicate_or_changed_strings(m
     else: pytest.fail("unknown test mutation")
     with pytest.raises(runtime.RuntimeObservationError, match="^host-binds$"):
         runtime._validate(row, CID, policy, phase, NOW + 4*10**9)
+
+
+def test_process_role_defaults_to_the_existing_builder_profile(policy):
+    assert policy.process_role == "builder"
+    assert replace(policy, process_role="builder") == policy
+    assert runtime.asdict(policy)["process_role"] == "builder"
+
+
+@pytest.mark.parametrize("user", ["1:1", "65534:65534", "2147483647:2147483647"])
+def test_explicit_builder_keeps_nonzero_uid_gid_bounds(policy, user):
+    assert replace(policy, process_role="builder", user=user).user == user
+    with pytest.raises(runtime.RuntimeObservationError, match="^user-policy$"):
+        replace(policy, process_role="signer", user=user)
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_root_requires_explicit_signer_profile(policy, explicit):
+    fields = {"process_role": "builder"} if explicit else {}
+    with pytest.raises(runtime.RuntimeObservationError, match="^user-policy$"):
+        replace(policy, user="0:0", **fields)
+
+
+@pytest.mark.parametrize("role", [None, True, False, 0, 1.0, "", "Signer", "root", " builder", "signer\n", [], {}])
+def test_malformed_process_role_is_rejected_before_transport(policy, monkeypatch, role):
+    monkeypatch.setattr(runtime, "_inspect", lambda _: pytest.fail("invalid policy must precede transport"))
+    with pytest.raises(runtime.RuntimeObservationError, match="^process-role-policy$"):
+        replace(policy, user="0:0", process_role=role)
+
+
+@pytest.mark.parametrize("role", ["builder", "signer"])
+@pytest.mark.parametrize("user", [None, True, 0, "root", "root:root", "0:1", "1:0", "00:0", "0:00",
+    "-1:1", "1:-1", "0:0 ", "0:0\n", "2147483648:1", "1:2147483648"])
+def test_profiles_reject_mixed_root_aliases_and_malformed_users(policy, role, user):
+    with pytest.raises(runtime.RuntimeObservationError, match="^user-policy$"):
+        replace(policy, process_role=role, user=user)
+
+
+def test_explicit_signer_created_and_exited_observations_remain_nonauthoritative(policy, monkeypatch):
+    signer = replace(policy, process_role="signer", user="0:0")
+    initial, terminal = inspection(policy), inspection(policy, "exited")
+    initial["Config"]["User"] = terminal["Config"]["User"] = "0:0"
+    snapshots = deepcopy([initial, terminal])
+    calls = samples(monkeypatch, [initial, initial, terminal, terminal],
+                    [NOW, NOW, NOW + 4*10**9, NOW + 4*10**9])
+    before = runtime.observe_created(CID, signer)
+    after = runtime.observe_exited(CID, signer, before)
+    assert type(before) is type(after) is runtime.RuntimeObservation
+    assert calls == [CID] * 4 and (before.phase, after.phase) == ("created", "exited")
+    assert before.configuration_sha256 == after.configuration_sha256
+    assert before.policy_sha256 == after.policy_sha256 == runtime._digest(runtime.asdict(signer))
+    assert runtime.asdict(signer)["process_role"] == "signer"
+    assert after.schema == "fleet.docker-configuration-state-observation/v1"
+    assert [initial, terminal] == snapshots
+    assert not any(hasattr(after, name) for name in ("authenticated_job", "signing_authorized", "credential_custody"))
+
+
+@pytest.mark.parametrize("phase", ["created", "exited"])
+@pytest.mark.parametrize("role,user,observed_user", [("builder", "65534:65534", "0:0"),
+    ("signer", "0:0", "65534:65534"), ("signer", "0:0", "0:1"), ("signer", "0:0", "root:root")])
+def test_inspected_user_and_labels_cannot_select_or_override_role(policy, phase, role, user, observed_user):
+    admitted = replace(policy, process_role=role, user=user, labels=(("process_role", "signer"),))
+    row = inspection(policy, phase)
+    row["Config"].update(User=observed_user, Labels={"process_role": "signer"})
+    with pytest.raises(runtime.RuntimeObservationError, match="^container-config$"):
+        runtime._validate(row, CID, admitted, phase, NOW + 4*10**9)
+
+
+@pytest.mark.parametrize("phase", ["created", "exited"])
+@pytest.mark.parametrize("field,value", [("Privileged", True), ("ReadonlyRootfs", False),
+    ("CapDrop", []), ("CapAdd", ["SYS_ADMIN"]), ("SecurityOpt", []), ("NetworkMode", "bridge"),
+    ("NanoCpus", 0), ("Binds", [])])
+def test_signer_profile_keeps_all_isolation_and_resource_checks(policy, phase, field, value):
+    signer = replace(policy, process_role="signer", user="0:0")
+    row = inspection(policy, phase)
+    row["Config"]["User"] = "0:0"
+    row["HostConfig"][field] = value
+    with pytest.raises(runtime.RuntimeObservationError):
+        runtime._validate(row, CID, signer, phase, NOW + 4*10**9)
+
+
+def test_process_role_change_cannot_reuse_prior_observation(policy, monkeypatch):
+    initial = inspection(policy)
+    samples(monkeypatch, [initial, initial])
+    before = runtime.observe_created(CID, policy)
+    signer = replace(policy, process_role="signer", user="0:0")
+    assert before.policy_sha256 != runtime._digest(runtime.asdict(signer))
+    monkeypatch.setattr(runtime, "_inspect", lambda _: pytest.fail("changed admission must precede transport"))
+    with pytest.raises(runtime.RuntimeObservationError, match="^prior-observation$"):
+        runtime.observe_exited(CID, signer, before)

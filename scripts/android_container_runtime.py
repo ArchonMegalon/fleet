@@ -2,6 +2,9 @@
 
 The controller must independently trust this code, the root daemon, immutable
 policy and input custody. A candidate must never supply its own admission policy.
+The explicit process_role selects only a UID/GID validation profile: builder is
+nonroot; signer requires 0:0 for the preserved consumer's ownership checks.
+This input is not authenticated job identity, custody or signing authorization.
 Only fixed API1.55 GET inspect requests are made; there is no CLI, Docker SDK,
 process execution, credential input, create/start/exec/delete or other mutation.
 
@@ -148,14 +151,19 @@ class RuntimePolicy:
     attach_stdout: bool = True
     attach_stderr: bool = True
     maximum_runtime_seconds: int = 10800
+    process_role: str = "builder"
 
     def __post_init__(self):
         _require(type(self.image_id) is str and re.fullmatch(r"sha256:[0-9a-f]{64}", self.image_id), "image-policy")
         _require(_text(self.requested_image, 512) and re.fullmatch(
             r"[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]+)?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+"
             r"(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?@sha256:[0-9a-f]{64}", self.requested_image), "image-policy")
-        _require(type(self.user) is str and re.fullmatch(r"[1-9][0-9]{0,9}:[1-9][0-9]{0,9}", self.user)
-                 and all(int(v) <= 2147483647 for v in self.user.split(":")), "user-policy")
+        _require(type(self.process_role) is str and self.process_role in {"builder", "signer"}, "process-role-policy")
+        if self.process_role == "signer":
+            _require(type(self.user) is str and self.user == "0:0", "user-policy")
+        else:
+            _require(type(self.user) is str and re.fullmatch(r"[1-9][0-9]{0,9}:[1-9][0-9]{0,9}", self.user)
+                     and all(int(v) <= 2147483647 for v in self.user.split(":")), "user-policy")
         _require(_path(self.workdir, root=True) and _strings(self.entrypoint, empty=False)
                  and _path(self.entrypoint[0]) and _strings(self.command), "command-policy")
         _require(_strings(self.environment) and all(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", value)
