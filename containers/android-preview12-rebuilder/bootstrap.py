@@ -10,6 +10,7 @@ import json
 import io
 import os
 from pathlib import Path, PurePosixPath
+import re
 import stat
 import struct
 import subprocess
@@ -37,11 +38,68 @@ PACKS = {
        for abi in ("arm", "arm64", "x86", "x64")},
 }
 LIBRARY_PACKS = {"Microsoft.Maui.Controls": "10.0.20"}
+PLATFORM_TOOLS_VERSION = "37.0.1"
 
 
 def require_directory(path: Path) -> None:
     if path.is_symlink() or not path.is_dir() or path.resolve(strict=True) != path:
         raise RuntimeError(f"missing or noncanonical toolchain directory: {path}")
+
+
+def verify_platform_tools(android_root: Path) -> None:
+    # Metadata/version checks only: invoking adb can create keys or start a
+    # daemon. Archive hashes, not this check, admit the installed tool bytes.
+    directory = android_root / "platform-tools"
+    require_directory(directory)
+    failure = f"missing, unsafe or mismatched Android platform-tools: {directory}"
+    identity = lambda value: (value.st_dev, value.st_ino, value.st_mode, value.st_uid,
+                              value.st_gid, value.st_nlink, value.st_size,
+                              value.st_mtime_ns, value.st_ctime_ns)
+
+    def checked_file(name):
+        path = directory / name
+        value = path.lstat()
+        if (not stat.S_ISREG(value.st_mode) or value.st_nlink != 1 or value.st_size <= 0
+                or path.resolve(strict=True) != path
+                or (name != "source.properties" and not value.st_mode & 0o111)):
+            raise RuntimeError(failure)
+        return value
+
+    try:
+        before = {name: checked_file(name) for name in ("adb", "fastboot", "source.properties")}
+        properties = directory / "source.properties"
+        if before["source.properties"].st_size > 4096:
+            raise RuntimeError(failure)
+        # NONBLOCK avoids hanging if a regular file is replaced by a FIFO
+        # between lstat and open; NOFOLLOW rejects a replaced final symlink.
+        with os.fdopen(os.open(properties, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as source:
+            if identity(os.fstat(source.fileno())) != identity(before["source.properties"]):
+                raise RuntimeError(failure)
+            raw = source.read(4097)
+            if (len(raw) != before["source.properties"].st_size
+                    or identity(os.fstat(source.fileno())) != identity(before["source.properties"])):
+                raise RuntimeError(failure)
+        text = raw.decode("ascii", errors="strict")
+        if any(ord(char) < 32 and char not in "\t\r\n" or ord(char) == 127 for char in text):
+            raise RuntimeError(failure)
+        fields = {}
+        for line in text.splitlines():
+            line = line.strip(" \t")
+            if not line or line.startswith(("#", "!")):
+                continue
+            # Admit the archive's plain key=value dialect, not escaped keys,
+            # continuations or alternate delimiters with ambiguous revisions.
+            match = re.fullmatch(r"([A-Za-z0-9_.-]+)[ \t]*=[ \t]*([^\\]*)", line)
+            if match is None or match[1] in fields:
+                raise RuntimeError(failure)
+            fields[match[1]] = match[2].strip(" \t")
+        if fields.get("Pkg.Revision") != PLATFORM_TOOLS_VERSION:
+            raise RuntimeError(failure)
+        require_directory(directory)
+        if any(identity(checked_file(name)) != identity(value) for name, value in before.items()):
+            raise RuntimeError(failure)
+    except (OSError, UnicodeError, ValueError):
+        raise RuntimeError(failure) from None
 
 
 def _unique_json_fields(pairs):
@@ -244,6 +302,7 @@ def verify_installed_versions(dotnet_root: Path, java_root: Path, android_root: 
                 raise
     for package_id, version in LIBRARY_PACKS.items():
         verify_library_pack(dotnet_root, package_id, version)
+    verify_platform_tools(android_root)
     for path in (android_root / "platforms/android-36/android.jar",
                  *(android_root / "build-tools/36.0.0" / name for name in ("aapt2", "apksigner", "zipalign"))):
         if path.is_symlink() or not path.is_file():

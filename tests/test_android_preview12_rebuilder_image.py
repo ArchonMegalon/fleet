@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import stat
@@ -42,6 +43,19 @@ def library_zip(xml=None, extra=()):
                                ("lib/net10.0/_._", b""), *extra])
 
 
+def platform_tools_zip():
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        for name, raw, mode in (("adb", b"nonexecuted adb fixture", 0o755),
+                                ("fastboot", b"nonexecuted fastboot fixture", 0o755),
+                                ("source.properties", b"Pkg.UserSrc=false\nPkg.Revision=37.0.1\n", 0o644)):
+            entry = zipfile.ZipInfo(f"platform-tools/{name}")
+            entry.create_system = 3
+            entry.external_attr = (stat.S_IFREG | mode) << 16
+            archive.writestr(entry, raw)
+    return output.getvalue()
+
+
 def prepare(tmp_path, monkeypatch, fault=None):
     value = json.loads((RECIPE / "toolchain.lock.json").read_bytes())
     archives = {
@@ -51,6 +65,7 @@ def prepare(tmp_path, monkeypatch, fault=None):
         ]),
         "temurin-jdk": FIXTURES.tar_bytes([("jdk/bin/java", "file", b"tiny nonexecuted JDK fixture")]),
         "android-sdk-platform": FIXTURES.zip_bytes([("platform/android.jar", b"tiny platform")]),
+        "android-platform-tools": platform_tools_zip(),
         "android-build-tools": FIXTURES.zip_bytes([(f"tools/{name}", b"tiny tool")
                                                    for name in ("aapt2", "apksigner", "zipalign")]),
         "bundletool": b"tiny nonexecuted jar",
@@ -99,6 +114,8 @@ def prepare(tmp_path, monkeypatch, fault=None):
             path.symlink_to(dotnet / "packs/Microsoft.Maui.Sdk/9.0.120", target_is_directory=True)
         if fault == "missing-api":
             (android / "platforms/android-36/android.jar").unlink()
+        if fault == "missing-platform-tools":
+            (android / "platform-tools").rename(android / "not-platform-tools")
 
     def runner(command, **kwargs):
         calls.append(command)
@@ -153,17 +170,142 @@ def test_real_tiny_offline_archives_and_explicit_workload_orchestration(tmp_path
     assert (tmp_path / "opt/dotnet/library-packs/microsoft.maui.controls.10.0.20.nupkg").is_file()
     assert not (tmp_path / "opt/dotnet/packs/Microsoft.Maui.Controls").exists()
     assert BOOT.LIBRARY_PACKS == {"Microsoft.Maui.Controls": "10.0.20"}
+    tools = tmp_path / "opt/android-sdk/platform-tools"
+    for name in ("adb", "fastboot"):
+        assert stat.S_IMODE((tools / name).stat().st_mode) == 0o755
+        assert not any(command[0] == str(tools / name) for command in calls)
+    assert (tools / "source.properties").read_bytes() == b"Pkg.UserSrc=false\nPkg.Revision=37.0.1\n"
 
 
 @pytest.mark.parametrize("fault", ["sdk-version", "extra-sdk", "workload-version", "java-version",
                                    "manifest-version", "missing-pack", "linked-pack", "missing-api", "workload-failure",
-                                   "library-kind", "library-manifest-version", "library-missing", "library-duplicate-kind"])
+                                   "library-kind", "library-manifest-version", "library-missing", "library-duplicate-kind",
+                                   "missing-platform-tools"])
 def test_bootstrap_version_or_install_failure_cannot_report_success(tmp_path, monkeypatch, fault):
     execute, calls, _ = prepare(tmp_path, monkeypatch, fault)
     with pytest.raises((RuntimeError, subprocess.CalledProcessError)):
         execute()
     if fault in ("sdk-version", "extra-sdk"):
         assert not any(command[1:3] == ["workload", "install"] for command in calls)
+
+
+@pytest.mark.parametrize("fault", ["missing-root", "linked-root", "linked-parent", "relative-root"])
+def test_platform_tools_requires_canonical_directory(tmp_path, monkeypatch, fault):
+    execute, _, _ = prepare(tmp_path, monkeypatch)
+    execute()
+    android = tmp_path / "opt/android-sdk"
+    directory = android / "platform-tools"
+    if fault in ("missing-root", "linked-root"):
+        target = directory.with_name("relocated-platform-tools")
+        directory.rename(target)
+        if fault == "linked-root":
+            directory.symlink_to(target, target_is_directory=True)
+    elif fault == "linked-parent":
+        alias = tmp_path / "alias"
+        alias.symlink_to(android, target_is_directory=True)
+        android = alias
+    else:
+        monkeypatch.chdir(tmp_path)
+        android = Path("opt/android-sdk")
+    with pytest.raises(RuntimeError, match="directory"):
+        BOOT.verify_platform_tools(android)
+
+
+@pytest.mark.parametrize("name", ["adb", "fastboot", "source.properties"])
+@pytest.mark.parametrize("fault", ["missing", "symlink", "hardlink", "empty", "directory", "fifo"])
+def test_platform_tools_rejects_unsafe_files_before_open(tmp_path, monkeypatch, name, fault):
+    execute, _, _ = prepare(tmp_path, monkeypatch)
+    execute()
+    android = tmp_path / "opt/android-sdk"
+    path = android / "platform-tools" / name
+    if fault == "hardlink":
+        os.link(path, path.with_name("extra-link"))
+    else:
+        path.unlink()
+        if fault == "symlink":
+            other = tmp_path / "outside"
+            other.write_bytes(b"Pkg.Revision=37.0.1\n")
+            path.symlink_to(other)
+        elif fault == "empty":
+            path.touch(mode=0o755)
+        elif fault == "directory":
+            path.mkdir()
+        elif fault == "fifo":
+            os.mkfifo(path)
+    monkeypatch.setattr(BOOT.os, "open", lambda *args, **kw: pytest.fail("unsafe file reached open"))
+    with pytest.raises(RuntimeError, match="platform-tools"):
+        BOOT.verify_platform_tools(android)
+
+
+@pytest.mark.parametrize("name", ["adb", "fastboot"])
+def test_platform_tools_rejects_nonexecutable_tool_without_launch(tmp_path, monkeypatch, name):
+    execute, _, _ = prepare(tmp_path, monkeypatch)
+    execute()
+    android = tmp_path / "opt/android-sdk"
+    (android / "platform-tools" / name).chmod(0o644)
+    with pytest.raises(RuntimeError, match="platform-tools"):
+        BOOT.verify_platform_tools(android)
+
+
+@pytest.mark.parametrize("raw", [
+    b"Pkg.UserSrc=false\n", b"Pkg.Revision=37.0.0\n", b"Pkg.Revision=37.0.1.0\n",
+    b"Pkg.Revision=\n", b"pkg.revision=37.0.1\n", b"Pkg.Revision:37.0.1\n",
+    b"Pkg.Revision 37.0.1\n", b"Pkg.Revision=37.0.1\nPkg.Revision=37.0.1\n",
+    b"Pkg.Revision=37.0.0\n Pkg.Revision =37.0.1\n",
+    b"Pkg.Revision=37.0.1\nPkg.Revision=37.0.0\n",
+    b"Pkg.Revision=37.0.1\nPkg\\.Revision=37.0.0\n",
+    b"Pkg.Revision=37.0.1\\\n", b"Pkg.Revision=37.0.1\x00\n",
+    b"Pkg.Revision=37.0.1\x0b\n", b"Pkg.Revision=37.0.1\x7f\n",
+    b"Pkg.Revision=37.0.1\n#\xff", b"Pkg.Revision=37.0.1\n" + b"#" * 4096,
+])
+def test_platform_tools_rejects_ambiguous_wrong_or_unbounded_revision(tmp_path, monkeypatch, raw):
+    execute, _, _ = prepare(tmp_path, monkeypatch)
+    execute()
+    android = tmp_path / "opt/android-sdk"
+    (android / "platform-tools/source.properties").write_bytes(raw)
+    if len(raw) > 4096:
+        monkeypatch.setattr(BOOT.os, "open", lambda *args, **kw: pytest.fail("oversized metadata reached open"))
+    with pytest.raises(RuntimeError, match="platform-tools"):
+        BOOT.verify_platform_tools(android)
+
+
+@pytest.mark.parametrize("raw", [b"Pkg.Revision=37.0.1", b"# comment\r\n! comment\r\n\r\nPkg.Revision = 37.0.1\r\n",
+                                b"\tPkg.Revision\t=\t37.0.1\t\nPkg.UserSrc=false\n"])
+def test_platform_tools_accepts_plain_property_whitespace_without_rewriting(tmp_path, monkeypatch, raw):
+    execute, calls, _ = prepare(tmp_path, monkeypatch)
+    execute()
+    android = tmp_path / "opt/android-sdk"
+    properties = android / "platform-tools/source.properties"
+    properties.write_bytes(raw)
+    before = list(calls)
+    BOOT.verify_platform_tools(android)
+    assert properties.read_bytes() == raw and calls == before
+
+
+@pytest.mark.parametrize("replace", [False, True])
+def test_platform_tools_detects_metadata_drift_during_read(tmp_path, monkeypatch, replace):
+    execute, _, _ = prepare(tmp_path, monkeypatch)
+    execute()
+    android = tmp_path / "opt/android-sdk"
+    properties = android / "platform-tools/source.properties"
+    original_fstat, calls = os.fstat, 0
+
+    def drift(fd):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            if replace:
+                other = properties.with_name("replacement")
+                other.write_bytes(properties.read_bytes())
+                other.replace(properties)
+            else:
+                properties.write_bytes(b"Pkg.UserSrc=false\nPkg.Revision=37.0.0\n")
+        return original_fstat(fd)
+
+    monkeypatch.setattr(BOOT.os, "fstat", drift)
+    with pytest.raises(RuntimeError, match="platform-tools"):
+        BOOT.verify_platform_tools(android)
+    assert calls == 2  # Both actual descriptor checks were reached.
 
 
 @pytest.mark.parametrize("namespace", [False, True])
@@ -306,6 +448,13 @@ def test_recipe_binds_exact_archive_metadata_and_keeps_old_image_untouched():
     assert archives["temurin-jdk"]["version"] == "17.0.20.1+1"
     assert archives["temurin-jdk"]["sha256"] == "3808d1d15e3ec6bd5b84057fb5d84c33d8a1536a258146bcea2e603fc726e08e"
     assert archives["android-sdk-platform"]["sha256"] == "37607369a28c5b640b3a7998868d45898ebcb777565a0e85f9acf36f29631d2e"
+    assert archives["android-platform-tools"] == {
+        "name": "android-platform-tools", "version": "37.0.1",
+        "url": "https://dl.google.com/android/repository/platform-tools_r37.0.1-linux.zip",
+        "sha256": "d230f13842f60f782a8645f9c813f8f845bf36089ea7289f28c48f17979313f1",
+        "format": "zip", "destination": "/opt/android-sdk/platform-tools", "strip_components": 1,
+    }
+    assert BOOT.PLATFORM_TOOLS_VERSION == "37.0.1"
     assert archives["android-build-tools"]["sha256"] == "5d9ac77fb6ff43d9da518a337b4fcf8f9097113df531d99ccefe80ef7ce8250b"
     assert archives["bundletool"]["sha256"] == "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29"
     docker = (RECIPE / "Dockerfile").read_text()
