@@ -190,12 +190,32 @@ def load_lock(path: Path) -> tuple[dict[str, Any], bytes]:
 
 
 def validate_lock(lock: Mapping[str, Any], lock_bytes: bytes, builder_image: str | None = None) -> list[str]:
+    """Validate full protected signing readiness; preserve every existing gate."""
+    return _validate_lock_configuration(lock, lock_bytes, builder_image, protected_signer=True)
+
+
+def validate_unsigned_rebuild_lock(
+    lock: Mapping[str, Any], lock_bytes: bytes, builder_image: str | None = None,
+) -> list[str]:
+    """Admit enabled unsigned work using the existing lock's public bindings.
+
+    Ready state, enabled rebuilding, isolation and all public build authority
+    remain required. Downstream signer/credential/ledger activation is separate.
+    This neither activates a dormant lock nor grants signing or publication.
+    """
+    return _validate_lock_configuration(lock, lock_bytes, builder_image, protected_signer=False)
+
+
+def _validate_lock_configuration(
+    lock: Mapping[str, Any], lock_bytes: bytes, builder_image: str | None, *, protected_signer: bool,
+) -> list[str]:
     failures: list[str] = []
     expected_top = {
         "contract_name", "contract_version", "state", "release", "android_authority",
         "toolchain", "approval_authority", "upload_key", "rebuild", "reservation", "outputs", "limits",
     }
-    if set(lock) != expected_top or lock.get("contract_version") != 1:
+    if set(lock) != expected_top or lock.get("contract_name") != LOCK_CONTRACT \
+            or type(lock.get("contract_version")) is not int or lock["contract_version"] != 1:
         return ["external rebuilder lock fields or version are not exact"]
     release = lock.get("release", {})
     if release != {
@@ -253,7 +273,7 @@ def validate_lock(lock: Mapping[str, Any], lock_bytes: bytes, builder_image: str
             or outputs.get("publication_authorized") is not False \
             or outputs.get("google_play_upload_authorized") is not False:
         failures.append("external rebuilder output authority escalates or drifted")
-    if outputs.get("signed_content_handoff_enabled") is not True:
+    if protected_signer and outputs.get("signed_content_handoff_enabled") is not True:
         failures.append("private immutable signed-content handoff is not configured")
     if lock.get("state") != "ready":
         failures.append("external rebuilder lock is dormant")
@@ -264,27 +284,28 @@ def validate_lock(lock: Mapping[str, Any], lock_bytes: bytes, builder_image: str
             or rebuild.get("deterministic_unsigned_digest_match_required") is not True \
             or rebuild.get("full_test_suite_required") is not True:
         failures.append("independent rebuild is disabled or weakened")
-    reservation = lock.get("reservation", {})
-    expected_reservation_fields = {
-        "adapter_contract", "adapter_path", "adapter_sha256", "configured", "policy_path",
-        "policy_sha256", "protocol_source", "signed_receipts_required",
-    }
-    if set(reservation) != expected_reservation_fields \
-            or reservation.get("adapter_contract") != LEDGER_POLICY_CONTRACT \
-            or reservation.get("configured") is not True \
-            or reservation.get("protocol_source") != "merged_reviewed_fleet_authority" \
-            or reservation.get("signed_receipts_required") is not True \
-            or not HEX64.fullmatch(str(reservation.get("adapter_sha256") or "")) \
-            or not HEX64.fullmatch(str(reservation.get("policy_sha256") or "")):
-        failures.append("reviewed durable approval-ledger adapter is not configured")
-    for name in ("adapter_path", "policy_path"):
-        value = reservation.get(name)
-        if not isinstance(value, str) or PurePosixPath(value).is_absolute() \
-                or ".." in PurePosixPath(value).parts or "\\" in value:
-            failures.append(f"reservation.{name} is not one safe Fleet-relative path")
-    if reservation.get("policy_path") != SIGNING_LEDGER_POLICY_PATH:
-        failures.append("binary signing must select its separate ledger policy")
-    for name in ("builder_image", "signer_image"):
+    if protected_signer:
+        reservation = lock.get("reservation", {})
+        expected_reservation_fields = {
+            "adapter_contract", "adapter_path", "adapter_sha256", "configured", "policy_path",
+            "policy_sha256", "protocol_source", "signed_receipts_required",
+        }
+        if set(reservation) != expected_reservation_fields \
+                or reservation.get("adapter_contract") != LEDGER_POLICY_CONTRACT \
+                or reservation.get("configured") is not True \
+                or reservation.get("protocol_source") != "merged_reviewed_fleet_authority" \
+                or reservation.get("signed_receipts_required") is not True \
+                or not HEX64.fullmatch(str(reservation.get("adapter_sha256") or "")) \
+                or not HEX64.fullmatch(str(reservation.get("policy_sha256") or "")):
+            failures.append("reviewed durable approval-ledger adapter is not configured")
+        for name in ("adapter_path", "policy_path"):
+            value = reservation.get(name)
+            if not isinstance(value, str) or PurePosixPath(value).is_absolute() \
+                    or ".." in PurePosixPath(value).parts or "\\" in value:
+                failures.append(f"reservation.{name} is not one safe Fleet-relative path")
+        if reservation.get("policy_path") != SIGNING_LEDGER_POLICY_PATH:
+            failures.append("binary signing must select its separate ledger policy")
+    for name in (("builder_image", "signer_image") if protected_signer else ("builder_image",)):
         image = toolchain.get(name)
         if not isinstance(image, str) or OCI_DIGEST_IMAGE.fullmatch(image) is None:
             failures.append(f"toolchain.{name} is not one digest-pinned OCI repository")
@@ -297,13 +318,17 @@ def validate_lock(lock: Mapping[str, Any], lock_bytes: bytes, builder_image: str
     if toolchain.get("builder_image") and builder_image is not None \
             and builder_image != toolchain.get("builder_image"):
         failures.append("reported builder image differs from lock")
-    for name in ("key_alias", "keystore_secret", "store_password_secret", "key_password_secret"):
-        if not upload.get(name):
-            failures.append(f"upload_key.{name} is not configured")
-    if not approval.get("private_key_secret"):
-        failures.append("approval attestation private-key secret is not configured")
+    if protected_signer:
+        for name in ("key_alias", "keystore_secret", "store_password_secret", "key_password_secret"):
+            if not upload.get(name):
+                failures.append(f"upload_key.{name} is not configured")
+        if not approval.get("private_key_secret"):
+            failures.append("approval attestation private-key secret is not configured")
     limits = lock.get("limits", {})
-    for name in ("json_bytes", "aab_bytes", "git_timeout_seconds", "build_timeout_seconds", "reservation_timeout_seconds"):
+    bound_names = ("json_bytes", "aab_bytes", "git_timeout_seconds", "build_timeout_seconds")
+    if protected_signer:
+        bound_names += ("reservation_timeout_seconds",)
+    for name in bound_names:
         if type(limits.get(name)) is not int or limits[name] < 1:
             failures.append(f"limits.{name} is invalid")
     if not lock_bytes or len(lock_bytes) > 1024 * 1024:
@@ -660,6 +685,16 @@ def _bind_auxiliary_toolchain(
 ) -> dict[str, Any]:
     """Bind non-tree build inputs without claiming protected-job provenance."""
 
+    return _bind_auxiliary_toolchain_inputs(
+        lock, bundletool, installed_closure_receipt, reported_builder_image, require_signer=True
+    )
+
+
+def _bind_auxiliary_toolchain_inputs(
+    lock: Mapping[str, Any], bundletool: Path, installed_closure_receipt: Path,
+    reported_builder_image: str, *, require_signer: bool,
+) -> dict[str, Any]:
+
     toolchain = lock["toolchain"]
     if reported_builder_image != toolchain.get("builder_image"):
         raise RebuilderError("reported builder image differs from lock")
@@ -677,7 +712,7 @@ def _bind_auxiliary_toolchain(
     if receipt_sha256 != toolchain.get("installed_closure_receipt_sha256"):
         raise RebuilderError("installed toolchain closure receipt differs from lock")
     signer_image = toolchain.get("signer_image")
-    if not isinstance(signer_image, str) or not signer_image:
+    if require_signer and (not isinstance(signer_image, str) or not signer_image):
         raise RebuilderError("planned protected signer image is absent")
     return {
         "bundletoolSha256": bundletool_sha256,
@@ -707,6 +742,35 @@ def verify_toolchain(
     bundletool: Path, installed_closure_receipt: Path, reported_builder_image: str, *,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> dict[str, Any]:
+    """Measure the existing full toolchain, including its planned signer image."""
+    return _verify_toolchain_inputs(
+        lock, dotnet_root, java_root, android_sdk_root, bundletool, installed_closure_receipt,
+        reported_builder_image, runner=runner, unsigned=False,
+    )
+
+
+def verify_unsigned_toolchain(
+    lock: Mapping[str, Any], dotnet_root: Path, java_root: Path, android_sdk_root: Path,
+    bundletool: Path, installed_closure_receipt: Path, reported_builder_image: str, *,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> dict[str, Any]:
+    """Measure identical build inputs without requiring downstream signer setup.
+
+    plannedSignerImage may remain null. This ordinary closure is bound to this
+    lock's bytes by the handoff. A later configured signing lock requires a new
+    matching rebuild/capture; this observation cannot promote the old handoff.
+    """
+    return _verify_toolchain_inputs(
+        lock, dotnet_root, java_root, android_sdk_root, bundletool, installed_closure_receipt,
+        reported_builder_image, runner=runner, unsigned=True,
+    )
+
+
+def _verify_toolchain_inputs(
+    lock: Mapping[str, Any], dotnet_root: Path, java_root: Path, android_sdk_root: Path,
+    bundletool: Path, installed_closure_receipt: Path, reported_builder_image: str, *,
+    runner: Callable[..., subprocess.CompletedProcess], unsigned: bool,
+) -> dict[str, Any]:
     toolchain = lock["toolchain"]
     roots = {"dotnet": dotnet_root, "java": java_root, "android_sdk": android_sdk_root}
     observed: dict[str, Any] = {}
@@ -726,6 +790,12 @@ def verify_toolchain(
     if not (android_sdk_root / "platforms/android-36/android.jar").is_file() \
             or not (android_sdk_root / "build-tools/36.0.0/aapt2").is_file():
         raise RebuilderError("trusted Android API/build-tools 36 closure is incomplete")
+    if unsigned:
+        auxiliary = _bind_auxiliary_toolchain_inputs(
+            lock, bundletool, installed_closure_receipt, reported_builder_image, require_signer=False
+        )
+        closure = {"platform": "linux/amd64", **observed, **auxiliary}
+        return {**closure, "closureSha256": hashlib.sha256(_canonical_json(closure)).hexdigest()}
     return _measured_toolchain_closure(
         lock, observed, bundletool, installed_closure_receipt, reported_builder_image
     )
@@ -1815,7 +1885,7 @@ def prepare_rebuild_handoff(
 
     _validate_authority_feed_paths(authority_root, owner_feed)
     lock, lock_raw = load_lock(lock_path)
-    failures = validate_lock(lock, lock_raw, reported_builder_image)
+    failures = validate_unsigned_rebuild_lock(lock, lock_raw, reported_builder_image)
     if failures:
         raise RebuilderError("; ".join(failures))
     request, graph = validate_external_request(
@@ -1857,7 +1927,7 @@ def prepare_rebuild_handoff(
         workspace = stage / "workspace"
         checkout_source_graph(graph, workspace, runner=runner, timeout=lock["limits"]["git_timeout_seconds"])
         android = validate_android_consumer(workspace / "chummer-android", lock)
-        toolchain = verify_toolchain(
+        toolchain = verify_unsigned_toolchain(
             lock, dotnet_root, java_root, android_sdk_root,
             bundletool, toolchain_authority, reported_builder_image, runner=runner,
         )
