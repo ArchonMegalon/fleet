@@ -1,0 +1,6 @@
+# CPython 3.12, Ubuntu 24.04 x86_64 wheels only. Official PyPI release JSON,
+# reviewed 2026-09-13. Install before the secret-injected step; no source builds.
+cryptography==50.0.1 --hash=sha256:51afcfceb15597cf2635068e4ac9a56b2abde622edde17f37d85fd7b5306497a
+PyNaCl==1.6.2 --hash=sha256:c8a231e36ec2cab018c4ad4358c386e36eede0319a0c41fed24f840b1dac59f6
+cffi==2.1.1 --hash=sha256:c1453022f490d2459a11819d83ad1d586e9ff65a12ac3e705ffebd46d3685dcf
+pycparser==3.0 --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
