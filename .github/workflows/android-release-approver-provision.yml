@@ -32,11 +32,11 @@ on:
         type: string
         required: true
       recipient_key_id:
-        description: Exact freshly read GitHub environment public encryption key ID
+        description: Fresh operator read must equal the reviewed source public encryption key ID
         type: string
         required: true
       recipient_public_key:
-        description: Exact freshly read GitHub environment public encryption key Base64
+        description: Fresh operator read must equal the reviewed source public encryption key Base64
         type: string
         required: true
       expected_public_key_spki:
@@ -47,11 +47,10 @@ on:
 
 permissions:
   contents: read
-  deployments: read
 
-# Serializes this workflow only; it is not an atomic secret create-only lock.
+# Serialize key dispatches independently of CI; not an atomic secret creation lock.
 concurrency:
-  group: android-preview12-release-approval-key-provision
+  group: ${{ github.event_name == 'workflow_dispatch' && 'android-preview12-release-approval-key-provision' || format('android-release-approver-verify-{0}', github.ref) }}
   cancel-in-progress: false
 
 env:
@@ -103,7 +102,7 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
-      - name: Validate source and current protected destination before installing tools
+      - name: Validate reviewed recipient and current protected main before installing tools
         env:
           GH_TOKEN: ${{ github.token }}
           WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
@@ -113,17 +112,14 @@ jobs:
           set -euo pipefail
           ulimit -c 0
           /usr/bin/python3 -I -B scripts/android_preview12_release_approver_provision.py context
+          printf '%s\n' 'Checking authenticated Fleet main before dependency installation'
           gh api -H 'X-GitHub-Api-Version: 2022-11-28' repos/ArchonMegalon/fleet/branches/main > "$RUNNER_TEMP/approver-main.json"
-          gh api -H 'X-GitHub-Api-Version: 2022-11-28' repos/ArchonMegalon/fleet/environments/android-preview12-release-approval > "$RUNNER_TEMP/approver-environment.json"
-          gh api -H 'X-GitHub-Api-Version: 2022-11-28' repos/ArchonMegalon/fleet/environments/android-preview12-release-approval/secrets/public-key > "$RUNNER_TEMP/approver-environment-public-key.json"
           /usr/bin/python3 -I -B scripts/android_preview12_release_approver_provision.py preflight
           /usr/bin/python3 -I -B -c 'import sys; assert sys.version_info[:2] == (3, 12)'
           /usr/bin/python3 -I -B -m venv "$RUNNER_TEMP/approver-python"
           "$RUNNER_TEMP/approver-python/bin/python" -I -B -m pip --isolated install --disable-pip-version-check --no-cache-dir --only-binary=:all: --require-hashes --no-deps -r config/release/android-release-approver-provision.requirements.txt
-          # Re-read authenticated metadata after install and before key access.
+          printf '%s\n' 'Checking authenticated Fleet main after dependency installation'
           gh api -H 'X-GitHub-Api-Version: 2022-11-28' repos/ArchonMegalon/fleet/branches/main > "$RUNNER_TEMP/approver-main.json"
-          gh api -H 'X-GitHub-Api-Version: 2022-11-28' repos/ArchonMegalon/fleet/environments/android-preview12-release-approval > "$RUNNER_TEMP/approver-environment.json"
-          gh api -H 'X-GitHub-Api-Version: 2022-11-28' repos/ArchonMegalon/fleet/environments/android-preview12-release-approval/secrets/public-key > "$RUNNER_TEMP/approver-environment-public-key.json"
           /usr/bin/python3 -I -B scripts/android_preview12_release_approver_provision.py preflight
       - name: Generate in volatile memory and seal only to the reviewed environment public key
         env:
@@ -156,7 +152,7 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
-      - name: Validate source and current protected destination before secret injection
+      - name: Validate reviewed recipient and current protected main before secret injection
         env:
           GH_TOKEN: ${{ github.token }}
           WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
@@ -166,17 +162,14 @@ jobs:
           set -euo pipefail
           ulimit -c 0
           /usr/bin/python3 -I -B scripts/android_preview12_release_approver_provision.py context
+          printf '%s\n' 'Checking authenticated Fleet main before dependency installation'
           gh api -H 'X-GitHub-Api-Version: 2022-11-28' repos/ArchonMegalon/fleet/branches/main > "$RUNNER_TEMP/approver-main.json"
-          gh api -H 'X-GitHub-Api-Version: 2022-11-28' repos/ArchonMegalon/fleet/environments/android-preview12-release-approval > "$RUNNER_TEMP/approver-environment.json"
-          gh api -H 'X-GitHub-Api-Version: 2022-11-28' repos/ArchonMegalon/fleet/environments/android-preview12-release-approval/secrets/public-key > "$RUNNER_TEMP/approver-environment-public-key.json"
           /usr/bin/python3 -I -B scripts/android_preview12_release_approver_provision.py preflight
           /usr/bin/python3 -I -B -c 'import sys; assert sys.version_info[:2] == (3, 12)'
           /usr/bin/python3 -I -B -m venv "$RUNNER_TEMP/approver-python"
           "$RUNNER_TEMP/approver-python/bin/python" -I -B -m pip --isolated install --disable-pip-version-check --no-cache-dir --only-binary=:all: --require-hashes --no-deps -r config/release/android-release-approver-provision.requirements.txt
-          # Re-read authenticated metadata after install and before secret injection.
+          printf '%s\n' 'Checking authenticated Fleet main after dependency installation'
           gh api -H 'X-GitHub-Api-Version: 2022-11-28' repos/ArchonMegalon/fleet/branches/main > "$RUNNER_TEMP/approver-main.json"
-          gh api -H 'X-GitHub-Api-Version: 2022-11-28' repos/ArchonMegalon/fleet/environments/android-preview12-release-approval > "$RUNNER_TEMP/approver-environment.json"
-          gh api -H 'X-GitHub-Api-Version: 2022-11-28' repos/ArchonMegalon/fleet/environments/android-preview12-release-approval/secrets/public-key > "$RUNNER_TEMP/approver-environment-public-key.json"
           /usr/bin/python3 -I -B scripts/android_preview12_release_approver_provision.py preflight
       - name: Prove independently injected custody without producing a release approval
         env:

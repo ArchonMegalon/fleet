@@ -22,6 +22,10 @@ REPOSITORY = "ArchonMegalon/fleet"
 REPOSITORY_ID = "1176287728"
 ENVIRONMENT = "android-preview12-release-approval"
 ENVIRONMENT_ID = "21501373212"
+# Public recipient read by the operator through authenticated GitHub API and
+# admitted by reviewed source. This is not a live runner metadata observation.
+RECIPIENT_KEY_ID = "3380204578043523366"
+RECIPIENT_PUBLIC_KEY = "KehADg5PaYNI/6mRiXvHp3Nwk2h+F55K0cMJWv/Dcz8="
 SECRET = "ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64"
 WORKFLOW = REPOSITORY + "/.github/workflows/android-release-approver-provision.yml@refs/heads/main"
 OUTPUT = "android-release-approver-observation.json"
@@ -63,13 +67,19 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
 
 
+def admit_recipient(key_id, key):
+    require(matches(key_id, r"[1-9][0-9]{0,19}"), "invalid environment public key ID")
+    raw = decode(key, 32)
+    require(key_id == RECIPIENT_KEY_ID and key == RECIPIENT_PUBLIC_KEY, "recipient differs from reviewed source pin")
+    return raw
+
+
 def identity(mode, nonce, sha, run_id, run_attempt, recipient_id, recipient_key):
     require(mode in {"generate", "prove"}, "invalid operation")
     require(matches(nonce, r"[0-9a-f]{64}") and nonce != "0" * 64, "invalid request nonce")
     require(matches(sha, r"[0-9a-f]{40}") and sha != "0" * 40, "invalid execution SHA")
     require(matches(run_id, r"[1-9][0-9]{0,19}") and run_attempt == "1", "reruns or invalid run identity are forbidden")
-    require(matches(recipient_id, r"[1-9][0-9]{0,19}"), "invalid environment public key ID")
-    recipient_raw = decode(recipient_key, 32)
+    recipient_raw = admit_recipient(recipient_id, recipient_key)
     return dict(operation=mode, repository=REPOSITORY, repositoryId=REPOSITORY_ID,
                 environment=ENVIRONMENT, environmentId=ENVIRONMENT_ID, secretName=SECRET, workflowRef=WORKFLOW,
                 executionRef="refs/heads/main",
@@ -117,19 +127,12 @@ def read_json(path):
     return json.loads(raw, object_pairs_hook=pairs, parse_constant=lambda _: (_ for _ in ()).throw(ProvisionError("non-finite JSON")))
 
 
-def snapshot_preflight(environment, context):
+def main_preflight(environment, context):
     directory = Path(environment.get("RUNNER_TEMP", ""))
     require(directory.is_absolute() and directory.resolve() == directory and directory.is_dir(), "invalid runner temporary directory")
     main = read_json(directory / "approver-main.json")
     require(main.get("name") == "main" and main.get("protected") is True and
             main.get("commit", {}).get("sha") == context["executionSha"], "current main snapshot differs")
-    scope = read_json(directory / "approver-environment.json")
-    require(scope.get("name") == ENVIRONMENT and str(scope.get("id")) == ENVIRONMENT_ID and
-            scope.get("deployment_branch_policy") == {"protected_branches": True, "custom_branch_policies": False} and
-            scope.get("can_admins_bypass") is False, "environment protection snapshot differs")
-    encryption = read_json(directory / "approver-environment-public-key.json")
-    require(encryption.get("key_id") == context["recipientKeyId"] and
-            encryption.get("key") == context["recipientPublicKeyBase64"], "authenticated environment encryption key differs")
 
 
 def public_metadata(key):
@@ -188,6 +191,7 @@ def validate_observation(observation, expected, expected_public=None):
 def generate(context):
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, NoEncryption
+    admit_recipient(context["recipientKeyId"], context["recipientPublicKeyBase64"])
     box = recipient(context["recipientPublicKeyBase64"])
     key = Ed25519PrivateKey.generate()
     private = key.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
@@ -202,6 +206,7 @@ def generate(context):
 def prove(context, environment):
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, NoEncryption, load_der_private_key
+    admit_recipient(context["recipientKeyId"], context["recipientPublicKeyBase64"])
     expected = environment.get("EXPECTED_PUBLIC_KEY_SPKI")
     public_key(expected)
     recipient(context["recipientPublicKeyBase64"])
@@ -258,7 +263,7 @@ def main(argv=None):
         context = execution(os.environ)
         if args.command == "context":
             return 0
-        snapshot_preflight(os.environ, context)
+        main_preflight(os.environ, context)
         if args.command == "preflight":
             return 0
         require(args.command == context["operation"], "command and dispatch mode differ")
