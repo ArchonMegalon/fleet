@@ -167,12 +167,28 @@ def test_valid_authority_paths_reach_prepare_lock_before_staging(tmp_path, monke
     assert not (tmp_path / "output_dir").exists()
 
 
-def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path):
+def offline_consumer(args, raw=b'input="$CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_FEED"\n'):
+    script = args["workspace"] / "chummer-android/scripts/build-release.sh"
+    script.parent.mkdir(parents=True)
+    protected_file(script, raw)
+    args["lock"]["android_authority"]["build_script"] = {
+        "path": "scripts/build-release.sh", "sha256": hashlib.sha256(raw).hexdigest()}
+    return script
+
+
+@pytest.mark.parametrize("offline", [False, True])
+def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path, monkeypatch, offline):
     module = fixture.load_module()
     feed = tmp_path / "authority" / "owner-feed"
     feed.mkdir(parents=True)
     args = entry_arguments(module, tmp_path, feed.parent, feed, "direct")
     args["workspace"].mkdir()
+    supplied = tmp_path / "offline-packages"
+    supplied.mkdir(mode=0o700)
+    monkeypatch.setenv("CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_FEED", "/ambient/must-not-enter-child")
+    if offline:
+        args["offline_nuget_feed"] = supplied
+        offline_consumer(args)
     for name in ("two_green_receipt", "approval"):
         fixture.protected_file(args[name], b'{"TEST_ONLY":true}\n')
     graph = json.dumps(fixture.graph(module)).encode()
@@ -183,6 +199,11 @@ def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path)
         assert kwargs["env"]["CHUMMER_INTERNAL_PHONE_BETA_PACKAGE_FEED"] == str(feed)
         assert Path(kwargs["env"]["CHUMMER_INTERNAL_PHONE_BETA_PACKAGE_FEED"]).parent == args["authority_root"]
         assert kwargs["env"]["CHUMMER_ANDROID_RELEASE_PACKAGE_AUTHORITY"] == str(args["package_authority"])
+        assert {key: value for key, value in kwargs["env"].items() if "OFFLINE" in key} == (
+            {"CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_FEED": str(supplied)} if offline else {})
+        assert kwargs["env"]["NUGET_PACKAGES"] == str(args["build_input_root"] / "nuget-packages")
+        assert kwargs["cwd"] == args["workspace"] / "chummer-android"
+        assert kwargs["timeout"] == args["lock"]["limits"]["build_timeout_seconds"]
         assert argv == ["/bin/bash", "-p", str(args["workspace"] / "chummer-android/scripts/build-release.sh")]
         # Orchestration fixture only: no compiler, package validation or build runs.
         outputs = args["build_input_root"] / "artifacts"
@@ -192,6 +213,83 @@ def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path)
         return subprocess.CompletedProcess(argv, 3)
     module._run_independent_rebuild(**args, runner=observe_android_call)
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("entry", ["prepare", "direct"])
+@pytest.mark.parametrize("attack", ["empty", "dot", "relative", "missing", "file", "linked", "ancestor-link",
+    "cycle", "parent-alias", "unsafe", "oversized", "unowned", "writable", "authority_root", "owner_feed",
+    "package_authority", "ui_authority_receipt", "toolchain_authority", "dotnet_root", "java_root",
+    "android_sdk_root", "generated", "workspace", "ancestor", "root-alias"])
+def test_offline_feed_rejected_before_any_side_effect(tmp_path, monkeypatch, entry, attack):
+    module = fixture.load_module()
+    operation = tmp_path / "operation"
+    owner = operation / "authority" / "feed"
+    owner.mkdir(parents=True)
+    args = entry_arguments(module, operation, owner.parent, owner, entry)
+    supplied = tmp_path / "offline"
+    supplied.mkdir(mode=0o700)
+    if attack in {"empty", "dot", "relative", "missing", "oversized"}:
+        supplied = {"empty": "", "dot": Path(), "relative": Path("offline"),
+                    "missing": tmp_path / "missing", "oversized": Path("/" + "a" * 4096)}[attack]
+    elif attack in {"linked", "ancestor-link", "cycle"}:
+        link = tmp_path / "link"
+        link.symlink_to(link if attack == "cycle" else supplied, target_is_directory=True)
+        if attack == "ancestor-link":
+            (supplied / "child").mkdir()
+            supplied = link / "child"
+        else:
+            supplied = link
+    elif attack == "parent-alias":
+        supplied = supplied / ".." / supplied.name
+    elif attack in {"file", "unsafe"}:
+        supplied = tmp_path / ("file" if attack == "file" else "unsafe;feed")
+        supplied.write_bytes(b"input") if attack == "file" else supplied.mkdir()
+    elif attack == "unowned":
+        original = Path.lstat
+        def metadata(path, *a, **k):
+            actual = original(path, *a, **k)
+            return SimpleNamespace(st_mode=actual.st_mode, st_uid=actual.st_uid + 1) if path == supplied else actual
+        monkeypatch.setattr(Path, "lstat", metadata)
+    elif attack == "writable":
+        supplied.chmod(0o777)
+    elif attack == "ancestor":
+        supplied = tmp_path
+    elif attack == "root-alias":
+        args["dotnet_root"].symlink_to(supplied, target_is_directory=True)
+    else:
+        if attack in {"generated", "workspace"}:
+            supplied = (args["output_dir"] / attack if entry == "prepare" else
+                        args["workspace"] if attack == "workspace" else args["build_input_root"] / "nuget-packages")
+        else:
+            supplied = args[attack]
+        supplied.mkdir(parents=True, exist_ok=True)
+    before = sorted(str(path) for path in tmp_path.rglob("*"))
+    function = module.prepare_rebuild_handoff if entry == "prepare" else module._run_independent_rebuild
+    with pytest.raises(module.RebuilderError, match="offline NuGet feed must"):
+        function(**args, offline_nuget_feed=supplied,
+                 runner=lambda *a, **k: pytest.fail("invalid offline transport reached runner"))
+    assert sorted(str(path) for path in tmp_path.rglob("*")) == before
+
+
+@pytest.mark.parametrize("fault", ["older-script", "comment-only", "hash-drift", "path-drift"])
+def test_offline_consumer_must_be_capable_and_exactly_bound_before_staging(tmp_path, fault):
+    module = fixture.load_module()
+    owner = tmp_path / "authority" / "feed"
+    owner.mkdir(parents=True)
+    supplied = tmp_path / "offline"
+    supplied.mkdir(mode=0o700)
+    args = entry_arguments(module, tmp_path, owner.parent, owner, "direct")
+    script = offline_consumer(args, b'exit 3\n' if fault == "older-script" else
+        b'# input="$CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_FEED"\n' if fault == "comment-only" else
+        b'input="$CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_FEED"\n')
+    if fault == "hash-drift":
+        script.write_bytes(script.read_bytes() + b"# changed\n")
+    if fault == "path-drift":
+        args["lock"]["android_authority"]["build_script"]["path"] = "scripts/other.sh"
+    with pytest.raises(module.RebuilderError, match="does not support offline NuGet|bytes differ from lock"):
+        module._run_independent_rebuild(**args, offline_nuget_feed=supplied,
+            runner=lambda *a, **k: pytest.fail("unbound or incapable consumer reached runner"))
+    assert not args["build_input_root"].exists()
 
 
 BUILDER = "registry.example/builder@sha256:" + "a" * 64
@@ -487,12 +585,16 @@ def test_both_toolchain_entrypoints_reject_changed_build_inputs(observations, fa
 
 
 @pytest.mark.parametrize("offline", [False, True])
-def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(tmp_path, monkeypatch, offline):
+@pytest.mark.parametrize("offline_nuget", [False, True])
+def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(tmp_path, monkeypatch, offline, offline_nuget):
     inputs = tmp_path / "inputs"
     inputs.mkdir(mode=0o700)
     _, _, paths, _ = handoff_inputs(fleet, inputs)
     lock = configured()
     args = prepare_arguments(tmp_path, lock)
+    if offline_nuget:
+        args["offline_nuget_feed"] = tmp_path / "offline-packages"
+        args["offline_nuget_feed"].mkdir(mode=0o700)
     args.update(external_request=paths["externalSignerRequest"], producer_unsigned_aab=paths["unsignedAab"],
                 producer_source_graph=paths["sourceGraph"], producer_sidecar=paths["buildSidecar"],
                 two_green_receipt=paths["twoGreenReceipt"], approval=paths["twoGreenApproval"])
@@ -521,6 +623,7 @@ def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(
         "sourceCommit": lock["android_authority"]["commit"], "sourceTree": lock["android_authority"]["tree"]}),
         _sidecar_claims=lambda *a: {})
     monkeypatch.setattr(fleet, "validate_android_consumer", lambda *a: consumer)
+    monkeypatch.setattr(fleet, "_require_offline_nuget_consumer", lambda *a: events.append("bound-offline-consumer"))
     def toolchain(*a, **k):
         events.append("unsigned-toolchain-model")
         assert a[0]["toolchain"]["signer_image"] is None
@@ -531,11 +634,13 @@ def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(
         # The last positional input is the disposable build-input directory,
         # not the preceding admitted Android SDK root.
         assert a[-1].name == "build-input" and len(a) == 15
+        assert k == {"runner": forbidden, "offline_nuget_feed": args.get("offline_nuget_feed")}
         a[-1].mkdir(mode=0o700)
         return paths["unsignedAab"], paths["sourceGraph"]
     monkeypatch.setattr(fleet, "_run_independent_rebuild", rebuild)
     result = fleet.prepare_rebuild_handoff(**args, runner=forbidden)
-    assert events == ["unsigned-configuration", "modeled-checkout", "unsigned-toolchain-model", "modeled-unsigned-rebuild"]
+    assert events == ["unsigned-configuration", "modeled-checkout"] + (["bound-offline-consumer"] if offline_nuget else []) + [
+        "unsigned-toolchain-model", "modeled-unsigned-rebuild"]
     actual, copied = fleet.validate_local_rebuild_handoff(args["output_dir"], lock)
     assert actual == result and len(list(args["output_dir"].iterdir())) == 7
     assert result["eligibleForProtectedSigner"] is False
@@ -546,7 +651,8 @@ def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(
 
 
 @pytest.mark.parametrize("manifest", [None, "/absolute/source-manifest.json", "relative-manifest.json"])
-def test_prepare_cli_propagates_optional_manifest_without_normalizing_relative_input(tmp_path, monkeypatch, capsys, manifest):
+@pytest.mark.parametrize("nuget_feed", [None, "/absolute/offline-packages", "relative-packages"])
+def test_prepare_cli_propagates_optional_inputs_without_normalizing_relative_input(tmp_path, monkeypatch, capsys, manifest, nuget_feed):
     args = prepare_arguments(tmp_path, configured())
     argv = ["--lock", str(args["lock_path"]), "prepare-rebuild"]
     for name, value in args.items():
@@ -555,11 +661,20 @@ def test_prepare_cli_propagates_optional_manifest_without_normalizing_relative_i
         argv += ["--builder-image" if name == "reported_builder_image" else "--" + name.replace("_", "-"), str(value)]
     if manifest is not None:
         argv += ["--offline-source-manifest", manifest]
+    if nuget_feed is not None:
+        argv += ["--offline-nuget-feed", nuget_feed]
     observed = []
     def prepare(*positional, **kwargs):
         observed.append(kwargs)
         return {"unitFixture": True}
     monkeypatch.setattr(fleet, "prepare_rebuild_handoff", prepare)
     assert fleet.main(argv) == 0
-    assert observed == [{"offline_source_manifest": Path(manifest) if manifest is not None else None}]
+    assert observed == [{"offline_source_manifest": Path(manifest) if manifest is not None else None,
+                         "offline_nuget_feed": Path(nuget_feed) if nuget_feed is not None else None}]
     assert json.loads(capsys.readouterr().out) == {"unitFixture": True}
+
+
+@pytest.mark.parametrize("value", ["", "/safe/./feed", "/safe//feed", "/safe/feed/"])
+def test_offline_feed_cli_rejects_aliases_before_path_normalization(value):
+    with pytest.raises(fleet.argparse.ArgumentTypeError, match="aliases or be empty"):
+        fleet._offline_nuget_feed_argument(value)

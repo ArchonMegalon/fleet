@@ -2103,6 +2103,40 @@ def _validate_authority_feed_paths(authority_root: Path, owner_feed: Path) -> No
         raise RebuilderError("package authority root must equal the owner feed parent")
 
 
+def _validate_offline_nuget_feed(path: Path | None, *separate_roots: Path) -> None:
+    """Admit transport only; Android owns package selection and byte validation."""
+    if path is None:
+        return
+    try:
+        if not isinstance(path, Path) or not path.is_absolute() \
+                or len(os.fspath(path)) > 4095 or not re.fullmatch(r"/[A-Za-z0-9._/-]+", os.fspath(path)) \
+                or path.resolve(strict=True) != path:
+            raise ValueError
+        metadata = path.lstat()
+        if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.getuid() \
+                or stat.S_IMODE(metadata.st_mode) & 0o022 \
+                or any(not stat.S_ISDIR(parent.lstat().st_mode) for parent in path.parents):
+            raise ValueError
+        for root in separate_roots:
+            root = root.resolve(strict=False)
+            if path == root or path in root.parents or root in path.parents:
+                raise ValueError
+    except (OSError, RuntimeError, ValueError):
+        raise RebuilderError("offline NuGet feed must be a safe canonical owned directory disjoint from rebuild inputs and outputs") from None
+
+
+def _require_offline_nuget_consumer(lock: Mapping[str, Any], workspace: Path) -> None:
+    """Check the already-bound script's capability without creating authority."""
+    binding = lock["android_authority"]["build_script"]
+    script = workspace / "chummer-android/scripts/build-release.sh"
+    raw = _stable_bytes(script, "Android offline NuGet build script", 8 * 1024 * 1024)
+    if binding["path"] != "scripts/build-release.sh" or hashlib.sha256(raw).hexdigest() != binding["sha256"]:
+        raise RebuilderError("Android offline NuGet build script bytes differ from lock")
+    active_lines = b"\n".join(line for line in raw.splitlines() if not line.lstrip().startswith(b"#"))
+    if not re.search(rb'\$(?:CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_FEED\b|\{CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_FEED[}:])', active_lines):
+        raise RebuilderError("bound Android build script does not support offline NuGet input")
+
+
 def _run_independent_rebuild(
     lock: Mapping[str, Any],
     workspace: Path,
@@ -2121,8 +2155,15 @@ def _run_independent_rebuild(
     build_input_root: Path,
     *,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    offline_nuget_feed: Path | None = None,
 ) -> tuple[Path, Path]:
     _validate_authority_feed_paths(authority_root, owner_feed)
+    _validate_offline_nuget_feed(
+        offline_nuget_feed, authority_root, workspace, build_input_root, package_authority,
+        ui_authority_receipt, toolchain_authority, dotnet_root, java_root, android_sdk_root,
+    )
+    if offline_nuget_feed is not None:
+        _require_offline_nuget_consumer(lock, workspace)
     build_input_root.mkdir(mode=0o700)
     (build_input_root / "nuget-packages").mkdir(mode=0o700)
     (build_input_root / "unsigned-child-home").mkdir(mode=0o700)
@@ -2155,6 +2196,8 @@ def _run_independent_rebuild(
         "CHUMMER_DOTNET": os.fspath(dotnet_root / "dotnet"),
         **{REVISION_VARIABLES[name]: row["commit"] for name, row in graph_rows.items()},
     }
+    if offline_nuget_feed is not None:
+        environment["CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_FEED"] = os.fspath(offline_nuget_feed)
     build_script = workspace / "chummer-android/scripts/build-release.sh"
     stdout_path, stderr_path = build_input_root / "build.stdout", build_input_root / "build.stderr"
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
@@ -2184,10 +2227,15 @@ def prepare_rebuild_handoff(
     android_sdk_root: Path, output_dir: Path, reported_builder_image: str, *,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     offline_source_manifest: Path | None = None,
+    offline_nuget_feed: Path | None = None,
 ) -> dict[str, Any]:
     """Run the secret-free rebuild stage in a job with no credential mounts."""
 
     _validate_authority_feed_paths(authority_root, owner_feed)
+    _validate_offline_nuget_feed(
+        offline_nuget_feed, authority_root, output_dir, package_authority,
+        ui_authority_receipt, toolchain_authority, dotnet_root, java_root, android_sdk_root,
+    )
     lock, lock_raw = load_lock(lock_path)
     failures = validate_unsigned_rebuild_lock(lock, lock_raw, reported_builder_image)
     if failures:
@@ -2236,6 +2284,8 @@ def prepare_rebuild_handoff(
                 graph, workspace, offline_source_manifest, timeout=lock["limits"]["git_timeout_seconds"],
             )
         android = validate_android_consumer(workspace / "chummer-android", lock)
+        if offline_nuget_feed is not None:
+            _require_offline_nuget_consumer(lock, workspace)
         toolchain = verify_unsigned_toolchain(
             lock, dotnet_root, java_root, android_sdk_root,
             bundletool, toolchain_authority, reported_builder_image, runner=runner,
@@ -2250,6 +2300,7 @@ def prepare_rebuild_handoff(
             lock, workspace, two_green_receipt, approval, package_authority, authority_root, owner_feed,
             ui_authority_receipt, toolchain_authority, bundletool, upload_certificate,
             dotnet_root, java_root, android_sdk_root, stage / "build-input", runner=runner,
+            offline_nuget_feed=offline_nuget_feed,
         )
         rebuilt = require_rebuild_match(rebuilt_aab, request, lock["limits"]["aab_bytes"])
         rebuilt_graph_value = _json_file(
@@ -3518,6 +3569,13 @@ def contract_check(lock_path: Path) -> dict[str, Any]:
             "google_play_upload_performed": False, "publication_performed": False}
 
 
+def _offline_nuget_feed_argument(value: str) -> Path:
+    path = Path(value)
+    if os.fspath(path) != value:
+        raise argparse.ArgumentTypeError("offline NuGet feed path must not contain aliases or be empty")
+    return path
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lock", required=True, type=Path)
@@ -3537,6 +3595,10 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument(
         "--offline-source-manifest", type=Path,
         help="absolute JSON path mapping all eight repositories to path, sha256 and size_bytes; source transport only",
+    )
+    prepare.add_argument(
+        "--offline-nuget-feed", type=_offline_nuget_feed_argument,
+        help="absolute canonical directory of offline packages; Android selects and validates the restore inputs",
     )
     return parser
 
@@ -3568,6 +3630,7 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.android_sdk_root.absolute(), arguments.output_dir.absolute(),
                 arguments.builder_image,
                 offline_source_manifest=arguments.offline_source_manifest,
+                offline_nuget_feed=arguments.offline_nuget_feed,
             )
     except (OSError, KeyError, TypeError, ValueError, subprocess.SubprocessError, RebuilderError) as error:
         print(f"android-preview12-external-rebuilder: {error}", file=sys.stderr)
