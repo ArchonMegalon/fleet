@@ -211,7 +211,7 @@ def execution(**changes) -> dict[str, object]:
 
 
 def qualified_dependency_graph() -> dict:
-    # Exact provisional source metadata, not hosted eligibility or a hash-only graph.
+    # Exact source metadata; the separate original-receipt test proves eligibility.
     identities = {
         "core-content": ("core", "1d8cf694d0412b3bd9f4a241fb95244fad341160", "3f39863d2ae5db4d6d7b3d07185e33bf240db330"),
         "core-runtime": ("core", "3bc5fe725fd2bbbad0333c5c7a3f849e53808c4f", "a39d4ccd8e1ba08c22c57339fe13bfc72aa191c7"),
@@ -423,7 +423,7 @@ def test_checked_in_policy_is_exact_dormant_and_contains_no_key_material():
     )
     assert value["cross_repo_actions_read"]["github_token_fallback_allowed"] is False
     assert value["external_ed25519_key"]["configured"] is False
-    assert value["external_ed25519_key"]["key_id"] == "local-release-builder-2026"
+    assert value["external_ed25519_key"]["key_id"] == "fleet-release-approver-2026-09"
     assert value["external_ed25519_key"]["expected_public_key_spki_sha256"] == (
         approval.RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256
     )
@@ -451,6 +451,118 @@ def test_dormant_preflight_fails_before_environment_or_key_access():
     args = argparse.Namespace(**inputs(), **{key: value for key, value in execution().items() if not key.startswith("execution_run") and key != "execution_environment"})
     with pytest.raises(approval.ApprovalError, match="policy state is dormant"):
         approval.validate_dispatch(value, args)
+
+
+OLD_CONSUMER_COMMIT = "411e0205378966c73e064ba34f68ca65ed426ab6"
+OLD_CONSUMER_TREE = "4a7cf04c2d0a1cbf04da8b889ac673153c779c7a"
+BUILDER_PUBLIC_SPKI = "MCowBQYDK2VwAyEAdXOvq6FjTeUUqxBWMCrF+OJGqihEANWatNQ96HmLNEc="
+PUBLIC_BINDING_DRIFT = [
+    ("external_ed25519_key", {"key_id": "unknown-approver"}),
+    ("external_ed25519_key", {"key_id": None}),
+    ("external_ed25519_key", {"key_id": ["fleet-release-approver-2026-09"]}),
+    ("external_ed25519_key", {"key_id": "local-release-builder-2026"}),
+    ("external_ed25519_key", {
+        "key_id": "local-release-builder-2026",
+        "trusted_public_key_path": "eng/trusted-release-approvers/local-release-builder-2026.public.pem",
+        "trusted_public_key_pem_sha256": "ed1fbe95fc7713bfc6d9d0fea21726c1ba3193533fc2d5523e054ad8fb86184c",
+        "public_key_spki_der_base64": "MCowBQYDK2VwAyEAB105wcYguHU3a/phMkbbRjhZ+Qhj8cdDTAvw/7t14sk=",
+        "expected_public_key_spki_sha256": "c46a4e9a224c8c77a4038bca83f7d9ed66146318d8b5c2c9fc81cd19fdd18ea7",
+    }),
+    ("external_ed25519_key", {"key_id": "fleet-release-builder-2026-09"}),
+    ("external_ed25519_key", {"role": "android_internal_release_builder"}),
+    ("external_ed25519_key", {"approval_scope": "android_internal_release_artifact_binding"}),
+    ("external_ed25519_key", {"algorithm": "rsa"}),
+    ("external_ed25519_key", {"trusted_public_key_path": "eng/trusted-release-builders/fleet-release-builder-2026-09.public.pem"}),
+    ("external_ed25519_key", {"trusted_public_key_pem_sha256": "0" * 64}),
+    ("external_ed25519_key", {"public_key_spki_der_base64": BUILDER_PUBLIC_SPKI,
+                              "expected_public_key_spki_sha256": "41b44078d037fafd85b091b967959f77a7a4aa9f160d03749fa49889a8b1b156"}),
+    ("external_ed25519_key", {"public_key_spki_der_base64": "not-base64"}),
+    ("external_ed25519_key", {"expected_public_key_spki_sha256": "0" * 64}),
+    ("external_ed25519_key", {"configured": 1}),
+    ("android_consumer", {"qualified_commit": OLD_CONSUMER_COMMIT}),
+    ("android_consumer", {"qualified_tree": OLD_CONSUMER_TREE}),
+    ("android_consumer", {"qualified_commit": OLD_CONSUMER_COMMIT, "qualified_tree": OLD_CONSUMER_TREE}),
+    ("android_consumer", {"provenance_validator_sha256": "0" * 64}),
+    ("output", {"key_id": "local-release-builder-2026"}),
+    ("output", {"signing_authorized": True}),
+]
+
+
+@pytest.mark.parametrize("section,changes", PUBLIC_BINDING_DRIFT)
+def test_public_binding_drift_fails_before_crypto_environment_and_output(
+    tmp_path, monkeypatch, section, changes
+):
+    policy, path, _ = active_policy(tmp_path, durable=True)
+    policy[section].update(changes)
+    write_json(path, policy)
+    accesses = []
+
+    class TrackedEnvironment(dict):
+        def get(self, *args, **kwargs):
+            accesses.append("environment")
+            return super().get(*args, **kwargs)
+
+    def unexpected_crypto(*args, **kwargs):
+        accesses.append("crypto")
+        raise AssertionError("invalid public binding reached crypto")
+
+    monkeypatch.setattr(approval, "_openssl", unexpected_crypto)
+    with pytest.raises(approval.ApprovalError, match="public binding"):
+        approval.load_policy(path)
+    with pytest.raises(approval.ApprovalError, match="public binding"):
+        approval._require_ready(policy)
+    with pytest.raises(approval.ApprovalError, match="public binding"):
+        approval.sign_ed25519(b"test", policy, TrackedEnvironment())
+    args = argparse.Namespace(policy=path, output=tmp_path / approval.OUTPUT_NAME,
+                              audit_output=tmp_path / approval.AUDIT_OUTPUT_NAME)
+    with pytest.raises(approval.ApprovalError, match="public binding"):
+        approval.create_approval_bundle(args, TrackedEnvironment(), now=NOW)
+    assert accesses == []
+    assert not args.output.exists() and not args.audit_output.exists()
+
+
+def stale_dependency_graph(value):
+    graph = value["commonAuthority"]["dependencyGraph"]
+    graph["sources"]["android"]["tree"] = OLD_CONSUMER_TREE
+    graph["sha256"] = approval.canonical_sha256({k: v for k, v in graph.items() if k != "sha256"})
+
+
+@pytest.mark.parametrize("mutate,match", [
+    (lambda v: v.update(sourceCommit=OLD_CONSUMER_COMMIT), "Android identity"),
+    (lambda v: v.update(sourceTree=OLD_CONSUMER_TREE), "Android identity"),
+    (stale_dependency_graph, "dependency graph"),
+    (lambda v: v["commonAuthority"]["workflow"].update(sha256="0" * 64), "wizard/source"),
+    (lambda v: v["commonAuthority"]["environmentPolicy"].update(sha256="0" * 64), "wizard/source"),
+    (lambda v: v["commonAuthority"]["wizardGate"].update(contractSha256="0" * 64), "wizard/source"),
+    (lambda v: v["policyAuthority"].update(sha256="0" * 64), "policy authority"),
+])
+def test_resealed_stale_evidence_fails_before_key_access_and_output(tmp_path, monkeypatch, mutate, match):
+    _, _, value, args, _ = full_case(tmp_path, monkeypatch)
+    mutate(value)
+    value["eligibilitySha256"] = approval.canonical_sha256({k: v for k, v in value.items() if k != "eligibilitySha256"})
+    raw = write_json(tmp_path / "receipt.json", value)
+    packed = archive(args.artifact_archive, raw)
+    args.two_green_receipt_sha256 = hashlib.sha256(raw).hexdigest()
+    args.two_green_artifact_sha256 = hashlib.sha256(packed).hexdigest()
+    metadata = json.loads(args.artifact_snapshot.read_bytes())
+    metadata.update(digest=f"sha256:{args.two_green_artifact_sha256}", size_in_bytes=len(packed))
+    write_json(args.artifact_snapshot, metadata)
+    accesses = []
+
+    class TrackedEnvironment(dict):
+        def get(self, *args, **kwargs):
+            accesses.append("key")
+            return None
+
+    def no_sign(*args, **kwargs):
+        accesses.append("sign")
+        raise AssertionError("stale evidence reached signer")
+
+    monkeypatch.setattr(approval, "sign_ed25519", no_sign)
+    with pytest.raises(approval.ApprovalError, match=match):
+        approval.create_approval_bundle(args, TrackedEnvironment(), now=NOW)
+    assert accesses == []
+    assert not args.output.exists() and not args.audit_output.exists()
 
 
 def test_environment_key_activation_still_fails_without_durable_replay(tmp_path: Path):
@@ -680,7 +792,7 @@ def test_exact_two_green_receipt_emits_only_public_non_authorizing_approval(
         "publicationAuthorized", "googlePlayUploadAuthorized", "signatureBase64",
     }
     assert result["contractName"] == "chummer.android.two-green-release-approval/v1"
-    assert result["keyId"] == "local-release-builder-2026"
+    assert result["keyId"] == "fleet-release-approver-2026-09"
     assert result["role"] == "android_internal_release_approver"
     assert result["approvalScope"] == "android_internal_release_preparation"
     assert result["provenanceReplaySha256"] == approval.canonical_sha256(audit)
@@ -741,10 +853,10 @@ def test_historical_android_388_key_and_output_shape_remain_compatible(
     assert policy["android_consumer"]["provenance_validator_sha256"] != fixture[
         "provenanceValidatorSha256"
     ]
-    assert policy["external_ed25519_key"]["trusted_public_key_pem_sha256"] == fixture[
+    assert policy["external_ed25519_key"]["trusted_public_key_pem_sha256"] != fixture[
         "publicKeyPemSha256"
     ]
-    assert policy["external_ed25519_key"]["expected_public_key_spki_sha256"] == fixture[
+    assert policy["external_ed25519_key"]["expected_public_key_spki_sha256"] != fixture[
         "publicKeySpkiDerSha256"
     ]
 
@@ -770,6 +882,11 @@ def test_historical_android_388_key_and_output_shape_remain_compatible(
 @pytest.mark.parametrize(
     "mutate,match",
     [
+        (lambda value: value.update(keyId="local-release-builder-2026"), "posture"),
+        (lambda value: value.update(keyId="fleet-release-builder-2026-09"), "posture"),
+        (lambda value: value.update(role="android_internal_release_builder"), "posture"),
+        (lambda value: value.update(approvalScope="android_internal_release_artifact_binding"), "posture"),
+        (lambda value: value.update(sourceTree=OLD_CONSUMER_TREE), "source/version"),
         (lambda value: value.update(provenanceValidatorSha256="0" * 64), "source/version"),
         (lambda value: value.update(sourceCommit="0" * 40), "source/version"),
         (lambda value: value.update(versionCode=13), "source/version"),
@@ -837,11 +954,9 @@ def test_exact_current_android_signature_verifier_accepts_fleet_bytes(
     public_path = tmp_path / "android-consumer-test-public.pem"
     public_path.write_bytes(test_public)
     public_path.chmod(0o600)
-    monkeypatch.setattr(consumer, "RELEASE_APPROVER_PUBLIC_KEY", public_path)
-    monkeypatch.setattr(
-        consumer, "RELEASE_APPROVER_PUBLIC_KEY_SHA256",
-        hashlib.sha256(test_public).hexdigest(),
-    )
+    # Substitute bytes only for the already admitted approval-only identity.
+    monkeypatch.setitem(consumer.RELEASE_APPROVAL_ONLY_KEYS, approval.RELEASE_APPROVER_KEY_ID,
+                        (public_path, hashlib.sha256(test_public).hexdigest()))
     receipt_raw = (tmp_path / "receipt.json").read_bytes()
     verified = consumer._verify_release_approval(
         args.output, receipt_raw=receipt_raw, receipt=receipt_value, now=NOW

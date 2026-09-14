@@ -331,13 +331,8 @@ def prepare(options: LaunchConfig) -> PreparedServer:
         policy = protocol.strict_json_bytes(policy_file.data, 'approval policy', 262144)
         ledger = protocol.validate_ledger_policy(policy['replay_protection']['external_ledger'], require_configured=True)
         receipt_public = base64.b64decode(ledger['receipt_public_key_spki_der_base64'], validate=True)
-        approval = policy['external_ed25519_key']
-        approval_public = base64.b64decode(approval['public_key_spki_der_base64'], validate=True)
-        if len(approval_public) != 44 or not approval_public.startswith(protocol.SPKI_ED25519_PREFIX) \
-                or hashlib.sha256(approval_public).hexdigest() != approval['expected_public_key_spki_sha256'] \
-                or approval['public_key_spki_der_base64'] != issuer.RELEASE_APPROVER_PUBLIC_KEY_SPKI_DER_BASE64 \
-                or approval['expected_public_key_spki_sha256'] != issuer.RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256 \
-                or receipt_public == approval_public:
+        approval_public = issuer.validate_public_approval_binding(policy)
+        if receipt_public == approval_public:
             raise LaunchError(_ERROR)
         # No credential file is opened before configured policy and separation.
         result._database = _path(options.database)

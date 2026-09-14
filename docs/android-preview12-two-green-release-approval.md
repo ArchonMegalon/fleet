@@ -8,13 +8,14 @@ are backed by the exact successful reviewed and main API-36 Two-Green evidence.
 
 It never accepts, signs, uploads, or publishes an AAB. Its primary output is
 the exact `chummer.android.two-green-release-approval/v1` contract consumed by
-the bound Android `411e0205378966c73e064ba34f68ca65ed426ab6` release
-verifier. This is provisional PR-source compatibility, not qualified main
-or hosted eligibility. It always keeps
+the bound Android `d4e9116d5bcdf12a51dec6490bf47b97ed143134` release
+verifier at tree `301180a95bb313f77b6c695ac8b88624603de933`. Public-key
+compatibility, hosted consumer qualification and issuer activation are separate
+claims. It always keeps
 `signingAuthorized`, `publicationAuthorized`, and
 `googlePlayUploadAuthorized` false.
 
-Android requires an exact compact object: `local-release-builder-2026`, role
+Fleet emits an exact compact object: `fleet-release-approver-2026-09`, role
 `android_internal_release_approver`, scope
 `android_internal_release_preparation`, Ed25519 over sorted compact UTF-8 JSON
 without a trailing newline, and no extra fields. The approval binds the raw
@@ -121,13 +122,22 @@ unset. Android's existing public release-approver key, key ID, consumer commit,
 consumer tree, verifier contract, and provenance-validator digest are pinned as
 public authority. No private key or repository/environment secret is included.
 
-Do not create an approval key in Fleet. If the prior
-`local-release-builder-2026` private key is remounted, it may be supplied only
-as the protected environment secret named by the policy. It stays in memory,
-is checked against Android's pinned public key, and is never included in the
-public JSON or Actions artifact. If that private key is unavailable, a new key
-requires a separate reviewed requalification of both Android's verifier pin and
-this Fleet policy; changing Fleet alone cannot make Android accept it.
+The fixed existing public approver is
+`eng/trusted-release-approvers/fleet-release-approver-2026-09.public.pem`, PEM
+SHA256 `0ccffb5997e10dea7531894e00a2376f8da309a8e50da00199ffc3073de85dcb`,
+SPKI SHA256 `b0afed082c23ee1af1c828dde5b28ffa4061ceaa71d1bab4c11927ff142f43a3`.
+Android admits this identity only for preparation approval. The separate
+`fleet-release-builder-2026-09` identity cannot approve. Fleet exposes no key
+selection or partly refreshed profile: key ID, role, scope, public bytes, exact
+consumer and output posture are admitted together before credentials or signing.
+Old consumer/new key combinations and stale evidence hashes fail closed.
+
+This refresh does not generate, retrieve or configure a private key. A later
+approved activation may supply the matching existing key only through the
+protected environment secret named by the policy. Its derived public key must
+match the reviewed pin. Any future identity change requires a separate reviewed
+requalification of both Android and Fleet; changing Fleet alone cannot confer
+consumer trust.
 
 ## Activation transaction
 
@@ -165,13 +175,32 @@ canonical SHA-256 is signed into the Android approval as
 `provenanceReplaySha256`. It does not claim a human approval or record an
 approval actor.
 
-Local current-consumer compatibility tests use `CHUMMER_ANDROID_CURRENT_ROOT`
-and explicitly synthetic RFC 8032 signatures. They exercise the actual Android
-signature consumer and graph normalizer, and prove that synthetic CI metadata
-does not qualify as full eligibility. Full original-receipt tests remain skipped
-until a genuine matching receipt is independently acquired and pinned; supplying
-`CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT` alone cannot qualify this PR source.
-These tests do not grant approval, establish protected custody, or reattest hosted provenance.
+Local current-consumer tests require `CHUMMER_ANDROID_CURRENT_ROOT` at the exact
+commit above, with clean source and exact file digests; matching only the tree is
+insufficient. They verify the actual protected public tuple before substituting
+published RFC 8032 bytes for the already admitted approval-only identity in the
+test process. They exercise the actual signature consumer and graph normalizer,
+and prove synthetic CI metadata does not qualify as full eligibility.
+`CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT` supplies the separately pinned
+original hosted receipt for full consumer interoperability. These tests grant
+no operational approval, establish no protected custody, and perform no local
+APK/archive provenance replay.
+
+The original qualification receipt is from Two-Green run `34815624341`, artifact
+`10335663622`, pairing review `34806341505` and main `34811134299`. Its exact
+25,298-byte JSON SHA256 is
+`89eae27aa5075e1c8a90d07fa97ba1b6259c4e9654c7e174abf7cc6ef7673d3d`;
+the canonical dependency graph SHA256 is
+`e2e048592cf37088ff686e662832c986a3e7f9ba71ef84e9efc831a92abad3f3`.
+The materializer, workflow, environment, wizard-gate and Two-Green-policy hashes
+were remeasured from exact source and remain unchanged. Original hosted evidence
+is kept external; tests never rewrite it or the historical fixtures.
+
+The optional builder suites still bind their historical source and original
+receipt. They now use `CHUMMER_ANDROID_HISTORICAL_BUILDER_ROOT` and
+`CHUMMER_ANDROID_HISTORICAL_BUILDER_TWO_GREEN_RECEIPT`; their historical fixtures
+and exact commit checks are unchanged. They are not current Android builder
+qualification, and skipping them does not establish it.
 
 ## Explicit non-authority
 

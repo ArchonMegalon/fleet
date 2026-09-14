@@ -42,18 +42,18 @@
     "source": "github_environment_secret_only",
     "secret_name": "ANDROID_PREVIEW12_RELEASE_APPROVAL_ED25519_PRIVATE_KEY_PKCS8_B64",
     "algorithm": "ed25519",
-    "key_id": "local-release-builder-2026",
+    "key_id": "fleet-release-approver-2026-09",
     "role": "android_internal_release_approver",
     "approval_scope": "android_internal_release_preparation",
-    "trusted_public_key_path": "eng/trusted-release-approvers/local-release-builder-2026.public.pem",
-    "trusted_public_key_pem_sha256": "ed1fbe95fc7713bfc6d9d0fea21726c1ba3193533fc2d5523e054ad8fb86184c",
-    "public_key_spki_der_base64": "MCowBQYDK2VwAyEAB105wcYguHU3a/phMkbbRjhZ+Qhj8cdDTAvw/7t14sk=",
-    "expected_public_key_spki_sha256": "c46a4e9a224c8c77a4038bca83f7d9ed66146318d8b5c2c9fc81cd19fdd18ea7",
+    "trusted_public_key_path": "eng/trusted-release-approvers/fleet-release-approver-2026-09.public.pem",
+    "trusted_public_key_pem_sha256": "0ccffb5997e10dea7531894e00a2376f8da309a8e50da00199ffc3073de85dcb",
+    "public_key_spki_der_base64": "MCowBQYDK2VwAyEAfQlc4wil/fVVadQd7QwlJhaEdVoovi6pkR6AICaeAZ0=",
+    "expected_public_key_spki_sha256": "b0afed082c23ee1af1c828dde5b28ffa4061ceaa71d1bab4c11927ff142f43a3",
     "private_key_persistence_allowed": false
   },
   "android_consumer": {
-    "qualified_commit": "411e0205378966c73e064ba34f68ca65ed426ab6",
-    "qualified_tree": "4a7cf04c2d0a1cbf04da8b889ac673153c779c7a",
+    "qualified_commit": "d4e9116d5bcdf12a51dec6490bf47b97ed143134",
+    "qualified_tree": "301180a95bb313f77b6c695ac8b88624603de933",
     "verifier_path": "scripts/verify_api36_two_green_release_eligibility.py",
     "contract_name": "chummer.android.two-green-release-approval/v1",
     "canonical_json": "utf8_sort_keys_compact_no_trailing_newline",
@@ -95,6 +95,6 @@
     }
   },
   "activation": {"enabled": false, "requires_separate_reviewed_contract_change": true},
-  "output": {"contract_name": "chummer.android.two-green-release-approval/v1", "key_id": "local-release-builder-2026", "role": "android_internal_release_approver", "approval_scope": "android_internal_release_preparation", "file_name": "ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json", "fleet_audit_contract_name": "fleet.android_preview12_two_green_release_approval.v1", "fleet_audit_file_name": "FLEET_ANDROID_PREVIEW12_APPROVAL_AUDIT.generated.json", "public_json_only": true, "signing_authorized": false, "publication_authorized": false, "google_play_upload_authorized": false},
+  "output": {"contract_name": "chummer.android.two-green-release-approval/v1", "key_id": "fleet-release-approver-2026-09", "role": "android_internal_release_approver", "approval_scope": "android_internal_release_preparation", "file_name": "ANDROID_API36_TWO_GREEN_RELEASE_APPROVAL.generated.json", "fleet_audit_contract_name": "fleet.android_preview12_two_green_release_approval.v1", "fleet_audit_file_name": "FLEET_ANDROID_PREVIEW12_APPROVAL_AUDIT.generated.json", "public_json_only": true, "signing_authorized": false, "publication_authorized": false, "google_play_upload_authorized": false},
   "separation": {"play_aab_signer": "strictly_separate", "accepts_aab_bytes": false, "accepts_play_credentials": false, "accepts_upload_keystore": false, "performs_artifact_signing": false, "performs_play_upload": false, "performs_publication": false}
 }
