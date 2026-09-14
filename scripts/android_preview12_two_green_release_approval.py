@@ -3,7 +3,9 @@
 
 This lane never accepts an AAB, upload keystore, Play credential, or publication
 target.  Its Ed25519 key is accepted only from the protected GitHub environment
-variable named by the reviewed policy.  The checked-in policy is dormant.
+variable named by the reviewed policy.  The checked-in policy is ready for its
+separately reviewed workflow; this lane is preparation-only and never signs
+artifacts, accesses Play credentials, or publishes.
 """
 
 from __future__ import annotations
@@ -51,8 +53,8 @@ VERSION_NAME = "0.1.0-preview.12"
 VERSION_CODE = 12
 # Exact qualified consumer and preparation-only public identity move together.
 # Hosted eligibility and public-key compatibility do not activate this lane.
-ANDROID_CONSUMER_COMMIT = "2eb09d5921a9c44c3f818ae9d20e3b40d2c43753"
-ANDROID_CONSUMER_TREE = "e8df321fb2d640acd32441bbc632f255c3b3cf13"
+ANDROID_CONSUMER_COMMIT = "e0d997bddaebcc1e685ef48b886445e7a96a5af7"
+ANDROID_CONSUMER_TREE = "f816035141ae63eb464fde437d3e09550aab2717"
 RELEASE_APPROVER_KEY_ID = "fleet-release-approver-2026-09"
 RELEASE_APPROVER_ROLE = "android_internal_release_approver"
 RELEASE_APPROVAL_SCOPE = "android_internal_release_preparation"
@@ -70,11 +72,11 @@ RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256 = (
 )
 PROVENANCE_VALIDATOR_PATH = "scripts/materialize-api36-two-green-eligibility.py"
 PROVENANCE_VALIDATOR_SHA256 = (
-    "d0e1938107a3794a44648286b8b97d1ac3db64daa30509f1e63fe78018d3f4c7"
+    "cfc76c70fd78a1bb94e85229be84dd6d2d1d97de0bce60e21cbb868cb4a94b9c"
 )
 # Public metadata of the exactly bound consumer, not locally executed Android
 # provenance replay. The workflow authenticates the original hosted artifact.
-QUALIFIED_DEPENDENCY_GRAPH_SHA256 = "a8eaf996a194db3e15bd49860928868e5054bfc6c606bd3de1d1ed8e37a6efd4"
+QUALIFIED_DEPENDENCY_GRAPH_SHA256 = "c9a989a904735141014d5b9b7ebdd33fea9e561a61ea5d28911b48150e0962cb"
 WIZARD_AUTHORITY_CLASS = "internal_phone_beta_sr5_wizard_only"
 WIZARD_PROOF_SCOPE = "sr5_wizards_only"
 WIZARD_AGGREGATE_SCHEMA = "chummer.android.api36-sr5-wizard-e2e-aggregate/v2"
@@ -84,7 +86,7 @@ WIZARD_JOURNEYS = (
 )
 QUALIFIED_WORKFLOW = {
     "path": ".github/workflows/api36-editing-e2e.yml",
-    "sha256": "987d5564c2700d1549d90a715e1a8b31bf36daa4435e58bb474506e7ebf4f20d", "sizeBytes": 33162,
+    "sha256": "a1c19279957f0a0e53ca715119c339a628718e8e219f76527c528075f757fee3", "sizeBytes": 34153,
 }
 QUALIFIED_ENVIRONMENT_POLICY = {
     "schema": "chummer.android.api36-proof-environment-authority/v2",
@@ -93,7 +95,7 @@ QUALIFIED_ENVIRONMENT_POLICY = {
 QUALIFIED_TWO_GREEN_POLICY = {
     "path": "eng/api36-two-consecutive-green-authority.json", "publicationAuthorized": False,
     "schema": "chummer.android.api36-ordered-review-main-green-policy/v3",
-    "sha256": "be2daf41ce4ad59f417bf592fcf0da7f2c716d7deee0fb51f90b5f3cc57ec01a", "sizeBytes": 2752,
+    "sha256": "b5d3b61c68cbb627836e89ee92f0e2bac9372d663906a63d7eafc13f6da9fe44", "sizeBytes": 2798,
 }
 QUALIFIED_WIZARD_GATE = {
     "schema": "chummer.android.api36-sr5-wizard-gate-binding/v1",
@@ -101,6 +103,26 @@ QUALIFIED_WIZARD_GATE = {
     "contractSha256": "c867b4fd8c2a771e3ddb4c3e20c0b843ea87510a197b476c7ce75dc013fec7b4",
     "authorityClass": WIZARD_AUTHORITY_CLASS, "proofScope": WIZARD_PROOF_SCOPE,
     "publicationAuthorized": False, "requiredJourneyCount": 7, "requiredJourneys": list(WIZARD_JOURNEYS),
+}
+QUALIFIED_DESIGN_POLICY_BINDING = {
+    "repository": "ArchonMegalon/chummer6-design",
+    "commit": "e408e11bdfabc34898cb0eca6e2409a98d021e4d",
+    "tree": "f4ce63636d2a1cef1ef1b96524530ebdda5eb449",
+    "matrix": {
+        "path": "products/chummer/ANDROID_PHONE_BETA_SUPPORT_MATRIX.yaml",
+        "sha256": "ea60a42426c6a3db02adccdb06f9763a1b3e45865f625b96d807f872e490c6cb",
+    },
+    "validator": {
+        "path": "scripts/ai/validate_android_phone_beta_contract.py",
+        "sha256": "136d6d216ad4d0c4d48e233016d43c9912219c97df8f08762049d39805a8f909",
+    },
+    "matrixSchema": "chummer.android_phone_beta_support_matrix.v1",
+    "wizardAggregateSchema": "chummer.android.api36-sr5-wizard-e2e-aggregate/v2",
+    "wizardGate": {
+        "path": "eng/api36-sr5-wizard-gate-authority.json",
+        "sha256": "c867b4fd8c2a771e3ddb4c3e20c0b843ea87510a197b476c7ce75dc013fec7b4",
+        "schema": "chummer.android.api36-sr5-wizard-gate-authority/v1",
+    },
 }
 TWO_GREEN_EXCLUSIONS = (
     "google_play_upload", "google_play_processing", "tester_distribution", "tester_installation",
@@ -210,6 +232,66 @@ def stable_file(path: Path, label: str, limit: int) -> tuple[bytes, str]:
 def _exact_keys(value: Mapping[str, Any], keys: set[str], label: str) -> None:
     if set(value) != keys:
         raise ApprovalError(f"{label} fields are not exact")
+
+
+def validate_design_policy_authorities(
+    value: object, *, expected_design_binding: Mapping[str, Any]
+) -> None:
+    """Validate the exact reviewed Design binding without consulting Design."""
+    if not isinstance(value, dict):
+        raise ApprovalError("Design policyAuthorities must be an object")
+    _exact_keys(value, {"design"}, "Design policyAuthorities")
+    if not isinstance(expected_design_binding, Mapping):
+        raise ApprovalError("reviewed Design binding must be an object")
+    design_keys = {
+        "repository", "commit", "tree", "matrix", "validator", "matrixSchema",
+        "wizardAggregateSchema", "wizardGate",
+    }
+    _exact_keys(expected_design_binding, design_keys, "reviewed Design binding")
+    if not all(isinstance(expected_design_binding[name], str) for name in (
+        "repository", "matrixSchema", "wizardAggregateSchema",
+    )):
+        raise ApprovalError("reviewed Design binding has an invalid type")
+    _sha40(expected_design_binding["commit"], "reviewed Design commit")
+    _sha40(expected_design_binding["tree"], "reviewed Design tree")
+    for name, keys in (
+        ("matrix", {"path", "sha256"}),
+        ("validator", {"path", "sha256"}),
+        ("wizardGate", {"path", "sha256", "schema"}),
+    ):
+        block = expected_design_binding[name]
+        if not isinstance(block, dict) or set(block) != keys:
+            raise ApprovalError(f"reviewed Design {name} must be an object")
+        if not isinstance(block["path"], str) or (
+            "schema" in block and not isinstance(block["schema"], str)
+        ):
+            raise ApprovalError(f"reviewed Design {name} path has an invalid type")
+        _sha256(block["sha256"], f"reviewed Design {name} digest")
+    if (
+        expected_design_binding["repository"] != "ArchonMegalon/chummer6-design"
+        or expected_design_binding["matrix"]["path"]
+        != "products/chummer/ANDROID_PHONE_BETA_SUPPORT_MATRIX.yaml"
+        or expected_design_binding["validator"]["path"]
+        != "scripts/ai/validate_android_phone_beta_contract.py"
+        or expected_design_binding["matrixSchema"]
+        != "chummer.android_phone_beta_support_matrix.v1"
+        or expected_design_binding["wizardAggregateSchema"]
+        != "chummer.android.api36-sr5-wizard-e2e-aggregate/v2"
+        or expected_design_binding["wizardGate"]["path"]
+        != "eng/api36-sr5-wizard-gate-authority.json"
+        or expected_design_binding["wizardGate"]["schema"]
+        != "chummer.android.api36-sr5-wizard-gate-authority/v1"
+    ):
+        raise ApprovalError("reviewed Design binding identity differs")
+    actual = value["design"]
+    if not isinstance(actual, dict):
+        raise ApprovalError("Design policy binding must be an object")
+    try:
+        matches = canonical_bytes(actual) == canonical_bytes(expected_design_binding)
+    except (TypeError, ValueError) as error:
+        raise ApprovalError("Design policy binding contains a non-JSON value") from error
+    if not matches:
+        raise ApprovalError("Design policy binding differs from reviewed authority")
 
 
 def _sha40(value: object, label: str) -> str:
@@ -932,8 +1014,12 @@ def validate_receipt(
     _exact_keys(common, {
         "androidTree", "authorityClass", "proofScope", "dependencyGraph", "workflow", "wizardGate",
         "aggregateSchema", "requiredJourneys", "environmentPolicy", "buildEnvironmentCompatibilitySha256",
-        "journeyEnvironmentCompatibilitySha256", "environmentCompatibilityStatus",
+        "journeyEnvironmentCompatibilitySha256", "environmentCompatibilityStatus", "policyAuthorities",
     }, "Two-Green common authority")
+    validate_design_policy_authorities(
+        common["policyAuthorities"],
+        expected_design_binding=QUALIFIED_DESIGN_POLICY_BINDING,
+    )
     expected_bindings = {
         "authorityClass": WIZARD_AUTHORITY_CLASS, "proofScope": WIZARD_PROOF_SCOPE,
         "aggregateSchema": WIZARD_AGGREGATE_SCHEMA, "requiredJourneys": list(WIZARD_JOURNEYS),
