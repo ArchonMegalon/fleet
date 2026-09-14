@@ -167,6 +167,88 @@ def test_source_graph_rejects_stale_release_and_repository_authority() -> None:
         module.validate_source_graph(stale_repository)
 
 
+def test_online_checkout_is_full_history_unfiltered_and_cleans_up_on_failure(tmp_path: Path) -> None:
+    module = load_module()
+    origin = tmp_path / "origin"
+    origin.mkdir()
+    git_environment = {
+        "PATH": "/usr/bin:/bin",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_ATTR_NOSYSTEM": "1",
+        "GIT_NO_REPLACE_OBJECTS": "1",
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_ASKPASS": "/bin/false",
+    }
+
+    def git(*args: str, check: bool = True):
+        return subprocess.run(
+            ["/usr/bin/git", "-c", "core.hooksPath=/dev/null", "-c", "init.templateDir=",
+             "-c", "commit.gpgSign=false", *args],
+            check=check, capture_output=True, text=True, env=git_environment,
+        )
+
+    git("init", "--quiet", str(origin))
+    git("-C", str(origin), "config", "user.name", "fixture")
+    git("-C", str(origin), "config", "user.email", "fixture@example.invalid")
+    (origin / "ancestor-only.txt").write_text("ancestor\n")
+    git("-C", str(origin), "add", ".")
+    git("-C", str(origin), "commit", "--quiet", "-m", "ancestor")
+    ancestor = git("-C", str(origin), "rev-parse", "HEAD").stdout.strip()
+    (origin / "ancestor-only.txt").unlink()
+    (origin / "head-only.txt").write_text("head\n")
+    git("-C", str(origin), "add", ".")
+    git("-C", str(origin), "commit", "--quiet", "-m", "head")
+    head = git("-C", str(origin), "rev-parse", "HEAD").stdout.strip()
+    tree = git("-C", str(origin), "rev-parse", "HEAD^{tree}").stdout.strip()
+    listing = git("-C", str(origin), "ls-tree", "-r", "-z", "--full-tree", "HEAD").stdout.encode()
+    local_url = str(origin)
+    monkeypatch_repositories = {
+        name: (role, relative, local_url)
+        for name, (role, relative, _repository) in module.REPOSITORIES.items()
+    }
+    module.REPOSITORIES = monkeypatch_repositories
+    value = graph(module)
+    for row in value["repositories"]:
+        row.update(commit=head, tree=tree, tree_sha256=hashlib.sha256(listing).hexdigest())
+    calls = []
+
+    def controlled(command, **kwargs):
+        calls.append(list(command))
+        cleaned = []
+        index = 0
+        while index < len(command):
+            if command[index:index + 2] in (["-c", "protocol.allow=never"], ["-c", "protocol.https.allow=always"]):
+                index += 2
+            else:
+                cleaned.append(command[index])
+                index += 1
+        return subprocess.run(cleaned, **kwargs)
+
+    roots = module.checkout_source_graph(value, tmp_path / "checkout", runner=controlled, timeout=30)
+    assert len(roots) == len(module.REPOSITORIES) == 8
+    fetches = [command for command in calls if "fetch" in command]
+    assert len(fetches) == 8
+    assert all(not any("filter" in arg or "depth" in arg for arg in command) for command in fetches)
+    for root in roots.values():
+        module._preserved_git_storage(root, local_url)
+        assert git("-C", str(root), "cat-file", "-e", f"{ancestor}:ancestor-only.txt").returncode == 0
+        assert git("-C", str(root), "show", f"{ancestor}:ancestor-only.txt").stdout == "ancestor\n"
+        assert git("-C", str(root), "cat-file", "-e", f"{head}:ancestor-only.txt", check=False).returncode != 0
+    failed = tmp_path / "failed-checkout"
+
+    def fail_checkout(command, **kwargs):
+        if "checkout" in command:
+            return subprocess.CompletedProcess(command, 1, "", "")
+        return controlled(command, **kwargs)
+
+    with pytest.raises(module.RebuilderError):
+        module.checkout_source_graph(value, failed, runner=fail_checkout, timeout=30)
+    assert not failed.exists()
+
+
 def test_duplicate_json_key_and_symlink_fail_closed(tmp_path: Path) -> None:
     module = load_module()
     tmp_path.chmod(0o700)

@@ -506,7 +506,7 @@ def checkout_source_graph(graph: Mapping[str, Any], workspace: Path, *,
             row = rows[name]
             _git(runner, ["init", "--quiet", os.fspath(root)], timeout=timeout)
             _git(runner, ["-C", os.fspath(root), "remote", "add", "origin", repository], timeout=timeout)
-            _git(runner, ["-C", os.fspath(root), "fetch", "--no-tags", "--filter=blob:none", "origin", row["commit"]], timeout=timeout)
+            _git(runner, ["-C", os.fspath(root), "fetch", "--no-tags", "origin", row["commit"]], timeout=timeout)
             _git(runner, ["-C", os.fspath(root), "checkout", "--quiet", "--detach", "FETCH_HEAD"], timeout=timeout)
             roots[name] = root
         verify_source_checkout_graph(graph, workspace, runner=runner, timeout=timeout)
