@@ -11,6 +11,7 @@ import argparse
 import base64
 import binascii
 from collections import deque
+from contextlib import contextmanager
 import configparser
 from datetime import UTC, datetime
 import hashlib
@@ -1359,7 +1360,7 @@ def _preserved_git_storage(root: Path, repository: str | None = None) -> None:
         if 'remote "origin"' in parser:
             remote = dict(parser['remote "origin"'])
             if set(remote) != {"url", "fetch"} or remote["fetch"] != "+refs/heads/*:refs/remotes/origin/*" \
-                    or remote["url"] not in {value[2] for value in REPOSITORIES.values()} \
+                    or remote["url"] not in ({repository} if repository is not None else {value[2] for value in REPOSITORIES.values()}) \
                     or (repository is not None and remote["url"] != repository):
                 raise ValueError()
         elif repository is not None:
@@ -1369,9 +1370,9 @@ def _preserved_git_storage(root: Path, repository: str | None = None) -> None:
 
 
 def _preserved_repository_bytes(root: Path, commit: str, *, git: Callable[..., bytes | str] | None = None,
-                                owner_uid: int = 0, timeout: int = 30) -> None:
+                                owner_uid: int = 0, timeout: int = 30, repository: str | None = None) -> None:
     """Bind all tracked source bytes, including assume-unchanged/ignored drift."""
-    _preserved_git_storage(root)
+    _preserved_git_storage(root, repository)
     operation = git or (lambda args, **kwargs: _git(subprocess.run, args, **kwargs))
     listing = operation(["-C", os.fspath(root), "ls-tree", "-r", "-z", "--full-tree", commit],
                         timeout=timeout, binary=True)
@@ -2239,6 +2240,202 @@ def _require_offline_aar_consumer(lock: Mapping[str, Any], workspace: Path) -> N
     _require_offline_feed_consumer(lock, workspace, "AAR")
 
 
+# Compatibility only, never source admission or a change to an active lock.
+# The checked-in historical script predates offline source-test inputs. The
+# reviewed successor must use exactly this stdlib-only Android capture helper.
+# Unknown scripts require a reviewed capability entry, never substring probing.
+RELEASE_TEST_CONSUMERS = {
+    "61ea9fa04338889f78e26de26a90b392c5f16def2a4150a64a94e9d4fadd5ca9": None,
+    "fc8b6e637ba3220e4e9c5ea55c5e4dcca6cb26c196eaa75f6d19e91a87ed3db6":
+        "a295c226850edda9ce3a57a3c43690188e271b3059c33dd14abca04f65ef4bcf",
+}
+TEST_ORACLE_REPOSITORY = "https://github.com/ArchonMegalon/chummer5a.git"
+TEST_ORACLE_FILE_COUNT = 250_000
+
+
+def _release_test_capability(lock: Mapping[str, Any]) -> str | None:
+    binding = lock["android_authority"]["build_script"]
+    if binding["path"] != "scripts/build-release.sh" or binding["sha256"] not in RELEASE_TEST_CONSUMERS:
+        raise RebuilderError("Android release source-test consumer capability is not admitted")
+    return RELEASE_TEST_CONSUMERS[binding["sha256"]]
+
+
+def _admit_release_test_inputs(lock: Mapping[str, Any], bootstrap: Path | None, wheels: Path | None,
+                              oracle: Path | None, *separate_roots: Path) -> None:
+    required = _release_test_capability(lock) is not None
+    paths = (bootstrap, wheels, oracle)
+    if not required:
+        if any(path is not None for path in paths):
+            raise RebuilderError("historical Android consumer does not accept source-test inputs")
+        return
+    if any(path is None for path in paths):
+        raise RebuilderError("Android source tests require explicit bootstrap, wheelhouse and oracle inputs")
+    for index, path in enumerate(paths):
+        _validate_offline_feed(path, *separate_roots, *paths[:index], kind="source-test")
+
+
+def _load_release_test_capture(lock: Mapping[str, Any], android: Path) -> Any:
+    """Import only the exact reviewed stdlib helper after full source checks.
+
+    Never install anything in Fleet, alter sys.path or import the test suite.
+    The requirements/workflow sit outside scripts/eng; check their Git bytes too.
+    """
+    helper_digest = _release_test_capability(lock)
+    commit = lock["android_authority"]["commit"]
+    _preserved_git_storage(android, REPOSITORIES["chummer-android"][2])
+    if _offline_git(["-C", str(android), "rev-parse", "HEAD"], timeout=30) != commit:
+        raise RebuilderError("source-test Android checkout is not the admitted commit")
+    _validate_android_consumer_inputs(android, commit)
+    for relative in ("scripts/build-release.sh", "scripts/run_release_source_tests.py",
+                     "eng/release-test-bootstrap.lock.json", "tests/requirements-ci.txt",
+                     ".github/workflows/api36-editing-e2e.yml"):
+        raw = _stable_bytes(android / relative, "Android source-test authority", 1024 * 1024)
+        tracked = _offline_git(["-C", str(android), "show", f"{commit}:{relative}"], timeout=30, binary=True)
+        if raw != tracked:
+            raise RebuilderError("Android source-test authority differs from tracked bytes")
+        if relative == "scripts/build-release.sh" and hashlib.sha256(raw).hexdigest() != lock["android_authority"]["build_script"]["sha256"]:
+            raise RebuilderError("Android source-test build script differs from admitted capability")
+    path = android / "scripts/run_release_source_tests.py"
+    helper = _stable_bytes(path, "Android source-test capture helper", 1024 * 1024)
+    if hashlib.sha256(helper).hexdigest() != helper_digest:
+        raise RebuilderError("Android source-test capture helper differs from admitted capability")
+    module = types.ModuleType("fleet_reviewed_android_test_capture")
+    module.__file__ = str(path)
+    exec(compile(helper, str(path), "exec"), module.__dict__)
+    return module
+
+
+def _oracle_inventory(root: Path) -> dict[str, os.stat_result]:
+    """No links, devices, shared objects or writable-by-other entries, before Git."""
+    entries, total = {}, 0
+    for base, directories, files in os.walk(root, followlinks=False):
+        for name in (*directories, *files):
+            path = Path(base) / name
+            info = path.lstat()
+            if info.st_uid != os.getuid() or info.st_mode & 0o022 \
+                    or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)) \
+                    or (stat.S_ISREG(info.st_mode) and info.st_nlink != 1):
+                raise RebuilderError("test oracle contains unsafe or shared entries")
+            if len(entries) >= TEST_ORACLE_FILE_COUNT:
+                raise RebuilderError("test oracle inventory exceeds its limit")
+            entries[path.relative_to(root).as_posix()] = info
+            if stat.S_ISREG(info.st_mode):
+                total += info.st_size
+                if info.st_size > OFFLINE_BUNDLE_BYTES or total > OFFLINE_TOTAL_BUNDLE_BYTES:
+                    raise RebuilderError("test oracle bytes exceed transport limits")
+    return entries
+
+
+def _verify_test_oracle(module: Any, android: Path, oracle: Path) -> str:
+    _oracle_inventory(oracle)
+    _preserved_git_storage(oracle, TEST_ORACLE_REPOSITORY)
+    workflow = module.read_stable(android / ".github/workflows/api36-editing-e2e.yml").decode("utf-8")
+    pins = re.findall(r"repository: ArchonMegalon/chummer5a\n\s+ref: ([0-9a-f]{40})\n", workflow)
+    if len(pins) != 1:
+        raise RebuilderError("test oracle workflow pin is missing or ambiguous")
+    def read_git(arguments: list[str], **options: Any) -> bytes | str:
+        # Status must not refresh the supplied index while checking identity.
+        return _offline_git(["--no-optional-locks", *arguments], **options)
+    commit = read_git(["-C", str(oracle), "rev-parse", "HEAD"], timeout=30)
+    if commit != pins[0]:
+        raise RebuilderError("test oracle does not match the Android workflow commit")
+    for name in ("Chummer", "Plugins/ChummerHub.Client/UI", "Translator", "CrashHandler", "ChummerDataViewer"):
+        if not (oracle / name).is_dir():
+            raise RebuilderError("test oracle is missing an Android inventory root")
+    if read_git(["-C", str(oracle), "status", "--porcelain", "--untracked-files=all"], timeout=30):
+        raise RebuilderError("test oracle checkout is not clean")
+    _preserved_repository_bytes(oracle, commit, git=read_git, owner_uid=os.getuid(),
+                                repository=TEST_ORACLE_REPOSITORY)
+    reachable = read_git(["-C", str(oracle), "rev-list", "--objects", "--no-object-names", commit], timeout=900)
+    stored = read_git(["-C", str(oracle), "cat-file", "--batch-all-objects", "--batch-check=%(objectname)"], timeout=900)
+    wanted, actual = reachable.splitlines(), stored.splitlines()
+    if not wanted or any(not HEX40.fullmatch(value) for value in (*wanted, *actual)) \
+            or set(wanted) != set(actual):
+        raise RebuilderError("test oracle object storage is not the exact reachable commit closure")
+    return commit
+
+
+def _stage_test_oracle(module: Any, android: Path, source: Path, destination: Path) -> os.stat_result:
+    """Copy only bounded ordinary Git object files into a fresh helper-free repo.
+
+    No clone/file-protocol exemption, bundles, hooks, index, caller config or
+    worktree bytes are copied. Git materializes the exact verified object tree.
+    Filesystem quota remains the enclosing builder's responsibility.
+    """
+    commit = _verify_test_oracle(module, android, source)
+    before = _oracle_inventory(source)
+    destination.mkdir(mode=0o700)
+    identity = destination.lstat()
+    try:
+        _offline_git(["init", "--quiet", "--template=", str(destination)], timeout=30)
+        objects = []
+        for relative, info in before.items():
+            if not relative.startswith(".git/objects/") or not stat.S_ISREG(info.st_mode):
+                continue
+            name = relative.removeprefix(".git/objects/")
+            if name == "info/packs" or re.fullmatch(r"pack/pack-[0-9a-f]{40}\.(?:rev|bitmap)", name):
+                continue  # Pack advertisement/acceleration indexes are not source objects.
+            if not re.fullmatch(r"(?:[0-9a-f]{2}/[0-9a-f]{38}|pack/pack-[0-9a-f]{40}\.(?:pack|idx))", name):
+                raise RebuilderError("test oracle has unsupported Git object storage")
+            objects.append((relative, info))
+        if not objects:
+            raise RebuilderError("test oracle has no independent objects")
+        for relative, info in objects:
+            output = destination / relative
+            output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            with output.open("xb") as stream:
+                os.fchmod(stream.fileno(), 0o600)
+                _copy_offline_input(source / relative, info, stream, OFFLINE_BUNDLE_BYTES)
+        _offline_git(["-C", str(destination), "fsck", "--full", "--strict", "--no-reflogs", commit], timeout=900)
+        _offline_git(["-C", str(destination), "remote", "add", "origin", TEST_ORACLE_REPOSITORY], timeout=30)
+        _offline_git(["-C", str(destination), "checkout", "--quiet", "--detach", commit], timeout=900)
+        if _verify_test_oracle(module, android, destination) != commit \
+                or _verify_test_oracle(module, android, source) != commit \
+                or {name: _file_identity(info) for name, info in before.items()} != \
+                   {name: _file_identity(info) for name, info in _oracle_inventory(source).items()}:
+            raise RebuilderError("test oracle changed during staging")
+        return identity
+    except BaseException:
+        _remove_owned_directory(destination, identity)
+        raise
+
+
+@contextmanager
+def _staged_release_test_inputs(lock: Mapping[str, Any], workspace: Path, scratch: Path,
+                                bootstrap: Path | None, wheels: Path | None, oracle: Path | None):
+    if _release_test_capability(lock) is None:
+        yield {}
+        return
+    module = _load_release_test_capture(lock, workspace / "chummer-android")
+    stage = Path(tempfile.mkdtemp(prefix=".release-test-inputs-", dir=scratch))
+    stage_identity, oracle_identity = stage.lstat(), None
+    destination = workspace / "chummer5a"
+    child_started = False
+    try:
+        # Android owns lock semantics and byte limits; Fleet only stages data.
+        for path in (bootstrap, wheels, oracle):
+            module.directory(path)
+        _lock, inputs, _requirements = module.capture_inputs(workspace / "chummer-android", bootstrap, wheels)
+        for name in ("bootstrap", "wheels"):
+            (stage / name).mkdir(mode=0o700)
+        for name, raw in inputs.items():
+            _write_exclusive(stage / name, raw)
+        oracle_identity = _stage_test_oracle(module, workspace / "chummer-android", oracle, destination)
+        child_started = True
+        yield {"CHUMMER_ANDROID_RELEASE_TEST_BOOTSTRAP_DIR": str(stage / "bootstrap"),
+               "CHUMMER_ANDROID_RELEASE_TEST_WHEELHOUSE": str(stage / "wheels")}
+    except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError):
+        if child_started:
+            raise  # Preserve build/timeout classification; this is not bad input.
+        raise RebuilderError("offline Android source-test input admission or staging failed") from None
+    finally:
+        try:
+            if oracle_identity is not None:
+                _remove_owned_directory(destination, oracle_identity)
+        finally:
+            _remove_owned_directory(stage, stage_identity)
+
+
 class _RebuildToolchainInputs:
     """Local input snapshots, not runtime authority or a transported dialect."""
 
@@ -2304,6 +2501,9 @@ def _run_independent_rebuild(
     offline_nuget_feed: Path | None = None,
     offline_aar_feed: Path | None = None,
     toolchain_inputs: _RebuildToolchainInputs | None = None,
+    test_bootstrap_dir: Path | None = None,
+    test_wheelhouse: Path | None = None,
+    test_oracle_root: Path | None = None,
 ) -> tuple[Path, Path]:
     _validate_authority_feed_paths(authority_root, owner_feed)
     _validate_offline_feeds(
@@ -2316,6 +2516,11 @@ def _run_independent_rebuild(
         _require_offline_nuget_consumer(lock, workspace)
     if offline_aar_feed is not None:
         _require_offline_aar_consumer(lock, workspace)
+    _admit_release_test_inputs(lock, test_bootstrap_dir, test_wheelhouse, test_oracle_root,
+        authority_root, workspace, build_input_root, package_authority, ui_authority_receipt,
+        java_tool_observation, installed_closure_receipt, dotnet_root, java_root, android_sdk_root,
+        two_green_receipt, approval, bundletool, upload_certificate,
+        *(path for path in (offline_nuget_feed, offline_aar_feed) if path is not None))
     if toolchain_inputs is None:
         toolchain_inputs = _RebuildToolchainInputs(installed_closure_receipt, java_tool_observation)
     toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
@@ -2357,7 +2562,10 @@ def _run_independent_rebuild(
         environment["CHUMMER_ANDROID_RELEASE_OFFLINE_AAR_FEED"] = os.fspath(offline_aar_feed)
     build_script = workspace / "chummer-android/scripts/build-release.sh"
     stdout_path, stderr_path = build_input_root / "build.stdout", build_input_root / "build.stderr"
-    with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
+    with _staged_release_test_inputs(lock, workspace, build_input_root,
+            test_bootstrap_dir, test_wheelhouse, test_oracle_root) as test_environment, \
+            stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
+        environment.update(test_environment)
         toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
         completed = runner(
             ["/bin/bash", "-p", os.fspath(build_script)], cwd=workspace / "chummer-android",
@@ -2388,6 +2596,9 @@ def prepare_rebuild_handoff(
     offline_source_manifest: Path | None = None,
     offline_nuget_feed: Path | None = None,
     offline_aar_feed: Path | None = None,
+    test_bootstrap_dir: Path | None = None,
+    test_wheelhouse: Path | None = None,
+    test_oracle_root: Path | None = None,
 ) -> dict[str, Any]:
     """Run the secret-free rebuild stage in a job with no credential mounts."""
 
@@ -2404,6 +2615,12 @@ def prepare_rebuild_handoff(
     failures = validate_unsigned_rebuild_lock(lock, lock_raw, reported_builder_image)
     if failures:
         raise RebuilderError("; ".join(failures))
+    _admit_release_test_inputs(lock, test_bootstrap_dir, test_wheelhouse, test_oracle_root,
+        authority_root, output_dir, package_authority, ui_authority_receipt, java_tool_observation,
+        installed_closure_receipt, dotnet_root, java_root, android_sdk_root, lock_path, external_request,
+        producer_unsigned_aab, producer_source_graph, producer_sidecar, two_green_receipt, approval,
+        bundletool, upload_certificate,
+        *(path for path in (offline_source_manifest, offline_nuget_feed, offline_aar_feed) if path is not None))
     toolchain_inputs = _RebuildToolchainInputs(installed_closure_receipt, java_tool_observation)
     if toolchain_inputs.bindings[0][1] != lock["toolchain"]["installed_closure_receipt_sha256"]:
         raise RebuilderError("installed toolchain closure receipt differs from lock")
@@ -2474,6 +2691,9 @@ def prepare_rebuild_handoff(
             offline_nuget_feed=offline_nuget_feed,
             offline_aar_feed=offline_aar_feed,
             toolchain_inputs=toolchain_inputs,
+            test_bootstrap_dir=test_bootstrap_dir,
+            test_wheelhouse=test_wheelhouse,
+            test_oracle_root=test_oracle_root,
         )
         toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
         rebuilt = require_rebuild_match(rebuilt_aab, request, lock["limits"]["aab_bytes"])
@@ -3796,6 +4016,9 @@ def _parser() -> argparse.ArgumentParser:
         "--offline-aar-feed", type=_offline_aar_feed_argument,
         help="absolute canonical directory of offline Android archives; Android owns manifest and byte validation",
     )
+    for name in ("test-bootstrap-dir", "test-wheelhouse", "test-oracle-root"):
+        prepare.add_argument("--" + name, type=lambda value: _offline_feed_argument(value, "source-test"),
+                            help="explicit offline test-only input; mandatory together for the admitted new test runner")
     return parser
 
 
@@ -3829,6 +4052,9 @@ def main(argv: list[str] | None = None) -> int:
                 offline_source_manifest=arguments.offline_source_manifest,
                 offline_nuget_feed=arguments.offline_nuget_feed,
                 offline_aar_feed=arguments.offline_aar_feed,
+                test_bootstrap_dir=arguments.test_bootstrap_dir,
+                test_wheelhouse=arguments.test_wheelhouse,
+                test_oracle_root=arguments.test_oracle_root,
             )
     except (OSError, KeyError, TypeError, ValueError, subprocess.SubprocessError, RebuilderError) as error:
         print(f"android-preview12-external-rebuilder: {error}", file=sys.stderr)
