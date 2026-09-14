@@ -20,6 +20,73 @@ from test_android_preview12_external_rebuilder import LOCK, protected_file
 from test_android_preview12_preserved_handoff import handoff_inputs
 
 
+def test_release_source_test_capabilities_are_explicit_and_nonpromoting():
+    historical = ready_lock()
+    fleet._admit_release_test_inputs(historical, None, None, None)
+    with pytest.raises(fleet.RebuilderError, match="historical"):
+        fleet._admit_release_test_inputs(historical, Path("/explicit"), None, None)
+    historical["android_authority"]["build_script"]["sha256"] = "f" * 64
+    with pytest.raises(fleet.RebuilderError, match="capability"):
+        fleet._admit_release_test_inputs(historical, None, None, None)
+    assert len(fleet.REPOSITORIES) == len(fleet.REVISION_VARIABLES) == 8
+    assert "chummer5a" not in fleet.REPOSITORIES
+    assert json.loads(LOCK.read_bytes())["state"] == "dormant"
+
+
+@pytest.mark.parametrize("present", [(), (0,), (1,), (2,), (0, 1), (0, 2), (1, 2)])
+def test_new_release_source_consumer_never_accepts_missing_or_partial_inputs(tmp_path, present):
+    lock = ready_lock()
+    lock["android_authority"]["build_script"]["sha256"] = next(
+        digest for digest, helper in fleet.RELEASE_TEST_CONSUMERS.items() if helper)
+    paths = tuple(tmp_path / str(index) if index in present else None for index in range(3))
+    with pytest.raises(fleet.RebuilderError, match="require explicit"):
+        fleet._admit_release_test_inputs(lock, *paths)
+
+
+@pytest.mark.parametrize("attack", ["same", "nested", "output", "relative", "symlink", "writable", "file"])
+def test_release_source_paths_reject_overlap_or_unsafe_inputs(tmp_path, attack):
+    lock = ready_lock()
+    lock["android_authority"]["build_script"]["sha256"] = next(
+        digest for digest, helper in fleet.RELEASE_TEST_CONSUMERS.items() if helper)
+    paths = [tmp_path / name for name in ("bootstrap", "wheels", "oracle")]
+    for path in paths:
+        path.mkdir(mode=0o700)
+    output = tmp_path / "output"
+    if attack == "same":
+        paths[1] = paths[0]
+    elif attack == "nested":
+        paths[1] = paths[0] / "nested"
+        paths[1].mkdir()
+    elif attack == "output":
+        output = paths[2]
+    elif attack == "relative":
+        paths[0] = Path("relative")
+    elif attack == "symlink":
+        link = tmp_path / "link"
+        link.symlink_to(paths[0], target_is_directory=True)
+        paths[0] = link
+    elif attack == "writable":
+        paths[0].chmod(0o777)
+    else:
+        paths[0].rmdir()
+        paths[0].write_text("not a directory")
+    with pytest.raises(fleet.RebuilderError, match="source-test"):
+        fleet._admit_release_test_inputs(lock, *paths, output)
+
+
+def test_release_source_cli_has_three_explicit_nonsecret_inputs(tmp_path):
+    args = prepare_arguments(tmp_path, configured())
+    argv = ["--lock", str(args.pop("lock_path")), "prepare-rebuild"]
+    for name, value in args.items():
+        argv += ["--builder-image" if name == "reported_builder_image" else "--" + name.replace("_", "-"), str(value)]
+    for name in ("test-bootstrap-dir", "test-wheelhouse", "test-oracle-root"):
+        argv += ["--" + name, str(tmp_path / name)]
+    parsed = fleet._parser().parse_args(argv)
+    assert parsed.test_bootstrap_dir == tmp_path / "test-bootstrap-dir"
+    assert parsed.test_wheelhouse == tmp_path / "test-wheelhouse"
+    assert parsed.test_oracle_root == tmp_path / "test-oracle-root"
+
+
 def ready_lock():
     lock = json.loads(fixture.LOCK.read_text())
     lock["state"] = "ready"
@@ -196,6 +263,10 @@ def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path,
             expected_offline[variable] = str(supplied)
     if expected_offline:
         offline_consumer(args)
+        # Synthetic shell used only by this modeled NuGet/AAR boundary test.
+        # Production capability table remains closed and independently tested.
+        monkeypatch.setattr(module, "RELEASE_TEST_CONSUMERS", {
+            **module.RELEASE_TEST_CONSUMERS, args["lock"]["android_authority"]["build_script"]["sha256"]: None})
     for name in ("two_green_receipt", "approval", "java_tool_observation", "installed_closure_receipt"):
         fixture.protected_file(args[name], b'{"TEST_ONLY":true}\n')
     graph = json.dumps(fixture.graph(module)).encode()
@@ -714,7 +785,8 @@ def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(
         captured = k.pop("toolchain_inputs")
         captured.assert_exact(inventory, observation)
         assert k == {"runner": forbidden, "offline_nuget_feed": args.get("offline_nuget_feed"),
-                     "offline_aar_feed": args.get("offline_aar_feed")}
+                     "offline_aar_feed": args.get("offline_aar_feed"), "test_bootstrap_dir": None,
+                     "test_wheelhouse": None, "test_oracle_root": None}
         a[-1].mkdir(mode=0o700)
         return paths["unsignedAab"], paths["sourceGraph"]
     monkeypatch.setattr(fleet, "_run_independent_rebuild", rebuild)
@@ -755,7 +827,8 @@ def test_prepare_cli_propagates_optional_inputs_without_normalizing_relative_inp
     assert fleet.main(argv) == 0
     assert observed == [{"offline_source_manifest": Path(manifest) if manifest is not None else None,
                          "offline_nuget_feed": Path(nuget_feed) if nuget_feed is not None else None,
-                         "offline_aar_feed": Path(aar_feed) if aar_feed is not None else None}]
+                         "offline_aar_feed": Path(aar_feed) if aar_feed is not None else None,
+                         "test_bootstrap_dir": None, "test_wheelhouse": None, "test_oracle_root": None}]
     assert json.loads(capsys.readouterr().out) == {"unitFixture": True}
 
 
