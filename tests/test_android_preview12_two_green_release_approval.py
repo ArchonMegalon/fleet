@@ -446,6 +446,55 @@ def test_checked_in_policy_is_exact_dormant_and_contains_no_key_material():
     assert base64.b64encode(TEST_PRIVATE_DER) not in data
 
 
+def test_public_approver_rotation_pins_qualified_identity_without_activation():
+    policy, _, _ = approval.load_policy(POLICY.resolve())
+    key = policy["external_ed25519_key"]
+    assert key["key_id"] == policy["output"]["key_id"] == "fleet-release-approver-2026-09"
+    assert key["trusted_public_key_path"] == (
+        "eng/trusted-release-approvers/fleet-release-approver-2026-09.public.pem"
+    )
+    assert key["public_key_spki_der_base64"] == (
+        "MCowBQYDK2VwAyEAfQlc4wil/fVVadQd7QwlJhaEdVoovi6pkR6AICaeAZ0="
+    )
+    public_der = base64.b64decode(key["public_key_spki_der_base64"], validate=True)
+    assert public_der.startswith(approval.SPKI_ED25519_PREFIX)
+    assert len(public_der) == 44
+    assert hashlib.sha256(public_der).hexdigest() == key["expected_public_key_spki_sha256"] == (
+        "b0afed082c23ee1af1c828dde5b28ffa4061ceaa71d1bab4c11927ff142f43a3"
+    )
+    public_pem = subprocess.run(
+        ["openssl", "pkey", "-pubin", "-inform", "DER", "-outform", "PEM"],
+        input=public_der, check=True, capture_output=True,
+    ).stdout
+    assert hashlib.sha256(public_pem).hexdigest() == key["trusted_public_key_pem_sha256"] == (
+        "0ccffb5997e10dea7531894e00a2376f8da309a8e50da00199ffc3073de85dcb"
+    )
+    # Qualification completes PR18's staged binding without activating custody.
+    assert policy["android_consumer"]["qualified_commit"] == "d4e9116d5bcdf12a51dec6490bf47b97ed143134"
+    assert policy["android_consumer"]["qualified_tree"] == "301180a95bb313f77b6c695ac8b88624603de933"
+    assert key["configured"] is False
+    assert policy["activation"]["enabled"] is False
+    for field in ("signing_authorized", "publication_authorized", "google_play_upload_authorized"):
+        assert policy["output"][field] is False
+
+
+@pytest.mark.parametrize("field,fixture_field", [
+    ("key_id", "keyId"), ("trusted_public_key_path", "publicKeyPemPath"),
+    ("trusted_public_key_pem_sha256", "publicKeyPemSha256"),
+    ("public_key_spki_der_base64", "publicKeySpkiDerBase64"),
+    ("expected_public_key_spki_sha256", "publicKeySpkiDerSha256"),
+])
+def test_current_policy_rejects_each_legacy_approval_pin(tmp_path: Path, field, fixture_field):
+    fixture = json.loads(ANDROID_388_FIXTURE.read_text())
+    policy, path, _ = active_policy(tmp_path, durable=True)
+    policy["external_ed25519_key"][field] = fixture[fixture_field]
+    write_json(path, policy)
+    with pytest.raises(approval.ApprovalError, match="public binding"):
+        approval.load_policy(path.resolve())
+    with pytest.raises(approval.ApprovalError, match="public binding"):
+        approval._require_ready(policy)
+
+
 def test_dormant_preflight_fails_before_environment_or_key_access():
     value, _, _ = approval.load_policy(POLICY.resolve())
     args = argparse.Namespace(**inputs(), **{key: value for key, value in execution().items() if not key.startswith("execution_run") and key != "execution_environment"})
@@ -853,6 +902,8 @@ def test_historical_android_388_key_and_output_shape_remain_compatible(
     assert policy["android_consumer"]["provenance_validator_sha256"] != fixture[
         "provenanceValidatorSha256"
     ]
+    assert policy["external_ed25519_key"]["key_id"] != fixture["keyId"]
+    assert policy["external_ed25519_key"]["trusted_public_key_path"] != fixture["publicKeyPemPath"]
     assert policy["external_ed25519_key"]["trusted_public_key_pem_sha256"] != fixture[
         "publicKeyPemSha256"
     ]
@@ -887,6 +938,13 @@ def test_historical_android_388_key_and_output_shape_remain_compatible(
         (lambda value: value.update(role="android_internal_release_builder"), "posture"),
         (lambda value: value.update(approvalScope="android_internal_release_artifact_binding"), "posture"),
         (lambda value: value.update(sourceTree=OLD_CONSUMER_TREE), "source/version"),
+        (lambda value: value.update(keyId="unknown-approver"), "posture"),
+        (lambda value: value.update(role="android_release_builder"), "posture"),
+        (lambda value: value.update(approvalScope="android_artifact_signing"), "posture"),
+        (lambda value: value.update(contractName="chummer.android.release-build-attestation/v1"), "posture"),
+        (lambda value: value.update(signingAuthorized=True), "posture"),
+        (lambda value: value.update(publicationAuthorized=True), "posture"),
+        (lambda value: value.update(googlePlayUploadAuthorized=True), "posture"),
         (lambda value: value.update(provenanceValidatorSha256="0" * 64), "source/version"),
         (lambda value: value.update(sourceCommit="0" * 40), "source/version"),
         (lambda value: value.update(versionCode=13), "source/version"),
