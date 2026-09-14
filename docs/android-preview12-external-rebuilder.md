@@ -50,9 +50,14 @@ synthetic artifact and qualification claims, not release qualification.
 
 `prepare-rebuild` accepts no keystore, password, bearer, or private-key
 argument. It checks out the complete source graph, binds the exact
-.NET 10.0.110, JDK 17.0.20.1, Android API/build-tools 36 closures, the exact
-bundletool bytes, the separate installed-closure receipt, and the declared
-builder image identity. Downstream signer configuration remains a separate gate.
+.NET 10.0.111 (9,258 files, 4,276,188,988 bytes), JDK 17.0.20.1 (246 files,
+332,109,578 bytes), and Android API/build-tools 36 (11,523 files,
+314,037,662 bytes), along with their exact tree digests, the exact bundletool
+bytes, the separate installed-closure receipt, and the declared builder image
+identity. Downstream signer configuration remains a separate gate.
+These values are contained-file measurements accepted by the SDK111 measurement
+record only; that record's outer measurement execution remains FAILED. They do
+not qualify current runtime custody or an installed closure.
 It runs the Android unsigned build and
 requires its AAB digest to equal the producer.
 
@@ -80,8 +85,8 @@ The dedicated separate-input tests optionally use
 receipt via `CHUMMER_ANDROID_CURRENT_BUILDER_TWO_GREEN_RECEIPT`. Actual-loader
 negative tests reject inventory as an observation; preparation tests model SDK
 execution and cannot establish an offline build. This plumbing change neither
-repins the historical checked-in lock nor qualifies/activates SDK111. Actual
-installed closure, admitted immutable image/controller, complete offline source
+repins the Android authority or qualifies/activates installed SDK111 custody.
+Actual installed closure, admitted immutable image/controller, complete offline source
 and package inputs, protected approval and real deterministic rebuild remain
 required.
 
