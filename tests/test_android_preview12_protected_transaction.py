@@ -279,6 +279,8 @@ def fake_consumer(module, lease, events):
 
     return SimpleNamespace(
         CONTRACT=module.ANDROID_ATTESTATION_CONTRACT,
+        _fleet_builder_key_id=module.BUILDER_KEY_IDS[0],
+        _fleet_builder_selection="qualified-legacy",  # Explicit test-only loader model.
         _fleet_expected_spki_sha256=json.loads(LOCK.read_text())["approval_authority"]["public_key_spki_sha256"],
         ROOT=lease.java_root.parent,
         VERIFY=SimpleNamespace(verify_release_eligibility=eligibility),
@@ -442,6 +444,63 @@ def test_reservation_precedes_key_admission_and_all_signing(tmp_path: Path, monk
     assert f"fsync:{tmp_path}" in events
 
 
+@pytest.mark.parametrize("failure", ["missing-id", "missing-mode", "approval-id", "new-id-on-legacy", "lock-drift"])
+def test_builder_selection_fails_before_reservation_and_credential_callback(tmp_path, monkeypatch, failure):
+    module = load_module()
+    events = []
+    lock, lock_raw, lease = fixture(module, tmp_path, events)
+    install_fakes(module, monkeypatch, events, lock, lock_raw)
+    consumer = fake_consumer(module, lease, events)
+    if failure == "missing-id":
+        del consumer._fleet_builder_key_id
+    elif failure == "missing-mode":
+        del consumer._fleet_builder_selection
+    elif failure == "approval-id":
+        consumer._fleet_builder_key_id = "fleet-release-approver-2026-09"
+    else:
+        consumer._fleet_builder_key_id = module.BUILDER_KEY_IDS[1]
+        if failure == "lock-drift":
+            consumer._fleet_builder_selection = "explicit-builder"
+    with pytest.raises(module.RebuilderError, match="qualified Android builder selector"):
+        module.execute_protected_signer_transaction(
+            tmp_path / "lock.json", lambda *_: lease, lambda: consumer, tmp_path, {},
+            lambda *_: pytest.fail("invalid builder selector reached credentials"),
+            lambda **_: pytest.fail("invalid builder selector reached signed validation"),
+            tmp_path / "output", attempt_id="d" * 64,
+            two_green_artifact_id=123, two_green_artifact_sha256="e" * 64,
+        )
+    assert not {"reserve", "owner-key-preflight", "sign", "android-v2", "external-v1"}.intersection(events)
+    assert not module._recovery_path(lease.recovery_root, "d" * 64).exists()
+
+
+@pytest.mark.parametrize("field", ["_fleet_builder_key_id", "_fleet_builder_selection", "_fleet_expected_spki_sha256"])
+def test_public_builder_binding_drift_after_reservation_never_admits_credentials(tmp_path, monkeypatch, field):
+    module = load_module()
+    events = []
+    lock, lock_raw, lease = fixture(module, tmp_path, events)
+    install_fakes(module, monkeypatch, events, lock, lock_raw)
+    consumer = fake_consumer(module, lease, events)
+    reserve = module.reserve_signing_attempt
+
+    def drift(*args, **kwargs):
+        result = reserve(*args, **kwargs)
+        setattr(consumer, field, "changed-public-binding")
+        return result
+
+    monkeypatch.setattr(module, "reserve_signing_attempt", drift)
+    with pytest.raises(module.RebuilderError):
+        module.execute_protected_signer_transaction(
+            tmp_path / "lock.json", lambda *_: lease, lambda: consumer, tmp_path, {},
+            lambda *_: pytest.fail("public binding drift admitted credentials"),
+            lambda **_: pytest.fail("public binding drift reached signed validation"),
+            tmp_path / "output", attempt_id="d" * 64,
+            two_green_artifact_id=123, two_green_artifact_sha256="e" * 64,
+        )
+    assert events.count("reserve") == events.count("abort") == 1
+    assert not {"owner-key-preflight", "sign", "android-v2", "external-v1"}.intersection(events)
+    assert not module._recovery_path(lease.recovery_root, "d" * 64).exists()
+
+
 @pytest.mark.parametrize("failure", ["missing-key", "malformed-key", "wrong-key", "missing-binding", "wrong-binding"])
 def test_owner_key_rejected_before_any_aab_signing(tmp_path: Path, monkeypatch, request, failure: str) -> None:
     module = load_module()
@@ -485,11 +544,18 @@ def test_owner_key_rejected_before_any_aab_signing(tmp_path: Path, monkeypatch, 
             attempt_id="d" * 64, two_green_artifact_id=123,
             two_green_artifact_sha256="e" * 64,
         )
-    assert events.count("reserve") == events.count("credentials") == 1
+    assert events.count("reserve") == 1
     assert "sign" not in events and "android-v2" not in events and "external-v1" not in events
-    assert "commit" not in events and "abort" not in events
+    assert "commit" not in events
     assert not output.exists()
     recovery = module._recovery_path(lease.recovery_root, "d" * 64)
+    if failure.endswith("binding"):
+        # Public authority failures precede credential admission. The existing
+        # pre-credential abort path applies; there are no signed bytes to retain.
+        assert "credentials" not in events and "owner-key-read" not in events
+        assert events.count("abort") == 1 and not recovery.exists()
+        return
+    assert events.count("credentials") == 1 and "abort" not in events
     assert recovery.is_dir()
     assert not (recovery / f"chummer-android-{module.VERSION_NAME}-signed.aab").exists()
     quarantine = json.loads((recovery / "QUARANTINED.generated.json").read_text())
@@ -505,10 +571,7 @@ def test_owner_key_rejected_before_any_aab_signing(tmp_path: Path, monkeypatch, 
         )
     assert events.count("reserve") == events.count("credentials") == 1
     assert "sign" not in events
-    if failure.endswith("binding"):
-        assert "owner-key-read" not in events
-    else:
-        assert events.index("credentials") < events.index("owner-key-read")
+    assert events.index("credentials") < events.index("owner-key-read")
 
 
 @pytest.mark.parametrize(
@@ -764,12 +827,15 @@ def test_recovery_rejects_fresh_validation_drift_without_replaying_signing(
     assert module._recovery_path(lease.recovery_root, "d" * 64).is_dir()
 
 
+@pytest.mark.parametrize("selection", ["qualified-legacy", "explicit-builder"])
 def test_external_v1_validator_binds_claims_and_detached_signature(
-    tmp_path: Path,
+    tmp_path: Path, selection: str,
 ) -> None:
     module = load_module()
     events: list[str] = []
     lock, _lock_raw, lease = fixture(module, tmp_path, events)
+    if selection == "explicit-builder":
+        lock["approval_authority"]["key_id"] = module.BUILDER_KEY_IDS[1]
     request = json.loads(lease.paths["externalSignerRequest"].read_text())
     unsigned_raw = lease.paths["unsignedAab"].read_bytes()
     graph_raw = lease.paths["sourceGraph"].read_bytes()
@@ -805,9 +871,17 @@ def test_external_v1_validator_binds_claims_and_detached_signature(
     path = protected_file(
         tmp_path / "ANDROID_EXTERNAL_SIGNER_ATTESTATION.v1.json", module._pretty_json(value)
     )
+    def verify_signature(*_args, **kwargs):
+        assert kwargs == {"label": "external signer v1", **(
+            {"builder_key_id": module.BUILDER_KEY_IDS[1]} if selection == "explicit-builder" else {}
+        )}
+        events.append("verify-signature")
+
     android = SimpleNamespace(
+        _fleet_builder_key_id=lock["approval_authority"]["key_id"],
+        _fleet_builder_selection=selection,
         VERIFY=SimpleNamespace(
-            _verify_ed25519_signature=lambda *_args, **_kwargs: events.append("verify-signature")
+            _verify_ed25519_signature=verify_signature,
         )
     )
     observed = module.validate_external_signer_attestation(
@@ -886,6 +960,8 @@ def test_real_android_v2_helper_preserves_rejected_signed_attestation(
     android = SimpleNamespace(
         ROOT=tmp_path,
         VERIFY=Verify,
+        _fleet_builder_key_id=module.BUILDER_KEY_IDS[0],
+        _fleet_builder_selection="qualified-legacy",
         _fleet_expected_spki_sha256="a" * 64,
         _artifact_claims=lambda *_args: {
             "graph": {"releaseIdentity": {"versionName": module.VERSION_NAME, "versionCode": module.VERSION_CODE}}
@@ -893,6 +969,7 @@ def test_real_android_v2_helper_preserves_rejected_signed_attestation(
         _validate_validation_claims=lambda value: value,
         _unsigned=lambda *_args: {
             "contractName": module.ANDROID_ATTESTATION_CONTRACT,
+            "keyId": module.BUILDER_KEY_IDS[0],
             "protectedValidation": {"status": "pass"},
         },
         _pretty=module._pretty_json,
