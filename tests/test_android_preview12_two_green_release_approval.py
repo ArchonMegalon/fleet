@@ -70,7 +70,8 @@ def use_test_approval_key(monkeypatch: pytest.MonkeyPatch) -> str:
 
 
 def active_policy(tmp_path: Path, *, durable: bool = False) -> tuple[dict, Path, str]:
-    value = json.loads(POLICY.read_text())
+    # Synthetic active/dormant cases do not inherit the operational ledger tuple.
+    value = approval.expected_policy()
     value["state"] = "ready"
     value["github_environment"]["configured"] = True
     value["cross_repo_actions_read"]["configured"] = True
@@ -405,8 +406,10 @@ def full_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch | None = None):
     return policy_value, public_digest, receipt_value, args, environment
 
 
-def test_checked_in_policy_is_exact_dormant_and_contains_no_key_material():
-    value, data, _ = approval.load_policy(POLICY.resolve())
+def test_dormant_template_is_exact_and_contains_no_key_material(tmp_path):
+    path = tmp_path / "dormant-policy.json"
+    write_json(path, approval.expected_policy())
+    value, data, _ = approval.load_policy(path.resolve())
     assert value == approval.expected_policy()
     assert value["state"].startswith("dormant")
     assert value["activation"]["enabled"] is False
@@ -446,7 +449,56 @@ def test_checked_in_policy_is_exact_dormant_and_contains_no_key_material():
     assert base64.b64encode(TEST_PRIVATE_DER) not in data
 
 
-def test_public_approver_rotation_pins_qualified_identity_without_activation():
+def test_checked_in_ready_policy_has_exact_public_ledger_and_closed_shape():
+    value, data, _ = approval.load_policy(POLICY.resolve())
+    expected = approval.expected_policy()
+    expected["state"] = "ready"
+    for section in ("github_environment", "cross_repo_actions_read", "external_ed25519_key"):
+        expected[section]["configured"] = True
+    expected["activation"]["enabled"] = True
+    expected["replay_protection"].update(
+        durable_external_reservation_configured=True, authority_complete=True,
+    )
+    expected["replay_protection"]["external_ledger"].update(
+        configured=True, base_url="https://chummer.run", allowed_hosts=["chummer.run"],
+        expected_service_identity="fleet-preview12-approval-ledger-20260914",
+        receipt_public_key_spki_der_base64="MCowBQYDK2VwAyEAG33jVaLGoFGzOKR+rTybpSvcAMg07vJSoaF9uSBJl34=",
+        receipt_public_key_spki_sha256="6bff5bfb80dbdb3892a7a9ef7f149baf6a3ad711ea4623621d5baf74079e55b2",
+    )
+    assert value == expected  # No extra policy fields, changed limits or paths.
+    approval._require_ready(value)  # Public source gate only; no live environment or credentials.
+    assert b"PRIVATE KEY" not in data
+    assert base64.b64encode(TEST_PRIVATE_DER) not in data
+
+
+@pytest.mark.parametrize("drift", ("receipt-key-reuse", "publication", "old-consumer"))
+def test_checked_in_ready_policy_drift_fails_before_credentials(tmp_path, monkeypatch, drift):
+    policy = json.loads(POLICY.read_bytes())
+    if drift == "receipt-key-reuse":
+        key = policy["external_ed25519_key"]
+        policy["replay_protection"]["external_ledger"].update(
+            receipt_public_key_spki_der_base64=key["public_key_spki_der_base64"],
+            receipt_public_key_spki_sha256=key["expected_public_key_spki_sha256"],
+        )
+    elif drift == "publication":
+        policy["output"]["publication_authorized"] = True
+    else:
+        policy["android_consumer"].update(
+            qualified_commit=PREVIOUS_CONSUMER_COMMIT, qualified_tree=PREVIOUS_CONSUMER_TREE,
+        )
+    path = tmp_path / "changed-ready-policy.json"
+    write_json(path, policy)
+    monkeypatch.setattr(approval, "sign_ed25519", lambda *a, **k: pytest.fail("unexpected signing"))
+    class NoCredentialAccess(dict):
+        def get(self, *args, **kwargs):
+            pytest.fail("invalid ready binding reached credentials")
+    with pytest.raises(approval.ApprovalError):
+        approval.load_policy(path)
+    with pytest.raises(approval.ApprovalError):
+        approval.create_approval_bundle(argparse.Namespace(policy=path), NoCredentialAccess(), now=NOW)
+
+
+def test_public_approver_pins_qualified_identity_without_publication():
     policy, _, _ = approval.load_policy(POLICY.resolve())
     key = policy["external_ed25519_key"]
     assert key["key_id"] == policy["output"]["key_id"] == "fleet-release-approver-2026-09"
@@ -472,8 +524,8 @@ def test_public_approver_rotation_pins_qualified_identity_without_activation():
     # Current consumer qualification does not activate custody or change key roles.
     assert policy["android_consumer"]["qualified_commit"] == "2eb09d5921a9c44c3f818ae9d20e3b40d2c43753"
     assert policy["android_consumer"]["qualified_tree"] == "e8df321fb2d640acd32441bbc632f255c3b3cf13"
-    assert key["configured"] is False
-    assert policy["activation"]["enabled"] is False
+    assert key["configured"] is True
+    assert policy["activation"]["enabled"] is True
     for field in ("signing_authorized", "publication_authorized", "google_play_upload_authorized"):
         assert policy["output"][field] is False
 
@@ -496,7 +548,7 @@ def test_current_policy_rejects_each_legacy_approval_pin(tmp_path: Path, field, 
 
 
 def test_dormant_preflight_fails_before_environment_or_key_access():
-    value, _, _ = approval.load_policy(POLICY.resolve())
+    value = approval.expected_policy()
     args = argparse.Namespace(**inputs(), **{key: value for key, value in execution().items() if not key.startswith("execution_run") and key != "execution_environment"})
     with pytest.raises(approval.ApprovalError, match="policy state is dormant"):
         approval.validate_dispatch(value, args)
