@@ -216,8 +216,8 @@ def qualified_dependency_graph() -> dict:
         "core-content": ("core", "1d8cf694d0412b3bd9f4a241fb95244fad341160", "3f39863d2ae5db4d6d7b3d07185e33bf240db330"),
         "core-runtime": ("core", "3bc5fe725fd2bbbad0333c5c7a3f849e53808c4f", "a39d4ccd8e1ba08c22c57339fe13bfc72aa191c7"),
         "hub": ("hub", "e35db6feca8f194161302064a9f77d4f8e60fe14", "58a03c18139ed860c442fad05ba4af8f33d6bd5b"),
-        "media": ("media-factory", "415c8163d3d90b1211e4014fef332bdec6d75f73", "841a2b8bf3180fada9c3978a6478e3826d75ee2b"),
-        "presentation": ("ui", "56b5e2178d87a81cbe0a7e126eda756ac2e9cfa1", "7eea8d4aa307012c854838a369911ba6cc8d5eac"),
+        "media": ("media-factory", "f3c955488210c69abdf96689dd3b3d67afba80d2", "67c7bc7254a78d62f850dc2fe8c6e9790c4292b8"),
+        "presentation": ("ui", "9a869420ecc335f9a54968debeff6723d4997ff7", "bb4eef82c5f0f76f9ef72a1e485aec47a061c329"),
         "registry": ("hub-registry", "af9a7e19c3bf331e96411dfb8f9e7820a98cab29", "ada0ad6341d34eea0f407ef2b109f6368b6752e2"),
         "ui-kit": ("ui-kit", "d51ecd99cf72098d4adc8db0192bff7bf9fd8e61", "1c9837c579a52c40fe49c70db9e4f7aff2af0143"),
     }
@@ -469,9 +469,9 @@ def test_public_approver_rotation_pins_qualified_identity_without_activation():
     assert hashlib.sha256(public_pem).hexdigest() == key["trusted_public_key_pem_sha256"] == (
         "0ccffb5997e10dea7531894e00a2376f8da309a8e50da00199ffc3073de85dcb"
     )
-    # Qualification completes PR18's staged binding without activating custody.
-    assert policy["android_consumer"]["qualified_commit"] == "d4e9116d5bcdf12a51dec6490bf47b97ed143134"
-    assert policy["android_consumer"]["qualified_tree"] == "301180a95bb313f77b6c695ac8b88624603de933"
+    # Current consumer qualification does not activate custody or change key roles.
+    assert policy["android_consumer"]["qualified_commit"] == "2eb09d5921a9c44c3f818ae9d20e3b40d2c43753"
+    assert policy["android_consumer"]["qualified_tree"] == "e8df321fb2d640acd32441bbc632f255c3b3cf13"
     assert key["configured"] is False
     assert policy["activation"]["enabled"] is False
     for field in ("signing_authorized", "publication_authorized", "google_play_upload_authorized"):
@@ -504,6 +504,8 @@ def test_dormant_preflight_fails_before_environment_or_key_access():
 
 OLD_CONSUMER_COMMIT = "411e0205378966c73e064ba34f68ca65ed426ab6"
 OLD_CONSUMER_TREE = "4a7cf04c2d0a1cbf04da8b889ac673153c779c7a"
+PREVIOUS_CONSUMER_COMMIT = "d4e9116d5bcdf12a51dec6490bf47b97ed143134"
+PREVIOUS_CONSUMER_TREE = "301180a95bb313f77b6c695ac8b88624603de933"
 BUILDER_PUBLIC_SPKI = "MCowBQYDK2VwAyEAdXOvq6FjTeUUqxBWMCrF+OJGqihEANWatNQ96HmLNEc="
 PUBLIC_BINDING_DRIFT = [
     ("external_ed25519_key", {"key_id": "unknown-approver"}),
@@ -531,10 +533,20 @@ PUBLIC_BINDING_DRIFT = [
     ("android_consumer", {"qualified_commit": OLD_CONSUMER_COMMIT}),
     ("android_consumer", {"qualified_tree": OLD_CONSUMER_TREE}),
     ("android_consumer", {"qualified_commit": OLD_CONSUMER_COMMIT, "qualified_tree": OLD_CONSUMER_TREE}),
+    ("android_consumer", {"qualified_commit": PREVIOUS_CONSUMER_COMMIT}),
+    ("android_consumer", {"qualified_tree": PREVIOUS_CONSUMER_TREE}),
+    ("android_consumer", {"qualified_commit": PREVIOUS_CONSUMER_COMMIT, "qualified_tree": PREVIOUS_CONSUMER_TREE}),
     ("android_consumer", {"provenance_validator_sha256": "0" * 64}),
     ("output", {"key_id": "local-release-builder-2026"}),
     ("output", {"signing_authorized": True}),
 ]
+
+
+def test_previous_qualified_consumer_is_rejected():
+    values = inputs()
+    values.update(main_commit=PREVIOUS_CONSUMER_COMMIT, main_tree=PREVIOUS_CONSUMER_TREE)
+    with pytest.raises(approval.ApprovalError, match="exactly bound consumer"):
+        approval.validate_inputs(argparse.Namespace(**values))
 
 
 @pytest.mark.parametrize("section,changes", PUBLIC_BINDING_DRIFT)
