@@ -2239,6 +2239,49 @@ def _require_offline_aar_consumer(lock: Mapping[str, Any], workspace: Path) -> N
     _require_offline_feed_consumer(lock, workspace, "AAR")
 
 
+class _RebuildToolchainInputs:
+    """Local input snapshots, not runtime authority or a transported dialect."""
+
+    __slots__ = ("paths", "bindings")
+
+    def __init__(self, installed_closure_receipt: Path, java_tool_observation: Path) -> None:
+        self.paths = (installed_closure_receipt, java_tool_observation)
+        self.bindings = self._capture()
+        if self.paths[0] == self.paths[1] or self.bindings[0][0][:2] == self.bindings[1][0][:2]:
+            raise RebuilderError("installed closure receipt and Java observation must be separate files")
+
+    def _capture(self) -> tuple[tuple[tuple[int, ...], str], ...]:
+        result = []
+        for path, label in zip(self.paths, ("installed closure receipt", "Java tool observation")):
+            # Owner-only canonical admission and bounded reads precede hashing;
+            # retain identity as well as bytes to reject same-byte replacement.
+            try:
+                metadata = path.lstat()
+                before = (*_file_identity(metadata), metadata.st_gid, metadata.st_nlink)
+                digest = _sha256_file(path, label, 8 * 1024 * 1024, owner_only=True)
+                metadata = path.lstat()
+                after = (*_file_identity(metadata), metadata.st_gid, metadata.st_nlink)
+            except OSError:
+                raise RebuilderError("rebuild toolchain input is unavailable") from None
+            if after != before:
+                raise RebuilderError("rebuild toolchain input changed while being captured")
+            result.append((before, digest))
+        return tuple(result)
+
+    def assert_exact(self, installed_closure_receipt: Path, java_tool_observation: Path) -> None:
+        if self.paths != (installed_closure_receipt, java_tool_observation) or self._capture() != self.bindings:
+            raise RebuilderError("rebuild toolchain input differs from the admitted snapshot")
+
+    def validate_observation(self, android: Any, dotnet_root: Path, java_root: Path) -> None:
+        self.assert_exact(*self.paths)
+        observed = android._load_trusted_java_toolchain(self.paths[1])
+        if observed["observationSha256"] != self.bindings[1][1] \
+                or observed["tools"]["java"] != java_root / "bin/java" \
+                or observed["dotnet"] != dotnet_root / "dotnet":
+            raise RebuilderError("rebuild Java observation differs from admitted bytes or tool roots")
+        self.assert_exact(*self.paths)
+
+
 def _run_independent_rebuild(
     lock: Mapping[str, Any],
     workspace: Path,
@@ -2248,7 +2291,8 @@ def _run_independent_rebuild(
     authority_root: Path,
     owner_feed: Path,
     ui_authority_receipt: Path,
-    toolchain_authority: Path,
+    java_tool_observation: Path,
+    installed_closure_receipt: Path,
     bundletool: Path,
     upload_certificate: Path,
     dotnet_root: Path,
@@ -2259,17 +2303,22 @@ def _run_independent_rebuild(
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     offline_nuget_feed: Path | None = None,
     offline_aar_feed: Path | None = None,
+    toolchain_inputs: _RebuildToolchainInputs | None = None,
 ) -> tuple[Path, Path]:
     _validate_authority_feed_paths(authority_root, owner_feed)
     _validate_offline_feeds(
         offline_nuget_feed, offline_aar_feed, authority_root, workspace, build_input_root, package_authority,
-        ui_authority_receipt, toolchain_authority, dotnet_root, java_root, android_sdk_root,
+        ui_authority_receipt, java_tool_observation, installed_closure_receipt,
+        dotnet_root, java_root, android_sdk_root,
         two_green_receipt, approval, bundletool, upload_certificate,
     )
     if offline_nuget_feed is not None:
         _require_offline_nuget_consumer(lock, workspace)
     if offline_aar_feed is not None:
         _require_offline_aar_consumer(lock, workspace)
+    if toolchain_inputs is None:
+        toolchain_inputs = _RebuildToolchainInputs(installed_closure_receipt, java_tool_observation)
+    toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
     build_input_root.mkdir(mode=0o700)
     (build_input_root / "nuget-packages").mkdir(mode=0o700)
     (build_input_root / "unsigned-child-home").mkdir(mode=0o700)
@@ -2290,7 +2339,7 @@ def _run_independent_rebuild(
         "CHUMMER_COMPLETE_ROOT": os.fspath(workspace),
         "CHUMMER_ANDROID_EXPECTED_VERSION_NAME": VERSION_NAME,
         "CHUMMER_ANDROID_EXPECTED_VERSION_CODE": str(VERSION_CODE),
-        "CHUMMER_ANDROID_RELEASE_TOOLCHAIN_AUTHORITY": os.fspath(toolchain_authority),
+        "CHUMMER_ANDROID_RELEASE_TOOLCHAIN_AUTHORITY": os.fspath(java_tool_observation),
         "CHUMMER_ANDROID_RELEASE_PACKAGE_AUTHORITY": os.fspath(package_authority),
         "CHUMMER_CURRENT_UI_PACKAGE_AUTHORITY_RECEIPT": os.fspath(ui_authority_receipt),
         "CHUMMER_INTERNAL_PHONE_BETA_PACKAGE_FEED": os.fspath(owner_feed),
@@ -2309,11 +2358,13 @@ def _run_independent_rebuild(
     build_script = workspace / "chummer-android/scripts/build-release.sh"
     stdout_path, stderr_path = build_input_root / "build.stdout", build_input_root / "build.stderr"
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
+        toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
         completed = runner(
             ["/bin/bash", "-p", os.fspath(build_script)], cwd=workspace / "chummer-android",
             env=environment, check=False, stdout=stdout, stderr=stderr,
             timeout=lock["limits"]["build_timeout_seconds"],
         )
+    toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
     # build-release intentionally exits 3 after creating an unsigned external-
     # signer handoff.  Any other result is either a failed build or an
     # unauthorized semantic change to the Android build boundary.
@@ -2330,7 +2381,7 @@ def prepare_rebuild_handoff(
     lock_path: Path, external_request: Path, producer_unsigned_aab: Path,
     producer_source_graph: Path, producer_sidecar: Path, two_green_receipt: Path,
     approval: Path, package_authority: Path, authority_root: Path, owner_feed: Path,
-    ui_authority_receipt: Path, toolchain_authority: Path, bundletool: Path,
+    ui_authority_receipt: Path, java_tool_observation: Path, installed_closure_receipt: Path, bundletool: Path,
     upload_certificate: Path, dotnet_root: Path, java_root: Path,
     android_sdk_root: Path, output_dir: Path, reported_builder_image: str, *,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
@@ -2343,7 +2394,8 @@ def prepare_rebuild_handoff(
     _validate_authority_feed_paths(authority_root, owner_feed)
     _validate_offline_feeds(
         offline_nuget_feed, offline_aar_feed, authority_root, output_dir, package_authority,
-        ui_authority_receipt, toolchain_authority, dotnet_root, java_root, android_sdk_root,
+        ui_authority_receipt, java_tool_observation, installed_closure_receipt,
+        dotnet_root, java_root, android_sdk_root,
         lock_path, external_request, producer_unsigned_aab, producer_source_graph, producer_sidecar,
         two_green_receipt, approval, bundletool, upload_certificate,
         *((offline_source_manifest,) if offline_source_manifest is not None else ()),
@@ -2352,6 +2404,9 @@ def prepare_rebuild_handoff(
     failures = validate_unsigned_rebuild_lock(lock, lock_raw, reported_builder_image)
     if failures:
         raise RebuilderError("; ".join(failures))
+    toolchain_inputs = _RebuildToolchainInputs(installed_closure_receipt, java_tool_observation)
+    if toolchain_inputs.bindings[0][1] != lock["toolchain"]["installed_closure_receipt_sha256"]:
+        raise RebuilderError("installed toolchain closure receipt differs from lock")
     request, graph = validate_external_request(
         external_request, producer_source_graph, lock["limits"]["json_bytes"]
     )
@@ -2402,21 +2457,25 @@ def prepare_rebuild_handoff(
             _require_offline_aar_consumer(lock, workspace)
         toolchain = verify_unsigned_toolchain(
             lock, dotnet_root, java_root, android_sdk_root,
-            bundletool, toolchain_authority, reported_builder_image, runner=runner,
+            bundletool, installed_closure_receipt, reported_builder_image, runner=runner,
         )
+        toolchain_inputs.validate_observation(android, dotnet_root, java_root)
         qualification = android.VERIFY.verify_release_eligibility(
             two_green_receipt, approval, android_root=workspace / "chummer-android",
             expected_version_name=VERSION_NAME, expected_version_code=VERSION_CODE,
             source_graph_path=source_graph_copy,
         )
         android._sidecar_claims(producer_sidecar, producer_unsigned_aab, producer_source_graph)
+        toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
         rebuilt_aab, rebuilt_graph = _run_independent_rebuild(
             lock, workspace, two_green_receipt, approval, package_authority, authority_root, owner_feed,
-            ui_authority_receipt, toolchain_authority, bundletool, upload_certificate,
+            ui_authority_receipt, java_tool_observation, installed_closure_receipt, bundletool, upload_certificate,
             dotnet_root, java_root, android_sdk_root, stage / "build-input", runner=runner,
             offline_nuget_feed=offline_nuget_feed,
             offline_aar_feed=offline_aar_feed,
+            toolchain_inputs=toolchain_inputs,
         )
+        toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
         rebuilt = require_rebuild_match(rebuilt_aab, request, lock["limits"]["aab_bytes"])
         rebuilt_graph_value = _json_file(
             rebuilt_graph, "rebuilt source graph", lock["limits"]["json_bytes"], owner_only=True
@@ -2473,6 +2532,7 @@ def prepare_rebuild_handoff(
         shutil.rmtree(workspace)
         shutil.rmtree(stage / "build-input")
         source_graph_copy.unlink()
+        toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
         os.replace(stage, output_dir)
         moved = True
         return handoff
@@ -3716,10 +3776,13 @@ def _parser() -> argparse.ArgumentParser:
     for name in (
         "external-request", "producer-unsigned-aab", "producer-source-graph", "producer-sidecar",
         "two-green-receipt", "approval", "package-authority", "authority-root", "owner-feed",
-        "ui-authority-receipt", "toolchain-authority", "bundletool", "upload-certificate",
+        "ui-authority-receipt", "bundletool", "upload-certificate",
         "dotnet-root", "java-root", "android-sdk-root", "output-dir",
     ):
         prepare.add_argument(f"--{name}", required=True, type=Path)
+    for name in ("java-tool-observation", "installed-closure-receipt"):
+        prepare.add_argument(f"--{name}", required=True, type=Path,
+                            help="separate canonical owner-only input; no legacy toolchain-authority fallback")
     prepare.add_argument("--builder-image", required=True)
     prepare.add_argument(
         "--offline-source-manifest", type=Path,
@@ -3757,7 +3820,8 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.producer_sidecar.absolute(), arguments.two_green_receipt.absolute(),
                 arguments.approval.absolute(), arguments.package_authority.absolute(),
                 arguments.authority_root.absolute(), arguments.owner_feed.absolute(),
-                arguments.ui_authority_receipt.absolute(), arguments.toolchain_authority.absolute(),
+                arguments.ui_authority_receipt.absolute(), arguments.java_tool_observation,
+                arguments.installed_closure_receipt,
                 arguments.bundletool.absolute(), arguments.upload_certificate.absolute(),
                 arguments.dotnet_root.absolute(), arguments.java_root.absolute(),
                 arguments.android_sdk_root.absolute(), arguments.output_dir.absolute(),
