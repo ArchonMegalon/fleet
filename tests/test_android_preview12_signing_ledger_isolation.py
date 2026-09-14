@@ -137,6 +137,10 @@ def policy_files(tmp_path, pr11):
     module = fixture.load_module()
     runtime = tmp_path / "runtime"
     lock = json.loads(fixture.LOCK.read_text())
+    # The historical approval and builder shared c46a...; a positive modeled
+    # active lane now requires a distinct builder SPKI. This is not a key pin
+    # or custody assertion: only the private fixture lock is changed.
+    lock["approval_authority"]["public_key_spki_sha256"] = "a" * 64
     signing = json.loads((fixture.ROOT / module.SIGNING_LEDGER_POLICY_PATH).read_text())
     approval = json.loads((root / module.APPROVAL_LEDGER_POLICY_PATH).read_text())
     approval["state"] = "ready"
@@ -179,6 +183,8 @@ class UnreadCredential(dict):
 
 
 MUTATIONS = [
+    ("builder-is-approver", lambda s, a, l: l["approval_authority"].update(
+        public_key_spki_sha256=a["external_ed25519_key"]["expected_public_key_spki_sha256"])),
     ("same-origin", lambda s, a, l: s["replay_protection"]["external_ledger"].update(base_url=a["replay_protection"]["external_ledger"]["base_url"], allowed_hosts=a["replay_protection"]["external_ledger"]["allowed_hosts"])),
     ("same-service", lambda s, a, l: s["replay_protection"]["external_ledger"].update(expected_service_identity=a["replay_protection"]["external_ledger"]["expected_service_identity"])),
     ("same-receipt-key", lambda s, a, l: s["replay_protection"]["external_ledger"].update({k: a["replay_protection"]["external_ledger"][k] for k in ("receipt_public_key_spki_der_base64", "receipt_public_key_spki_sha256")})),

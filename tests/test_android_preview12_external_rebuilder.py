@@ -235,9 +235,12 @@ def test_android_v2_uses_consumer_pretty_bytes_and_rejects_proof_contamination(
     files = [protected_file(tmp_path / name, name.encode()) for name in
              ("signed.aab", "graph.json", "sidecar", "receipt.json", "approval.json", "owner.key")]
     signed, graph_path, sidecar, receipt, approval, owner_key = files
-    unsigned = {"contractName": module.ANDROID_ATTESTATION_CONTRACT, "challengeNonce": "a" * 64}
+    unsigned = {"contractName": module.ANDROID_ATTESTATION_CONTRACT, "challengeNonce": "a" * 64,
+                "keyId": module.BUILDER_KEY_IDS[0]}
     fake = SimpleNamespace(
         ROOT=tmp_path,
+        _fleet_builder_key_id=module.BUILDER_KEY_IDS[0],
+        _fleet_builder_selection="qualified-legacy",  # Modeled loader result, not custody.
         _fleet_expected_spki_sha256="b" * 64,
         _artifact_claims=lambda *_: {"graph": {"releaseIdentity": {
             "packageId": module.PACKAGE_ID, "versionName": module.VERSION_NAME, "versionCode": 12
@@ -411,10 +414,244 @@ def test_real_android_v2_consumer_binding_when_exact_checkout_is_available(
     monkeypatch.setenv("CHUMMER_RELEASE_REPO_ROOT", "caller-posture-must-be-restored")
     consumer = module.validate_android_consumer(Path(value), json.loads(LOCK.read_text()))
     assert consumer.CONTRACT == module.ANDROID_ATTESTATION_CONTRACT
+    assert module._android_builder_selection(consumer) == (module.BUILDER_KEY_IDS[0], False)
     assert consumer._pretty({"b": 2, "a": 1}) == b'{\n  "a": 1,\n  "b": 2\n}\n'
     assert module.sys.dont_write_bytecode is prior_bytecode_posture
     assert os.environ["CHUMMER_RELEASE_REPO_ROOT"] == "caller-posture-must-be-restored"
     module._validate_android_consumer_inputs(Path(value), json.loads(LOCK.read_text())["android_authority"]["commit"])
+
+
+# Public RFC 8032 vector 1; these fixtures exercise transport/crypto only, never
+# a qualified Android graph, operational private key, or protected-job custody.
+RFC_BUILDER_SEED = bytes.fromhex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+RFC_BUILDER_SPKI = bytes.fromhex(
+    "302a300506032b6570032100d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+)
+
+
+def synthetic_builder(module, root, key_id=None):
+    lock = json.loads(LOCK.read_text())
+    key_id = key_id or module.BUILDER_KEY_IDS[1]
+    path = root / "eng" / "trusted-release-builders" / (key_id + ".public.pem")
+    path.parent.mkdir(parents=True)
+    raw = b"-----BEGIN PUBLIC KEY-----\n" + base64.b64encode(RFC_BUILDER_SPKI) + b"\n-----END PUBLIC KEY-----\n"
+    protected_file(path, raw)
+    lock["approval_authority"].update(
+        key_id=key_id, public_key_path=path.relative_to(root).as_posix(),
+        public_key_sha256=hashlib.sha256(raw).hexdigest(),
+        public_key_spki_sha256=hashlib.sha256(RFC_BUILDER_SPKI).hexdigest(),
+    )
+    authority = lock["approval_authority"]
+    consumer = SimpleNamespace(
+        CONTRACT=module.ANDROID_ATTESTATION_CONTRACT,
+        EXPECTED_UPLOAD_CERTIFICATE_SHA256=module.UPLOAD_CERTIFICATE_SHA256,
+        VERIFY=SimpleNamespace(
+            RELEASE_APPROVER_KEY_ID="unrelated-approval-key",
+            _release_builder_key=lambda selected: (path, authority["public_key_sha256"])
+            if selected == key_id else (_ for _ in ()).throw(ValueError("unknown fixture key")),
+        ),
+    )
+    return lock, consumer, path
+
+
+@pytest.mark.parametrize("key_id", ["local-release-builder-2026", "fleet-release-builder-2026-09"])
+def test_finite_builder_consumer_loads_qualified_fixture_bytes_not_approval_default(tmp_path, key_id):
+    module = load_module()
+    root = tmp_path / "synthetic-consumer"
+    lock, _consumer, public_key = synthetic_builder(module, root, key_id)
+    (root / "scripts").mkdir()
+    source = (
+        "import os\nfrom pathlib import Path\nfrom types import SimpleNamespace\n"
+        f"CONTRACT = {module.ANDROID_ATTESTATION_CONTRACT!r}\n"
+        f"EXPECTED_UPLOAD_CERTIFICATE_SHA256 = {module.UPLOAD_CERTIFICATE_SHA256!r}\n"
+        "ROOT = Path(os.environ['CHUMMER_RELEASE_REPO_ROOT'])\n"
+        f"KEY_ID = {key_id!r}\n"
+        "def builder(key_id):\n"
+        "    if key_id != KEY_ID: raise ValueError('unknown fixture key')\n"
+        f"    return (ROOT / {public_key.relative_to(root).as_posix()!r}, "
+        f"{lock['approval_authority']['public_key_sha256']!r})\n"
+        "VERIFY = SimpleNamespace(RELEASE_APPROVER_KEY_ID='not-the-builder', _release_builder_key=builder)\n"
+    ).encode()
+    for name in ("build_script", "attestation_consumer", "two_green_verifier", "source_graph_verifier"):
+        binding = lock["android_authority"][name]
+        raw = source if name == "attestation_consumer" else b"# synthetic non-executable fixture\n"
+        protected_file(root / binding["path"], raw)
+        binding["sha256"] = hashlib.sha256(raw).hexdigest()
+
+    def git(*args):
+        return module._git(subprocess.run, ["-C", str(root), *args], timeout=30)
+
+    git("init", "--quiet")
+    git("remote", "add", "origin", lock["android_authority"]["repository"])
+    git("add", ".")
+    git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+        "-c", "commit.gpgSign=false", "commit", "--quiet", "-m", "Synthetic builder API")
+    lock["android_authority"].update(commit=git("rev-parse", "HEAD"), tree=git("rev-parse", "HEAD^{tree}"))
+    consumer = module.validate_android_consumer(root, lock)
+    assert module._android_builder_selection(consumer, lock["approval_authority"]) == (key_id, True)
+    assert consumer._fleet_expected_spki_sha256 == hashlib.sha256(RFC_BUILDER_SPKI).hexdigest()
+    assert consumer.VERIFY.RELEASE_APPROVER_KEY_ID == "not-the-builder"
+    assert json.loads(LOCK.read_text())["state"] == "dormant"
+
+
+@pytest.mark.parametrize("key_id", [None, True, [], {}, "unknown", "fleet-release-approver-2026-09"])
+def test_unknown_builder_rejected_before_selector_or_public_file_read(tmp_path, monkeypatch, key_id):
+    module = load_module()
+    lock, consumer, _path = synthetic_builder(module, tmp_path)
+    lock["approval_authority"]["key_id"] = key_id
+    consumer.VERIFY._release_builder_key = lambda *_: pytest.fail("unknown ID reached Android selector")
+    monkeypatch.setattr(module, "_stable_bytes", lambda *_: pytest.fail("unknown ID read public bytes"))
+    with pytest.raises(module.RebuilderError, match="key ID is not supported"):
+        module._bind_android_builder(consumer, tmp_path, lock)
+    assert not hasattr(consumer, "_fleet_builder_key_id")
+
+
+@pytest.mark.parametrize("attack", [
+    "missing", "not-callable", "raises-typeerror", "tuple-shape", "string-path",
+    "other-path", "other-digest", "spki", "pem", "symlink", "role", "scope",
+])
+def test_builder_selector_and_public_binding_fail_closed(tmp_path, attack):
+    module = load_module()
+    lock, consumer, path = synthetic_builder(module, tmp_path)
+    authority = lock["approval_authority"]
+    calls = []
+    if attack == "missing":
+        del consumer.VERIFY._release_builder_key
+    elif attack == "not-callable":
+        consumer.VERIFY._release_builder_key = None
+    elif attack == "raises-typeerror":
+        def reject(*args):
+            calls.append(args)
+            raise TypeError("private exception text must not escape")
+        consumer.VERIFY._release_builder_key = reject
+    elif attack in ("tuple-shape", "string-path", "other-path", "other-digest"):
+        selected = {
+            "tuple-shape": [path, authority["public_key_sha256"]],
+            "string-path": (str(path), authority["public_key_sha256"]),
+            "other-path": (path.with_name("other.pem"), authority["public_key_sha256"]),
+            "other-digest": (path, "0" * 64),
+        }[attack]
+        consumer.VERIFY._release_builder_key = lambda _: selected
+    elif attack == "spki":
+        authority["public_key_spki_sha256"] = "0" * 64
+    elif attack == "pem":
+        path.write_bytes(b"-----BEGIN PUBLIC KEY-----\n!!!!\n-----END PUBLIC KEY-----\n")
+        authority["public_key_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    elif attack == "symlink":
+        saved = path.with_suffix(".saved")
+        path.rename(saved)
+        path.symlink_to(saved)
+    else:
+        authority[attack] = "approval-only"
+    with pytest.raises(module.RebuilderError) as error:
+        module._bind_android_builder(consumer, tmp_path, lock)
+    assert "private exception" not in str(error.value)
+    assert not hasattr(consumer, "_fleet_builder_key_id")
+    if attack == "raises-typeerror":
+        assert calls == [(module.BUILDER_KEY_IDS[1],)]  # No default-key retry.
+
+
+@pytest.mark.parametrize("field", ["commit", "tree", "path", "sha256", "key_id", "public_key_path", "public_key_sha256", "public_key_spki_sha256"])
+def test_legacy_compatibility_requires_exact_historical_binding_before_read(tmp_path, monkeypatch, field):
+    module = load_module()
+    lock = json.loads(LOCK.read_text())
+    if field in ("commit", "tree"):
+        lock["android_authority"][field] = "0" * 40
+    elif field in ("path", "sha256"):
+        lock["android_authority"]["attestation_consumer"][field] = "changed"
+    else:
+        lock["approval_authority"][field] = "changed"
+    consumer = SimpleNamespace(VERIFY=SimpleNamespace(RELEASE_APPROVER_KEY_ID=module.BUILDER_KEY_IDS[0]))
+    monkeypatch.setattr(module, "_stable_bytes", lambda *_: pytest.fail("unqualified legacy read public key"))
+    with pytest.raises(module.RebuilderError):
+        module._bind_android_builder(consumer, tmp_path, lock)
+
+
+def test_explicit_builder_v2_and_external_v1_use_real_rfc_signatures_without_approval_fallback(tmp_path):
+    module = load_module()
+    tmp_path.chmod(0o700)
+    lock, consumer, public_key = synthetic_builder(module, tmp_path)
+    module._bind_android_builder(consumer, tmp_path, lock)
+    authority = lock["approval_authority"]
+    pkcs8 = bytes.fromhex("302e020100300506032b657004220420") + RFC_BUILDER_SEED
+    key = protected_file(tmp_path / "RFC8032-test-only.key", b"-----BEGIN PRIVATE KEY-----\n" +
+                         base64.b64encode(pkcs8) + b"\n-----END PRIVATE KEY-----\n")
+    files = [protected_file(tmp_path / name, name.encode()) for name in
+             ("signed.aab", "graph.json", "sidecar", "receipt.json", "approval.json")]
+    signed_aab, graph_path, sidecar, receipt, approval = files
+    calls = []
+
+    def verify_signature(unsigned, signature, *, label, builder_key_id):
+        # Deliberately minimal synthetic consumer, with actual RFC Ed25519 crypto.
+        assert builder_key_id == authority["key_id"] == unsigned["keyId"]
+        calls.append((label, builder_key_id))
+        message = protected_file(tmp_path / "verify-payload", module._canonical_json(unsigned))
+        sig = protected_file(tmp_path / "verify-signature", base64.b64decode(signature, validate=True))
+        result = subprocess.run(["/usr/bin/openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(public_key),
+                                 "-rawin", "-in", str(message), "-sigfile", str(sig)],
+                                capture_output=True, timeout=10, env={"PATH": "/usr/bin:/bin"})
+        if result.returncode:
+            raise ValueError("fixture signature rejected")
+
+    def verify_v2(path, *_):
+        value = json.loads(path.read_bytes())
+        signature = value.pop("signatureBase64")
+        verify_signature(value, signature, label="Android v2 fixture", builder_key_id=value["keyId"])
+
+    def unsigned(_claims, _qualification, _validation, generated, nonce, *, key_id):
+        return {"contractName": module.ANDROID_ATTESTATION_CONTRACT, "keyId": key_id,
+                "generatedAtUtc": generated, "challengeNonce": nonce, "testOnly": True}
+
+    consumer.ROOT = tmp_path
+    consumer._artifact_claims = lambda *_: {"graph": {"releaseIdentity": {"versionName": module.VERSION_NAME, "versionCode": 12}}}
+    consumer.VERIFY.verify_release_eligibility = lambda *_args, **_kwargs: {"testOnly": True}
+    consumer.VERIFY._canonical_json_bytes = module._canonical_json
+    consumer.VERIFY._verify_ed25519_signature = verify_signature
+    consumer._validate_validation_claims = lambda value: value
+    consumer._unsigned, consumer._pretty, consumer.verify = unsigned, module._pretty_json, verify_v2
+    v2 = tmp_path / "v2.json"
+    module.android_v2_attestation(consumer, signed_aab, graph_path, sidecar, receipt, approval, {}, key, v2)
+    graph_raw = graph_path.read_bytes()
+    req = request(module, graph_raw)
+    rebuilt = {"sha256": req["unsignedAab"]["sha256"], "sizeBytes": req["unsignedAab"]["sizeBytes"]}
+    signed = {"sha256": hashlib.sha256(signed_aab.read_bytes()).hexdigest(), "sizeBytes": signed_aab.stat().st_size,
+              "uploadCertificateSha256": module.UPLOAD_CERTIFICATE_SHA256}
+    toolchain = {"builderExecutionProvenanceAuthenticated": True, "protectedSignerRuntimeVerified": True,
+                 "closureSha256": "a" * 64}  # Explicitly modeled, not an execution receipt.
+    v1 = tmp_path / "v1.json"
+    module.external_signer_attestation(req, rebuilt, signed, graph_raw, toolchain, v2, key, authority, v1)
+    module.validate_external_signer_attestation(consumer, v1, req, rebuilt, signed, graph_raw, toolchain, v2, authority)
+    assert calls == [("Android v2 fixture", authority["key_id"]), ("external signer v1", authority["key_id"])]
+    value = json.loads(v1.read_bytes())
+    value["signatureBase64"] = base64.b64encode(bytes(64)).decode()
+    v1.write_bytes(module._pretty_json(value))
+    with pytest.raises(module.RebuilderError, match="detached signature is invalid"):
+        module.validate_external_signer_attestation(consumer, v1, req, rebuilt, signed, graph_raw, toolchain, v2, authority)
+    assert len(calls) == 3  # A failing explicit verification is never retried.
+
+
+@pytest.mark.parametrize("attack", ["wrong-returned-id", "old-call-signature"])
+def test_explicit_v2_materializer_cannot_downgrade_or_retry_before_private_key(tmp_path, monkeypatch, attack):
+    module = load_module()
+    lock, consumer, _ = synthetic_builder(module, tmp_path)
+    module._bind_android_builder(consumer, tmp_path, lock)
+    consumer.ROOT = tmp_path
+    consumer._artifact_claims = lambda *_: {"graph": {"releaseIdentity": {"versionName": module.VERSION_NAME, "versionCode": 12}}}
+    consumer.VERIFY.verify_release_eligibility = lambda *_args, **_kwargs: {}
+    consumer._validate_validation_claims = lambda value: value
+    calls = []
+    def wrong_id(*args, **kwargs):
+        calls.append(kwargs)
+        return {"contractName": module.ANDROID_ATTESTATION_CONTRACT, "keyId": module.BUILDER_KEY_IDS[0]}
+    def old_signature(*args):
+        pytest.fail("explicit v2 incorrectly retried the old signature")
+    consumer._unsigned = wrong_id if attack == "wrong-returned-id" else old_signature
+    monkeypatch.setattr(module, "_owner_key_matches", lambda *_: pytest.fail("invalid selector reached private key"))
+    with pytest.raises(module.RebuilderError if attack == "wrong-returned-id" else TypeError):
+        module.android_v2_attestation(consumer, *(tmp_path / name for name in
+            ("aab", "graph", "sidecar", "receipt", "approval")), {}, tmp_path / "private", tmp_path / "out")
+    assert calls == ([{"key_id": module.BUILDER_KEY_IDS[1]}] if attack == "wrong-returned-id" else [])
+    assert not (tmp_path / "out").exists()
 
 
 @pytest.mark.parametrize("tamper", [

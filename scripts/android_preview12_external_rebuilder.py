@@ -43,6 +43,20 @@ SIGNING_LEDGER_POLICY_PATH = "config/release/android-preview12-binary-signing-le
 APPROVAL_LEDGER_POLICY_PATH = "config/release/android-preview12-two-green-release-approval.json"
 SIGNING_LEDGER_CREDENTIAL_INPUT = "ANDROID_PREVIEW12_BINARY_SIGNING_LEDGER_BEARER_TOKEN"
 EXTERNAL_SIGNER_ATTESTATION_CONTRACT = "chummer.android.external-release-signer-attestation/v1"
+BUILDER_KEY_IDS = ("local-release-builder-2026", "fleet-release-builder-2026-09")
+# Only this already-qualified consumer predates Android's explicit builder
+# selector. A missing selector on any successor is not permission to use the
+# approval verifier's default key. This is compatibility, not new authority.
+LEGACY_BUILDER_BINDING = (
+    "8ea0da6092ede167c65b7e059df40fe88ac6f026",
+    "dba9e14fe892a9794df60eeff254d1f907c926b8",
+    "scripts/sign_android_release_build_attestation.py",
+    "b31bec9cfd198214250a645c346f4bb46f7c4d4f5b0856ca618862f24cfabe93",
+    "local-release-builder-2026",
+    "eng/trusted-release-approvers/local-release-builder-2026.public.pem",
+    "ed1fbe95fc7713bfc6d9d0fea21726c1ba3193533fc2d5523e054ad8fb86184c",
+    "c46a4e9a224c8c77a4038bca83f7d9ed66146318d8b5c2c9fc81cd19fdd18ea7",
+)
 REBUILD_HANDOFF_CONTRACT = "fleet.android_preview12_external_rebuild_handoff.v1"
 RECOVERY_CONTRACT = "fleet.android_preview12_external_signer_recovery.v1"
 PACKAGE_ID = "com.myexternalbrain.chummer"
@@ -1160,6 +1174,68 @@ def _validate_android_consumer_inputs(android_root: Path, commit: str) -> None:
         raise RebuilderError("Android consumer closure is incomplete")
 
 
+def _bind_android_builder(module: Any, android_root: Path, lock: Mapping[str, Any]) -> None:
+    """Bind the builder role after the caller has verified the source closure."""
+    authority = lock["approval_authority"]  # Historical lock field; builder role.
+    key_id = authority["key_id"]
+    if not isinstance(key_id, str) or key_id not in BUILDER_KEY_IDS:
+        raise RebuilderError("Android builder key ID is not supported")
+    if authority["role"] != "android_internal_release_builder" \
+            or authority["scope"] != "android_internal_release_artifact_binding":
+        raise RebuilderError("Android builder authority role or scope differs")
+    public_key = android_root.joinpath(*PurePosixPath(authority["public_key_path"]).parts)
+    if hasattr(module.VERIFY, "_release_builder_key"):
+        try:
+            selected = module.VERIFY._release_builder_key(key_id)
+        except Exception:
+            raise RebuilderError("Android builder selector rejected the qualified key") from None
+        if not isinstance(selected, tuple) or len(selected) != 2 \
+                or not isinstance(selected[0], Path) \
+                or selected != (public_key, authority["public_key_sha256"]):
+            raise RebuilderError("Android builder selector differs from qualified authority")
+        selection = "explicit-builder"
+    else:
+        android = lock["android_authority"]
+        binding = (android["commit"], android["tree"], android["attestation_consumer"]["path"],
+                   android["attestation_consumer"]["sha256"], key_id, authority["public_key_path"],
+                   authority["public_key_sha256"], authority["public_key_spki_sha256"])
+        if binding != LEGACY_BUILDER_BINDING \
+                or getattr(module.VERIFY, "RELEASE_APPROVER_KEY_ID", None) != key_id:
+            raise RebuilderError("Android consumer lacks the qualified builder selector")
+        selection = "qualified-legacy"
+    raw = _stable_bytes(public_key, "Android attestation public key", 64 * 1024)
+    if hashlib.sha256(raw).hexdigest() != authority["public_key_sha256"]:
+        raise RebuilderError("Android attestation public key differs from lock")
+    # Ed25519 SPKI is exactly 44 bytes. Decode the same held public PEM bytes
+    # whose SHA was checked; no OpenSSL/private-key operation is needed here.
+    lines = raw.splitlines()
+    if len(lines) != 3 or lines[0] != b"-----BEGIN PUBLIC KEY-----" \
+            or lines[2] != b"-----END PUBLIC KEY-----":
+        raise RebuilderError("Android builder public key is not Ed25519 SPKI")
+    try:
+        der = base64.b64decode(lines[1], validate=True)
+    except (ValueError, binascii.Error):
+        raise RebuilderError("Android builder public key is not Ed25519 SPKI") from None
+    if len(der) != 44 or der[:12] != bytes.fromhex("302a300506032b6570032100") \
+            or base64.b64encode(der) != lines[1] \
+            or hashlib.sha256(der).hexdigest() != authority["public_key_spki_sha256"]:
+        raise RebuilderError("Android builder public SPKI differs from lock")
+    module._fleet_builder_key_id = key_id
+    module._fleet_builder_selection = selection
+    module._fleet_expected_spki_sha256 = authority["public_key_spki_sha256"]
+
+
+def _android_builder_selection(android: Any, authority: Mapping[str, Any] | None = None) -> tuple[str, bool]:
+    key_id = getattr(android, "_fleet_builder_key_id", None)
+    selection = getattr(android, "_fleet_builder_selection", None)
+    if not isinstance(key_id, str) or key_id not in BUILDER_KEY_IDS \
+            or selection not in ("explicit-builder", "qualified-legacy") \
+            or (selection == "qualified-legacy" and key_id != BUILDER_KEY_IDS[0]) \
+            or (authority is not None and key_id != authority["key_id"]):
+        raise RebuilderError("Fleet did not bind the qualified Android builder selector")
+    return key_id, selection == "explicit-builder"
+
+
 def validate_android_consumer(android_root: Path, lock: Mapping[str, Any]):
     # SourceFileLoader may READ timestamp/hash-valid caches even when writes
     # are disabled. A prefix outside scripts/eng is outside the checked blob
@@ -1198,15 +1274,10 @@ def validate_android_consumer(android_root: Path, lock: Mapping[str, Any]):
         else:
             os.environ["CHUMMER_RELEASE_REPO_ROOT"] = prior_release_root
     _validate_android_consumer_inputs(android_root, android["commit"])
-    approval = lock["approval_authority"]
-    public_key = android_root.joinpath(*PurePosixPath(approval["public_key_path"]).parts)
     if module.CONTRACT != ANDROID_ATTESTATION_CONTRACT \
-            or module.EXPECTED_UPLOAD_CERTIFICATE_SHA256.replace(":", "").lower() != UPLOAD_CERTIFICATE_SHA256 \
-            or module.VERIFY.RELEASE_APPROVER_KEY_ID != approval["key_id"] \
-            or _sha256_file(public_key, "Android attestation public key", 64 * 1024) \
-            != approval["public_key_sha256"]:
+            or module.EXPECTED_UPLOAD_CERTIFICATE_SHA256.replace(":", "").lower() != UPLOAD_CERTIFICATE_SHA256:
         raise RebuilderError("Android v2 consumer authority differs from lock")
-    module._fleet_expected_spki_sha256 = approval["public_key_spki_sha256"]
+    _bind_android_builder(module, android_root, lock)
     return module
 
 
@@ -1635,6 +1706,7 @@ def android_v2_attestation(android, signed_aab: Path, graph: Path, sidecar: Path
                            approval: Path, protected_validation: Mapping[str, Any], owner_private_key: Path,
                            output: Path, *, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
                            now: datetime | None = None, nonce: str | None = None) -> dict[str, Any]:
+    key_id, explicit = _android_builder_selection(android)
     claims = android._artifact_claims(signed_aab, graph, sidecar, two_green_receipt, approval)
     identity = claims["graph"]["releaseIdentity"]
     qualification = android.VERIFY.verify_release_eligibility(
@@ -1646,8 +1718,11 @@ def android_v2_attestation(android, signed_aab: Path, graph: Path, sidecar: Path
     generated = (now or datetime.now(UTC)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     challenge = nonce or os.urandom(32).hex()
     _sha256(challenge, "build attestation challenge nonce")
-    unsigned = android._unsigned(claims, qualification, validation, generated, challenge)
-    if unsigned.get("contractName") != ANDROID_ATTESTATION_CONTRACT or set(unsigned).intersection({"contract_name", "fleetAudit"}):
+    unsigned = android._unsigned(claims, qualification, validation, generated, challenge,
+                                 **({"key_id": key_id} if explicit else {}))
+    if unsigned.get("contractName") != ANDROID_ATTESTATION_CONTRACT \
+            or unsigned.get("keyId") != key_id \
+            or set(unsigned).intersection({"contract_name", "fleetAudit"}):
         raise RebuilderError("Android v2 attestation materializer returned an incompatible dialect")
     # The Android verifier pins the PEM bytes; Fleet additionally pins the SPKI.
     expected_spki = getattr(android, "_fleet_expected_spki_sha256", None)
@@ -1821,6 +1896,8 @@ def _validate_ledger_separation(module, signing_policy, approval_policy, lock):
             or hashlib.sha256(approval_der).hexdigest() != approval_spki:
         raise RebuilderError("pinned approval public key digest differs")
     attestation_spki = _sha256(attestation.get("public_key_spki_sha256"), "attestation signing SPKI")
+    if attestation_spki == approval_spki:
+        raise RebuilderError("builder and approval signing keys are not independent")
     if {signing["receipt_public_key_spki_sha256"], approval["receipt_public_key_spki_sha256"]} \
             & {approval_spki, attestation_spki}:
         raise RebuilderError("ledger receipt key is reused for approval or attestation signing")
@@ -3077,6 +3154,7 @@ def validate_external_signer_attestation(
 ) -> dict[str, Any]:
     """Verify the exact public v1 response using Android's pinned Ed25519 key."""
 
+    key_id, explicit = _android_builder_selection(android, approval_authority)
     value, raw = _json_file(
         path, "external signer v1 attestation", 32 * 1024, owner_only=True
     )
@@ -3136,7 +3214,8 @@ def validate_external_signer_attestation(
         raise RebuilderError("external signer v1 claims differ from the recovered transaction")
     try:
         android.VERIFY._verify_ed25519_signature(
-            unsigned, signature, label="external signer v1"
+            unsigned, signature, label="external signer v1",
+            **({"builder_key_id": key_id} if explicit else {}),
         )
     except Exception as error:
         raise RebuilderError("external signer v1 detached signature is invalid") from error
@@ -3308,6 +3387,7 @@ def execute_protected_signer_transaction(
     android = load_consumer()
     if getattr(android, "CONTRACT", None) != ANDROID_ATTESTATION_CONTRACT:
         raise RebuilderError("protected Android consumer contract differs")
+    builder_selection = _android_builder_selection(android, lock["approval_authority"])
     request, _graph, rebuilt, request_raw, graph_raw = _validate_pre_signing_inputs(
         lease, lock, android
     )
@@ -3343,17 +3423,19 @@ def execute_protected_signer_transaction(
                 two_green_artifact_id, two_green_artifact_sha256,
             ),
         )
+        if _android_builder_selection(android, lock["approval_authority"]) != builder_selection:
+            raise RebuilderError("Android builder selector changed before credential admission")
+        expected_spki = lock["approval_authority"]["public_key_spki_sha256"]
+        if getattr(android, "_fleet_expected_spki_sha256", None) != expected_spki:
+            raise RebuilderError("Android builder key binding differs from the qualified lock")
         credential_admission_started = True
         failure_phase = "credential-admission"
         credentials = _admit_signing_paths(
             admit_signing_credentials(reservation, lease.provenance)
         )
         lease.assert_exact()
-        # Reject unusable approval custody before consuming the AAB signing
+        # Reject unusable builder custody before consuming the AAB signing
         # operation. Later attestation checks remain necessary as well.
-        expected_spki = lock["approval_authority"]["public_key_spki_sha256"]
-        if getattr(android, "_fleet_expected_spki_sha256", None) != expected_spki:
-            raise RebuilderError("Android approval key binding differs from the qualified lock")
         _owner_key_matches(runner, credentials["ownerPrivateKey"], expected_spki)
         lease.assert_exact()
         signed_path = recovery / f"chummer-android-{VERSION_NAME}-signed.aab"
@@ -3517,6 +3599,7 @@ def reconcile_protected_signer_transaction(
     android = load_consumer()
     if getattr(android, "CONTRACT", None) != ANDROID_ATTESTATION_CONTRACT:
         raise RebuilderError("protected Android consumer contract differs")
+    _android_builder_selection(android, lock["approval_authority"])
     request, _graph, rebuilt, request_raw, graph_raw = _validate_pre_signing_inputs(
         lease, lock, android
     )
