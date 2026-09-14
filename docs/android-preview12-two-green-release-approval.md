@@ -1,7 +1,8 @@
 # Preview12 Two-Green release approval
 
-This is a dormant Fleet-owned approval lane for the exact Android Preview12
-Two-Green receipt. It is deliberately separate from the Play AAB signer.
+This is a source-configured Fleet-owned approval lane for the exact Android
+Preview12 Two-Green receipt. The reviewed READY policy is source-qualified, not
+runtime-verified by its presence. It is separate from the Play AAB signer.
 
 It approves only that the exact Android main tree and Preview12/code12 identity
 are backed by the exact successful reviewed and main API-36 Two-Green evidence.
@@ -111,16 +112,39 @@ ID, a monotonic terminal revision, the exact stored approval bytes, and the
 prior signed reservation-receipt digest. It is evidence only; it does not grant
 signing, upload, processing, distribution, or publication authority.
 
-## Dormant state
+## Source-configured state
 
-The checked-in policy fails before the protected environment: it is not ready,
-activation is disabled, environment/private-key configuration is false,
-cross-repository Actions credential
-configuration is false, and the ledger URL, hostname,
-service identity, bearer credential and receipt-verification public key are all
-unset. Android's existing public release-approver key, key ID, consumer commit,
-consumer tree, verifier contract, and provenance-validator digest are pinned as
-public authority. No private key or repository/environment secret is included.
+The checked-in policy selects the existing closed READY shape: its environment,
+cross-repository reader, approval key, ledger and replay bindings are configured,
+and the source activation flag is enabled. This is a public configuration
+transaction, not evidence of authenticated operability, continuous health or a
+completed approval. All runtime gates remain mandatory. The unchanged dormant
+template remains supported and tested to reject before credential access.
+
+The ledger origin is `https://chummer.run`, service identity
+`fleet-preview12-approval-ledger-20260914`, with receipt SPKI SHA256
+`6bff5bfb80dbdb3892a7a9ef7f149baf6a3ad711ea4623621d5baf74079e55b2`.
+Only its reviewed public verification key is included; the four paths, request
+limits, lease and retry bounds are unchanged. Android's exact consumer and
+public approver remain pinned. No private key, bearer value or repository/
+environment secret is included.
+
+The connector is ephemeral: it exists only during a root-supervised workflow
+window and is removed afterward. The public ledger route is not continuously
+available or continuously healthy. Before dispatch, root must bind fresh
+environment/runtime/configuration evidence and independently confirm the exact
+owned connector, protected origin/TLS and environment configuration. The first
+authenticated mutation is the actual protected workflow reservation: its signed
+service identity must validate before approver-key use. No dummy reservation or
+authenticated health/status probe substitutes for that transaction.
+
+Supervise the connector within its fixed lease. On normal completion, confirm
+terminal workflow/ledger disposition, then perform connector-first cleanup.
+Lease expiry, EOF or error always triggers connector-first cleanup even when the
+workflow disposition remains ambiguous; the connector is never extended merely
+to wait for a cleanup job. If owned connector absence is unresolved, preserve
+the NFT boundary and token custody. Conditional configuration rollback requires
+actual owned-process absence. A policy file cannot replace these execution checks.
 
 The fixed existing public approver is
 `eng/trusted-release-approvers/fleet-release-approver-2026-09.public.pem`, PEM
@@ -132,8 +156,8 @@ selection or partly refreshed profile: key ID, role, scope, public bytes, exact
 consumer and output posture are admitted together before credentials or signing.
 Old consumer/new key combinations and stale evidence hashes fail closed.
 
-This refresh does not generate, retrieve or configure a private key. A later
-approved activation may supply the matching existing key only through the
+This source transaction does not generate, retrieve or configure a private key.
+An independently approved execution may supply the existing key only through the
 protected environment secret named by the policy. Its derived public key must
 match the reviewed pin. Any future identity change requires a separate reviewed
 requalification of both Android and Fleet; changing Fleet alone cannot confer
@@ -141,22 +165,17 @@ consumer trust.
 
 ## Activation transaction
 
-Activation requires a separate reviewed policy and operations change: deploy
-and independently review a durable external ledger that implements the checked
-contract, provision its exact HTTPS origin, allowlisted hostname, logical
-service identity, Ed25519 receipt public key and environment-only bearer
-credential, then provision the
-`android-preview12-release-approval` environment for protected branches with
-administrator bypass disabled and exactly its branch-policy protection rule.
+The prepared READY policy requires independent non-writer review and protected
+Fleet main landing before use. Root must separately recheck the actual ledger
+and `android-preview12-release-approval` environment, including current secret
+availability without exposing values, protected branches, administrator bypass
+disabled and exactly its branch-policy protection rule. Prior provisioning
+metadata is not a fresh execution or authenticated-service receipt.
 The owner's zero-manual-review policy requires no reviewer rule or identities;
-reintroduced reviewer rules fail closed. Add the external key only there and
-retain Android's exact key ID/public-key and
-consumer-contract pins, set the two
-approval `configured` flags, the ledger `configured` flag and replay authority,
-the cross-repository credential's `configured` flag,
-`state: ready`, and `activation.enabled: true`, then land
-through protected Fleet `main`. Merely changing the checked-in policy flags
-cannot activate the current implementation.
+reintroduced reviewer rules fail closed. Keep credentials only in their existing
+separate protected-environment slots and retain Android's exact public-key and
+consumer-contract pins. Source READY flags alone do not authorize a dispatch,
+prove authenticated ingress or establish a continuously running connector.
 
 The workflow then rechecks the live environment API response after the GitHub
 environment gate, verifies the exact Two-Green workflow run, artifact archive,

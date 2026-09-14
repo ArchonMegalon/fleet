@@ -233,9 +233,8 @@ def client(fake: FakeLedger, **environment: str) -> ledger.DurableApprovalLedger
     )
 
 
-def test_checked_in_ledger_is_dormant_and_contains_no_endpoint_credential_or_key():
-    policy = json.loads(POLICY.read_text())
-    value = policy["replay_protection"]["external_ledger"]
+def test_dormant_ledger_template_contains_no_endpoint_credential_or_key():
+    value = ledger.dormant_ledger_policy()
     assert ledger.validate_ledger_policy(value, require_configured=False) == ledger.dormant_ledger_policy()
     assert value["configured"] is False
     assert value["base_url"] is None
@@ -243,6 +242,22 @@ def test_checked_in_ledger_is_dormant_and_contains_no_endpoint_credential_or_key
     assert value["expected_service_identity"] is None
     assert value["receipt_public_key_spki_der_base64"] is None
     assert ledger.CREDENTIAL_ENV_NAME not in POLICY.read_text().split('"credential_env_name"', 1)[0]
+
+
+def test_checked_in_ready_ledger_has_exact_public_binding_and_rejects_dormant_use():
+    policy = json.loads(POLICY.read_text())
+    value = policy["replay_protection"]["external_ledger"]
+    expected = ledger.dormant_ledger_policy()
+    expected.update(
+        configured=True, base_url="https://chummer.run", allowed_hosts=["chummer.run"],
+        expected_service_identity="fleet-preview12-approval-ledger-20260914",
+        receipt_public_key_spki_der_base64="MCowBQYDK2VwAyEAG33jVaLGoFGzOKR+rTybpSvcAMg07vJSoaF9uSBJl34=",
+        receipt_public_key_spki_sha256="6bff5bfb80dbdb3892a7a9ef7f149baf6a3ad711ea4623621d5baf74079e55b2",
+    )
+    assert ledger.validate_ledger_policy(value, require_configured=True) == expected
+    assert value["receipt_public_key_spki_sha256"] != policy["external_ed25519_key"]["expected_public_key_spki_sha256"]
+    with pytest.raises(ledger.LedgerError, match="not valid in dormant policy"):
+        ledger.validate_ledger_policy(value, require_configured=False)
 
 
 @pytest.mark.parametrize("change", [

@@ -202,7 +202,7 @@ def verify_full(consumer, root, receipt_path, approval_path, now):
     )
 
 
-def test_qualified_consumer_policy_stays_dormant_before_evidence_or_key_access(monkeypatch):
+def test_qualified_consumer_dormant_template_blocks_before_evidence_or_key_access(tmp_path, monkeypatch):
     class NoKeyAccess(dict):
         def get(self, *args, **kwargs):
             pytest.fail("dormant issuance accessed the key environment")
@@ -211,7 +211,9 @@ def test_qualified_consumer_policy_stays_dormant_before_evidence_or_key_access(m
         pytest.fail("dormant issuance reached signing")
 
     monkeypatch.setattr(approval, "sign_ed25519", no_sign)
-    args = argparse.Namespace(policy=fixture.POLICY, **fixture.inputs())
+    policy_path = tmp_path / "dormant-policy.json"
+    fixture.write_json(policy_path, approval.expected_policy())
+    args = argparse.Namespace(policy=policy_path, **fixture.inputs())
     with pytest.raises(approval.ApprovalError, match="policy state is dormant"):
         approval.create_approval_bundle(args, NoKeyAccess(), now=fixture.NOW)
 
