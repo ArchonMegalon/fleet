@@ -11,6 +11,7 @@ import base64
 import copy
 import hashlib
 import hmac
+import ipaddress
 import math
 import re
 import threading
@@ -45,6 +46,33 @@ class ServiceConfigurationError(ValueError):
     """Only fixed diagnostics; never expose injected configuration values."""
 
 
+_LOCAL_PROXY_NETWORKS = tuple(ipaddress.ip_network(network) for network in (
+    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "fc00::/7", "::1/128",
+))
+
+
+def validate_trusted_proxy_addresses(value: tuple[str, ...]) -> tuple[str, ...]:
+    """Finite, exact local transport peers; never ranges or forwarded identity."""
+    invalid = type(value) is not tuple or len(value) > 4
+    if not invalid:
+        try:
+            for text in value:
+                if type(text) is not str or not 0 < len(text) <= 45 or "%" in text:
+                    invalid = True
+                    break
+                address = ipaddress.ip_address(text)
+                if str(address) != text or not any(address in network for network in _LOCAL_PROXY_NETWORKS):
+                    invalid = True
+                    break
+            if not invalid and len(set(value)) != len(value):
+                invalid = True
+        except (ValueError, TypeError):
+            invalid = True
+    if invalid:
+        raise ServiceConfigurationError("explicit ledger service configuration is invalid")
+    return value
+
+
 def _response(status: int, body: bytes | None = None) -> Response:
     return Response(
         _ERRORS[status] if body is None else body, status_code=status,
@@ -56,11 +84,13 @@ def _response(status: int, body: bytes | None = None) -> Response:
 class _HttpBoundary:
     """Raw ASGI header/path checks run before FastAPI or any body receive."""
 
-    def __init__(self, app: Any, *, hostname: bytes, paths: dict[bytes, str], token_digest: bytes):
+    def __init__(self, app: Any, *, hostname: bytes, paths: dict[bytes, str], token_digest: bytes,
+                 trusted_proxy_addresses: tuple[str, ...] = ()):
         self.app = app
         self.hostname = hostname
         self.paths = paths
         self.token_digest = token_digest
+        self.trusted_proxy_addresses = trusted_proxy_addresses
 
     def _check(self, scope: dict[str, Any]) -> tuple[int | None, str | None, int | None]:
         raw_path = scope.get("raw_path")
@@ -92,7 +122,23 @@ class _HttpBoundary:
             return 400, None, None
         if b"origin" in headers:
             return 403, None, None
-        if any(name == b"forwarded" or name.startswith(b"x-forwarded-") for name in headers):
+        forwarding = {name for name in headers if name == b"forwarded" or name.startswith(b"x-forwarded-")}
+        if self.trusted_proxy_addresses:
+            # Uvicorn proxy rewriting MUST remain disabled. Only the actual TLS
+            # socket peer is admitted; XFF/CF headers cannot establish identity.
+            client = scope.get("client")
+            if type(client) not in (tuple, list) or len(client) != 2 \
+                    or type(client[0]) is not str or client[0] not in self.trusted_proxy_addresses \
+                    or type(client[1]) is not int or not 1 <= client[1] <= 65535:
+                return 400, None, None
+            forwarded_for = headers.get(b"x-forwarded-for", b"")
+            if forwarding != {b"x-forwarded-for", b"x-forwarded-proto"} \
+                    or headers.get(b"x-forwarded-proto") != b"https" \
+                    or not 0 < len(forwarded_for) <= 1024 or not forwarded_for.strip():
+                return 400, None, None
+            # XFF is opaque, untrusted metadata. Do not rewrite the ASGI scope,
+            # authenticate with it, log it, or include it in signed receipts.
+        elif forwarding:
             return 400, None, None
         authorization = headers.get(b"authorization", b"")
         match = _BEARER.fullmatch(authorization) if len(authorization) <= 4103 else None
@@ -148,6 +194,7 @@ def create_app(
     *, ledger_policy: Mapping[str, Any], store: persistence.SQLiteApprovalLedgerStore,
     bearer_token_sha256: str, sign_receipt: Callable[[bytes], bytes],
     maximum_in_flight: int = 2, body_timeout_seconds: float = 10.0,
+    trusted_proxy_addresses: tuple[str, ...] = (),
 ) -> FastAPI:
     """Create only an explicitly bound app; no ambient or unconfigured mode.
 
@@ -158,6 +205,7 @@ def create_app(
     """
     invalid = False
     try:
+        trusted_proxy_addresses = validate_trusted_proxy_addresses(trusted_proxy_addresses)
         policy = copy.deepcopy(protocol.validate_ledger_policy(ledger_policy, require_configured=True))
         if not isinstance(store, persistence.SQLiteApprovalLedgerStore) \
                 or policy["expected_service_identity"] != store.service_identity \
@@ -253,5 +301,6 @@ def create_app(
     app.add_middleware(
         _HttpBoundary, hostname=urlsplit(policy["base_url"]).hostname.encode("ascii"),
         paths=paths, token_digest=bytes.fromhex(bearer_token_sha256),
+        trusted_proxy_addresses=trusted_proxy_addresses,
     )
     return app
