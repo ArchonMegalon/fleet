@@ -34,23 +34,23 @@
   "toolchain": {
     "platform": "linux/amd64",
     "dotnet": {
-      "version": "10.0.110",
-      "tree_sha256": "9ad400dd17fa8f84001bf5fd35ee2ce2d1b2c847fd20d39a15051f8f5fa64d81",
-      "file_count": 8899,
-      "size_bytes": 4232503090
+      "version": "10.0.111",
+      "tree_sha256": "b35e0cd83e7ca5ac595d712fb9185f9357b123f8c15afad5c285750c284f3dd1",
+      "file_count": 9258,
+      "size_bytes": 4276188988
     },
     "java": {
       "version": "17.0.20.1",
-      "tree_sha256": "a49293b17c15c197fbb89a89b98a7fe949ffbe794fd35d22118e736768f5a6e1",
-      "file_count": 454,
-      "size_bytes": 333699498
+      "tree_sha256": "85d610b3ad706cd4de8d36d3c8c6fc91000814f5c3f84fefde5ab401c836806a",
+      "file_count": 246,
+      "size_bytes": 332109578
     },
     "android_sdk": {
       "api_level": 36,
       "build_tools_version": "36.0.0",
-      "tree_sha256": "31d8de20b961f0963b97bc1c029c0c334d97beadc9321578551fbacdf19eb404",
-      "file_count": 11670,
-      "size_bytes": 463020707
+      "tree_sha256": "54de1ef5b7d26c7a442cbc51078c105d31ac4b73f58469404c3e04d7c7a55e09",
+      "file_count": 11523,
+      "size_bytes": 314037662
     },
     "bundletool_sha256": "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29",
     "builder_image": null,

@@ -264,18 +264,24 @@ def _validate_lock_configuration(
         failures.append("Android attestation consumer contract drifted")
     toolchain = lock.get("toolchain", {})
     expected_tools = {
-        "dotnet": ("10.0.110", 8899, 4232503090),
-        "java": ("17.0.20.1", 454, 333699498),
+        "dotnet": ("10.0.111", 9258, 4276188988),
+        "java": ("17.0.20.1", 246, 332109578),
     }
     for name, (version, count, size) in expected_tools.items():
         row = toolchain.get(name, {})
-        if row.get("version") != version or row.get("file_count") != count or row.get("size_bytes") != size \
-                or not HEX64.fullmatch(str(row.get("tree_sha256") or "")):
+        if type(row.get("version")) is not str or row.get("version") != version \
+                or type(row.get("file_count")) is not int or row.get("file_count") != count \
+                or type(row.get("size_bytes")) is not int or row.get("size_bytes") != size \
+                or type(row.get("tree_sha256")) is not str \
+                or not HEX64.fullmatch(row.get("tree_sha256") or ""):
             failures.append(f"{name} closure is not exact")
     sdk = toolchain.get("android_sdk", {})
-    if sdk.get("api_level") != 36 or sdk.get("build_tools_version") != "36.0.0" \
-            or sdk.get("file_count") != 11670 or sdk.get("size_bytes") != 463020707 \
-            or not HEX64.fullmatch(str(sdk.get("tree_sha256") or "")):
+    if type(sdk.get("api_level")) is not int or sdk.get("api_level") != 36 \
+            or type(sdk.get("build_tools_version")) is not str or sdk.get("build_tools_version") != "36.0.0" \
+            or type(sdk.get("file_count")) is not int or sdk.get("file_count") != 11523 \
+            or type(sdk.get("size_bytes")) is not int or sdk.get("size_bytes") != 314037662 \
+            or type(sdk.get("tree_sha256")) is not str \
+            or not HEX64.fullmatch(sdk.get("tree_sha256") or ""):
         failures.append("Android API/build-tools 36 closure is not exact")
     if toolchain.get("platform") != "linux/amd64" \
             or toolchain.get("bundletool_sha256") != "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29":

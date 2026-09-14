@@ -121,6 +121,92 @@ def test_checked_in_contract_is_dormant_and_prepare_parser_has_no_secret_argumen
     assert result["google_play_upload_performed"] is False
 
 
+def synthetic_ready_lock() -> dict:
+    lock = json.loads(LOCK.read_text())
+    lock["state"] = "ready"
+    lock["toolchain"].update(
+        builder_image="registry.example.test/team/builder@sha256:" + "a" * 64,
+        signer_image="registry.example.test/team/signer@sha256:" + "b" * 64,
+        installed_closure_receipt_sha256="c" * 64,
+    )
+    lock["outputs"]["signed_content_handoff_enabled"] = True
+    lock["rebuild"]["enabled"] = True
+    lock["reservation"].update(
+        configured=True, adapter_sha256="d" * 64, policy_sha256="e" * 64,
+        protocol_source="merged_reviewed_fleet_authority",
+    )
+    for name in ("key_alias", "keystore_secret", "store_password_secret", "key_password_secret"):
+        lock["upload_key"][name] = "TEST_ONLY_SYMBOLIC"
+    lock["approval_authority"]["private_key_secret"] = "TEST_ONLY_SYMBOLIC"
+    return lock
+
+
+EXPECTED_SDK111_MEASUREMENTS = {
+    "dotnet": ("10.0.111", "b35e0cd83e7ca5ac595d712fb9185f9357b123f8c15afad5c285750c284f3dd1", 9258, 4276188988),
+    "java": ("17.0.20.1", "85d610b3ad706cd4de8d36d3c8c6fc91000814f5c3f84fefde5ab401c836806a", 246, 332109578),
+    "android_sdk": (36, "36.0.0", "54de1ef5b7d26c7a442cbc51078c105d31ac4b73f58469404c3e04d7c7a55e09", 11523, 314037662),
+}
+
+
+def test_sdk111_toolchain_tuple_is_exact_and_checked_in_lock_stays_unusable() -> None:
+    module = load_module()
+    lock, raw = module.load_lock(LOCK)
+    errors = module.validate_unsigned_rebuild_lock(lock, raw)
+    assert "external rebuilder lock is dormant" in errors
+    assert "toolchain.builder_image is not one digest-pinned OCI repository" in errors
+    assert "toolchain.installed_closure_receipt_sha256 is not a lowercase SHA-256" in errors
+    assert not any("closure is not exact" in error for error in errors)
+
+    ready = synthetic_ready_lock()
+    assert (ready["toolchain"]["dotnet"]["version"], ready["toolchain"]["dotnet"]["tree_sha256"],
+            ready["toolchain"]["dotnet"]["file_count"], ready["toolchain"]["dotnet"]["size_bytes"]) == EXPECTED_SDK111_MEASUREMENTS["dotnet"]
+    assert (ready["toolchain"]["java"]["version"], ready["toolchain"]["java"]["tree_sha256"],
+            ready["toolchain"]["java"]["file_count"], ready["toolchain"]["java"]["size_bytes"]) == EXPECTED_SDK111_MEASUREMENTS["java"]
+    assert (ready["toolchain"]["android_sdk"]["api_level"], ready["toolchain"]["android_sdk"]["build_tools_version"],
+            ready["toolchain"]["android_sdk"]["tree_sha256"], ready["toolchain"]["android_sdk"]["file_count"],
+            ready["toolchain"]["android_sdk"]["size_bytes"]) == EXPECTED_SDK111_MEASUREMENTS["android_sdk"]
+    original = deepcopy(ready)
+    assert module.validate_lock(ready, json.dumps(ready).encode(), ready["toolchain"]["builder_image"]) == []
+    assert ready == original
+
+
+@pytest.mark.parametrize(("row", "field", "value"), [
+    (row, "file_count", value)
+    for row, count in (("dotnet", 9258), ("java", 246), ("android_sdk", 11523))
+    for value in (float(count), True, str(count), count - 1, count + 1)
+] + [
+    (row, "size_bytes", value)
+    for row, size in (("dotnet", 4276188988), ("java", 332109578), ("android_sdk", 314037662))
+    for value in (float(size), True, str(size), size - 1, size + 1)
+] + [
+    (row, "tree_sha256", int("5" * 64))
+    for row in ("dotnet", "java", "android_sdk")
+] + [
+    ("dotnet", "version", "10.0.110"),
+    ("dotnet", "file_count", 8899),
+    ("java", "file_count", 454),
+    ("android_sdk", "file_count", 11670),
+    ("dotnet", "version", 10.0),
+    ("dotnet", "version", True),
+    ("java", "version", 17.0201),
+    ("java", "version", None),
+    ("android_sdk", "api_level", 36.0),
+    ("android_sdk", "api_level", True),
+    ("android_sdk", "api_level", "36"),
+    ("android_sdk", "build_tools_version", 36.0),
+    ("android_sdk", "build_tools_version", True),
+    ("android_sdk", "build_tools_version", None),
+    ("java", "tree_sha256", True),
+    ("android_sdk", "tree_sha256", ["5" * 64]),
+])
+def test_sdk111_toolchain_tuple_drift_fails_closed(row, field, value) -> None:
+    module = load_module()
+    lock = synthetic_ready_lock()
+    lock["toolchain"][row][field] = value
+    errors = module.validate_lock(lock, json.dumps(lock).encode(), lock["toolchain"]["builder_image"])
+    assert any("closure is not exact" in error for error in errors)
+
+
 def test_prepare_parser_help_contains_no_signing_secret(monkeypatch, capsys) -> None:
     module = load_module()
     with pytest.raises(SystemExit) as stopped:
