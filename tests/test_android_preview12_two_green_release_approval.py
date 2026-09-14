@@ -257,6 +257,7 @@ def receipt() -> dict:
         "commonAuthority": {
             "androidTree": approval.ANDROID_CONSUMER_TREE,
             "environmentCompatibilityStatus": "pass",
+            "policyAuthorities": copy.deepcopy(DESIGN_POLICY_AUTHORITIES),
             "dependencyGraph": qualified_dependency_graph(),
             "environmentPolicy": copy.deepcopy(approval.QUALIFIED_ENVIRONMENT_POLICY),
             "authorityClass": approval.WIZARD_AUTHORITY_CLASS,
@@ -522,8 +523,8 @@ def test_public_approver_pins_qualified_identity_without_publication():
         "0ccffb5997e10dea7531894e00a2376f8da309a8e50da00199ffc3073de85dcb"
     )
     # Current consumer qualification does not activate custody or change key roles.
-    assert policy["android_consumer"]["qualified_commit"] == "2eb09d5921a9c44c3f818ae9d20e3b40d2c43753"
-    assert policy["android_consumer"]["qualified_tree"] == "e8df321fb2d640acd32441bbc632f255c3b3cf13"
+    assert policy["android_consumer"]["qualified_commit"] == approval.ANDROID_CONSUMER_COMMIT
+    assert policy["android_consumer"]["qualified_tree"] == approval.ANDROID_CONSUMER_TREE
     assert key["configured"] is True
     assert policy["activation"]["enabled"] is True
     for field in ("signing_authorized", "publication_authorized", "google_play_upload_authorized"):
@@ -662,6 +663,31 @@ def test_design_policy_authorities_rejects_nonmapping_expected_binding():
     with pytest.raises(approval.ApprovalError, match="Design"):
         approval.validate_design_policy_authorities(
             {"design": {}}, expected_design_binding=None
+        )
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda value: value["commonAuthority"].pop("policyAuthorities"),
+        lambda value: value["commonAuthority"]["policyAuthorities"].update(pinfile={}),
+        lambda value: value["commonAuthority"]["policyAuthorities"]["design"].update(
+            repository="attacker/design"
+        ),
+        lambda value: value["commonAuthority"]["policyAuthorities"]["design"]["wizardGate"].update(
+            schema="chummer.android.api36-sr5-wizard-gate-binding/v1"
+        ),
+    ],
+)
+def test_receipt_requires_exact_design_policy_authority(mutate):
+    value = receipt()
+    mutate(value)
+    with pytest.raises(approval.ApprovalError, match="Design|common authority|fields are not exact"):
+        approval.validate_receipt(
+            value,
+            approval.validate_inputs(argparse.Namespace(**inputs())),
+            now=NOW,
+            policy=approval.expected_policy(),
         )
 
 

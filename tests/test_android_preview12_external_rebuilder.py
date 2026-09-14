@@ -496,7 +496,7 @@ def test_real_android_v2_consumer_binding_when_exact_checkout_is_available(
     monkeypatch.setenv("CHUMMER_RELEASE_REPO_ROOT", "caller-posture-must-be-restored")
     consumer = module.validate_android_consumer(Path(value), json.loads(LOCK.read_text()))
     assert consumer.CONTRACT == module.ANDROID_ATTESTATION_CONTRACT
-    assert module._android_builder_selection(consumer) == (module.BUILDER_KEY_IDS[0], False)
+    assert module._android_builder_selection(consumer) == (module.BUILDER_KEY_IDS[0], True)
     assert consumer._pretty({"b": 2, "a": 1}) == b'{\n  "a": 1,\n  "b": 2\n}\n'
     assert module.sys.dont_write_bytecode is prior_bytecode_posture
     assert os.environ["CHUMMER_RELEASE_REPO_ROOT"] == "caller-posture-must-be-restored"

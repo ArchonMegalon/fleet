@@ -43,6 +43,29 @@ def test_new_release_source_consumer_never_accepts_missing_or_partial_inputs(tmp
         fleet._admit_release_test_inputs(lock, *paths)
 
 
+def test_checked_in_current_source_consumer_requires_all_three_safe_inputs(tmp_path):
+    lock = json.loads(LOCK.read_bytes())
+    binding = lock["android_authority"]["build_script"]
+    current_build_sha = "fc8b6e637ba3220e4e9c5ea55c5e4dcca6cb26c196eaa75f6d19e91a87ed3db6"
+    current_capture_sha = "a295c226850edda9ce3a57a3c43690188e271b3059c33dd14abca04f65ef4bcf"
+    assert binding["sha256"] == current_build_sha
+    assert fleet.RELEASE_TEST_CONSUMERS[current_build_sha] == current_capture_sha
+    for present in [(), (0,), (1,), (2,), (0, 1), (0, 2), (1, 2)]:
+        paths = tuple(
+            (tmp_path / f"missing-{index}") if index in present else None
+            for index in range(3)
+        )
+        for path in paths:
+            if path is not None:
+                path.mkdir(mode=0o700, exist_ok=True)
+        with pytest.raises(fleet.RebuilderError, match="require explicit"):
+            fleet._admit_release_test_inputs(lock, *paths)
+    safe = tuple(tmp_path / name for name in ("bootstrap", "wheelhouse", "oracle"))
+    for path in safe:
+        path.mkdir(mode=0o700)
+    fleet._admit_release_test_inputs(lock, *safe)
+
+
 @pytest.mark.parametrize("attack", ["same", "nested", "output", "relative", "symlink", "writable", "file"])
 def test_release_source_paths_reject_overlap_or_unsafe_inputs(tmp_path, attack):
     lock = ready_lock()
@@ -89,6 +112,11 @@ def test_release_source_cli_has_three_explicit_nonsecret_inputs(tmp_path):
 
 def ready_lock():
     lock = json.loads(fixture.LOCK.read_text())
+    # These modeled ready-lock tests exercise historical no-source-test inputs;
+    # the checked-in qualified successor is tested separately with explicit feeds.
+    lock["android_authority"]["build_script"]["sha256"] = (
+        "61ea9fa04338889f78e26de26a90b392c5f16def2a4150a64a94e9d4fadd5ca9"
+    )
     lock["state"] = "ready"
     lock["toolchain"].update(builder_image="registry.example.test/team/builder@sha256:" + "a" * 64,
                              signer_image="registry.example.test/team/signer@sha256:" + "b" * 64,
@@ -436,6 +464,11 @@ def raw(value):
 
 def configured(*, protected=False):
     value = json.loads(LOCK.read_bytes())
+    # Modeled toolchain-input tests intentionally use the historical consumer;
+    # current source-test capability requires explicit feeds in its own lane.
+    value["android_authority"]["build_script"]["sha256"] = (
+        "61ea9fa04338889f78e26de26a90b392c5f16def2a4150a64a94e9d4fadd5ca9"
+    )
     value["state"] = "ready"
     value["rebuild"]["enabled"] = True
     value["toolchain"].update(builder_image=BUILDER, installed_closure_receipt_sha256="c" * 64)

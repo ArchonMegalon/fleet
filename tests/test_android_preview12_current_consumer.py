@@ -19,10 +19,10 @@ approval = fixture.approval
 EXTERNAL_INPUTS = (
     "CHUMMER_ANDROID_CURRENT_ROOT", "CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT",
 )
-# Original run 34871784422 / artifact 10359371457, reviewed against exact main.
-# Original evidence stays external and byte-immutable; RFC signatures are test-only.
-ORIGINAL_RECEIPT_SHA256 = "fe805b88d4eb2d6359f4b78b7b156894ac05c3ed99474a1ebedc93e1489b9410"
-CURRENT_CONSUMER_SHA256 = "3217d44a653c21e604de6383b7b200e36749865c5e343fd1c1983be7261ee07c"
+# Retained ordered qualification run 34903253505 / artifact 10371049954.
+# Hosted evidence stays external and byte-immutable; RFC signatures are test-only.
+ORIGINAL_RECEIPT_SHA256 = "b36747bbd43106c1a7e0fe66ee461c4528e4e6f6aadb1edbf5acb1e78d9658e1"
+CURRENT_CONSUMER_SHA256 = "a6ecfecb0c53a45e9f91706ff4b3c8ef97e0bd23fc69a7d9a48e094d5038cb76"
 
 
 def reseal(value):
@@ -92,7 +92,7 @@ def current_source(monkeypatch):
     pinned = {
         path: CURRENT_CONSUMER_SHA256,
         root / approval.PROVENANCE_VALIDATOR_PATH: approval.PROVENANCE_VALIDATOR_SHA256,
-        root / "scripts/materialize-android-p0-pr-authority.py": "a6f943e199c8572fe02e9663e58bbb81b7cdc21dfd4f1cf78cd8d0778066d4c7",
+        root / "scripts/materialize-android-p0-pr-authority.py": "4557fe6a4f2e03e7afd172fc92047ba5cdb53ed2b11651b78867afe8cdbd3583",
         root / "scripts/materialize-api36-hosted-arm64-candidate.py": "8fa8669f4c9c0dc901a853f3675dd14d8e8eb08b82ed0fb90e266537b7500f6a",
         root / approval.QUALIFIED_WORKFLOW["path"]: approval.QUALIFIED_WORKFLOW["sha256"],
         root / approval.QUALIFIED_TWO_GREEN_POLICY["path"]: approval.QUALIFIED_TWO_GREEN_POLICY["sha256"],

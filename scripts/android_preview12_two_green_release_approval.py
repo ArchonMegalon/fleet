@@ -3,7 +3,9 @@
 
 This lane never accepts an AAB, upload keystore, Play credential, or publication
 target.  Its Ed25519 key is accepted only from the protected GitHub environment
-variable named by the reviewed policy.  The checked-in policy is dormant.
+variable named by the reviewed policy.  The checked-in policy is ready for its
+separately reviewed workflow; this lane is preparation-only and never signs
+artifacts, accesses Play credentials, or publishes.
 """
 
 from __future__ import annotations
@@ -51,8 +53,8 @@ VERSION_NAME = "0.1.0-preview.12"
 VERSION_CODE = 12
 # Exact qualified consumer and preparation-only public identity move together.
 # Hosted eligibility and public-key compatibility do not activate this lane.
-ANDROID_CONSUMER_COMMIT = "2eb09d5921a9c44c3f818ae9d20e3b40d2c43753"
-ANDROID_CONSUMER_TREE = "e8df321fb2d640acd32441bbc632f255c3b3cf13"
+ANDROID_CONSUMER_COMMIT = "e0d997bddaebcc1e685ef48b886445e7a96a5af7"
+ANDROID_CONSUMER_TREE = "f816035141ae63eb464fde437d3e09550aab2717"
 RELEASE_APPROVER_KEY_ID = "fleet-release-approver-2026-09"
 RELEASE_APPROVER_ROLE = "android_internal_release_approver"
 RELEASE_APPROVAL_SCOPE = "android_internal_release_preparation"
@@ -70,11 +72,11 @@ RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256 = (
 )
 PROVENANCE_VALIDATOR_PATH = "scripts/materialize-api36-two-green-eligibility.py"
 PROVENANCE_VALIDATOR_SHA256 = (
-    "d0e1938107a3794a44648286b8b97d1ac3db64daa30509f1e63fe78018d3f4c7"
+    "cfc76c70fd78a1bb94e85229be84dd6d2d1d97de0bce60e21cbb868cb4a94b9c"
 )
 # Public metadata of the exactly bound consumer, not locally executed Android
 # provenance replay. The workflow authenticates the original hosted artifact.
-QUALIFIED_DEPENDENCY_GRAPH_SHA256 = "a8eaf996a194db3e15bd49860928868e5054bfc6c606bd3de1d1ed8e37a6efd4"
+QUALIFIED_DEPENDENCY_GRAPH_SHA256 = "c9a989a904735141014d5b9b7ebdd33fea9e561a61ea5d28911b48150e0962cb"
 WIZARD_AUTHORITY_CLASS = "internal_phone_beta_sr5_wizard_only"
 WIZARD_PROOF_SCOPE = "sr5_wizards_only"
 WIZARD_AGGREGATE_SCHEMA = "chummer.android.api36-sr5-wizard-e2e-aggregate/v2"
@@ -84,7 +86,7 @@ WIZARD_JOURNEYS = (
 )
 QUALIFIED_WORKFLOW = {
     "path": ".github/workflows/api36-editing-e2e.yml",
-    "sha256": "987d5564c2700d1549d90a715e1a8b31bf36daa4435e58bb474506e7ebf4f20d", "sizeBytes": 33162,
+    "sha256": "a1c19279957f0a0e53ca715119c339a628718e8e219f76527c528075f757fee3", "sizeBytes": 34153,
 }
 QUALIFIED_ENVIRONMENT_POLICY = {
     "schema": "chummer.android.api36-proof-environment-authority/v2",
@@ -93,7 +95,7 @@ QUALIFIED_ENVIRONMENT_POLICY = {
 QUALIFIED_TWO_GREEN_POLICY = {
     "path": "eng/api36-two-consecutive-green-authority.json", "publicationAuthorized": False,
     "schema": "chummer.android.api36-ordered-review-main-green-policy/v3",
-    "sha256": "be2daf41ce4ad59f417bf592fcf0da7f2c716d7deee0fb51f90b5f3cc57ec01a", "sizeBytes": 2752,
+    "sha256": "b5d3b61c68cbb627836e89ee92f0e2bac9372d663906a63d7eafc13f6da9fe44", "sizeBytes": 2798,
 }
 QUALIFIED_WIZARD_GATE = {
     "schema": "chummer.android.api36-sr5-wizard-gate-binding/v1",
@@ -101,6 +103,26 @@ QUALIFIED_WIZARD_GATE = {
     "contractSha256": "c867b4fd8c2a771e3ddb4c3e20c0b843ea87510a197b476c7ce75dc013fec7b4",
     "authorityClass": WIZARD_AUTHORITY_CLASS, "proofScope": WIZARD_PROOF_SCOPE,
     "publicationAuthorized": False, "requiredJourneyCount": 7, "requiredJourneys": list(WIZARD_JOURNEYS),
+}
+QUALIFIED_DESIGN_POLICY_BINDING = {
+    "repository": "ArchonMegalon/chummer6-design",
+    "commit": "e408e11bdfabc34898cb0eca6e2409a98d021e4d",
+    "tree": "f4ce63636d2a1cef1ef1b96524530ebdda5eb449",
+    "matrix": {
+        "path": "products/chummer/ANDROID_PHONE_BETA_SUPPORT_MATRIX.yaml",
+        "sha256": "ea60a42426c6a3db02adccdb06f9763a1b3e45865f625b96d807f872e490c6cb",
+    },
+    "validator": {
+        "path": "scripts/ai/validate_android_phone_beta_contract.py",
+        "sha256": "136d6d216ad4d0c4d48e233016d43c9912219c97df8f08762049d39805a8f909",
+    },
+    "matrixSchema": "chummer.android_phone_beta_support_matrix.v1",
+    "wizardAggregateSchema": "chummer.android.api36-sr5-wizard-e2e-aggregate/v2",
+    "wizardGate": {
+        "path": "eng/api36-sr5-wizard-gate-authority.json",
+        "sha256": "c867b4fd8c2a771e3ddb4c3e20c0b843ea87510a197b476c7ce75dc013fec7b4",
+        "schema": "chummer.android.api36-sr5-wizard-gate-authority/v1",
+    },
 }
 TWO_GREEN_EXCLUSIONS = (
     "google_play_upload", "google_play_processing", "tester_distribution", "tester_installation",
@@ -992,8 +1014,12 @@ def validate_receipt(
     _exact_keys(common, {
         "androidTree", "authorityClass", "proofScope", "dependencyGraph", "workflow", "wizardGate",
         "aggregateSchema", "requiredJourneys", "environmentPolicy", "buildEnvironmentCompatibilitySha256",
-        "journeyEnvironmentCompatibilitySha256", "environmentCompatibilityStatus",
+        "journeyEnvironmentCompatibilitySha256", "environmentCompatibilityStatus", "policyAuthorities",
     }, "Two-Green common authority")
+    validate_design_policy_authorities(
+        common["policyAuthorities"],
+        expected_design_binding=QUALIFIED_DESIGN_POLICY_BINDING,
+    )
     expected_bindings = {
         "authorityClass": WIZARD_AUTHORITY_CLASS, "proofScope": WIZARD_PROOF_SCOPE,
         "aggregateSchema": WIZARD_AGGREGATE_SCHEMA, "requiredJourneys": list(WIZARD_JOURNEYS),

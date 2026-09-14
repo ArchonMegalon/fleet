@@ -52,13 +52,13 @@
     "private_key_persistence_allowed": false
   },
   "android_consumer": {
-    "qualified_commit": "2eb09d5921a9c44c3f818ae9d20e3b40d2c43753",
-    "qualified_tree": "e8df321fb2d640acd32441bbc632f255c3b3cf13",
+    "qualified_commit": "e0d997bddaebcc1e685ef48b886445e7a96a5af7",
+    "qualified_tree": "f816035141ae63eb464fde437d3e09550aab2717",
     "verifier_path": "scripts/verify_api36_two_green_release_eligibility.py",
     "contract_name": "chummer.android.two-green-release-approval/v1",
     "canonical_json": "utf8_sort_keys_compact_no_trailing_newline",
     "provenance_validator_path": "scripts/materialize-api36-two-green-eligibility.py",
-    "provenance_validator_sha256": "d0e1938107a3794a44648286b8b97d1ac3db64daa30509f1e63fe78018d3f4c7",
+    "provenance_validator_sha256": "cfc76c70fd78a1bb94e85229be84dd6d2d1d97de0bce60e21cbb868cb4a94b9c",
     "maximum_approval_lifetime_seconds": 43200,
     "approval_clock_skew_seconds": 120
   },

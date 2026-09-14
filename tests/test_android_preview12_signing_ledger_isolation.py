@@ -378,6 +378,13 @@ def test_execute_and_reconcile_have_one_shared_signing_policy_loader():
         assert len(calls) == 1
     lock = json.loads(fixture.LOCK.read_text())
     policy = json.loads((fixture.ROOT / lock["reservation"]["policy_path"]).read_text())
-    assert policy["state"] == "dormant" and policy["approval_policy"]["sha256"] is None
+    assert policy["state"] == "dormant"
+    approval_path = fixture.ROOT / "config/release/android-preview12-two-green-release-approval.json"
+    assert policy["approval_policy"]["sha256"] == hashlib.sha256(
+        approval_path.read_bytes()
+    ).hexdigest()
     assert policy["replay_protection"]["external_ledger"]["configured"] is False
-    assert lock["reservation"]["adapter_sha256"] is None and lock["reservation"]["policy_sha256"] is None
+    assert lock["reservation"]["adapter_sha256"] is None
+    assert lock["reservation"]["policy_sha256"] == hashlib.sha256(
+        (fixture.ROOT / lock["reservation"]["policy_path"]).read_bytes()
+    ).hexdigest()
