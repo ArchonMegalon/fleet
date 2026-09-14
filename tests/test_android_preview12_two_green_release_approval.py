@@ -554,6 +554,117 @@ def test_dormant_preflight_fails_before_environment_or_key_access():
         approval.validate_dispatch(value, args)
 
 
+DESIGN_POLICY_AUTHORITIES = {
+    "design": {
+        "repository": "ArchonMegalon/chummer6-design",
+        "commit": "e408e11bdfabc34898cb0eca6e2409a98d021e4d",
+        "tree": "f4ce63636d2a1cef1ef1b96524530ebdda5eb449",
+        "matrix": {"path": "products/chummer/ANDROID_PHONE_BETA_SUPPORT_MATRIX.yaml", "sha256": "ea60a42426c6a3db02adccdb06f9763a1b3e45865f625b96d807f872e490c6cb"},
+        "validator": {"path": "scripts/ai/validate_android_phone_beta_contract.py", "sha256": "136d6d216ad4d0c4d48e233016d43c9912219c97df8f08762049d39805a8f909"},
+        "matrixSchema": "chummer.android_phone_beta_support_matrix.v1",
+        "wizardAggregateSchema": "chummer.android.api36-sr5-wizard-e2e-aggregate/v2",
+        "wizardGate": {"path": "eng/api36-sr5-wizard-gate-authority.json", "sha256": "c867b4fd8c2a771e3ddb4c3e20c0b843ea87510a197b476c7ce75dc013fec7b4", "schema": "chummer.android.api36-sr5-wizard-gate-authority/v1"},
+    }
+}
+
+
+def _design_authorities_change(path: tuple[str, ...], replacement: object) -> dict:
+    value = copy.deepcopy(DESIGN_POLICY_AUTHORITIES)
+    node = value
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] = replacement
+    return value
+
+
+def _assert_design_rejected(value, expected=None):
+    with pytest.raises(approval.ApprovalError, match="Design"):
+        approval.validate_design_policy_authorities(
+            value,
+            expected_design_binding=(
+                DESIGN_POLICY_AUTHORITIES["design"] if expected is None else expected
+            ),
+        )
+
+
+@pytest.mark.parametrize("value", [None, [], {}, {"design": None}, {"design": []}, {"design": {}}])
+def test_design_policy_authorities_rejects_missing_null_and_nonobjects(value):
+    _assert_design_rejected(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {**DESIGN_POLICY_AUTHORITIES, "pinfile": {}},
+        _design_authorities_change(("design", "unexpected"), True),
+        _design_authorities_change(("design", "matrix", "unexpected"), True),
+        _design_authorities_change(("design", "validator", "unexpected"), True),
+        _design_authorities_change(("design", "wizardGate", "unexpected"), True),
+    ],
+)
+def test_design_policy_authorities_rejects_unknown_outer_and_nested_keys(value):
+    _assert_design_rejected(value)
+
+
+@pytest.mark.parametrize(
+    "path,replacement",
+    [
+        (("design", "repository"), "attacker/design"),
+        (("design", "commit"), "0" * 40),
+        (("design", "tree"), "0" * 40),
+        (("design", "matrix", "path"), "legacy/matrix.yaml"),
+        (("design", "matrix", "sha256"), "0" * 64),
+        (("design", "validator", "path"), "legacy/validator.py"),
+        (("design", "validator", "sha256"), "0" * 64),
+        (("design", "matrixSchema"), "chummer.android_phone_beta_support_matrix.v0"),
+        (("design", "wizardAggregateSchema"), "chummer.android.api36-sr5-wizard-e2e-aggregate/v1"),
+        (("design", "wizardGate", "path"), "eng/legacy-gate.json"),
+        (("design", "wizardGate", "sha256"), "0" * 64),
+        (("design", "wizardGate", "schema"), "chummer.android.api36-sr5-wizard-gate-binding/v1"),
+        (("design", "commit"), True),
+        (("design", "matrix", "sha256"), None),
+        (("design", "wizardGate"), False),
+        (("design", "repository"), object()),
+    ],
+)
+def test_design_policy_authorities_rejects_drift_legacy_tuple_and_type_mistakes(path, replacement):
+    _assert_design_rejected(_design_authorities_change(path, replacement))
+
+
+def test_design_policy_authorities_accepts_unmodified_exact_reviewed_binding():
+    value = copy.deepcopy(DESIGN_POLICY_AUTHORITIES)
+    expected = copy.deepcopy(DESIGN_POLICY_AUTHORITIES["design"])
+    original, expected_original = copy.deepcopy(value), copy.deepcopy(expected)
+    approval.validate_design_policy_authorities(
+        value,
+        expected_design_binding=expected,
+    )
+    assert value == original
+    assert expected == expected_original
+
+
+@pytest.mark.parametrize(
+    "expected",
+    [
+        {},
+        {"repository": "ArchonMegalon/chummer6-design"},
+        {**copy.deepcopy(DESIGN_POLICY_AUTHORITIES["design"]), "unexpected": True},
+        _design_authorities_change(("design", "commit"), True)["design"],
+        _design_authorities_change(("design", "matrix"), None)["design"],
+        _design_authorities_change(("design", "wizardGate", "schema"), "chummer.android.api36-sr5-wizard-gate-binding/v1")["design"],
+    ],
+)
+def test_design_policy_authorities_rejects_malformed_expected_binding(expected):
+    _assert_design_rejected({"design": copy.deepcopy(expected)}, expected)
+
+
+def test_design_policy_authorities_rejects_nonmapping_expected_binding():
+    with pytest.raises(approval.ApprovalError, match="Design"):
+        approval.validate_design_policy_authorities(
+            {"design": {}}, expected_design_binding=None
+        )
+
+
 OLD_CONSUMER_COMMIT = "411e0205378966c73e064ba34f68ca65ed426ab6"
 OLD_CONSUMER_TREE = "4a7cf04c2d0a1cbf04da8b889ac673153c779c7a"
 PREVIOUS_CONSUMER_COMMIT = "d4e9116d5bcdf12a51dec6490bf47b97ed143134"

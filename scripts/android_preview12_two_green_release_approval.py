@@ -212,6 +212,66 @@ def _exact_keys(value: Mapping[str, Any], keys: set[str], label: str) -> None:
         raise ApprovalError(f"{label} fields are not exact")
 
 
+def validate_design_policy_authorities(
+    value: object, *, expected_design_binding: Mapping[str, Any]
+) -> None:
+    """Validate the exact reviewed Design binding without consulting Design."""
+    if not isinstance(value, dict):
+        raise ApprovalError("Design policyAuthorities must be an object")
+    _exact_keys(value, {"design"}, "Design policyAuthorities")
+    if not isinstance(expected_design_binding, Mapping):
+        raise ApprovalError("reviewed Design binding must be an object")
+    design_keys = {
+        "repository", "commit", "tree", "matrix", "validator", "matrixSchema",
+        "wizardAggregateSchema", "wizardGate",
+    }
+    _exact_keys(expected_design_binding, design_keys, "reviewed Design binding")
+    if not all(isinstance(expected_design_binding[name], str) for name in (
+        "repository", "matrixSchema", "wizardAggregateSchema",
+    )):
+        raise ApprovalError("reviewed Design binding has an invalid type")
+    _sha40(expected_design_binding["commit"], "reviewed Design commit")
+    _sha40(expected_design_binding["tree"], "reviewed Design tree")
+    for name, keys in (
+        ("matrix", {"path", "sha256"}),
+        ("validator", {"path", "sha256"}),
+        ("wizardGate", {"path", "sha256", "schema"}),
+    ):
+        block = expected_design_binding[name]
+        if not isinstance(block, dict) or set(block) != keys:
+            raise ApprovalError(f"reviewed Design {name} must be an object")
+        if not isinstance(block["path"], str) or (
+            "schema" in block and not isinstance(block["schema"], str)
+        ):
+            raise ApprovalError(f"reviewed Design {name} path has an invalid type")
+        _sha256(block["sha256"], f"reviewed Design {name} digest")
+    if (
+        expected_design_binding["repository"] != "ArchonMegalon/chummer6-design"
+        or expected_design_binding["matrix"]["path"]
+        != "products/chummer/ANDROID_PHONE_BETA_SUPPORT_MATRIX.yaml"
+        or expected_design_binding["validator"]["path"]
+        != "scripts/ai/validate_android_phone_beta_contract.py"
+        or expected_design_binding["matrixSchema"]
+        != "chummer.android_phone_beta_support_matrix.v1"
+        or expected_design_binding["wizardAggregateSchema"]
+        != "chummer.android.api36-sr5-wizard-e2e-aggregate/v2"
+        or expected_design_binding["wizardGate"]["path"]
+        != "eng/api36-sr5-wizard-gate-authority.json"
+        or expected_design_binding["wizardGate"]["schema"]
+        != "chummer.android.api36-sr5-wizard-gate-authority/v1"
+    ):
+        raise ApprovalError("reviewed Design binding identity differs")
+    actual = value["design"]
+    if not isinstance(actual, dict):
+        raise ApprovalError("Design policy binding must be an object")
+    try:
+        matches = canonical_bytes(actual) == canonical_bytes(expected_design_binding)
+    except (TypeError, ValueError) as error:
+        raise ApprovalError("Design policy binding contains a non-JSON value") from error
+    if not matches:
+        raise ApprovalError("Design policy binding differs from reviewed authority")
+
+
 def _sha40(value: object, label: str) -> str:
     if not isinstance(value, str) or SHA40.fullmatch(value) is None:
         raise ApprovalError(f"{label} must be a lowercase SHA-40")
