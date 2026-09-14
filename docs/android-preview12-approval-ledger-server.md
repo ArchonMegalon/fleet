@@ -29,7 +29,7 @@ python -m scripts.android_preview12_approval_ledger_server \
   --bind-address <explicit-canonical-IP>
 ```
 
-There are no token/key bytes on argv, environment discovery, reload, proxy,
+There are no token/key bytes on argv, environment discovery, reload, implicit proxy,
 plaintext, alternate-port, database-create or key-generation modes. Production
 port is 443 because the existing protocol permits only canonical
 `https://hostname` and exact hostname-only Host headers. Bind permission and
@@ -71,7 +71,8 @@ an explicit stop/restart with newly admitted inputs; live drift fails closed.
 
 ## Limits and shutdown
 
-One worker, no WebSockets/docs/OpenAPI, no forwarded headers or access logging.
+One worker, no WebSockets/docs/OpenAPI or access logging. Direct mode rejects
+all forwarded headers; the explicit local-proxy mode below is the only exception.
 Existing exact four POST routes and body/response limits remain unchanged.
 Defaults: two in-flight operations, 16 post-handshake connections, 32 backlog,
 16 KiB incomplete HTTP header events, 10-second body timeout, two-second idle
@@ -108,3 +109,45 @@ made-up HTTPS ASGI scope alone. Hostile file/configuration fixtures are not
 production credential, persistent-volume, rollback-resistance or public TLS
 qualification. There is no `/health`; ledger status can perform lazy expiry
 transitions, so it must not be advertised as a read-only health probe.
+
+## Optional local Docker / HTTPS tunnel ingress
+
+The existing Docker host and Cloudflare Tunnel can host this service; a new
+machine or permission to publish host port 443 is not inherently required.
+Port 443 above is the **container-local** listener. Use no published Docker
+ports and a dedicated isolated network shared only with the admitted connector.
+Keep the ledger separate from the public app container and unrelated services.
+Container bind privileges, immutable image/dependency admission, private durable
+storage, receipt-key custody and authenticated ingress remain deployment work.
+
+Repeat `--trusted-proxy-address <canonical-local-IP>` for each explicitly admitted
+last-hop connector address (maximum four). Addresses must be stable exact
+RFC1918 IPv4, IPv6 ULA or loopback literals. No wildcards, CIDRs, DNS discovery,
+mapped/scoped IPv6 or forwarded client identity is accepted. Changing an address
+requires an explicit restart with the newly admitted configuration. With no
+option, direct TLS mode is unchanged. Proxy configuration is checked before
+opening policy or credential files.
+
+Opt-in mode still requires actual HTTPS **from the connector to the ledger**,
+the exact configured Host and four POST routes, the existing bearer credential,
+and all original body/framing limits. Uvicorn proxy rewriting stays disabled.
+The actual socket peer must match the explicit tuple; a forwarded header cannot
+substitute for the peer, TLS or bearer credential. Only `X-Forwarded-Proto: https`
+and a nonblank, bounded `X-Forwarded-For` are allowed forwarding headers; both are
+required. XFF is untrusted opaque metadata and never becomes authentication,
+workspace identity, logs or receipt content. Other forwarding headers fail closed.
+
+Cloudflare documents [forwarding header behavior](https://developers.cloudflare.com/fundamentals/reference/http-headers/).
+For the tunnel's [origin parameters](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/origin-parameters/),
+use verified HTTPS to the container, matching `originServerName`/SNI and exact
+`httpHostHeader`; use a reviewed `caPool` for a private origin CA if needed.
+Keep `noTLSVerify=false`. Preserve fixed-length POST framing (configure
+`disableChunkedEncoding` if needed). Edge/client certificate trust and
+connector/origin certificate trust are distinct and both must be verified.
+Network isolation and private authenticated ingress must be independently
+established; accepting proxy headers alone does not create them. No wildcard
+public ingress or unauthenticated signing route is authorized by this option.
+
+Tests exercise this mode through a real verified loopback TLS connection with
+public fixture keys and an existing disposable SQLite store. They do not run
+cloudflared, deploy a route, provision a credential or establish release readiness.

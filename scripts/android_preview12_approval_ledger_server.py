@@ -63,6 +63,7 @@ class LaunchConfig:
     maximum_connections: int = 16
     body_timeout: float = 10.0
     shutdown_timeout: float = 15.0
+    trusted_proxy_addresses: tuple[str, ...] = ()
 
 
 def _identity(info):
@@ -319,6 +320,7 @@ def prepare(options: LaunchConfig) -> PreparedServer:
                 or str(ipaddress.ip_address(options.bind_address)) != options.bind_address \
                 or type(options.database_id) is not str or not protocol.SHA256.fullmatch(options.database_id):
             raise LaunchError(_ERROR)
+        service.validate_trusted_proxy_addresses(options.trusted_proxy_addresses)
         for value, low, high in ((options.maximum_in_flight, 1, 8), (options.maximum_connections, 2, 64)):
             if type(value) is not int or not low <= value <= high:
                 raise LaunchError(_ERROR)
@@ -379,7 +381,8 @@ def prepare(options: LaunchConfig) -> PreparedServer:
         key_fd = _sealed(key.data, result._stack)
         result.app = service.create_app(ledger_policy=ledger, store=store,
             bearer_token_sha256=digest.data.rstrip(b'\n').decode('ascii'), sign_receipt=result.sign_receipt,
-            maximum_in_flight=options.maximum_in_flight, body_timeout_seconds=options.body_timeout)
+            maximum_in_flight=options.maximum_in_flight, body_timeout_seconds=options.body_timeout,
+            trusted_proxy_addresses=options.trusted_proxy_addresses)
         result.app.add_middleware(_InputFence, inputs=result)
         result.config = uvicorn.Config(result.app, host=options.bind_address, port=443, workers=1,
             interface='asgi3', loop='asyncio', http=_BoundedHttp, ws='none', lifespan='on', reload=False,
@@ -415,7 +418,10 @@ def main(argv=None) -> int:
         parser.add_argument('--maximum-connections', type=int, default=16)
         parser.add_argument('--body-timeout', type=float, default=10.0)
         parser.add_argument('--shutdown-timeout', type=float, default=15.0)
-        with prepare(LaunchConfig(**vars(parser.parse_args(argv)))) as prepared:
+        parser.add_argument('--trusted-proxy-address', action='append', default=[], dest='trusted_proxy_addresses')
+        arguments = vars(parser.parse_args(argv))
+        arguments['trusted_proxy_addresses'] = tuple(arguments['trusted_proxy_addresses'])
+        with prepare(LaunchConfig(**arguments)) as prepared:
             prepared.server.run()
             if not prepared.server.started:
                 raise LaunchError(_ERROR)
