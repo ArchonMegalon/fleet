@@ -8,8 +8,8 @@ are backed by the exact successful reviewed and main API-36 Two-Green evidence.
 
 It never accepts, signs, uploads, or publishes an AAB. Its primary output is
 the exact `chummer.android.two-green-release-approval/v1` contract consumed by
-the bound Android `d4e9116d5bcdf12a51dec6490bf47b97ed143134` release
-verifier at tree `301180a95bb313f77b6c695ac8b88624603de933`. Public-key
+the bound Android `2eb09d5921a9c44c3f818ae9d20e3b40d2c43753` release
+verifier at tree `e8df321fb2d640acd32441bbc632f255c3b3cf13`. Public-key
 compatibility, hosted consumer qualification and issuer activation are separate
 claims. It always keeps
 `signingAuthorized`, `publicationAuthorized`, and
@@ -186,15 +186,19 @@ original hosted receipt for full consumer interoperability. These tests grant
 no operational approval, establish no protected custody, and perform no local
 APK/archive provenance replay.
 
-The original qualification receipt is from Two-Green run `34815624341`, artifact
-`10335663622`, pairing review `34806341505` and main `34811134299`. Its exact
+The current original qualification receipt is from Two-Green run `34871784422`, artifact
+`10359371457`, pairing review `34853371703` and main `34861528577`. Its exact
 25,298-byte JSON SHA256 is
-`89eae27aa5075e1c8a90d07fa97ba1b6259c4e9654c7e174abf7cc6ef7673d3d`;
+`fe805b88d4eb2d6359f4b78b7b156894ac05c3ed99474a1ebedc93e1489b9410`;
 the canonical dependency graph SHA256 is
-`e2e048592cf37088ff686e662832c986a3e7f9ba71ef84e9efc831a92abad3f3`.
-The materializer, workflow, environment, wizard-gate and Two-Green-policy hashes
-were remeasured from exact source and remain unchanged. Original hosted evidence
-is kept external; tests never rewrite it or the historical fixtures.
+`a8eaf996a194db3e15bd49860928868e5054bfc6c606bd3de1d1ed8e37a6efd4`.
+The exact workflow hash is
+`987d5564c2700d1549d90a715e1a8b31bf36daa4435e58bb474506e7ebf4f20d`;
+the P0 source hash is updated in the actual-consumer test. The consumer verifier,
+provenance materializer, environment, wizard-gate, Two-Green-policy and public-key
+bytes were remeasured from exact source and remain unchanged. The previous
+`d4e9116`/`301180a` qualification is historical and is rejected as current input.
+Original hosted evidence stays external; tests never rewrite it or historical fixtures.
 
 The optional builder suites still bind their historical source and original
 receipt. They now use `CHUMMER_ANDROID_HISTORICAL_BUILDER_ROOT` and

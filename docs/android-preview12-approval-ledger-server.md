@@ -145,9 +145,14 @@ workspace identity, logs or receipt content. Other forwarding headers fail close
 
 Cloudflare documents [forwarding header behavior](https://developers.cloudflare.com/fundamentals/reference/http-headers/).
 For the tunnel's [origin parameters](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/origin-parameters/),
-use verified HTTPS to the container, matching `originServerName`/SNI and exact
-`httpHostHeader`; use a reviewed `caPool` for a private origin CA if needed.
-Keep `noTLSVerify=false`. Preserve fixed-length POST framing (configure
+use verified HTTPS to the container and preserve the incoming exact configured
+Host. Do not set `httpHostHeader` on these four ledger routes: the reviewed
+cloudflared [origin proxy implementation](https://github.com/cloudflare/cloudflared/blob/81a53555aa827fca88605d7e67ad5c03cda468d2/ingress/origin_proxy.go#L43-L47) adds `X-Forwarded-Host`
+for any override, which the ledger's request predicate rejects. This is pinned
+source incompatibility, not attribution of a historical HTTP400 response.
+Set `originServerName`/SNI independently and use a reviewed `caPool` for a private
+origin CA if needed; keep `noTLSVerify=false`. Unrelated existing routes and
+their host overrides are unaffected. Preserve fixed-length POST framing (configure
 `disableChunkedEncoding` if needed). Edge/client certificate trust and
 connector/origin certificate trust are distinct and both must be verified.
 Network isolation and private authenticated ingress must be independently
