@@ -36,11 +36,17 @@ port is 443 because the existing protocol permits only canonical
 public DNS/TLS trust must already exist; this module grants neither. Launch it
 with a minimal service environment, without unrelated controller credentials.
 
-The full existing approval JSON is only a container for
-`replay_protection.external_ledger` and the source-bound public approval-key pin.
+The full existing approval JSON is a container for
+`replay_protection.external_ledger` and the fixed public approval binding.
+The launcher admits the exact `fleet-release-approver-2026-09` key ID, role,
+scope, public path/PEM digest/SPKI bytes/digest, consumer commit/tree/provenance
+binding and non-authorizing output tuple through the issuer's public validator.
+Unknown or builder identities, swapped public tuples and the old consumer paired
+with the new key fail before database construction or credential reads.
 The ledger must be explicitly configured before **any credential file** is
 opened. Approval-issuer activation and obsolete human-review flags are not
-startup requirements: the ledger can be provisioned before the issuer. No
+startup requirements: the launcher does not invoke the issuer's ready gate, so
+the ledger can be provisioned before the issuer. No
 acceptance of this file promotes either one to ready.
 
 All supplied configuration/credential files must be canonical absolute regular

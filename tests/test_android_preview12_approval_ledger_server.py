@@ -131,17 +131,27 @@ def reject_before_credentials(config, monkeypatch):
     forbidden = {getattr(config, field) for field in CREDENTIALS}
     attempted = []
     original = launcher._HeldFile
+    stores = []
+    original_store = persistence.SQLiteApprovalLedgerStore
+    before = Path(config.database).read_bytes()
 
     def tracked_hold(value, limit):
         if value in forbidden:
             attempted.append(value)
         return original(value, limit)
 
+    def tracked_store(*args, **kwargs):
+        stores.append(True)
+        return original_store(*args, **kwargs)
+
     with monkeypatch.context() as patch:
         patch.setattr(launcher, "_HeldFile", tracked_hold)
+        patch.setattr(persistence, "SQLiteApprovalLedgerStore", tracked_store)
         reject(config)
     # An inline assertion alone could be normalized into LaunchError.
     assert attempted == []
+    assert stores == []
+    assert Path(config.database).read_bytes() == before
 
 
 def test_prepared_configuration_is_frozen_tls_only_and_bounded(launch):
@@ -265,7 +275,7 @@ def test_receipt_key_must_be_canonical_and_match_pinned_public_key(launch, raw):
 
 
 @pytest.mark.parametrize("defect", ("reuse", "invalid_spki", "alternate_spki", "wrong_digest"))
-def test_approval_public_key_is_valid_distinct_and_digest_bound(launch, defect):
+def test_approval_public_key_is_valid_distinct_and_digest_bound(launch, monkeypatch, defect):
     _, policy, config = launch
     key = policy["external_ed25519_key"]
     raw = {"reuse": fixture.PUBLIC_DER, "alternate_spki": OTHER_PUBLIC_DER}.get(defect, b"not SPKI")
@@ -275,7 +285,38 @@ def test_approval_public_key_is_valid_distinct_and_digest_bound(launch, defect):
     else:
         key["expected_public_key_spki_sha256"] = "0" * 64
     private_write(Path(config.policy), protocol.pretty_bytes(policy))
-    reject(config)
+    reject_before_credentials(config, monkeypatch)
+
+
+@pytest.mark.parametrize("section,changes", [
+    ("external_ed25519_key", {"key_id": "unknown"}),
+    ("external_ed25519_key", {"key_id": None}),
+    ("external_ed25519_key", {"key_id": ["fleet-release-approver-2026-09"]}),
+    ("external_ed25519_key", {"key_id": "fleet-release-builder-2026-09"}),
+    ("external_ed25519_key", {"key_id": "local-release-builder-2026"}),
+    ("external_ed25519_key", {
+        "key_id": "local-release-builder-2026",
+        "trusted_public_key_path": "eng/trusted-release-approvers/local-release-builder-2026.public.pem",
+        "trusted_public_key_pem_sha256": "ed1fbe95fc7713bfc6d9d0fea21726c1ba3193533fc2d5523e054ad8fb86184c",
+        "public_key_spki_der_base64": "MCowBQYDK2VwAyEAB105wcYguHU3a/phMkbbRjhZ+Qhj8cdDTAvw/7t14sk=",
+        "expected_public_key_spki_sha256": "c46a4e9a224c8c77a4038bca83f7d9ed66146318d8b5c2c9fc81cd19fdd18ea7",
+    }),
+    ("external_ed25519_key", {"role": "android_internal_release_builder"}),
+    ("external_ed25519_key", {"approval_scope": "android_internal_release_artifact_binding"}),
+    ("external_ed25519_key", {"trusted_public_key_path": "eng/untrusted.pem"}),
+    ("external_ed25519_key", {"trusted_public_key_pem_sha256": "0" * 64}),
+    ("external_ed25519_key", {"public_key_spki_der_base64": "MCowBQYDK2VwAyEAdXOvq6FjTeUUqxBWMCrF+OJGqihEANWatNQ96HmLNEc=",
+                              "expected_public_key_spki_sha256": "41b44078d037fafd85b091b967959f77a7a4aa9f160d03749fa49889a8b1b156"}),
+    ("android_consumer", {"qualified_commit": "411e0205378966c73e064ba34f68ca65ed426ab6",
+                          "qualified_tree": "4a7cf04c2d0a1cbf04da8b889ac673153c779c7a"}),
+    ("android_consumer", {"provenance_validator_sha256": "0" * 64}),
+    ("output", {"key_id": "local-release-builder-2026"}),
+])
+def test_fixed_public_identity_and_consumer_reject_before_store_and_credentials(launch, monkeypatch, section, changes):
+    _, policy, config = launch
+    policy[section].update(changes)
+    private_write(Path(config.policy), protocol.pretty_bytes(policy))
+    reject_before_credentials(config, monkeypatch)
 
 
 def test_source_approval_key_cannot_be_relabelled_as_receipt_key(launch, monkeypatch):

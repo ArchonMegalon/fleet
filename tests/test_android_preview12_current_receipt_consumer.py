@@ -1,4 +1,4 @@
-"""Guarded PR12 loader plus full current Android v3 eligibility verification.
+"""Historical PR12 builder loader and Android 8ea0 v3 receipt verification.
 
 Only RFC 8032 test signatures authorize test-loaded trust; no operational
 approval, custody, APK replay, signing or release-build claim is made here.
@@ -33,10 +33,10 @@ def git(root, *args):
 
 @pytest.fixture
 def loaded_original():
-    root_value = os.environ.get("CHUMMER_ANDROID_CURRENT_ROOT")
-    receipt_value = os.environ.get("CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT")
+    root_value = os.environ.get("CHUMMER_ANDROID_HISTORICAL_BUILDER_ROOT")
+    receipt_value = os.environ.get("CHUMMER_ANDROID_HISTORICAL_BUILDER_TWO_GREEN_RECEIPT")
     if not root_value or not receipt_value:
-        pytest.skip("exact current Android root and original qualified receipt are required")
+        pytest.skip("exact historical Android 8ea0 builder root and original receipt are required")
     root, path = Path(root_value).resolve(strict=True), Path(receipt_value).resolve(strict=True)
     raw = path.read_bytes()
     assert hashlib.sha256(raw).hexdigest() == RECEIPT_SHA
@@ -103,7 +103,7 @@ def verify(verifier, root, receipt_path, approval_path, now):
     )
 
 
-def test_original_v3_receipt_passes_full_consumer_through_guarded_loader(loaded_original, tmp_path, monkeypatch):
+def test_historical_v3_receipt_passes_full_consumer_through_guarded_loader(loaded_original, tmp_path, monkeypatch):
     root, path, raw, receipt, verifier = loaded_original
     approval_path, now = synthetic_approval(tmp_path, monkeypatch, verifier, receipt, raw)
     result = verify(verifier, root, path, approval_path, now)
@@ -120,7 +120,7 @@ def test_original_v3_receipt_passes_full_consumer_through_guarded_loader(loaded_
     ("missing-journey", "two-green aggregate authority differs from the governed gate"),
     ("runtime-content", "two-green dependency commit differs: core-content"),
 ])
-def test_validly_resigned_original_drift_fails_full_current_consumer(loaded_original, tmp_path, monkeypatch, mutation, expected_error):
+def test_validly_resigned_original_drift_fails_full_historical_consumer(loaded_original, tmp_path, monkeypatch, mutation, expected_error):
     root, _, _, receipt, verifier = loaded_original
     common = receipt["commonAuthority"]
     if mutation == "scope":

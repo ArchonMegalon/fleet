@@ -49,24 +49,24 @@ CROSS_REPO_TOKEN_ENV_NAME = "ANDROID_PREVIEW12_CROSS_REPO_ACTIONS_READ_TOKEN"
 PACKAGE_ID = "com.myexternalbrain.chummer"
 VERSION_NAME = "0.1.0-preview.12"
 VERSION_CODE = 12
-# Provisional PR-source compatibility only. The dormant policy does not qualify
-# this commit as protected main or supply its missing hosted Two-Green evidence.
-ANDROID_CONSUMER_COMMIT = "411e0205378966c73e064ba34f68ca65ed426ab6"
-ANDROID_CONSUMER_TREE = "4a7cf04c2d0a1cbf04da8b889ac673153c779c7a"
-RELEASE_APPROVER_KEY_ID = "local-release-builder-2026"
+# Exact qualified consumer and preparation-only public identity move together.
+# Hosted eligibility and public-key compatibility do not activate this lane.
+ANDROID_CONSUMER_COMMIT = "d4e9116d5bcdf12a51dec6490bf47b97ed143134"
+ANDROID_CONSUMER_TREE = "301180a95bb313f77b6c695ac8b88624603de933"
+RELEASE_APPROVER_KEY_ID = "fleet-release-approver-2026-09"
 RELEASE_APPROVER_ROLE = "android_internal_release_approver"
 RELEASE_APPROVAL_SCOPE = "android_internal_release_preparation"
 RELEASE_APPROVER_PUBLIC_KEY_PATH = (
-    "eng/trusted-release-approvers/local-release-builder-2026.public.pem"
+    "eng/trusted-release-approvers/fleet-release-approver-2026-09.public.pem"
 )
 RELEASE_APPROVER_PUBLIC_KEY_PEM_SHA256 = (
-    "ed1fbe95fc7713bfc6d9d0fea21726c1ba3193533fc2d5523e054ad8fb86184c"
+    "0ccffb5997e10dea7531894e00a2376f8da309a8e50da00199ffc3073de85dcb"
 )
 RELEASE_APPROVER_PUBLIC_KEY_SPKI_DER_BASE64 = (
-    "MCowBQYDK2VwAyEAB105wcYguHU3a/phMkbbRjhZ+Qhj8cdDTAvw/7t14sk="
+    "MCowBQYDK2VwAyEAfQlc4wil/fVVadQd7QwlJhaEdVoovi6pkR6AICaeAZ0="
 )
 RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256 = (
-    "c46a4e9a224c8c77a4038bca83f7d9ed66146318d8b5c2c9fc81cd19fdd18ea7"
+    "b0afed082c23ee1af1c828dde5b28ffa4061ceaa71d1bab4c11927ff142f43a3"
 )
 PROVENANCE_VALIDATOR_PATH = "scripts/materialize-api36-two-green-eligibility.py"
 PROVENANCE_VALIDATOR_SHA256 = (
@@ -74,7 +74,7 @@ PROVENANCE_VALIDATOR_SHA256 = (
 )
 # Public metadata of the exactly bound consumer, not locally executed Android
 # provenance replay. The workflow authenticates the original hosted artifact.
-QUALIFIED_DEPENDENCY_GRAPH_SHA256 = "68f3df01e2cefc8071da799ed9646cdf0f36458510b76994450bf365e7e1fdcf"
+QUALIFIED_DEPENDENCY_GRAPH_SHA256 = "e2e048592cf37088ff686e662832c986a3e7f9ba71ef84e9efc831a92abad3f3"
 WIZARD_AUTHORITY_CLASS = "internal_phone_beta_sr5_wizard_only"
 WIZARD_PROOF_SCOPE = "sr5_wizards_only"
 WIZARD_AGGREGATE_SCHEMA = "chummer.android.api36-sr5-wizard-e2e-aggregate/v2"
@@ -391,10 +391,39 @@ def expected_policy() -> dict[str, Any]:
     }
 
 
+def validate_public_approval_binding(policy: Mapping[str, Any]) -> bytes:
+    """Admit the fixed public identity and consumer without activating issuance.
+
+    Ledger provisioning precedes issuer activation. Only the key's boolean
+    configured flag may vary here; identity, role, scope, bytes, consumer and
+    non-authorizing output remain one source-bound tuple.
+    """
+    expected = expected_policy()
+    key = policy.get("external_ed25519_key")
+    if not isinstance(key, dict) or type(key.get("configured")) is not bool:
+        raise ApprovalError("Android release approver public binding differs")
+    expected["external_ed25519_key"]["configured"] = key["configured"]
+    for field in ("external_ed25519_key", "android_consumer", "output"):
+        if canonical_bytes(policy.get(field)) != canonical_bytes(expected[field]):
+            raise ApprovalError("Android release approver public binding differs")
+    try:
+        public_der = base64.b64decode(key["public_key_spki_der_base64"], validate=True)
+    except (binascii.Error, TypeError, ValueError) as error:
+        raise ApprovalError("Android release approver public binding differs") from error
+    if (
+        len(public_der) != len(SPKI_ED25519_PREFIX) + 32
+        or not public_der.startswith(SPKI_ED25519_PREFIX)
+        or hashlib.sha256(public_der).hexdigest() != key["expected_public_key_spki_sha256"]
+    ):
+        raise ApprovalError("Android release approver public binding differs")
+    return public_der
+
+
 def load_policy(path: Path) -> tuple[dict[str, Any], bytes, str]:
     data, digest = stable_file(path, "approval policy", MAX_RECEIPT_BYTES)
     value = strict_json_bytes(data, "approval policy")
     _validate_environment_policy(value.get("github_environment"))
+    validate_public_approval_binding(value)
     expected = expected_policy()
     if value != expected:
         # Activation is deliberately the only accepted deviation from the dormant template.
@@ -460,24 +489,10 @@ def _require_ready(policy: Mapping[str, Any]) -> None:
         or cross_repo.get("persisted") is not False
     ):
         blockers.append("cross-repository Android Actions read authority is unavailable")
-    if not isinstance(key, dict) or SHA256.fullmatch(
-        str(key.get("expected_public_key_spki_sha256") or "")
-    ) is None:
-        blockers.append("external Ed25519 public-key digest is not pinned")
-    elif (
-        key.get("algorithm") != "ed25519"
-        or key.get("key_id") != RELEASE_APPROVER_KEY_ID
-        or key.get("role") != RELEASE_APPROVER_ROLE
-        or key.get("approval_scope") != RELEASE_APPROVAL_SCOPE
-        or key.get("trusted_public_key_path") != RELEASE_APPROVER_PUBLIC_KEY_PATH
-        or key.get("trusted_public_key_pem_sha256")
-        != RELEASE_APPROVER_PUBLIC_KEY_PEM_SHA256
-        or key.get("public_key_spki_der_base64")
-        != RELEASE_APPROVER_PUBLIC_KEY_SPKI_DER_BASE64
-        or key.get("expected_public_key_spki_sha256")
-        != RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256
-    ):
-        blockers.append("external Ed25519 key differs from Android's pinned approver")
+    try:
+        validate_public_approval_binding(policy)
+    except ApprovalError as error:
+        blockers.append(str(error))
     try:
         _validate_environment_policy(environment)
     except ApprovalError as error:
@@ -989,6 +1004,7 @@ def _openssl(arguments: list[str], *, input_bytes: bytes | None = None, pass_fds
 
 
 def sign_ed25519(message: bytes, policy: Mapping[str, Any], environment: Mapping[str, str]) -> dict[str, str]:
+    validate_public_approval_binding(policy)
     encoded = environment.get(KEY_ENV_NAME)
     if environment is os.environ:
         os.environ.pop(KEY_ENV_NAME, None)
@@ -1439,21 +1455,9 @@ def validate_approval(
         if any(value.get(field) != member for field, member in expected_unsigned.items()):
             raise ApprovalError("Android release approval claims differ from Fleet evidence")
     effective_policy = policy or expected_policy()
+    public_der = validate_public_approval_binding(effective_policy)
     key = effective_policy.get("external_ed25519_key")
-    if not isinstance(key, dict):
-        raise ApprovalError("Android release approver key policy is missing")
-    if (
-        key.get("key_id") != RELEASE_APPROVER_KEY_ID
-        or key.get("public_key_spki_der_base64")
-        != RELEASE_APPROVER_PUBLIC_KEY_SPKI_DER_BASE64
-        or key.get("expected_public_key_spki_sha256")
-        != RELEASE_APPROVER_PUBLIC_KEY_SPKI_SHA256
-    ):
-        raise ApprovalError("Android release approver public-key pin differs")
     try:
-        public_der = base64.b64decode(
-            key["public_key_spki_der_base64"], validate=True
-        )
         signature = base64.b64decode(value.get("signatureBase64"), validate=True)
     except (binascii.Error, TypeError, ValueError) as error:
         raise ApprovalError("Android release approval signature is not strict Base64") from error
