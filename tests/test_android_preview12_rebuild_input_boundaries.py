@@ -82,11 +82,11 @@ def test_installed_closure_requires_actual_hex_digest(digest):
 def entry_arguments(module, parent, authority, feed, entry):
     if entry == "prepare":
         names = ("lock_path external_request producer_unsigned_aab producer_source_graph producer_sidecar "
-                 "two_green_receipt approval package_authority ui_authority_receipt toolchain_authority "
+                 "two_green_receipt approval package_authority ui_authority_receipt java_tool_observation installed_closure_receipt "
                  "bundletool upload_certificate dotnet_root java_root android_sdk_root output_dir").split()
         return {**{name: parent / name for name in names}, "authority_root": authority,
                 "owner_feed": feed, "reported_builder_image": "builder@sha256:" + "a" * 64}
-    names = ("workspace two_green_receipt approval package_authority ui_authority_receipt toolchain_authority "
+    names = ("workspace two_green_receipt approval package_authority ui_authority_receipt java_tool_observation installed_closure_receipt "
              "bundletool upload_certificate dotnet_root java_root android_sdk_root build_input_root").split()
     return {**{name: parent / name for name in names}, "lock": ready_lock(),
             "authority_root": authority, "owner_feed": feed}
@@ -196,7 +196,7 @@ def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path,
             expected_offline[variable] = str(supplied)
     if expected_offline:
         offline_consumer(args)
-    for name in ("two_green_receipt", "approval"):
+    for name in ("two_green_receipt", "approval", "java_tool_observation", "installed_closure_receipt"):
         fixture.protected_file(args[name], b'{"TEST_ONLY":true}\n')
     graph = json.dumps(fixture.graph(module)).encode()
     fixture.protected_file(tmp_path / "producer-source-graph.json", graph)
@@ -206,6 +206,8 @@ def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path,
         assert kwargs["env"]["CHUMMER_INTERNAL_PHONE_BETA_PACKAGE_FEED"] == str(feed)
         assert Path(kwargs["env"]["CHUMMER_INTERNAL_PHONE_BETA_PACKAGE_FEED"]).parent == args["authority_root"]
         assert kwargs["env"]["CHUMMER_ANDROID_RELEASE_PACKAGE_AUTHORITY"] == str(args["package_authority"])
+        assert kwargs["env"]["CHUMMER_ANDROID_RELEASE_TOOLCHAIN_AUTHORITY"] == str(args["java_tool_observation"])
+        assert str(args["installed_closure_receipt"]) not in kwargs["env"].values()
         assert {key: value for key, value in kwargs["env"].items() if "OFFLINE" in key} == expected_offline
         assert kwargs["env"]["NUGET_PACKAGES"] == str(args["build_input_root"] / "nuget-packages")
         assert kwargs["cwd"] == args["workspace"] / "chummer-android"
@@ -225,7 +227,7 @@ def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path,
 @pytest.mark.parametrize("kind", ["NuGet", "AAR"])
 @pytest.mark.parametrize("attack", ["empty", "dot", "relative", "missing", "file", "linked", "ancestor-link",
     "cycle", "parent-alias", "unsafe", "oversized", "unowned", "writable", "authority_root", "owner_feed",
-    "package_authority", "ui_authority_receipt", "toolchain_authority", "dotnet_root", "java_root",
+    "package_authority", "ui_authority_receipt", "java_tool_observation", "installed_closure_receipt", "dotnet_root", "java_root",
     "android_sdk_root", "generated", "workspace", "ancestor", "root-alias",
     "two_green_receipt", "approval", "bundletool", "upload_certificate"])
 def test_offline_feed_rejected_before_any_side_effect(tmp_path, monkeypatch, entry, kind, attack):
@@ -489,7 +491,7 @@ def prepare_arguments(tmp_path, lock):
     return dict(lock_path=lock_path, external_request=missing, producer_unsigned_aab=missing,
         producer_source_graph=missing, producer_sidecar=missing, two_green_receipt=missing,
         approval=missing, package_authority=missing, authority_root=authority, owner_feed=feed,
-        ui_authority_receipt=missing, toolchain_authority=missing, bundletool=missing,
+        ui_authority_receipt=missing, java_tool_observation=missing, installed_closure_receipt=missing, bundletool=missing,
         upload_certificate=missing, dotnet_root=missing, java_root=missing, android_sdk_root=missing,
         output_dir=tmp_path / "output", reported_builder_image=BUILDER)
 
@@ -653,7 +655,11 @@ def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(
     inputs.mkdir(mode=0o700)
     _, _, paths, _ = handoff_inputs(fleet, inputs)
     lock = configured()
+    observation = protected_file(tmp_path / "java-observation.json", b'{"TEST_ONLY_observation":true}\n')
+    inventory = protected_file(tmp_path / "installed-inventory.json", b'{"TEST_ONLY_inventory":true}\n')
+    lock["toolchain"]["installed_closure_receipt_sha256"] = hashlib.sha256(inventory.read_bytes()).hexdigest()
     args = prepare_arguments(tmp_path, lock)
+    args.update(java_tool_observation=observation, installed_closure_receipt=inventory)
     if offline_nuget:
         args["offline_nuget_feed"] = tmp_path / "offline-packages"
         args["offline_nuget_feed"].mkdir(mode=0o700)
@@ -686,20 +692,27 @@ def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(
     monkeypatch.setattr(fleet, "checkout_source_graph" if offline else "checkout_source_graph_from_bundles", forbidden)
     consumer = SimpleNamespace(VERIFY=SimpleNamespace(verify_release_eligibility=lambda *a, **k: {
         "sourceCommit": lock["android_authority"]["commit"], "sourceTree": lock["android_authority"]["tree"]}),
-        _sidecar_claims=lambda *a: {})
+        _sidecar_claims=lambda *a: {},
+        _load_trusted_java_toolchain=lambda path: {
+            "observationSha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "tools": {"java": args["java_root"] / "bin/java"}, "dotnet": args["dotnet_root"] / "dotnet"})
     monkeypatch.setattr(fleet, "validate_android_consumer", lambda *a: consumer)
     monkeypatch.setattr(fleet, "_require_offline_nuget_consumer", lambda *a: events.append("bound-offline-consumer"))
     monkeypatch.setattr(fleet, "_require_offline_aar_consumer", lambda *a: events.append("bound-offline-aar-consumer"))
     def toolchain(*a, **k):
         events.append("unsigned-toolchain-model")
         assert a[0]["toolchain"]["signer_image"] is None
+        assert a[5] == inventory and a[5] != observation
         return {"closureSha256": "f" * 64}
     monkeypatch.setattr(fleet, "verify_unsigned_toolchain", toolchain)
     def rebuild(*a, **k):
         events.append("modeled-unsigned-rebuild")
         # The last positional input is the disposable build-input directory,
         # not the preceding admitted Android SDK root.
-        assert a[-1].name == "build-input" and len(a) == 15
+        assert a[-1].name == "build-input" and len(a) == 16
+        assert a[8:10] == (observation, inventory)
+        captured = k.pop("toolchain_inputs")
+        captured.assert_exact(inventory, observation)
         assert k == {"runner": forbidden, "offline_nuget_feed": args.get("offline_nuget_feed"),
                      "offline_aar_feed": args.get("offline_aar_feed")}
         a[-1].mkdir(mode=0o700)

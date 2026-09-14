@@ -25,9 +25,13 @@ signing. It treats these as different artifacts:
 The v1 external-signer response does not replace Android v2. Fleet audit v3 is
 never presented to Android as release authority.
 
-Current consumer tests require `CHUMMER_ANDROID_CURRENT_ROOT` pointing to the
-exact clean qualified checkout. The separate original-receipt integration also
-requires `CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT`: the unchanged qualified
+Historical helper checks in `test_android_preview12_external_rebuilder.py` and
+`test_android_preview12_preserved_validation.py` still read
+`CHUMMER_ANDROID_CURRENT_ROOT`; despite that name, those suites require the exact
+clean 8ea0 checkout pinned by the external lock, not current d4e.
+The historical `real_v2_consumer` and `current_receipt_consumer` suites instead
+read `CHUMMER_ANDROID_HISTORICAL_BUILDER_ROOT`. The latter additionally requires
+`CHUMMER_ANDROID_HISTORICAL_BUILDER_TWO_GREEN_RECEIPT`: the unchanged qualified
 TwoGreen v3 receipt from hosted workflow `34723623558`, artifact `10306679223`.
 The receipt file SHA-256 is
 `ce610801b27a7b5942c462ce5d10b2e6a3cb230bf4e29924979e37f706e1119b`;
@@ -47,9 +51,39 @@ synthetic artifact and qualification claims, not release qualification.
 `prepare-rebuild` accepts no keystore, password, bearer, or private-key
 argument. It checks out the complete source graph, binds the exact
 .NET 10.0.110, JDK 17.0.20.1, Android API/build-tools 36 closures, the exact
-bundletool bytes, the installed toolchain-authority receipt, and the declared
-builder/signer image identities. It runs the Android unsigned build and
+bundletool bytes, the separate installed-closure receipt, and the declared
+builder image identity. Downstream signer configuration remains a separate gate.
+It runs the Android unsigned build and
 requires its AAB digest to equal the producer.
+
+The two mandatory inputs are `--installed-closure-receipt` (Fleet's
+lock-digest-bound installed inventory) and `--java-tool-observation` (Android's
+canonical `chummer.android.local-unsigned-toolchain-observation/v1` file).
+The ambiguous former `--toolchain-authority` option is not accepted; neither
+input defaults to the other. Only the observation reaches Android's existing
+`CHUMMER_ANDROID_RELEASE_TOOLCHAIN_AUTHORITY` environment variable. The installed
+receipt is used only for Fleet's closure check.
+
+Preparation captures both canonical owner-only paths, file identities and byte
+digests before staging. Same-path/inode inputs are rejected. The exact bound
+Android loader validates the observation and its tool roots; changes, including
+identical-byte file replacement, fail around validation, before/after the build,
+and before handoff publication. These snapshots are local preparation checks,
+not immutable runtime custody. The unchanged seven-file handoff binds the
+installed receipt through its lock and toolchain closure, and the observation's
+tools through those measured trees; it does **not** transport a new observation
+byte digest or an eighth file. Protected validation independently preserves and
+revalidates its own separate observation and installed receipt.
+
+The dedicated separate-input tests optionally use
+`CHUMMER_ANDROID_CURRENT_BUILDER_ROOT` at exact Android d4e9116 and the original
+receipt via `CHUMMER_ANDROID_CURRENT_BUILDER_TWO_GREEN_RECEIPT`. Actual-loader
+negative tests reject inventory as an observation; preparation tests model SDK
+execution and cannot establish an offline build. This plumbing change neither
+repins the historical checked-in lock nor qualifies/activates SDK111. Actual
+installed closure, admitted immutable image/controller, complete offline source
+and package inputs, protected approval and real deterministic rebuild remain
+required.
 
 Its local handoff explicitly says:
 
