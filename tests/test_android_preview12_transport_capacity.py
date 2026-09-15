@@ -17,13 +17,13 @@ def resize_metadata(case, row, size):
     case.manifest.write_text(json.dumps(case.rows))
 
 
-@pytest.mark.parametrize('size', [512 * 1024**2 + 1, 1024 * 1024**2])
+@pytest.mark.parametrize('size', [1024**3 + 1, 5 * 1024**3])
 def test_product_bundle_metadata_accepts_bounded_complete_history_size(bundles, size):
     row = bundles.rows['chummer6-hub']
     resize_metadata(bundles, row, size)
     parsed = fleet._offline_manifest(bundles.manifest, bundles.workspace)
     assert parsed['chummer6-hub'][1].st_size == size
-    assert fleet.OFFLINE_BUNDLE_BYTES == 1024 * 1024**2
+    assert fleet.OFFLINE_BUNDLE_BYTES == 5 * 1024**3
 
 
 def test_product_bundle_metadata_still_rejects_one_byte_over_limit(bundles):
@@ -34,13 +34,12 @@ def test_product_bundle_metadata_still_rejects_one_byte_over_limit(bundles):
 
 def test_product_total_accepts_exact_ceiling_and_rejects_next_byte(bundles):
     rows = list(bundles.rows.values())
-    remainder = sum(row['size_bytes'] for row in rows[3:])
+    remainder = sum(row['size_bytes'] for row in rows[2:])
     resize_metadata(bundles, rows[0], fleet.OFFLINE_BUNDLE_BYTES)
-    resize_metadata(bundles, rows[1], fleet.OFFLINE_BUNDLE_BYTES)
-    resize_metadata(bundles, rows[2], fleet.OFFLINE_BUNDLE_BYTES - remainder)
+    resize_metadata(bundles, rows[1], fleet.OFFLINE_TOTAL_BUNDLE_BYTES - fleet.OFFLINE_BUNDLE_BYTES - remainder)
     parsed = fleet._offline_manifest(bundles.manifest, bundles.workspace)
-    assert sum(row[1].st_size for row in parsed.values()) == 3 * 1024**3
-    resize_metadata(bundles, rows[2], rows[2]['size_bytes'] + 1)
+    assert sum(row[1].st_size for row in parsed.values()) == 6 * 1024**3
+    resize_metadata(bundles, rows[1], rows[1]['size_bytes'] + 1)
     with pytest.raises(fleet.RebuilderError, match='inventory exceeds its byte limit'):
         fleet._offline_manifest(bundles.manifest, bundles.workspace)
 

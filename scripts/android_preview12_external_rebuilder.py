@@ -97,10 +97,11 @@ REVISION_VARIABLES = {
 # Transport limits only. Pack/object expansion and checkout disk usage still
 # require an external filesystem quota; these do not bound expanded source.
 OFFLINE_MANIFEST_BYTES = 64 * 1024
-# Complete selected Hub history exceeds the former 512-MiB transport ceiling.
-# These remain finite, streamed input bounds, not expanded-source disk admission.
-OFFLINE_BUNDLE_BYTES = 1024 * 1024 * 1024
-OFFLINE_TOTAL_BUNDLE_BYTES = 3 * 1024 * 1024 * 1024
+# Selected Hub history occupies about 4.47 GB of local compressed Git objects.
+# Export representation may differ: retain finite streamed limits and reject
+# overflow rather than treating that planning measurement as a guaranteed bound.
+OFFLINE_BUNDLE_BYTES = 5 * 1024 * 1024 * 1024
+OFFLINE_TOTAL_BUNDLE_BYTES = 6 * 1024 * 1024 * 1024
 # Test-oracle custody has a separate scope. Do not widen it when admitting a
 # larger product-repository bundle (including its historical Git objects).
 OFFLINE_ORACLE_FILE_BYTES = 512 * 1024 * 1024
