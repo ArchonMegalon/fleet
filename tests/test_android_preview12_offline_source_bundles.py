@@ -97,7 +97,7 @@ def test_complete_eight_repo_graph_retains_ancestry_and_uses_only_local_bounded_
     roots = materialize(bundles)
     assert set(roots) == set(fleet.REPOSITORIES)
     calls = list(git_calls)
-    assert len(calls) == 8 * 12  # Every importer and shared byte/graph validator call is observable.
+    assert len(calls) == 8 * 18  # Includes frozen-attribute checks and three streamed regular files per repo.
     for command, kwargs in calls:
         assert command[0] == "/usr/bin/git"
         assert not any(value in command for value in ("fetch", "clone", "ls-remote", "push", "pull"))
@@ -371,7 +371,7 @@ def test_post_checkout_tampering_still_reaches_existing_exact_validators(bundles
         result = original(args, **kwargs)
         if not changed and "checkout" in args:
             changed = True
-            root = Path(args[1])
+            root = Path(args[args.index("-C") + 1])
             if attack == "bytes":
                 (root / "package-source.txt").write_text("changed")
                 original(["-C", str(root), "update-index", "--assume-unchanged", "package-source.txt"], timeout=15)
@@ -384,6 +384,83 @@ def test_post_checkout_tampering_still_reaches_existing_exact_validators(bundles
     with pytest.raises(fleet.RebuilderError):
         materialize(bundles)
     assert changed and not bundles.workspace.exists()
+
+
+@pytest.fixture
+def crlf_bundles(bundles, tmp_path):
+    root = tmp_path / "declared-crlf-bundle"
+    root.mkdir()
+    git(root, "init", "--quiet", "--template=")
+    (root / ".gitattributes").write_bytes(b"*.sln text eol=crlf\n*.props text eol=crlf\n")
+    (root / "fixture.sln").write_bytes(b"first\nsecond\n")
+    (root / "fixture.props").write_bytes(b"<Project />\n")
+    git(root, "add", ".")
+    git(root, "commit", "--quiet", "-m", "Real declared checkout representation")
+    commit, tree = git(root, "rev-parse", "HEAD"), git(root, "rev-parse", "HEAD^{tree}")
+    listing = git(root, "ls-tree", "-r", "-z", "--full-tree", commit, binary=True)
+    source = root.parent / "declared-crlf.bundle"
+    git(root, "bundle", "create", "--version=2", str(source), "HEAD")
+    for row in bundles.graph["repositories"]:
+        row.update(commit=commit, tree=tree, tree_sha256=hashlib.sha256(listing).hexdigest())
+        target = bundles.inputs / (row["name"] + ".bundle")
+        shutil.copyfile(source, target)
+        bind_bundle(bundles, row["name"], target)
+    return bundles
+
+
+def test_actual_eight_role_import_accepts_exact_declared_crlf_bytes(crlf_bundles, git_calls):
+    roots = materialize(crlf_bundles)
+    assert set(roots) == set(fleet.REPOSITORIES)
+    for root in roots.values():
+        assert (root / "fixture.sln").read_bytes() == b"first\r\nsecond\r\n"
+        assert (root / "fixture.props").read_bytes() == b"<Project />\r\n"
+    conversions = [command for command, _kwargs in git_calls if "cat-file" in command]
+    assert len(conversions) == 8 * 3
+    assert all("--attr-source=" + crlf_bundles.graph["repositories"][0]["commit"] in command
+               and "--filters" in command for command in conversions)
+
+
+@pytest.mark.parametrize("raw", [b"first\nsecond\n", b"first\r\nsecond\n", b"changed\r\nsecond\r\n"])
+def test_exact_import_rejects_postcheckout_eol_or_content_tampering(crlf_bundles, monkeypatch, raw):
+    original, changed = fleet._offline_git, False
+    def tamper(args, **kwargs):
+        nonlocal changed
+        result = original(args, **kwargs)
+        if not changed and "checkout" in args:
+            changed = True
+            root = Path(args[args.index("-C") + 1])
+            original(["-C", str(root), "update-index", "--assume-unchanged", "fixture.sln"], timeout=15)
+            (root / "fixture.sln").write_bytes(raw)
+        return result
+    monkeypatch.setattr(fleet, "_offline_git", tamper)
+    with pytest.raises(fleet.RebuilderError):
+        materialize(crlf_bundles)
+    assert changed and not crlf_bundles.workspace.exists()
+
+
+@pytest.mark.parametrize("attack", ["info-attributes", "filter-config"])
+def test_import_rejects_checkout_override_before_any_checkout(crlf_bundles, monkeypatch, attack):
+    original, changed, checkouts = fleet._offline_git, False, []
+    sentinel = crlf_bundles.workspace.parent / "filter-must-not-execute"
+    def inject(args, **kwargs):
+        nonlocal changed
+        if "checkout" in args:
+            checkouts.append(args)
+        result = original(args, **kwargs)
+        if not changed and "remote" in args and "add" in args:
+            changed = True
+            root = Path(args[args.index("-C") + 1])
+            if attack == "info-attributes":
+                (root / ".git/info/attributes").write_bytes(b"* -text\n")
+            else:
+                original(["-C", str(root), "config", "filter.evil.smudge",
+                          "/usr/bin/touch " + str(sentinel)], timeout=15)
+        return result
+    monkeypatch.setattr(fleet, "_offline_git", inject)
+    with pytest.raises(fleet.RebuilderError):
+        materialize(crlf_bundles)
+    assert changed and checkouts == [] and not sentinel.exists()
+    assert not crlf_bundles.workspace.exists()
 
 
 def test_frozen_ui_style_host_absolute_link_is_rejected_without_normalizing_bytes(bundles, tmp_path):

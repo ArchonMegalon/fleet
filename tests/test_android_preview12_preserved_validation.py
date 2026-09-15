@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import stat
 import subprocess
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -199,8 +200,129 @@ def test_preserved_git_blob_streams_beyond_eight_megabytes(fleet, tmp_path, moun
     assert len(sizes) >= 20 and max(sizes) == 1024 * 1024
 
 
+def crlf_repository(tmp_path):
+    root, _ = repository(tmp_path)
+    protected(root / ".gitattributes", b"*.sln text eol=crlf\n*.props text eol=crlf\n")
+    protected(root / "fixture.sln", b"first\nsecond\n")
+    protected(root / "fixture.props", b"<Project />\n")
+    nested = root / "nested"
+    nested.mkdir()
+    protected(nested / ".gitattributes", b"*.txt text eol=crlf\n")
+    protected(nested / "fixture.txt", b"nested\n")
+    git(root, "add", ".")
+    git(root, "commit", "--quiet", "-m", "Declared checkout representations")
+    # Re-materialize this newly owned fixture through real Git, not Python EOL conversion.
+    for relative in ("fixture.sln", "fixture.props", "nested/fixture.txt"):
+        (root / relative).unlink()
+    git(root, "checkout-index", "--force", "--all", "--index")
+    return root, git(root, "rev-parse", "HEAD")
+
+
+def test_exact_declared_crlf_checkout_passes_and_remains_unmodified(fleet, tmp_path, mount_model):
+    root, commit = crlf_repository(tmp_path)
+    paths = [root / "fixture.sln", root / "fixture.props", root / "nested/fixture.txt"]
+    before = [path.read_bytes() for path in paths]
+    assert before == [b"first\r\nsecond\r\n", b"<Project />\r\n", b"nested\r\n"]
+    fleet._preserved_repository_bytes(root, commit)
+    assert [path.read_bytes() for path in paths] == before
+
+
+@pytest.mark.parametrize("raw", [b"first\nsecond\n", b"first\r\nsecond\n", b"changed\r\nsecond\r\n"])
+def test_alternate_eol_or_content_fails_even_with_hidden_index_drift(fleet, tmp_path, mount_model, raw):
+    root, commit = crlf_repository(tmp_path)
+    git(root, "update-index", "--assume-unchanged", "fixture.sln")
+    (root / "fixture.sln").write_bytes(raw)
+    assert git(root, "status", "--porcelain") == ""
+    with pytest.raises(fleet.RebuilderError):
+        fleet._preserved_repository_bytes(root, commit)
+
+
+def test_real_attr_source_uses_admitted_tree_not_live_attributes_or_index(fleet, tmp_path, mount_model):
+    root, commit = crlf_repository(tmp_path)
+    prescribed = (root / "fixture.sln").read_bytes()
+    blob = git(root, "rev-parse", commit + ":fixture.sln")
+    # Poison the current attribute/index view while retaining the original admitted commit.
+    (root / ".gitattributes").write_bytes(b"* -text\n")
+    git(root, "add", ".gitattributes")
+    expected = fleet._expected_checkout_digest(root, commit, "fixture.sln", blob,
+                                               size=len(prescribed), timeout=15)
+    assert expected == hashlib.sha256(prescribed).hexdigest()
+    with pytest.raises(fleet.RebuilderError):
+        fleet._preserved_repository_bytes(root, commit)
+
+
+@pytest.mark.parametrize("attack", ["info-attributes", "untracked-attributes", "filter-config", "named-filter"])
+def test_attribute_overrides_and_external_filters_fail_before_conversion(
+    fleet, tmp_path, mount_model, monkeypatch, attack,
+):
+    root, commit = crlf_repository(tmp_path)
+    sentinel = tmp_path / "filter-must-not-execute"
+    if attack == "info-attributes":
+        protected(root / ".git/info/attributes", b"* -text\n")
+    elif attack == "untracked-attributes":
+        (root / "untracked").mkdir()
+        protected(root / "untracked/.gitattributes", b"* -text\n")
+    elif attack == "filter-config":
+        (root / ".gitattributes").write_bytes(b"*.sln filter=evil\n")
+        git(root, "add", ".gitattributes")
+        git(root, "commit", "--quiet", "-m", "Select forbidden helper")
+        commit = git(root, "rev-parse", "HEAD")
+        git(root, "config", "filter.evil.smudge", "/usr/bin/touch " + str(sentinel))
+    else:
+        (root / ".gitattributes").write_bytes(b"*.sln filter=evil\n")
+        git(root, "add", ".gitattributes")
+        git(root, "commit", "--quiet", "-m", "Unsupported named checkout filter")
+        commit = git(root, "rev-parse", "HEAD")
+    original, conversions = subprocess.Popen, []
+    def observe(command, **kwargs):
+        if "cat-file" in command:
+            conversions.append(command)
+        return original(command, **kwargs)
+    monkeypatch.setattr(subprocess, "Popen", observe)
+    with pytest.raises(fleet.RebuilderError):
+        fleet._preserved_repository_bytes(root, commit)
+    assert conversions == [] and not sentinel.exists()
+
+
+def test_ambient_attribute_and_filter_environment_cannot_change_expected_bytes(
+    fleet, tmp_path, mount_model, monkeypatch,
+):
+    root, commit = crlf_repository(tmp_path)
+    sentinel = tmp_path / "ambient-filter-must-not-execute"
+    config = tmp_path / "ambient-config"
+    config.write_text("[filter \"evil\"]\nsmudge = /usr/bin/touch " + str(sentinel) + "\n")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.attributesFile")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", str(config))
+    monkeypatch.setenv("GIT_ATTR_SOURCE", "0" * 40)
+    monkeypatch.setenv("GIT_INDEX_FILE", str(tmp_path / "untrusted-index"))
+    fleet._preserved_repository_bytes(root, commit)
+    assert not sentinel.exists() and not (tmp_path / "untrusted-index").exists()
+
+
+def test_small_exact_checkout_timing_sample(fleet, tmp_path, mount_model, record_property):
+    """Bounded local fixture measurement, not a full Core runtime estimate."""
+    root, _ = repository(tmp_path)
+    protected(root / ".gitattributes", b"*.txt text eol=crlf\n")
+    for index in range(197):
+        protected(root / ("sample-%03d.txt" % index), b"small\nexact\nfixture\n")
+    git(root, "add", ".")
+    git(root, "commit", "--quiet", "-m", "Two hundred small fixture files")
+    for index in range(197):
+        (root / ("sample-%03d.txt" % index)).unlink()
+    git(root, "checkout-index", "--force", "--all", "--index")
+    commit = git(root, "rev-parse", "HEAD")
+    started = time.monotonic()
+    fleet._preserved_repository_bytes(root, commit)
+    elapsed = time.monotonic() - started
+    record_property("exactCheckoutFileCount", 200)
+    record_property("exactCheckoutElapsedSeconds", elapsed)
+
+
 @pytest.mark.parametrize("relative", ["objects/info/alternates", "objects/info/http-alternates", "commondir",
-                                       "gitdir", "shallow", "worktrees", "modules", "info/grafts", "refs/replace"])
+                                       "gitdir", "shallow", "worktrees", "modules", "info/grafts", "refs/replace",
+                                       "info/attributes"])
 def test_external_git_storage_rejected_before_any_git_execution(fleet, tmp_path, mount_model, monkeypatch, relative):
     root, commit = repository(tmp_path)
     path = root / ".git" / relative

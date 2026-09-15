@@ -484,10 +484,13 @@ def _git(runner: Callable[..., subprocess.CompletedProcess], arguments: list[str
     environment = {
         "PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C", "HOME": "/tmp",
         "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_NO_REPLACE_OBJECTS": "1",
+        "GIT_ATTR_NOSYSTEM": "1",
         "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "/bin/false",
     }
     completed = runner(
-        ["/usr/bin/git", "-c", "protocol.allow=never", "-c", "protocol.https.allow=always", *arguments],
+        ["/usr/bin/git", "-c", "protocol.allow=never", "-c", "protocol.https.allow=always",
+         "-c", "core.attributesFile=/dev/null", "-c", "core.autocrlf=false", "-c", "core.eol=lf",
+         *arguments],
         cwd=cwd, env=environment, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         timeout=timeout, text=not binary,
     )
@@ -554,7 +557,19 @@ def _verify_source_checkout_graph(graph: Mapping[str, Any], workspace: Path,
 
 
 def _offline_git(arguments: list[str], *, timeout: int, binary: bool = False) -> bytes | str:
-    """Local Git only, with bounded capture and content-free failures.
+    """Capture bounded Git metadata; source contents use the same stream pump."""
+    output = bytearray()
+    _offline_git_stream(arguments, timeout=timeout, output_limit=OFFLINE_GIT_OUTPUT_BYTES,
+                        consume=output.extend)
+    try:
+        return bytes(output) if binary else output.decode("utf-8", errors="strict").strip()
+    except UnicodeDecodeError:
+        raise RebuilderError("offline Git operation failed") from None
+
+
+def _offline_git_stream(arguments: list[str], *, timeout: int, output_limit: int,
+                        consume: Callable[[bytes], None]) -> int:
+    """Local Git only, bounded streaming and content-free failures.
 
     Use Popen here so output is bounded while the process runs, not after a
     potentially unlimited subprocess.run(capture_output=True) allocation.
@@ -566,12 +581,12 @@ def _offline_git(arguments: list[str], *, timeout: int, binary: bool = False) ->
         "GIT_ALLOW_PROTOCOL": "", "GIT_PROTOCOL_FROM_USER": "0",
     }
     command = ["/usr/bin/git", "-c", "protocol.allow=never", "-c", "core.hooksPath=/dev/null",
-               "-c", "core.attributesFile=/dev/null", "-c", "core.autocrlf=false",
+               "-c", "core.attributesFile=/dev/null", "-c", "core.autocrlf=false", "-c", "core.eol=lf",
                "-c", "init.templateDir=", "-c", "gc.auto=0", "-c", "maintenance.auto=false",
                *arguments]
     process, leader_reserved = None, False
     try:
-        if type(timeout) is not int or timeout < 1:
+        if type(timeout) is not int or timeout < 1 or type(output_limit) is not int or output_limit < 0:
             raise RebuilderError("offline Git timeout is invalid")
         deadline = time.monotonic() + min(timeout, OFFLINE_GIT_TIMEOUT_SECONDS)
         process = subprocess.Popen(command, env=environment, stdin=subprocess.DEVNULL, umask=0o077,
@@ -579,7 +594,7 @@ def _offline_git(arguments: list[str], *, timeout: int, binary: bool = False) ->
                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         leader_reserved = True
         assert process.stdout is not None
-        output = bytearray()
+        consumed = 0
         with selectors.DefaultSelector() as selector:
             selector.register(process.stdout, selectors.EVENT_READ)
             while selector.get_map():
@@ -587,13 +602,14 @@ def _offline_git(arguments: list[str], *, timeout: int, binary: bool = False) ->
                 if remaining <= 0:
                     raise RebuilderError("offline Git operation exceeded its time limit")
                 for key, _ in selector.select(min(remaining, 1)):
-                    chunk = os.read(key.fd, min(64 * 1024, OFFLINE_GIT_OUTPUT_BYTES + 1 - len(output)))
+                    chunk = os.read(key.fd, min(64 * 1024, output_limit + 1 - consumed))
                     if not chunk:
                         selector.unregister(key.fileobj)
                     else:
-                        output.extend(chunk)
-                        if len(output) > OFFLINE_GIT_OUTPUT_BYTES:
+                        consumed += len(chunk)
+                        if consumed > output_limit:
                             raise RebuilderError("offline Git operation exceeded its output limit")
+                        consume(chunk)
         # Observe exit without releasing the leader PID. Cleanup can then
         # signal only our still-owned process group, before wait() reaps it.
         while True:
@@ -610,7 +626,7 @@ def _offline_git(arguments: list[str], *, timeout: int, binary: bool = False) ->
             time.sleep(min(remaining, 0.01))
         if status.si_code != os.CLD_EXITED or status.si_status != 0:
             raise RebuilderError("offline Git operation failed")
-        return bytes(output) if binary else output.decode("utf-8", errors="strict").strip()
+        return consumed
     except (OSError, ValueError, subprocess.SubprocessError):
         raise RebuilderError("offline Git operation failed") from None
     finally:
@@ -821,7 +837,10 @@ def checkout_source_graph_from_bundles(graph: Mapping[str, Any], workspace: Path
             _offline_git([*command, "fsck", "--full", "--strict", "--no-reflogs", rows[name]["commit"]], timeout=timeout)
             _offline_git([*command, "remote", "add", "origin", repository], timeout=timeout)
             _preserved_git_storage(root, repository)
-            _offline_git([*command, "checkout", "--quiet", "--detach", rows[name]["commit"]], timeout=timeout)
+            expected, _ = _preserved_git_inventory(root, rows[name]["commit"], _offline_git, timeout)
+            _preserved_checkout_attributes(root, rows[name]["commit"], expected, _offline_git, timeout)
+            _offline_git(["--attr-source=" + rows[name]["commit"], *command, "checkout", "--quiet",
+                          "--detach", rows[name]["commit"]], timeout=timeout)
         roots = _verify_source_checkout_graph(graph, workspace, _offline_git, timeout=timeout)
         for name, root in roots.items():
             _preserved_repository_bytes(root, rows[name]["commit"], git=_offline_git,
@@ -1335,7 +1354,7 @@ def _preserved_git_storage(root: Path, repository: str | None = None) -> None:
     if not (root / ".git").is_dir() or (root / ".git").is_symlink():
         raise RebuilderError("preserved source requires independent contained Git storage")
     for relative in ("objects/info/alternates", "objects/info/http-alternates", "commondir", "gitdir",
-                     "shallow", "worktrees", "modules", "info/grafts", "refs/replace"):
+                     "shallow", "worktrees", "modules", "info/grafts", "refs/replace", "info/attributes"):
         path = root / ".git" / relative
         if path.exists() or path.is_symlink():
             raise RebuilderError("preserved Git storage references an external or replacement authority")
@@ -1375,14 +1394,13 @@ def _preserved_git_storage(root: Path, repository: str | None = None) -> None:
         raise RebuilderError("preserved Git config is not an exact helper-free clone") from None
 
 
-def _preserved_repository_bytes(root: Path, commit: str, *, git: Callable[..., bytes | str] | None = None,
-                                owner_uid: int = 0, timeout: int = 30, repository: str | None = None) -> None:
-    """Bind all tracked source bytes, including assume-unchanged/ignored drift."""
-    _preserved_git_storage(root, repository)
-    operation = git or (lambda args, **kwargs: _git(subprocess.run, args, **kwargs))
+def _preserved_git_inventory(root: Path, commit: str, operation: Callable[..., bytes | str],
+                              timeout: int) -> tuple[dict[str, tuple[str, str]], set[str]]:
+    if not isinstance(commit, str) or not HEX40.fullmatch(commit):
+        raise RebuilderError("preserved source commit is not exact")
     listing = operation(["-C", os.fspath(root), "ls-tree", "-r", "-z", "--full-tree", commit],
                         timeout=timeout, binary=True)
-    if not listing or len(listing) > 8 * 1024 * 1024:
+    if not isinstance(listing, bytes) or not listing or len(listing) > 8 * 1024 * 1024:
         raise RebuilderError("preserved source Git inventory is missing or oversized")
     expected, parents = {}, set()
     for entry in listing.split(b"\0"):
@@ -1401,7 +1419,62 @@ def _preserved_repository_bytes(root: Path, commit: str, *, git: Callable[..., b
             raise RebuilderError("preserved source Git inventory is not exact")
         expected[relative] = (mode, blob)
         parents.update(str(parent) for parent in path.parents if str(parent) != ".")
+    return expected, parents
+
+
+def _preserved_checkout_attributes(root: Path, commit: str, expected: Mapping[str, tuple[str, str]],
+                                    operation: Callable[..., bytes | str], timeout: int) -> None:
+    """Only committed built-in checkout transformations, never filter helpers.
+
+    --attr-source is a required Git capability, not a silently ignored config
+    variable. Both attribute lookup and conversion use the exact admitted tree.
+    """
+    paths = list(expected)
+    for relative, (mode, _blob) in expected.items():
+        if PurePosixPath(relative).name == ".gitattributes" and mode == "120000":
+            raise RebuilderError("preserved source has an unsupported attribute link")
+    for offset in range(0, len(paths), 128):
+        batch = paths[offset:offset + 128]
+        raw = operation(["--attr-source=" + commit, "-C", os.fspath(root), "check-attr",
+                         "--source=" + commit, "-z", "filter", "--", *batch], timeout=timeout, binary=True)
+        if not isinstance(raw, bytes) or len(raw) > OFFLINE_GIT_OUTPUT_BYTES or not raw.endswith(b"\0"):
+            raise RebuilderError("preserved checkout attributes are not exact")
+        fields = raw[:-1].split(b"\0")
+        if len(fields) != 3 * len(batch):
+            raise RebuilderError("preserved checkout attributes are not exact")
+        for index, relative in enumerate(batch):
+            path, attribute, value = fields[3 * index:3 * index + 3]
+            if path != relative.encode("utf-8") or attribute != b"filter" \
+                    or value not in (b"unspecified", b"unset"):
+                raise RebuilderError("preserved source requires an unsupported checkout filter")
+
+
+def _expected_checkout_digest(root: Path, commit: str, relative: str, blob: str, *,
+                               size: int, timeout: int) -> str:
+    """Stream exactly the declared checkout representation; do not normalize input.
+
+    The actual file size is a strict output bound, not authority about expected
+    bytes. Too much/too little output fails. Large source files remain streamed
+    rather than being collected under the separate eight-MiB metadata limit.
+    """
+    digest = hashlib.sha256()
+    consumed = _offline_git_stream(
+        ["--attr-source=" + commit, "-C", os.fspath(root), "cat-file", "--filters",
+         "--path=" + relative, blob], timeout=timeout, output_limit=size, consume=digest.update,
+    )
+    if consumed != size:
+        raise RebuilderError("preserved source checkout size differs from Git")
+    return digest.hexdigest()
+
+
+def _preserved_repository_bytes(root: Path, commit: str, *, git: Callable[..., bytes | str] | None = None,
+                                owner_uid: int = 0, timeout: int = 30, repository: str | None = None) -> None:
+    """Bind exact committed checkout bytes, including hidden and EOL-only drift."""
+    _preserved_git_storage(root, repository)
+    operation = git or _offline_git
+    expected, parents = _preserved_git_inventory(root, commit, operation, timeout)
     observed = set()
+    regular = []
     for base, directories, files in os.walk(root, followlinks=False):
         parent = Path(base)
         if parent == root:
@@ -1426,15 +1499,25 @@ def _preserved_repository_bytes(root: Path, commit: str, *, git: Callable[..., b
                 _resolve_tree_link(root, path, os.fsdecode(raw), "preserved source", owner_uid=owner_uid)
                 actual = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw,
                                       usedforsecurity=False).hexdigest()
+                if actual != blob:
+                    raise RebuilderError("preserved source bytes differ from Git")
             else:
                 if mode == "120000" or bool(path.stat().st_mode & 0o111) != (mode == "100755"):
                     raise RebuilderError("preserved source mode differs from Git")
-                actual = _stable_file_digest(path, path.lstat(), "preserved source", git_blob=True)
-            if actual != blob:
-                raise RebuilderError("preserved source bytes differ from Git")
+                regular.append((relative, path, blob, path.lstat()))
             observed.add(relative)
     if observed != set(expected):
         raise RebuilderError("preserved source is incomplete")
+    # Reject untracked attribute overrides/membership before conversion. Compare
+    # tracked attribute files first; conversion never consults their live bytes.
+    _preserved_checkout_attributes(root, commit, expected, operation, timeout)
+    regular.sort(key=lambda row: PurePosixPath(row[0]).name != ".gitattributes")
+    for relative, path, blob, metadata in regular:
+        actual = _stable_file_digest(path, metadata, "preserved source")
+        prescribed = _expected_checkout_digest(root, commit, relative, blob,
+                                                size=metadata.st_size, timeout=timeout)
+        if _file_identity(path.lstat()) != _file_identity(metadata) or actual != prescribed:
+            raise RebuilderError("preserved source bytes differ from Git checkout")
 
 
 class PreservedProtectedValidation:
