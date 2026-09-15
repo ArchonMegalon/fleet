@@ -97,8 +97,14 @@ REVISION_VARIABLES = {
 # Transport limits only. Pack/object expansion and checkout disk usage still
 # require an external filesystem quota; these do not bound expanded source.
 OFFLINE_MANIFEST_BYTES = 64 * 1024
-OFFLINE_BUNDLE_BYTES = 512 * 1024 * 1024
-OFFLINE_TOTAL_BUNDLE_BYTES = 2 * 1024 * 1024 * 1024
+# Complete selected Hub history exceeds the former 512-MiB transport ceiling.
+# These remain finite, streamed input bounds, not expanded-source disk admission.
+OFFLINE_BUNDLE_BYTES = 1024 * 1024 * 1024
+OFFLINE_TOTAL_BUNDLE_BYTES = 3 * 1024 * 1024 * 1024
+# Test-oracle custody has a separate scope. Do not widen it when admitting a
+# larger product-repository bundle (including its historical Git objects).
+OFFLINE_ORACLE_FILE_BYTES = 512 * 1024 * 1024
+OFFLINE_ORACLE_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 OFFLINE_GIT_OUTPUT_BYTES = 8 * 1024 * 1024
 OFFLINE_GIT_TIMEOUT_SECONDS = 900
 
@@ -2410,7 +2416,7 @@ def _oracle_inventory(root: Path) -> dict[str, os.stat_result]:
             entries[path.relative_to(root).as_posix()] = info
             if stat.S_ISREG(info.st_mode):
                 total += info.st_size
-                if info.st_size > OFFLINE_BUNDLE_BYTES or total > OFFLINE_TOTAL_BUNDLE_BYTES:
+                if info.st_size > OFFLINE_ORACLE_FILE_BYTES or total > OFFLINE_ORACLE_TOTAL_BYTES:
                     raise RebuilderError("test oracle bytes exceed transport limits")
     return entries
 
@@ -2474,7 +2480,7 @@ def _stage_test_oracle(module: Any, android: Path, source: Path, destination: Pa
             output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             with output.open("xb") as stream:
                 os.fchmod(stream.fileno(), 0o600)
-                _copy_offline_input(source / relative, info, stream, OFFLINE_BUNDLE_BYTES)
+                _copy_offline_input(source / relative, info, stream, OFFLINE_ORACLE_FILE_BYTES)
         _offline_git(["-C", str(destination), "fsck", "--full", "--strict", "--no-reflogs", commit], timeout=900)
         _offline_git(["-C", str(destination), "remote", "add", "origin", TEST_ORACLE_REPOSITORY], timeout=30)
         _offline_git(["-C", str(destination), "checkout", "--quiet", "--detach", commit], timeout=900)
