@@ -332,7 +332,8 @@ def _binary_ledger_policy(result, options, policy):
             or approval.get('external_ed25519_key', {}).get('configured') is not True:
         raise LaunchError(_ERROR)
     approval_public = issuer.validate_public_approval_binding(approval)
-    ledger = protocol.validate_ledger_policy(policy['replay_protection']['external_ledger'], require_configured=True)
+    ledger = protocol.validate_ledger_policy(
+        policy['replay_protection']['external_ledger'], require_configured=True, binary_signing=True)
     comparison_ledger = protocol.validate_ledger_policy(
         approval['replay_protection']['external_ledger'], require_configured=True)
     if any(ledger[name] == comparison_ledger[name] for name in (
@@ -434,7 +435,8 @@ def prepare(options: LaunchConfig) -> PreparedServer:
         result.app = service.create_app(ledger_policy=ledger, store=store,
             bearer_token_sha256=digest.data.rstrip(b'\n').decode('ascii'), sign_receipt=result.sign_receipt,
             maximum_in_flight=options.maximum_in_flight, body_timeout_seconds=options.body_timeout,
-            trusted_proxy_addresses=options.trusted_proxy_addresses)
+            trusted_proxy_addresses=options.trusted_proxy_addresses,
+            binary_signing=options.ledger_lane == 'binary-signing')
         result.app.add_middleware(_InputFence, inputs=result)
         result.config = uvicorn.Config(result.app, host=options.bind_address, port=443, workers=1,
             interface='asgi3', loop='asyncio', http=_BoundedHttp, ws='none', lifespan='on', reload=False,

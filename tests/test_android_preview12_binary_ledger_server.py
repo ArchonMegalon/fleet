@@ -105,6 +105,24 @@ def test_binary_startup_composes_existing_store_protocol_tls_without_running(bin
     assert policy['credential_input'] == 'ANDROID_PREVIEW12_BINARY_SIGNING_LEDGER_BEARER_TOKEN'
 
 
+def test_owner_controller_source_is_explicit_binary_only(binary, monkeypatch):
+    _, policy, approval, config, _ = binary
+    policy['replay_protection']['external_ledger']['credential_source'] = protocol.BINARY_CONTROLLER_CREDENTIAL_SOURCE
+    reseal(policy, approval, config)
+    with launcher.prepare(config) as prepared:
+        assert not prepared.server.started
+    approval['replay_protection']['external_ledger']['credential_source'] = protocol.BINARY_CONTROLLER_CREDENTIAL_SOURCE
+    reseal(policy, approval, config)
+    reject_before_store_and_keys(config, monkeypatch, no_digest=True)
+
+
+def test_default_approval_server_rejects_owner_controller_source(launch, monkeypatch):
+    _, policy, config = launch
+    policy['replay_protection']['external_ledger']['credential_source'] = protocol.BINARY_CONTROLLER_CREDENTIAL_SOURCE
+    write_policy(config.policy, policy)
+    existing.reject_before_credentials(config, monkeypatch)
+
+
 @pytest.mark.parametrize('field,value', [
     ('ledger_lane', 'unknown'), ('ledger_lane', True),
     ('comparison_approval_policy', None), ('comparison_approval_policy', ''),
