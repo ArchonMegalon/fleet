@@ -64,6 +64,34 @@ the optional exact trusted proxy configuration remain owner responsibilities.
 
 ## Lifetime, failure and custody
 
+The strict default remains unchanged: an unarmed `challenge` request stops the
+exporter. A local owner may explicitly call
+`enable_preparation_wait(maximum_seconds)` once, with an integer 1–1800. Its
+fixed monotonic deadline starts at that call, not at each poll. Before arm, the
+existing authenticated empty `challenge` route then returns exactly
+`200 pending\n`, at most 1,801 times. No new route is added. This records only a
+per-export preparation diagnostic; `preparation_observed()` lets the same local
+owner inspect it. It is not authenticated job identity, signing authority, a
+remote arm command or a durable receipt. It never calls the challenge store.
+
+For this opt-in mode, the owner must see a pending request before independently
+calling `enable_protected_job_checks()` and `arm()`. Arm rechecks full custody
+and the original preparation deadline before and after store issuance. Expiry,
+drift, close, repeated enabling or arm failure stops the export; an issue that
+committed before failure remains in the original journal and is not reissued.
+After arm, the original fresh audience replaces pending permanently. The
+preparation timer never changes challenge, token, transfer or signing TTLs.
+
+Only `client.challenge(preparation_wait_seconds=N)` with integer 1–1800 accepts
+pending. Its independent fixed monotonic deadline is checked before and after
+each request; it waits at most one second between successful pending responses,
+with the same 1,801-request cap. Zero/omission stays strict. Unknown bodies,
+404/other status, network errors, lost replies and late audience replies stop
+the client without a retry. Neither side renews a session. These are cooperative
+call-boundary limits: the owner still needs a whole-process deadline for blocked
+DNS, headers, transport or filesystem work. This option does not deploy a
+listener or establish private transport or job supervision.
+
 OIDC freshness is required through initial admission. It is not replayed or
 renewed while an already admitted transfer runs. A separately admitted monotonic
 session limit (default 1,800 seconds, maximum 7,200) and idle limit (default 60,

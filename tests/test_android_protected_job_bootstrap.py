@@ -107,7 +107,8 @@ def model(tmp_path, monkeypatch):
         def __init__(self, own, **kwargs): events.append("entrypoint"); self.own = own
         def run(self, **kwargs):
             events.append("entrypoint.run")
-            assert kwargs == {name: texts[name] for name in ("oidc_request_url", "oidc_request_credential")}
+            assert kwargs == ({name: texts[name] for name in ("oidc_request_url", "oidc_request_credential")}
+                              | {"preparation_wait_seconds": value.get("preparation_wait_seconds", 0)})
             return {"PUBLIC-TEST-modeled-audit": True}
     monkeypatch.setattr(boot.entrypoint, "ProtectedJobEntrypoint", Entry)
     return SimpleNamespace(value=value, path=deployment, save=save, events=events, opened=opened,
@@ -138,6 +139,21 @@ def test_fixed_executable_composes_existing_types_once_after_owner_release(model
 def test_claims_and_import_factories_rejected_before_any_other_input(model, field):
     model.value[field] = True
     with pytest.raises(boot.BootstrapError, match="^" + boot.ERROR + "$"): execute(model)
+    assert model.events == [] and model.opened == [model.path]
+
+
+@pytest.mark.parametrize("seconds", [0, 1, 1800])
+def test_public_preparation_wait_option_passes_only_after_existing_owner_pipe(model, seconds):
+    model.value["preparation_wait_seconds"] = seconds
+    assert execute(model) == {"PUBLIC-TEST-modeled-audit": True}
+    assert model.events[-2:] == ["owner-release", "entrypoint.run"]
+    assert model.clients[0]._failed
+
+
+@pytest.mark.parametrize("seconds", [-1, 1801, True, False, 1.0, None, "1"])
+def test_invalid_preparation_wait_rejects_before_transport_or_secrets(model, seconds):
+    model.value["preparation_wait_seconds"] = seconds
+    with pytest.raises(boot.BootstrapError): execute(model)
     assert model.events == [] and model.opened == [model.path]
 
 

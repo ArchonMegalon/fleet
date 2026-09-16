@@ -31,6 +31,15 @@ BEARER = "PUBLIC-TEST-protected-intake-" + "x" * 40
 sha = lambda raw: hashlib.sha256(raw).hexdigest()
 
 
+def preparation_clock(monkeypatch):
+    """Only intake's monotonic domain is modeled; real journal time is unchanged."""
+    clock = SimpleNamespace(now=intake.time.monotonic())
+    def sleep(seconds): clock.now += seconds
+    monkeypatch.setattr(intake, "time", SimpleNamespace(monotonic=lambda: clock.now,
+                        sleep=sleep, time=intake.time.time))
+    return clock
+
+
 @pytest.fixture
 def model(tmp_path, monkeypatch, request):
     value = builders.model.__wrapped__(tmp_path, monkeypatch)
@@ -157,6 +166,164 @@ def model_mounts(value, monkeypatch):
 def receive(value, client):
     return client.receive(value.flow.tmp_path / "job-intake", lock=value.flow.model.lock,
                           verifier=value.flow.verifier.pins[2], trusted_root=value.flow.verifier.pins[3])
+
+
+def test_strict_unarmed_challenge_still_closes_without_issue(exported):
+    assert exchange(exported, "challenge")[:2] == (409, b"stopped-reconcile\n")
+    assert exported.export._stopped and exported.export._issued is None
+
+
+def test_pending_is_only_a_diagnostic_until_actual_owner_arms(exported):
+    owner = exported.export
+    owner.enable_preparation_wait(1800)
+    assert owner.preparation_observed() is False
+    for _ in range(3):
+        assert exchange(exported, "challenge")[:2] == (200, b"pending\n")
+        assert owner.preparation_observed() is True
+        assert owner._issued is owner._authenticated is None
+        assert not owner._armed and not owner._signing_enabled and not owner._submitted
+    owner.enable_protected_job_checks()
+    owner.arm()
+    issued = owner._issued
+    assert exchange(exported, "challenge")[:2] == (200, issued.audience.encode())
+    assert owner._issued is issued and owner._preparation_polls == 3
+    with pytest.raises(intake.IntakeError): owner.arm()
+    assert owner._issued is issued
+
+
+@pytest.mark.parametrize("seconds", [0, -1, 1801, True, False, 1.0, None, "1"])
+def test_owner_preparation_bounds_fail_closed(exported, seconds):
+    with pytest.raises(intake.IntakeError): exported.export.enable_preparation_wait(seconds)
+    assert exported.export._stopped and exported.export._issued is None
+
+
+@pytest.mark.parametrize("fault", ["double-enable", "arm-before-poll", "late-arm", "closed", "drift", "poll-cap"])
+def test_preparation_cannot_reset_or_arm_stale_diagnostics(exported, monkeypatch, fault):
+    owner = exported.export
+    clock = preparation_clock(monkeypatch)
+    owner.enable_preparation_wait(1)
+    if fault == "double-enable":
+        with pytest.raises(intake.IntakeError): owner.enable_preparation_wait(1)
+    elif fault == "arm-before-poll":
+        with pytest.raises(intake.IntakeError): owner.arm()
+    else:
+        assert exchange(exported, "challenge")[0] == 200
+        if fault == "late-arm": clock.now += 1
+        elif fault == "closed": owner.close()
+        elif fault == "drift": owner._bundle.pin.path.write_bytes(b"changed")
+        else: owner._preparation_polls = intake.MAX_PREPARATION_POLLS
+        if fault == "poll-cap": assert exchange(exported, "challenge")[0] == 409
+        else:
+            with pytest.raises(intake.IntakeError): owner.arm()
+    assert owner._stopped and owner._issued is None
+
+
+def test_preparation_rechecks_deadline_after_full_custody_before_issue(exported, monkeypatch):
+    owner = exported.export
+    clock = preparation_clock(monkeypatch)
+    owner.enable_preparation_wait(1)
+    assert exchange(exported, "challenge")[0] == 200
+    original = owner._session._retained
+    def slow(retained):
+        original(retained)
+        clock.now += 1
+    monkeypatch.setattr(owner._session, "_retained", slow)
+    with pytest.raises(intake.IntakeError): owner.arm()
+    assert owner._issued is None and owner._stopped
+
+
+@pytest.mark.parametrize("fault", ["slow-committed-issue", "lost-committed-issue"])
+def test_committed_issue_failure_latches_arm_and_never_issues_again(exported, monkeypatch, fault):
+    owner = exported.export
+    clock = preparation_clock(monkeypatch)
+    owner.enable_preparation_wait(1)
+    assert exchange(exported, "challenge")[0] == 200
+    original, committed = owner._store.issue, []
+    def issue(policy):
+        issued = original(policy)
+        committed.append(issued)
+        if fault == "lost-committed-issue": raise ConnectionError("PRIVATE post-commit details")
+        clock.now += 1
+        return issued
+    monkeypatch.setattr(owner._store, "issue", issue)
+    with pytest.raises(intake.IntakeError): owner.arm()
+    assert owner._armed and owner._stopped and len(committed) == 1
+    assert owner._store.status(sha(committed[0].audience.encode())) == "pending"
+    with pytest.raises(intake.IntakeError): owner.arm()
+    with pytest.raises(intake.IntakeError): owner.enable_preparation_wait(1)
+    assert exchange(exported, "challenge")[:2] == (409, b"stopped-reconcile\n")
+    assert len(committed) == 1
+
+
+@pytest.mark.parametrize("fault", ["nonempty", "wrong-bearer"])
+def test_preparation_notification_requires_original_empty_authenticated_route(exported, fault):
+    exported.export.enable_preparation_wait(10)
+    def wrong(scope):
+        scope["headers"] = [(k, b"Bearer wrong" if k == b"authorization" else v) for k, v in scope["headers"]]
+    result = exchange(exported, "challenge", b"ready" if fault == "nonempty" else b"",
+                      alter=wrong if fault == "wrong-bearer" else None)
+    assert result[0] != 200
+    assert not exported.export._preparation_observed and exported.export._issued is None
+
+
+def test_client_explicit_wait_polls_only_pending_then_original_audience(exported, monkeypatch):
+    client = connect(exported, monkeypatch)
+    clock = preparation_clock(monkeypatch)
+    exported.export.enable_preparation_wait(10)
+    def advance(seconds):
+        clock.now += seconds
+        assert exported.export.preparation_observed() is True
+        assert exported.export._issued is None
+        exported.export.arm()
+    monkeypatch.setattr(intake.time, "sleep", advance)
+    assert client.challenge(preparation_wait_seconds=5) == exported.export._issued.audience
+    assert exported.seen == ["challenge", "challenge"]
+    assert not client._begun and exported.export._authenticated is None
+
+
+@pytest.mark.parametrize("fault", ["default", "404", "unknown", "lost", "timeout", "late-audience", "closed", "cap", "client-close"])
+def test_pending_error_late_reply_or_timeout_never_retries_or_returns_authority(exported, monkeypatch, fault):
+    client = connect(exported, monkeypatch)
+    clock = preparation_clock(monkeypatch)
+    exported.export.enable_preparation_wait(10)
+    if fault == "lost": exported.lost = "challenge"
+    elif fault == "404": exported.mutate = lambda _, response: setattr(response, "status", 404)
+    elif fault == "unknown": exported.mutate = lambda _, response: setattr(response, "raw", io.BytesIO(b"pending!"))
+    elif fault == "late-audience":
+        def late(_, response):
+            exported.export.arm()
+            response.raw = io.BytesIO(exported.export._issued.audience.encode())
+            clock.now += 1
+        exported.mutate = late
+    elif fault == "closed": exported.export.close()
+    elif fault == "client-close": exported.mutate = lambda *_: client.close()
+    elif fault == "cap":
+        monkeypatch.setattr(intake, "MAX_PREPARATION_POLLS", 2)
+        monkeypatch.setattr(intake.time, "sleep", lambda _: None)
+    with pytest.raises(intake.IntakeError):
+        client.challenge(preparation_wait_seconds=0 if fault == "default" else 1)
+    assert client._failed and not client._begun
+    count = len(exported.seen)
+    assert count == (2 if fault == "cap" else 1)
+    with pytest.raises(intake.IntakeError): client.challenge(preparation_wait_seconds=1)
+    assert len(exported.seen) == count and exported.export._authenticated is None
+
+
+@pytest.mark.parametrize("seconds", [-1, 1801, True, False, 1.0, None, "1"])
+def test_client_wait_bounds_reject_before_http(exported, monkeypatch, seconds):
+    client = connect(exported, monkeypatch)
+    with pytest.raises(intake.IntakeError): client.challenge(preparation_wait_seconds=seconds)
+    assert client._failed and exported.seen == []
+
+
+def test_once_armed_expiry_cannot_return_to_pending_or_renew(exported, monkeypatch):
+    exported.export.enable_preparation_wait(10)
+    assert exchange(exported, "challenge")[0] == 200
+    exported.export.arm()
+    issued = exported.export._issued
+    monkeypatch.setattr(exported.export._controller, "_fresh", lambda _: (_ for _ in ()).throw(ValueError("expired")))
+    assert exchange(exported, "challenge")[:2] == (409, b"stopped-reconcile\n")
+    assert exported.export._issued is issued and exported.export._stopped
 
 
 @pytest.mark.parametrize("model", [None, intake.CHUNK * 2, intake.CHUNK * 2 + 17], indirect=True)

@@ -31,6 +31,7 @@ from scripts import android_workflow_identity as identity
 
 CHUNK = 1024 * 1024
 MAX_CHECKS = 4096
+MAX_PREPARATION_POLLS = 1801
 _ERROR = "protected public intake stopped; do not replay"
 _FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
 
@@ -67,6 +68,8 @@ class PublicCaptureExport:
         self._fds, self._index, self._offset, self._sequence = {}, 0, 0, 0
         self._started = self._last = None
         self._signing_enabled, self._signing_sequence = False, 0
+        self._preparation_deadline = None
+        self._preparation_observed, self._preparation_polls = False, 0
         try:
             _require(type(completed) is rendezvous.ControllerRendezvous)
             self._controller, self._result = completed, completed.completed()
@@ -105,6 +108,8 @@ class PublicCaptureExport:
 
     def _exact(self, *, full=False):
         _require(not self._stopped)
+        if not self._armed:
+            self._preparation_fresh()
         with self._controller._condition:
             self._controller._exact()
             _require(self._controller._state == "complete" and self._controller._result is self._result
@@ -114,19 +119,53 @@ class PublicCaptureExport:
             if full:
                 self._session._retained(self._retained)
                 self._bundle.recheck()
+        if not self._armed:
+            self._preparation_fresh()
         if self._started is not None:
             now = time.monotonic()
             _require(self._started <= self._last <= now
                      and now - self._started < self._maximum and now - self._last < self._idle)
+
+    def _preparation_fresh(self):
+        if self._preparation_deadline is not None:
+            started, deadline = self._preparation_deadline
+            _require(started <= time.monotonic() < deadline)
+
+    def enable_preparation_wait(self, maximum_seconds):
+        """Owner-only opt-in. This timer never issues or extends a challenge."""
+        with self._mutex:
+            try:
+                _require(not self._armed and self._preparation_deadline is None
+                         and type(maximum_seconds) is int and 1 <= maximum_seconds <= 1800)
+                self._exact(full=True)
+                started = time.monotonic()
+                self._preparation_deadline = (started, started + maximum_seconds)
+            except BaseException:
+                self.close()
+                raise IntakeError(_ERROR) from None
+
+    def preparation_observed(self):
+        """Owner-local diagnostic only; NOT job authentication or arm authority."""
+        with self._mutex:
+            try:
+                _require(self._preparation_deadline is not None)
+                self._exact()
+                return self._preparation_observed
+            except BaseException:
+                self.close()
+                raise IntakeError(_ERROR) from None
 
     def arm(self):
         """Owner-only. No HTTP request can issue or renew a challenge."""
         with self._mutex:
             try:
                 _require(not self._armed)
-                self._armed = True
                 self._exact(full=True)
+                _require(self._preparation_deadline is None or self._preparation_observed)
+                self._preparation_fresh()
+                self._armed = True
                 self._issued = self._store.issue(self._policy)
+                self._preparation_fresh()
             except BaseException:
                 self.close()
                 raise IntakeError(_ERROR) from None
@@ -214,7 +253,15 @@ class PublicCaptureExport:
                 self._exact()
                 _require(role == "intake" and type(raw) is bytes)
                 if operation == "challenge" and not raw:
-                    _require(not self._submitted and self._issued is not None)
+                    _require(not self._submitted)
+                    if not self._armed:
+                        _require(self._preparation_deadline is not None
+                                 and self._preparation_polls < MAX_PREPARATION_POLLS)
+                        self._preparation_fresh()
+                        self._preparation_polls += 1
+                        self._preparation_observed = True
+                        return 200, b"pending\n"
+                    _require(self._issued is not None)
                     self._controller._fresh(self._issued)
                     return 200, self._issued.audience.encode("ascii")
                 if operation == "submit":
@@ -397,14 +444,34 @@ class PublicCaptureClient:
             self._failed = True
             raise IntakeError(_ERROR) from None
 
-    def challenge(self):
+    def challenge(self, *, preparation_wait_seconds=0):
+        """Only exact successful pending replies may repeat, with explicit opt-in.
+
+        No request error or lost response is retried. An outer supervisor must
+        still bound stalls inside DNS, transport or local filesystem calls.
+        """
         with self._mutex:
             try:
-                _require(not self._begun)
-                status, raw = self._post("challenge")
-                _require(status == 200 and re.fullmatch(rb"urn:chummer:fleet:workflow-job:"
-                         + self._job.transaction_id.encode() + rb":[0-9a-f]{64}", raw))
-                return raw.decode("ascii")
+                _require(not self._begun and type(preparation_wait_seconds) is int
+                         and 0 <= preparation_wait_seconds <= 1800)
+                started = time.monotonic()
+                deadline = started + preparation_wait_seconds
+                for _ in range(MAX_PREPARATION_POLLS):
+                    if preparation_wait_seconds:
+                        _require(started <= time.monotonic() < deadline)
+                    status, raw = self._post("challenge")
+                    _require(not self._failed and not self._begun)
+                    if preparation_wait_seconds:
+                        _require(started <= time.monotonic() < deadline)
+                    _require(status == 200)
+                    if raw == b"pending\n":
+                        _require(preparation_wait_seconds > 0)
+                        time.sleep(min(1, max(0, deadline - time.monotonic())))
+                        continue
+                    _require(re.fullmatch(rb"urn:chummer:fleet:workflow-job:"
+                             + self._job.transaction_id.encode() + rb":[0-9a-f]{64}", raw))
+                    return raw.decode("ascii")
+                raise IntakeError(_ERROR)
             except BaseException:
                 self.close()
                 raise IntakeError(_ERROR) from None

@@ -175,7 +175,7 @@ class ProtectedJobEntrypoint:
                  and not os.path.lexists(self._packet))
         _tls(self._tls)
 
-    def run(self, *, oidc_request_url, oidc_request_credential):
+    def run(self, *, oidc_request_url, oidc_request_credential, preparation_wait_seconds=0):
         """Explicit job-injected request inputs; no ambient environment default.
 
         Return the launcher's actual audit unchanged. Keep captured custody for
@@ -191,13 +191,21 @@ class ProtectedJobEntrypoint:
             _endpoint(oidc_request_url)
             _require(identity._text(oidc_request_credential, 16384)
                      and not re.search(r"\s", oidc_request_credential))
+            _require(type(preparation_wait_seconds) is int and 0 <= preparation_wait_seconds <= 1800)
             with self._client._mutex:
                 self._preflight()
                 # Pair-wide latch, not an authority bit. Release the mutex before
                 # launch: its broker/heartbeat must use the same live client.
                 self._client._host_entrypoint_claimed = True
                 claimed = True
-            audience = self._client.challenge()
+            audience = self._client.challenge(preparation_wait_seconds=preparation_wait_seconds)
+            # Cheap identity/state fences after a possibly long pending wait.
+            # Full source/tool gates still run at their original launch points.
+            _require(self._owner.connection is self._client and not self._owner.used
+                     and not self._client._failed and not self._client._begun
+                     and self._client._host_entrypoint_claimed
+                     and self._client._job == self._job and self._client._policy == self._origin
+                     and fleet._canonical_json(self._owner.config) == self._config)
             _require(re.fullmatch(r"urn:chummer:fleet:workflow-job:" + self._job.transaction_id
                                  + r":[0-9a-f]{64}", audience))
             token = _request_token(oidc_request_url, oidc_request_credential, audience, self._tls)
