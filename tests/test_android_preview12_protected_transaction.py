@@ -249,6 +249,7 @@ def fixture(module, tmp_path: Path, events: list[str]):
 
 
 def fake_consumer(module, lease, events):
+    authority = json.loads(LOCK.read_text())["approval_authority"]
     def claims(aab, graph, sidecar, receipt, approval):
         graph_value = json.loads(graph.read_text())
         android_row = next(row for row in graph_value["repositories"] if row["name"] == "chummer-android")
@@ -279,9 +280,9 @@ def fake_consumer(module, lease, events):
 
     return SimpleNamespace(
         CONTRACT=module.ANDROID_ATTESTATION_CONTRACT,
-        _fleet_builder_key_id=module.BUILDER_KEY_IDS[0],
-        _fleet_builder_selection="qualified-legacy",  # Explicit test-only loader model.
-        _fleet_expected_spki_sha256=json.loads(LOCK.read_text())["approval_authority"]["public_key_spki_sha256"],
+        _fleet_builder_key_id=authority["key_id"],
+        _fleet_builder_selection="explicit-builder",  # Current test-only loader model.
+        _fleet_expected_spki_sha256=authority["public_key_spki_sha256"],
         ROOT=lease.java_root.parent,
         VERIFY=SimpleNamespace(verify_release_eligibility=eligibility),
         _artifact_claims=claims,
@@ -457,10 +458,12 @@ def test_builder_selection_fails_before_reservation_and_credential_callback(tmp_
         del consumer._fleet_builder_selection
     elif failure == "approval-id":
         consumer._fleet_builder_key_id = "fleet-release-approver-2026-09"
+    elif failure == "new-id-on-legacy":
+        consumer._fleet_builder_selection = "qualified-legacy"
     else:
-        consumer._fleet_builder_key_id = module.BUILDER_KEY_IDS[1]
-        if failure == "lock-drift":
-            consumer._fleet_builder_selection = "explicit-builder"
+        # A coherent legacy selector is not this transaction's current lock.
+        consumer._fleet_builder_key_id = module.BUILDER_KEY_IDS[0]
+        consumer._fleet_builder_selection = "qualified-legacy"
     with pytest.raises(module.RebuilderError, match="qualified Android builder selector"):
         module.execute_protected_signer_transaction(
             tmp_path / "lock.json", lambda *_: lease, lambda: consumer, tmp_path, {},
@@ -834,8 +837,16 @@ def test_external_v1_validator_binds_claims_and_detached_signature(
     module = load_module()
     events: list[str] = []
     lock, _lock_raw, lease = fixture(module, tmp_path, events)
-    if selection == "explicit-builder":
-        lock["approval_authority"]["key_id"] = module.BUILDER_KEY_IDS[1]
+    if selection == "qualified-legacy":
+        # Keep historical signature-dispatch coverage internally coherent; do
+        # not relabel the current builder's public key as the legacy identity.
+        key_id, public_path, pem_sha, spki_sha = module.LEGACY_BUILDER_BINDING[4:]
+        lock["approval_authority"].update(
+            key_id=key_id, public_key_path=public_path,
+            public_key_sha256=pem_sha, public_key_spki_sha256=spki_sha,
+        )
+    else:
+        assert lock["approval_authority"]["key_id"] == module.BUILDER_KEY_IDS[1]
     request = json.loads(lease.paths["externalSignerRequest"].read_text())
     unsigned_raw = lease.paths["unsignedAab"].read_bytes()
     graph_raw = lease.paths["sourceGraph"].read_bytes()
