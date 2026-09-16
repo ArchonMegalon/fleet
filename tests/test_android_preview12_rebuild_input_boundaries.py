@@ -20,6 +20,15 @@ from test_android_preview12_external_rebuilder import LOCK, protected_file
 from test_android_preview12_preserved_handoff import handoff_inputs
 
 
+def modeled_contextual_observer(module):
+    """Explicit no-SDK double for tests of the later shell/feed boundary."""
+    def observe(lock, root, original, dotnet, java, output, **kwargs):
+        original.assert_exact(*original.paths)
+        protected_file(output, original.paths[1].read_bytes())
+        return module._RebuildToolchainInputs(original.paths[0], output)
+    return observe
+
+
 def test_release_source_test_capabilities_are_explicit_and_nonpromoting():
     historical = ready_lock()
     fleet._admit_release_test_inputs(historical, None, None, None)
@@ -282,6 +291,7 @@ def offline_consumer(args, raw=(b'input="$CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_
 @pytest.mark.parametrize("offline_aar", [False, True])
 def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path, monkeypatch, offline, offline_aar):
     module = fixture.load_module()
+    monkeypatch.setattr(module, "_contextual_rebuild_observation", modeled_contextual_observer(module))
     feed = tmp_path / "authority" / "owner-feed"
     feed.mkdir(parents=True)
     args = entry_arguments(module, tmp_path, feed.parent, feed, "direct")
@@ -311,7 +321,8 @@ def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path,
         assert kwargs["env"]["CHUMMER_INTERNAL_PHONE_BETA_PACKAGE_FEED"] == str(feed)
         assert Path(kwargs["env"]["CHUMMER_INTERNAL_PHONE_BETA_PACKAGE_FEED"]).parent == args["authority_root"]
         assert kwargs["env"]["CHUMMER_ANDROID_RELEASE_PACKAGE_AUTHORITY"] == str(args["package_authority"])
-        assert kwargs["env"]["CHUMMER_ANDROID_RELEASE_TOOLCHAIN_AUTHORITY"] == str(args["java_tool_observation"])
+        assert kwargs["env"]["CHUMMER_ANDROID_RELEASE_TOOLCHAIN_AUTHORITY"] == str(
+            args["build_input_root"] / "java-tool-observation.json")
         assert str(args["installed_closure_receipt"]) not in kwargs["env"].values()
         assert {key: value for key, value in kwargs["env"].items() if "OFFLINE" in key} == expected_offline
         assert kwargs["env"]["NUGET_PACKAGES"] == str(args["build_input_root"] / "nuget-packages")

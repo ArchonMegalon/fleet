@@ -2581,6 +2581,104 @@ class _RebuildToolchainInputs:
         self.assert_exact(*self.paths)
 
 
+def _contextual_rebuild_observation(
+    lock: Mapping[str, Any], android_root: Path, original: _RebuildToolchainInputs,
+    dotnet_root: Path, java_root: Path, output: Path, *,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> _RebuildToolchainInputs:
+    """Measure the canonical observation in the build's actual cwd, never chdir.
+
+    The original remains a fenced historical input. Only dotnet's full --info
+    output digest may change with global.json's absolute staged pathname. Both
+    generation and live version verification use the qualified Android CLI.
+    This stage-local file follows build-input cleanup; it is not an eighth
+    handoff member or independently retained protected validation evidence.
+    """
+    binding = lock["android_authority"]["attestation_consumer"]
+    helper = android_root / binding["path"]
+    environment = {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C",
+                   "CHUMMER_RELEASE_REPO_ROOT": os.fspath(android_root)}
+    contextual: _RebuildToolchainInputs | None = None
+
+    def guard() -> None:
+        original.assert_exact(*original.paths)
+        if contextual is not None:
+            contextual.assert_exact(*contextual.paths)
+        try:
+            canonical = android_root.resolve(strict=True) == android_root and not android_root.is_symlink()
+        except OSError:
+            canonical = False
+        if not canonical:
+            raise RebuilderError("contextual Android root is not canonical")
+        _validate_android_consumer_inputs(android_root, lock["android_authority"]["commit"])
+        if _sha256_file(helper, "contextual Android observer", 8 * 1024 * 1024) != binding["sha256"]:
+            raise RebuilderError("contextual Android observer differs from qualified bytes")
+
+    def invoke(action: str, arguments: list[str]) -> dict[str, Any]:
+        guard()
+        try:
+            completed = runner(
+                ["/usr/bin/python3", "-I", "-B", "-S", os.fspath(helper), action, *arguments],
+                cwd=android_root, env=environment, stdin=subprocess.DEVNULL, check=False,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300,
+            )
+        except (OSError, subprocess.SubprocessError):
+            raise RebuilderError("contextual Android tool observation failed") from None
+        finally:
+            guard()
+        if completed.returncode != 0 or not isinstance(completed.stdout, bytes) \
+                or not 0 < len(completed.stdout) <= 64 * 1024:
+            raise RebuilderError("contextual Android tool observation failed")
+        value = _strict_json(completed.stdout, "contextual Android observation result")
+        if value.get("status") != "pass" or value.get("signingAuthorized") is not False \
+                or value.get("publicationAuthorized") is not False \
+                or value.get("authorityClass") != "non_authoritative_local_unsigned_preparation":
+            raise RebuilderError("contextual Android observation result differs")
+        return value
+
+    generated = invoke("observe-toolchain", ["--java-sdk", os.fspath(java_root),
+        "--dotnet", os.fspath(dotnet_root / "dotnet"), "--output", os.fspath(output)])
+    contextual = _RebuildToolchainInputs(original.paths[0], output)
+    verified = invoke("verify-toolchain", ["--authority", os.fspath(output)])
+    contextual.assert_exact(*contextual.paths)
+    if any(value.get("observationSha256") != contextual.bindings[1][1]
+           for value in (generated, verified)) \
+            or verified.get("javaSdkRoot") != os.fspath(java_root) \
+            or verified.get("dotnetPath") != os.fspath(dotnet_root / "dotnet"):
+        raise RebuilderError("contextual observation differs from measured bytes or tool roots")
+    previous, previous_raw = _json_file(original.paths[1], "original Java observation", 8 * 1024 * 1024,
+                                        owner_only=True)
+    current, _ = _json_file(output, "contextual Java observation", 8 * 1024 * 1024, owner_only=True)
+    if previous_raw != _pretty_json(previous):
+        raise RebuilderError("original Java observation is not canonical")
+    if not isinstance(current.get("dotnet"), dict):
+        raise RebuilderError("contextual dotnet claim is missing")
+    if current.get("javaSdkRoot") != os.fspath(java_root) \
+            or current["dotnet"].get("absolutePath") != os.fspath(dotnet_root / "dotnet") \
+            or any(current.get(name) is not False for name in (
+                "signingAuthorized", "publicationAuthorized", "androidSdkBound")) \
+            or current.get("externalSignerMustBindFullJdkDotnetAndroidSdkClosure") is not True:
+        raise RebuilderError("contextual observation roots or authority posture differ")
+    for prefix, name in (("javaSdk", "java"), ("dotnetSdk", "dotnet")):
+        expected = lock["toolchain"][name]
+        if _canonical_json([current.get(prefix + suffix) for suffix in
+                            ("TreeSha256", "TreeFileCount", "TreeSizeBytes")]) != _canonical_json(
+                [expected["tree_sha256"], expected["file_count"], expected["size_bytes"]]):
+            raise RebuilderError("contextual observation closure differs from lock")
+    for value in (previous, current):
+        claim = value.get("dotnet")
+        if not isinstance(claim, dict):
+            raise RebuilderError("contextual dotnet claim is missing")
+        _sha256(claim.get("versionOutputSha256"), "dotnet version observation")
+        del claim["versionOutputSha256"]
+    # Canonical byte comparison is type-aware: False != 0 and 1 != 1.0 here.
+    if _canonical_json(previous) != _canonical_json(current):
+        raise RebuilderError("contextual observation changed non-context toolchain claims")
+    guard()
+    contextual.assert_exact(*contextual.paths)
+    return contextual
+
+
 def _run_independent_rebuild(
     lock: Mapping[str, Any],
     workspace: Path,
@@ -2627,6 +2725,10 @@ def _run_independent_rebuild(
         toolchain_inputs = _RebuildToolchainInputs(installed_closure_receipt, java_tool_observation)
     toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
     build_input_root.mkdir(mode=0o700)
+    contextual = _contextual_rebuild_observation(
+        lock, workspace / "chummer-android", toolchain_inputs, dotnet_root, java_root,
+        build_input_root / "java-tool-observation.json", runner=runner,
+    )
     (build_input_root / "nuget-packages").mkdir(mode=0o700)
     (build_input_root / "unsigned-child-home").mkdir(mode=0o700)
     _copy_protected(two_green_receipt, build_input_root / "ANDROID_API36_TWO_GREEN_ELIGIBILITY.generated.json",
@@ -2646,7 +2748,7 @@ def _run_independent_rebuild(
         "CHUMMER_COMPLETE_ROOT": os.fspath(workspace),
         "CHUMMER_ANDROID_EXPECTED_VERSION_NAME": VERSION_NAME,
         "CHUMMER_ANDROID_EXPECTED_VERSION_CODE": str(VERSION_CODE),
-        "CHUMMER_ANDROID_RELEASE_TOOLCHAIN_AUTHORITY": os.fspath(java_tool_observation),
+        "CHUMMER_ANDROID_RELEASE_TOOLCHAIN_AUTHORITY": os.fspath(contextual.paths[1]),
         "CHUMMER_ANDROID_RELEASE_PACKAGE_AUTHORITY": os.fspath(package_authority),
         "CHUMMER_CURRENT_UI_PACKAGE_AUTHORITY_RECEIPT": os.fspath(ui_authority_receipt),
         "CHUMMER_INTERNAL_PHONE_BETA_PACKAGE_FEED": os.fspath(owner_feed),
@@ -2669,12 +2771,18 @@ def _run_independent_rebuild(
             stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
         environment.update(test_environment)
         toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
-        completed = runner(
-            ["/bin/bash", "-p", os.fspath(build_script)], cwd=workspace / "chummer-android",
-            env=environment, check=False, stdout=stdout, stderr=stderr,
-            timeout=lock["limits"]["build_timeout_seconds"],
-        )
-    toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
+        contextual.assert_exact(*contextual.paths)
+        try:
+            completed = runner(
+                ["/bin/bash", "-p", os.fspath(build_script)], cwd=workspace / "chummer-android",
+                env=environment, check=False, stdout=stdout, stderr=stderr,
+                timeout=lock["limits"]["build_timeout_seconds"],
+            )
+        except (OSError, subprocess.SubprocessError):
+            raise RebuilderError("independent Android unsigned rebuild process failed") from None
+        finally:
+            toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
+            contextual.assert_exact(*contextual.paths)
     # build-release intentionally exits 3 after creating an unsigned external-
     # signer handoff.  Any other result is either a failed build or an
     # unauthorized semantic change to the Android build boundary.
@@ -2778,7 +2886,6 @@ def prepare_rebuild_handoff(
             lock, dotnet_root, java_root, android_sdk_root,
             bundletool, installed_closure_receipt, reported_builder_image, runner=runner,
         )
-        toolchain_inputs.validate_observation(android, dotnet_root, java_root)
         qualification = android.VERIFY.verify_release_eligibility(
             two_green_receipt, approval, android_root=workspace / "chummer-android",
             expected_version_name=VERSION_NAME, expected_version_code=VERSION_CODE,

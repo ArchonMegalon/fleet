@@ -127,19 +127,32 @@ input defaults to the other. Only the observation reaches Android's existing
 receipt is used only for Fleet's closure check.
 
 Preparation captures both canonical owner-only paths, file identities and byte
-digests before staging. Same-path/inode inputs are rejected. The exact bound
-Android loader validates the observation and its tool roots; changes, including
-identical-byte file replacement, fail around validation, before/after the build,
-and before handoff publication. These snapshots are local preparation checks,
+digests before staging. Same-path/inode inputs are rejected. Android hashes the
+full `dotnet --info` output, including its working-directory-dependent
+`global.json` path. The original observation therefore remains an unchanged
+historical input; the qualified Android `observe-toolchain` and `verify-toolchain`
+commands create and verify a separate canonical observation in the actual staged
+Android build directory. Only `dotnet.versionOutputSha256` may differ between
+the two observations. Every other field must match with exact JSON types, and
+the measured Java/.NET closure must match the lock. No digest is substituted or
+version check skipped, and the controller never changes its global cwd.
+The build receives that contextual observation. Original and contextual input
+snapshots reject changes, including identical-byte file replacement, around
+validation and build execution, including failure paths. These are local preparation checks,
 not immutable runtime custody. The unchanged seven-file handoff binds the
 installed receipt through its lock and toolchain closure, and the observation's
 tools through those measured trees; it does **not** transport a new observation
 byte digest or an eighth file. Protected validation independently preserves and
 revalidates its own separate observation and installed receipt.
 
+The contextual observation follows the existing disposable build-input
+lifecycle; these changes do not add durable controller evidence retention.
+The future protected controller must preserve its validation closure separately.
+
 The dedicated separate-input tests optionally use
-`CHUMMER_ANDROID_CURRENT_BUILDER_ROOT` at exact Android d4e9116 and the original
-receipt via `CHUMMER_ANDROID_CURRENT_BUILDER_TWO_GREEN_RECEIPT`. Actual-loader
+`CHUMMER_ANDROID_CURRENT_ROOT` at the exact checked-in Android lock authority
+and its original hosted receipt via `CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT`
+(the older `CURRENT_BUILDER_*` variable names remain aliases, not older pins). Actual-loader
 negative tests reject inventory as an observation; preparation tests model SDK
 execution and cannot establish an offline build. This plumbing change neither
 repins the Android authority or qualifies/activates installed SDK111 custody.

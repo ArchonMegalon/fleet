@@ -197,7 +197,10 @@ def test_android_observation_must_match_captured_bytes_and_tool_roots(modeled_pr
         return value
     case.consumer._load_trusted_java_toolchain = load
     with pytest.raises((fleet.RebuilderError, KeyError)):
-        fleet.prepare_rebuild_handoff(**case.args, runner=case.runner)
+        # This unit covers the retained direct loader API. Rebuild preparation
+        # now measures/verifies its own observation in an isolated build cwd.
+        fleet._RebuildToolchainInputs(case.inventory, case.observation).validate_observation(
+            case.consumer, case.args["dotnet_root"], case.args["java_root"])
     assert "rebuild-model" not in case.events and not case.args["output_dir"].exists()
 
 
@@ -211,6 +214,8 @@ def test_real_child_boundary_rechecks_both_inputs(tmp_path, monkeypatch, which, 
     for name in ("two_green_receipt", "approval", "java_tool_observation", "installed_closure_receipt"):
         protected_file(args[name], b'{"TEST_ONLY":true}\n')
     protected_file(tmp_path / "producer-source-graph.json", json.dumps(boundaries.fixture.graph(fleet)).encode())
+    monkeypatch.setattr(fleet, "_contextual_rebuild_observation",
+                        boundaries.modeled_contextual_observer(fleet))
     calls = []
     if phase == "before-runner":
         original = fleet._copy_protected
@@ -231,26 +236,14 @@ def test_real_child_boundary_rechecks_both_inputs(tmp_path, monkeypatch, which, 
 
 @pytest.fixture
 def exact_current_android():
-    configured = os.environ.get("CHUMMER_ANDROID_CURRENT_BUILDER_ROOT")
+    configured = os.environ.get("CHUMMER_ANDROID_CURRENT_ROOT") or os.environ.get("CHUMMER_ANDROID_CURRENT_BUILDER_ROOT")
     if not configured:
-        pytest.skip("exact current d4e Android source required; not installed SDK qualification")
+        pytest.skip("exact lock-bound Android source required; not installed SDK qualification")
     root = Path(configured)
     lock = deepcopy(json.loads(LOCK.read_bytes()))
     authority = lock["android_authority"]
-    authority.update(commit="d4e9116d5bcdf12a51dec6490bf47b97ed143134",
-                     tree="301180a95bb313f77b6c695ac8b88624603de933")
-    for name, digest in {
-        "build_script": "499f7cf4ccea659239c1fdc6e7c0a1b18c7280cc1983f699bbbbc30019546daa",
-        "attestation_consumer": "6b784367cd58348f77243ac497efd67e73c6d53828241c5a47b4a0ff6255f655",
-        "two_green_verifier": "3217d44a653c21e604de6383b7b200e36749865c5e343fd1c1983be7261ee07c",
-        "source_graph_verifier": "c15f60db34f6becfe60ddfd749da1b50d457cf5777232e26a7513bdc068d983e",
-    }.items():
-        authority[name]["sha256"] = digest
-    # Public-only test binding; production lock and every readiness flag stay dormant.
-    lock["approval_authority"].update(key_id="fleet-release-builder-2026-09",
-        public_key_path="eng/trusted-release-builders/fleet-release-builder-2026-09.public.pem",
-        public_key_sha256="ef44c5b7fcadaf0f115b5f0e0e7b1a65edb322bb002faf980acb654a5db8caaf",
-        public_key_spki_sha256="41b44078d037fafd85b091b967959f77a7a4aa9f160d03749fa49889a8b1b156")
+    # Use the checked-in exact current public pins, never derive trust from the
+    # supplied checkout or activate any production readiness flag.
     original = LOCK.read_bytes()
     android = fleet.validate_android_consumer(root, lock)  # Exact HEAD, origin and full scripts/eng blob guards.
     yield android
@@ -267,7 +260,8 @@ def test_actual_current_android_rejects_inventory_as_observation(exact_current_a
 
 def test_original_receipt_passes_actual_current_builder_guarded_loader(exact_current_android, tmp_path, monkeypatch):
     from test_android_preview12_current_consumer import ORIGINAL_RECEIPT_SHA256, synthetic_approval, verify_full
-    supplied = os.environ.get("CHUMMER_ANDROID_CURRENT_BUILDER_TWO_GREEN_RECEIPT")
+    supplied = os.environ.get("CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT") or os.environ.get(
+        "CHUMMER_ANDROID_CURRENT_BUILDER_TWO_GREEN_RECEIPT")
     if not supplied:
         pytest.skip("original current hosted receipt required; no operational approval is inferred")
     path = Path(supplied)
@@ -277,6 +271,6 @@ def test_original_receipt_passes_actual_current_builder_guarded_loader(exact_cur
     signed, now = synthetic_approval(tmp_path, monkeypatch, raw, json.loads(raw), verifier)
     result = verify_full(verifier, exact_current_android.ROOT, path, signed, now)
     assert result["receiptSha256"] == ORIGINAL_RECEIPT_SHA256
-    assert result["sourceCommit"] == "d4e9116d5bcdf12a51dec6490bf47b97ed143134"
+    assert result["sourceCommit"] == json.loads(LOCK.read_bytes())["android_authority"]["commit"]
     assert result["publicationAuthorized"] is False and result["googlePlayUploadAuthorized"] is False
     assert path.read_bytes() == raw
