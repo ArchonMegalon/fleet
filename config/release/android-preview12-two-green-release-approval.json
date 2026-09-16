@@ -52,8 +52,8 @@
     "private_key_persistence_allowed": false
   },
   "android_consumer": {
-    "qualified_commit": "e0d997bddaebcc1e685ef48b886445e7a96a5af7",
-    "qualified_tree": "f816035141ae63eb464fde437d3e09550aab2717",
+    "qualified_commit": "9cbe9136a786bf5c8dee233e77656678c838c481",
+    "qualified_tree": "46322c4789f8de397e043ba29ed93e0186ff9cc7",
     "verifier_path": "scripts/verify_api36_two_green_release_eligibility.py",
     "contract_name": "chummer.android.two-green-release-approval/v1",
     "canonical_json": "utf8_sort_keys_compact_no_trailing_newline",

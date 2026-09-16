@@ -472,7 +472,7 @@ def test_checked_in_ready_policy_has_exact_public_ledger_and_closed_shape():
     assert base64.b64encode(TEST_PRIVATE_DER) not in data
 
 
-@pytest.mark.parametrize("drift", ("receipt-key-reuse", "publication", "old-consumer"))
+@pytest.mark.parametrize("drift", ("receipt-key-reuse", "publication", "old-consumer", "immediate-predecessor"))
 def test_checked_in_ready_policy_drift_fails_before_credentials(tmp_path, monkeypatch, drift):
     policy = json.loads(POLICY.read_bytes())
     if drift == "receipt-key-reuse":
@@ -483,6 +483,10 @@ def test_checked_in_ready_policy_drift_fails_before_credentials(tmp_path, monkey
         )
     elif drift == "publication":
         policy["output"]["publication_authorized"] = True
+    elif drift == "immediate-predecessor":
+        policy["android_consumer"].update(
+            qualified_commit=PREDECESSOR_CONSUMER_COMMIT, qualified_tree=PREDECESSOR_CONSUMER_TREE,
+        )
     else:
         policy["android_consumer"].update(
             qualified_commit=PREVIOUS_CONSUMER_COMMIT, qualified_tree=PREVIOUS_CONSUMER_TREE,
@@ -529,6 +533,24 @@ def test_public_approver_pins_qualified_identity_without_publication():
     assert policy["activation"]["enabled"] is True
     for field in ("signing_authorized", "publication_authorized", "google_play_upload_authorized"):
         assert policy["output"][field] is False
+
+
+def test_current_consumer_rebind_preserves_dormant_binary_policy_chain():
+    lock = json.loads((ROOT / "config/release/android-preview12-external-rebuilder.lock.json").read_bytes())
+    ledger_path = ROOT / lock["reservation"]["policy_path"]
+    ledger_raw = ledger_path.read_bytes()
+    ledger = json.loads(ledger_raw)
+    assert lock["android_authority"]["commit"] == approval.ANDROID_CONSUMER_COMMIT
+    assert lock["android_authority"]["tree"] == approval.ANDROID_CONSUMER_TREE
+    assert lock["reservation"]["policy_sha256"] == hashlib.sha256(ledger_raw).hexdigest()
+    assert ROOT / ledger["approval_policy"]["path"] == POLICY
+    assert ledger["approval_policy"]["sha256"] == hashlib.sha256(POLICY.read_bytes()).hexdigest()
+    assert lock["state"] == ledger["state"] == "dormant"
+    assert lock["rebuild"]["enabled"] is False
+    assert lock["reservation"]["configured"] is False
+    assert ledger["replay_protection"]["external_ledger"]["configured"] is False
+    for field in ("signed_content_handoff_enabled", "publication_authorized", "google_play_upload_authorized"):
+        assert lock["outputs"][field] is False
 
 
 @pytest.mark.parametrize("field,fixture_field", [
@@ -695,6 +717,8 @@ OLD_CONSUMER_COMMIT = "411e0205378966c73e064ba34f68ca65ed426ab6"
 OLD_CONSUMER_TREE = "4a7cf04c2d0a1cbf04da8b889ac673153c779c7a"
 PREVIOUS_CONSUMER_COMMIT = "d4e9116d5bcdf12a51dec6490bf47b97ed143134"
 PREVIOUS_CONSUMER_TREE = "301180a95bb313f77b6c695ac8b88624603de933"
+PREDECESSOR_CONSUMER_COMMIT = "e0d997bddaebcc1e685ef48b886445e7a96a5af7"
+PREDECESSOR_CONSUMER_TREE = "f816035141ae63eb464fde437d3e09550aab2717"
 BUILDER_PUBLIC_SPKI = "MCowBQYDK2VwAyEAdXOvq6FjTeUUqxBWMCrF+OJGqihEANWatNQ96HmLNEc="
 PUBLIC_BINDING_DRIFT = [
     ("external_ed25519_key", {"key_id": "unknown-approver"}),
@@ -725,6 +749,9 @@ PUBLIC_BINDING_DRIFT = [
     ("android_consumer", {"qualified_commit": PREVIOUS_CONSUMER_COMMIT}),
     ("android_consumer", {"qualified_tree": PREVIOUS_CONSUMER_TREE}),
     ("android_consumer", {"qualified_commit": PREVIOUS_CONSUMER_COMMIT, "qualified_tree": PREVIOUS_CONSUMER_TREE}),
+    ("android_consumer", {"qualified_commit": PREDECESSOR_CONSUMER_COMMIT}),
+    ("android_consumer", {"qualified_tree": PREDECESSOR_CONSUMER_TREE}),
+    ("android_consumer", {"qualified_commit": PREDECESSOR_CONSUMER_COMMIT, "qualified_tree": PREDECESSOR_CONSUMER_TREE}),
     ("android_consumer", {"provenance_validator_sha256": "0" * 64}),
     ("output", {"key_id": "local-release-builder-2026"}),
     ("output", {"signing_authorized": True}),
@@ -736,6 +763,32 @@ def test_previous_qualified_consumer_is_rejected():
     values.update(main_commit=PREVIOUS_CONSUMER_COMMIT, main_tree=PREVIOUS_CONSUMER_TREE)
     with pytest.raises(approval.ApprovalError, match="exactly bound consumer"):
         approval.validate_inputs(argparse.Namespace(**values))
+
+
+@pytest.mark.parametrize("commit,tree", [
+    (PREDECESSOR_CONSUMER_COMMIT, approval.ANDROID_CONSUMER_TREE),
+    (approval.ANDROID_CONSUMER_COMMIT, PREDECESSOR_CONSUMER_TREE),
+    (PREDECESSOR_CONSUMER_COMMIT, PREDECESSOR_CONSUMER_TREE),
+])
+def test_immediate_predecessor_consumer_is_rejected(commit, tree):
+    values = inputs()
+    values.update(main_commit=commit, main_tree=tree)
+    with pytest.raises(approval.ApprovalError, match="exactly bound consumer"):
+        approval.validate_inputs(argparse.Namespace(**values))
+
+
+def test_resealed_immediate_predecessor_dependency_graph_is_rejected():
+    value = receipt()
+    graph = value["commonAuthority"]["dependencyGraph"]
+    graph["sources"]["android"]["tree"] = PREDECESSOR_CONSUMER_TREE
+    graph["sha256"] = approval.canonical_sha256({k: v for k, v in graph.items() if k != "sha256"})
+    value.pop("eligibilitySha256")
+    value["eligibilitySha256"] = approval.canonical_sha256(value)
+    with pytest.raises(approval.ApprovalError):
+        approval.validate_receipt(
+            value, approval.validate_inputs(argparse.Namespace(**inputs())),
+            now=NOW, policy=approval.expected_policy(),
+        )
 
 
 @pytest.mark.parametrize("section,changes", PUBLIC_BINDING_DRIFT)
