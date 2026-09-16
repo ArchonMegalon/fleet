@@ -4,7 +4,7 @@
   "state": "dormant",
   "approval_policy": {
     "path": "config/release/android-preview12-two-green-release-approval.json",
-    "sha256": "97584be435595960e175fd4e92a2a756fb7cdbd79c096c2319e461b71cd4c790"
+    "sha256": "ae48cbe9631f7abfbeefa7ebe6d0842f2e409d9b0358cbd85fbb653f6aa80864"
   },
   "credential_input": "ANDROID_PREVIEW12_BINARY_SIGNING_LEDGER_BEARER_TOKEN",
   "replay_protection": {

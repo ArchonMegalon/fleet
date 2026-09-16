@@ -105,7 +105,11 @@ OFFLINE_TOTAL_BUNDLE_BYTES = 6 * 1024 * 1024 * 1024
 # Test-oracle custody has a separate scope. Do not widen it when admitting a
 # larger product-repository bundle (including its historical Git objects).
 OFFLINE_ORACLE_FILE_BYTES = 512 * 1024 * 1024
-OFFLINE_ORACLE_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
+# Retained full-oracle candidate (checkout plus Git storage) measured
+# 2,589,350,023 bytes; see docs/android-release-test-inputs.md for evidence and
+# separate transport/staging quota requirements. This is a logical-byte limit,
+# not a filesystem-capacity admission or a relaxation of object integrity.
+OFFLINE_ORACLE_TOTAL_BYTES = 3 * 1024 * 1024 * 1024
 OFFLINE_GIT_OUTPUT_BYTES = 8 * 1024 * 1024
 OFFLINE_GIT_TIMEOUT_SECONDS = 900
 
@@ -2343,6 +2347,8 @@ def _require_offline_aar_consumer(lock: Mapping[str, Any], workspace: Path) -> N
 RELEASE_TEST_CONSUMERS = {
     "61ea9fa04338889f78e26de26a90b392c5f16def2a4150a64a94e9d4fadd5ca9": None,
     "fc8b6e637ba3220e4e9c5ea55c5e4dcca6cb26c196eaa75f6d19e91a87ed3db6":
+        "a295c226850edda9ce3a57a3c43690188e271b3059c33dd14abca04f65ef4bcf",
+    "4e29b255aae29d30f1b8ddb7fc96947cf851df2c661fa820031bd5db2604f3f6":
         "a295c226850edda9ce3a57a3c43690188e271b3059c33dd14abca04f65ef4bcf",
 }
 TEST_ORACLE_REPOSITORY = "https://github.com/ArchonMegalon/chummer5a.git"

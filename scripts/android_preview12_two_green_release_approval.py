@@ -53,8 +53,8 @@ VERSION_NAME = "0.1.0-preview.12"
 VERSION_CODE = 12
 # Exact qualified consumer and preparation-only public identity move together.
 # Hosted eligibility and public-key compatibility do not activate this lane.
-ANDROID_CONSUMER_COMMIT = "9cbe9136a786bf5c8dee233e77656678c838c481"
-ANDROID_CONSUMER_TREE = "46322c4789f8de397e043ba29ed93e0186ff9cc7"
+ANDROID_CONSUMER_COMMIT = "b3fc0619ec61df3df25849db90593e1b6b66deb2"
+ANDROID_CONSUMER_TREE = "9c71c65836cdeab038c3e88e8770d208e887ed1e"
 RELEASE_APPROVER_KEY_ID = "fleet-release-approver-2026-09"
 RELEASE_APPROVER_ROLE = "android_internal_release_approver"
 RELEASE_APPROVAL_SCOPE = "android_internal_release_preparation"
@@ -76,7 +76,7 @@ PROVENANCE_VALIDATOR_SHA256 = (
 )
 # Public metadata of the exactly bound consumer, not locally executed Android
 # provenance replay. The workflow authenticates the original hosted artifact.
-QUALIFIED_DEPENDENCY_GRAPH_SHA256 = "b4f0e957bf8ab7544a55b934a204cb5283a0fb73f671daaa0ca2db13d737e574"
+QUALIFIED_DEPENDENCY_GRAPH_SHA256 = "866c73b32482f089fbb1f04bbbff3940277971db22c15080a939c404a3486614"
 WIZARD_AUTHORITY_CLASS = "internal_phone_beta_sr5_wizard_only"
 WIZARD_PROOF_SCOPE = "sr5_wizards_only"
 WIZARD_AGGREGATE_SCHEMA = "chummer.android.api36-sr5-wizard-e2e-aggregate/v2"
