@@ -44,9 +44,9 @@ already trusted by this exact 840ac consumer: `fleet-release-builder-2026-09`,
 `eng/trusted-release-builders/fleet-release-builder-2026-09.public.pem`, PEM SHA256
 `ef44c5b7fcadaf0f115b5f0e0e7b1a65edb322bb002faf980acb654a5db8caaf`, SPKI SHA256
 `41b44078d037fafd85b091b967959f77a7a4aa9f160d03749fa49889a8b1b156`.
-This aligns public selection only: `private_key_secret` remains null and every
-dormant/activation gate remains unchanged. It establishes no present private-key
-custody or signer readiness, and does not replace the RSA Play upload identity or
+The public-key selection and protected-environment secret descriptor below do
+not activate any gate. They establish no admitted private-key custody or signer
+readiness, and do not replace the RSA Play upload identity or
 the separate approval key. Android's historical legacy-key compatibility remains
 unchanged. Current consumer tests load the actual lock without substituting a
 test key and reject mismatched IDs, paths and hashes; a complete stale operational
@@ -87,7 +87,7 @@ requires its AAB digest to equal the producer.
 
 ### Observed public builder inputs, not activation
 
-The dormant lock selects only these existing public bytes:
+The dormant lock selects these existing public builder bytes:
 
 - builder image `ghcr.io/archonmegalon/chummer-android-builder@sha256:5298279ccc96316c546d7bebe00af639e38c22bdac081a980ba10e7dc965e40a`;
 - original 2,362-byte `sdk111-tree-measurement.AV1kqHwI/archive-inventory.json`,
@@ -110,11 +110,45 @@ records `builderQualified`, `installedClosureAdmitted`,
 `builderExecutionProvenanceAuthenticated` and `protectedSignerRuntimeVerified`
 as false. Pinning its inventory does not turn those claims true. The inventory
 is not Android's separate Java observation or a protected-runtime attestation.
-`state` remains `dormant`, `rebuild.enabled` remains false, signer image and
-credential descriptors remain null, reservation remains unconfigured, and
+`state` remains `dormant`, `rebuild.enabled` remains false, reservation remains
+unconfigured with a null adapter digest, and
 signed-content handoff, publication and Play upload remain disabled. Both
 unsigned activation gates and every protected-signing gate still apply. There
 is no new runtime authenticator, signer caller or execution in this change.
+
+### Selected signer inputs, not activation
+
+The 2026-09-16 operator readback verified the existing image digest above still
+maps to config `9795253a6f2218f9a757cefaea59ebd8a9d3e056fb6e4d9011b5179b42862be5`.
+The lock selects that same immutable image for the **separate** signer role;
+sharing image bytes does not share jobs, containers, credentials or runtime
+authority. Actual signer-profile and PID1 watchdog observations do not establish
+authenticated protected-job custody or admit the whole signing transaction.
+
+The protected GitHub environment `android-preview12-release-builder`, ID
+`21853652742`, was separately observed with exactly these four secret names.
+Only metadata was read for this selection; no values were retrieved:
+
+| Lock field | Selected existing input |
+| --- | --- |
+| `approval_authority.private_key_secret` | `ANDROID_PREVIEW12_RELEASE_BUILDER_ED25519_PRIVATE_KEY_PKCS8_B64` |
+| `upload_key.keystore_secret` | `ANDROID_PREVIEW12_UPLOAD_KEYSTORE_B64` |
+| `upload_key.store_password_secret` | `ANDROID_PREVIEW12_KEYSTORE_PASSWORD` |
+| `upload_key.key_password_secret` | `ANDROID_PREVIEW12_KEY_PASSWORD` |
+
+`upload_key.key_alias` is `chummer-upload`, matching the retained original
+keystore's alias and the unchanged `d9c4...` certificate identity, not the
+obsolete native-v3 alias `upload`. A secret name's presence does not verify its
+value, SPKI, certificate, availability to a future job, or custody; the existing
+reserved transaction must perform its unchanged checks before signing. The
+builder key stays in the protected GitHub job, never the ordinary local builder.
+
+These six field selections remove only six missing-input configuration errors.
+The four remaining errors are disabled signed-content handoff, dormant state,
+disabled independent rebuild, and unconfigured reviewed ledger adapter. Both
+owner readiness and signing remain rejected; all publication/upload flags stay
+false. A future signing-bound rebuild must consume the **final configured lock**:
+this partial lock and its new digest cannot later be relabeled as that authority.
 
 ### Separate rebuild inputs
 
@@ -276,8 +310,9 @@ external-signer attestation helper refuses to sign while either is false.
 
 This lane does not introduce another HTTP or reservation protocol. It pins and
 loads the signed, no-redirect durable Approval Ledger adapter reviewed in Fleet
-Draft PR #11. Its adapter and policy digests remain null, and its policy source
-remains `pending_merge`, so checked-in code fails closed. The existing adapter
+Draft PR #11. The binary-policy digest is pinned, but the adapter digest remains
+null, `configured` remains false, and `protocol_source` remains
+`reviewed_fleet_draft_11_pending_merge`, so checked-in code fails closed. The existing adapter
 owns reservation, replay rejection, signed receipts, bounded retry, and
 lost-response recovery. Exact public external-signer v1 bytes are committed to
 a **separate binary-signing ledger**, never PR11's approval-issuance store.
@@ -287,8 +322,8 @@ That dormant policy reuses the unchanged wire-policy representation and pins the
 actual approval-policy bytes for comparison. Loading requires immutable runtime
 ancestry and exact hashes for the adapter and both policies. It rejects shared
 HTTPS origin, service identity or receipt SPKI, and either receipt key reused
-for approval/attestation signing. Null comparison/adapter/policy pins and dormant
-state do not authorize any runtime. No Android authority pins change here.
+for approval/attestation signing. Public policy pins do not overcome the missing
+adapter admission or dormant state. No Android authority pins change here.
 
 Both execution and reconciliation require only
 `ANDROID_PREVIEW12_BINARY_SIGNING_LEDGER_BEARER_TOKEN`. The loader maps this
@@ -354,14 +389,16 @@ the old Play upload certificate SHA-256:
 d9c4b635121544d5522abf1ec2dfda3c1938aab93d6726bb93c9871ec9ed1d15
 ```
 
-Key aliases and secret references are null. The current Android v2 owner public
-key is digest-bound. A future owner-key rotation must first merge and qualify a
+The existing alias and four protected secret names are selected above, without
+embedding or accessing any private value. The current Android v2 owner public
+key is unchanged and digest-bound. A future owner-key rotation must first merge and qualify a
 new Android consumer, then update this lock in a separate reviewed change.
 
 ## Activation blockers
 
 - merge and pin the reviewed Draft #11 ledger adapter and configured policy;
-- supply immutable builder and signer images plus an installed-closure receipt;
+- admit the selected immutable builder/signer image and installed closure in the
+  actual distinct runtime roles;
 - prove the builder job has no signer credential mounts;
 - add authenticated immutable artifact provenance between jobs;
 - provide durable owner-only signer recovery storage and bind it to the exact
@@ -375,8 +412,8 @@ new Android consumer, then update this lock in a separate reviewed change.
 - make protected consumption revalidate the current lock, sidecar, source,
   two-green semantics, and authenticated execution provenance;
 - configure a private immutable signed-content handoff with readback;
-- configure protected secret descriptors for the recovered old upload key and
-  the qualified Android v2 owner key;
+- admit actual protected-job custody and validate the selected existing upload
+  and Android v2 owner credentials after reservation;
 - wire the tested composition callbacks to a real protected owner workflow;
 - separately qualify any Android v2 owner-key rotation before updating the
   lock or admitting the rotated key.

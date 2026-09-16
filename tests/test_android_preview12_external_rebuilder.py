@@ -158,9 +158,21 @@ CURRENT_BUILDER_PUBLIC_BINDING = {
     "public_key_path": "eng/trusted-release-builders/fleet-release-builder-2026-09.public.pem",
     "public_key_sha256": "ef44c5b7fcadaf0f115b5f0e0e7b1a65edb322bb002faf980acb654a5db8caaf",
     "public_key_spki_sha256": "41b44078d037fafd85b091b967959f77a7a4aa9f160d03749fa49889a8b1b156",
-    "private_key_secret": None,
+    "private_key_secret": "ANDROID_PREVIEW12_RELEASE_BUILDER_ED25519_PRIVATE_KEY_PKCS8_B64",
     "rotation_requires_android_merge_and_requalification": True,
 }
+CURRENT_UPLOAD_BINDINGS = {
+    "key_alias": "chummer-upload",
+    "keystore_secret": "ANDROID_PREVIEW12_UPLOAD_KEYSTORE_B64",
+    "store_password_secret": "ANDROID_PREVIEW12_KEYSTORE_PASSWORD",
+    "key_password_secret": "ANDROID_PREVIEW12_KEY_PASSWORD",
+}
+REMAINING_SIGNER_BLOCKERS = [
+    "private immutable signed-content handoff is not configured",
+    "external rebuilder lock is dormant",
+    "independent rebuild is disabled or weakened",
+    "reviewed durable approval-ledger adapter is not configured",
+]
 
 
 def test_checked_in_builder_public_binding_is_current_without_credential_activation() -> None:
@@ -171,11 +183,11 @@ def test_checked_in_builder_public_binding_is_current_without_credential_activat
     assert lock["android_authority"]["tree"] == "6d9a5fab10fd440fc30aaeae8023dd83bc01e472"
     assert lock["state"] == "dormant" and lock["rebuild"]["enabled"] is False
     assert lock["reservation"]["configured"] is False
-    assert lock["toolchain"]["signer_image"] is None
+    assert lock["toolchain"]["signer_image"] == OBSERVED_BUILDER_IMAGE
     assert all(lock["outputs"][name] is False for name in (
         "signed_content_handoff_enabled", "publication_authorized", "google_play_upload_authorized",
     ))
-    assert "approval attestation private-key secret is not configured" in module.validate_lock(lock, raw)
+    assert module.validate_lock(lock, raw) == REMAINING_SIGNER_BLOCKERS
     assert module.validate_unsigned_rebuild_lock(lock, raw) == [
         "external rebuilder lock is dormant", "independent rebuild is disabled or weakened",
     ]
@@ -216,13 +228,11 @@ def test_observed_public_pins_remove_only_two_configuration_blockers() -> None:
     ]
     assert remaining == [error for error in before if error in remaining]
     assert lock["state"] == "dormant" and lock["rebuild"]["enabled"] is False
-    assert lock["toolchain"]["signer_image"] is None
+    assert lock["toolchain"]["signer_image"] == OBSERVED_BUILDER_IMAGE
     assert lock["reservation"]["configured"] is False
     assert lock["reservation"]["adapter_sha256"] is None
-    assert lock["approval_authority"]["private_key_secret"] is None
-    assert all(lock["upload_key"][name] is None for name in (
-        "key_alias", "keystore_secret", "store_password_secret", "key_password_secret",
-    ))
+    assert lock["approval_authority"] == CURRENT_BUILDER_PUBLIC_BINDING
+    assert {name: lock["upload_key"][name] for name in CURRENT_UPLOAD_BINDINGS} == CURRENT_UPLOAD_BINDINGS
     assert all(lock["outputs"][name] is False for name in (
         "signed_content_handoff_enabled", "publication_authorized", "google_play_upload_authorized",
     ))
@@ -233,6 +243,66 @@ def test_observed_public_pins_remove_only_two_configuration_blockers() -> None:
         "signing_performed", "publication_performed", "google_play_upload_performed",
     ))
     assert lock == original
+
+
+SELECTED_SIGNER_INPUTS = [
+    ("toolchain", "signer_image", OBSERVED_BUILDER_IMAGE,
+     "toolchain.signer_image is not one digest-pinned OCI repository"),
+    *[("upload_key", name, value, f"upload_key.{name} is not configured")
+      for name, value in CURRENT_UPLOAD_BINDINGS.items()],
+    ("approval_authority", "private_key_secret", CURRENT_BUILDER_PUBLIC_BINDING["private_key_secret"],
+     "approval attestation private-key secret is not configured"),
+]
+
+
+def test_selected_signer_inputs_remove_only_six_missing_input_blockers() -> None:
+    module = load_module()
+    lock, raw = module.load_lock(LOCK)
+    original = deepcopy(lock)
+    unselected = deepcopy(lock)
+    for row, field, value, _error in SELECTED_SIGNER_INPUTS:
+        assert lock[row][field] == value
+        unselected[row][field] = None
+    remaining = module.validate_lock(lock, raw)
+    before = module.validate_lock(unselected, json.dumps(unselected).encode())
+    assert remaining == REMAINING_SIGNER_BLOCKERS
+    assert before == remaining + [item[3] for item in SELECTED_SIGNER_INPUTS]
+    assert lock["reservation"]["configured"] is False
+    assert lock["reservation"]["adapter_sha256"] is None
+    assert lock["state"] == "dormant" and lock["rebuild"]["enabled"] is False
+    assert all(lock["outputs"][name] is False for name in (
+        "signed_content_handoff_enabled", "publication_authorized", "google_play_upload_authorized",
+    ))
+    result = module.contract_check(LOCK)
+    assert result["status"] == "dormant" and result["blockers"] == remaining
+    assert all(result[name] is False for name in (
+        "signing_performed", "publication_performed", "google_play_upload_performed",
+    ))
+    assert lock == original
+
+
+@pytest.mark.parametrize(("row", "field", "value", "error"), SELECTED_SIGNER_INPUTS)
+def test_each_selected_signer_input_remains_required(row, field, value, error) -> None:
+    module = load_module()
+    lock, _ = module.load_lock(LOCK)
+    assert lock[row][field] == value
+    lock[row][field] = None
+    assert module.validate_lock(lock, json.dumps(lock).encode()) == REMAINING_SIGNER_BLOCKERS + [error]
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("builder_runs_in_separate_job", False), ("builder_credential_mounts_allowed", True),
+])
+def test_same_image_selection_never_relaxes_builder_isolation(field, value) -> None:
+    module = load_module()
+    lock = synthetic_ready_lock()
+    lock["toolchain"]["signer_image"] = lock["toolchain"]["builder_image"]
+    # This checks configuration compatibility only, not authenticated runtime.
+    assert module.validate_lock(lock, json.dumps(lock).encode()) == []
+    lock["rebuild"][field] = value
+    assert module.validate_lock(lock, json.dumps(lock).encode()) == [
+        "independent rebuild is disabled or weakened",
+    ]
 
 
 @pytest.mark.parametrize(("state", "enabled", "expected"), [
