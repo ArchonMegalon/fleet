@@ -214,6 +214,25 @@ def test_same_job_and_overlapping_capture_operation_rejected(flow):
     assert not flow.model.operation.exists()
 
 
+def test_owner_capture_accessor_returns_only_actual_terminal_object(flow):
+    assert flow.r.owner_state() == "unarmed"
+    with pytest.raises(rendezvous.RendezvousError):
+        flow.r.capture_completed()
+    flow.r.arm_capture()
+    issued = flow.r._issued_capture
+    flow.serve(issued, 707)
+    assert request(flow, "capture", "submit", flow.token(issued).encode())[0] == 202
+    wait(flow, "capture-complete")
+    result = flow.r.capture_completed()
+    assert result is flow.r._session._captured
+    assert result.directory == flow.model.operation / capture.COPY_DIRECTORY
+    assert not isinstance(result, fleet.PreservedRebuildHandoff)
+    assert not isinstance(result, fleet.AuthenticatedRebuildHandoff)
+    flow.r.close()
+    with pytest.raises(rendezvous.RendezvousError):
+        flow.r.capture_completed()
+
+
 @pytest.mark.parametrize("attack", ["bearer", "role", "duplicate-auth", "duplicate-host", "host", "scheme",
     "method", "query", "raw-path", "suffix", "root", "origin", "forwarded", "encoding", "transfer",
     "missing-length", "too-long", "negative-length", "large-header", "control", "unknown-custody", "arm-route"])

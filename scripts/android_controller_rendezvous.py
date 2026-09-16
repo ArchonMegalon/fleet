@@ -294,6 +294,24 @@ class ControllerRendezvous:
             self._retained.assert_exact()
             return self._result
 
+    def owner_state(self):
+        """Local scheduling only; this string is never an admission receipt."""
+        with self._condition:
+            self._exact()
+            return self._state
+
+    def capture_completed(self):
+        """Return the actual live capture for owner custody, never load a file."""
+        with self._condition:
+            self._exact()
+            _require(self._state == "capture-complete" and self._session is not None,
+                     "capture-not-complete")
+            result = self._session._captured
+            _require(type(result) is capture.BuilderHandoffCapture, "capture-not-complete")
+            self._session._lock_snapshot.recheck()
+            capture._terminal(result.execution, self._inputs.policy)
+            return result
+
 
 class _FixedApp:
     """Raw ASGI factory product, no listener. Two bounded readers, one action worker.
