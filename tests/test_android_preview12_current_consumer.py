@@ -19,9 +19,9 @@ approval = fixture.approval
 EXTERNAL_INPUTS = (
     "CHUMMER_ANDROID_CURRENT_ROOT", "CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT",
 )
-# Retained ordered qualification run 35089872322 / artifact 10443981502.
+# Retained ordered qualification run 35140852521 / artifact 10465102739.
 # Hosted evidence stays external and byte-immutable; RFC signatures are test-only.
-ORIGINAL_RECEIPT_SHA256 = "8ff57d0f56818d6f356472a6d56415703187a503a6660478e5af64587c9f07e6"
+ORIGINAL_RECEIPT_SHA256 = "91eda21158a1d203ce1d931250c0d571f4dfab797c024ad15bd22ad439918f15"
 CURRENT_CONSUMER_SHA256 = "a6ecfecb0c53a45e9f91706ff4b3c8ef97e0bd23fc69a7d9a48e094d5038cb76"
 
 
@@ -222,6 +222,16 @@ def test_qualified_commit_cannot_substitute_a_different_main_with_same_tree():
     inputs = fixture.inputs()
     inputs["main_commit"] = "d" * 40
     assert inputs["main_tree"] == approval.ANDROID_CONSUMER_TREE
+    with pytest.raises(approval.ApprovalError, match="exactly bound consumer"):
+        approval.validate_inputs(argparse.Namespace(**inputs))
+
+
+def test_previous_qualified_commit_and_tree_are_not_current_authority():
+    inputs = fixture.inputs()
+    inputs.update(
+        main_commit="b3fc0619ec61df3df25849db90593e1b6b66deb2",
+        main_tree="9c71c65836cdeab038c3e88e8770d208e887ed1e",
+    )
     with pytest.raises(approval.ApprovalError, match="exactly bound consumer"):
         approval.validate_inputs(argparse.Namespace(**inputs))
 
