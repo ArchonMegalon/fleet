@@ -75,6 +75,52 @@ SSLContext reads immutable sealed copies, not unchecked reopened input paths.
 Held originals are revalidated before/after receipt signing. Rotation requires
 an explicit stop/restart with newly admitted inputs; live drift fails closed.
 
+## Explicit binary-signing ledger startup
+
+The default `--ledger-lane approval` preserves the startup above. A separate
+binary receipt service uses the same server, database implementation, four
+routes and signed protocol, with these additional explicit arguments:
+
+```text
+--ledger-lane binary-signing
+--comparison-approval-policy /srv/binary-ledger-private/approval-policy.json
+--comparison-approval-bearer-sha256-file /srv/binary-ledger-private/approval-bearer.sha256
+```
+
+Here `--policy` selects an independently admitted **ready** instance of the
+existing `android-preview12-binary-signing-ledger.json` contract, not the approval
+wrapper. The repository's dormant binary policy remains unchanged and rejected.
+The existing signer's wrapper validator requires the distinct binary credential
+input name and exact approval-policy comparison path/digest binding. The held
+comparison file must have that exact raw SHA256, contain the ready approval
+policy with its fixed public approver binding, and configure the approval ledger.
+Both canonical HTTPS origins, service identities and receipt SPKIs must differ.
+Neither receipt key can be the fixed approval signing key.
+
+Both bearer files contain only bounded private SHA256 text, never raw tokens.
+The launcher requires distinct normalized digest values (the optional LF cannot
+hide reuse), and applies the original private-file, no-alias and replacement
+guards. Both policy files and both bearer digests are rechecked **before** opening
+the selected existing database or reading receipt/TLS private keys. They remain
+held and fenced throughout service lifetime. Comparison inputs are mandatory
+only for this explicit lane; supplying either to the approval lane is an error.
+No input or credential is discovered from the environment or another service.
+
+The selected database must already carry the binary policy's distinct service
+identity and the independently retained `--database-id`. Opening the approval
+database fails, even with its correct database ID; no history is created or
+changed by admission. Policies do not assert a database path or numeric ID
+inequality: those identities remain provisioner/deployment responsibilities.
+The TLS leaf SPKI must also differ from the comparison approval-ledger receipt
+key, as well as the selected receipt key and the fixed approval signing key.
+
+This bridge establishes neither builder-key custody nor protected signer
+readiness. The signer's existing lock, binary-ledger/approval/builder key
+separation, credential admission and release checks remain independent. It does
+not activate policy, provision databases/keys, grant signing, or authorize Play.
+Focused binary startup tests use public/disposable fixtures without a listener;
+they are not production provisioning or remote TLS qualification.
+
 ## Limits and shutdown
 
 One worker, no WebSockets/docs/OpenAPI or access logging. Direct mode rejects
