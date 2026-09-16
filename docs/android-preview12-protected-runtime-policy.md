@@ -16,7 +16,7 @@ The separate v3 `android_preview12_signer.py` workflow is not this missing calle
 
 Bind the exact reviewed `config/release/android-preview12-external-rebuilder.lock.json` and the subsequently qualified Android graph.
 Do not adopt the legacy `android-preview12-signer-toolchain.lock.json` (.NET 8/API 35/JDK 21).
-The external lock targets .NET 10.0.110/API 36/JDK 17; its image and installed-closure admissions remain unresolved until independently measured and reviewed.
+The external lock targets .NET 10.0.111/API 36/JDK 17; its image and installed-closure admissions remain unresolved until independently measured and reviewed.
 Do not repin that lock to an unqualified Android candidate or treat source changes as preserved image qualification.
 
 ## A. Cryptographically authenticated Fleet artifact origin

@@ -65,11 +65,45 @@ argument. It checks out the complete source graph, binds the exact
 314,037,662 bytes), along with their exact tree digests, the exact bundletool
 bytes, the separate installed-closure receipt, and the declared builder image
 identity. Downstream signer configuration remains a separate gate.
-These values are contained-file measurements accepted by the SDK111 measurement
-record only; that record's outer measurement execution remains FAILED. They do
-not qualify current runtime custody or an installed closure.
+The SDK111 measurement record's outer execution remains FAILED. A separate
+2026-09-16 installed-closure probe observed these same three exact tree/count/size
+tuples in the selected builder image and passed its post-fences and cleanup;
+it does not rewrite that historical failure or establish runtime custody.
 It runs the Android unsigned build and
 requires its AAB digest to equal the producer.
+
+### Observed public builder inputs, not activation
+
+The dormant lock selects only these existing public bytes:
+
+- builder image `ghcr.io/archonmegalon/chummer-android-builder@sha256:5298279ccc96316c546d7bebe00af639e38c22bdac081a980ba10e7dc965e40a`;
+- original 2,362-byte `sdk111-tree-measurement.AV1kqHwI/archive-inventory.json`,
+  SHA-256 `3a37e627299076065f5881be6e157dd1887f3428dfe2a698ffc8cf4e465ad330`.
+
+The retained public evidence lives below
+`/docker/chummercomplete/_completion/chummer-next-wave/android-persistence-owner-20260909.K00qFF/`.
+`builder-installed-closure-probe-v2-20260916/execution/RESULTS.json` has SHA-256
+`62b43baf2979ed3bceefc01c398d9625d318b2e4a569d870528e4f5a7778b88c`;
+its original `observation.json` has SHA-256
+`99da464a517d5543ed7cc7e1402dd4ab213de5f6421d4a5b85c0e4845a13bca5`.
+The observation binds image config
+`sha256:9795253a6f2218f9a757cefaea59ebd8a9d3e056fb6e4d9011b5179b42862be5`
+to the repository-qualified digest and inventory above. All originals, including
+older failed observations, remain unchanged; no inventory is regenerated or
+relabeled for this selection.
+
+This is a public byte selection, not authentication or qualification. The probe
+records `builderQualified`, `installedClosureAdmitted`,
+`builderExecutionProvenanceAuthenticated` and `protectedSignerRuntimeVerified`
+as false. Pinning its inventory does not turn those claims true. The inventory
+is not Android's separate Java observation or a protected-runtime attestation.
+`state` remains `dormant`, `rebuild.enabled` remains false, signer image and
+credential descriptors remain null, reservation remains unconfigured, and
+signed-content handoff, publication and Play upload remain disabled. Both
+unsigned activation gates and every protected-signing gate still apply. There
+is no new runtime authenticator, signer caller or execution in this change.
+
+### Separate rebuild inputs
 
 The two mandatory inputs are `--installed-closure-receipt` (Fleet's
 lock-digest-bound installed inventory) and `--java-tool-observation` (Android's

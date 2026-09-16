@@ -53,9 +53,9 @@
       "size_bytes": 314037662
     },
     "bundletool_sha256": "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29",
-    "builder_image": null,
+    "builder_image": "ghcr.io/archonmegalon/chummer-android-builder@sha256:5298279ccc96316c546d7bebe00af639e38c22bdac081a980ba10e7dc965e40a",
     "signer_image": null,
-    "installed_closure_receipt_sha256": null
+    "installed_closure_receipt_sha256": "3a37e627299076065f5881be6e157dd1887f3428dfe2a698ffc8cf4e465ad330"
   },
   "approval_authority": {
     "key_id": "local-release-builder-2026",

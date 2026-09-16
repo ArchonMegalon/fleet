@@ -146,16 +146,20 @@ EXPECTED_SDK111_MEASUREMENTS = {
     "java": ("17.0.20.1", "85d610b3ad706cd4de8d36d3c8c6fc91000814f5c3f84fefde5ab401c836806a", 246, 332109578),
     "android_sdk": (36, "36.0.0", "54de1ef5b7d26c7a442cbc51078c105d31ac4b73f58469404c3e04d7c7a55e09", 11523, 314037662),
 }
+OBSERVED_BUILDER_IMAGE = (
+    "ghcr.io/archonmegalon/chummer-android-builder@sha256:"
+    "5298279ccc96316c546d7bebe00af639e38c22bdac081a980ba10e7dc965e40a"
+)
+OBSERVED_INSTALLED_INVENTORY_SHA256 = "3a37e627299076065f5881be6e157dd1887f3428dfe2a698ffc8cf4e465ad330"
 
 
 def test_sdk111_toolchain_tuple_is_exact_and_checked_in_lock_stays_unusable() -> None:
     module = load_module()
     lock, raw = module.load_lock(LOCK)
     errors = module.validate_unsigned_rebuild_lock(lock, raw)
-    assert "external rebuilder lock is dormant" in errors
-    assert "toolchain.builder_image is not one digest-pinned OCI repository" in errors
-    assert "toolchain.installed_closure_receipt_sha256 is not a lowercase SHA-256" in errors
-    assert not any("closure is not exact" in error for error in errors)
+    assert errors == ["external rebuilder lock is dormant", "independent rebuild is disabled or weakened"]
+    assert lock["toolchain"]["builder_image"] == OBSERVED_BUILDER_IMAGE
+    assert lock["toolchain"]["installed_closure_receipt_sha256"] == OBSERVED_INSTALLED_INVENTORY_SHA256
 
     ready = synthetic_ready_lock()
     assert (ready["toolchain"]["dotnet"]["version"], ready["toolchain"]["dotnet"]["tree_sha256"],
@@ -168,6 +172,62 @@ def test_sdk111_toolchain_tuple_is_exact_and_checked_in_lock_stays_unusable() ->
     original = deepcopy(ready)
     assert module.validate_lock(ready, json.dumps(ready).encode(), ready["toolchain"]["builder_image"]) == []
     assert ready == original
+
+
+def test_observed_public_pins_remove_only_two_configuration_blockers() -> None:
+    module = load_module()
+    lock, raw = module.load_lock(LOCK)
+    original = deepcopy(lock)
+    unpinned = deepcopy(lock)
+    unpinned["toolchain"].update(builder_image=None, installed_closure_receipt_sha256=None)
+    remaining = module.validate_lock(lock, raw)
+    before = module.validate_lock(unpinned, json.dumps(unpinned).encode())
+    assert [error for error in before if error not in remaining] == [
+        "toolchain.builder_image is not one digest-pinned OCI repository",
+        "toolchain.installed_closure_receipt_sha256 is not a lowercase SHA-256",
+    ]
+    assert remaining == [error for error in before if error in remaining]
+    assert lock["state"] == "dormant" and lock["rebuild"]["enabled"] is False
+    assert lock["toolchain"]["signer_image"] is None
+    assert lock["reservation"]["configured"] is False
+    assert lock["reservation"]["adapter_sha256"] is None
+    assert lock["approval_authority"]["private_key_secret"] is None
+    assert all(lock["upload_key"][name] is None for name in (
+        "key_alias", "keystore_secret", "store_password_secret", "key_password_secret",
+    ))
+    assert all(lock["outputs"][name] is False for name in (
+        "signed_content_handoff_enabled", "publication_authorized", "google_play_upload_authorized",
+    ))
+    result = module.contract_check(LOCK)
+    assert result["status"] == "dormant"
+    assert result["blockers"] == remaining
+    assert all(result[name] is False for name in (
+        "signing_performed", "publication_performed", "google_play_upload_performed",
+    ))
+    assert lock == original
+
+
+@pytest.mark.parametrize(("state", "enabled", "expected"), [
+    ("dormant", False, ["external rebuilder lock is dormant", "independent rebuild is disabled or weakened"]),
+    ("ready", False, ["independent rebuild is disabled or weakened"]),
+    ("dormant", True, ["external rebuilder lock is dormant"]),
+])
+def test_observed_public_pins_cannot_bypass_unsigned_activation(state, enabled, expected) -> None:
+    module = load_module()
+    lock, _ = module.load_lock(LOCK)
+    lock["state"], lock["rebuild"]["enabled"] = state, enabled
+    assert module.validate_unsigned_rebuild_lock(
+        lock, json.dumps(lock).encode(), OBSERVED_BUILDER_IMAGE,
+    ) == expected
+
+
+def test_observed_public_builder_pin_rejects_a_different_reported_image() -> None:
+    module = load_module()
+    lock, raw = module.load_lock(LOCK)
+    assert module.validate_unsigned_rebuild_lock(lock, raw, "builder@sha256:" + "0" * 64) == [
+        "external rebuilder lock is dormant", "independent rebuild is disabled or weakened",
+        "reported builder image differs from lock",
+    ]
 
 
 @pytest.mark.parametrize(("row", "field", "value"), [
