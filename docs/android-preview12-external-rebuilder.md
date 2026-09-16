@@ -10,8 +10,8 @@ That proposal is not an approved trust policy or activation evidence.
 
 ## Contract boundary
 
-The implementation pins Android commit `8ea0da6092ede167c65b7e059df40fe88ac6f026`,
-tree `dba9e14fe892a9794df60eeff254d1f907c926b8`, and its exact consumer bytes.
+The implementation pins Android commit `9cbe9136a786bf5c8dee233e77656678c838c481`,
+tree `46322c4789f8de397e043ba29ed93e0186ff9cc7`, and its exact consumer bytes.
 This dormant consumer rebind does not qualify a builder/signer image or activate
 signing. It treats these as different artifacts:
 
@@ -25,10 +25,11 @@ signing. It treats these as different artifacts:
 The v1 external-signer response does not replace Android v2. Fleet audit v3 is
 never presented to Android as release authority.
 
-Historical helper checks in `test_android_preview12_external_rebuilder.py` and
+Current helper checks in `test_android_preview12_external_rebuilder.py` and
 `test_android_preview12_preserved_validation.py` still read
-`CHUMMER_ANDROID_CURRENT_ROOT`; despite that name, those suites require the exact
-clean 8ea0 checkout pinned by the external lock, not current d4e.
+`CHUMMER_ANDROID_CURRENT_ROOT`; those suites require the exact clean `9cbe9136`
+checkout pinned by the external lock. The four pinned helper hashes remain
+unchanged from `e0d997b`; this is not builder or signer qualification.
 The historical `real_v2_consumer` and `current_receipt_consumer` suites instead
 read `CHUMMER_ANDROID_HISTORICAL_BUILDER_ROOT`. The latter additionally requires
 `CHUMMER_ANDROID_HISTORICAL_BUILDER_TWO_GREEN_RECEIPT`: the unchanged qualified
