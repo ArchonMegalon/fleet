@@ -85,6 +85,7 @@ def test_whitelisted_types_and_exact_attempt_mapping_never_promote_authority(mod
     assert result["contextCheckRunId"]["value"] == json.loads(context)
     assert result["apiJobId"] == 990 and result["apiCheckRunId"] == "789"
     assert result["jwtHeaderTypes"] == {"alg": "string", "kid": "string", "typ": "string"}
+    assert result["jobWorkflowIdentity"] == "absent"
     assert result["signatureVerified"] is False and result["classification"] == "diagnostic_only_not_authority"
     assert len(model.calls) == 4
     serialized = json.dumps(result)
@@ -92,7 +93,55 @@ def test_whitelisted_types_and_exact_attempt_mapping_never_promote_authority(mod
     assert "Authorization" not in serialized and "audience" not in serialized and "private-query" not in serialized
     assert set(result) == {"classification", "signatureVerified", "repository", "repositoryId", "sourceSha",
         "workflowRef", "runId", "runAttempt", "oidcCheckRunId", "contextCheckRunId", "apiJobId", "apiCheckRunId",
-        "comparison", "jwtHeaderTypes"}
+        "comparison", "jwtHeaderTypes", "jobWorkflowIdentity"}
+
+
+def test_direct_workflow_self_reference_pair_is_exact_and_diagnostic_only(model):
+    model.claims.update(job_workflow_ref=observation.WORKFLOW_REF, job_workflow_sha="a" * 40)
+    model.header = {"alg": "RS256", "typ": "JWT", "kid": "PRIVATE", "x5t": "PRIVATE"}
+    result = observation.observe(model.env, model.fetch)
+    assert result["jobWorkflowIdentity"] == "exact_direct_self_reference"
+    assert result["oidcCheckRunId"] == {"jsonType": "string", "value": "789"}
+    assert result["signatureVerified"] is False and result["classification"] == "diagnostic_only_not_authority"
+    assert "PRIVATE" not in json.dumps(result)
+    assert "job_workflow_ref" not in result and "job_workflow_sha" not in result
+
+
+@pytest.mark.parametrize("pair", [
+    {"job_workflow_ref": observation.WORKFLOW_REF}, {"job_workflow_sha": "a" * 40},
+    {"job_workflow_ref": None, "job_workflow_sha": "a" * 40},
+    {"job_workflow_ref": observation.WORKFLOW_REF, "job_workflow_sha": None},
+    {"job_workflow_ref": True, "job_workflow_sha": "a" * 40},
+    {"job_workflow_ref": observation.WORKFLOW_REF, "job_workflow_sha": ["a" * 40]},
+    {"job_workflow_ref": "PRIVATE/foreign/.github/workflows/other.yml@refs/heads/main", "job_workflow_sha": "a" * 40},
+    {"job_workflow_ref": observation.REPOSITORY + "/.github/workflows/reusable.yml@refs/heads/main", "job_workflow_sha": "a" * 40},
+    {"job_workflow_ref": observation.WORKFLOW_REF.replace("refs/heads/main", "refs/heads/other"), "job_workflow_sha": "a" * 40},
+    {"job_workflow_ref": observation.WORKFLOW_REF, "job_workflow_sha": "b" * 40},
+    {"job_workflow_ref": observation.WORKFLOW_REF, "job_workflow_sha": "A" * 40},
+    {"job_workflow_ref": "", "job_workflow_sha": ""},
+])
+def test_optional_pair_rejects_partial_foreign_reusable_or_changed_identity(model, pair):
+    model.claims.update(pair)
+    diagnostic = observation.Diagnostic()
+    with pytest.raises(observation.ObservationError) as rejected:
+        observation.observe(model.env, model.fetch, diagnostic)
+    assert len(model.calls) == 2 and rejected.value.reason == "claim-mismatch"
+    failure = diagnostic.failure(rejected.value)
+    assert "PRIVATE" not in failure and token(model.claims) not in failure
+    assert json.loads(failure)["field"] in ("claims.job_workflow_ref", "claims.job_workflow_sha")
+
+
+@pytest.mark.parametrize("value", [None, "", "PRIVATE", True])
+@pytest.mark.parametrize("self_reference", [False, True])
+def test_environment_claim_stays_forbidden_even_with_exact_self_reference(model, value, self_reference):
+    model.claims["environment"] = value
+    if self_reference:
+        model.claims.update(job_workflow_ref=observation.WORKFLOW_REF, job_workflow_sha="a" * 40)
+    diagnostic = observation.Diagnostic()
+    with pytest.raises(observation.ObservationError) as rejected:
+        observation.observe(model.env, model.fetch, diagnostic)
+    assert diagnostic.field == "claims.environment" and len(model.calls) == 2
+    assert "PRIVATE" not in diagnostic.failure(rejected.value)
 
 
 def test_documented_x5t_header_and_extra_response_metadata_never_expose_values(model):

@@ -238,8 +238,16 @@ def decode_observation(value, expected, diagnostic=None):
     for key, value in selected.items():
         diagnostic.field = "claims." + key
         require(type(claims.get(key)) is str and claims[key] == value, "claim-mismatch")
-    diagnostic.field = None
-    require(not any(key in claims for key in ("environment", "job_workflow_ref", "job_workflow_sha")))
+    diagnostic.field = "claims.environment"
+    require("environment" not in claims)
+    # A genuine direct hosted job has emitted these claims. Their presence is
+    # not reusable-workflow authority: admit only this exact direct self-reference.
+    job_workflow_identity = "absent"
+    if "job_workflow_ref" in claims or "job_workflow_sha" in claims:
+        for key, value in (("job_workflow_ref", WORKFLOW_REF), ("job_workflow_sha", expected["sha"])):
+            diagnostic.field = "claims." + key
+            require(type(claims.get(key)) is str and claims[key] == value, "claim-mismatch")
+        job_workflow_identity = "exact_direct_self_reference"
     diagnostic.at("oidc-times")
     now = int(time.time())
     require(all(type(claims.get(key)) is int for key in ("iat", "nbf", "exp"))
@@ -251,7 +259,7 @@ def decode_observation(value, expected, diagnostic=None):
     require(type(check) in (str, int) and number(str(check)) and str(check) == expected["check"])
     # Return only an equality-checked public integer/string; no arbitrary JWT values.
     return {"checkRunId": {"jsonType": "string" if type(check) is str else "number", "value": check},
-        "headerTypes": {key: "string" for key in sorted(header)}}
+        "headerTypes": {key: "string" for key in sorted(header)}, "jobWorkflowIdentity": job_workflow_identity}
 
 
 def observe(environment, fetch=get_json, diagnostic=None):
@@ -311,6 +319,7 @@ def observe(environment, fetch=get_json, diagnostic=None):
         "repository": REPOSITORY, "repositoryId": REPOSITORY_ID, "sourceSha": expected["sha"],
         "workflowRef": WORKFLOW_REF, "runId": expected["run"], "runAttempt": expected["attempt"],
         "oidcCheckRunId": observed["checkRunId"], "jwtHeaderTypes": observed["headerTypes"],
+        "jobWorkflowIdentity": observed["jobWorkflowIdentity"],
         "contextCheckRunId": {"jsonType": expected["contextType"], "value": expected["contextValue"]},
         "apiJobId": job["id"], "apiCheckRunId": expected["check"], "comparison": "exact_match"}
 
