@@ -34,10 +34,12 @@ def test_release_source_test_capabilities_are_explicit_and_nonpromoting():
 
 
 @pytest.mark.parametrize("present", [(), (0,), (1,), (2,), (0, 1), (0, 2), (1, 2)])
-def test_new_release_source_consumer_never_accepts_missing_or_partial_inputs(tmp_path, present):
+@pytest.mark.parametrize("build_sha", [
+    digest for digest, helper in fleet.RELEASE_TEST_CONSUMERS.items() if helper
+])
+def test_new_release_source_consumer_never_accepts_missing_or_partial_inputs(tmp_path, present, build_sha):
     lock = ready_lock()
-    lock["android_authority"]["build_script"]["sha256"] = next(
-        digest for digest, helper in fleet.RELEASE_TEST_CONSUMERS.items() if helper)
+    lock["android_authority"]["build_script"]["sha256"] = build_sha
     paths = tuple(tmp_path / str(index) if index in present else None for index in range(3))
     with pytest.raises(fleet.RebuilderError, match="require explicit"):
         fleet._admit_release_test_inputs(lock, *paths)
@@ -46,10 +48,12 @@ def test_new_release_source_consumer_never_accepts_missing_or_partial_inputs(tmp
 def test_checked_in_current_source_consumer_requires_all_three_safe_inputs(tmp_path):
     lock = json.loads(LOCK.read_bytes())
     binding = lock["android_authority"]["build_script"]
-    current_build_sha = "fc8b6e637ba3220e4e9c5ea55c5e4dcca6cb26c196eaa75f6d19e91a87ed3db6"
+    current_build_sha = "4e29b255aae29d30f1b8ddb7fc96947cf851df2c661fa820031bd5db2604f3f6"
     current_capture_sha = "a295c226850edda9ce3a57a3c43690188e271b3059c33dd14abca04f65ef4bcf"
     assert binding["sha256"] == current_build_sha
-    assert fleet.RELEASE_TEST_CONSUMERS[current_build_sha] == current_capture_sha
+    assert fleet._release_test_capability(lock) == current_capture_sha
+    predecessor_build_sha = "fc8b6e637ba3220e4e9c5ea55c5e4dcca6cb26c196eaa75f6d19e91a87ed3db6"
+    assert fleet.RELEASE_TEST_CONSUMERS[predecessor_build_sha] == current_capture_sha
     for present in [(), (0,), (1,), (2,), (0, 1), (0, 2), (1, 2)]:
         paths = tuple(
             (tmp_path / f"missing-{index}") if index in present else None
@@ -67,10 +71,12 @@ def test_checked_in_current_source_consumer_requires_all_three_safe_inputs(tmp_p
 
 
 @pytest.mark.parametrize("attack", ["same", "nested", "output", "relative", "symlink", "writable", "file"])
-def test_release_source_paths_reject_overlap_or_unsafe_inputs(tmp_path, attack):
+@pytest.mark.parametrize("build_sha", [
+    digest for digest, helper in fleet.RELEASE_TEST_CONSUMERS.items() if helper
+])
+def test_release_source_paths_reject_overlap_or_unsafe_inputs(tmp_path, attack, build_sha):
     lock = ready_lock()
-    lock["android_authority"]["build_script"]["sha256"] = next(
-        digest for digest, helper in fleet.RELEASE_TEST_CONSUMERS.items() if helper)
+    lock["android_authority"]["build_script"]["sha256"] = build_sha
     paths = [tmp_path / name for name in ("bootstrap", "wheels", "oracle")]
     for path in paths:
         path.mkdir(mode=0o700)

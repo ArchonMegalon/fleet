@@ -10,8 +10,8 @@ That proposal is not an approved trust policy or activation evidence.
 
 ## Contract boundary
 
-The implementation pins Android commit `9cbe9136a786bf5c8dee233e77656678c838c481`,
-tree `46322c4789f8de397e043ba29ed93e0186ff9cc7`, and its exact consumer bytes.
+The implementation pins Android commit `b3fc0619ec61df3df25849db90593e1b6b66deb2`,
+tree `9c71c65836cdeab038c3e88e8770d208e887ed1e`, and its exact consumer bytes.
 This dormant consumer rebind does not qualify a builder/signer image or activate
 signing. It treats these as different artifacts:
 
@@ -27,9 +27,18 @@ never presented to Android as release authority.
 
 Current helper checks in `test_android_preview12_external_rebuilder.py` and
 `test_android_preview12_preserved_validation.py` still read
-`CHUMMER_ANDROID_CURRENT_ROOT`; those suites require the exact clean `9cbe9136`
-checkout pinned by the external lock. The four pinned helper hashes remain
-unchanged from `e0d997b`; this is not builder or signer qualification.
+`CHUMMER_ANDROID_CURRENT_ROOT`; those suites require the exact clean `b3fc0619`
+checkout pinned by the external lock. Of the four pinned helper hashes, only
+`scripts/build-release.sh` changed from `9cbe9136`, to
+`4e29b255aae29d30f1b8ddb7fc96947cf851df2c661fa820031bd5db2604f3f6`.
+It verifies captured sidecars from the external release-input root. Its admitted
+source-test helper remains
+`a295c226850edda9ce3a57a3c43690188e271b3059c33dd14abca04f65ef4bcf`;
+the previous build-script capability entry is retained. Current eligibility is
+the original Two-Green run `35089872322` artifact `10443981502`, pairing PR 67
+review `35075954343` and main `35083352933`; its separate approval-consumer test
+requires that original receipt, never a relabeled predecessor. This is not
+builder or signer qualification.
 The historical `real_v2_consumer` and `current_receipt_consumer` suites instead
 read `CHUMMER_ANDROID_HISTORICAL_BUILDER_ROOT`. The latter additionally requires
 `CHUMMER_ANDROID_HISTORICAL_BUILDER_TWO_GREEN_RECEIPT`: the unchanged qualified

@@ -59,18 +59,53 @@ def test_larger_transport_does_not_change_oracle_file_limit(tmp_path):
     assert fleet.OFFLINE_ORACLE_FILE_BYTES == 512 * 1024**2
 
 
-def test_larger_transport_does_not_change_oracle_aggregate_limit(tmp_path):
+def test_oracle_aggregate_accepts_exact_three_gib_and_rejects_next_byte(tmp_path):
     root = tmp_path / 'oracle'
     root.mkdir(mode=0o700)
-    for index in range(4):
+    for index in range(6):
         with (root / str(index)).open('wb') as output:
             output.truncate(512 * 1024**2)
         (root / str(index)).chmod(0o600)
-    assert len(fleet._oracle_inventory(root)) == 4
+    inventory = fleet._oracle_inventory(root)
+    assert len(inventory) == 6
+    assert sum(info.st_size for info in inventory.values()) == 3 * 1024**3
     (root / 'one-byte-too-many').write_bytes(b'x')
     with pytest.raises(fleet.RebuilderError, match='oracle bytes exceed transport limits'):
         fleet._oracle_inventory(root)
-    assert fleet.OFFLINE_ORACLE_TOTAL_BYTES == 2 * 1024**3
+    assert fleet.OFFLINE_ORACLE_TOTAL_BYTES == 3 * 1024**3
+    assert fleet.TEST_ORACLE_FILE_COUNT == 250_000
+
+
+def test_oracle_metadata_accepts_measured_full_history_size_without_payload_allocation(tmp_path):
+    # Read-only measurement of the pinned fe4355 oracle on 2026-09-16.
+    # These sparse placeholders model only its component byte totals: they are
+    # deliberately not Git objects and cannot establish oracle admission.
+    root = tmp_path / 'oracle'
+    root.mkdir(mode=0o700)
+    component_sizes = {
+        'checkout': 1_240_994_870,
+        'packs-index-rev': 1_345_350_073,
+        'git-auxiliary': 3_005_080,
+    }
+    paths = []
+    for component, size in component_sizes.items():
+        directory = root / component
+        directory.mkdir(mode=0o700)
+        index = 0
+        while size:
+            chunk = min(size, 512 * 1024**2)
+            path = directory / str(index)
+            with path.open('wb') as output:
+                output.truncate(chunk)
+            path.chmod(0o600)
+            paths.append(path)
+            size -= chunk
+            index += 1
+    inventory = fleet._oracle_inventory(root)
+    total = sum(inventory[path.relative_to(root).as_posix()].st_size for path in paths)
+    assert total == sum(component_sizes.values()) == 2_589_350_023
+    assert 2 * 1024**3 < total < fleet.OFFLINE_ORACLE_TOTAL_BYTES
+    assert sum(path.stat().st_blocks * 512 for path in paths) < 1024**2
 
 
 def test_streamed_snapshot_keeps_one_mib_reads_and_authenticates_bytes(tmp_path, monkeypatch):

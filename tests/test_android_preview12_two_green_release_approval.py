@@ -719,6 +719,8 @@ PREVIOUS_CONSUMER_COMMIT = "d4e9116d5bcdf12a51dec6490bf47b97ed143134"
 PREVIOUS_CONSUMER_TREE = "301180a95bb313f77b6c695ac8b88624603de933"
 PREDECESSOR_CONSUMER_COMMIT = "e0d997bddaebcc1e685ef48b886445e7a96a5af7"
 PREDECESSOR_CONSUMER_TREE = "f816035141ae63eb464fde437d3e09550aab2717"
+PRE_SIDECAR_FIX_CONSUMER_COMMIT = "9cbe9136a786bf5c8dee233e77656678c838c481"
+PRE_SIDECAR_FIX_CONSUMER_TREE = "46322c4789f8de397e043ba29ed93e0186ff9cc7"
 BUILDER_PUBLIC_SPKI = "MCowBQYDK2VwAyEAdXOvq6FjTeUUqxBWMCrF+OJGqihEANWatNQ96HmLNEc="
 PUBLIC_BINDING_DRIFT = [
     ("external_ed25519_key", {"key_id": "unknown-approver"}),
@@ -752,6 +754,9 @@ PUBLIC_BINDING_DRIFT = [
     ("android_consumer", {"qualified_commit": PREDECESSOR_CONSUMER_COMMIT}),
     ("android_consumer", {"qualified_tree": PREDECESSOR_CONSUMER_TREE}),
     ("android_consumer", {"qualified_commit": PREDECESSOR_CONSUMER_COMMIT, "qualified_tree": PREDECESSOR_CONSUMER_TREE}),
+    ("android_consumer", {"qualified_commit": PRE_SIDECAR_FIX_CONSUMER_COMMIT}),
+    ("android_consumer", {"qualified_tree": PRE_SIDECAR_FIX_CONSUMER_TREE}),
+    ("android_consumer", {"qualified_commit": PRE_SIDECAR_FIX_CONSUMER_COMMIT, "qualified_tree": PRE_SIDECAR_FIX_CONSUMER_TREE}),
     ("android_consumer", {"provenance_validator_sha256": "0" * 64}),
     ("output", {"key_id": "local-release-builder-2026"}),
     ("output", {"signing_authorized": True}),
@@ -775,6 +780,33 @@ def test_immediate_predecessor_consumer_is_rejected(commit, tree):
     values.update(main_commit=commit, main_tree=tree)
     with pytest.raises(approval.ApprovalError, match="exactly bound consumer"):
         approval.validate_inputs(argparse.Namespace(**values))
+
+
+@pytest.mark.parametrize("commit,tree", [
+    (PRE_SIDECAR_FIX_CONSUMER_COMMIT, approval.ANDROID_CONSUMER_TREE),
+    (approval.ANDROID_CONSUMER_COMMIT, PRE_SIDECAR_FIX_CONSUMER_TREE),
+    (PRE_SIDECAR_FIX_CONSUMER_COMMIT, PRE_SIDECAR_FIX_CONSUMER_TREE),
+])
+def test_pre_sidecar_fix_consumer_is_rejected(commit, tree):
+    values = inputs()
+    values.update(main_commit=commit, main_tree=tree)
+    with pytest.raises(approval.ApprovalError, match="exactly bound consumer"):
+        approval.validate_inputs(argparse.Namespace(**values))
+
+
+def test_resealed_pre_sidecar_fix_dependency_graph_is_rejected():
+    value = receipt()
+    graph = value["commonAuthority"]["dependencyGraph"]
+    graph["sources"]["android"]["tree"] = PRE_SIDECAR_FIX_CONSUMER_TREE
+    graph["sha256"] = approval.canonical_sha256({k: v for k, v in graph.items() if k != "sha256"})
+    assert graph["sha256"] == "b4f0e957bf8ab7544a55b934a204cb5283a0fb73f671daaa0ca2db13d737e574"
+    value.pop("eligibilitySha256")
+    value["eligibilitySha256"] = approval.canonical_sha256(value)
+    with pytest.raises(approval.ApprovalError, match="qualified dependency graph"):
+        approval.validate_receipt(
+            value, approval.validate_inputs(argparse.Namespace(**inputs())),
+            now=NOW, policy=approval.expected_policy(),
+        )
 
 
 def test_resealed_immediate_predecessor_dependency_graph_is_rejected():

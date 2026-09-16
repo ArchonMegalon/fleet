@@ -11,11 +11,11 @@
   },
   "android_authority": {
     "repository": "https://github.com/ArchonMegalon/chummer-android.git",
-    "commit": "9cbe9136a786bf5c8dee233e77656678c838c481",
-    "tree": "46322c4789f8de397e043ba29ed93e0186ff9cc7",
+    "commit": "b3fc0619ec61df3df25849db90593e1b6b66deb2",
+    "tree": "9c71c65836cdeab038c3e88e8770d208e887ed1e",
     "build_script": {
       "path": "scripts/build-release.sh",
-      "sha256": "fc8b6e637ba3220e4e9c5ea55c5e4dcca6cb26c196eaa75f6d19e91a87ed3db6"
+      "sha256": "4e29b255aae29d30f1b8ddb7fc96947cf851df2c661fa820031bd5db2604f3f6"
     },
     "attestation_consumer": {
       "path": "scripts/sign_android_release_build_attestation.py",
@@ -91,7 +91,7 @@
     "adapter_sha256": null,
     "configured": false,
     "policy_path": "config/release/android-preview12-binary-signing-ledger.json",
-    "policy_sha256": "d67c71202ffee7428985dd926571e3cb5056cbb26f924a49b0dfed1b4e5341ab",
+    "policy_sha256": "d4836ecce655d3e5c27cb4c49c89fb190f322c1844dce82b79f62637df78623a",
     "protocol_source": "reviewed_fleet_draft_11_pending_merge",
     "signed_receipts_required": true
   },

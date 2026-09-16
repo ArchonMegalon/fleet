@@ -19,9 +19,9 @@ approval = fixture.approval
 EXTERNAL_INPUTS = (
     "CHUMMER_ANDROID_CURRENT_ROOT", "CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT",
 )
-# Retained ordered qualification run 35032475683 / artifact 10421743956.
+# Retained ordered qualification run 35089872322 / artifact 10443981502.
 # Hosted evidence stays external and byte-immutable; RFC signatures are test-only.
-ORIGINAL_RECEIPT_SHA256 = "986131d9b0d487efcd4d1044260337ae65d0429f095910b7c8aad66a0d18e4b1"
+ORIGINAL_RECEIPT_SHA256 = "8ff57d0f56818d6f356472a6d56415703187a503a6660478e5af64587c9f07e6"
 CURRENT_CONSUMER_SHA256 = "a6ecfecb0c53a45e9f91706ff4b3c8ef97e0bd23fc69a7d9a48e094d5038cb76"
 
 
