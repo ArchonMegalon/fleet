@@ -39,6 +39,19 @@ the original Two-Green run `35089872322` artifact `10443981502`, pairing PR 67
 review `35075954343` and main `35083352933`; its separate approval-consumer test
 requires that original receipt, never a relabeled predecessor. This is not
 builder or signer qualification.
+The lock's historical `approval_authority` field selects the **builder** identity
+already trusted by this exact b3fc consumer: `fleet-release-builder-2026-09`,
+`eng/trusted-release-builders/fleet-release-builder-2026-09.public.pem`, PEM SHA256
+`ef44c5b7fcadaf0f115b5f0e0e7b1a65edb322bb002faf980acb654a5db8caaf`, SPKI SHA256
+`41b44078d037fafd85b091b967959f77a7a4aa9f160d03749fa49889a8b1b156`.
+This aligns public selection only: `private_key_secret` remains null and every
+dormant/activation gate remains unchanged. It establishes no present private-key
+custody or signer readiness, and does not replace the RSA Play upload identity or
+the separate approval key. Android's historical legacy-key compatibility remains
+unchanged. Current consumer tests load the actual lock without substituting a
+test key and reject mismatched IDs, paths and hashes; a complete stale operational
+tuple fails the checked-in public-binding regression.
+
 The historical `real_v2_consumer` and `current_receipt_consumer` suites instead
 read `CHUMMER_ANDROID_HISTORICAL_BUILDER_ROOT`. The latter additionally requires
 `CHUMMER_ANDROID_HISTORICAL_BUILDER_TWO_GREEN_RECEIPT`: the unchanged qualified

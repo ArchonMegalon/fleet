@@ -58,12 +58,12 @@
     "installed_closure_receipt_sha256": "3a37e627299076065f5881be6e157dd1887f3428dfe2a698ffc8cf4e465ad330"
   },
   "approval_authority": {
-    "key_id": "local-release-builder-2026",
+    "key_id": "fleet-release-builder-2026-09",
     "role": "android_internal_release_builder",
     "scope": "android_internal_release_artifact_binding",
-    "public_key_path": "eng/trusted-release-approvers/local-release-builder-2026.public.pem",
-    "public_key_sha256": "ed1fbe95fc7713bfc6d9d0fea21726c1ba3193533fc2d5523e054ad8fb86184c",
-    "public_key_spki_sha256": "c46a4e9a224c8c77a4038bca83f7d9ed66146318d8b5c2c9fc81cd19fdd18ea7",
+    "public_key_path": "eng/trusted-release-builders/fleet-release-builder-2026-09.public.pem",
+    "public_key_sha256": "ef44c5b7fcadaf0f115b5f0e0e7b1a65edb322bb002faf980acb654a5db8caaf",
+    "public_key_spki_sha256": "41b44078d037fafd85b091b967959f77a7a4aa9f160d03749fa49889a8b1b156",
     "private_key_secret": null,
     "rotation_requires_android_merge_and_requalification": true
   },
