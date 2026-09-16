@@ -295,7 +295,7 @@ class ControllerRendezvous:
             return self._result
 
 
-class RendezvousApp:
+class _FixedApp:
     """Raw ASGI factory product, no listener. Two bounded readers, one action worker.
 
     Follows the existing ledger's verified-TLS/exact-Host/bearer boundary. Proxy
@@ -303,8 +303,7 @@ class RendezvousApp:
     Infrastructure must disable proxy rewriting/access logs and supervise stalls.
     """
 
-    def __init__(self, controller: ControllerRendezvous, *, trusted_proxy_addresses=()):
-        _require(type(controller) is ControllerRendezvous)
+    def __init__(self, controller, routes, *, trusted_proxy_addresses=(), body_limits=None):
         networks = tuple(ipaddress.ip_network(value) for value in
             ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "fc00::/7", "::1/128"))
         _require(type(trusted_proxy_addresses) is tuple and len(trusted_proxy_addresses) <= 4)
@@ -318,9 +317,8 @@ class RendezvousApp:
             raise RendezvousError("proxy-admission") from None
         self._controller, self._peers = controller, trusted_proxy_addresses
         self._readers = threading.BoundedSemaphore(2)
-        self._routes = {(controller.prefix + "/" + role + "/" + action).encode(): (role, action)
-            for role in ("capture", "emission") for action in
-            (("challenge", "submit", "status") if role == "capture" else ("challenge", "submit", "status", "manifest", "bundle"))}
+        self._routes = dict(routes)
+        self._body_limits = dict(body_limits or {})
 
     def _check(self, scope):
         path = scope.get("raw_path")
@@ -363,7 +361,8 @@ class RendezvousApp:
         if headers.get(b"content-type") != b"application/octet-stream" or b"content-encoding" in headers \
                 or b"transfer-encoding" in headers:
             return 400, None
-        limit = MAX_BUNDLE if action == "bundle" else identity.MAX_TOKEN if action == "submit" else 0
+        limit = self._body_limits.get(action,
+            MAX_BUNDLE if action == "bundle" else identity.MAX_TOKEN if action == "submit" else 0)
         length = headers.get(b"content-length", b"")
         if not re.fullmatch(rb"0|[1-9][0-9]{0,7}", length) or int(length) > limit:
             return 413, None
@@ -407,6 +406,17 @@ class RendezvousApp:
             (b"content-type", b"application/octet-stream"), (b"content-length", str(len(body)).encode()),
             (b"cache-control", b"no-store"), (b"x-content-type-options", b"nosniff")]})
         await send({"type": "http.response.body", "body": body})
+
+
+class RendezvousApp(_FixedApp):
+    """The original two-role boundary; private transport reuse adds no roles."""
+
+    def __init__(self, controller: ControllerRendezvous, *, trusted_proxy_addresses=()):
+        _require(type(controller) is ControllerRendezvous)
+        routes = {(controller.prefix + "/" + role + "/" + action).encode(): (role, action)
+            for role in ("capture", "emission") for action in
+            (("challenge", "submit", "status") if role == "capture" else ("challenge", "submit", "status", "manifest", "bundle"))}
+        super().__init__(controller, routes, trusted_proxy_addresses=trusted_proxy_addresses)
 
 
 class HostedClient:
