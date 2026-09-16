@@ -1737,6 +1737,56 @@ def _secret_file(path: Path, label: str) -> Path:
     return path
 
 
+@contextmanager
+def _durable_signed_output(path: Path, limit: int):
+    """Fence jarsigner's final inode through validation and durable completion.
+
+    Jarsigner may replace the unsigned copy. Anchor its resulting file, not the
+    old inode; never delete uncertain sign-once bytes on any failure here.
+    This is a data/rename barrier, not proof of the storage backend's durability.
+    """
+    identity = lambda item: (item.st_dev, item.st_ino, item.st_mode, item.st_uid,
+                            item.st_gid, item.st_nlink, item.st_size,
+                            item.st_mtime_ns, item.st_ctime_ns)
+    parent_identity = lambda item: (item.st_dev, item.st_ino, item.st_mode,
+                                   item.st_uid, item.st_gid)
+    if not path.is_absolute() or path.parent.resolve(strict=True) != path.parent:
+        raise RebuilderError("signed AAB parent is not canonical")
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
+    parent = os.open(path.parent, flags | os.O_DIRECTORY)
+    descriptor = None
+    try:
+        directory = os.fstat(parent)
+        if directory.st_uid != os.getuid() or stat.S_IMODE(directory.st_mode) & 0o077:
+            raise RebuilderError("signed AAB parent is not owner-only")
+        descriptor = os.open(path.name, flags, dir_fd=parent)
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_uid != os.getuid() \
+                or stat.S_IMODE(before.st_mode) & 0o077 or before.st_nlink != 1 \
+                or not 0 < before.st_size <= limit:
+            raise RebuilderError("signed AAB is not one bounded owner-only inode")
+
+        def fence():
+            if identity(os.fstat(descriptor)) != identity(before) \
+                    or identity(os.stat(path.name, dir_fd=parent, follow_symlinks=False)) != identity(before) \
+                    or parent_identity(path.parent.lstat()) != parent_identity(directory) \
+                    or path.parent.resolve(strict=True) != path.parent:
+                raise RebuilderError("signed AAB changed during validation or sync")
+
+        fence()
+        yield descriptor, before.st_size
+        fence()
+        os.fsync(descriptor)
+        fence()
+        # Persist jarsigner's replacement directory entry as well as file data.
+        os.fsync(parent)
+        fence()
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        os.close(parent)
+
+
 def sign_aab(unsigned_aab: Path, output: Path, lock: Mapping[str, Any], keystore: Path,
              store_password_file: Path, key_password_file: Path, java_root: Path, *,
              runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> dict[str, Any]:
@@ -1769,16 +1819,24 @@ def sign_aab(unsigned_aab: Path, output: Path, lock: Mapping[str, Any], keystore
         "-storepass:env", "FLEET_STOREPASS", "-keypass:env", "FLEET_KEYPASS", "-sigalg",
         upload["signature_algorithm"], "-digestalg", upload["digest_algorithm"], os.fspath(output),
         upload["key_alias"]], env=env, label="AAB signing", timeout=300)
-    verified = _checked(runner, [os.fspath(jarsigner), "-verify", "-verbose", "-certs", os.fspath(output)],
-                        env=env, label="signed AAB verification", timeout=300, text=True)
-    if "jar verified." not in verified.stdout:
-        raise RebuilderError("jarsigner did not verify the signed AAB")
-    pem = _checked(runner, [os.fspath(keytool), "-printcert", "-jarfile", os.fspath(output), "-rfc"],
-                   env=env, label="signed AAB certificate inspection", text=True).stdout
-    if hashlib.sha256(_pem_der(pem)).hexdigest() != UPLOAD_CERTIFICATE_SHA256:
-        raise RebuilderError("signed AAB certificate is not the recovered legacy Play identity")
-    return {"sha256": _sha256_file(output, "signed AAB", lock["limits"]["aab_bytes"]),
-            "sizeBytes": output.stat().st_size, "uploadCertificateSha256": UPLOAD_CERTIFICATE_SHA256}
+    with _durable_signed_output(output, lock["limits"]["aab_bytes"]) as (descriptor, size):
+        verified = _checked(runner, [os.fspath(jarsigner), "-verify", "-verbose", "-certs", os.fspath(output)],
+                            env=env, label="signed AAB verification", timeout=300, text=True)
+        if "jar verified." not in verified.stdout:
+            raise RebuilderError("jarsigner did not verify the signed AAB")
+        pem = _checked(runner, [os.fspath(keytool), "-printcert", "-jarfile", os.fspath(output), "-rfc"],
+                       env=env, label="signed AAB certificate inspection", text=True).stdout
+        if hashlib.sha256(_pem_der(pem)).hexdigest() != UPLOAD_CERTIFICATE_SHA256:
+            raise RebuilderError("signed AAB certificate is not the recovered legacy Play identity")
+        digest = hashlib.sha256()
+        remaining = size + 1
+        while remaining and (chunk := os.read(descriptor, min(remaining, 1024 * 1024))):
+            digest.update(chunk)
+            remaining -= len(chunk)
+        if remaining != 1:
+            raise RebuilderError("signed AAB size changed during hashing")
+        return {"sha256": digest.hexdigest(), "sizeBytes": size,
+                "uploadCertificateSha256": UPLOAD_CERTIFICATE_SHA256}
 
 
 def materialize_signed_sidecar(signed_aab: Path, graph: Path, output: Path, limit: int) -> bytes:
