@@ -43,6 +43,7 @@ SIGNING_LEDGER_POLICY_CONTRACT = "fleet.android_preview12_binary_signing_ledger_
 SIGNING_LEDGER_POLICY_PATH = "config/release/android-preview12-binary-signing-ledger.json"
 APPROVAL_LEDGER_POLICY_PATH = "config/release/android-preview12-two-green-release-approval.json"
 SIGNING_LEDGER_CREDENTIAL_INPUT = "ANDROID_PREVIEW12_BINARY_SIGNING_LEDGER_BEARER_TOKEN"
+BINARY_CONTROLLER_CREDENTIAL_SOURCE = "owner_admitted_binary_ledger_controller_only"
 EXTERNAL_SIGNER_ATTESTATION_CONTRACT = "chummer.android.external-release-signer-attestation/v1"
 BUILDER_KEY_IDS = ("local-release-builder-2026", "fleet-release-builder-2026-09")
 # Only this already-qualified consumer predates Android's explicit builder
@@ -1978,11 +1979,14 @@ def _validate_ledger_separation(module, signing_policy, approval_policy, lock):
             or not isinstance(attestation, dict):
         raise RebuilderError("pinned approval/signing comparison fields are invalid")
     try:
+        selected_ledger = signing_policy["replay_protection"]["external_ledger"]
         signing = module.validate_ledger_policy(
-            signing_policy["replay_protection"]["external_ledger"], require_configured=True
+            selected_ledger, require_configured=True,
+            **({"binary_signing": True} if isinstance(selected_ledger, dict) and selected_ledger.get(
+                "credential_source") == BINARY_CONTROLLER_CREDENTIAL_SOURCE else {}),
         )
         approval = module.validate_ledger_policy(replay["external_ledger"], require_configured=True)
-    except module.LedgerError:
+    except (module.LedgerError, TypeError):
         raise RebuilderError("pinned lane ledger authority is invalid") from None
     if any(signing[name] == approval[name] for name in (
         "base_url", "expected_service_identity", "receipt_public_key_spki_sha256",
@@ -2005,7 +2009,10 @@ def _validate_ledger_separation(module, signing_policy, approval_policy, lock):
     return signing
 
 
-def load_reviewed_ledger(fleet_root: Path, lock: Mapping[str, Any], environment: Mapping[str, str]):
+def load_reviewed_ledger(
+    fleet_root: Path, lock: Mapping[str, Any], environment: Mapping[str, str], *,
+    bridge_transport: Callable | None = None,
+):
     """Load Draft #11's reviewed signed/no-redirect ledger after it is merged.
 
     The checked-in lock has null digests and therefore cannot reach this code.
@@ -2051,6 +2058,14 @@ def load_reviewed_ledger(fleet_root: Path, lock: Mapping[str, Any], environment:
     # job supplies its own capability; only the unchanged client's slot is mapped.
     if module.CREDENTIAL_ENV_NAME in environment:
         raise RebuilderError("approval-ledger credential must not enter the signing lane")
+    if ledger_policy["credential_source"] == BINARY_CONTROLLER_CREDENTIAL_SOURCE:
+        if SIGNING_LEDGER_CREDENTIAL_INPUT in environment or not callable(bridge_transport):
+            raise RebuilderError("binary ledger bridge requires credential-free explicit admission")
+        client = module.DurableApprovalLedgerClient.for_binary_bridge(
+            ledger_policy, transport=bridge_transport)
+        return module, client, policy_sha256
+    if bridge_transport is not None:
+        raise RebuilderError("binary ledger bridge differs from the pinned credential source")
     token = environment.get(SIGNING_LEDGER_CREDENTIAL_INPUT)
     if environment is os.environ:
         os.environ.pop(SIGNING_LEDGER_CREDENTIAL_INPUT, None)
@@ -3841,6 +3856,7 @@ def execute_protected_signer_transaction(
     two_green_artifact_id: int,
     two_green_artifact_sha256: str,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    ledger_bridge_transport: Callable | None = None,
 ) -> dict[str, Any]:
     """Compose one dormant protected sign-once transaction.
 
@@ -3881,7 +3897,8 @@ def execute_protected_signer_transaction(
         lease, lock, android
     )
     ledger, client, policy_sha256 = load_reviewed_ledger(
-        fleet_root, lock, ledger_environment
+        fleet_root, lock, ledger_environment,
+        **({"bridge_transport": ledger_bridge_transport} if ledger_bridge_transport is not None else {}),
     )
     subject, reservation = reserve_signing_attempt(
         ledger, client, attempt_id=attempt_id,
@@ -4054,6 +4071,7 @@ def reconcile_protected_signer_transaction(
     attempt_id: str,
     two_green_artifact_id: int,
     two_green_artifact_sha256: str,
+    ledger_bridge_transport: Callable | None = None,
 ) -> dict[str, Any]:
     """Recover commit/audit/promotion without admitting keys or signing again."""
 
@@ -4093,7 +4111,8 @@ def reconcile_protected_signer_transaction(
         lease, lock, android
     )
     ledger, client, policy_sha256 = load_reviewed_ledger(
-        fleet_root, lock, ledger_environment
+        fleet_root, lock, ledger_environment,
+        **({"bridge_transport": ledger_bridge_transport} if ledger_bridge_transport is not None else {}),
     )
     subject = _expected_ledger_subject(
         ledger, lease, policy_sha256, attempt_id=attempt_id,

@@ -195,6 +195,7 @@ def create_app(
     bearer_token_sha256: str, sign_receipt: Callable[[bytes], bytes],
     maximum_in_flight: int = 2, body_timeout_seconds: float = 10.0,
     trusted_proxy_addresses: tuple[str, ...] = (),
+    binary_signing: bool = False,
 ) -> FastAPI:
     """Create only an explicitly bound app; no ambient or unconfigured mode.
 
@@ -206,7 +207,8 @@ def create_app(
     invalid = False
     try:
         trusted_proxy_addresses = validate_trusted_proxy_addresses(trusted_proxy_addresses)
-        policy = copy.deepcopy(protocol.validate_ledger_policy(ledger_policy, require_configured=True))
+        policy = copy.deepcopy(protocol.validate_ledger_policy(
+            ledger_policy, require_configured=True, binary_signing=binary_signing))
         if not isinstance(store, persistence.SQLiteApprovalLedgerStore) \
                 or policy["expected_service_identity"] != store.service_identity \
                 or type(bearer_token_sha256) is not str or not protocol.SHA256.fullmatch(bearer_token_sha256) \

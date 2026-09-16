@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Durable exactly-once ledger client for the dormant Preview12 approval lane.
 
-The client talks only to one reviewed HTTPS origin, authenticates with an
-environment-only bearer credential, and accepts only Ed25519-signed, strict,
-bounded response receipts from the reviewed service identity.  It never signs
-an Android artifact and never contacts Google Play.
+The ordinary client uses one reviewed HTTPS origin and environment-only bearer.
+An explicit binary-only bridge keeps that bearer in an admitted controller.
+Both paths accept only Ed25519-signed, strict, bounded response receipts from
+the reviewed service identity. It never signs an Android artifact or contacts Play.
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ PACKAGE_ID = "com.myexternalbrain.chummer"
 VERSION_NAME = "0.1.0-preview.12"
 VERSION_CODE = 12
 CREDENTIAL_ENV_NAME = "ANDROID_PREVIEW12_APPROVAL_LEDGER_BEARER_TOKEN"
+BINARY_CONTROLLER_CREDENTIAL_SOURCE = "owner_admitted_binary_ledger_controller_only"
 SPKI_ED25519_PREFIX = bytes.fromhex("302a300506032b6570032100")
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -172,8 +173,15 @@ def dormant_ledger_policy() -> dict[str, Any]:
     }
 
 
-def validate_ledger_policy(value: object, *, require_configured: bool) -> dict[str, Any]:
+def validate_ledger_policy(
+    value: object, *, require_configured: bool, binary_signing: bool = False,
+) -> dict[str, Any]:
     template = dormant_ledger_policy()
+    if type(binary_signing) is not bool:
+        raise LedgerError("durable ledger lane is invalid")
+    if binary_signing and isinstance(value, dict) and value.get("configured") is True \
+            and value.get("credential_source") == BINARY_CONTROLLER_CREDENTIAL_SOURCE:
+        template["credential_source"] = BINARY_CONTROLLER_CREDENTIAL_SOURCE
     if not isinstance(value, dict) or set(value) != set(template):
         raise LedgerError("durable ledger policy fields are not exact")
     fixed = {
@@ -485,6 +493,28 @@ class DurableApprovalLedgerClient:
         self._transport = transport or _https_transport
         self._sleep = sleeper
 
+    @classmethod
+    def for_binary_bridge(
+        cls, policy: Mapping[str, Any], *,
+        transport: Callable[[bytes, int], HttpResponse],
+        sleeper: Callable[[float], None] = time.sleep,
+    ) -> "DurableApprovalLedgerClient":
+        """Credential-free client; admitted controller custody is external to this factory.
+
+        Only the existing request bytes and timeout cross the local bridge.
+        The normal constructor retains its existing environment-credential mode.
+        All response signatures, replay and continuity checks below are shared.
+        """
+        checked = validate_ledger_policy(policy, require_configured=True, binary_signing=True)
+        if checked["credential_source"] != BINARY_CONTROLLER_CREDENTIAL_SOURCE or not callable(transport):
+            raise LedgerError("binary ledger bridge requires explicit controller custody")
+        result = cls.__new__(cls)
+        result.policy = strict_json_bytes(canonical_bytes(checked), "binary ledger policy", 65536)
+        result._token = None
+        result._transport = lambda _url, body, _headers, timeout: transport(body, timeout)
+        result._sleep = sleeper
+        return result
+
     def _call(self, request: Mapping[str, Any]) -> dict[str, Any]:
         body = canonical_bytes(request)
         if len(body) > self.policy["maximum_request_bytes"]:
@@ -496,10 +526,11 @@ class DurableApprovalLedgerClient:
             raise LedgerError("durable ledger request escaped its reviewed HTTPS identity")
         headers = {
             "Accept": "application/json",
-            "Authorization": f"Bearer {self._token}",
             "Content-Type": "application/json",
             "User-Agent": "chummer-fleet-preview12-approval-ledger/1",
         }
+        if self._token is not None:
+            headers["Authorization"] = f"Bearer {self._token}"
         last_error: Exception | None = None
         for attempt in range(self.policy["maximum_attempts"]):
             try:
