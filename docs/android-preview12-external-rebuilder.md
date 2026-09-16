@@ -10,8 +10,8 @@ That proposal is not an approved trust policy or activation evidence.
 
 ## Contract boundary
 
-The implementation pins Android commit `b3fc0619ec61df3df25849db90593e1b6b66deb2`,
-tree `9c71c65836cdeab038c3e88e8770d208e887ed1e`, and its exact consumer bytes.
+The implementation pins Android commit `840ac319c47e89e383876faea03b83dce31aaf22`,
+tree `6d9a5fab10fd440fc30aaeae8023dd83bc01e472`, and its exact consumer bytes.
 This dormant consumer rebind does not qualify a builder/signer image or activate
 signing. It treats these as different artifacts:
 
@@ -27,20 +27,20 @@ never presented to Android as release authority.
 
 Current helper checks in `test_android_preview12_external_rebuilder.py` and
 `test_android_preview12_preserved_validation.py` still read
-`CHUMMER_ANDROID_CURRENT_ROOT`; those suites require the exact clean `b3fc0619`
-checkout pinned by the external lock. Of the four pinned helper hashes, only
-`scripts/build-release.sh` changed from `9cbe9136`, to
+`CHUMMER_ANDROID_CURRENT_ROOT`; those suites require the exact clean `840ac319`
+checkout pinned by the external lock. All four pinned helper hashes remain
+unchanged from `b3fc0619`; `scripts/build-release.sh` remains
 `4e29b255aae29d30f1b8ddb7fc96947cf851df2c661fa820031bd5db2604f3f6`.
 It verifies captured sidecars from the external release-input root. Its admitted
 source-test helper remains
 `a295c226850edda9ce3a57a3c43690188e271b3059c33dd14abca04f65ef4bcf`;
 the previous build-script capability entry is retained. Current eligibility is
-the original Two-Green run `35089872322` artifact `10443981502`, pairing PR 67
-review `35075954343` and main `35083352933`; its separate approval-consumer test
+the original Two-Green run `35140852521` artifact `10465102739`, pairing PR 68
+review `35124166088` attempt 2 and main `35133296059` attempt 1; its separate approval-consumer test
 requires that original receipt, never a relabeled predecessor. This is not
 builder or signer qualification.
 The lock's historical `approval_authority` field selects the **builder** identity
-already trusted by this exact b3fc consumer: `fleet-release-builder-2026-09`,
+already trusted by this exact 840ac consumer: `fleet-release-builder-2026-09`,
 `eng/trusted-release-builders/fleet-release-builder-2026-09.public.pem`, PEM SHA256
 `ef44c5b7fcadaf0f115b5f0e0e7b1a65edb322bb002faf980acb654a5db8caaf`, SPKI SHA256
 `41b44078d037fafd85b091b967959f77a7a4aa9f160d03749fa49889a8b1b156`.
