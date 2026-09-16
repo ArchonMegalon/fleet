@@ -64,6 +64,9 @@ class LaunchConfig:
     body_timeout: float = 10.0
     shutdown_timeout: float = 15.0
     trusted_proxy_addresses: tuple[str, ...] = ()
+    ledger_lane: str = 'approval'
+    comparison_approval_policy: str | None = None
+    comparison_approval_bearer_sha256_file: str | None = None
 
 
 def _identity(info):
@@ -312,6 +315,35 @@ class PreparedServer:
             raise LaunchError(_ERROR) from None
 
 
+def _binary_ledger_policy(result, options, policy):
+    # Reuse the signer's exact existing wrapper contract, not a new server or
+    # receipt dialect. This admits a receipt service, NOT builder-key custody or
+    # protected signer readiness; those remain the signer's independent gates.
+    from scripts import android_preview12_external_rebuilder as rebuilder
+
+    binding = rebuilder._validate_signing_ledger_wrapper(policy)
+    comparison = result._hold(options.comparison_approval_policy, 262144)
+    if hashlib.sha256(comparison.data).hexdigest() != binding['sha256']:
+        raise LaunchError(_ERROR)
+    approval = protocol.strict_json_bytes(comparison.data, 'comparison approval policy', 262144)
+    if approval.get('contract_name') != 'fleet.android_preview12_two_green_release_approval_policy.v1' \
+            or type(approval.get('contract_version')) is not int or approval['contract_version'] != 1 \
+            or approval.get('state') != 'ready' \
+            or approval.get('external_ed25519_key', {}).get('configured') is not True:
+        raise LaunchError(_ERROR)
+    approval_public = issuer.validate_public_approval_binding(approval)
+    ledger = protocol.validate_ledger_policy(policy['replay_protection']['external_ledger'], require_configured=True)
+    comparison_ledger = protocol.validate_ledger_policy(
+        approval['replay_protection']['external_ledger'], require_configured=True)
+    if any(ledger[name] == comparison_ledger[name] for name in (
+            'base_url', 'expected_service_identity', 'receipt_public_key_spki_sha256')):
+        raise LaunchError(_ERROR)
+    comparison_receipt = base64.b64decode(comparison_ledger['receipt_public_key_spki_der_base64'], validate=True)
+    if comparison_receipt == approval_public:
+        raise LaunchError(_ERROR)
+    return ledger, approval_public, comparison_receipt
+
+
 def prepare(options: LaunchConfig) -> PreparedServer:
     result = PreparedServer()
     try:
@@ -327,21 +359,46 @@ def prepare(options: LaunchConfig) -> PreparedServer:
         for value, high in ((options.body_timeout, 10), (options.shutdown_timeout, 30)):
             if type(value) not in (float, int) or not math.isfinite(value) or not 0 < value <= high:
                 raise LaunchError(_ERROR)
+        if type(options.ledger_lane) is not str or options.ledger_lane not in ('approval', 'binary-signing'):
+            raise LaunchError(_ERROR)
+        comparisons = (options.comparison_approval_policy, options.comparison_approval_bearer_sha256_file)
+        if options.ledger_lane == 'approval':
+            if any(value is not None for value in comparisons):
+                raise LaunchError(_ERROR)
+        elif any(type(value) is not str or not value for value in comparisons):
+            raise LaunchError(_ERROR)
         policy_file = result._hold(options.policy, 262144)
         policy = protocol.strict_json_bytes(policy_file.data, 'approval policy', 262144)
-        ledger = protocol.validate_ledger_policy(policy['replay_protection']['external_ledger'], require_configured=True)
+        comparison_receipt = None
+        if options.ledger_lane == 'binary-signing':
+            ledger, approval_public, comparison_receipt = _binary_ledger_policy(result, options, policy)
+        else:
+            ledger = protocol.validate_ledger_policy(policy['replay_protection']['external_ledger'], require_configured=True)
+            approval_public = issuer.validate_public_approval_binding(policy)
         receipt_public = base64.b64decode(ledger['receipt_public_key_spki_der_base64'], validate=True)
-        approval_public = issuer.validate_public_approval_binding(policy)
         if receipt_public == approval_public:
             raise LaunchError(_ERROR)
+        if options.ledger_lane == 'binary-signing':
+            # Only digests, never token discovery. Compare the actual held bytes
+            # (normalizing the one allowed LF), before opening the database or
+            # private signing/TLS key. Held comparison files stay fenced forever.
+            digest = result._hold(options.bearer_sha256_file, 65)
+            comparison_digest = result._hold(options.comparison_approval_bearer_sha256_file, 65)
+            if any(re.fullmatch(rb'[0-9a-f]{64}\n?', held.data) is None
+                   for held in (digest, comparison_digest)) \
+                    or digest.data.rstrip(b'\n') == comparison_digest.data.rstrip(b'\n'):
+                raise LaunchError(_ERROR)
+            for held in result._files:
+                held.assert_exact()
         # No credential file is opened before configured policy and separation.
         result._database = _path(options.database)
         result._database_ancestors = _ancestors(result._database)
         store = persistence.SQLiteApprovalLedgerStore(result._database,
             service_identity=ledger['expected_service_identity'], database_id=options.database_id)
-        digest = result._hold(options.bearer_sha256_file, 65)
-        if re.fullmatch(rb'[0-9a-f]{64}\n?', digest.data) is None:
-            raise LaunchError(_ERROR)
+        if options.ledger_lane == 'approval':
+            digest = result._hold(options.bearer_sha256_file, 65)
+            if re.fullmatch(rb'[0-9a-f]{64}\n?', digest.data) is None:
+                raise LaunchError(_ERROR)
         receipt = result._hold(options.receipt_key_file, 48)
         if len(receipt.data) != 48 or not receipt.data.startswith(_PKCS8):
             raise LaunchError(_ERROR)
@@ -363,7 +420,7 @@ def prepare(options: LaunchConfig) -> PreparedServer:
             public_fd = _sealed(tls_public_pem, temporary)
             tls_public = _openssl(['pkey', '-pubin', '-in', f'/proc/self/fd/{public_fd}',
                                    '-outform', 'DER'], (public_fd,))
-        if tls_public in (approval_public, receipt_public):
+        if tls_public in (approval_public, receipt_public, comparison_receipt):
             raise LaunchError(_ERROR)
         # A supplied chain is used as a local anchor ONLY for hostname, validity
         # and server-purpose checks. This does not establish public client trust.
@@ -414,6 +471,9 @@ def main(argv=None) -> int:
         parser.add_argument('--body-timeout', type=float, default=10.0)
         parser.add_argument('--shutdown-timeout', type=float, default=15.0)
         parser.add_argument('--trusted-proxy-address', action='append', default=[], dest='trusted_proxy_addresses')
+        parser.add_argument('--ledger-lane', choices=('approval', 'binary-signing'), default='approval')
+        parser.add_argument('--comparison-approval-policy')
+        parser.add_argument('--comparison-approval-bearer-sha256-file')
         arguments = vars(parser.parse_args(argv))
         arguments['trusted_proxy_addresses'] = tuple(arguments['trusted_proxy_addresses'])
         with prepare(LaunchConfig(**arguments)) as prepared:

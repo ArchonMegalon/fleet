@@ -146,16 +146,48 @@ EXPECTED_SDK111_MEASUREMENTS = {
     "java": ("17.0.20.1", "85d610b3ad706cd4de8d36d3c8c6fc91000814f5c3f84fefde5ab401c836806a", 246, 332109578),
     "android_sdk": (36, "36.0.0", "54de1ef5b7d26c7a442cbc51078c105d31ac4b73f58469404c3e04d7c7a55e09", 11523, 314037662),
 }
+OBSERVED_BUILDER_IMAGE = (
+    "ghcr.io/archonmegalon/chummer-android-builder@sha256:"
+    "5298279ccc96316c546d7bebe00af639e38c22bdac081a980ba10e7dc965e40a"
+)
+OBSERVED_INSTALLED_INVENTORY_SHA256 = "3a37e627299076065f5881be6e157dd1887f3428dfe2a698ffc8cf4e465ad330"
+CURRENT_BUILDER_PUBLIC_BINDING = {
+    "key_id": "fleet-release-builder-2026-09",
+    "role": "android_internal_release_builder",
+    "scope": "android_internal_release_artifact_binding",
+    "public_key_path": "eng/trusted-release-builders/fleet-release-builder-2026-09.public.pem",
+    "public_key_sha256": "ef44c5b7fcadaf0f115b5f0e0e7b1a65edb322bb002faf980acb654a5db8caaf",
+    "public_key_spki_sha256": "41b44078d037fafd85b091b967959f77a7a4aa9f160d03749fa49889a8b1b156",
+    "private_key_secret": None,
+    "rotation_requires_android_merge_and_requalification": True,
+}
+
+
+def test_checked_in_builder_public_binding_is_current_without_credential_activation() -> None:
+    module = load_module()
+    lock, raw = module.load_lock(LOCK)
+    assert lock["approval_authority"] == CURRENT_BUILDER_PUBLIC_BINDING
+    assert lock["android_authority"]["commit"] == "b3fc0619ec61df3df25849db90593e1b6b66deb2"
+    assert lock["android_authority"]["tree"] == "9c71c65836cdeab038c3e88e8770d208e887ed1e"
+    assert lock["state"] == "dormant" and lock["rebuild"]["enabled"] is False
+    assert lock["reservation"]["configured"] is False
+    assert lock["toolchain"]["signer_image"] is None
+    assert all(lock["outputs"][name] is False for name in (
+        "signed_content_handoff_enabled", "publication_authorized", "google_play_upload_authorized",
+    ))
+    assert "approval attestation private-key secret is not configured" in module.validate_lock(lock, raw)
+    assert module.validate_unsigned_rebuild_lock(lock, raw) == [
+        "external rebuilder lock is dormant", "independent rebuild is disabled or weakened",
+    ]
 
 
 def test_sdk111_toolchain_tuple_is_exact_and_checked_in_lock_stays_unusable() -> None:
     module = load_module()
     lock, raw = module.load_lock(LOCK)
     errors = module.validate_unsigned_rebuild_lock(lock, raw)
-    assert "external rebuilder lock is dormant" in errors
-    assert "toolchain.builder_image is not one digest-pinned OCI repository" in errors
-    assert "toolchain.installed_closure_receipt_sha256 is not a lowercase SHA-256" in errors
-    assert not any("closure is not exact" in error for error in errors)
+    assert errors == ["external rebuilder lock is dormant", "independent rebuild is disabled or weakened"]
+    assert lock["toolchain"]["builder_image"] == OBSERVED_BUILDER_IMAGE
+    assert lock["toolchain"]["installed_closure_receipt_sha256"] == OBSERVED_INSTALLED_INVENTORY_SHA256
 
     ready = synthetic_ready_lock()
     assert (ready["toolchain"]["dotnet"]["version"], ready["toolchain"]["dotnet"]["tree_sha256"],
@@ -168,6 +200,62 @@ def test_sdk111_toolchain_tuple_is_exact_and_checked_in_lock_stays_unusable() ->
     original = deepcopy(ready)
     assert module.validate_lock(ready, json.dumps(ready).encode(), ready["toolchain"]["builder_image"]) == []
     assert ready == original
+
+
+def test_observed_public_pins_remove_only_two_configuration_blockers() -> None:
+    module = load_module()
+    lock, raw = module.load_lock(LOCK)
+    original = deepcopy(lock)
+    unpinned = deepcopy(lock)
+    unpinned["toolchain"].update(builder_image=None, installed_closure_receipt_sha256=None)
+    remaining = module.validate_lock(lock, raw)
+    before = module.validate_lock(unpinned, json.dumps(unpinned).encode())
+    assert [error for error in before if error not in remaining] == [
+        "toolchain.builder_image is not one digest-pinned OCI repository",
+        "toolchain.installed_closure_receipt_sha256 is not a lowercase SHA-256",
+    ]
+    assert remaining == [error for error in before if error in remaining]
+    assert lock["state"] == "dormant" and lock["rebuild"]["enabled"] is False
+    assert lock["toolchain"]["signer_image"] is None
+    assert lock["reservation"]["configured"] is False
+    assert lock["reservation"]["adapter_sha256"] is None
+    assert lock["approval_authority"]["private_key_secret"] is None
+    assert all(lock["upload_key"][name] is None for name in (
+        "key_alias", "keystore_secret", "store_password_secret", "key_password_secret",
+    ))
+    assert all(lock["outputs"][name] is False for name in (
+        "signed_content_handoff_enabled", "publication_authorized", "google_play_upload_authorized",
+    ))
+    result = module.contract_check(LOCK)
+    assert result["status"] == "dormant"
+    assert result["blockers"] == remaining
+    assert all(result[name] is False for name in (
+        "signing_performed", "publication_performed", "google_play_upload_performed",
+    ))
+    assert lock == original
+
+
+@pytest.mark.parametrize(("state", "enabled", "expected"), [
+    ("dormant", False, ["external rebuilder lock is dormant", "independent rebuild is disabled or weakened"]),
+    ("ready", False, ["independent rebuild is disabled or weakened"]),
+    ("dormant", True, ["external rebuilder lock is dormant"]),
+])
+def test_observed_public_pins_cannot_bypass_unsigned_activation(state, enabled, expected) -> None:
+    module = load_module()
+    lock, _ = module.load_lock(LOCK)
+    lock["state"], lock["rebuild"]["enabled"] = state, enabled
+    assert module.validate_unsigned_rebuild_lock(
+        lock, json.dumps(lock).encode(), OBSERVED_BUILDER_IMAGE,
+    ) == expected
+
+
+def test_observed_public_builder_pin_rejects_a_different_reported_image() -> None:
+    module = load_module()
+    lock, raw = module.load_lock(LOCK)
+    assert module.validate_unsigned_rebuild_lock(lock, raw, "builder@sha256:" + "0" * 64) == [
+        "external rebuilder lock is dormant", "independent rebuild is disabled or weakened",
+        "reported builder image differs from lock",
+    ]
 
 
 @pytest.mark.parametrize(("row", "field", "value"), [
@@ -580,13 +668,51 @@ def test_real_android_v2_consumer_binding_when_exact_checkout_is_available(
         pytest.skip("exact Android consumer checkout not supplied")
     monkeypatch.setattr(module.sys, "dont_write_bytecode", prior_bytecode_posture)
     monkeypatch.setenv("CHUMMER_RELEASE_REPO_ROOT", "caller-posture-must-be-restored")
-    consumer = module.validate_android_consumer(Path(value), json.loads(LOCK.read_text()))
+    # Use the actual checked-in lock and exact consumer. No synthetic key/path
+    # override or historical approval default may conceal a stale public pin.
+    lock, _ = module.load_lock(LOCK)
+    original = deepcopy(lock)
+    assert lock["approval_authority"] == CURRENT_BUILDER_PUBLIC_BINDING
+    consumer = module.validate_android_consumer(Path(value), lock)
     assert consumer.CONTRACT == module.ANDROID_ATTESTATION_CONTRACT
-    assert module._android_builder_selection(consumer) == (module.BUILDER_KEY_IDS[0], True)
+    assert module._android_builder_selection(consumer) == ("fleet-release-builder-2026-09", True)
+    assert consumer._fleet_expected_spki_sha256 == CURRENT_BUILDER_PUBLIC_BINDING["public_key_spki_sha256"]
+    assert consumer.VERIFY._release_builder_key("fleet-release-builder-2026-09") == (
+        Path(value) / CURRENT_BUILDER_PUBLIC_BINDING["public_key_path"],
+        CURRENT_BUILDER_PUBLIC_BINDING["public_key_sha256"],
+    )
+    assert lock == original
     assert consumer._pretty({"b": 2, "a": 1}) == b'{\n  "a": 1,\n  "b": 2\n}\n'
     assert module.sys.dont_write_bytecode is prior_bytecode_posture
     assert os.environ["CHUMMER_RELEASE_REPO_ROOT"] == "caller-posture-must-be-restored"
     module._validate_android_consumer_inputs(Path(value), json.loads(LOCK.read_text())["android_authority"]["commit"])
+
+
+@pytest.mark.parametrize("field,value", [
+    ("key_id", "local-release-builder-2026"),
+    ("key_id", "fleet-release-approver-2026-09"),
+    ("key_id", "unregistered-builder"),
+    ("public_key_path", "eng/trusted-release-approvers/local-release-builder-2026.public.pem"),
+    ("public_key_path", "eng/trusted-release-approvers/fleet-release-approver-2026-09.public.pem"),
+    ("public_key_path", "eng/trusted-release-builders/unregistered-builder.public.pem"),
+    ("public_key_sha256", "ed1fbe95fc7713bfc6d9d0fea21726c1ba3193533fc2d5523e054ad8fb86184c"),
+    ("public_key_sha256", "0" * 64),
+    ("public_key_spki_sha256", "c46a4e9a224c8c77a4038bca83f7d9ed66146318d8b5c2c9fc81cd19fdd18ea7"),
+    ("public_key_spki_sha256", "0" * 64),
+])
+def test_real_current_consumer_rejects_stale_or_unregistered_builder_substitutions(field, value):
+    configured = os.environ.get("CHUMMER_ANDROID_CURRENT_ROOT")
+    if not configured:
+        pytest.skip("exact Android consumer checkout not supplied")
+    module = load_module()
+    lock, _ = module.load_lock(LOCK)
+    assert lock["approval_authority"] == CURRENT_BUILDER_PUBLIC_BINDING
+    lock["approval_authority"][field] = value
+    # Historical complete tuples remain valid for their historical receipts.
+    # They cannot be mixed with this current operational selection, and the
+    # checked-in-lock assertion above prevents silently reverting the full tuple.
+    with pytest.raises(module.RebuilderError, match="builder"):
+        module.validate_android_consumer(Path(configured), lock)
 
 
 # Public RFC 8032 vector 1; these fixtures exercise transport/crypto only, never
