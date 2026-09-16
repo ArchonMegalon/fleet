@@ -34,12 +34,19 @@ known header names (alg, kid, typ, optional x5t) and JSON types are recorded,
 never header values or arbitrary names. Unknown names or malformed types fail.
 Additional bounded OIDC response metadata is discarded, following the official
 toolkit's response.value selection rather than assuming a closed response schema.
+An environment claim remains forbidden, even when null or empty. The optional
+job_workflow_ref/job_workflow_sha claims must either both be absent or both be
+strings exactly matching this admitted direct workflow's ref and execution SHA.
+Partial pairs, other repositories, reusable workflow paths, refs or SHAs fail.
+This diagnostic-only compatibility check does not alter production verification.
 
 Only an exclusive 0600 file under the canonical runner temporary directory is
 uploaded, with one-day retention. Its closed public inventory is classification,
 the explicit false signature-verification flag, exact repository/source/workflow/
 run/attempt identifiers, OIDC/context check-run values and JSON types, whitelisted
-JWT header names/types, matched API job/check-run IDs and comparison result.
+JWT header names/types, matched API job/check-run IDs and comparison result, plus
+jobWorkflowIdentity (absent or exact_direct_self_reference). The latter records
+which strictly admitted optional-claim case occurred, never raw claim values.
 JWTs, header values, subjects, JTIs, token hashes, request
 headers/URLs/query strings, arbitrary claims, response bodies and exception text
 are never persisted or logged. Failures print one constant line plus a bounded
@@ -78,3 +85,13 @@ checks confirmed the expected protected main and exact job/check-run mapping,
 but cannot recover the failed job's authenticated or OIDC response shape. Closed
 failure diagnostics support a separately authorized successor observation; they
 are not evidence that the provider mismatch is already diagnosed or corrected.
+
+Run 35114674101, attempt 1, then reached oidc-claims after all selected exact
+claim comparisons passed. Its closed diagnostics showed environment absent and
+both job_workflow_* claims present as strings. That establishes presence/types,
+not their values or equality. The optional exact self-reference check above must
+still pass in a separately authorized genuine observation before compatibility
+is claimed. GitHub's [claim reference](https://docs.github.com/en/actions/reference/security/oidc#custom-claims-provided-by-github)
+describes these claims for reusable workflows but does not establish that their
+absence is guaranteed for direct jobs. No production authority follows from
+either diagnostic run.
