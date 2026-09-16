@@ -1,0 +1,69 @@
+name: Android hosted identity observation (diagnostic only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_execution_sha:
+        description: Exact reviewed protected Fleet main commit containing this diagnostic
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: android-hosted-identity-observation
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    name: Observe hosted identity (diagnostic only)
+    if: ${{ github.repository == 'ArchonMegalon/fleet' && github.repository_id == '1176287728' && github.ref == 'refs/heads/main' && github.ref_protected && github.event_name == 'workflow_dispatch' && github.run_attempt == 1 }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    # No protected signing environment or secret injection: observation only.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ArchonMegalon/fleet
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Observe public identity types without logging tokens
+        env:
+          EXPECTED_EXECUTION_SHA: ${{ inputs.expected_execution_sha }}
+          EXECUTION_REPOSITORY: ${{ github.repository }}
+          EXECUTION_REPOSITORY_ID: ${{ github.repository_id }}
+          EXECUTION_OWNER: ${{ github.repository_owner }}
+          EXECUTION_OWNER_ID: ${{ github.repository_owner_id }}
+          EXECUTION_REF: ${{ github.ref }}
+          EXECUTION_REF_PROTECTED: ${{ github.ref_protected }}
+          EXECUTION_EVENT: ${{ github.event_name }}
+          EXECUTION_SHA: ${{ github.sha }}
+          EXECUTION_RUN_ID: ${{ github.run_id }}
+          EXECUTION_RUN_ATTEMPT: ${{ github.run_attempt }}
+          EXECUTION_JOB: ${{ github.job }}
+          EXECUTION_CHECK_RUN_JSON: ${{ toJSON(job.check_run_id) }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_REF: ${{ job.workflow_ref }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          OBSERVATION_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          /usr/bin/python3 -I -B scripts/android_hosted_identity_observation.py
+      - name: Retain only bounded public diagnostic metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hosted-identity-observation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/hosted-identity-observation.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
