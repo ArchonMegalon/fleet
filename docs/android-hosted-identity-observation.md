@@ -42,8 +42,15 @@ run/attempt identifiers, OIDC/context check-run values and JSON types, whitelist
 JWT header names/types, matched API job/check-run IDs and comparison result.
 JWTs, header values, subjects, JTIs, token hashes, request
 headers/URLs/query strings, arbitrary claims, response bodies and exception text
-are never persisted or logged. Failures print one constant line and do not upload
-an artifact. No Python-memory zeroization claim is made. Enable neither shell
+are never persisted or logged. Failures print one constant line plus a bounded
+JSON diagnostic with a closed, source-defined stage/reason vocabulary and only
+fixed field names mapped to JSON types (including missing). A mismatched selected
+claim identifies its fixed field name, never its value. HTTP rejection reasons
+distinguish status/URL, header count/duplicates/bounds, content type/charset,
+encoding, pagination and body bounds; no observed headers, URLs or exception text
+are printed. Unknown exceptions map to unexpected-exception. These diagnostics
+remain diagnostic_only_not_authority, emit no artifact and change no acceptance
+condition. No Python-memory zeroization claim is made. Enable neither shell
 tracing nor third-party credential/token debugging around this observation.
 
 Actual execution effects, if later authorized: one hosted Ubuntu 24.04 job; pinned
@@ -64,3 +71,10 @@ Primary references: [OIDC claims and token requests](https://docs.github.com/en/
 [hosted OIDC domains](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#communication-requirements-for-github-hosted-runners).
 Focused tests use fabricated unsigned diagnostic tokens and modeled HTTP only;
 they never claim genuine hosted evidence or execute the workflow.
+
+The first hosted observation (run 35113504447, attempt 1) failed before output;
+its original constant error does not identify a cause. Public read-only API
+checks confirmed the expected protected main and exact job/check-run mapping,
+but cannot recover the failed job's authenticated or OIDC response shape. Closed
+failure diagnostics support a separately authorized successor observation; they
+are not evidence that the provider mismatch is already diagnosed or corrected.
