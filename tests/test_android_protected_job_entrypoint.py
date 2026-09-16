@@ -122,6 +122,92 @@ def execute(prepared):
     return prepared.e.run(oidc_request_url=URL, oidc_request_credential=REQUEST_CREDENTIAL)
 
 
+def wait_execute(prepared):
+    return prepared.e.run(oidc_request_url=URL, oidc_request_credential=REQUEST_CREDENTIAL,
+                          preparation_wait_seconds=5)
+
+
+def test_pending_preparation_then_real_signed_consume_and_once_only_completion(prepared, monkeypatch):
+    network(prepared, monkeypatch)
+    clock = transfer.preparation_clock(monkeypatch)
+    exported = prepared.exported
+    exported.export.enable_preparation_wait(10)
+    def owner_decision(seconds):
+        assert prepared.get_calls == [] and exported.seen == ["challenge"]
+        assert exported.export.preparation_observed() is True
+        assert exported.export._issued is None and not exported.export._signing_enabled
+        assert prepared.client._host_entrypoint_claimed and prepared.e._attempted
+        clock.now += seconds
+        arm(prepared)  # Independently modeled local owner, never an HTTP action.
+    monkeypatch.setattr(intake.time, "sleep", owner_decision)
+    assert wait_execute(prepared) == {"PUBLIC-TEST-modeled-launch": True}
+    assert prepared.get_calls == ["GET"] and len(prepared.launched) == 1
+    assert exported.seen.count("challenge") == 2 and exported.seen.count("submit") == 1
+    assert exported.flow.store.status(hashlib.sha256(exported.export._issued.audience.encode()).hexdigest()) == "consumed"
+    with pytest.raises(entry.EntrypointError): wait_execute(prepared)
+    assert prepared.get_calls == ["GET"] and len(prepared.launched) == 1
+
+
+@pytest.mark.parametrize("fault", ["timeout", "lost", "closed", "default", "preflight-drift"])
+def test_pending_failure_has_no_oidc_submit_or_launch_and_no_second_attempt(prepared, monkeypatch, fault):
+    network(prepared, monkeypatch)
+    transfer.preparation_clock(monkeypatch)
+    exported = prepared.exported
+    exported.export.enable_preparation_wait(10)
+    if fault == "lost": exported.lost = "challenge"
+    elif fault == "closed": exported.export.close()
+    elif fault == "preflight-drift": prepared.own.config["attempt"] = "f" * 64
+    with pytest.raises(entry.EntrypointError):
+        execute(prepared) if fault == "default" else wait_execute(prepared)
+    count = len(exported.seen)
+    with pytest.raises(entry.EntrypointError): wait_execute(prepared)
+    assert len(exported.seen) == count and not prepared.get_calls and not prepared.launched
+    assert "submit" not in exported.seen and exported.export._issued is None
+
+
+@pytest.mark.parametrize("seconds", [-1, 1801, True, False, 1.0, None, "1"])
+def test_invalid_wait_is_latched_before_any_request(prepared, seconds):
+    with pytest.raises(entry.EntrypointError):
+        prepared.e.run(oidc_request_url=URL, oidc_request_credential=REQUEST_CREDENTIAL,
+                       preparation_wait_seconds=seconds)
+    with pytest.raises(entry.EntrypointError): execute(prepared)
+    assert prepared.exported.seen == [] and not prepared.get_calls and not prepared.launched
+
+
+@pytest.mark.parametrize("second_wrapper", [False, True])
+def test_pending_wait_still_owns_single_entrypoint_claim(prepared, monkeypatch, second_wrapper):
+    other = entry.ProtectedJobEntrypoint(prepared.own, **prepared.params) if second_wrapper else prepared.e
+    network(prepared, monkeypatch)
+    transfer.preparation_clock(monkeypatch)
+    prepared.exported.export.enable_preparation_wait(10)
+    def owner_decision(_):
+        with pytest.raises(entry.EntrypointError):
+            other.run(oidc_request_url=URL, oidc_request_credential=REQUEST_CREDENTIAL,
+                      preparation_wait_seconds=5)
+        assert not prepared.client._failed and not prepared.get_calls
+        arm(prepared)
+    monkeypatch.setattr(intake.time, "sleep", owner_decision)
+    assert wait_execute(prepared) == {"PUBLIC-TEST-modeled-launch": True}
+    assert prepared.get_calls == ["GET"] and len(prepared.launched) == 1
+
+
+@pytest.mark.parametrize("fault", ["configuration", "job", "connection", "client-close"])
+def test_wait_drift_rejects_before_any_oidc_request(prepared, monkeypatch, fault):
+    network(prepared, monkeypatch)
+    transfer.preparation_clock(monkeypatch)
+    prepared.exported.export.enable_preparation_wait(10)
+    def change(_):
+        arm(prepared)
+        if fault == "configuration": prepared.own.config["attempt"] = "f" * 64
+        elif fault == "job": prepared.client._job = replace(prepared.client._job, check_run_id="912")
+        elif fault == "connection": prepared.own.connection = object()
+        else: prepared.client.close()
+    monkeypatch.setattr(intake.time, "sleep", change)
+    with pytest.raises(entry.EntrypointError): wait_execute(prepared)
+    assert prepared.client._failed and not prepared.get_calls and not prepared.launched
+    assert "submit" not in prepared.exported.seen
+
+
 def test_complete_real_admission_intake_and_fresh_check_with_modeled_launch(prepared, monkeypatch, capsys):
     arm(prepared); network(prepared, monkeypatch)
     assert execute(prepared) == {"PUBLIC-TEST-modeled-launch": True}

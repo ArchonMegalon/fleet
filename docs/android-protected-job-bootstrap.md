@@ -43,7 +43,7 @@ remain deployment prerequisites. No credentials occur in argv or public JSON.
 
 ## Expected inputs, never serialized capabilities
 
-The bounded duplicate-key-rejecting JSON contains exactly:
+The bounded duplicate-key-rejecting JSON contains these required fields:
 
 - `launcher`: the existing launcher configuration fields, execute-only, including
   its exact validation paths and imported Fleet `code_pins`.
@@ -61,6 +61,13 @@ The bounded duplicate-key-rejecting JSON contains exactly:
 - `transport_inputs`: owner-local file paths `intake_bearer`, `binary_bearer`,
   `oidc_request_url`, `oidc_request_credential`; `base_url`: admitted private TLS
   controller origin; `release_wait_seconds`: bounded 1–1800 local wait.
+
+The sole optional field is `preparation_wait_seconds`: exact integer 0–1800.
+Absence or zero preserves strict challenge behavior and the existing required
+JSON shape; 1–1800 explicitly enables the entrypoint's bounded pending wait.
+Booleans, floats, unknown fields and other values reject before transport reads.
+It is covered by the same independently admitted deployment-byte hash; it is
+not a remotely supplied permission or evidence of readiness.
 
 Dynamic repository/workflow/run/attempt/check-run/environment/transaction/subject
 expectations must agree with the **same live** controller and its two distinct
@@ -97,8 +104,26 @@ coordinates the existing local controller's `enable_protected_job_checks()` and
 single `arm()`, **then** sends exactly one byte `1` and closes its write end.
 The root-owned read-only anonymous pipe is identity-fenced and boundedly waited.
 It is local sequencing only, not an authentication/capability receipt. Do not
-prebuffer the byte. No new HTTP readiness endpoint, polling or second challenge
-exists: requesting an unarmed challenge fails and closes the existing exporter.
+prebuffer the byte. In this default mode requesting an unarmed challenge still
+fails and closes the existing exporter.
+
+With explicit `preparation_wait_seconds > 0`, the independently admitted local
+owner must first create the actual unarmed exporter, enable its bounded
+`enable_preparation_wait(N)`, and make that exact authenticated TLS intake
+reachable. Only then may the hosted supervisor release the pipe after observing
+this process's READY marker. The entrypoint completes its existing preflight
+and once-only claim, then polls only exact successful `pending\n` responses on
+the existing challenge route. The local owner sees `preparation_observed()` as
+a non-authorizing diagnostic and independently decides to call
+`enable_protected_job_checks()` and `arm()`. HTTP cannot call either method.
+There is no new route/control plane, remote arm action, challenge renewal or
+OIDC request while pending. Missing listener/404/lost response is failure, not
+pending. The exporter deadline starts on owner enable; the independent client
+deadline starts on its challenge call. The exporter checks its deadline through
+arm/issuance; the client checks its own deadline through audience receipt.
+Once armed, the original challenge freshness applies on the exporter instead
+of its preparation deadline. Polling never resets either timer. Concrete supervisor/listener
+deployment is still required and is not activated by this source option.
 
 After release, drift fences run and the real entrypoint acquires the genuine
 job-injected OIDC token, consumes the original RS256/Jobs-API/SQLite admission,

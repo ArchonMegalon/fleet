@@ -43,12 +43,27 @@ The same invocation must contain the two distinct admitted hosted capture and
 emission jobs. Jobs1/2 already use `ControllerRendezvous` and `HostedClient`;
 there is no new controller or signing protocol here.
 
-Execution performs one challenge request, one direct GitHub OIDC HTTPS GET with
+By default execution performs one challenge request, one direct GitHub OIDC HTTPS GET with
 that audience, `begin(token)`, the existing seven-file `receive(...)`, and
 `ProtectedJobLauncher.launch(actual_intake)`. Token syntax is bounded locally;
 the existing server's RS256/JWKS/exact Jobs API/SQLite consume remains the only
 workflow authentication. Neither locally decoded claims nor diagnostic identity
 observations are substituted. The raw launcher audit is returned unchanged.
+
+An explicit `run(..., preparation_wait_seconds=N)` (integer 1–1800, default 0)
+may instead wait on the existing challenge route's exact successful pending
+response. The actual exporter owner must independently enable its bounded
+preparation wait first. The entrypoint's full preparation and shared-client
+once-only claim precede every pending request; no OIDC request, token consume,
+intake or launch occurs while pending. Only the local controller owner can
+observe this non-authorizing preparation diagnostic and separately enable
+checks/arm the original challenge. The entrypoint then performs the same one
+OIDC GET and one consume. Lightweight owner/client/policy identity fences run
+after waiting, before OIDC; all original full launch validation remains.
+Expiry, close, drift, unknown response, network error or lost reply consumes
+this entrypoint attempt without retry. Pending is never a capability or a new
+challenge. Independent outer supervision must bound blocked calls; the fixed
+monotonic waiting deadline does not kill them.
 
 The endpoint is HTTPS on the existing GitHub Actions issuer-request host family;
 the injected URL must not already contain an audience. No proxies, redirects,
@@ -72,10 +87,10 @@ This entrypoint is execute-only; it neither adds nor changes reconciliation.
 
 ## Exact production wiring still missing
 
-There is no safe generic JSON-to-owner bootstrap in the project. This change
-deliberately does **not** invent one or call an arbitrary operator-selected
-module. A reviewed hosted-owner bootstrap still must construct the existing
-launcher/client from actual deployment admission and call the entrypoint above.
+The fixed `android_protected_job_bootstrap.py` now constructs the existing
+launcher/client from explicitly admitted inputs and calls this entrypoint; it
+does not call an arbitrary operator-selected module. Its actual deployed host
+supervisor and independently admitted configuration are still missing.
 That bootstrap belongs in the protected GitHub-runner host step, not the isolated
 worker or the ordinary local build controller. Its manual workflow must admit
 the exact Fleet/workflow/run/attempt/check-run, select

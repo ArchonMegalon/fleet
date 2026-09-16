@@ -144,8 +144,12 @@ def _policies(value):
 
 
 def _document(raw):
-    value = _shape(identity._json(raw), {"launcher", "job_policy", "artifact_policy", "runtime_policy",
-        "pins", "persistent", "operation_directory", "secret_inputs", "transport_inputs", "base_url", "release_wait_seconds"})
+    value = identity._json(raw)
+    names = {"launcher", "job_policy", "artifact_policy", "runtime_policy",
+        "pins", "persistent", "operation_directory", "secret_inputs", "transport_inputs", "base_url", "release_wait_seconds"}
+    require(type(value) is dict and set(value) in (names, names | {"preparation_wait_seconds"}))
+    value.setdefault("preparation_wait_seconds", 0)
+    require(type(value["preparation_wait_seconds"]) is int and 0 <= value["preparation_wait_seconds"] <= 1800)
     config = _shape(value["launcher"], CONFIG_FIELDS)
     require(config["mode"] == "execute" and origin._hex(config["attempt"], 64)
             and type(config["artifact_id"]) is int and config["artifact_id"] > 0
@@ -197,7 +201,8 @@ def _release_fd(fd):
 
 def _wait_release(fd, stamp, seconds):
     # Local root-supervisor sequencing only, not a remote authority protocol.
-    # Sending early is an operator error; never poll/reissue the real challenge.
+    # Strict mode releases after arm. Explicit preparation-wait mode may
+    # release after READY into the already reachable owner's pending endpoint.
     require(_release_fd(fd) == stamp)
     deadline = time.monotonic() + seconds
     ready, _, _ = select.select([fd], [], [], seconds)
@@ -281,7 +286,8 @@ def run(deployment, expected_sha256, release_fd):
                 item.recheck()
             require(all(_metadata(secrets[name], 1400000) == stamp for name, stamp in key_stamps.items()))
             return entry.run(oidc_request_url=texts["oidc_request_url"],
-                             oidc_request_credential=texts["oidc_request_credential"])
+                             oidc_request_credential=texts["oidc_request_credential"],
+                             preparation_wait_seconds=value["preparation_wait_seconds"])
     except BaseException:
         raise BootstrapError(ERROR) from None
     finally:
