@@ -54,7 +54,7 @@
     },
     "bundletool_sha256": "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29",
     "builder_image": "ghcr.io/archonmegalon/chummer-android-builder@sha256:5298279ccc96316c546d7bebe00af639e38c22bdac081a980ba10e7dc965e40a",
-    "signer_image": null,
+    "signer_image": "ghcr.io/archonmegalon/chummer-android-builder@sha256:5298279ccc96316c546d7bebe00af639e38c22bdac081a980ba10e7dc965e40a",
     "installed_closure_receipt_sha256": "3a37e627299076065f5881be6e157dd1887f3428dfe2a698ffc8cf4e465ad330"
   },
   "approval_authority": {
@@ -64,17 +64,17 @@
     "public_key_path": "eng/trusted-release-builders/fleet-release-builder-2026-09.public.pem",
     "public_key_sha256": "ef44c5b7fcadaf0f115b5f0e0e7b1a65edb322bb002faf980acb654a5db8caaf",
     "public_key_spki_sha256": "41b44078d037fafd85b091b967959f77a7a4aa9f160d03749fa49889a8b1b156",
-    "private_key_secret": null,
+    "private_key_secret": "ANDROID_PREVIEW12_RELEASE_BUILDER_ED25519_PRIVATE_KEY_PKCS8_B64",
     "rotation_requires_android_merge_and_requalification": true
   },
   "upload_key": {
     "expected_certificate_sha256": "d9c4b635121544d5522abf1ec2dfda3c1938aab93d6726bb93c9871ec9ed1d15",
-    "key_alias": null,
+    "key_alias": "chummer-upload",
     "signature_algorithm": "SHA256withRSA",
     "digest_algorithm": "SHA-256",
-    "keystore_secret": null,
-    "store_password_secret": null,
-    "key_password_secret": null
+    "keystore_secret": "ANDROID_PREVIEW12_UPLOAD_KEYSTORE_B64",
+    "store_password_secret": "ANDROID_PREVIEW12_KEYSTORE_PASSWORD",
+    "key_password_secret": "ANDROID_PREVIEW12_KEY_PASSWORD"
   },
   "rebuild": {
     "enabled": false,
