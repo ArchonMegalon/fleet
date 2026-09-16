@@ -88,6 +88,39 @@ sequence, not substitute a candidate-selected digest or placeholder.
 
 ## Failure and regression coverage
 
+### Hosted OIDC compatibility and exact policy admission
+
+The production verifier permits only the required alg/kid/typ JWT header plus
+optional x5t, validated as a canonical base64url-encoded 20-byte SHA-1 certificate
+thumbprint ([RFC 7515 section 4.1.7](https://www.rfc-editor.org/rfc/rfc7515#section-4.1.7)).
+That metadata is neither a key selector nor a trust root: the unique kid still
+selects the RSA n/e key from the fixed TLS-authenticated GitHub JWKS, and the
+complete original JWT must pass real RS256 verification. No header URL, embedded
+key, certificate chain, critical extension or algorithm override is admitted.
+
+For a direct job emitting job_workflow_ref/job_workflow_sha, the owner must
+explicitly admit both existing policy fields equal to workflow_ref/workflow_sha
+before issuing the challenge. A None policy still rejects present claims; an
+explicit pair requires both exact signed strings. No automatic fallback,
+token-derived policy, absent-environment rule or journal-schema change is added.
+Existing independently admitted reusable-workflow policies remain supported.
+The protected environment, subject, audience, expiry and replay checks are
+unchanged. The journal persists the full exact tuple; changing it cannot renew
+the same transaction/run-attempt/check-run slot.
+
+Hosted diagnostic run 35116185741, attempt 1, at protected source
+3a83ce15bc2c5f2c45e9c0e3b956915ab291b44a observed exact direct self-reference,
+a string OIDC check_run_id, numeric job context, and optional string x5t. Its
+public report SHA256 is 1b8914e3c3ab7023b2d54f7c3828047cc20bfdfbe8f168cb3e699d172ca4f0e8.
+It explicitly reports signatureVerified=false: it motivates compatibility,
+not production cryptographic authentication or protected signer readiness.
+The diagnostic recorded x5t's type, not its bytes or canonical encoding.
+This implementation validates the standard encoding independently. Job ID and
+check-run ID happened to coincide there; the verifier still obtains the former
+from the exact-attempt API mapping of the latter, without assuming equality.
+
+### Failure boundaries
+
 Each session latches capture and emission before side effects. Invalid inputs,
 authentication failure, callback exception, TTL expiry, drift, verifier failure
 or lost response cannot replay that action in the session. Durable consumption

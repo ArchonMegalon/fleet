@@ -33,9 +33,13 @@ def sha(raw):
 
 
 @pytest.fixture
-def flow(model, store, signing_key, monkeypatch, tmp_path):
-    first = store.issue(journals.template())
-    second = replace(journals.template(), check_run_id="910")
+def flow(model, store, signing_key, monkeypatch, tmp_path, request):
+    template = journals.template()
+    if getattr(request, "param", False):
+        template = replace(template, job_workflow_ref=template.workflow_ref,
+            job_workflow_sha=template.workflow_sha)
+    first = store.issue(template)
+    second = replace(template, check_run_id="910")
     policy = replace(origins.policy(), source_commit=first.sha,
         subject_name=capture.MANIFEST, subject_sha256=sha(model.expected[capture.MANIFEST]))
     preserved = tmp_path / "preserved"
@@ -111,6 +115,7 @@ def emit(flow, **changes):
     return flow.session.emit(flow.issued, flow.token(flow.issued), flow.retained, **(arguments | changes))
 
 
+@pytest.mark.parametrize("flow", [False, True], indirect=True, ids=["absent", "explicit-direct"])
 def test_authentication_precedes_actual_copy_and_emission_reuses_exact_seven_bytes(flow):
     flow.model.emitted = lambda directory: pytest.fail("capture before durable consume") \
         if flow.store.status(journals.key_of(flow.first)) != "consumed" else None
@@ -118,6 +123,12 @@ def test_authentication_precedes_actual_copy_and_emission_reuses_exact_seven_byt
     result = emit(flow)
     assert type(result) is controller.ControllerEmission
     assert result.capture_job.job_id == 707 and result.emission_job.job_id == 708
+    assert result.capture_job.check_run_id == "909" and result.emission_job.check_run_id == "910"
+    for facts, issued in ((result.capture_job, flow.first), (result.emission_job, flow.issued)):
+        assert facts.job_workflow_ref == issued.job_workflow_ref
+        assert facts.job_workflow_sha == issued.job_workflow_sha
+        assert facts.job_id != int(facts.check_run_id)
+        assert flow.store.status(journals.key_of(issued)) == "consumed"
     assert result.capture.artifact_closure_sha256 == result.artifact_origin.policy.subject_sha256
     assert dict(result.capture.file_sha256) == {name: sha(raw) for name, raw in flow.model.expected.items()}
     assert flow.model.calls == ["builder"] and flow.emitted == [708]
@@ -153,6 +164,27 @@ def test_stored_full_policy_must_match_even_fields_omitted_from_returned_facts(f
     with pytest.raises(controller.ControllerCaptureError, match="capture-failed"):
         run_capture(flow)
     assert flow.model.calls == [] and flow.store.status(journals.key_of(flow.first)) == "pending"
+
+
+@pytest.mark.parametrize("flow", [True], indirect=True, ids=["explicit-direct"])
+@pytest.mark.parametrize("change", [
+    {"job_workflow_ref": None, "job_workflow_sha": None},
+    {"job_workflow_ref": "foreign/repo/.github/workflows/build.yml@refs/heads/main"},
+    {"job_workflow_sha": "e" * 40},
+], ids=["removed-pair", "foreign-workflow", "changed-sha"])
+def test_stored_capture_workflow_tuple_drift_rejected_before_consume_or_build(flow, change, monkeypatch):
+    flow.session = controller.ControllerCaptureSession(flow.store, replace(flow.first, **change),
+        flow.second, flow.policy, flow.preserved)
+    consumed = []
+    monkeypatch.setattr(flow.store, "authenticate_and_consume", lambda *args: consumed.append(args))
+    with pytest.raises(controller.ControllerCaptureError, match="capture-failed"):
+        run_capture(flow)
+    assert consumed == [] and flow.model.calls == []
+    assert flow.store.status(journals.key_of(flow.first)) == "pending"
+    assert flow.store._read(journals.key_of(flow.first))[1] == flow.first
+    with pytest.raises(controller.ControllerCaptureError, match="already-started"):
+        run_capture(flow)
+    assert consumed == []
 
 
 def test_interrupted_builder_keeps_consumed_challenge_and_never_replays(flow):
@@ -199,6 +231,30 @@ def test_wrong_emission_policy_rejected_before_callback_or_consume(flow, field):
     with pytest.raises(controller.ControllerCaptureError):
         emit(flow)
     assert flow.emitted == [] and not flow.verifier.marker.exists()
+
+
+@pytest.mark.parametrize("flow", [True], indirect=True, ids=["explicit-direct"])
+@pytest.mark.parametrize("change", [
+    {"job_workflow_ref": None, "job_workflow_sha": None},
+    {"job_workflow_ref": "foreign/repo/.github/workflows/build.yml@refs/heads/main"},
+    {"job_workflow_sha": "e" * 40},
+], ids=["removed-pair", "foreign-workflow", "changed-sha"])
+def test_issued_emission_workflow_tuple_drift_rejected_before_consume_or_callback(flow, change, monkeypatch):
+    ready(flow)
+    issued = flow.issued
+    flow.issued = replace(issued, **change)
+    consumed = []
+    monkeypatch.setattr(flow.store, "authenticate_and_consume", lambda *args: consumed.append(args))
+    with pytest.raises(controller.ControllerCaptureError, match="emission-failed"):
+        emit(flow)
+    assert consumed == [] and flow.emitted == [] and flow.model.calls == ["builder"]
+    assert not flow.verifier.marker.exists()
+    assert flow.store.status(journals.key_of(flow.first)) == "consumed"
+    assert flow.store.status(journals.key_of(issued)) == "pending"
+    assert flow.store._read(journals.key_of(issued))[1] == issued
+    with pytest.raises(controller.ControllerCaptureError, match="emission-state"):
+        emit(flow)
+    assert consumed == []
 
 
 def test_actual_authenticated_emission_job_must_differ_from_capture(flow):

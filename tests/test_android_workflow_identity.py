@@ -150,6 +150,57 @@ def test_actual_pyjwt_uses_raw_rsa_key_and_one_algorithm(policy, keys, monkeypat
     assert identity.authenticate_workflow_job(sign(keys[0]), policy).job_id == 707
 
 
+@pytest.mark.parametrize("thumbprint", [False, True])
+@pytest.mark.parametrize("job_id", [707, 909])
+def test_optional_x5t_keeps_real_rs256_and_independent_job_check_mapping(policy, keys, monkeypatch, thumbprint, job_id):
+    jobs = api_jobs()
+    jobs["jobs"][0].update(id=job_id, url="https://api.github.com/repos/example/repo/actions/jobs/" + str(job_id))
+    seen = replies(monkeypatch, keys[0], jobs=jobs)
+    header = {"alg": "RS256", "typ": "JWT", "kid": "test-only"}
+    if thumbprint:
+        header["x5t"] = b64(b"t" * 20)
+    token = sign(keys[0], header=header)
+    facts = identity.authenticate_workflow_job(token, policy)
+    assert facts.job_id == job_id and facts.check_run_id == "909"
+    assert facts.token_sha256 == hashlib.sha256(token.encode()).hexdigest()
+    assert [url for url, _ in seen] == [identity.JWKS_URL, ATTEMPT, JOBS]
+    assert "x5t" not in facts.__dataclass_fields__  # No new authority/identity field.
+
+
+@pytest.mark.parametrize("value", [None, True, 123, {}, [], "", "x" * 65,
+    b64(b"t" * 19), b64(b"t" * 21), b64(b"t" * 20) + "=", "!" * 27,
+    b64(b"t" * 20) + "\n", b64(b"t" * 20)[:-1] + "R"])
+def test_malformed_x5t_rejects_before_network(policy, keys, monkeypatch, value):
+    monkeypatch.setattr(identity, "_fetch", lambda *_: pytest.fail("malformed header reached transport"))
+    header = {"alg": "RS256", "typ": "JWT", "kid": "test-only", "x5t": value}
+    with pytest.raises(identity.WorkflowIdentityError):
+        identity.authenticate_workflow_job(sign(keys[0], header=header), policy)
+
+
+def test_duplicate_x5t_rejects_before_network(policy, keys, monkeypatch):
+    monkeypatch.setattr(identity, "_fetch", lambda *_: pytest.fail("duplicate header reached transport"))
+    header = b'{"alg":"RS256","typ":"JWT","kid":"test-only","x5t":"' + b64(b"t" * 20).encode() + b'","x5t":"' + b64(b"t" * 20).encode() + b'"}'
+    with pytest.raises(identity.WorkflowIdentityError, match="json-duplicate"):
+        identity.authenticate_workflow_job(sign(keys[0], raw_header=header), policy)
+
+
+@pytest.mark.parametrize("fault", ["header-tamper", "wrong-key", "unknown-kid"])
+def test_x5t_never_replaces_kid_selection_or_signature_verification(policy, keys, monkeypatch, fault):
+    data = jwks(keys[0])
+    data["keys"][0]["x5t"] = b64(b"t" * 20)
+    seen = replies(monkeypatch, keys[0], key_data=data)
+    header = {"alg": "RS256", "typ": "JWT", "kid": "unknown" if fault == "unknown-kid" else "test-only",
+        "x5t": b64(b"t" * 20)}
+    token = sign(keys[1] if fault == "wrong-key" else keys[0], header=header)
+    if fault == "header-tamper":
+        parts = token.split(".")
+        parts[0] = b64(raw(dict(header, x5t=b64(b"u" * 20))))
+        token = ".".join(parts)
+    with pytest.raises(identity.WorkflowIdentityError, match="jwks-key-missing" if fault == "unknown-kid" else "jwt-signature-or-validity"):
+        identity.authenticate_workflow_job(token, policy)
+    assert [url for url, _ in seen] == [identity.JWKS_URL]
+
+
 @pytest.mark.parametrize("kind", ["other-key", "changed-body", "changed-signature"])
 def test_invalid_real_signature_never_reaches_run_api(policy, keys, monkeypatch, kind):
     seen = replies(monkeypatch, keys[0])
@@ -164,7 +215,8 @@ def test_invalid_real_signature_never_reaches_run_api(policy, keys, monkeypatch,
 
 @pytest.mark.parametrize("field,value", [("alg", "none"), ("alg", "HS256"), ("alg", "PS256"),
     ("alg", "RS512"), ("typ", "not-JWT"), ("kid", ""), ("kid", True), ("jku", "https://evil.invalid"),
-    ("x5u", "https://evil.invalid"), ("jwk", {}), ("crit", ["b64"]), ("b64", False)])
+    ("x5u", "https://evil.invalid"), ("jwk", {}), ("crit", ["b64"]), ("b64", False),
+    ("x5t#S256", b64(b"s" * 32)), ("x5c", [])])
 def test_header_confusion_rejects_before_network(policy, keys, monkeypatch, field, value):
     header = {"alg": "RS256", "typ": "JWT", "kid": "test-only", field: value}
     monkeypatch.setattr(identity, "_fetch", lambda *_: pytest.fail("must reject before transport"))
@@ -177,6 +229,7 @@ def test_header_confusion_rejects_before_network(policy, keys, monkeypatch, fiel
     ("repository_id", 123), ("repository_id", "124"), ("repository_owner", "other"), ("repository_owner_id", "457"),
     ("sha", "b"*40), ("ref", "refs/heads/other"), ("workflow_ref", "example/repo/.github/workflows/other.yml@refs/heads/main"),
     ("workflow_sha", "b"*40), ("run_id", "1235"), ("run_attempt", "1"), ("check_run_id", "707"),
+    ("check_run_id", 909), ("check_run_id", True), ("check_run_id", "0909"),
     ("environment", "unprotected"), ("event_name", "pull_request_target"), ("runner_environment", "self-hosted"),
     ("repository_visibility", "private"), ("environment", "protected\n"), ("jti", "")])
 def test_exact_signed_claims_cannot_be_replaced(policy, keys, monkeypatch, field, value):
@@ -320,6 +373,44 @@ def test_reusable_workflow_is_separate_signed_identity(policy, keys, monkeypatch
     assert facts.workflow_sha == "a"*40 and facts.job_workflow_sha == "b"*40
     with pytest.raises(identity.WorkflowIdentityError): identity.authenticate_workflow_job(token, policy)
     with pytest.raises(identity.WorkflowIdentityError): identity.authenticate_workflow_job(sign(keys[0]), selected)
+
+
+@pytest.mark.parametrize("thumbprint", [False, True])
+def test_direct_self_reference_requires_explicit_independent_policy(policy, keys, monkeypatch, thumbprint):
+    selected = replace(policy, job_workflow_ref=policy.workflow_ref, job_workflow_sha=policy.workflow_sha)
+    value = dict(claims(), job_workflow_ref=policy.workflow_ref, job_workflow_sha=policy.workflow_sha)
+    header = {"alg": "RS256", "typ": "JWT", "kid": "test-only"}
+    if thumbprint:
+        header["x5t"] = b64(b"t" * 20)
+    replies(monkeypatch, keys[0])
+    token = sign(keys[0], value, header=header)
+    facts = identity.authenticate_workflow_job(token, selected)
+    assert facts.job_workflow_ref == facts.workflow_ref == policy.workflow_ref
+    assert facts.job_workflow_sha == facts.workflow_sha == policy.workflow_sha
+    assert facts.environment == "protected" and facts.check_run_id == "909"
+    identity._same_context(selected, origin_policy(selected))
+    with pytest.raises(identity.WorkflowIdentityError, match="jwt-reusable"):
+        identity.authenticate_workflow_job(token, policy)  # No None-policy fallback.
+
+
+@pytest.mark.parametrize("change", ["absent", "partial-ref", "partial-sha", "foreign", "reusable",
+    "wrong-ref", "wrong-sha", "null-ref", "number-sha", "missing-environment", "wrong-environment"])
+def test_explicit_direct_policy_rejects_tuple_or_protected_environment_drift(policy, keys, monkeypatch, change):
+    selected = replace(policy, job_workflow_ref=policy.workflow_ref, job_workflow_sha=policy.workflow_sha)
+    value = dict(claims(), job_workflow_ref=policy.workflow_ref, job_workflow_sha=policy.workflow_sha)
+    if change in ("absent", "partial-sha"): del value["job_workflow_ref"]
+    if change in ("absent", "partial-ref"): del value["job_workflow_sha"]
+    if change == "foreign": value["job_workflow_ref"] = "foreign/repo/.github/workflows/build.yml@refs/heads/main"
+    if change == "reusable": value["job_workflow_ref"] = "example/repo/.github/workflows/reusable.yml@refs/heads/main"
+    if change == "wrong-ref": value["job_workflow_ref"] = policy.workflow_ref.replace("main", "other")
+    if change == "wrong-sha": value["job_workflow_sha"] = "b" * 40
+    if change == "null-ref": value["job_workflow_ref"] = None
+    if change == "number-sha": value["job_workflow_sha"] = 123
+    if change == "missing-environment": del value["environment"]
+    if change == "wrong-environment": value["environment"] = "other"
+    monkeypatch.setattr(identity, "_fetch", lambda *_: pytest.fail("bad exact claims reached transport"))
+    with pytest.raises(identity.WorkflowIdentityError):
+        identity.authenticate_workflow_job(sign(keys[0], value), selected)
 
 
 @pytest.mark.parametrize("point", ["keys", "attempt", "jobs"])

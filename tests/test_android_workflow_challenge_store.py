@@ -47,6 +47,10 @@ def template():
         challenge_nonce="d" * 64, challenge_issued_at=1, challenge_expires_at=2)
 
 
+def self_reference(policy):
+    return replace(policy, job_workflow_ref=policy.workflow_ref, job_workflow_sha=policy.workflow_sha)
+
+
 @pytest.fixture(scope="module")
 def signing_key():
     return rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -73,7 +77,7 @@ def token_for(policy, key, **changes):
     return jwt.encode(value, key, algorithm="RS256", headers={"kid": "test-only"})
 
 
-def reply_bytes(key, policy):
+def reply_bytes(key, policy, *, job_id=707):
     b64 = lambda value: base64.urlsafe_b64encode(value).decode().rstrip("=")
     numbers = key.public_key().public_numbers()
     api = identity.API + "/repos/" + policy.repository
@@ -87,15 +91,15 @@ def reply_bytes(key, policy):
             "path": ".github/workflows/build.yml", "head_commit": {"message": "Actual fixture\nwith body"},
             "repository": {"id": int(policy.repository_id), "full_name": policy.repository, "private": False,
                 "owner": {"id": int(policy.repository_owner_id), "login": policy.repository_owner}}},
-        attempt + "/jobs?per_page=100&page=1": {"total_count": 1, "jobs": [{"id": 707,
-            "run_id": int(policy.run_id), "run_url": run, "url": api + "/actions/jobs/707", "head_sha": policy.sha,
+        attempt + "/jobs?per_page=100&page=1": {"total_count": 1, "jobs": [{"id": job_id,
+            "run_id": int(policy.run_id), "run_url": run, "url": api + "/actions/jobs/" + str(job_id), "head_sha": policy.sha,
             "check_run_url": api + "/check-runs/" + policy.check_run_id,
             "status": policy.job_status, "conclusion": policy.job_conclusion}]}}
     return {url: json.dumps(value).encode() for url, value in replies.items()}
 
 
-def serve(monkeypatch, key, policy):
-    replies = reply_bytes(key, policy)
+def serve(monkeypatch, key, policy, *, job_id=707):
+    replies = reply_bytes(key, policy, job_id=job_id)
     seen = []
     def fetch(url, deadline):
         seen.append(url)
@@ -165,6 +169,115 @@ def test_exact_reusable_workflow_and_explicit_job_lifecycle_preserved(store, sig
     assert facts.job_workflow_ref == expected.job_workflow_ref
     assert facts.job_workflow_sha == expected.job_workflow_sha
     assert facts.job_status == expected.job_status
+
+
+@pytest.mark.parametrize("job_id", [707, 909], ids=["distinct-job-id", "equal-numeric-job-id"])
+def test_explicit_direct_self_reference_persists_exact_policy_and_identity(store, signing_key, monkeypatch, job_id):
+    policy = store.issue(self_reference(template()))
+    seen = serve(monkeypatch, signing_key, policy, job_id=job_id)
+    token = token_for(policy, signing_key)
+    facts = store.authenticate_and_consume(key_of(policy), token)
+    assert facts.job_id == job_id and facts.check_run_id == "909"
+    reopened = reopen(store)
+    assert reopened.status(key_of(policy)) == "consumed"
+    row, persisted_policy = reopened._read(key_of(policy))
+    assert persisted_policy == policy
+    assert json.loads(row[3]) == asdict(policy)
+    assert json.loads(row[9]) == asdict(facts)
+    for document in (json.loads(row[3]), json.loads(row[9])):
+        assert type(document["job_workflow_ref"]) is str
+        assert type(document["job_workflow_sha"]) is str
+        assert document["job_workflow_ref"] == policy.workflow_ref
+        assert document["job_workflow_sha"] == policy.workflow_sha
+    with pytest.raises(journal.ChallengeStoreError, match="consumed"):
+        reopened.authenticate_and_consume(key_of(policy), token)
+    assert len(seen) == 3  # Replay fails before any additional modeled HTTPS.
+
+
+@pytest.mark.parametrize("claim_pair", [
+    {},
+    {"job_workflow_ref": template().workflow_ref},
+    {"job_workflow_sha": template().workflow_sha},
+    {"job_workflow_ref": "foreign/repo/.github/workflows/build.yml@refs/heads/main",
+     "job_workflow_sha": template().workflow_sha},
+    {"job_workflow_ref": template().workflow_ref, "job_workflow_sha": "e" * 40},
+    {"job_workflow_ref": None, "job_workflow_sha": template().workflow_sha},
+    {"job_workflow_ref": template().workflow_ref, "job_workflow_sha": None},
+    {"job_workflow_ref": True, "job_workflow_sha": template().workflow_sha},
+    {"job_workflow_ref": template().workflow_ref, "job_workflow_sha": 123},
+])
+def test_explicit_self_reference_rejects_missing_partial_or_wrong_signed_pair_without_consuming(
+        store, signing_key, monkeypatch, claim_pair):
+    policy = store.issue(self_reference(template()))
+    serve(monkeypatch, signing_key, policy)
+    no_pair = replace(policy, job_workflow_ref=None, job_workflow_sha=None)
+    token = token_for(no_pair, signing_key, **claim_pair)
+    with pytest.raises(journal.ChallengeStoreError):
+        store.authenticate_and_consume(key_of(policy), token)
+    assert reopen(store).status(key_of(policy)) == "pending"
+
+
+@pytest.mark.parametrize("fields", [("job_workflow_ref",), ("job_workflow_sha",),
+                                  ("job_workflow_ref", "job_workflow_sha")])
+def test_absent_pair_policy_never_infers_direct_self_reference(store, signing_key, monkeypatch, fields):
+    policy = store.issue(template())
+    serve(monkeypatch, signing_key, policy)
+    direct = self_reference(policy)
+    token = token_for(policy, signing_key, **{name: getattr(direct, name) for name in fields})
+    with pytest.raises(journal.ChallengeStoreError):
+        store.authenticate_and_consume(key_of(policy), token)
+    assert reopen(store).status(key_of(policy)) == "pending"
+
+
+@pytest.mark.parametrize("expired", [False, True])
+@pytest.mark.parametrize("direction", ["absent-to-self", "self-to-absent", "self-to-foreign"])
+def test_workflow_tuple_changes_cannot_renew_the_same_job_slot(store, monkeypatch, expired, direction):
+    initial = template() if direction == "absent-to-self" else self_reference(template())
+    policy = store.issue(initial)
+    changed = self_reference(template()) if direction == "absent-to-self" else template()
+    if direction == "self-to-foreign":
+        changed = replace(initial, job_workflow_ref="foreign/repo/.github/workflows/build.yml@refs/heads/main",
+                          job_workflow_sha="e" * 40)
+    if expired:
+        monkeypatch.setattr(journal, "time", SimpleNamespace(time=lambda: policy.challenge_expires_at + 1))
+    with pytest.raises(journal.ChallengeStoreError):
+        store.issue(changed)
+    row, persisted_policy = reopen(store)._read(key_of(policy))
+    assert persisted_policy == policy and row[6] is None
+    assert store.status(key_of(policy)) == ("expired" if expired else "pending")
+    with sqlite3.connect(store._path) as connection:
+        assert connection.execute("SELECT count(*) FROM challenges").fetchone() == (1,)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("job_workflow_ref", None), ("job_workflow_ref", True),
+    ("job_workflow_ref", "foreign/repo/.github/workflows/build.yml@refs/heads/main"),
+    ("job_workflow_sha", None), ("job_workflow_sha", 123), ("job_workflow_sha", "e" * 40),
+])
+@pytest.mark.parametrize("location", ["returned", "persisted"])
+def test_exact_self_reference_result_tuple_rejects_corruption(
+        store, signing_key, monkeypatch, field, value, location):
+    policy = store.issue(self_reference(template()))
+    serve(monkeypatch, signing_key, policy)
+    token = token_for(policy, signing_key)
+    if location == "returned":
+        real = identity.authenticate_workflow_job
+        monkeypatch.setattr(identity, "authenticate_workflow_job",
+            lambda raw, selected: replace(real(raw, selected), **{field: value}))
+        with pytest.raises(journal.ChallengeStoreError, match="authentication-binding"):
+            store.authenticate_and_consume(key_of(policy), token)
+        assert reopen(store).status(key_of(policy)) == "pending"
+    else:
+        facts = store.authenticate_and_consume(key_of(policy), token)
+        changed = journal._canonical(asdict(replace(facts, **{field: value})))
+        # Model corrupted history while restoring the exact schema, so the
+        # persisted tuple binding itself must reject, not just schema checks.
+        with sqlite3.connect(store._path) as connection:
+            connection.execute("DROP TRIGGER challenge_consumption_immutable")
+            connection.execute("UPDATE challenges SET identity_bytes=? WHERE challenge_sha=?", (changed, key_of(policy)))
+            connection.execute(journal._SCHEMA[-1])
+        with pytest.raises(journal.ChallengeStoreError, match="authentication-binding"):
+            reopen(store).status(key_of(policy))
 
 
 def test_quota_never_purges_old_or_consumed_history(tmp_path, monkeypatch):

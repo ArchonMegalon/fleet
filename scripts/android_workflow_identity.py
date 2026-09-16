@@ -388,8 +388,11 @@ def _authenticate(token, policy, deadline):
     parts = token.split(".")
     _require(len(parts) == 3, "jwt-shape")
     header = _json(_b64(parts[0], 2048))
-    _require(set(header) == {"alg", "kid", "typ"} and header.get("alg") == "RS256"
+    _require({"alg", "kid", "typ"} <= set(header) <= {"alg", "kid", "typ", "x5t"} and header.get("alg") == "RS256"
              and header.get("typ") == "JWT" and _text(header.get("kid"), 256), "jwt-header")
+    # Optional JOSE SHA-1 certificate thumbprint is bounded metadata, not a key
+    # selector or trust root. kid still selects n/e from the fixed HTTPS JWKS.
+    _require("x5t" not in header or len(_b64(header["x5t"], 64)) == 20, "jwt-header")
     claims = _json(_b64(parts[1], MAX_TOKEN))
     _b64(parts[2], 1024)
     _claims(claims, policy, int(time.time()))  # Rejection only, not authentication.
