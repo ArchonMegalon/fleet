@@ -9,9 +9,10 @@ loads credentials, signs, launches Docker or creates an HTTP listener.
 from __future__ import annotations
 
 import ctypes
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 import hashlib
+import math
 import os
 from pathlib import Path
 import re
@@ -22,6 +23,7 @@ import time
 
 from scripts import android_artifact_origin as origin
 from scripts import android_builder_handoff as capture
+from scripts import android_controller_capture as controller
 from scripts import android_controller_rendezvous as rendezvous
 from scripts import android_preview12_external_rebuilder as fleet
 from scripts import android_workflow_challenge_store as journal
@@ -64,6 +66,7 @@ class PublicCaptureExport:
         self._issued = self._authenticated = None
         self._fds, self._index, self._offset, self._sequence = {}, 0, 0, 0
         self._started = self._last = None
+        self._signing_enabled, self._signing_sequence = False, 0
         try:
             _require(type(completed) is rendezvous.ControllerRendezvous)
             self._controller, self._result = completed, completed.completed()
@@ -128,6 +131,34 @@ class PublicCaptureExport:
                 self.close()
                 raise IntakeError(_ERROR) from None
 
+    def enable_protected_job_checks(self):
+        """Owner-only, BEFORE arm: retain this original admission for signing.
+
+        This adds no renewal or capability document. Protected runtime/custody
+        still belongs to the independently admitted job launcher.
+        """
+        with self._mutex:
+            _require(not self._armed and not self._signing_enabled)
+            self._exact(full=True)
+            self._signing_enabled = True
+
+    def _signing_fresh(self):
+        _require(self._signing_enabled and self._authenticated is not None
+                 and self._index == len(self._names) and self._bundle_sent)
+        self._exact(full=True)
+        _require(self._store is self._controller._store is self._session._store)
+        row, stored = self._store._read(controller._challenge(self._issued))
+        facts = self._authenticated
+        _require(stored == self._issued and controller._role(stored) == controller._role(self._policy)
+                 and row[6] is not None and row[7] == facts.token_sha256
+                 and row[8] == facts.token_identifier_sha256
+                 and row[9] == journal._canonical(asdict(facts)))
+        # Check AFTER expensive custody work; never reinterpret transfer TTL.
+        self._store._match(facts, self._issued, int(time.time()))
+        remaining = facts.valid_until - math.ceil(time.time())
+        _require(1 <= remaining <= 600)
+        return remaining
+
     def close(self):
         with self._mutex:
             self._stopped = True
@@ -189,6 +220,13 @@ class PublicCaptureExport:
                 if operation == "submit":
                     return self._admit(raw)
                 _require(self._authenticated is not None)
+                if operation == "fresh-check":
+                    _require(len(raw) == 8 and self._signing_sequence < MAX_CHECKS
+                             and struct.unpack(">Q", raw)[0] == self._signing_sequence)
+                    self._signing_sequence += 1
+                    remaining = self._signing_fresh()
+                    self._last = time.monotonic()
+                    return 200, raw + struct.pack(">I", remaining)
                 if operation == "check":
                     _require(len(raw) == 8 and self._sequence < MAX_CHECKS
                              and struct.unpack(">Q", raw)[0] == self._sequence)
@@ -214,12 +252,12 @@ class PublicCaptureApp(rendezvous._FixedApp):
 
     def __init__(self, exporter: PublicCaptureExport, *, trusted_proxy_addresses=()):
         _require(type(exporter) is PublicCaptureExport)
-        operations = ["challenge", "submit", "check", "bundle"]
+        operations = ["challenge", "submit", "check", "bundle", "fresh-check"]
         for name, limit in exporter._limits.items():
             operations.extend("file/" + name + "/" + str(index) for index in range(limit // CHUNK + 1))
         routes = {(exporter.prefix + "/" + value).encode(): ("intake", value) for value in operations}
         super().__init__(exporter, routes, trusted_proxy_addresses=trusted_proxy_addresses,
-                         body_limits={"check": 8, "bundle": 0})
+                         body_limits={"check": 8, "bundle": 0, "fresh-check": 8})
 
 
 def _root_directory(path):
@@ -348,6 +386,7 @@ class PublicCaptureClient:
         self._policy, self._job = artifact_policy, job_policy
         self._failed = self._begun = self._received = False
         self._sequence = 0
+        self._signing_sequence, self._intake = 0, None
         self._mutex = threading.RLock()
 
     def _post(self, operation, raw=b"", limit=4096):
@@ -393,6 +432,30 @@ class PublicCaptureClient:
 
     def close(self):
         self._failed = True
+
+    def assert_signing_fresh(self, retained):
+        """Live owner-bound check, never authentication from a public echo."""
+        with self._mutex:
+            try:
+                started = time.monotonic()
+                _require(self._intake is retained and type(retained) is CapturedPublicIntake
+                         and retained.connection is self and self._signing_sequence < MAX_CHECKS)
+                retained.custody.assert_exact()
+                retained.retained.assert_exact()
+                _require(retained.artifact_origin.policy == self._policy
+                         and retained.retained.artifact_closure_sha256 == self._policy.subject_sha256)
+                raw = struct.pack(">Q", self._signing_sequence)
+                self._signing_sequence += 1
+                status, response = self._post("fresh-check", raw, 12)
+                _require(status == 200 and len(response) == 12 and response[:8] == raw)
+                remaining = struct.unpack(">I", response[8:])[0]
+                _require(1 <= remaining <= 600 and time.monotonic() < started + remaining)
+                # Start BEFORE all local checks and network delay. This is an
+                # ephemeral upper bound, not a transferable authority receipt.
+                return started + remaining
+            except BaseException:
+                self.close()
+                raise IntakeError(_ERROR) from None
 
     def receive(self, packet: Path, *, lock: origin.PinnedFile,
                 verifier: origin.PinnedFile, trusted_root: origin.PinnedFile) -> CapturedPublicIntake:
@@ -462,6 +525,7 @@ class PublicCaptureClient:
                     value.recheck()
                 result = CapturedPublicIntake(retained, verified, custody, self)
                 result.assert_exact()
+                self._intake = result
                 return result
             except BaseException:
                 self.close()
