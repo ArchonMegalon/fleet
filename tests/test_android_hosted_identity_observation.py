@@ -108,15 +108,28 @@ def test_documented_x5t_header_and_extra_response_metadata_never_expose_values(m
     ("x5t", {}), ("x5t", True), ("x5t", ""), ("x5t", "x" * 257), ("alg", "none"), ("typ", "OTHER")])
 def test_unknown_or_malformed_header_is_rejected_without_echo(model, monkeypatch, capsys, field, value):
     model.header = {"alg": "RS256", "typ": "JWT", "kid": "PRIVATE-KEY-ID", field: value}
-    monkeypatch.setattr(observation, "observe", lambda env: observation_decode(model))
+    monkeypatch.setattr(observation, "observe", lambda env, diagnostic: observation.decode_observation(
+        {"value": token(model.claims, model.header)}, observation.context(env), diagnostic))
     assert observation.main(model.env) == 1
     output = capsys.readouterr()
-    assert output.out == "" and output.err == "Hosted identity diagnostic failed; no authority was produced.\n"
+    diagnostic = failure_output(output)
+    assert diagnostic["stage"] == "oidc-header"
+    assert diagnostic["fieldTypes"]["header.kid"] == "string"
     assert not (Path(model.env["RUNNER_TEMP"]) / observation.OUTPUT_NAME).exists()
 
 
-def observation_decode(model):
-    return observation.decode_observation({"value": token(model.claims, model.header)}, observation.context(model.env))
+def failure_output(output):
+    assert output.out == ""
+    lines = output.err.splitlines()
+    assert len(lines) == 2 and lines[0] == "Hosted identity diagnostic failed; no authority was produced."
+    assert len(lines[1]) <= 4096 and "PRIVATE" not in output.err
+    result = json.loads(lines[1])
+    assert set(result) <= {"classification", "outcome", "stage", "reason", "fieldTypes", "field"}
+    assert result["classification"] == "diagnostic_only_not_authority" and result["outcome"] == "failed"
+    assert result["stage"] in observation.STAGES and result["reason"] in observation.REASONS
+    assert set(result["fieldTypes"]) <= observation.TYPE_NAMES
+    assert set(result["fieldTypes"].values()) <= observation.JSON_TYPES
+    return result
 
 
 @pytest.mark.parametrize("value", [None, True, False, 789.0, [], {}, "0789", "789\n", "PRIVATE", 10**20, "790"])
@@ -193,12 +206,15 @@ def test_oidc_request_credentials_cannot_be_redirected(model, url):
 
 
 def test_network_errors_and_raw_claims_never_appear_in_cli_errors(model, monkeypatch, capsys):
-    def failed(_env):
+    def failed(_env, diagnostic):
+        diagnostic.at("oidc-request")
         raise urllib.error.URLError("PRIVATE JWT " + token(model.claims) + " PRIVATE request header")
     monkeypatch.setattr(observation, "observe", failed)
     assert observation.main(model.env) == 1
     output = capsys.readouterr()
-    assert output.out == "" and output.err == "Hosted identity diagnostic failed; no authority was produced.\n"
+    diagnostic = failure_output(output)
+    assert diagnostic == {"classification": "diagnostic_only_not_authority", "outcome": "failed",
+        "stage": "oidc-request", "reason": "unexpected-exception", "fieldTypes": {}}
     assert not (Path(model.env["RUNNER_TEMP"]) / observation.OUTPUT_NAME).exists()
 
 
@@ -257,8 +273,11 @@ def test_actual_http_reader_rejects_bounds_redirect_and_malformed_responses(monk
             return response
         return SimpleNamespace(open=opened)
     monkeypatch.setattr(observation.urllib.request, "build_opener", opener)
-    with pytest.raises(observation.ObservationError):
+    with pytest.raises(observation.ObservationError) as rejected:
         observation.get_json(endpoint, "PRIVATE-TEST-TOKEN", 16)
+    assert rejected.value.reason == {"oversize": "http-body-bounds", "redirect": "http-url",
+        "content-type": "http-content-type", "encoding": "http-content-encoding", "pagination": "http-pagination",
+        "duplicate-header": "http-header-duplicates", "status": "http-status"}[fault]
     with pytest.raises(observation.ObservationError):
         observation.NoRedirect().redirect_request(None, None, None, None, None, "https://foreign.invalid")
 
@@ -271,10 +290,99 @@ def test_wrong_current_main_stops_before_oidc(model):
         observation.observe(model.env, drift)
 
 
+def test_real_urllib_http_error_is_classified_without_reading_or_printing_it(monkeypatch):
+    class UnreadableBody:
+        def read(self, *_args):
+            pytest.fail("error response body must never be read")
+        def close(self): pass
+    def opened(*_args, **_kwargs):
+        raise urllib.error.HTTPError("https://PRIVATE.invalid/PRIVATE", 403, "PRIVATE response",
+            {"PRIVATE-HEADER": "PRIVATE"}, UnreadableBody())
+    monkeypatch.setattr(observation.urllib.request, "build_opener", lambda *_args: SimpleNamespace(open=opened))
+    with pytest.raises(observation.ObservationError) as rejected:
+        observation.get_json(observation.API + "/branches/main", "PRIVATE-TEST-TOKEN", 16)
+    assert rejected.value.reason == "http-status"
+    assert str(rejected.value) == "identity-observation-rejected"
+    assert "PRIVATE" not in observation.Diagnostic().failure(rejected.value)
+
+
 @pytest.mark.parametrize("credential", ["", None, "PRIVATE\nHEADER", "x" * 16385])
 def test_invalid_request_credentials_rejected_before_http(credential):
     with pytest.raises(observation.ObservationError):
         observation.get_json(observation.API + "/branches/main", credential, 16)
+
+
+@pytest.mark.parametrize("fault,stage,field,kind", [
+    ("context", "context", None, None), ("url", "oidc-url", None, None),
+    ("response", "oidc-response", "oidc-response.value", "object"),
+    ("token", "oidc-token", "oidc-response.value", "string"),
+    ("claim", "oidc-claims", "claims.run_attempt", "integer"),
+    ("time", "oidc-times", "claims.exp", "boolean"),
+    ("check", "oidc-check-run", "claims.check_run_id", "boolean"),
+    ("run", "run-validation", "run.run_attempt", "string"),
+    ("repository", "repository-validation", "run.repository", "object"),
+    ("jobs", "jobs-validation", "jobs.total_count", "string"),
+    ("job", "job-validation", "job.id", "boolean"),
+    ("write", "report-write", None, None),
+])
+def test_actual_main_reports_closed_failure_stage_and_types(model, monkeypatch, capsys, fault, stage, field, kind):
+    original = observation.observe
+    if fault == "context": model.env["EXECUTION_EVENT"] = "PRIVATE"
+    if fault == "url": model.env["ACTIONS_ID_TOKEN_REQUEST_URL"] = "https://PRIVATE.invalid/PRIVATE"
+    if fault == "claim": model.claims["run_attempt"] = 1
+    if fault == "time": model.claims["exp"] = True
+    if fault == "check": model.claims["check_run_id"] = True
+    if fault == "run": model.run["run_attempt"] = "PRIVATE"
+    if fault == "repository": model.run["repository"]["full_name"] = "PRIVATE"
+    if fault == "jobs": model.count = "PRIVATE"
+    if fault == "job": model.job["id"] = True
+    if fault == "write": monkeypatch.setattr(observation, "write_report", lambda *_args: (_ for _ in ()).throw(OSError("PRIVATE")))
+    def fetch(url, credential, limit):
+        if url.startswith("https://run-actions.") and fault in ("response", "token"):
+            return {"value": {"PRIVATE": "PRIVATE"} if fault == "response" else "PRIVATE"}
+        return model.fetch(url, credential, limit)
+    monkeypatch.setattr(observation, "observe", lambda env, diagnostic: original(env, fetch, diagnostic))
+    assert observation.main(model.env) == 1
+    result = failure_output(capsys.readouterr())
+    assert result["stage"] == stage
+    if field is not None:
+        assert result["fieldTypes"][field] == kind
+    if fault == "claim":
+        assert result["field"] == "claims.run_attempt" and result["reason"] == "claim-mismatch"
+    assert not (Path(model.env["RUNNER_TEMP"]) / observation.OUTPUT_NAME).exists()
+
+
+@pytest.mark.parametrize("stage", ["branch-request", "oidc-request", "run-request", "jobs-request"])
+def test_request_boundary_is_identified_without_exception_text(model, monkeypatch, capsys, stage):
+    original = observation.observe
+    target = {"branch-request": 1, "oidc-request": 2, "run-request": 3, "jobs-request": 4}[stage]
+    def fetch(url, credential, limit):
+        if len(model.calls) + 1 == target:
+            raise observation.ObservationError("http-header-duplicates")
+        return model.fetch(url, credential, limit)
+    monkeypatch.setattr(observation, "observe", lambda env, diagnostic: original(env, fetch, diagnostic))
+    assert observation.main(model.env) == 1
+    result = failure_output(capsys.readouterr())
+    assert result["stage"] == stage and result["reason"] == "http-header-duplicates"
+
+
+def test_failure_vocabulary_cannot_echo_arbitrary_values_or_unknown_names():
+    diagnostic = observation.Diagnostic()
+    diagnostic.stage = "PRIVATE-STAGE"
+    diagnostic.field = "PRIVATE-FIELD"
+    diagnostic.types = {"PRIVATE-NAME": "PRIVATE-VALUE", "claims.aud": "PRIVATE-VALUE", "header.kid": {"PRIVATE": 1}}
+    result = diagnostic.failure(observation.ObservationError("PRIVATE-EXCEPTION"))
+    assert json.loads(result) == {"classification": "diagnostic_only_not_authority", "outcome": "failed",
+        "stage": "startup", "reason": "unexpected-exception", "fieldTypes": {}}
+    assert "PRIVATE" not in result
+
+
+def test_maximum_closed_type_inventory_fits_failure_bound():
+    diagnostic = observation.Diagnostic()
+    for group, fields in observation.TYPE_FIELDS.items():
+        diagnostic.record(group, {field: "PRIVATE" for field in fields})
+    result = diagnostic.failure(ValueError("PRIVATE"))
+    assert len(result) <= 4096 and "PRIVATE" not in result
 
 
 def test_workflow_is_manual_secretless_nondeploying_and_only_uploads_public_file():
