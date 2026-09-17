@@ -2340,6 +2340,52 @@ def _copy_protected(source: Path, destination: Path, label: str, limit: int) -> 
     _write_exclusive(destination, raw)
 
 
+def _canonical_output_identity(path: Path, limit: int) -> os.stat_result:
+    """Admit Android's promoted public output, not an arbitrary readable file."""
+    metadata = _offline_input_identity(path, limit)
+    parent = path.parent.lstat()
+    if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o444 \
+            or parent.st_uid != os.getuid() or stat.S_IMODE(parent.st_mode) & 0o022:
+        raise RebuilderError("canonical rebuilt output is not owned read-only custody")
+    return metadata
+
+
+def _copy_canonical_output(source: Path, destination: Path, label: str, limit: int) -> None:
+    """Snapshot exact 0444 metadata into private custody without chmod/rebinding.
+
+    Reuse descriptor-based input capture and double-read digest verification;
+    private consumers retain their existing owner_only checks. This is local
+    byte custody, not authentication of the build or an immutable mount claim.
+    """
+    try:
+        metadata = _canonical_output_identity(source, limit)
+        parent = source.parent.lstat()
+        parent_identity = lambda item: (item.st_dev, item.st_ino, item.st_mode, item.st_uid, item.st_gid)
+        identity = lambda item: (*_file_identity(item), item.st_gid, item.st_nlink)
+
+        def fence():
+            if identity(_canonical_output_identity(source, limit)) != identity(metadata) \
+                    or parent_identity(source.parent.lstat()) != parent_identity(parent):
+                raise RebuilderError(f"{label} changed during private capture")
+
+        with io.BytesIO() as output:
+            digest = _copy_offline_input(source, metadata, output, limit)
+            raw = output.getvalue()
+        if _stable_file_sha256(source, metadata, label) != digest:
+            raise RebuilderError(f"{label} differs from descriptor capture")
+        fence()
+        _write_exclusive(destination, raw)
+        _fsync_directory(destination.parent)
+        copied = _offline_input_identity(destination, limit)
+        if copied.st_uid != os.getuid() or stat.S_IMODE(copied.st_mode) != 0o600 \
+                or _stable_file_sha256(destination, copied, label) != digest \
+                or _stable_bytes(destination, label, limit, owner_only=True) != raw:
+            raise RebuilderError(f"{label} private copy differs from captured output")
+        fence()
+    except (OSError, ValueError):
+        raise RebuilderError(f"{label} canonical private capture failed") from None
+
+
 def _validate_authority_feed_paths(authority_root: Path, owner_feed: Path) -> None:
     """Match Android's existing owner_feed.parent routing, not a second verifier."""
     for path in (authority_root, owner_feed):
@@ -2863,9 +2909,16 @@ def _run_independent_rebuild(
         raise RebuilderError("independent Android unsigned rebuild failed")
     rebuilt_aab = build_input_root / f"artifacts/chummer-android-{VERSION_NAME}-unsigned.aab"
     rebuilt_graph = build_input_root / f"artifacts/chummer-android-{VERSION_NAME}-source-graph.json"
-    _stable_bytes(rebuilt_aab, "independently rebuilt unsigned AAB", lock["limits"]["aab_bytes"])
-    _stable_bytes(rebuilt_graph, "independently rebuilt source graph", lock["limits"]["json_bytes"], owner_only=True)
-    return rebuilt_aab, rebuilt_graph
+    rebuilt_sidecar = rebuilt_aab.with_name(rebuilt_aab.name + ".sha256")
+    aab_metadata = _canonical_output_identity(rebuilt_aab, lock["limits"]["aab_bytes"])
+    _stable_file_sha256(rebuilt_aab, aab_metadata, "independently rebuilt unsigned AAB")
+    private_metadata = build_input_root / "private-rebuilt-metadata"
+    private_metadata.mkdir(mode=0o700)
+    _copy_canonical_output(rebuilt_graph, private_metadata / rebuilt_graph.name,
+                           "independently rebuilt source graph", lock["limits"]["json_bytes"])
+    _copy_canonical_output(rebuilt_sidecar, private_metadata / rebuilt_sidecar.name,
+                           "independently rebuilt sidecar", 16 * 1024)
+    return rebuilt_aab, private_metadata / rebuilt_graph.name
 
 
 def prepare_rebuild_handoff(
@@ -2979,6 +3032,12 @@ def prepare_rebuild_handoff(
         )
         toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
         rebuilt = require_rebuild_match(rebuilt_aab, request, lock["limits"]["aab_bytes"])
+        rebuilt_sidecar = rebuilt_graph.parent / (rebuilt_aab.name + ".sha256")
+        sidecar_claims = android._sidecar_claims(rebuilt_sidecar, rebuilt_aab, rebuilt_graph)
+        if sidecar_claims.get(f"artifacts/{rebuilt_aab.name}") != rebuilt["sha256"] \
+                or sidecar_claims.get(f"artifacts/{rebuilt_graph.name}") != _sha256_file(
+                    rebuilt_graph, "rebuilt source graph", lock["limits"]["json_bytes"], owner_only=True):
+            raise RebuilderError("independently rebuilt sidecar differs from exact rebuilt outputs")
         rebuilt_graph_value = _json_file(
             rebuilt_graph, "rebuilt source graph", lock["limits"]["json_bytes"], owner_only=True
         )[0]
