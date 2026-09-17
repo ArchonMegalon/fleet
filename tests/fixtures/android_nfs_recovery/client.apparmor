@@ -1,0 +1,14 @@
+# Exact-package/VM admission must validate this profile before execution.
+# It permits only the intended NFS mount target, never a generic mount fallback.
+#include <tunables/global>
+profile nfs-qualification-client-bkpapg6l flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+  file,
+  network,
+  capability sys_admin,
+  mount fstype=nfs4 -> /mnt/recovery-store/,
+  umount /mnt/recovery-store/,
+  deny /sys/** wklx,
+  deny /proc/sys/** wklx,
+  deny /proc/sysrq-trigger rwklx,
+}
