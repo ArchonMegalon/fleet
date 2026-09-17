@@ -102,6 +102,24 @@ custody, not proof of protected workflow admission; candidate code must never
 run in this role process or choose its inputs. No signing secrets are injected
 into these roles. Root/local builder key export is neither needed nor allowed.
 
+## Optional protected-success hold
+
+When digest-covered `role_binding` mode is enabled, successful `capture` and
+`emission-submit` keep the hosted role alive while observing the exact
+already-bound protected check through public run/job metadata. The run must
+remain `in_progress`; only that protected job may reach `completed/success`.
+`emission-prepare` never waits for this observation. This is metadata
+observation, not authentication, signing authority, or a new receipt.
+
+Each hold permits at most eight snapshots (sixteen public reads). Each snapshot
+shares one 20-second read deadline and the original phase deadline. After a
+validated in-progress snapshot, waits are paced at 30/60/120/240/480/960/960
+seconds, with custody/deadline checks in no more than one-second slices and no
+extra reads during the wait. Failure, malformed/unknown/queued state, transport
+error, or expiry is terminal; errors are not retried and no credentials are
+obtained. This does not reserve or guarantee a shared-IP API quota. Static mode
+without `role_binding` is unchanged.
+
 ## Once-only and expiry boundaries
 
 Exclusive fsynced `started`, `manifest-ready` and `bundle-started` files are

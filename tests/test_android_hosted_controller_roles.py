@@ -18,6 +18,7 @@ from scripts import android_hosted_controller_roles as roles
 from scripts import android_workflow_job_binder as binder
 from scripts import android_artifact_origin as origin
 import test_android_controller_rendezvous as flows
+import test_android_workflow_identity as identity_fixtures
 from test_android_controller_rendezvous import flow, model, store, signing_key
 
 
@@ -88,6 +89,7 @@ def test_admitted_capture_binding_is_consumed_before_hosted_oidc(prepared, monke
                 "emission": binder.identity.WorkflowJobPolicy(**emission),
                 "protected": binder.identity.WorkflowJobPolicy(**protected)}
     monkeypatch.setattr(binder, "bind_deployment_roles", bind)
+    monkeypatch.setattr(roles, "_hold_for_protected_success", lambda *_: None)
     prepared.r.arm_capture(); prepared.serve(prepared.r._issued_capture, 707)
     assert invoke(prepared, "capture") == roles.COMPLETE["capture"]
     assert len(calls) == 1 and len(prepared.oidc_calls) == 1
@@ -142,6 +144,9 @@ def test_optional_three_phase_sequence_preserves_markers_and_submit_no_reconsume
                 "emission": binder.identity.WorkflowJobPolicy(**binding["templates"]["emission"]),
                 "protected": binder.identity.WorkflowJobPolicy(**binding["templates"]["protected"])}
     monkeypatch.setattr(binder, "bind_deployment_roles", bind)
+    holds = []
+    monkeypatch.setattr(roles, "_hold_for_protected_success",
+                        lambda policy, deadline, check: holds.append(policy.check_run_id))
     directory = manifest_ready(prepared)
     bundle = actual_test_bundle(prepared)
     before = list(prepared.oidc_calls)
@@ -149,6 +154,7 @@ def test_optional_three_phase_sequence_preserves_markers_and_submit_no_reconsume
     monkeypatch.setattr(roles.rendezvous.HostedClient, "challenge", lambda *_: pytest.fail("submit re-challenged"))
     assert invoke(prepared, "emission-submit", bundle) == roles.COMPLETE["emission-submit"]
     assert calls == ["capture", "emission", "emission"]
+    assert holds == [binding["templates"]["protected"]["check_run_id"]] * 2
     assert prepared.oidc_calls == before and (directory / "bundle-started").exists()
 
 
@@ -173,6 +179,201 @@ def actual_test_bundle(prepared):
     # Deliberately synthetic existing verifier stand-in, not an attester run.
     directory = prepared.output / "random-action-child"; directory.mkdir(mode=0o700)
     return Path(prepared.write(directory / "attestation.json", prepared.verifier.pins[1].path.read_bytes(), 0o644))
+
+
+def _protected_policy(prepared):
+    return replace(prepared.first, check_run_id="911", environment="android-preview12-release-builder")
+
+
+def _protected_attempt(*, status="in_progress", conclusion=None, sha=None):
+    value = identity_fixtures.api_attempt()
+    value.update(status=status, conclusion=conclusion)
+    value["head_sha"] = "b" * 40 if sha is None else sha
+    return value
+
+
+def _protected_jobs(*, status="in_progress", conclusion=None, check="911"):
+    value = identity_fixtures.api_jobs()
+    value["jobs"][0].update(status=status, conclusion=conclusion,
+        head_sha="b" * 40,
+        check_run_url=identity_fixtures.identity.API + "/repos/example/repo/check-runs/" + check)
+    return value
+
+
+def _observe_protected(prepared, monkeypatch, responses, *, deadline=None, check=None):
+    calls = []
+    clock = [100.0]
+    def fetch(url, fetch_deadline):
+        calls.append((url, fetch_deadline))
+        value = responses.pop(0)
+        return value if type(value) is bytes else json.dumps(value, separators=(",", ":")).encode()
+    monkeypatch.setattr(roles.identity, "_fetch", fetch)
+    monkeypatch.setattr(roles.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(roles.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    roles._hold_for_protected_success(_protected_policy(prepared),
+        5000.0 if deadline is None else deadline,
+        (check or (lambda: None)))
+    return calls
+
+
+def test_protected_observer_accepts_exact_terminal_success(prepared, monkeypatch):
+    calls = _observe_protected(prepared, monkeypatch,
+        [_protected_attempt(),
+         _protected_jobs(status="completed", conclusion="success")])
+    assert calls[0][0].endswith("/attempts/2")
+    assert calls[1][0].endswith("/attempts/2/jobs?per_page=100&page=1")
+    assert calls[0][1] == calls[1][1]
+    assert all(deadline > time.monotonic() for _, deadline in calls)
+
+
+def test_protected_observer_polls_pending_then_success_without_rebinding(prepared, monkeypatch):
+    calls = _observe_protected(prepared, monkeypatch,
+        [_protected_attempt(), _protected_jobs(),
+         _protected_attempt(),
+         _protected_jobs(status="completed", conclusion="success")])
+    assert len(calls) == 4 and calls[0][0].endswith("/attempts/2")
+
+
+@pytest.mark.parametrize("responses", [
+    [_protected_attempt(status="queued"), _protected_jobs()],
+    [_protected_attempt(status="completed", conclusion="failure"), _protected_jobs()],
+    [_protected_attempt(status="completed", conclusion="success"),
+     _protected_jobs(status="completed", conclusion="success")],
+    [_protected_attempt(), {"total_count": 1, "jobs": [{"bad": True}]}],
+    [_protected_attempt(sha="c" * 40), _protected_jobs()],
+])
+def test_protected_observer_rejects_failure_mismatch_or_malformed_without_retry(prepared, monkeypatch, responses):
+    calls = []
+    def fetch(url, deadline):
+        calls.append(url)
+        value = responses.pop(0)
+        return json.dumps(value, separators=(",", ":")).encode()
+    monkeypatch.setattr(roles.identity, "_fetch", fetch)
+    with pytest.raises(roles.RoleError):
+        roles._hold_for_protected_success(_protected_policy(prepared), time.monotonic() + 5, lambda: None)
+    assert len(calls) <= 2
+
+
+@pytest.mark.parametrize("failure", [identity_fixtures.identity.WorkflowIdentityError("workflow-fetch"), OSError("PUBLIC-TEST")])
+def test_protected_observer_transport_failure_is_terminal_without_retry_or_sleep(prepared, monkeypatch, failure):
+    calls, sleeps = [], []
+    def fetch(url, deadline):
+        calls.append(url)
+        raise failure
+    monkeypatch.setattr(roles.identity, "_fetch", fetch)
+    monkeypatch.setattr(roles.time, "sleep", sleeps.append)
+    with pytest.raises(roles.RoleError):
+        roles._hold_for_protected_success(_protected_policy(prepared), time.monotonic() + 60, lambda: None)
+    assert len(calls) == 1 and sleeps == []
+
+
+def test_protected_observer_short_phase_expires_without_a_second_snapshot(prepared, monkeypatch):
+    calls, clock = [], [100.0]
+    def fetch(url, deadline):
+        calls.append(url)
+        value = _protected_attempt() if url.endswith("/attempts/2") else _protected_jobs()
+        return json.dumps(value, separators=(",", ":")).encode()
+    monkeypatch.setattr(roles.identity, "_fetch", fetch)
+    monkeypatch.setattr(roles.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(roles.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    with pytest.raises(roles.RoleError):
+        roles._hold_for_protected_success(_protected_policy(prepared), 120.0, lambda: None)
+    assert len(calls) == 2
+
+
+def test_protected_observer_rechecks_held_inputs_between_public_reads(prepared, monkeypatch):
+    checks = []
+    def check():
+        checks.append(True)
+        if len(checks) == 2: raise roles.RoleError(roles.ERROR)
+    calls = []
+    def fetch(url, deadline):
+        calls.append(url)
+        return json.dumps(_protected_attempt()).encode()
+    monkeypatch.setattr(roles.identity, "_fetch", fetch)
+    with pytest.raises(roles.RoleError):
+        roles._hold_for_protected_success(_protected_policy(prepared), time.monotonic() + 5, check)
+    assert len(calls) == 1 and len(checks) == 2
+
+
+def test_protected_observer_expiry_stops_before_public_fetch(prepared, monkeypatch):
+    calls = []
+    monkeypatch.setattr(roles.identity, "_fetch", lambda *args: calls.append(args))
+    with pytest.raises(roles.RoleError):
+        roles._hold_for_protected_success(_protected_policy(prepared), time.monotonic() - 1, lambda: None)
+    assert calls == []
+
+
+def test_protected_observer_final_custody_check_cannot_cross_lookup_deadline(prepared, monkeypatch):
+    responses = [_protected_attempt(), _protected_jobs(status="completed", conclusion="success")]
+    monkeypatch.setattr(roles.identity, "_fetch", lambda url, deadline:
+        json.dumps(responses.pop(0), separators=(",", ":")).encode())
+    clock, checks = [100.0], []
+    monkeypatch.setattr(roles.time, "monotonic", lambda: clock[0])
+    def check():
+        checks.append(True)
+        if len(checks) == 4: clock[0] = 106.0
+    with pytest.raises(roles.RoleError):
+        roles._hold_for_protected_success(_protected_policy(prepared), 105.0, check)
+    assert len(checks) == 4
+
+
+def test_protected_observer_has_a_small_paced_snapshot_budget(prepared, monkeypatch):
+    calls, read_times, sleeps, clock = [], [], [], [100.0]
+    def fetch(url, deadline):
+        calls.append(url)
+        read_times.append(clock[0])
+        value = _protected_attempt() if url.endswith("/attempts/2") else _protected_jobs()
+        return json.dumps(value, separators=(",", ":")).encode()
+    monkeypatch.setattr(roles.identity, "_fetch", fetch)
+    monkeypatch.setattr(roles.time, "monotonic", lambda: clock[0])
+    def sleep(seconds):
+        sleeps.append(seconds); clock[0] += seconds
+    monkeypatch.setattr(roles.time, "sleep", sleep)
+    with pytest.raises(roles.RoleError):
+        roles._hold_for_protected_success(_protected_policy(prepared), 4100.0, lambda: None)
+    assert len(calls) == 2 * roles.PROTECTED_OBSERVATION_MAX_SNAPSHOTS
+    assert all(0 < value <= 1.0 for value in sleeps)
+    assert sum(sleeps) == sum(roles.PROTECTED_OBSERVATION_DELAYS)
+    assert read_times[::2] == [100.0, 130.0, 190.0, 310.0, 550.0, 1030.0, 1990.0, 2950.0]
+
+
+def test_protected_observer_checks_custody_during_pacing_without_another_fetch(prepared, monkeypatch):
+    calls, clock, checks = [], [100.0], []
+    def fetch(url, deadline):
+        calls.append(url)
+        value = _protected_attempt() if url.endswith("/attempts/2") else _protected_jobs()
+        return json.dumps(value, separators=(",", ":")).encode()
+    def check():
+        checks.append(True)
+        if len(checks) == 4: raise roles.RoleError(roles.ERROR)
+    monkeypatch.setattr(roles.identity, "_fetch", fetch)
+    monkeypatch.setattr(roles.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(roles.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    with pytest.raises(roles.RoleError):
+        roles._hold_for_protected_success(_protected_policy(prepared), 4100.0, check)
+    assert len(calls) == 2 and len(checks) == 4
+
+
+def test_optional_capture_failure_does_not_start_protected_hold(prepared, monkeypatch):
+    capture = dict(prepared.documents["capture"]["job_policy"])
+    emission = dict(prepared.documents["emission"]["job_policy"])
+    protected = dict(capture); protected["environment"] = "android-preview12-release-builder"
+    prepared.documents["capture"]["role_binding"] = {
+        "job_names": {role: "preview12-" + role for role in binder.ROLES},
+        "templates": {"capture": capture, "emission": emission, "protected": protected}}
+    save(prepared, "capture")
+    monkeypatch.setattr(binder, "bind_deployment_roles", lambda **_: {
+        "capture": binder.identity.WorkflowJobPolicy(**capture),
+        "emission": binder.identity.WorkflowJobPolicy(**emission),
+        "protected": binder.identity.WorkflowJobPolicy(**protected)})
+    monkeypatch.setattr(roles.rendezvous.HostedClient, "_post",
+                        lambda *_: (_ for _ in ()).throw(ConnectionError("PUBLIC-TEST-action-failure")))
+    monkeypatch.setattr(roles, "_hold_for_protected_success",
+                        lambda *_: pytest.fail("protected hold started before action success"))
+    prepared.r.arm_capture(); prepared.serve(prepared.r._issued_capture, 707)
+    with pytest.raises(roles.RoleError): invoke(prepared, "capture")
+    assert prepared.oidc_calls == []
 
 
 def test_real_three_step_sequence_retains_live_server_authority_and_no_oidc_reconsume(prepared, monkeypatch):
