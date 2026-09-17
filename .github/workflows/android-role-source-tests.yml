@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
-      - name: Install exact test wheels and run seven offline source suites
+      - name: Install exact test wheels and run eight offline source suites
         shell: bash
         run: |
           set -euo pipefail
@@ -38,4 +38,5 @@ jobs:
             tests/test_android_hosted_controller_roles.py \
             tests/test_android_workflow_job_binder.py \
             tests/test_android_protected_job_supervisor.py \
-            tests/test_android_hosted_input_stager.py
+            tests/test_android_hosted_input_stager.py \
+            tests/test_android_hosted_source_admission.py

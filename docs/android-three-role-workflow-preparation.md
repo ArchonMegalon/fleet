@@ -24,7 +24,11 @@ existing owner/bootstrap custody checks must remain unchanged. The fixed
 OIDC request values into fresh files at admitted paths, after checking the exact
 rendered deployment and already-delivered role bearer. It does not supply
 source/interpreter/profile admission, role-bearer delivery, protected credentials,
-private routing or durable storage. See the
+private routing or durable storage. The callable
+`android_hosted_source_admission.admit()` now holds independently selected
+profile/context/source bytes before importing the three fixed helpers from
+captured source. It does not choose their authority or admit its own initial
+Python/stdlib/dependency runtime. See the
 [materializer](android-deployment-materializer.md),
 [hosted roles](android-hosted-controller-roles.md), and
 [protected supervisor](android-protected-job-supervisor.md) contracts.
@@ -145,9 +149,10 @@ OIDC, attestation, Docker, network, listener or signing operation occurs.
 Existing dependency version checks remain active. These tests are preparation
 evidence only, not a substitute for the missing provisioning implementation.
 
-The source-test CI runs seven suites: these composition tests plus materializer,
+The source-test CI runs eight suites: these composition tests plus materializer,
 adversarial materializer, hosted-role, job-binder, supervisor and hosted-input
-stager tests on Ubuntu 24.04/Python 3.12, without path filters. It uses a fresh non-system-site
+stager tests, and held hosted-source admission tests, on Ubuntu 24.04/Python 3.12,
+without path filters. It uses a fresh non-system-site
 venv and ten hash-pinned binary wheels in
 `tests/android-role-source-requirements.txt`, with dependency resolution
 disabled and `pip check` required. No FastAPI/Uvicorn/optional server extras
@@ -155,4 +160,4 @@ are installed: the server import is inside the uncalled owner `run()` path.
 The five-minute job has only read-only repository permission, pinned checkout
 with persisted credentials disabled, no protected environment or artifact
 upload, and no dispatch/activation route. Public wheel download is installation
-of test dependencies only; the seven suites do not contact live providers.
+of test dependencies only; the eight suites do not contact live providers.
