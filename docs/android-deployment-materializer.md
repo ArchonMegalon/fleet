@@ -15,8 +15,12 @@ role-binding copies, and the protected launcher attempt/output path.  Check
 IDs, subjects, role names, environment, reusable-workflow identity, manifest,
 TLS/publisher/trust/resource/image/recovery/code pins, and secret/transport
 paths remain profile-controlled.  In direct-workflow profiles the signer
-commit follows the admitted workflow SHA; reusable-workflow identity fields
-are never inferred or replaced.  Owner and protected lock pins must agree.
+commit follows the admitted workflow SHA. An explicitly admitted exact
+self-reference in `job_workflow_ref`/`job_workflow_sha` follows that same source
+update; absent claims are not inferred. A separate reusable workflow identity
+remains unchanged, including when its different workflow file is pinned to the
+same source commit. Partial pairs and stale same-reference SHAs are rejected.
+Owner and protected lock pins must agree.
 
 Emission preparation and submission therefore consume the same rendered bytes
 and context.  The helper performs no credential reads, network requests,

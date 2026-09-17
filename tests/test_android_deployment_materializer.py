@@ -128,6 +128,23 @@ def _context():
             "run_id": "77", "run_attempt": "3", "transaction_id": "d" * 64}
 
 
+def _set_job_workflow(profile, role, workflow_ref, workflow_sha):
+    owner_name = {"capture": "capture_policy", "emission": "emission_policy",
+                  "protected": "protected_job_policy"}[role]
+    policies = [profile["owner"][owner_name], profile[role]["job_policy"]]
+    for document in profile.values():
+        policies.append(document["role_binding"]["templates"][role])
+    for policy in policies:
+        policy["job_workflow_ref"] = workflow_ref
+        policy["job_workflow_sha"] = workflow_sha
+
+
+def _set_artifact_signer(profile, workflow_ref, signer_sha):
+    for document in profile.values():
+        document["artifact_policy"]["workflow_identity"] = "https://github.com/" + workflow_ref
+        document["artifact_policy"]["signer_commit"] = signer_sha
+
+
 def test_render_uses_real_role_parsers_and_changes_only_invocation_fields(tmp_path):
     profile = _profile(tmp_path)
     before = deepcopy(profile)
@@ -176,3 +193,55 @@ def test_render_preserves_input_object_and_rejects_role_binding_drift(tmp_path):
     with pytest.raises(materializer.MaterializerError):
         materializer.render(profile, _context(), "emission")
     assert profile["owner"]["artifact_policy"] == original["owner"]["artifact_policy"]
+
+
+@pytest.mark.parametrize("selected_role", materializer.ROLES)
+def test_self_referential_reusable_pair_tracks_current_workflow_sha(tmp_path, selected_role):
+    profile = _profile(tmp_path)
+    own_ref = profile["owner"]["emission_policy"]["workflow_ref"]
+    old_sha = profile["owner"]["emission_policy"]["workflow_sha"]
+    for role in ("capture", "emission", "protected"):
+        _set_job_workflow(profile, role, own_ref, old_sha)
+    value = json.loads(materializer.render(profile, _context(), selected_role))
+    jobs = [value[name] for name in ("capture_policy", "emission_policy", "protected_job_policy")] if selected_role == "owner" else [value["job_policy"]]
+    jobs.extend(value["role_binding"]["templates"].values())
+    for job in jobs:
+        assert job["job_workflow_ref"] == own_ref
+        assert job["job_workflow_sha"] == _context()["workflow_sha"]
+    assert value["artifact_policy"]["signer_commit"] == _context()["workflow_sha"]
+
+
+@pytest.mark.parametrize("same_source_commit", [False, True])
+def test_separate_reusable_workflow_identity_remains_immutable(tmp_path, same_source_commit):
+    profile = _profile(tmp_path)
+    reusable_ref = "example/signer/.github/workflows/reusable.yml@refs/heads/main"
+    reusable_sha = profile["owner"]["emission_policy"]["workflow_sha"] if same_source_commit else "f" * 40
+    _set_job_workflow(profile, "emission", reusable_ref, reusable_sha)
+    _set_job_workflow(profile, "protected", reusable_ref, reusable_sha)
+    _set_artifact_signer(profile, reusable_ref, reusable_sha)
+    value = json.loads(materializer.render(profile, _context(), "emission"))
+    assert value["job_policy"]["job_workflow_ref"] == reusable_ref
+    assert value["job_policy"]["job_workflow_sha"] == reusable_sha
+    assert value["artifact_policy"]["workflow_identity"] == "https://github.com/" + reusable_ref
+    assert value["artifact_policy"]["signer_commit"] == reusable_sha
+
+
+def test_partial_self_reference_is_rejected(tmp_path):
+    profile = _profile(tmp_path)
+    own_ref = profile["owner"]["emission_policy"]["workflow_ref"]
+    _set_job_workflow(profile, "emission", own_ref, "f" * 40)
+    _set_job_workflow(profile, "protected", own_ref, "f" * 40)
+    _set_artifact_signer(profile, own_ref, "f" * 40)
+    with pytest.raises(materializer.MaterializerError):
+        materializer.render(profile, _context(), "emission")
+
+
+def test_capture_may_keep_a_separate_reusable_identity(tmp_path):
+    profile = _profile(tmp_path)
+    reusable_ref = "example/capture/.github/workflows/reusable.yml@refs/heads/main"
+    reusable_sha = "f" * 40
+    _set_job_workflow(profile, "capture", reusable_ref, reusable_sha)
+    value = json.loads(materializer.render(profile, _context(), "capture"))
+    assert value["job_policy"]["job_workflow_ref"] == reusable_ref
+    assert value["job_policy"]["job_workflow_sha"] == reusable_sha
+    assert value["artifact_policy"]["signer_commit"] == _context()["workflow_sha"]
