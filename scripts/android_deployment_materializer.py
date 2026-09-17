@@ -113,23 +113,40 @@ def _parse_documents(value, selected_role):
     protected._document(encoded(value["protected"]))
 
 
+def _self_referential_workflow(raw):
+    job_ref, job_sha = raw.get("job_workflow_ref"), raw.get("job_workflow_sha")
+    _require((job_ref is None) == (job_sha is None))
+    if job_ref is None:
+        return False
+    ref_matches = job_ref == raw.get("workflow_ref")
+    sha_matches = job_sha == raw.get("workflow_sha")
+    # A different workflow file can legitimately be pinned to the same commit.
+    # Only this workflow's own reference requires its exact admitted source SHA.
+    _require(not ref_matches or sha_matches)
+    return ref_matches
+
+
 def _job_context(raw, context):
     _require(type(raw) is dict)
+    self_reference = _self_referential_workflow(raw)
     for name in MUTABLE_JOB_FIELDS:
         raw[name] = context["fleet_sha"] if name in {"sha", "workflow_sha"} else context[name]
     _require(raw["workflow_ref"].endswith("@" + context["ref"]))
     if raw.get("job_workflow_ref") is not None:
         _require(raw["job_workflow_sha"] is not None)
+        if self_reference:
+            raw["job_workflow_sha"] = context["workflow_sha"]
+    return self_reference
 
 
-def _artifact_context(raw, context, *, direct_signer):
+def _artifact_context(raw, context, *, direct_signer, self_reference):
     _require(type(raw) is dict)
     for name in MUTABLE_ARTIFACT_FIELDS:
         source_name = {"source_commit": "fleet_sha", "source_ref": "ref",
                        "run_id": "run_id", "run_attempt": "run_attempt"}[name]
         raw[name] = context[source_name]
     _require(raw["build_config_identity"].endswith("@" + context["ref"]))
-    if direct_signer:
+    if direct_signer or self_reference:
         raw["signer_commit"] = context["workflow_sha"]
 
 
@@ -144,23 +161,28 @@ def _binding(value, context):
 
 
 def _mutate(value, context):
-    direct_signer = value["owner"]["emission_policy"].get("job_workflow_ref") is None
     for document in value.values():
         _binding(document, context)
 
     owner_doc = value["owner"]
+    self_references = {}
     for name in ("capture_policy", "emission_policy", "protected_job_policy"):
-        _job_context(owner_doc[name], context)
-    _artifact_context(owner_doc["artifact_policy"], context, direct_signer=direct_signer)
+        self_references[name] = _job_context(owner_doc[name], context)
+    direct_signer = owner_doc["emission_policy"].get("job_workflow_ref") is None
+    shared_signer_update = direct_signer or self_references["emission_policy"] or self_references["protected_job_policy"]
+    _artifact_context(owner_doc["artifact_policy"], context, direct_signer=direct_signer,
+                      self_reference=shared_signer_update)
 
     for role in ("capture", "emission"):
         document = value[role]
         _job_context(document["job_policy"], context)
-        _artifact_context(document["artifact_policy"], context, direct_signer=direct_signer)
+        _artifact_context(document["artifact_policy"], context, direct_signer=direct_signer,
+                          self_reference=shared_signer_update)
 
     document = value["protected"]
     _job_context(document["job_policy"], context)
-    _artifact_context(document["artifact_policy"], context, direct_signer=direct_signer)
+    _artifact_context(document["artifact_policy"], context, direct_signer=direct_signer,
+                      self_reference=shared_signer_update)
     launcher = document["launcher"]
     persistent = document["persistent"]
     _require(launcher["output"] == str(Path(persistent["parent"]) / "outputs" / launcher["attempt"]))
