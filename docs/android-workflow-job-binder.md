@@ -59,12 +59,39 @@ terminal errors, never internal retries. The closed pending subset follows the
 documented [GitHub Actions status vocabulary](https://docs.github.com/en/pull-requests/reference/status-checks#check-statuses-and-conclusions);
 it deliberately does not accept every possible GitHub state.
 
-There is no polling loop, sleep, CLI, configuration dialect or persistent state.
+There is no polling loop, sleep, CLI, release-receipt dialect or persistent state.
 The actual provisioning caller may wait only after `None`, within its own fixed
 deadline/count and without changing admitted expectations. An exception stops
 that attempt; it must not be converted to pending or caught for automatic retry.
 Even a successful snapshot is time-of-observation metadata, not a guarantee
 that all jobs remain live afterward. No original challenge/token TTL changes.
+
+## Optional admitted deployment binding
+
+The local owner, hosted role phases and protected bootstrap accept an optional
+`role_binding` object covered by their existing independently admitted deployment
+hash. It contains exactly `job_names` and `templates`, each keyed by exactly
+`capture`, `emission` and `protected`. Names are the reviewed workflow's distinct
+job names; templates contain all existing `WorkflowJobPolicy` fields. No role
+name, policy or deployment digest is adopted from candidate bytes or API output.
+
+`bind_deployment_roles` compares the caller's existing policies with the admitted
+templates before making one lookup. The owner supplies all three; fixed hosted
+and protected code selects its own role. Only `check_run_id` may change, and
+three distinct live check IDs are required. Pending is a failure for these
+entrypoints, not permission to start or retry. An earlier caller deadline is
+preserved; a later one cannot extend the original 20-second transport cap.
+
+The held deployment is rechecked after lookup. Owner and protected paths also
+recheck their admitted source closure; hosted provisioning must admit its full
+closure before import. Include this module in the exact code pins, including
+the protected supervisor's inspection of dormant literal imports.
+
+This wiring does not deploy anything. Three jobs must remain concurrently live
+through the emission submission; completion of the capture CLI alone is not a
+safe point to terminate its job. The old serial signer workflow is not usable
+for this mode. Private routing, orchestration barriers, credentials and actual
+signing remain independently admitted deployment work.
 
 Tests reuse real existing parsers/API validators and synthetic test-key RS256
 verification with modeled transport. They make no live metadata/OIDC request,

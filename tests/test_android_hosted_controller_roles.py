@@ -15,6 +15,7 @@ import time
 import pytest
 
 from scripts import android_hosted_controller_roles as roles
+from scripts import android_workflow_job_binder as binder
 from scripts import android_artifact_origin as origin
 import test_android_controller_rendezvous as flows
 from test_android_controller_rendezvous import flow, model, store, signing_key
@@ -69,6 +70,86 @@ def invoke(prepared, phase, bundle=None):
     role = "capture" if phase == "capture" else "emission"
     path = prepared.configs[role]
     return roles.run(phase, path, hashlib.sha256(path.read_bytes()).hexdigest(), bundle_path=bundle)
+
+
+def test_admitted_capture_binding_is_consumed_before_hosted_oidc(prepared, monkeypatch):
+    capture = dict(prepared.documents["capture"]["job_policy"])
+    emission = dict(prepared.documents["emission"]["job_policy"])
+    protected = dict(capture); protected["environment"] = "android-preview12-release-builder"
+    prepared.documents["capture"]["role_binding"] = {
+        "job_names": {role: "preview12-" + role for role in binder.ROLES},
+        "templates": {"capture": capture, "emission": emission, "protected": protected},
+    }
+    save(prepared, "capture")
+    calls = []
+    def bind(*, binding, current_policies, role, deadline):
+        calls.append((binding, current_policies, role, deadline))
+        return {"capture": binder.identity.WorkflowJobPolicy(**capture),
+                "emission": binder.identity.WorkflowJobPolicy(**emission),
+                "protected": binder.identity.WorkflowJobPolicy(**protected)}
+    monkeypatch.setattr(binder, "bind_deployment_roles", bind)
+    prepared.r.arm_capture(); prepared.serve(prepared.r._issued_capture, 707)
+    assert invoke(prepared, "capture") == roles.COMPLETE["capture"]
+    assert len(calls) == 1 and len(prepared.oidc_calls) == 1
+
+
+def _optional_binding(prepared):
+    capture = dict(prepared.documents["capture"]["job_policy"])
+    emission = dict(prepared.documents["emission"]["job_policy"])
+    protected = dict(capture); protected["environment"] = "android-preview12-release-builder"
+    return {"job_names": {role: "preview12-" + role for role in binder.ROLES},
+            "templates": {"capture": capture, "emission": emission, "protected": protected}}
+
+
+def test_optional_lookup_failure_precedes_hosted_input_and_client(prepared, monkeypatch):
+    prepared.documents["capture"]["role_binding"] = _optional_binding(prepared)
+    save(prepared, "capture")
+    monkeypatch.setattr(binder, "bind_deployment_roles",
+                        lambda **_: (_ for _ in ()).throw(binder.JobBindingError(binder.ERROR)))
+    with pytest.raises(roles.RoleError): invoke(prepared, "capture")
+    assert prepared.oidc_calls == [] and prepared.seen == []
+
+
+def test_optional_lookup_rechecks_held_deployment_before_hosted_inputs(prepared, monkeypatch):
+    prepared.documents["capture"]["role_binding"] = _optional_binding(prepared)
+    save(prepared, "capture")
+    completed = []
+    def live(*, role_policies, job_names, deadline):
+        return {role: replace(role_policies[role], check_run_id=str(1500 + index))
+                for index, role in enumerate(binder.ROLES)}
+    monkeypatch.setattr(binder, "bind_live_roles", live)
+    original = binder.bind_deployment_roles
+    def drift(**kwargs):
+        result = original(**kwargs)
+        prepared.configs["capture"].write_bytes(b"PUBLIC-TEST-deployment-drift")
+        completed.append("lookup-succeeded-and-deployment-changed")
+        return result
+    monkeypatch.setattr(binder, "bind_deployment_roles", drift)
+    with pytest.raises(roles.RoleError): invoke(prepared, "capture")
+    assert completed == ["lookup-succeeded-and-deployment-changed"]
+    assert prepared.oidc_calls == [] and prepared.seen == []
+
+
+def test_optional_three_phase_sequence_preserves_markers_and_submit_no_reconsume(prepared, monkeypatch):
+    binding = _optional_binding(prepared)
+    prepared.documents["capture"]["role_binding"] = binding
+    prepared.documents["emission"]["role_binding"] = binding
+    save(prepared, "capture"); save(prepared, "emission")
+    calls = []
+    def bind(*, binding, current_policies, role, deadline):
+        calls.append(role)
+        return {"capture": binder.identity.WorkflowJobPolicy(**binding["templates"]["capture"]),
+                "emission": binder.identity.WorkflowJobPolicy(**binding["templates"]["emission"]),
+                "protected": binder.identity.WorkflowJobPolicy(**binding["templates"]["protected"])}
+    monkeypatch.setattr(binder, "bind_deployment_roles", bind)
+    directory = manifest_ready(prepared)
+    bundle = actual_test_bundle(prepared)
+    before = list(prepared.oidc_calls)
+    monkeypatch.setattr(roles.oidc, "_request_token", lambda *_: pytest.fail("submit re-read OIDC"))
+    monkeypatch.setattr(roles.rendezvous.HostedClient, "challenge", lambda *_: pytest.fail("submit re-challenged"))
+    assert invoke(prepared, "emission-submit", bundle) == roles.COMPLETE["emission-submit"]
+    assert calls == ["capture", "emission", "emission"]
+    assert prepared.oidc_calls == before and (directory / "bundle-started").exists()
 
 
 def captured(prepared):

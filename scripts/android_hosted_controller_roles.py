@@ -97,8 +97,14 @@ class _Input:
 
 
 def _document(raw, phase):
-    value = _shape(identity._json(raw), {"role", "job_policy", "artifact_policy", "base_url", "pins",
-        "transport_inputs", "attempt_directory", "attestation_output_root", "deadline_seconds"})
+    required = {"role", "job_policy", "artifact_policy", "base_url", "pins",
+        "transport_inputs", "attempt_directory", "attestation_output_root", "deadline_seconds"}
+    parsed = identity._json(raw)
+    require(type(parsed) is dict and set(parsed) in (required, required | {"role_binding"}))
+    value = parsed
+    if "role_binding" in value:
+        from scripts import android_workflow_job_binder as binder
+        binder.validate_role_binding(value["role_binding"])
     role = "capture" if phase == "capture" else "emission"
     require(value["role"] == role and phase in PHASES)
     job = identity.WorkflowJobPolicy(**_shape(value["job_policy"], [f.name for f in fields(identity.WorkflowJobPolicy)]))
@@ -190,6 +196,15 @@ def run(phase, deployment, deployment_sha256, *, bundle_path=None):
             source = held(deployment, MAX_CONFIG, expected=deployment_sha256)
             value, job, artifact, pins, inputs, directory = _document(source.raw, phase)
             deadline = time.monotonic() + value["deadline_seconds"]
+            if "role_binding" in value:
+                from scripts import android_workflow_job_binder as binder
+                role = "capture" if phase == "capture" else "emission"
+                bound = binder.bind_deployment_roles(
+                    binding=value["role_binding"], current_policies={role: job}, role=role,
+                    deadline=deadline)
+                job = bound[role]
+                source.recheck()
+                require(time.monotonic() < deadline)
             expected_marker = lambda name: (name + "\n" + deployment_sha256 + "\n").encode()
             snapshots = [source]
             # Before reading ANY role credential or public CA, reject aliases.

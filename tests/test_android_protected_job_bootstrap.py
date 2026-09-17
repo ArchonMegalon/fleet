@@ -17,6 +17,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts import android_protected_job_bootstrap as boot
+from scripts import android_workflow_job_binder as binder
 from scripts import android_artifact_origin as origin
 import test_android_artifact_origin as origin_tests
 import test_android_workflow_identity as identity_tests
@@ -117,6 +118,45 @@ def model(tmp_path, monkeypatch):
 
 def execute(model):
     return boot.run(model.path, model.save(), 8)
+
+
+def test_admitted_protected_binding_is_consumed_before_mount_and_transport(model, monkeypatch):
+    binder_path = Path(model.value["launcher"]["fleet_root"]) / "scripts/android_workflow_job_binder.py"
+    binder_path.parent.mkdir(mode=0o700)
+    binder_path.write_bytes(Path(binder.__file__).read_bytes()); binder_path.chmod(0o600)
+    model.value["launcher"]["code_pins"]["scripts/android_workflow_job_binder.py"] = hashlib.sha256(
+        binder_path.read_bytes()).hexdigest()
+    protected = dict(model.value["job_policy"])
+    capture = dict(protected); capture["environment"] = "capture"
+    emission = dict(protected); emission["environment"] = "emission"
+    model.value["role_binding"] = {
+        "job_names": {role: "preview12-" + role for role in binder.ROLES},
+        "templates": {"capture": capture, "emission": emission, "protected": protected},
+    }
+    calls = []
+    def bind(*, role_policies, job_names, deadline):
+        calls.append((role_policies, job_names))
+        return {role: replace(policy, check_run_id=str(1300 + index))
+                for index, (role, policy) in enumerate(
+                    {**{role: binder.identity.WorkflowJobPolicy(**model.value["role_binding"]["templates"][role])
+                       for role in binder.ROLES}}.items(), 1)}
+    monkeypatch.setattr(binder, "bind_live_roles", bind)
+    assert execute(model) == {"PUBLIC-TEST-modeled-audit": True}
+    assert len(calls) == 1 and model.events[:2] == ["code", "code"]
+    assert model.events[2:] == ["mount", "public-validation", "client", "launcher", "entrypoint",
+                                "owner-release", "entrypoint.run"]
+    assert model.clients[0]._job.check_run_id == "1303"
+
+
+def test_pending_protected_binding_stops_before_mount_or_client(model, monkeypatch):
+    protected = dict(model.value["job_policy"])
+    capture = dict(protected); capture["environment"] = "capture"
+    emission = dict(protected); emission["environment"] = "emission"
+    model.value["role_binding"] = {"job_names": {role: "preview12-" + role for role in binder.ROLES},
+        "templates": {"capture": capture, "emission": emission, "protected": protected}}
+    monkeypatch.setattr(binder, "bind_live_roles", lambda **_: None)
+    with pytest.raises(boot.BootstrapError): execute(model)
+    assert model.events == ["code"] and model.clients == [] and model.owners == []
 
 
 def test_fixed_executable_composes_existing_types_once_after_owner_release(model, capsys):

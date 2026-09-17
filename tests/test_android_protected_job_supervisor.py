@@ -113,7 +113,8 @@ def test_pending_opt_in_required_before_spawn(prepared, value):
     assert prepared[-1] == []
 
 
-@pytest.mark.parametrize("attack", ["config-pin", "code-pin", "interpreter-pin", "symlink", "mode", "unlisted-import", "cache", "duplicate-key"])
+@pytest.mark.parametrize("attack", ["config-pin", "code-pin", "interpreter-pin", "symlink", "mode", "unlisted-import",
+                                    "lazy-binder-import", "cache", "duplicate-key"])
 def test_program_and_configuration_admission_before_spawn(prepared, attack):
     root, source, deployment, configure, interpreter, processes = prepared
     digest = configure()
@@ -124,6 +125,8 @@ def test_program_and_configuration_admission_before_spawn(prepared, attack):
         target = source.with_suffix(".original"); source.rename(target); source.symlink_to(target)
     elif attack == "mode": deployment.chmod(0o666)
     elif attack == "unlisted-import": digest = configure("from scripts import unadmitted\n" + BENIGN)
+    elif attack == "lazy-binder-import": digest = configure(
+        BENIGN + "\n\ndef dormant():\n    from scripts import android_workflow_job_binder\n")
     elif attack == "cache": (source.parent / "__pycache__").mkdir()
     else:
         deployment.write_text('{"preparation_wait_seconds":1,"preparation_wait_seconds":2}')

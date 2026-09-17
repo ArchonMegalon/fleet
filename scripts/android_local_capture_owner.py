@@ -73,10 +73,16 @@ def _typed(kind, value):
 
 
 def _document(raw):
-    value = _shape(identity._json(raw), {"fleet_root", "code_pins", "pins", "journal",
+    required = {"fleet_root", "code_pins", "pins", "journal",
         "capture_policy", "emission_policy", "protected_job_policy", "artifact_policy",
         "runtime_policy", "operation_directory", "attempt_directory", "custody_packet",
-        "output_bind_target", "handoff_child_name", "base_url", "bearer_sha256", "tls", "limits"})
+        "output_bind_target", "handoff_child_name", "base_url", "bearer_sha256", "tls", "limits"}
+    parsed = identity._json(raw)
+    require(type(parsed) is dict and set(parsed) in (required, required | {"role_binding"}))
+    value = parsed
+    if "role_binding" in value:
+        from scripts import android_workflow_job_binder as binder
+        binder.validate_role_binding(value["role_binding"])
     pins = {name: origin.PinnedFile(_path(_shape(item, {"path", "sha256"})["path"]), item["sha256"])
             for name, item in _shape(value["pins"], PIN_LIMITS).items()}
     jobs = tuple(_typed(identity.WorkflowJobPolicy, value[name]) for name in
@@ -209,8 +215,19 @@ class LocalCaptureOwner:
             require(os.getuid() == os.geteuid() == os.getgid() == os.getegid() == 0)
             self._deployment = self._stack.enter_context(_held(deployment, inputs.MAX_DEPLOYMENT, expected_sha256))
             self.value, self.pins, self.jobs, self.artifact, self.policy = _document(self._deployment.raw)
+            binding_deadline = (time.monotonic() + self.value["limits"]["whole_seconds"]
+                                if "role_binding" in self.value else None)
             self._root = _path(self.value["fleet_root"])
             self._code = worker.code_inputs(self._root, self.value["code_pins"])
+            if "role_binding" in self.value:
+                from scripts import android_workflow_job_binder as binder
+                bound = binder.bind_deployment_roles(
+                    binding=self.value["role_binding"],
+                    current_policies=dict(zip(binder.ROLES, self.jobs)), deadline=binding_deadline)
+                self.jobs = tuple(bound[role] for role in binder.ROLES)
+                self._deployment.recheck()
+                require(worker.code_inputs(self._root, self.value["code_pins"]) == self._code)
+                require(time.monotonic() < binding_deadline)
             self._captured = {name: origin._capture(pin, PIN_LIMITS[name], executable=name in {"docker", "verifier"})
                               for name, pin in self.pins.items()}
             fleet._preserved_path(self.pins["lock"].path, "owner lock")
@@ -248,7 +265,7 @@ class LocalCaptureOwner:
                 binary_bearer_sha256=digests["binary"])
             self._peers = tuple(self.value["tls"]["trusted_proxy_addresses"])
             self._app = rendezvous.RendezvousApp(self.controller, trusted_proxy_addresses=self._peers)
-            self._deadline = time.monotonic() + self.value["limits"]["whole_seconds"]
+            self._deadline = binding_deadline or time.monotonic() + self.value["limits"]["whole_seconds"]
             self.recheck()
         except BaseException:
             self.close()
