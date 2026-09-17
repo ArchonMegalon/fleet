@@ -102,10 +102,31 @@ class PacketTests(unittest.TestCase):
         prep.verify_recipe(prep.RECIPE)
         with tempfile.TemporaryDirectory(prefix='public-recipe-unit-') as folder:
             with self.assertRaisesRegex(ValueError, 'recipe drift'): prep.verify_recipe(Path(folder))
-        with patch.object(prep, 'acquire', side_effect=AssertionError('no network')) as acquire:
-            with self.assertRaisesRegex(ValueError, 'refuse shared/local host'):
+        # Model each refusal explicitly: tests also run on an admitted hosted VM.
+        cases = [('false', 'github-hosted', False),
+                 ('true', 'self-hosted', False), ('true', 'github-hosted', True)]
+        for actions, runner, shared in cases:
+            with self.subTest(actions=actions, runner=runner, shared=shared), \
+                    patch.dict(os.environ, {'GITHUB_ACTIONS': actions, 'RUNNER_ENVIRONMENT': runner}), \
+                    patch.object(Path, 'exists', return_value=shared), \
+                    patch.object(Path, 'mkdir', side_effect=AssertionError('no directory creation')) as mkdir, \
+                    patch.object(prep, 'acquire', side_effect=AssertionError('no network')) as acquire:
+                with self.assertRaisesRegex(ValueError, 'refuse shared/local host'):
+                    prep.main(['--execute', '--disposable-vm', '--output-receipt', '/never/image.json',
+                               '--work-root', '/never/work'])
+                acquire.assert_not_called()
+                mkdir.assert_not_called()
+
+    def test_hosted_recipe_drift_rejects_before_directory_or_acquisition(self):
+        with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted'}), \
+                patch.object(Path, 'exists', return_value=False), \
+                patch.object(prep, 'verify_recipe', side_effect=ValueError('reviewed public recipe drift')), \
+                patch.object(Path, 'mkdir', side_effect=AssertionError('no directory creation')) as mkdir, \
+                patch.object(prep, 'acquire', side_effect=AssertionError('no network')) as acquire:
+            with self.assertRaisesRegex(ValueError, 'recipe drift'):
                 prep.main(['--execute', '--disposable-vm', '--output-receipt', '/never/image.json',
                            '--work-root', '/never/work'])
+            mkdir.assert_not_called()
             acquire.assert_not_called()
 
     def test_archive_size_hash_redirect_and_proxy_controls(self):
