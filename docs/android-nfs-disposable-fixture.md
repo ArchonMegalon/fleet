@@ -84,6 +84,16 @@ power-loss durability, a genuine network partition, authenticated production
 storage, or independent-client lock contention. AUTH_SYS is confined to this
 isolated synthetic network and is not production authentication.
 
+The synthetic server explicitly uses Ganesha4.3 `Allow_Numeric_Owners` and
+`Only_Numeric_Owners` so owner/group attributes carry the actual numeric IDs
+without requiring a shared name-mapping domain. The prior hosted observation
+reported UID/GID4294967294 with correct directory type and mode0700. This setting
+does not map anonymous IDs to root, change RPC credentials, relax the scoped
+CLIENT access/squash policy, or alter a Linux host parameter. The client still
+requires actual UID/GID0 and exact mode0700; only a subsequent real exercise
+can establish the result. See the pinned
+[Ganesha4.3 option definitions](https://raw.githubusercontent.com/nfs-ganesha/nfs-ganesha/V4.3/src/doc/man/ganesha-core-config.rst).
+
 Only `HOST_INVENTORY.json`, `INTENT.json`, `OBSERVATIONS.json`, and bounded
 `SERVER_LOG.json` are eligible for the one-day public artifact. No export, state,
 source staging directory, credentials, or private package bytes are uploaded.
