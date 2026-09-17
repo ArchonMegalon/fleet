@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chummer.run/schemas/fleet/chummer-cross-repo-build-matrix-v1.schema.json",
+  "title": "Chummer cross-repository build matrix",
+  "description": "Fleet-owned orchestration input. A matrix is evidence only after every exact binding is independently verified; the checked-in fixture is synthetic and carries no release authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractName",
+    "mode",
+    "rows",
+    "workflowPosture",
+    "matrixDigest"
+  ],
+  "properties": {
+    "contractName": {
+      "const": "chummer.cross-repo-build-matrix/v1"
+    },
+    "mode": {
+      "enum": [
+        "synthetic-fixture",
+        "candidate-bound"
+      ]
+    },
+    "rows": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "items": {
+        "$ref": "#/$defs/repositoryRow"
+      }
+    },
+    "workflowPosture": {
+      "$ref": "#/$defs/workflowPosture"
+    },
+    "matrixDigest": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "$defs": {
+    "sha40": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "repositoryRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryId",
+        "repository",
+        "ref",
+        "assetsSha256",
+        "membersSha256",
+        "runId",
+        "runAttempt",
+        "artifactId",
+        "artifactName",
+        "artifactSha256"
+      ],
+      "properties": {
+        "repositoryId": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "repository": {
+          "type": "string",
+          "pattern": "^ArchonMegalon/[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "ref": {
+          "$ref": "#/$defs/sha40"
+        },
+        "assetsSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "membersSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "runAttempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "artifactId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "artifactName": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "artifactSha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "workflowPosture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runner",
+        "dotnetSdk",
+        "android",
+        "journeys"
+      ],
+      "properties": {
+        "runner": {
+          "const": "ubuntu-24.04"
+        },
+        "dotnetSdk": {
+          "const": "10.0.110"
+        },
+        "android": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "apiLevel",
+            "systemImage",
+            "architecture",
+            "deviceProfile"
+          ],
+          "properties": {
+            "apiLevel": {
+              "const": 36
+            },
+            "systemImage": {
+              "const": "google_apis"
+            },
+            "architecture": {
+              "const": "x86_64"
+            },
+            "deviceProfile": {
+              "const": "pixel_6"
+            }
+          }
+        },
+        "journeys": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "full-editing",
+              "creation-prerequisite",
+              "career-active-skill-advance",
+              "career-weapon-fire"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

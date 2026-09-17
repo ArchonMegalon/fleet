@@ -1,0 +1,82 @@
+{
+  "name": "Chummer cross-repository build matrix contract",
+  "on": {
+    "pull_request": {
+      "paths": [
+        ".github/workflows/chummer-cross-repo-build-matrix.yml",
+        ".github/requirements-cross-repo-matrix.txt",
+        "config/chummer_cross_repo_build_matrix.schema.json",
+        "scripts/verify_chummer_cross_repo_build_matrix.py",
+        "tests/fixtures/chummer_cross_repo_build_matrix.synthetic.json",
+        "tests/test_chummer_cross_repo_build_matrix.py"
+      ]
+    },
+    "workflow_dispatch": {}
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "jobs": {
+    "contract-tests": {
+      "name": "Synthetic contract and fail-closed tests",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 10,
+      "steps": [
+        {
+          "name": "Check out exact Fleet revision",
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "fetch-depth": 1,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Create hash-locked Python environment",
+          "run": "set -euo pipefail\npython3 -m venv \"$RUNNER_TEMP/chummer-matrix-python\"\n\"$RUNNER_TEMP/chummer-matrix-python/bin/python\" -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes --requirement .github/requirements-cross-repo-matrix.txt"
+        },
+        {
+          "name": "Compile validator",
+          "run": "\"$RUNNER_TEMP/chummer-matrix-python/bin/python\" -m py_compile scripts/verify_chummer_cross_repo_build_matrix.py"
+        },
+        {
+          "name": "Run synthetic contract tests",
+          "run": "\"$RUNNER_TEMP/chummer-matrix-python/bin/python\" -m pytest -q tests/test_chummer_cross_repo_build_matrix.py"
+        },
+        {
+          "name": "Validate synthetic matrix and inactive workflow",
+          "run": "\"$RUNNER_TEMP/chummer-matrix-python/bin/python\" scripts/verify_chummer_cross_repo_build_matrix.py --matrix tests/fixtures/chummer_cross_repo_build_matrix.synthetic.json"
+        }
+      ]
+    },
+    "inactive-build-matrix-skeleton": {
+      "name": "Inactive API36 journey skeleton (${{ matrix.journey }})",
+      "if": "${{ false }}",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 1,
+      "strategy": {
+        "fail-fast": false,
+        "matrix": {
+          "journey": [
+            "full-editing",
+            "creation-prerequisite",
+            "career-active-skill-advance",
+            "career-weapon-fire"
+          ]
+        }
+      },
+      "env": {
+        "DOTNET_SDK_VERSION": "10.0.110",
+        "ANDROID_API_LEVEL": "36",
+        "ANDROID_SYSTEM_IMAGE": "google_apis",
+        "ANDROID_ARCHITECTURE": "x86_64",
+        "ANDROID_DEVICE_PROFILE": "pixel_6"
+      },
+      "steps": [
+        {
+          "name": "Inactive by design",
+          "run": "echo 'Synthetic contract skeleton only; no repository or artifact is consumed.'"
+        }
+      ]
+    }
+  }
+}
