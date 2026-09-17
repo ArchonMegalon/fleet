@@ -120,7 +120,8 @@ def execute(model):
     return boot.run(model.path, model.save(), 8)
 
 
-def test_admitted_protected_binding_is_consumed_before_mount_and_transport(model, monkeypatch):
+@pytest.mark.parametrize("startup_enabled", [False, True])
+def test_admitted_protected_binding_is_consumed_before_mount_and_transport(model, monkeypatch, startup_enabled):
     binder_path = Path(model.value["launcher"]["fleet_root"]) / "scripts/android_workflow_job_binder.py"
     binder_path.parent.mkdir(mode=0o700)
     binder_path.write_bytes(Path(binder.__file__).read_bytes()); binder_path.chmod(0o600)
@@ -133,6 +134,11 @@ def test_admitted_protected_binding_is_consumed_before_mount_and_transport(model
         "job_names": {role: "preview12-" + role for role in binder.ROLES},
         "templates": {"capture": capture, "emission": emission, "protected": protected},
     }
+    if startup_enabled:
+        from scripts import android_startup_scheduling as startup
+        model.value["startup_barrier"] = {"publisher_id": 123}
+        monkeypatch.setattr(startup, "wait_for_stage", lambda *_args, **_kwargs:
+                            pytest.fail("child must not repeat the supervisor startup wait"))
     calls = []
     def bind(*, role_policies, job_names, deadline):
         calls.append((role_policies, job_names))

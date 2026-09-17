@@ -188,6 +188,123 @@ def test_role_lookup_source_drift_stops_before_owner_controller(deployment, monk
     assert deployment.flow.model.calls == [] and deployment.mounted == []
 
 
+def scheduling(deployment, monkeypatch):
+    from scripts import android_startup_scheduling as startup
+    deployment.value["role_binding"] = {
+        "job_names": {role: "preview12-" + role for role in binder.ROLES},
+        "templates": {role: deployment.value[key] for role, key in zip(
+            binder.ROLES, ("capture_policy", "emission_policy", "protected_job_policy"))}}
+    deployment.value["startup_barrier"] = {"publisher_id": 123}
+    token = deployment.path.parent / "public-test-status-token"
+    token.write_bytes(b"PUBLIC-test-status-only-token"); token.chmod(0o600)
+    deployment.value["status_write_token"] = str(token)
+    monkeypatch.setattr(binder, "bind_live_roles", lambda **kwargs: kwargs["role_policies"])
+    return startup, token
+
+
+def test_startup_notices_follow_real_owner_transitions_once(deployment, monkeypatch):
+    startup, token = scheduling(deployment, monkeypatch)
+    notices = []
+    current = construct(deployment)
+    def publish(value, stage, jobs, held, *, deadline, recheck):
+        recheck()
+        assert held.path == token and held.raw is None
+        assert token in current._private_paths and jobs["protected"] is current.jobs[2]
+        if stage == "listener":
+            assert current.controller.owner_state() == "capture-ready" and current._export_app is None
+        else:
+            assert current._phase == "preparation" and current._export_app is not None
+            assert current.exporter._issued is None  # Scheduling never arms job3.
+        notices.append(stage)
+    monkeypatch.setattr(startup, "publish_stage", publish)
+    actual_start = current.start
+    def modeled_listener_start():
+        actual_start()
+        current.publish_startup("listener")
+    monkeypatch.setattr(current, "start", modeled_listener_start)
+    try:
+        with pytest.raises(owner.OwnerError): current.publish_startup("listener")
+        export_ready(current, deployment.flow)
+        assert notices == ["listener", "export"]
+        with pytest.raises(owner.OwnerError): current.publish_startup("export")
+        assert notices == ["listener", "export"]
+    finally:
+        current.close()
+
+
+@pytest.mark.parametrize("alias", ["deployment", "tls", "journal", "pin"])
+def test_status_writer_token_alias_rejected_before_controller(deployment, monkeypatch, alias):
+    scheduling(deployment, monkeypatch)
+    paths = {"deployment": str(deployment.path), "tls": deployment.value["tls"]["key_file"],
+             "journal": deployment.value["journal"]["path"],
+             "pin": deployment.value["pins"]["tls_certificate"]["path"]}
+    deployment.value["status_write_token"] = paths[alias]
+    with pytest.raises(owner.OwnerError): construct(deployment)
+    assert deployment.flow.model.calls == [] and deployment.mounted == []
+
+
+def test_status_writer_lost_post_reply_revokes_and_is_not_replayed(deployment, monkeypatch):
+    startup, token = scheduling(deployment, monkeypatch)
+    current = construct(deployment)
+    posts = []
+    def lost(*args, **kwargs):
+        posts.append(True)
+        raise RuntimeError("PUBLIC synthetic lost reply")
+    monkeypatch.setattr(startup, "publish_stage", lost)
+    try:
+        current.start()
+        with pytest.raises(owner.OwnerError): current.publish_startup("listener")
+        with pytest.raises(owner.OwnerError): current.publish_startup("listener")
+        assert posts == [True] and current._revoked.is_set()
+        assert flows.request(SimpleNamespace(r=current.controller, app=current), "capture", "challenge") == (404, b"not-found\n", 0)
+    finally:
+        current.close()
+
+
+def test_status_writer_custody_drift_rejects_before_read(deployment, monkeypatch):
+    _startup, token = scheduling(deployment, monkeypatch)
+    current = construct(deployment)
+    try:
+        assert current._status_token.raw is None
+        token.write_bytes(b"PUBLIC changed token file")
+        with pytest.raises(owner.inputs.BootstrapError): current.recheck()
+        assert current._status_token.raw is None
+    finally:
+        current.close()
+
+
+def test_export_publication_failure_revokes_existing_intake_without_arm(deployment, monkeypatch):
+    startup, _token = scheduling(deployment, monkeypatch)
+    current = construct(deployment)
+    stages = []
+    def publish(value, stage, *_args, **_kwargs):
+        stages.append(stage)
+        if stage == "export":
+            raise RuntimeError("PUBLIC synthetic lost export response")
+    monkeypatch.setattr(startup, "publish_stage", publish)
+    actual_start = current.start
+    def modeled_listener_start():
+        actual_start()
+        current.publish_startup("listener")
+    monkeypatch.setattr(current, "start", modeled_listener_start)
+    try:
+        with pytest.raises(owner.OwnerError): export_ready(current, deployment.flow)
+        assert stages == ["listener", "export"] and current._revoked.is_set()
+        assert current.exporter._issued is None
+        assert transfers.exchange(SimpleNamespace(export=current.exporter, app=current), "challenge")[:2] == (404, b"not-found\n")
+        with pytest.raises(owner.OwnerError): current.advance()
+        assert stages == ["listener", "export"]
+    finally:
+        current.close()
+
+
+@pytest.mark.parametrize("missing", ["role_binding", "status_write_token", "startup_barrier"])
+def test_partial_startup_configuration_is_rejected(deployment, monkeypatch, missing):
+    scheduling(deployment, monkeypatch)
+    del deployment.value[missing]
+    with pytest.raises(owner.OwnerError): construct(deployment)
+
+
 def capture_done(current, flow):
     current.start()
     issued = current.controller._issued_capture
@@ -506,7 +623,8 @@ def test_private_inputs_cannot_be_exposed_by_bind_path_or_inode(tmp_path, alias)
         owner._not_exposed(path, [SimpleNamespace(source=str(source))])
 
 
-def test_fixed_cli_runs_real_owner_with_only_listener_tls_boundary_modeled(deployment, monkeypatch):
+@pytest.mark.parametrize("publish_fails", [False, True])
+def test_fixed_cli_runs_real_owner_with_only_listener_tls_boundary_modeled(deployment, monkeypatch, publish_fails):
     import sys
     observed = {}
     class Config:
@@ -529,7 +647,15 @@ def test_fixed_cli_runs_real_owner_with_only_listener_tls_boundary_modeled(deplo
     transport = SimpleNamespace(uvicorn=SimpleNamespace(__version__="0.34.2", Config=Config, Server=Server),
                                _Server=Server, _BoundedHttp=object(), _NULL_LOG={}, _sealed=sealed)
     monkeypatch.setitem(sys.modules, "scripts.android_preview12_approval_ledger_server", transport)
-    assert owner.run(deployment.path, sha(deployment.path.read_bytes())) == 0
+    monkeypatch.setattr(sys.modules["scripts"], "android_preview12_approval_ledger_server", transport, raising=False)
+    if publish_fails:
+        startup, _token = scheduling(deployment, monkeypatch)
+        deployment.path.write_bytes(raw(deployment.value))
+        monkeypatch.setattr(startup, "publish_stage", lambda *_args, **_kwargs:
+                            (_ for _ in ()).throw(RuntimeError("PUBLIC lost listener response")))
+        with pytest.raises(owner.OwnerError): owner.run(deployment.path, sha(deployment.path.read_bytes()))
+    else:
+        assert owner.run(deployment.path, sha(deployment.path.read_bytes())) == 0
     config = observed["config"]
     assert config.values["workers"] == 1 and config.values["port"] == 443
     assert not config.values["proxy_headers"] and not config.values["access_log"]
@@ -566,6 +692,7 @@ def test_monitor_failure_revokes_before_graceful_server_shutdown(deployment, mon
     transport = SimpleNamespace(uvicorn=SimpleNamespace(__version__="0.34.2", Config=Config, Server=Server),
                                _Server=Server, _BoundedHttp=object(), _NULL_LOG={}, _sealed=lambda *args: 123)
     monkeypatch.setitem(sys.modules, "scripts.android_preview12_approval_ledger_server", transport)
+    monkeypatch.setattr(sys.modules["scripts"], "android_preview12_approval_ledger_server", transport, raising=False)
     monkeypatch.setattr(owner.LocalCaptureOwner, "advance", lambda self:
                         (_ for _ in ()).throw(owner.OwnerError(owner.ERROR)))
     with pytest.raises(owner.OwnerError): owner.run(deployment.path, sha(deployment.path.read_bytes()))

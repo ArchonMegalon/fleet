@@ -78,11 +78,17 @@ def _document(raw):
         "runtime_policy", "operation_directory", "attempt_directory", "custody_packet",
         "output_bind_target", "handoff_child_name", "base_url", "bearer_sha256", "tls", "limits"}
     parsed = identity._json(raw)
-    require(type(parsed) is dict and set(parsed) in (required, required | {"role_binding"}))
+    require(type(parsed) is dict and required <= set(parsed)
+            <= required | {"role_binding", "startup_barrier", "status_write_token"})
     value = parsed
+    require(("startup_barrier" in value) == ("status_write_token" in value))
     if "role_binding" in value:
         from scripts import android_workflow_job_binder as binder
         binder.validate_role_binding(value["role_binding"])
+    if "startup_barrier" in value:
+        from scripts import android_startup_scheduling as startup
+        startup.validate_deployment(value, owner=True)
+        _path(value["status_write_token"])
     pins = {name: origin.PinnedFile(_path(_shape(item, {"path", "sha256"})["path"]), item["sha256"])
             for name, item in _shape(value["pins"], PIN_LIMITS).items()}
     jobs = tuple(_typed(identity.WorkflowJobPolicy, value[name]) for name in
@@ -208,6 +214,8 @@ class LocalCaptureOwner:
         self._stack = ExitStack()
         self.controller = self.exporter = self.custody = self.retained = None
         self._app = self._export_app = None
+        self._status_token = None
+        self._startup_published = set()
         self._phase, self._closed = "prepared", False
         self._mutex = threading.RLock()
         self._revoked = threading.Event()
@@ -235,6 +243,9 @@ class LocalCaptureOwner:
             require(hashlib.sha256(raw).hexdigest() == self.pins["lock"].sha256
                     and not fleet.validate_lock(lock, raw, self.policy.requested_image))
             self._key = self._stack.enter_context(_held(_path(self.value["tls"]["key_file"]), 16384))
+            if "startup_barrier" in self.value:
+                self._status_token = self._stack.enter_context(
+                    _held(_path(self.value["status_write_token"]), 16384))
             destinations = [_path(self.value[name]) for name in
                             ("operation_directory", "attempt_directory", "custody_packet")]
             for target in destinations:
@@ -244,6 +255,11 @@ class LocalCaptureOwner:
                 require(all(_separate(target, Path(bind.source)) for bind in self.policy.binds))
             require(len(set(destinations)) == 3)
             private = (self._deployment.path, self._key.path, _path(self.value["journal"]["path"]))
+            if self._status_token is not None:
+                require(self._status_token.stamp[:2] not in {
+                    origin._identity(path.stat())[:2] for path in
+                    (*private, *(pin.path for pin in self.pins.values()))})
+                private += (self._status_token.path,)
             self._private_paths = private
             for path in private:
                 _not_exposed(path, self.policy.binds)
@@ -275,6 +291,8 @@ class LocalCaptureOwner:
         require(not self._closed and not self._revoked.is_set() and time.monotonic() < self._deadline)
         self._deployment.recheck()
         self._key.recheck()  # Metadata only; never accesses a signing credential.
+        if self._status_token is not None:
+            self._status_token.recheck()
         for path in self._private_paths:
             _not_exposed(path, self.policy.binds)
         if full:
@@ -301,6 +319,26 @@ class LocalCaptureOwner:
             self.recheck()
             self.controller.arm_capture()
 
+    def publish_startup(self, stage):
+        """One scheduling notice after an actual local transition, never auth."""
+        if "startup_barrier" not in self.value:
+            return
+        from scripts import android_startup_scheduling as startup
+        with self._mutex:
+            require(stage in {"listener", "export"} and stage not in self._startup_published
+                    and self._phase == ("capture" if stage == "listener" else "preparation")
+                    and (stage == "listener" or "listener" in self._startup_published))
+            self.recheck()
+            self._startup_published.add(stage)  # Lost POST replies are not replayed.
+            try:
+                startup.publish_stage(self.value, stage,
+                    dict(zip(("capture", "emission", "protected"), self.jobs)), self._status_token,
+                    deadline=self._deadline, recheck=self.recheck)
+                self.recheck()
+            except BaseException:
+                self.revoke()  # A late/lost publication never leaves admission open.
+                raise OwnerError(ERROR) from None
+
     def advance(self):
         """Local owner scheduling; no HTTP request selects or calls this method."""
         with self._mutex:
@@ -325,6 +363,7 @@ class LocalCaptureOwner:
                 self.exporter.enable_preparation_wait(self.value["limits"]["preparation_wait_seconds"])
                 self._export_app = intake.PublicCaptureApp(self.exporter, trusted_proxy_addresses=self._peers)
                 self._phase = "preparation"
+                self.publish_startup("export")
                 print("local_capture_owner=intake_listener_installed", flush=True)
             elif self._phase == "preparation" and self.exporter.preparation_observed():
                 # Diagnostic pending observation only triggers this independent
@@ -437,6 +476,7 @@ def run(deployment, expected_sha256):
                 await transport.uvicorn.Server.startup(self, sockets=sockets)
                 if self.started:
                     owner.start()
+                    owner.publish_startup("listener")
                     print("local_capture_owner=listener_started", flush=True)
         server = Server(config)
         stop = threading.Event()

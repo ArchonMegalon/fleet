@@ -14,6 +14,14 @@ An admitted final interpreter symlink preserves a qualified venv; both the link
 and the real executable are fenced. The independently expected hash covers the
 real interpreter bytes, not the symlink text.
 
+Startup-barrier mode requires the supervisor itself to be invoked through an
+independently admitted fixed `-I -B -c` module bootstrap: insert only the admitted
+absolute Fleet root and import `scripts.android_protected_job_supervisor.main`.
+This establishes the exact namespace before optional helpers are imported.
+Direct-file/cwd/PYTHONPATH discovery is not supported for this opt-in; the prior
+static mode is unchanged. Source/interpreter admission precedes this invocation,
+not a candidate-computed path or digest.
+
 The owner must admit this supervisor, interpreter, standard library, installed
 dependencies, dynamic loaders and exact Fleet import closure **before** running
 it. The deployment digest is independently selected by protected provisioning,
@@ -45,8 +53,14 @@ executed Python or independently select deployment authority.
 
 READY does **not** prove the remote exporter exists or is reachable. No readiness
 HTTP probe is added. A network error or missing route is terminal, not pending
-and not retryable. Actual orchestration must establish invocation timing before
-the pipe is released; this executable cannot discover that authority remotely.
+and not retryable. Optional `startup_barrier` with `role_binding` observes the
+exact public `export` scheduling notice before creating the pipe or child.
+The supervisor admits the helper/binder source closure before importing it,
+rejects ambient Fleet namespaces, performs its own live job binding and compares
+the three-check-ID digest. The child still performs all original authentication,
+custody and release checks. Metadata does not prove endpoint reachability or
+grant permission. See [startup scheduling](android-startup-scheduling.md).
+Without this opt-in, independent orchestration must still establish timing.
 
 ## Required hosted setup
 

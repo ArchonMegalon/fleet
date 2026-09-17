@@ -77,7 +77,7 @@ The bounded, duplicate-key-rejecting public JSON has these required fields:
   emission, null for capture; `deadline_seconds`: 1–10800 per phase, chosen by
   the owner and bounded by independent whole-job supervision.
 
-The only additional optional field is `role_binding`, containing the exact
+The optional field `role_binding` contains the exact
 reviewed names/templates in [the binder contract](android-workflow-job-binder.md).
 The fixed phase selects capture or emission and requires its existing job policy
 to match that template before lookup. Discovery is inside the original phase
@@ -85,6 +85,17 @@ deadline and retains the separate 20-second transport ceiling. The deployment
 is rechecked before private input reads or controller requests. Pending/error
 does not permit a retry. Static policies remain supported when the field is absent.
 The admitted import closure must include the binder before these steps execute.
+
+With that mode, an independently admitted `startup_barrier: {"publisher_id": ID}`
+may additionally enable the fixed GitHub commit-status scheduling observer.
+Capture and emission-prepare wait for the exact run/attempt/transaction listener
+notice **before** binding the three jobs or reading any private role input.
+They then perform the original live lookup and compare its three-check-ID
+digest with the notice. Emission-submit does not repeat the startup wait; its
+original session, retained manifest and no-replay markers remain authoritative.
+See [startup scheduling](android-startup-scheduling.md) for exact transport and
+deadline bounds. Public metadata never supplies authenticated job identity,
+replaces OIDC, authorizes a protected action, or extends a challenge lifetime.
 
 Emission prepare and submit use the same deployment bytes/digest, same retained
 manifest and same private attempt directory. The action output must be a

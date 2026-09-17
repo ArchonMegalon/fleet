@@ -109,11 +109,15 @@ def _document(raw, phase):
     required = {"role", "job_policy", "artifact_policy", "base_url", "pins",
         "transport_inputs", "attempt_directory", "attestation_output_root", "deadline_seconds"}
     parsed = identity._json(raw)
-    require(type(parsed) is dict and set(parsed) in (required, required | {"role_binding"}))
+    require(type(parsed) is dict and required <= set(parsed)
+            <= required | {"role_binding", "startup_barrier"})
     value = parsed
     if "role_binding" in value:
         from scripts import android_workflow_job_binder as binder
         binder.validate_role_binding(value["role_binding"])
+    if "startup_barrier" in value:
+        from scripts import android_startup_scheduling as startup
+        startup.validate_deployment(value)
     role = "capture" if phase == "capture" else "emission"
     require(value["role"] == role and phase in PHASES)
     job = identity.WorkflowJobPolicy(**_shape(value["job_policy"], [f.name for f in fields(identity.WorkflowJobPolicy)]))
@@ -266,6 +270,16 @@ def run(phase, deployment, deployment_sha256, *, bundle_path=None):
             value, job, artifact, pins, inputs, directory = _document(source.raw, phase)
             deadline = time.monotonic() + value["deadline_seconds"]
             bound_roles = None
+            startup_digest = None
+            if "startup_barrier" in value and phase != "emission-submit":
+                from scripts import android_startup_scheduling as startup
+                # Wait BEFORE lookup: the third hosted job may not be running
+                # yet. A status is scheduling only; the binder and original
+                # OIDC/controller authentication must still run independently.
+                startup_digest = startup.wait_for_stage(
+                    value, "listener", deadline=deadline, recheck=source.recheck)
+                source.recheck()
+                _remaining(deadline)
             if "role_binding" in value:
                 from scripts import android_workflow_job_binder as binder
                 role = "capture" if phase == "capture" else "emission"
@@ -275,6 +289,10 @@ def run(phase, deployment, deployment_sha256, *, bundle_path=None):
                 job = bound_roles[role]
                 source.recheck()
                 require(time.monotonic() < deadline)
+                if startup_digest is not None:
+                    require(startup.binding_digest(bound_roles) == startup_digest)
+                    source.recheck()
+                    _remaining(deadline)
             expected_marker = lambda name: (name + "\n" + deployment_sha256 + "\n").encode()
             snapshots = [source]
             # Before reading ANY role credential or public CA, reject aliases.

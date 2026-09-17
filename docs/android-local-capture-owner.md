@@ -48,13 +48,21 @@ the checked-in dormant lock reject before any challenge or TLS-key read.
 | `tls` | Canonical `bind_address`, private local `key_file`, explicit `trusted_proxy_addresses`; certificate pin above |
 | `limits` | Whole-lifecycle `whole_seconds` (1–21600) and shorter `preparation_wait_seconds` (1–1800) |
 
-The only additional optional field is `role_binding`, using the exact admitted
+The optional field `role_binding` uses the exact admitted
 three-role names/templates described in [the binder contract](android-workflow-job-binder.md).
 The existing three policies must equal those templates before lookup. Discovery
 can replace only their check IDs and occurs before controller construction. The
 held deployment and code closure are rechecked afterward. Its at-most20-second
 lookup consumes the existing whole-lifecycle budget, never extending it. Without
 this field the original static-policy path remains unchanged.
+
+Optional `startup_barrier: {"publisher_id": ID}` requires `role_binding` and an
+explicit `status_write_token` absolute private file. Only the local owner receives
+this separate commit-status credential. The descriptor contains its path, never
+its value. It is held/rechecked, disjoint from other inputs and excluded from
+every builder bind and destination. The publisher reads it only for its fixed
+GitHub request; it is not forwarded to hosted jobs, argv, environment or logs.
+No credential is discovered or permission granted by this code.
 
 Certificate/role credential selection and actual network/proxy custody remain
 independent deployment inputs. Only the explicitly selected local TLS key is
@@ -86,12 +94,15 @@ It never invokes the ledger server's `prepare()` or mounts its database/keys.
    protected-job freshness checks and arms job3 once. Actual job3 authentication
    still uses genuine OIDC, exact Jobs API identity and the original SQLite slot.
 
-All three real job/check IDs must exist before owner construction. Independent
-workflow provisioning must withhold capture/emission role starts until the
-listener is installed, and withhold the hosted job3 supervisor's pipe release
-until the export endpoint is installed. The constant listener diagnostics are
-not authentication or release receipts. The actual deployment barrier remains
-to be admitted; do not substitute blind delays, HTTP-error retries or new routes.
+All three real job/check IDs must exist before owner construction. Optional
+[startup scheduling](android-startup-scheduling.md) publishes `listener` only
+after the real TLS listener starts and capture is armed; it publishes `export`
+only after the actual intake app and preparation wait are installed. Each stage
+is latched before its single POST; a lost reply is not retried. Without this mode,
+independent provisioning still owns start timing. The notices and constant local
+diagnostics are not authentication or release receipts. Actual status-write
+permission and workflow provisioning remain separately admitted deployment
+inputs; this source change activates neither and creates no controller route.
 
 ## Failure and operational bounds
 

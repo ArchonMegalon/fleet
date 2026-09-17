@@ -147,11 +147,14 @@ def _document(raw):
     value = identity._json(raw)
     names = {"launcher", "job_policy", "artifact_policy", "runtime_policy",
         "pins", "persistent", "operation_directory", "secret_inputs", "transport_inputs", "base_url", "release_wait_seconds"}
-    optional = {"preparation_wait_seconds", "role_binding"}
+    optional = {"preparation_wait_seconds", "role_binding", "startup_barrier"}
     require(type(value) is dict and names <= set(value) <= names | optional)
     if "role_binding" in value:
         from scripts import android_workflow_job_binder as binder
         binder.validate_role_binding(value["role_binding"])
+    if "startup_barrier" in value:
+        from scripts import android_startup_scheduling as startup
+        startup.validate_deployment(value)
     value.setdefault("preparation_wait_seconds", 0)
     require(type(value["preparation_wait_seconds"]) is int and 0 <= value["preparation_wait_seconds"] <= 1800)
     config = _shape(value["launcher"], CONFIG_FIELDS)
