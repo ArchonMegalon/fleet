@@ -19,9 +19,9 @@ approval = fixture.approval
 EXTERNAL_INPUTS = (
     "CHUMMER_ANDROID_CURRENT_ROOT", "CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT",
 )
-# Retained ordered qualification run 35140852521 / artifact 10465102739.
+# Retained ordered qualification run 35219818439 / artifact 10496043746.
 # Hosted evidence stays external and byte-immutable; RFC signatures are test-only.
-ORIGINAL_RECEIPT_SHA256 = "91eda21158a1d203ce1d931250c0d571f4dfab797c024ad15bd22ad439918f15"
+ORIGINAL_RECEIPT_SHA256 = "9e4e568a2bf8022db713055489ff30015868fa9820c1d6bd3a86832b1d3928b6"
 CURRENT_CONSUMER_SHA256 = "a6ecfecb0c53a45e9f91706ff4b3c8ef97e0bd23fc69a7d9a48e094d5038cb76"
 
 
@@ -226,11 +226,15 @@ def test_qualified_commit_cannot_substitute_a_different_main_with_same_tree():
         approval.validate_inputs(argparse.Namespace(**inputs))
 
 
-def test_previous_qualified_commit_and_tree_are_not_current_authority():
+@pytest.mark.parametrize("commit,tree", [
+    ("b3fc0619ec61df3df25849db90593e1b6b66deb2", "9c71c65836cdeab038c3e88e8770d208e887ed1e"),
+    ("840ac319c47e89e383876faea03b83dce31aaf22", "6d9a5fab10fd440fc30aaeae8023dd83bc01e472"),
+])
+def test_previous_qualified_commit_and_tree_are_not_current_authority(commit, tree):
     inputs = fixture.inputs()
     inputs.update(
-        main_commit="b3fc0619ec61df3df25849db90593e1b6b66deb2",
-        main_tree="9c71c65836cdeab038c3e88e8770d208e887ed1e",
+        main_commit=commit,
+        main_tree=tree,
     )
     with pytest.raises(approval.ApprovalError, match="exactly bound consumer"):
         approval.validate_inputs(argparse.Namespace(**inputs))
@@ -244,6 +248,20 @@ def test_qualified_source_must_still_equal_observed_protected_main(tmp_path, mon
     monkeypatch.setattr(approval, "sign_ed25519", lambda *a, **k: pytest.fail("unexpected signing"))
     with pytest.raises(approval.ApprovalError, match="current Android main branch"):
         approval.create_approval_bundle(args, environment, now=fixture.NOW)
+
+
+def test_resealed_pre_sdk_staging_graph_cannot_replace_current_qualification():
+    value = fixture.receipt()
+    graph = value["commonAuthority"]["dependencyGraph"]
+    graph["sources"]["android"]["tree"] = "6d9a5fab10fd440fc30aaeae8023dd83bc01e472"
+    graph["sha256"] = approval.canonical_sha256({k: v for k, v in graph.items() if k != "sha256"})
+    assert graph["sha256"] == "dc784a6d2cc4c68ed17dfe778b44f4f58a0c8681765d72f2ee40a83ba9547821"
+    reseal(value)
+    with pytest.raises(approval.ApprovalError, match="qualified dependency graph"):
+        approval.validate_receipt(
+            value, approval.validate_inputs(argparse.Namespace(**fixture.inputs())),
+            now=fixture.NOW, policy=approval.expected_policy(),
+        )
 
 
 def test_bound_graph_is_derived_by_actual_android_producers(current_source):

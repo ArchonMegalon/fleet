@@ -9,8 +9,8 @@ are backed by the exact successful reviewed and main API-36 Two-Green evidence.
 
 It never accepts, signs, uploads, or publishes an AAB. Its primary output is
 the exact `chummer.android.two-green-release-approval/v1` contract consumed by
-the bound Android `840ac319c47e89e383876faea03b83dce31aaf22` release
-verifier at tree `6d9a5fab10fd440fc30aaeae8023dd83bc01e472`. Public-key
+the bound Android `8c98b0abef4fef25e0d0938e0e8df9bba9e5e99e` release
+verifier at tree `616d388dcb4270488c4651fa2cc2a1c23daeef09`. Public-key
 compatibility, hosted consumer qualification and issuer activation are separate
 claims. It always keeps
 `signingAuthorized`, `publicationAuthorized`, and
@@ -205,14 +205,14 @@ original hosted receipt for full consumer interoperability. These tests grant
 no operational approval, establish no protected custody, and perform no local
 APK/archive provenance replay.
 
-The current original qualification receipt is from Two-Green run `35140852521`, artifact
-`10465102739`, pairing PR `68` review `35124166088` attempt 2 and main
-`35133296059` attempt 1. Its exact 26,347-byte JSON SHA256 is
-`91eda21158a1d203ce1d931250c0d571f4dfab797c024ad15bd22ad439918f15`;
-the 26,561-byte artifact archive SHA256 is
-`9abd6320feff25e8c433099da1af44b08a7bec5fd72e1e4fb8a13d44ffd1a495`;
+The current original qualification receipt is from Two-Green run `35219818439`, artifact
+`10496043746`, pairing PR `69` review `35207890648` attempt 1 and main
+`35214156231` attempt 1. Its exact 26,341-byte JSON SHA256 is
+`9e4e568a2bf8022db713055489ff30015868fa9820c1d6bd3a86832b1d3928b6`;
+the 26,555-byte artifact archive SHA256 is
+`948e475dbccff4cb04e01a8f6289dd2c6a0e048271b875d145a1e7595ee85172`;
 the canonical dependency graph SHA256 is
-`dc784a6d2cc4c68ed17dfe778b44f4f58a0c8681765d72f2ee40a83ba9547821`.
+`2f2e7ffbe7a339e58fe6249588de8df4aa94a019681795e0dc70e4052fa79bc9`.
 The exact workflow hash is
 `a1c19279957f0a0e53ca715119c339a628718e8e219f76527c528075f757fee3`.
 The P0 source, workflow, consumer verifier,
@@ -220,9 +220,10 @@ provenance materializer, environment, wizard-gate, Two-Green-policy and public-k
 bytes were remeasured from exact source and remain unchanged from `b3fc0619`.
 The dependency source tuples are unchanged apart from the Android tree.
 The build script and its pinned source-test helper are unchanged. The
-`840ac319` source tree incorporates the reviewed Android AAR consumed-cache fix;
+`8c98b0ab` source tree incorporates the reviewed Android SDK runtime private
+staging and restore custody diagnostics;
 that product change is qualified by the new receipt, not by the predecessor's
-evidence. The previous `b3fc0619`/`9c71c658` and `9cbe9136`/`46322c4`
+evidence. The previous `840ac319`/`6d9a5fab`, `b3fc0619`/`9c71c658` and `9cbe9136`/`46322c4`
 qualification, like `e0d997b`/`f816035` and `d4e9116`/`301180a`, is historical
 and is rejected as current input. Rebinding does not bypass freshness
 or current protected-main checks: advancing Android main requires a separately

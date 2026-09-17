@@ -179,8 +179,8 @@ def test_checked_in_builder_public_binding_is_current_without_credential_activat
     module = load_module()
     lock, raw = module.load_lock(LOCK)
     assert lock["approval_authority"] == CURRENT_BUILDER_PUBLIC_BINDING
-    assert lock["android_authority"]["commit"] == "840ac319c47e89e383876faea03b83dce31aaf22"
-    assert lock["android_authority"]["tree"] == "6d9a5fab10fd440fc30aaeae8023dd83bc01e472"
+    assert lock["android_authority"]["commit"] == "8c98b0abef4fef25e0d0938e0e8df9bba9e5e99e"
+    assert lock["android_authority"]["tree"] == "616d388dcb4270488c4651fa2cc2a1c23daeef09"
     assert lock["state"] == "dormant" and lock["rebuild"]["enabled"] is False
     assert lock["reservation"]["configured"] is False
     assert lock["toolchain"]["signer_image"] == OBSERVED_BUILDER_IMAGE
