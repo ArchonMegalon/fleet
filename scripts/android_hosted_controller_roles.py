@@ -3,12 +3,19 @@
 Expectations/code/runtime must be admitted before invocation. No listener,
 attester selection/execution, capability restoration, secret discovery or retry.
 Only the controller authenticates jobs and verifies the submitted actual bundle.
+Optional role binding may perform a small, unauthenticated public observation of
+the already-bound protected check after capture/submission. That observation is
+strictly capped at eight snapshots (sixteen public reads) and paced at
+30/60/120/240/480/960/960 seconds only after validated in-progress state. The
+original phase deadline remains authoritative; this is metadata, not auth, and
+does not reserve or guarantee shared-IP quota or provide an authentication
+workaround.
 """
 from __future__ import annotations
 
 import argparse
 from contextlib import ExitStack
-from dataclasses import fields
+from dataclasses import fields, replace
 import hashlib
 import os
 from pathlib import Path
@@ -32,6 +39,8 @@ INPUT_LIMITS = {"role_bearer": 4096, "oidc_request_url": 8192, "oidc_request_cre
 PHASES = frozenset(COMPLETE)
 PIN_NAMES = {"controller_ca", "oidc_ca"}
 MAX_CONFIG = 128 * 1024
+PROTECTED_OBSERVATION_MAX_SNAPSHOTS = 8
+PROTECTED_OBSERVATION_DELAYS = (30.0, 60.0, 120.0, 240.0, 480.0, 960.0, 960.0)
 
 
 class RoleError(RuntimeError):
@@ -178,6 +187,66 @@ def _status(client, deadline, check, role):
     return _poll(read, deadline, check)
 
 
+def _protected_job_state(raw, pending, completed):
+    try:
+        identity._job(raw, pending)
+        return "pending"
+    except identity.WorkflowIdentityError as error:
+        # Only a status mismatch may be reinterpreted as the exact terminal
+        # success shape. Shape, identity, cardinality and context failures are
+        # terminal and must never become polling.
+        if str(error) != "api-job-status":
+            raise
+        identity._job(raw, completed)
+        return "completed"
+
+
+def _wait_for_protected_snapshot(delay, phase_deadline, check):
+    wait_deadline = min(phase_deadline, time.monotonic() + delay)
+    while True:
+        _remaining(phase_deadline)
+        check()
+        _remaining(phase_deadline)
+        remaining = wait_deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        time.sleep(min(1.0, remaining))
+
+
+def _hold_for_protected_success(policy, phase_deadline, check):
+    """Observe the already-bound protected job without consuming another identity."""
+    require(type(policy) is identity.WorkflowJobPolicy)
+    completed = replace(policy, job_status="completed", job_conclusion="success")
+    base = identity.API + "/repos/" + policy.repository
+    attempt_url = base + "/actions/runs/" + policy.run_id + "/attempts/" + policy.run_attempt
+    jobs_url = attempt_url + "/jobs?per_page=100&page=1"
+    for snapshot in range(PROTECTED_OBSERVATION_MAX_SNAPSHOTS):
+        _remaining(phase_deadline)
+        check()
+        lookup_deadline = min(phase_deadline, time.monotonic() + identity.TOTAL_SECONDS)
+        try:
+            attempt_raw = identity._json(identity._fetch(attempt_url, lookup_deadline))
+            _remaining(lookup_deadline)
+            check()
+            identity._run_attempt(attempt_raw, policy)
+            jobs_raw = identity._json(identity._fetch(jobs_url, lookup_deadline))
+            _remaining(lookup_deadline)
+            check()
+            job_state = _protected_job_state(jobs_raw, policy, completed)
+            _remaining(lookup_deadline)
+        except (identity.WorkflowIdentityError, OSError, ValueError, TypeError, RecursionError):
+            raise RoleError(ERROR) from None
+        if job_state == "completed":
+            check()
+            _remaining(lookup_deadline)
+            _remaining(phase_deadline)
+            return
+        if snapshot + 1 == PROTECTED_OBSERVATION_MAX_SNAPSHOTS:
+            raise RoleError(ERROR)
+        _wait_for_protected_snapshot(PROTECTED_OBSERVATION_DELAYS[snapshot], phase_deadline, check)
+    raise RoleError(ERROR)
+
+
 def _marker(directory, name, digest):
     # Local no-replay diagnostics ONLY. Never a portable session/capability.
     rendezvous._write_new(directory / name, (name + "\n" + digest + "\n").encode())
@@ -196,13 +265,14 @@ def run(phase, deployment, deployment_sha256, *, bundle_path=None):
             source = held(deployment, MAX_CONFIG, expected=deployment_sha256)
             value, job, artifact, pins, inputs, directory = _document(source.raw, phase)
             deadline = time.monotonic() + value["deadline_seconds"]
+            bound_roles = None
             if "role_binding" in value:
                 from scripts import android_workflow_job_binder as binder
                 role = "capture" if phase == "capture" else "emission"
-                bound = binder.bind_deployment_roles(
+                bound_roles = binder.bind_deployment_roles(
                     binding=value["role_binding"], current_policies={role: job}, role=role,
                     deadline=deadline)
-                job = bound[role]
+                job = bound_roles[role]
                 source.recheck()
                 require(time.monotonic() < deadline)
             expected_marker = lambda name: (name + "\n" + deployment_sha256 + "\n").encode()
@@ -298,6 +368,8 @@ def run(phase, deployment, deployment_sha256, *, bundle_path=None):
                     check()
                     _marker(directory, "manifest-ready", deployment_sha256)
             _remaining(deadline); check()
+            if bound_roles is not None and phase in {"capture", "emission-submit"}:
+                _hold_for_protected_success(bound_roles["protected"], deadline, check)
             # Never print an origin fact, live capability or attestation receipt.
             return COMPLETE[phase]
     except BaseException:
