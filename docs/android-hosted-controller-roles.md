@@ -20,6 +20,42 @@ already-admitted absolute Fleet root, not cwd/PYTHONPATH or a dynamic factory.
 The configuration digest must come independently from protected provisioning,
 never from candidate JSON, local claims, a self-hash or chown-as-authentication.
 
+## Fixed request-input staging
+
+`scripts/android_hosted_input_stager.py` supplies one bounded preparation step,
+not a hosted provisioner or role executor. Its closed CLI accepts only `--role
+capture|emission`, plus `--profile`, `--context`, `--deployment` and each one's
+independently admitted `--*-sha256`. The deployment must equal the actual
+`android_deployment_materializer.render()` output byte-for-byte. The existing
+configured role bearer must already be delivered; its bytes must match the
+admitted owner document's `bearer_sha256` for that exact role. It is not copied.
+
+After public/input/CA alias and custody preflight, the stager reads only
+`ACTIONS_ID_TOKEN_REQUEST_URL` and `ACTIONS_ID_TOKEN_REQUEST_TOKEN` from the
+explicit job injection. It validates the existing endpoint/ASCII/bounds rules
+and distinct bearer/request credential, then exclusively writes those two
+configured private files. No directories or credentials are generated. Profile
+and context may be non-group/world-writable public files; deployment, existing
+bearer and CA files use the caller's existing 0600 custody. All immediate input
+and output parents are already current-user 0700 under accepted ancestry.
+
+Both destinations must be fresh and distinct, outside the role attempt and
+emission action-output roots. Held input and parent bindings are rechecked
+around writes; completed outputs remain held through final readback. Failure
+preserves partial files and requires reconciliation, never overwrite, deletion
+or automatic retry. The CLI prints only constants, not credential bytes,
+private digests or paths. Python zeroization is not claimed. An independently
+admitted outer deadline must also cover filesystem stalls.
+
+Interpreter/source/dependency admission still precedes importing this helper.
+It does not establish that supplied environment values are genuine GitHub
+identity, request an OIDC token, call the owner/client, start a role, or supply
+protected signing credentials, storage, private routing or deployment. The
+original OIDC/Jobs API/journal authentication remains unchanged. Disposable
+tests use the real renderer, writer and `_Input` reader; operational callbacks
+are trapped. The source-test CI separately includes this dedicated suite; no
+operational workflow is added by this preparation step.
+
 ## Actual sequence across hosted steps
 
 1. The capture job calls `capture`. The executable polls only the existing
