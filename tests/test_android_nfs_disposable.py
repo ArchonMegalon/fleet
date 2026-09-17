@@ -475,6 +475,26 @@ class PacketTests(unittest.TestCase):
         self.assertEqual(caught.exception.diagnostic, {'cliExitCode': 7, 'stdout': 'synthetic stdout\n',
             'stderr': 'E' * driver.CLIENT_DIAGNOSTIC_MAX, 'stdoutTruncated': False, 'stderrTruncated': True})
 
+    def test_private_directory_rejection_reports_exact_metadata_without_paths_or_relaxation(self):
+        for mode, uid, gid in ((stat.S_IFDIR | 0o700, 65534, 0),
+                               (stat.S_IFDIR | 0o700, 0, 65534),
+                               (stat.S_IFDIR | 0o755, 0, 0),
+                               (stat.S_IFREG | 0o700, 0, 0)):
+            with self.subTest(mode=mode, uid=uid, gid=gid):
+                output = io.StringIO()
+                info = SimpleNamespace(st_mode=mode, st_uid=uid, st_gid=gid)
+                with patch.object(client.Path, 'lstat', return_value=info), contextlib.redirect_stdout(output):
+                    with self.assertRaisesRegex(RuntimeError, '^private-directory$'):
+                        client.private_directory(Path('/never-read-or-report-this-path'))
+                self.assertEqual(json.loads(output.getvalue()), {'diagnostic': 'private-directory-metadata',
+                    'isDirectory': stat.S_ISDIR(mode), 'uid': uid, 'gid': gid, 'mode': format(stat.S_IMODE(mode), '04o')})
+                self.assertNotIn('never-read-or-report', output.getvalue())
+        output = io.StringIO()
+        with patch.object(client.Path, 'lstat', return_value=SimpleNamespace(
+                st_mode=stat.S_IFDIR | 0o700, st_uid=0, st_gid=0)), contextlib.redirect_stdout(output):
+            client.private_directory(Path('/never-read'))
+        self.assertEqual(output.getvalue(), '')
+
     def test_both_controlled_stop_paths_preserve_five_second_grace(self):
         source = (PACKET / 'run.py').read_text()
         calls = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)

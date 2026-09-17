@@ -104,6 +104,10 @@ remain excluded. Container-identity drift refuses diagnostic retention. Clients
 still have Docker logging disabled. These diagnostics never satisfy client events
 or success, and the original failure is re-raised before bounded cleanup. A CLI
 exit code is not substituted for the container's actual exit or persistence proof.
+If the client's private-directory assertion fails, its bounded stdout includes
+only the observed directory-type boolean, numeric UID/GID and octal permission
+mode, not the path or contents. Exact root ownership and mode0700 remain required;
+these observations diagnose rejection and never satisfy a successful phase.
 
 Source tests model host commands and admission; local file fsync/rename tests use
 temporary synthetic files only. Preparation-bound tests use in-memory responses

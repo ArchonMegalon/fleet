@@ -49,8 +49,14 @@ def exact(path, raw):
 
 def private_directory(path):
     info = path.lstat()
-    require(stat.S_ISDIR(info.st_mode) and info.st_uid == info.st_gid == 0
-            and stat.S_IMODE(info.st_mode) == 0o700, 'private-directory')
+    valid = (stat.S_ISDIR(info.st_mode) and info.st_uid == info.st_gid == 0
+             and stat.S_IMODE(info.st_mode) == 0o700)
+    if not valid:
+        # Public synthetic metadata only, never paths or directory contents.
+        print(json.dumps({'diagnostic': 'private-directory-metadata',
+            'isDirectory': stat.S_ISDIR(info.st_mode), 'uid': info.st_uid, 'gid': info.st_gid,
+            'mode': format(stat.S_IMODE(info.st_mode), '04o')}), flush=True)
+    require(valid, 'private-directory')
 
 
 def collision(path):
