@@ -22,17 +22,15 @@ jobs:
   exercise:
     if: ${{ inputs.confirm_disposable_fixture && github.repository == 'ArchonMegalon/fleet' && github.repository_id == '1176287728' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.ref_protected }}
     runs-on: ubuntu-24.04
-    # Includes checkout/pull/evidence collection. This is NOT proof of VM destruction;
+    # Includes public preparation, checkout/evidence collection. This is NOT proof of VM destruction;
     # hard NFS I/O can outlive cancellation and prevent cleanup/evidence upload.
-    timeout-minutes: 5
+    # Preparation has its own bounded 10-minute step; fixture body/cleanup
+    # remain the driver's 210s/30s budgets and are not increased here.
+    timeout-minutes: 15
     permissions:
       contents: read
-      packages: read
-    env:
-      IMAGE_REF: ghcr.io/archonmegalon/chummer-android-recovery-fixture@sha256:fd912e0e4f6744490e6e2559a98f62db6b87f259d51ea3e5b08994996c3d2a1c
-      IMAGE_ID: sha256:3062be1e90bdb5a481c8b2f12c207412ac2ba33cd3a531de00b3f101784a68e6
     steps:
-      - name: Reject unreviewed source before checkout or registry credentials
+      - name: Reject unreviewed source before checkout or public preparation
         env:
           EXPECTED_SHA: ${{ inputs.expected_execution_sha }}
           WORKFLOW_SHA: ${{ github.workflow_sha }}
@@ -49,29 +47,19 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
-      - name: Pull only the pinned private helper and remove temporary registry custody
-        timeout-minutes: 1
-        env:
-          REGISTRY_TOKEN: ${{ github.token }}
-          REGISTRY_USER: ${{ github.actor }}
+      - name: Acquire fixed public archives and build a local fixture image
+        timeout-minutes: 10
+        # The JSON receipt is a same-job Docker observation, never release authority.
         run: |
           set -euo pipefail
           umask 077
-          auth=$(mktemp -d "$RUNNER_TEMP/nfs-registry.XXXXXXXX")
-          cleanup() {
-            unset REGISTRY_TOKEN
-            rm -f -- "$auth/config.json"
-            rmdir -- "$auth"
-          }
-          trap cleanup EXIT
-          printf '%s' "$REGISTRY_TOKEN" | /usr/bin/env -i PATH=/usr/bin:/bin \
-            /usr/bin/docker --config "$auth" --host unix:///run/docker.sock \
-            login ghcr.io --username "$REGISTRY_USER" --password-stdin
-          /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/docker --config "$auth" \
-            --host unix:///run/docker.sock pull "$IMAGE_REF"
-          cleanup
-          trap - EXIT
-          test ! -e "$auth"
+          work="$RUNNER_TEMP/nfs-public-preparation"
+          receipt="$RUNNER_TEMP/nfs-public-image-observation.json"
+          /usr/bin/env -i PATH=/usr/bin:/bin LANG=C \
+            GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted \
+            /usr/bin/python3 -I -B scripts/prepare_android_nfs_public_image.py --execute \
+            --disposable-vm --output-receipt "$receipt" --work-root "$work"
+          test -f "$receipt"; test ! -e "$work/docker-config/config.json"
       - name: Run once with no registry or release credentials
         run: |
           set -euo pipefail
@@ -88,12 +76,17 @@ jobs:
           for name in run.py client.py server.py ganesha.conf client.apparmor; do
             sudo install -o 0 -g 0 -m 0400 "tests/fixtures/android_nfs_recovery/$name" "$program/$name"
           done
+          sudo mkdir -m 0555 -- "$program/public-image"
+          for name in Dockerfile install-offline.sh policy-rc.d package-files.tsv install-order.tsv public-packages.tsv; do
+            sudo install -o 0 -g 0 -m 0444 "tests/fixtures/android_nfs_recovery/public-image/$name" "$program/public-image/$name"
+          done
+          sudo install -o 0 -g 0 -m 0400 "$RUNNER_TEMP/nfs-public-image-observation.json" "$program/image-observation.json"
           sudo /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C \
             GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted \
             RUNNER_OS="${RUNNER_OS-}" RUNNER_ARCH="${RUNNER_ARCH-}" \
             ImageOS="${ImageOS-}" ImageVersion="${ImageVersion-}" \
             /usr/bin/python3 -I -B "$program/run.py" --execute --disposable-vm \
-            --image-id "$IMAGE_ID" --image-ref "$IMAGE_REF" --output "$output"
+            --image-receipt "$program/image-observation.json" --output "$output"
       - name: Retain only bounded public fixture observations when available
         if: ${{ always() }}
         run: |

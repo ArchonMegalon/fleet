@@ -1,4 +1,4 @@
-"""One disposable-VM NFS exercise. No image pull/build or package installation."""
+"""One disposable-VM NFS exercise using an explicitly prepared local image."""
 import argparse
 import hashlib
 import ipaddress
@@ -20,8 +20,10 @@ PROFILE = 'nfs-qualification-client-bkpapg6l'
 SUBNET = '172.30.249.0/29'
 MAX_OUTPUT = 128 * 1024
 COMMAND_DEADLINE = None
-IMAGE_REF = 'ghcr.io/archonmegalon/chummer-android-recovery-fixture@sha256:fd912e0e4f6744490e6e2559a98f62db6b87f259d51ea3e5b08994996c3d2a1c'
-IMAGE_ID = 'sha256:3062be1e90bdb5a481c8b2f12c207412ac2ba33cd3a531de00b3f101784a68e6'
+IMAGE_REF = 'chummer-android-recovery-fixture-public:recipe-v1'
+BASE_IMAGE_REF = ('mcr.microsoft.com/dotnet/runtime-deps:10.0.10-noble-amd64@'
+                  'sha256:e6508f4bfffe893467e70c54b68a2d28b93fc5d1a69f3de0a3ce69d131ca274e')
+BASE_IMAGE_ID = 'sha256:9993b46fc643b59f3c9ea5859acfc1b8b6c3859cfe7b5586cfc24455a0ab6dd7'
 HOST_TOOLS = ('/usr/bin/docker', '/usr/bin/findmnt', '/usr/sbin/modprobe',
               '/usr/sbin/apparmor_parser', '/usr/bin/ip', '/usr/bin/python3')
 
@@ -94,6 +96,69 @@ def validate_events(role, exit_code, events):
                 and json.dumps(events, sort_keys=True) == json.dumps(expected, sort_keys=True), 'read observations')
 
 
+def read_receipt(path):
+    require(path.is_absolute() and path.resolve() == path and path.parent.resolve() == path.parent
+            and path.is_file(), 'image observation path')
+    parent = path.parent.stat()
+    require(parent.st_uid == os.getuid() and not parent.st_mode & 0o077,
+            'image observation parent custody')
+    def identity(info):
+        return (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid,
+                info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    # Descriptor checks, not a path-only preflight, bind the bytes actually read.
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), 'rb') as stream:
+        before = os.fstat(stream.fileno())
+        require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1
+                and before.st_uid == os.getuid() and not before.st_mode & 0o077
+                and before.st_size <= 16 * 1024, 'image observation custody')
+        raw = stream.read(16 * 1024 + 1)
+        after = os.fstat(stream.fileno())
+        require(identity(before) == identity(after) == identity(path.lstat())
+                and identity(parent) == identity(path.parent.stat()) and len(raw) <= 16 * 1024,
+                'image observation changed during read')
+    def no_duplicate(pairs):
+        value = {}
+        for key, item in pairs:
+            require(key not in value, 'duplicate image observation key')
+            value[key] = item
+        return value
+    value = json.loads(raw.decode('utf-8'), object_pairs_hook=no_duplicate)
+    required = {'kind', 'version', 'imageRef', 'imageId', 'rootfsDiffIds', 'baseImageRef',
+                'baseImageId', 'packageManifestSha256', 'packageCount', 'packageBytes',
+                'recipeFiles', 'fixtureSourceHashes', 'publicOnly', 'releaseAuthority'}
+    require(type(value) is dict and set(value) == required
+            and value.get('kind') == 'android-nfs-disposable-public-image-observation'
+            and type(value.get('version')) is int and value.get('version') == 1
+            and value.get('imageRef') == IMAGE_REF
+            and value.get('baseImageRef') == BASE_IMAGE_REF and value.get('baseImageId') == BASE_IMAGE_ID
+            and value.get('publicOnly') is True and value.get('releaseAuthority') is False
+            and type(value.get('packageCount')) is int and value.get('packageCount') == 52
+            and type(value.get('packageBytes')) is int and value.get('packageBytes') == 13482674,
+            'unapproved image observation')
+    require(type(value.get('imageId')) is str and re.fullmatch(r'sha256:[0-9a-f]{64}', value['imageId'])
+            and type(value.get('rootfsDiffIds')) is list
+            and 0 < len(value['rootfsDiffIds']) <= 128
+            and all(type(row) is str and re.fullmatch(r'sha256:[0-9a-f]{64}', row)
+                                                for row in value['rootfsDiffIds']),
+            'image observation identity')
+    manifest = PACKET / 'public-image' / 'public-packages.tsv'
+    require(manifest.is_file() and value.get('packageManifestSha256') ==
+            hashlib.sha256(manifest.read_bytes()).hexdigest(), 'public manifest drift')
+    recipe_names = ('Dockerfile', 'install-offline.sh', 'policy-rc.d', 'package-files.tsv',
+                    'install-order.tsv', 'public-packages.tsv')
+    require(type(value['recipeFiles']) is dict and set(value['recipeFiles']) == set(recipe_names)
+            and all(type(value['recipeFiles'][name]) is str
+                    and re.fullmatch(r'[0-9a-f]{64}', value['recipeFiles'][name])
+                    and hashlib.sha256((PACKET / 'public-image' / name).read_bytes()).hexdigest()
+                    == value['recipeFiles'][name] for name in recipe_names), 'recipe drift')
+    source_names = ('run.py', 'client.py', 'server.py', 'ganesha.conf', 'client.apparmor')
+    require(type(value['fixtureSourceHashes']) is dict
+            and set(value['fixtureSourceHashes']) == set(source_names)
+            and all(value['fixtureSourceHashes'][name] == hashlib.sha256((PACKET / name).read_bytes()).hexdigest()
+                    for name in source_names), 'fixture source drift')
+    return value
+
+
 def admit_vm(args, environment):
     require(args.execute and args.disposable_vm, 'explicit disposable VM admission required')
     # Negative accident guards, NOT cryptographic proof of hosted/disposable identity.
@@ -101,12 +166,12 @@ def admit_vm(args, environment):
             and environment.get('RUNNER_ENVIRONMENT') == 'github-hosted'
             and os.getuid() == 0 and not Path('/docker/chummercomplete').exists(),
             'refuse shared/local host')
-    require(args.image_id == IMAGE_ID and args.image_ref == IMAGE_REF, 'fixed private image required')
+    args.image_observation = read_receipt(args.image_receipt)
     require(args.output.is_absolute() and args.output.parent.resolve(strict=True) == args.output.parent
             and args.output.name.startswith('nfs-qualification-'), 'fresh canonical output path')
 
 
-def host_inventory(docker, output, environment):
+def host_inventory(docker, output, environment, image_ref):
     """Bounded public observations, NOT approval of the runner/tool closure."""
     result = {'scope': 'observed disposable-host profile; not approved environment or durability',
         'kernel': list(os.uname()), 'python': list(sys.version_info[:3]), 'tools': {}, 'errors': [],
@@ -139,7 +204,7 @@ def host_inventory(docker, output, environment):
     observe('docker', lambda: json_values(docker('info', '--format',
         '{{json .SecurityOptions}} {{json .OSType}} {{json .Architecture}} {{json .CgroupVersion}}')))
     observe('image', lambda: json_values(docker('image', 'inspect', '--format',
-        '{{json .Id}} {{json .RepoDigests}} {{json .Architecture}} {{json .Os}} {{json .Config.Labels}}', IMAGE_REF)))
+        '{{json .Id}} {{json .RepoTags}} {{json .RepoDigests}} {{json .Architecture}} {{json .Os}} {{json .Config.Labels}} {{json .RootFS.Layers}}', image_ref)))
     observe('backing', lambda: command(['/usr/bin/findmnt', '-n', '-o', 'FSTYPE', '-T', str(output)])[1].strip())
     observe('stopTimeoutSupported', lambda: '--timeout' in docker('stop', '--help'))
     observe('nfsModuleDryRun', lambda: command(['/usr/sbin/modprobe', '--dry-run', 'nfsv4'])[0] == 0)
@@ -152,7 +217,7 @@ def host_inventory(docker, output, environment):
     return result
 
 
-def validate_host(value):
+def validate_host(value, observation=None):
     """Necessary supported-profile checks, not an image/kernel approval receipt."""
     require(not value['errors'], 'host inventory incomplete; no fallback')
     require(set(value['tools']) == set(HOST_TOOLS)
@@ -174,10 +239,12 @@ def validate_host(value):
             and 'name=seccomp,profile=builtin' in security and 'name=rootless' not in security
             and operating_system == 'linux' and architecture in ('x86_64', 'amd64') and cgroup == '2',
             'unsupported Docker isolation profile')
-    image_id, digests, architecture, operating_system, labels = value['image']
-    require(image_id == IMAGE_ID and type(digests) is list and IMAGE_REF in digests
+    image_id, tags, digests, architecture, operating_system, labels, layers = value['image']
+    require(type(observation) is dict, 'image observation required')
+    require(observation is not None and image_id == observation['imageId']
+            and tags == [IMAGE_REF] and digests == [] and layers == observation['rootfsDiffIds']
             and architecture == 'amd64' and operating_system == 'linux'
-            and (labels is None or type(labels) is dict), 'fixed preloaded image mismatch')
+            and (labels is None or type(labels) is dict), 'prepared local image mismatch')
     target = ipaddress.ip_network(SUBNET)
     require(type(value['routes']) is list and type(value['networkIpam']) is list, 'network inventory shape')
     routes = [row['dst'] for row in value['routes'] if row.get('dst', 'default') != 'default']
@@ -268,17 +335,18 @@ def run_fixture(args, progress):
     def docker(*tail, **kw):
         return command([*docker_prefix, *tail], **kw)[1]
     progress['stage'] = 'host-inventory'
-    inventory = host_inventory(docker, args.output, os.environ)
+    observation = args.image_observation
+    inventory = host_inventory(docker, args.output, os.environ, observation['imageId'])
     record(args.output, 'HOST_INVENTORY.json', inventory)  # Retain unsupported profiles before rejection.
     progress['stage'] = 'host-profile-admission'
-    image_id, image_labels = IMAGE_ID, validate_host(inventory)
+    image_id, image_labels = observation['imageId'], validate_host(inventory, observation)
     labels = (image_labels or {}) | LABEL
     progress['stage'] = 'existing-resource-admission'
     require(not docker('ps', '-aq', '--filter', 'name=^/' + PREFIX).strip(), 'existing container name')
     require(not docker('network', 'ls', '-q', '--filter', 'name=^' + PREFIX + '$').strip(), 'existing network name')
     profiles = Path('/sys/kernel/security/apparmor/profiles').read_text().splitlines()
     require(not any(row.startswith(PROFILE + ' ') for row in profiles), 'existing AppArmor profile')
-    record(args.output, 'INTENT.json', {'imageId': image_id, 'imageRef': args.image_ref,
+    record(args.output, 'INTENT.json', {'imageId': image_id, 'imageRef': observation['imageRef'],
         'sourceHashes': {name: hashlib.sha256((PACKET / name).read_bytes()).hexdigest()
                          for name in ('run.py', 'client.py', 'server.py', 'ganesha.conf', 'client.apparmor')},
         'scope': 'synthetic controlled restart and same-VM replacement client; no authority'})
@@ -298,7 +366,7 @@ def run_fixture(args, progress):
                 'container name still occupied; do not remove replacement')
         del containers[cid]
     def create(role):
-        cid = docker(*create_args(args.image_ref, network, role, stage, args.output)).strip()
+        cid = docker(*create_args(observation['imageId'], network, role, stage, args.output)).strip()
         require(re.fullmatch(r'[0-9a-f]{64}', cid), 'ambiguous create; VM disposal required')
         containers[cid] = role
         identity(cid, role)
@@ -415,8 +483,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--disposable-vm', action='store_true')
-    parser.add_argument('--image-id', required=True)
-    parser.add_argument('--image-ref', required=True)
+    parser.add_argument('--image-receipt', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     exercise(parser.parse_args())
 

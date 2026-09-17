@@ -14,25 +14,30 @@ also requires protected Fleet main and checks both the workflow and checkout SHA
 Those checks and the driver's environment checks are accident guards, not remote
 attestation of the runner or independent approval of its kernel/tool closure.
 
-The helper is pinned to:
+The operator rejected any possible fork access to the private recovery-fixture
+package. **Do not grant Fleet package access or supply a token workaround.** The
+private image remains private and is not an input to this workflow. A separate
+local helper is prepared from this pinned public MCR base:
 
 ```
-ghcr.io/archonmegalon/chummer-android-recovery-fixture@sha256:fd912e0e4f6744490e6e2559a98f62db6b87f259d51ea3e5b08994996c3d2a1c
-sha256:3062be1e90bdb5a481c8b2f12c207412ac2ba33cd3a531de00b3f101784a68e6
+mcr.microsoft.com/dotnet/runtime-deps:10.0.10-noble-amd64@sha256:e6508f4bfffe893467e70c54b68a2d28b93fc5d1a69f3de0a3ce69d131ca274e
+sha256:9993b46fc643b59f3c9ea5859acfc1b8b6c3859cfe7b5586cfc24455a0ab6dd7
 ```
 
-The first line is the registry digest; the second is the required image config ID.
-The package remains private. At implementation time Fleet Actions read access is
-still pending; this workflow does not grant access or make the package public.
-An unauthorized pull must fail, not substitute a public image or another token.
+The first line is the base manifest; the second is its required config ID. The
+reviewed recipe adds 52 fixed public Ubuntu archives (13,482,674 bytes), validates
+every size/hash, and installs offline in the original reviewed order. Downloads
+reject redirects/proxies and have a 120-second wall-clock alarm. The build runs
+network-none with a checked 1 GiB/no-swap/half-CPU cgroup. Recipe hashes are pinned
+in the preparation script; the resulting local image ID/rootfs and source hashes
+are recorded as same-job observations, not independent release authority.
 
-The job grants only `contents: read` and `packages: read`; GitHub permissions are
-job-scoped, not step-scoped. The token is explicitly exposed only to the fixed
-pull step. Checkout does not persist credentials. Login uses a fresh private
-Docker config; its credential file and directory are removed before the fixture.
-The fixture uses a different empty Docker config, an explicit local Unix socket,
-and a cleared environment. Neither containers nor public artifacts receive the
-token. No installation, image build, registry push, or image archive occurs.
+The job grants only `contents: read`, with no `packages` permission or explicit
+token input. Checkout does not persist credentials. The pinned public MCR pull
+uses a fresh empty Docker configuration and a cleared environment, with no login.
+The fixture uses a different empty Docker configuration, an explicit local Unix
+socket and a cleared environment. It starts only the receipt's immutable image
+ID. No private package pull, registry push or image archive is permitted.
 
 ## Supported profile and bounded execution
 
@@ -40,11 +45,13 @@ Before host mutation, the driver records public OS, kernel, runner-image,
 Python/tool hashes and versions, selected Docker isolation fields, image identity,
 backing filesystem, NFS module availability, and route/subnet observations.
 It requires Ubuntu 24.04/x64, Python 3.12, ext4, cgroup v2, enabled AppArmor,
-Docker's builtin seccomp, the pinned preloaded image, available NFS tools/module,
+Docker's builtin seccomp, the exact locally prepared image, available NFS tools/module,
 `docker stop --timeout`, and an unused fixed fixture subnet/resource namespace.
 Incomplete observations or an unsupported profile fail closed. Recording versions
 is not proof of an approved environment; the host tools/kernel are not pinned by
-the helper image digest. No dynamic package installs or isolation fallbacks exist.
+the helper image digest. Package installation is confined to the separate
+offline image-preparation step; no dynamic installation or isolation fallback
+exists in the fixture itself.
 
 The fixture retains the original narrow AppArmor NFS mount target, private
 internal Docker bridge, resource limits, read-only container roots, bounded
@@ -56,8 +63,11 @@ permission to broaden the profile. Both controlled stop paths use `--timeout 5`.
 
 The driver has a cooperative 210-second body budget including inventory and a
 30-second cleanup budget. Individual commands have deadlines and bounded output.
-The entire job has a five-minute timeout including pull, checkout, and evidence
-upload, so those budgets can be interrupted. A GitHub job timeout is **not an
+Preparation has a separate ten-minute limit; the entire job has a fifteen-minute
+timeout including checkout and evidence upload, so those budgets can still be
+interrupted. Preparation failures retain bounded, JSON-escaped public command
+output in the job log; the four-file artifact allowlist is unchanged.
+A GitHub job timeout is **not an
 independently verified VM destruction guarantee**. Hard NFS I/O can remain stuck
 through cancellation and prevent cleanup or evidence upload. Do not claim a clean
 host when cleanup is unresolved; retain the failed run and obtain actual VM
@@ -77,11 +87,13 @@ isolated synthetic network and is not production authentication.
 Only `HOST_INVENTORY.json`, `INTENT.json`, `OBSERVATIONS.json`, and bounded
 `SERVER_LOG.json` are eligible for the one-day public artifact. No export, state,
 source staging directory, credentials, or private package bytes are uploaded.
-Failure observations preserve a fixed stage/category, never exception text or
+Fixture failure observations preserve a fixed stage/category, never exception text or
 command arguments. Missing evidence, ambiguous resource creation, cleanup errors,
 or failed phase assertions are failures, not success receipts or retry authority.
 The driver's exclusive output directory prevents adopting an earlier attempt.
 
 Source tests model host commands and admission; local file fsync/rename tests use
-temporary synthetic files only. They do not run Docker, mount NFS, load modules,
-exercise the hosted kernel, verify private package access, or qualify production.
+temporary synthetic files only. Preparation-bound tests use in-memory responses
+and tiny local Python child processes. They do not download archives, run Docker,
+mount NFS, load modules, exercise the hosted kernel or qualify production.
+See [the recipe notes](../tests/fixtures/android_nfs_recovery/README.md).
