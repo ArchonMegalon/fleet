@@ -1,0 +1,122 @@
+name: Android synthetic NFS disposable-host fixture
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_execution_sha:
+        description: Exact independently reviewed Fleet main commit containing this fixture
+        type: string
+        required: true
+      confirm_disposable_fixture:
+        description: Synthetic same-VM test only; no release authority or guaranteed VM destruction
+        type: boolean
+        required: true
+        default: false
+
+permissions: {}
+concurrency:
+  group: android-nfs-disposable-fixture
+  cancel-in-progress: false
+
+jobs:
+  exercise:
+    if: ${{ inputs.confirm_disposable_fixture && github.repository == 'ArchonMegalon/fleet' && github.repository_id == '1176287728' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.ref_protected }}
+    runs-on: ubuntu-24.04
+    # Includes checkout/pull/evidence collection. This is NOT proof of VM destruction;
+    # hard NFS I/O can outlive cancellation and prevent cleanup/evidence upload.
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: read
+    env:
+      IMAGE_REF: ghcr.io/archonmegalon/chummer-android-recovery-fixture@sha256:fd912e0e4f6744490e6e2559a98f62db6b87f259d51ea3e5b08994996c3d2a1c
+      IMAGE_ID: sha256:3062be1e90bdb5a481c8b2f12c207412ac2ba33cd3a531de00b3f101784a68e6
+    steps:
+      - name: Reject unreviewed source before checkout or registry credentials
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_execution_sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$EXPECTED_SHA" = "$GITHUB_SHA"
+          test "$WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$WORKFLOW_REF" = 'ArchonMegalon/fleet/.github/workflows/android-nfs-disposable-fixture.yml@refs/heads/main'
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ArchonMegalon/fleet
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Pull only the pinned private helper and remove temporary registry custody
+        timeout-minutes: 1
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          umask 077
+          auth=$(mktemp -d "$RUNNER_TEMP/nfs-registry.XXXXXXXX")
+          cleanup() {
+            unset REGISTRY_TOKEN
+            rm -f -- "$auth/config.json"
+            rmdir -- "$auth"
+          }
+          trap cleanup EXIT
+          printf '%s' "$REGISTRY_TOKEN" | /usr/bin/env -i PATH=/usr/bin:/bin \
+            /usr/bin/docker --config "$auth" --host unix:///run/docker.sock \
+            login ghcr.io --username "$REGISTRY_USER" --password-stdin
+          /usr/bin/env -i PATH=/usr/bin:/bin /usr/bin/docker --config "$auth" \
+            --host unix:///run/docker.sock pull "$IMAGE_REF"
+          cleanup
+          trap - EXIT
+          test ! -e "$auth"
+      - name: Run once with no registry or release credentials
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          # Inspect only key existence, never print any unexpected credential value.
+          if git config --local --get-regexp '^(http\..*\.extraheader|credential\.)' >/dev/null; then
+            exit 1
+          else
+            test "$?" = 1
+          fi
+          output="/var/tmp/nfs-qualification-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          program="${output}-source"
+          sudo mkdir -m 0700 -- "$program"
+          for name in run.py client.py server.py ganesha.conf client.apparmor; do
+            sudo install -o 0 -g 0 -m 0400 "tests/fixtures/android_nfs_recovery/$name" "$program/$name"
+          done
+          sudo /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C \
+            GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted \
+            RUNNER_OS="${RUNNER_OS-}" RUNNER_ARCH="${RUNNER_ARCH-}" \
+            ImageOS="${ImageOS-}" ImageVersion="${ImageVersion-}" \
+            /usr/bin/python3 -I -B "$program/run.py" --execute --disposable-vm \
+            --image-id "$IMAGE_ID" --image-ref "$IMAGE_REF" --output "$output"
+      - name: Retain only bounded public fixture observations when available
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          output="/var/tmp/nfs-qualification-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          public="$RUNNER_TEMP/nfs-public-evidence"
+          mkdir -m 0700 -- "$public"
+          for name in HOST_INVENTORY.json INTENT.json OBSERVATIONS.json SERVER_LOG.json; do
+            if sudo test -f "$output/$name"; then
+              sudo install -o "$(id -u)" -g "$(id -g)" -m 0600 "$output/$name" "$public/$name"
+            fi
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ always() }}
+        with:
+          name: android-nfs-disposable-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/nfs-public-evidence/HOST_INVENTORY.json
+            ${{ runner.temp }}/nfs-public-evidence/INTENT.json
+            ${{ runner.temp }}/nfs-public-evidence/OBSERVATIONS.json
+            ${{ runner.temp }}/nfs-public-evidence/SERVER_LOG.json
+          if-no-files-found: warn
+          retention-days: 1
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false

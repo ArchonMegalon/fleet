@@ -1,0 +1,373 @@
+"""Local synthetic/source checks only; never starts Docker or mounts NFS."""
+import importlib.util
+import ast
+import json
+import os
+from pathlib import Path
+import stat
+import tempfile
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+PACKET = Path(__file__).resolve().parent / 'fixtures' / 'android_nfs_recovery'
+
+
+def load(name):
+    spec = importlib.util.spec_from_file_location('fixture_' + name, PACKET / (name + '.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+driver, client = load('run'), load('client')
+
+
+class LostAcknowledgement(BaseException):
+    pass
+
+
+class PacketTests(unittest.TestCase):
+    def profile(self):
+        return {'errors': [], 'osRelease': 'ID=ubuntu\nVERSION_ID="24.04"\n',
+            'kernel': ['Linux', 'synthetic-host', '6.8.0-test', 'test', 'x86_64'], 'python': [3, 12, 3],
+            'runner': {'RUNNER_OS': 'Linux', 'RUNNER_ARCH': 'X64', 'RUNNER_ENVIRONMENT': 'github-hosted',
+                       'ImageOS': 'ubuntu24', 'ImageVersion': '20260901.1.0'},
+            'tools': {path: {'resolved': path, 'sha256': 'a' * 64, 'version': 'synthetic version'}
+                      for path in driver.HOST_TOOLS},
+            'apparmorEnabled': 'Y', 'backing': 'ext4', 'stopTimeoutSupported': True, 'nfsModuleDryRun': True,
+            'docker': [['name=apparmor', 'name=seccomp,profile=builtin'], 'linux', 'x86_64', '2'],
+            'image': [driver.IMAGE_ID, [driver.IMAGE_REF], 'amd64', 'linux', None],
+            'routes': [{'dst': 'default'}, {'dst': '10.0.0.0/24'}], 'networkIpam': [None, [], [{'Subnet': '172.17.0.0/16'}]]}
+
+    def test_required_host_profile_and_exact_preloaded_image(self):
+        self.assertIsNone(driver.validate_host(self.profile()))
+        changes = [('osRelease', 'ID=debian\nVERSION_ID="24.04"'), ('python', [3, 11, 1]),
+            ('kernel', ['Linux', 'model', '6.8', 'test', 'aarch64']), ('apparmorEnabled', 'N'),
+            ('backing', 'overlay'), ('stopTimeoutSupported', False), ('nfsModuleDryRun', False),
+            ('errors', [{'observation': 'tool', 'errorType': 'FileNotFoundError'}]), ('tools', {})]
+        for key, value in changes:
+            with self.subTest(key=key):
+                model = self.profile(); model[key] = value
+                with self.assertRaises(RuntimeError): driver.validate_host(model)
+        for key, value in [('RUNNER_ENVIRONMENT', 'self-hosted'), ('RUNNER_OS', 'Windows'),
+                           ('RUNNER_ARCH', 'ARM64'), ('ImageOS', 'ubuntu22'), ('ImageVersion', '')]:
+            model = self.profile(); model['runner'][key] = value
+            with self.subTest(key=key), self.assertRaises(RuntimeError): driver.validate_host(model)
+
+    def test_unsupported_docker_security_or_image_never_falls_back(self):
+        for section, index, value in [('docker', 0, ['name=apparmor']), ('docker', 0, ['name=seccomp,profile=builtin']),
+                ('docker', 0, ['name=apparmor', 'name=seccomp,profile=builtin', 'name=rootless']),
+                ('docker', 1, 'windows'), ('docker', 2, 'aarch64'), ('docker', 3, '1'),
+                ('image', 0, 'sha256:' + '0' * 64), ('image', 1, ['other@sha256:' + 'a' * 64]),
+                ('image', 2, 'arm64'), ('image', 3, 'windows'), ('image', 4, [])]:
+            model = self.profile(); model[section][index] = value
+            with self.subTest(section=section, index=index, value=value), self.assertRaises(RuntimeError):
+                driver.validate_host(model)
+
+    def test_subnet_overlap_in_routes_or_existing_network_rejects(self):
+        for overlap in ('172.30.249.0/29', '172.30.0.0/16', '172.30.249.2/32'):
+            for field in ('routes', 'networkIpam'):
+                model = self.profile()
+                model[field] = [{'dst': overlap}] if field == 'routes' else [[{'Subnet': overlap}]]
+                with self.subTest(field=field, overlap=overlap), self.assertRaisesRegex(RuntimeError, 'subnet collision'):
+                    driver.validate_host(model)
+        model = self.profile(); model['networkIpam'].append([{'Subnet': 'fd00::/64'}])
+        driver.validate_host(model)
+
+    def test_unknown_observation_is_retained_as_constant_failure_type(self):
+        with patch.object(driver, 'command', side_effect=RuntimeError('DO_NOT_RETAIN_RAW_EXCEPTION')):
+            observed = driver.host_inventory(lambda *a: (_ for _ in ()).throw(RuntimeError('PRIVATE')),
+                Path('/nonexistent-model-output'), {'REGISTRY_TOKEN': 'PRIVATE', 'ImageVersion': 'public-model'})
+        # Tool-file metadata/public version reads only; all commands are blocked above.
+        self.assertTrue(observed['errors'])
+        self.assertNotIn('REGISTRY_TOKEN', observed['runner'])
+        self.assertNotIn('PRIVATE', json.dumps(observed))
+        self.assertNotIn('DO_NOT_RETAIN_RAW_EXCEPTION', json.dumps(observed))
+        with self.assertRaises(RuntimeError): driver.validate_host(observed)
+
+    def test_both_controlled_stop_paths_preserve_five_second_grace(self):
+        source = (PACKET / 'run.py').read_text()
+        calls = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Name) and node.func.id == 'docker'
+                 and node.args and isinstance(node.args[0], ast.Constant) and node.args[0].value == 'stop']
+        stops = [node for node in calls if len(node.args) > 2]
+        self.assertEqual(len(stops), 2)
+        for node in stops:
+            self.assertEqual([arg.value for arg in node.args[:3]], ['stop', '--timeout', '5'])
+            self.assertEqual({kw.arg: kw.value.value for kw in node.keywords}, {'timeout': 8})
+        self.assertNotIn("'--time'", source)
+
+    def test_inventory_precedes_host_mutation_and_shared_host_refusal_precedes_inventory(self):
+        tree = ast.parse((PACKET / 'run.py').read_bytes())
+        functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+        for function, first, second in [('exercise', 'admit_vm', 'run_fixture'),
+                                         ('run_fixture', 'host_inventory', 'validate_host')]:
+            calls = [node for node in ast.walk(functions[function]) if isinstance(node, ast.Call)]
+            positions = {name: min(node.lineno for node in calls if isinstance(node.func, ast.Name) and node.func.id == name)
+                         for name in (first, second)}
+            self.assertLess(positions[first], positions[second])
+        source = (PACKET / 'run.py').read_text()
+        self.assertLess(source.index("record(args.output, 'HOST_INVENTORY.json', inventory)"), source.index('validate_host(inventory)'))
+        self.assertLess(source.index('validate_host(inventory)'), source.index("command(['/usr/sbin/modprobe', 'nfsv4'])"))
+        self.assertNotIn('apt-get', source)
+        self.assertNotIn('unconfined', source)
+
+    def test_failed_host_profile_has_evidence_before_any_command(self):
+        with tempfile.TemporaryDirectory(prefix='nfs-packet-unit-') as folder:
+            args = SimpleNamespace(output=Path(folder) / 'fresh', image_ref=driver.IMAGE_REF)
+            model = self.profile(); model['backing'] = 'overlay'
+            with patch.object(driver, 'admit_vm'), patch.object(driver.os, 'umask'), \
+                    patch.object(driver, 'host_inventory', return_value=model), \
+                    patch.object(driver, 'command', side_effect=AssertionError('must not execute')):
+                with self.assertRaises(RuntimeError): driver.exercise(args)
+            value = json.loads((args.output / 'OBSERVATIONS.json').read_text())
+            self.assertEqual(value['failure']['stage'], 'host-profile-admission')
+            self.assertFalse(value['exerciseCompleted'])
+            self.assertEqual(value['unresolvedCleanup'], [])
+            self.assertEqual(json.loads((args.output / 'HOST_INVENTORY.json').read_text()), model)
+
+    def test_refusal_and_existing_output_never_write_or_replace_evidence(self):
+        with tempfile.TemporaryDirectory(prefix='nfs-packet-unit-') as folder:
+            args = SimpleNamespace(output=Path(folder) / 'fresh')
+            with patch.object(driver, 'admit_vm', side_effect=RuntimeError('refused')):
+                with self.assertRaises(RuntimeError): driver.exercise(args)
+            self.assertFalse(args.output.exists())
+            args.output.mkdir(); receipt = args.output / 'OBSERVATIONS.json'; receipt.write_text('preserved')
+            with patch.object(driver, 'admit_vm'), patch.object(driver.os, 'umask'), \
+                    patch.object(driver, 'run_fixture', side_effect=AssertionError('no reuse')):
+                with self.assertRaises(FileExistsError): driver.exercise(args)
+            self.assertEqual(receipt.read_text(), 'preserved')
+
+    def test_modeled_command_server_and_client_failures_retain_stage_without_error_text(self):
+        # Driver control flow is real; every host command, signal and host admission is modeled.
+        for target in ('nfs-module-load', 'server-start', 'client-a-start-attach', 'client-b-start-attach'):
+            states, roles = {}, {}
+            def modeled_command(args, **kwargs):
+                if args[0] != '/usr/bin/docker':
+                    if target == 'nfs-module-load': raise RuntimeError('PRIVATE_EXCEPTION_BYTES')
+                    return 0, ''
+                tail = args[5:]
+                if tail[0] in ('ps', 'logs', 'exec'): return 0, ''
+                if tail[:2] == ['network', 'ls']: return 0, ''
+                if tail[:2] == ['network', 'create']: return 0, 'f' * 64
+                if tail[:2] == ['network', 'inspect']:
+                    return 0, ' '.join(map(json.dumps, ['f' * 64, driver.PREFIX, driver.LABEL, True, {}]))
+                if tail[:2] == ['network', 'rm']: return 0, ''
+                if tail[0] == 'create':
+                    role = tail[tail.index('--name') + 1].removeprefix(driver.PREFIX + '-')
+                    cid = {'server': 'a', 'client-a': 'b', 'client-b': 'c'}[role] * 64
+                    roles[cid], states[cid] = role, 'created'
+                    return 0, cid
+                cid, role = tail[-1], roles[tail[-1]]
+                if tail[0] == 'inspect':
+                    if '.State.ExitCode' in tail[2]: return 0, '47' if role == 'client-a' else '0'
+                    return 0, ' '.join(map(json.dumps, [cid, driver.IMAGE_ID,
+                        '/' + driver.PREFIX + '-' + role, driver.LABEL, states[cid]]))
+                if tail[0] == 'start':
+                    stage = 'server-start' if role == 'server' else role + '-start-attach'
+                    if target == stage: raise RuntimeError('PRIVATE_EXCEPTION_BYTES')
+                    states[cid] = 'running' if role == 'server' else 'exited'
+                    events = [{'observation': 'mounted', 'filesystem': 'nfs4', 'version': '4.1',
+                               'security': 'AUTH_SYS', 'hard': True},
+                              {'observation': 'final-placeholder-fsync-and-rename-completed'}]
+                    return 0, '\n'.join(map(json.dumps, events)) if role == 'client-a' else ''
+                if tail[0] == 'stop': states[cid] = 'exited'; return 0, ''
+                if tail[0] == 'rm': del states[cid]; return 0, ''
+                raise AssertionError('unmodeled command')
+            with self.subTest(target=target), tempfile.TemporaryDirectory(prefix='nfs-packet-unit-') as folder:
+                args = SimpleNamespace(output=Path(folder) / 'fresh', image_ref=driver.IMAGE_REF)
+                with patch.object(driver, 'admit_vm'), patch.object(driver.os, 'umask'), \
+                        patch.object(driver, 'host_inventory', return_value=self.profile()), \
+                        patch.object(driver, 'command', side_effect=modeled_command), \
+                        patch.object(driver.Path, 'read_text', return_value=''), \
+                        patch.object(driver.signal, 'signal'), patch.object(driver.signal, 'setitimer'), \
+                        patch.object(driver.time, 'sleep'):
+                    with self.assertRaises(RuntimeError): driver.exercise(args)
+                raw = (args.output / 'OBSERVATIONS.json').read_text(); value = json.loads(raw)
+                self.assertEqual(value['failure'], {'stage': target, 'kind': 'rejected-or-command-failed'})
+                self.assertFalse(value['exerciseCompleted'])
+                self.assertEqual(value['unresolvedCleanup'], [])
+                self.assertNotIn('PRIVATE_EXCEPTION_BYTES', raw)
+                self.assertEqual(states, {})
+
+    def test_workflow_is_manual_pinned_credential_bounded_and_public_evidence_only(self):
+        path = PACKET.parents[2] / '.github/workflows/android-nfs-disposable-fixture.yml'
+        source = path.read_text()
+        self.assertIn('workflow_dispatch:', source)
+        self.assertNotIn('pull_request:', source)
+        self.assertNotIn('push:', source)
+        self.assertIn('timeout-minutes: 5', source)
+        self.assertIn('runs-on: ubuntu-24.04', source)
+        self.assertIn('permissions: {}', source)
+        self.assertIn('      contents: read\n      packages: read', source)
+        self.assertNotIn('id-token:', source)
+        self.assertNotIn('secrets.', source)
+        self.assertEqual(source.count('${{ github.token }}'), 1)
+        self.assertIn('persist-credentials: false', source)
+        self.assertIn(driver.IMAGE_REF, source)
+        self.assertIn(driver.IMAGE_ID, source)
+        self.assertLess(source.index('test ! -e "$auth"'), source.index('Run once with no registry'))
+        self.assertIn('unset REGISTRY_TOKEN', source)
+        self.assertIn('rm -f -- "$auth/config.json"', source)
+        self.assertIn('rmdir -- "$auth"', source)
+        self.assertIn('sudo /usr/bin/env -i', source)
+        self.assertNotIn('docker save', source)
+        self.assertNotIn('apt-get', source)
+        self.assertNotIn('unconfined', source)
+        for line in source.splitlines():
+            if 'uses:' in line:
+                self.assertRegex(line, r'uses: actions/[a-z-]+@[0-9a-f]{40}$')
+        paths = source.split('          path: |\n', 1)[1].split('          if-no-files-found:', 1)[0]
+        self.assertEqual(len(paths.splitlines()), 4)
+        self.assertNotIn('*', paths)
+
+    def test_imports_have_no_execution(self):
+        with patch('subprocess.Popen', side_effect=AssertionError('runtime forbidden')):
+            load('run')
+            load('client')
+            load('server')
+
+    def test_expired_cleanup_deadline_never_launches_later_commands(self):
+        with patch.object(driver, 'COMMAND_DEADLINE', 1.0), \
+                patch.object(driver.time, 'monotonic', return_value=2.0), \
+                patch.object(driver.subprocess, 'Popen', side_effect=AssertionError('must not launch')):
+            for _ in range(3):
+                with self.assertRaisesRegex(RuntimeError, 'phase deadline'):
+                    driver.command(['/usr/bin/docker', 'anything'])
+
+    def test_shared_host_is_never_admitted(self):
+        args = SimpleNamespace(execute=True, disposable_vm=True,
+            image_id='sha256:' + 'a' * 64, image_ref='example.invalid/nfs@sha256:' + 'b' * 64,
+            output=Path('/tmp/nfs-qualification-never-created'))
+        with patch.object(driver.os, 'getuid', return_value=0), \
+                patch.object(driver.Path, 'exists', return_value=True):
+            with self.assertRaisesRegex(RuntimeError, 'refuse shared/local host'):
+                driver.admit_vm(args, {'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted'})
+
+    def test_explicit_execution_and_disposable_admission_required(self):
+        for execute, disposable in ((False, False), (False, True), (True, False)):
+            with self.subTest(execute=execute, disposable=disposable):
+                with self.assertRaisesRegex(RuntimeError, 'explicit disposable VM'):
+                    driver.admit_vm(SimpleNamespace(execute=execute, disposable_vm=disposable), {})
+
+    def test_fixed_container_resource_and_isolation_arguments(self):
+        for role in ('server', 'client-a', 'client-b'):
+            args = driver.create_args('image@sha256:' + 'a' * 64, 'b' * 64, role,
+                                      Path('/out/program'), Path('/out'))
+            with self.subTest(role=role):
+                self.assertEqual(args[args.index('--pull') + 1], 'never')
+                self.assertEqual(args[args.index('--network') + 1], 'b' * 64)
+                self.assertIn('--read-only', args)
+                self.assertEqual(args[args.index('--user') + 1], '0:0')
+                self.assertEqual(args[args.index('--cap-drop') + 1], 'ALL')
+                self.assertEqual(args[args.index('--memory') + 1], '384m' if role == 'server' else '256m')
+                self.assertEqual(args[args.index('--cpus') + 1], '0.25' if role == 'server' else '0.5')
+                self.assertEqual(args[args.index('--memory-swap') + 1], args[args.index('--memory') + 1])
+                self.assertFalse(set(args) & {'--privileged', '--publish', '-p', '--device', '--pid', '--ipc'})
+                self.assertFalse(any('/run/docker.sock' in item or 'unconfined' in item for item in args))
+                self.assertEqual(sum(item == '--tmpfs' for item in args), 2)
+                self.assertIn('no-new-privileges', args)
+                self.assertIn('/out/program:/packet:ro,rprivate', args)
+        server = driver.create_args('image', 'network', 'server', Path('/out/program'), Path('/out'))
+        self.assertNotIn('SYS_ADMIN', server)
+        self.assertIn('max-size=64k', server)
+        self.assertIn('max-file=1', server)
+        self.assertIn('/out/export:/export:rw,rprivate', server)
+        self.assertIn('/out/state:/var/lib/nfs:rw,rprivate', server)
+        native = driver.create_args('image', 'network', 'client-a', Path('/out/program'), Path('/out'))
+        self.assertIn('SYS_ADMIN', native)
+        self.assertIn('apparmor=' + driver.PROFILE, native)
+        with self.assertRaises(RuntimeError):
+            driver.create_args('image', 'network', 'unrecognized', Path('/out/program'), Path('/out'))
+
+    def test_mount_and_server_configuration_are_narrow(self):
+        source = (PACKET / 'client.py').read_text()
+        self.assertIn("['/usr/bin/mount', '-t', 'nfs4', '-o'", source)
+        self.assertIn('vers=4.1,proto=tcp,port=2049,sec=sys,hard', source)
+        self.assertIn('nosharecache', source)
+        config = (PACKET / 'ganesha.conf').read_text()
+        self.assertIn('Access_Type = None;', config)
+        self.assertEqual(config.count('Squash = No_Root_Squash;'), 1)
+        self.assertIn('Clients = 172.30.249.3;', config)
+        self.assertIn('RecoveryBackend = fs_ng;', config)
+        profile = (PACKET / 'client.apparmor').read_text()
+        self.assertIn('mount fstype=nfs4 -> /mnt/recovery-store/,', profile)
+        self.assertNotIn('mount,', profile)
+
+    def test_events_require_both_real_phase_observations(self):
+        mounted = {'observation': 'mounted', 'filesystem': 'nfs4', 'version': '4.1',
+                   'security': 'AUTH_SYS', 'hard': True}
+        write = [mounted, {'observation': 'final-placeholder-fsync-and-rename-completed'}]
+        read = [mounted, {'observation': 'replacement-client-readback-completed',
+                          'ambiguousRecord': 'retained-without-retry'}]
+        driver.validate_events('client-a', 47, write)
+        driver.validate_events('client-b', 0, read)
+        for role, code, rows in (('client-a', 0, write), ('client-b', 47, read),
+                                 ('client-a', 47, []), ('client-b', 0, [mounted]),
+                                 ('other', 0, read), ('client-a', 47, write + [mounted]),
+                                 ('client-b', False, read),
+                                 ('client-a', 47, [mounted | {'hard': 1}, write[1]])):
+            with self.subTest(role=role, code=code, rows=rows), self.assertRaises(RuntimeError):
+                driver.validate_events(role, code, rows)
+
+    def test_local_exclusive_create_preserves_existing_bytes(self):
+        with tempfile.TemporaryDirectory(prefix='nfs-packet-unit-') as folder:
+            path = Path(folder) / 'file'
+            client.exclusive(path, b'first')
+            client.collision(path)
+            with self.assertRaises(FileExistsError):
+                client.exclusive(path, b'replacement')
+            self.assertEqual(path.read_bytes(), b'first')
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+
+    def test_local_fsync_order_rename_and_injected_loss_preserve_bytes(self):
+        # This exercises the real local syscalls, NOT NFS, root UID mapping or
+        # independent-client exclusion. Synthetic ownership and flock only.
+        with tempfile.TemporaryDirectory(prefix='nfs-packet-unit-') as folder:
+            root = Path(folder)
+            events = []
+            real_fsync, real_rename = os.fsync, os.rename
+            def fsync(fd):
+                info = os.fstat(fd)
+                raw = None
+                if stat.S_ISREG(info.st_mode):
+                    raw = Path('/proc/self/fd/' + str(fd)).read_bytes()
+                events.append(('fsync', info.st_ino, raw))
+                return real_fsync(fd)
+            def rename(source, target):
+                inode = (source / 'signed-placeholder.bin').stat().st_ino
+                self.assertIn(('fsync', inode, client.SIGNED), events)
+                events.append(('rename', inode, None))
+                return real_rename(source, target)
+            def exact_fixture(path, raw):
+                self.assertEqual(path.read_bytes(), raw)
+                self.assertEqual(path.stat().st_nlink, 1)
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            with patch.object(client, 'ROOT', root), patch.object(client, 'exact', exact_fixture), \
+                    patch.object(client, 'private_directory'), patch.object(client.os, 'fsync', fsync), \
+                    patch.object(client.os, 'rename', rename), \
+                    patch.object(client.subprocess, 'run', return_value=SimpleNamespace(returncode=23)), \
+                    patch.object(client.os, '_exit', side_effect=LostAcknowledgement):
+                with self.assertRaises(LostAcknowledgement):
+                    client.write_phase()
+                lost = root / 'recovery/unacknowledged-operation.bin'
+                self.assertEqual(lost.read_bytes(), client.AMBIGUOUS)
+                self.assertIn(('fsync', lost.stat().st_ino, client.AMBIGUOUS), events)
+                client.read_phase()
+                self.assertEqual(lost.read_bytes(), client.AMBIGUOUS)
+
+    def test_bad_root_directory_modes_and_symlink_fail(self):
+        with tempfile.TemporaryDirectory(prefix='nfs-packet-unit-') as folder:
+            path = Path(folder)
+            fake = SimpleNamespace(st_mode=stat.S_IFDIR | 0o755, st_uid=0, st_gid=0)
+            with patch.object(client.Path, 'lstat', return_value=fake), self.assertRaises(RuntimeError):
+                client.private_directory(path)
+            fake.st_mode = stat.S_IFLNK | 0o700
+            with patch.object(client.Path, 'lstat', return_value=fake), self.assertRaises(RuntimeError):
+                client.private_directory(path)
+
+
+
+if __name__ == '__main__':
+    unittest.main()
