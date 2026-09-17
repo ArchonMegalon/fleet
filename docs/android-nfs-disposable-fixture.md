@@ -88,7 +88,10 @@ Only `HOST_INVENTORY.json`, `INTENT.json`, `OBSERVATIONS.json`, and bounded
 `SERVER_LOG.json` are eligible for the one-day public artifact. No export, state,
 source staging directory, credentials, or private package bytes are uploaded.
 Fixture failure observations preserve a fixed stage/category, never exception text or
-command arguments. Missing evidence, ambiguous resource creation, cleanup errors,
+command arguments. `SERVER_LOG.json` additionally retains only the verified server
+identity, bounded status/exit/OOM fields, and a bounded Docker `State.Error` prefix;
+if log capture is unavailable it records a fixed marker and empty log. Python
+exception text is never retained. Missing evidence, ambiguous resource creation, cleanup errors,
 or failed phase assertions are failures, not success receipts or retry authority.
 The driver's exclusive output directory prevents adopting an earlier attempt.
 

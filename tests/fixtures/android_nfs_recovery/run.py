@@ -19,6 +19,10 @@ LABEL = {'chummer.nfs-qualification': 'BKpapg6L'}
 PROFILE = 'nfs-qualification-client-bkpapg6l'
 SUBNET = '172.30.249.0/29'
 MAX_OUTPUT = 128 * 1024
+SERVER_STATE_ERROR_MAX = 4096
+SERVER_STATE_UNAVAILABLE = 'server-state-diagnostic-unavailable:'
+SERVER_LOG_UNAVAILABLE = 'server-log-unavailable:'
+SERVER_DIAGNOSTIC_RECORD_UNAVAILABLE = 'server-diagnostic-record-unavailable:'
 COMMAND_DEADLINE = None
 IMAGE_REF = 'chummer-android-recovery-fixture-public:recipe-v1'
 BASE_IMAGE_REF = ('mcr.microsoft.com/dotnet/runtime-deps:10.0.10-noble-amd64@'
@@ -358,6 +362,24 @@ def run_fixture(args, progress):
         require(rows[:4] == [cid, image_id, '/' + PREFIX + '-' + role, labels]
                 and len(rows) == 5 and rows[4] in ('created', 'running', 'exited'), 'foreign container')
         return rows[4]
+    def server_state(cid, role):
+        # Keep the immutable ownership tuple in the same response as the state
+        # fields.  State.Error is Docker's public daemon diagnostic for this
+        # public-only fixture; retain only a bounded prefix and truncation bit.
+        rows = json_values(docker('inspect', '--format',
+            '{{json .Id}} {{json .Image}} {{json .Name}} {{json .Config.Labels}} '
+            '{{json .State.Status}} {{json .State.ExitCode}} {{json .State.OOMKilled}} '
+            '{{json .State.Error}}', cid, timeout=5))
+        require(len(rows) == 8 and rows[:4] == [cid, image_id, '/' + PREFIX + '-' + role, labels]
+                and rows[4] in ('created', 'running', 'exited')
+                and type(rows[5]) is int and rows[5] >= 0
+                and type(rows[6]) is bool
+                and (rows[7] is None or type(rows[7]) is str),
+                'server state diagnostic shape')
+        state_error = rows[7] or ''
+        return {'containerId': cid, 'state': rows[4], 'exitCode': rows[5],
+                'oomKilled': rows[6], 'serverStateError': state_error[:SERVER_STATE_ERROR_MAX],
+                'serverStateErrorTruncated': len(state_error) > SERVER_STATE_ERROR_MAX}
     def remove(cid, role):
         if identity(cid, role) == 'running':
             docker('stop', '--timeout', '5', cid, timeout=8)
@@ -442,14 +464,27 @@ def run_fixture(args, progress):
             for cid, role in list(containers.items()):
                 if role == 'server':
                     try:
-                        state = identity(cid, role)
-                        exit_code = json.loads(docker('inspect', '--format', '{{json .State.ExitCode}}', cid))
+                        diagnostic = server_state(cid, role)
+                    except BaseException:
+                        cleanup_errors.append(SERVER_STATE_UNAVAILABLE + cid)
+                        continue
+                    try:
                         log = docker('logs', '--timestamps', '--tail', '1000', cid,
                                      timeout=5, include_stderr=True)
-                        record(args.output, 'SERVER_LOG.json', {'containerId': cid, 'state': state,
-                               'exitCode': exit_code, 'log': log})
+                        require(type(log) is str and len(log) <= MAX_OUTPUT, 'server log bound')
                     except BaseException:
-                        cleanup_errors.append('server-diagnostic-unavailable:' + cid)
+                        diagnostic.update({'logStatus': 'unavailable', 'log': ''})
+                        try:
+                            record(args.output, 'SERVER_LOG.json', diagnostic)
+                        except BaseException:
+                            cleanup_errors.append(SERVER_DIAGNOSTIC_RECORD_UNAVAILABLE + cid)
+                        cleanup_errors.append(SERVER_LOG_UNAVAILABLE + cid)
+                    else:
+                        diagnostic.update({'logStatus': 'captured', 'log': log})
+                        try:
+                            record(args.output, 'SERVER_LOG.json', diagnostic)
+                        except BaseException:
+                            cleanup_errors.append(SERVER_DIAGNOSTIC_RECORD_UNAVAILABLE + cid)
             for cid, role in list(containers.items()):
                 try:
                     remove(cid, role)

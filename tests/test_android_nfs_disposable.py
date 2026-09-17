@@ -520,16 +520,27 @@ class PacketTests(unittest.TestCase):
                 with self.assertRaises(FileExistsError): driver.exercise(args)
             self.assertEqual(receipt.read_text(), 'preserved')
 
-    def test_modeled_command_server_and_client_failures_retain_stage_without_error_text(self):
+    def test_modeled_command_failures_retain_stage_and_bounded_server_diagnostics(self):
         # Driver control flow is real; every host command, signal and host admission is modeled.
-        for target in ('nfs-module-load', 'server-start', 'client-a-start-attach', 'client-b-start-attach'):
+        for target in ('nfs-module-load', 'server-start', 'client-a-start-attach', 'client-b-start-attach',
+                       'server-start-log-unavailable', 'server-start-state-rebound',
+                       'server-start-record-failure'):
             states, roles = {}, {}
+            original_record = driver.record
+            def modeled_record(output, name, value):
+                if target == 'server-start-record-failure' and name == 'SERVER_LOG.json':
+                    raise RuntimeError('PRIVATE_RECORD_EXCEPTION_BYTES')
+                return original_record(output, name, value)
             def modeled_command(args, **kwargs):
                 if args[0] != '/usr/bin/docker':
                     if target == 'nfs-module-load': raise RuntimeError('PRIVATE_EXCEPTION_BYTES')
                     return 0, ''
                 tail = args[5:]
-                if tail[0] in ('ps', 'logs', 'exec'): return 0, ''
+                if tail[0] == 'logs':
+                    if target == 'server-start-log-unavailable':
+                        raise RuntimeError('PRIVATE_LOG_EXCEPTION_BYTES')
+                    return 0, ''
+                if tail[0] in ('ps', 'exec'): return 0, ''
                 if tail[:2] == ['network', 'ls']: return 0, ''
                 if tail[:2] == ['network', 'create']: return 0, 'f' * 64
                 if tail[:2] == ['network', 'inspect']:
@@ -542,12 +553,22 @@ class PacketTests(unittest.TestCase):
                     return 0, cid
                 cid, role = tail[-1], roles[tail[-1]]
                 if tail[0] == 'inspect':
+                    if '.State.Error' in tail[2]:
+                        state_cid = 'd' * 64 if target == 'server-start-state-rebound' else cid
+                        state_error = ('OCI runtime create failed: synthetic permission denied\n' +
+                                       'E' * (driver.SERVER_STATE_ERROR_MAX + 100)
+                                       if target == 'server-start-log-unavailable'
+                                       else 'OCI runtime create failed: synthetic permission denied')
+                        return 0, ' '.join(map(json.dumps, [state_cid, SYNTHETIC_IMAGE_ID,
+                            '/' + driver.PREFIX + '-' + role, driver.LABEL, states[cid],
+                            0, False, state_error]))
                     if '.State.ExitCode' in tail[2]: return 0, '47' if role == 'client-a' else '0'
                     return 0, ' '.join(map(json.dumps, [cid, SYNTHETIC_IMAGE_ID,
                         '/' + driver.PREFIX + '-' + role, driver.LABEL, states[cid]]))
                 if tail[0] == 'start':
                     stage = 'server-start' if role == 'server' else role + '-start-attach'
-                    if target == stage: raise RuntimeError('PRIVATE_EXCEPTION_BYTES')
+                    if target == stage or (target.startswith('server-start-') and stage == 'server-start'):
+                        raise RuntimeError('PRIVATE_EXCEPTION_BYTES')
                     states[cid] = 'running' if role == 'server' else 'exited'
                     events = [{'observation': 'mounted', 'filesystem': 'nfs4', 'version': '4.1',
                                'security': 'AUTH_SYS', 'hard': True},
@@ -562,15 +583,35 @@ class PacketTests(unittest.TestCase):
                 with patch.object(driver, 'admit_vm'), patch.object(driver.os, 'umask'), \
                         patch.object(driver, 'host_inventory', return_value=self.profile()), \
                         patch.object(driver, 'command', side_effect=modeled_command), \
+                        patch.object(driver, 'record', side_effect=modeled_record), \
                         patch.object(driver.Path, 'read_text', return_value=''), \
                         patch.object(driver.signal, 'signal'), patch.object(driver.signal, 'setitimer'), \
                         patch.object(driver.time, 'sleep'):
                     with self.assertRaises(RuntimeError): driver.exercise(args)
                 raw = (args.output / 'OBSERVATIONS.json').read_text(); value = json.loads(raw)
-                self.assertEqual(value['failure'], {'stage': target, 'kind': 'rejected-or-command-failed'})
+                expected_stage = 'server-start' if target.startswith('server-start-') else target
+                self.assertEqual(value['failure'], {'stage': expected_stage, 'kind': 'rejected-or-command-failed'})
                 self.assertFalse(value['exerciseCompleted'])
-                self.assertEqual(value['unresolvedCleanup'], [])
+                expected_cleanup = ([driver.SERVER_LOG_UNAVAILABLE + 'a' * 64]
+                                    if target == 'server-start-log-unavailable' else
+                                    [driver.SERVER_STATE_UNAVAILABLE + 'a' * 64]
+                                    if target == 'server-start-state-rebound' else
+                                    [driver.SERVER_DIAGNOSTIC_RECORD_UNAVAILABLE + 'a' * 64]
+                                    if target == 'server-start-record-failure' else [])
+                self.assertEqual(value['unresolvedCleanup'], expected_cleanup)
                 self.assertNotIn('PRIVATE_EXCEPTION_BYTES', raw)
+                if target == 'server-start-log-unavailable':
+                    server_log = json.loads((args.output / 'SERVER_LOG.json').read_text())
+                    self.assertEqual(server_log, {'containerId': 'a' * 64, 'state': 'created',
+                        'exitCode': 0, 'oomKilled': False,
+                        'serverStateError': ('OCI runtime create failed: synthetic permission denied\n' +
+                                             'E' * (driver.SERVER_STATE_ERROR_MAX -
+                                                    len('OCI runtime create failed: synthetic permission denied\n'))),
+                        'serverStateErrorTruncated': True, 'logStatus': 'unavailable', 'log': ''})
+                    self.assertNotIn('PRIVATE_LOG_EXCEPTION_BYTES', raw)
+                if target == 'server-start-record-failure':
+                    self.assertFalse((args.output / 'SERVER_LOG.json').exists())
+                    self.assertNotIn('PRIVATE_RECORD_EXCEPTION_BYTES', raw)
                 self.assertEqual(states, {})
 
     def test_workflow_is_manual_pinned_credential_bounded_and_public_evidence_only(self):
