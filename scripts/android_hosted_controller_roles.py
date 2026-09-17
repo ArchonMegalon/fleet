@@ -105,7 +105,7 @@ class _Input:
             self.fd = -1
 
 
-def _document(raw, phase):
+def _document_shape(raw, phase):
     required = {"role", "job_policy", "artifact_policy", "base_url", "pins",
         "transport_inputs", "attempt_directory", "attestation_output_root", "deadline_seconds"}
     parsed = identity._json(raw)
@@ -152,9 +152,16 @@ def _document(raw, phase):
         require(value["attestation_output_root"] is None)
     else:
         output = _path(value["attestation_output_root"])
-        require(output.resolve(strict=True) == output and output.is_dir()
-                and not directory.is_relative_to(output) and not output.is_relative_to(directory))
+        require(not directory.is_relative_to(output) and not output.is_relative_to(directory))
     require(not any(path.is_relative_to(directory) for path in (*inputs.values(), *(p.path for p in pins.values()))))
+    return value, job, artifact, pins, inputs, directory
+
+
+def _document(raw, phase):
+    value, job, artifact, pins, inputs, directory = _document_shape(raw, phase)
+    if phase != "capture":
+        output = _path(value["attestation_output_root"])
+        require(output.resolve(strict=True) == output and output.is_dir())
     return value, job, artifact, pins, inputs, directory
 
 
