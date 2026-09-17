@@ -9,12 +9,20 @@ are backed by the exact successful reviewed and main API-36 Two-Green evidence.
 
 It never accepts, signs, uploads, or publishes an AAB. Its primary output is
 the exact `chummer.android.two-green-release-approval/v1` contract consumed by
-the bound Android `8c98b0abef4fef25e0d0938e0e8df9bba9e5e99e` release
-verifier at tree `616d388dcb4270488c4651fa2cc2a1c23daeef09`. Public-key
+the bound Android `5732c7803c934a6eeb02ab8dbe474e5ea9703755` release
+verifier at tree `103ff9fe1f4feba5d6134376191fcd9b03472351`. Public-key
 compatibility, hosted consumer qualification and issuer activation are separate
 claims. It always keeps
 `signingAuthorized`, `publicationAuthorized`, and
 `googlePlayUploadAuthorized` false.
+
+Ordered qualification run `35260515080` passed with the original artifact
+`10514137838`, pairing PR70 review `35245616416` attempt 1 and subsequent
+main `35252844173` attempt 1. The exact receipt SHA256 is
+`b45784e1cab0f843315651d9f275d3cf0c67d928e6e51febffe2ca248221d341`.
+The previous `8c98` receipt and detached approval cannot qualify this commit.
+Qualification is not issuance: a fresh protected-environment approval remains
+required, and signing and publication stay outside this contract.
 
 Fleet emits an exact compact object: `fleet-release-approver-2026-09`, role
 `android_internal_release_approver`, scope

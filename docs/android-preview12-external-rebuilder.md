@@ -10,8 +10,8 @@ That proposal is not an approved trust policy or activation evidence.
 
 ## Contract boundary
 
-The implementation pins Android commit `8c98b0abef4fef25e0d0938e0e8df9bba9e5e99e`,
-tree `616d388dcb4270488c4651fa2cc2a1c23daeef09`, and its exact consumer bytes.
+The implementation pins Android commit `5732c7803c934a6eeb02ab8dbe474e5ea9703755`,
+tree `103ff9fe1f4feba5d6134376191fcd9b03472351`, and its exact consumer bytes.
 This dormant consumer rebind does not qualify a builder/signer image or activate
 signing. It treats these as different artifacts:
 
@@ -27,20 +27,23 @@ never presented to Android as release authority.
 
 Current helper checks in `test_android_preview12_external_rebuilder.py` and
 `test_android_preview12_preserved_validation.py` still read
-`CHUMMER_ANDROID_CURRENT_ROOT`; those suites require the exact clean `8c98b0ab`
-checkout pinned by the external lock. All four pinned helper hashes remain
-unchanged from `b3fc0619`; `scripts/build-release.sh` remains
+`CHUMMER_ANDROID_CURRENT_ROOT`; those suites require the exact clean `5732c780`
+checkout pinned by the external lock. PR70 changes the source-graph verifier
+and attestation consumer to admit a bounded sealed anonymous file descriptor;
+ordinary path symlink rejection remains. `scripts/build-release.sh` remains
 `4e29b255aae29d30f1b8ddb7fc96947cf851df2c661fa820031bd5db2604f3f6`.
 It verifies captured sidecars from the external release-input root. Its admitted
 source-test helper remains
 `a295c226850edda9ce3a57a3c43690188e271b3059c33dd14abca04f65ef4bcf`;
 the previous build-script capability entry is retained. Current eligibility is
-the original Two-Green run `35219818439` artifact `10496043746`, pairing PR 69
-review `35207890648` attempt 1 and main `35214156231` attempt 1; its separate approval-consumer test
-requires that original receipt, never a relabeled predecessor. This is not
-builder or signer qualification.
+the original Two-Green run `35260515080` artifact `10514137838`, pairing PR70
+review `35245616416` attempt 1 and main `35252844173` attempt 1. Its separate
+approval-consumer test requires that original receipt, SHA256
+`b45784e1cab0f843315651d9f275d3cf0c67d928e6e51febffe2ca248221d341`.
+Old run `35219818439` remains historical only. No predecessor receipt or
+approval may be relabeled. This is not builder or signer qualification.
 The lock's historical `approval_authority` field selects the **builder** identity
-already trusted by this exact 8c98 consumer: `fleet-release-builder-2026-09`,
+already trusted by this exact `5732` consumer: `fleet-release-builder-2026-09`,
 `eng/trusted-release-builders/fleet-release-builder-2026-09.public.pem`, PEM SHA256
 `ef44c5b7fcadaf0f115b5f0e0e7b1a65edb322bb002faf980acb654a5db8caaf`, SPKI SHA256
 `41b44078d037fafd85b091b967959f77a7a4aa9f160d03749fa49889a8b1b156`.
@@ -52,9 +55,9 @@ unchanged. Current consumer tests load the actual lock without substituting a
 test key and reject mismatched IDs, paths and hashes; a complete stale operational
 tuple fails the checked-in public-binding regression.
 
-The new source tree includes Android's SDK runtime private staging and restore
-custody diagnostics. Qualification belongs to its new original receipt, not
-to the historical `840ac319` receipt. This lock's changed digest invalidates
+The new source tree includes Android's sealed-FD source-graph handoff fix.
+Qualification must come from its new original receipt, not
+the historical `8c98` or `840ac` receipts. This lock's changed digest invalidates
 old lock-bound rebuild/handoff observations; they cannot be relabeled or reused
 for signing. No approval is issued or renewed by this source-only repin, and
 the dormant rebuild/signing/publication switches remain unchanged.
