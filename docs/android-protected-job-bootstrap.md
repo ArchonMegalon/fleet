@@ -62,12 +62,23 @@ The bounded duplicate-key-rejecting JSON contains these required fields:
   `oidc_request_url`, `oidc_request_credential`; `base_url`: admitted private TLS
   controller origin; `release_wait_seconds`: bounded 1–1800 local wait.
 
-The sole optional field is `preparation_wait_seconds`: exact integer 0–1800.
+The optional field `preparation_wait_seconds` is an exact integer 0–1800.
 Absence or zero preserves strict challenge behavior and the existing required
 JSON shape; 1–1800 explicitly enables the entrypoint's bounded pending wait.
 Booleans, floats, unknown fields and other values reject before transport reads.
 It is covered by the same independently admitted deployment-byte hash; it is
 not a remotely supplied permission or evidence of readiness.
+
+The other optional field is `role_binding`, with the exact reviewed names and
+templates in [the binder contract](android-workflow-job-binder.md). Fixed code
+selects protected, verifies the existing policy equals its admitted template,
+and performs one bounded public lookup before mount/client construction or
+private transport reads. Deployment and source pins are rechecked afterward.
+Pending/error fails closed. Include the binder in the independently admitted
+import closure; no signing/challenge authority is created by its metadata.
+Public metadata requests may therefore precede READY, but no controller request,
+challenge or signing has occurred at that point. The old serial workflow is not
+activated by this source-only option.
 
 Dynamic repository/workflow/run/attempt/check-run/environment/transaction/subject
 expectations must agree with the **same live** controller and its two distinct

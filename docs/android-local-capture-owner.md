@@ -31,7 +31,7 @@ root service. Builder execution remains the separate nonroot existing runtime.
 
 ## Closed owner document
 
-All fields are required; unknown fields, null pins, missing readiness inputs and
+The fields below are required; unknown fields, null pins, missing readiness inputs and
 the checked-in dormant lock reject before any challenge or TLS-key read.
 
 | Fields | Existing expectation type/purpose |
@@ -47,6 +47,14 @@ the checked-in dormant lock reject before any challenge or TLS-key read.
 | `base_url`, `bearer_sha256` | Admitted HTTPS origin and five distinct capture/emission/intake/approval/binary credential digests; no raw role secrets |
 | `tls` | Canonical `bind_address`, private local `key_file`, explicit `trusted_proxy_addresses`; certificate pin above |
 | `limits` | Whole-lifecycle `whole_seconds` (1–21600) and shorter `preparation_wait_seconds` (1–1800) |
+
+The only additional optional field is `role_binding`, using the exact admitted
+three-role names/templates described in [the binder contract](android-workflow-job-binder.md).
+The existing three policies must equal those templates before lookup. Discovery
+can replace only their check IDs and occurs before controller construction. The
+held deployment and code closure are rechecked afterward. Its at-most20-second
+lookup consumes the existing whole-lifecycle budget, never extending it. Without
+this field the original static-policy path remains unchanged.
 
 Certificate/role credential selection and actual network/proxy custody remain
 independent deployment inputs. Only the explicitly selected local TLS key is

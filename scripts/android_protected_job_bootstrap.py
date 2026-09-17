@@ -147,7 +147,11 @@ def _document(raw):
     value = identity._json(raw)
     names = {"launcher", "job_policy", "artifact_policy", "runtime_policy",
         "pins", "persistent", "operation_directory", "secret_inputs", "transport_inputs", "base_url", "release_wait_seconds"}
-    require(type(value) is dict and set(value) in (names, names | {"preparation_wait_seconds"}))
+    optional = {"preparation_wait_seconds", "role_binding"}
+    require(type(value) is dict and names <= set(value) <= names | optional)
+    if "role_binding" in value:
+        from scripts import android_workflow_job_binder as binder
+        binder.validate_role_binding(value["role_binding"])
     value.setdefault("preparation_wait_seconds", 0)
     require(type(value["preparation_wait_seconds"]) is int and 0 <= value["preparation_wait_seconds"] <= 1800)
     config = _shape(value["launcher"], CONFIG_FIELDS)
@@ -254,7 +258,14 @@ def run(deployment, expected_sha256, release_fd):
             lock, lock_raw = fleet.load_lock(pins["lock"].path)
             require(lock_raw == held["lock"].raw and not fleet.validate_lock(lock, lock_raw)
                     and policy.requested_image == lock["toolchain"]["signer_image"])
-            worker.code_inputs(Path(config["fleet_root"]), config["code_pins"])
+            code_snapshot = worker.code_inputs(Path(config["fleet_root"]), config["code_pins"])
+            if "role_binding" in value:
+                from scripts import android_workflow_job_binder as binder
+                bound = binder.bind_deployment_roles(
+                    binding=value["role_binding"], current_policies={"protected": job}, role="protected")
+                job = bound["protected"]
+                source.recheck()
+                require(worker.code_inputs(Path(config["fleet_root"]), config["code_pins"]) == code_snapshot)
             persistent = launcher.RecoveryMount(_path(value["persistent"]["parent"]), value["persistent"]["mount_row_sha256"])
             # Finish expensive key-free preparation before reading role tokens
             # and before the supervisor arms the real controller challenge.
@@ -279,7 +290,9 @@ def run(deployment, expected_sha256, release_fd):
                 secret_inputs=secrets, binary_bearer=texts["binary_bearer"], connection=connection)
             entry = entrypoint.ProtectedJobEntrypoint(owner, verifier=pins["verifier"],
                 trusted_root=pins["trusted_root"], oidc_tls_context=oidc_tls)
-            # No network request, challenge or signing has happened at READY.
+            # No private transport request, controller challenge or signing has
+            # happened at READY; public deployment admission may already have
+            # performed its bounded role lookup above.
             print(READY, flush=True)
             _wait_release(release_fd, release_stamp, value["release_wait_seconds"])
             for item in (source, *held.values(), *transports.values()):

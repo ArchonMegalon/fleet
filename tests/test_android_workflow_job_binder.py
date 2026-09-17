@@ -2,6 +2,7 @@
 from copy import deepcopy
 from dataclasses import asdict, replace
 from types import SimpleNamespace
+import time
 
 import pytest
 
@@ -44,6 +45,80 @@ def model(policy, monkeypatch):
 
 def bind(model):
     return binder.bind_live_roles(role_policies=model.policies, job_names=model.names)
+
+
+def deployment_binding(model):
+    return {"job_names": dict(model.names),
+            "templates": {role: asdict(policy) for role, policy in model.policies.items()}}
+
+
+def test_deployment_binding_replaces_only_check_ids_and_preserves_templates(model):
+    before = deepcopy(model.policies)
+    result = binder.bind_deployment_roles(binding=deployment_binding(model),
+                                          current_policies=before)
+    assert set(result) == set(binder.ROLES)
+    for role in binder.ROLES:
+        assert asdict(result[role]) == asdict(before[role]) | {"check_run_id": str(909 + binder.ROLES.index(role))}
+    assert [url for url, _ in model.calls] == [fixtures.ATTEMPT, fixtures.JOBS]
+    assert len({deadline for _, deadline in model.calls}) == 1
+
+
+@pytest.mark.parametrize("attack", ["pending", "duplicate", "malformed", "terminal", "mixed-context"])
+def test_deployment_binding_fails_before_owner_use_on_untrusted_or_pending_jobs(model, attack):
+    binding = deployment_binding(model)
+    if attack == "pending":
+        model.jobs["jobs"][0]["status"] = "queued"
+    elif attack == "duplicate":
+        model.jobs["jobs"][1]["check_run_url"] = model.jobs["jobs"][0]["check_run_url"]
+    elif attack == "malformed":
+        model.jobs["jobs"][1]["check_run_url"] = "https://evil.invalid/check-runs/910"
+    elif attack == "terminal":
+        model.jobs["jobs"][2].update(status="completed", conclusion="failure")
+    else:
+        binding["templates"]["emission"]["run_id"] = "9999"
+    with pytest.raises(binder.JobBindingError, match="^" + binder.ERROR + "$"):
+        binder.bind_deployment_roles(binding=binding, current_policies=model.policies)
+    assert len(model.calls) == (2 if attack != "mixed-context" else 0)
+
+
+def test_role_specific_binding_requires_exact_template_before_api(model):
+    binding = deployment_binding(model)
+    current = {"capture": model.policies["capture"]}
+    assert binder.bind_deployment_roles(binding=binding, current_policies=current, role="capture")["capture"].check_run_id == "909"
+    model.calls.clear()
+    current["capture"] = replace(current["capture"], environment="tampered")
+    with pytest.raises(binder.JobBindingError):
+        binder.bind_deployment_roles(binding=binding, current_policies=current, role="capture")
+    assert model.calls == []
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("nan"), True, "20"])
+def test_caller_deadline_rejects_nonfinite_or_non_numeric(value, model):
+    with pytest.raises(binder.JobBindingError):
+        binder.bind_deployment_roles(binding=deployment_binding(model),
+                                     current_policies=model.policies, deadline=value)
+    assert model.calls == []
+
+
+def test_caller_deadline_is_capped_by_original_transport_budget(model):
+    before = time.monotonic()
+    binder.bind_deployment_roles(binding=deployment_binding(model), current_policies=model.policies,
+                                 deadline=before + 10 * identity.TOTAL_SECONDS)
+    observed = [deadline for _, deadline in model.calls]
+    assert len(observed) == 2 and observed[0] == observed[1]
+    assert before < observed[0] <= before + identity.TOTAL_SECONDS + 0.05
+    model.calls.clear()
+    with pytest.raises(binder.JobBindingError):
+        binder.bind_deployment_roles(binding=deployment_binding(model), current_policies=model.policies,
+                                     deadline=time.monotonic() - 1)
+    assert model.calls == []
+
+
+def test_shorter_caller_deadline_is_preserved_for_both_requests(model, monkeypatch):
+    monkeypatch.setattr(binder.time, "monotonic", lambda: 100.0)
+    binder.bind_deployment_roles(binding=deployment_binding(model), current_policies=model.policies,
+                                 deadline=105.0)
+    assert [deadline for _, deadline in model.calls] == [105.0, 105.0]
 
 
 @pytest.mark.parametrize("equal_ids", [False, True])

@@ -61,7 +61,7 @@ outside the admitted action runtime, or invent a successful emission receipt.
 
 ## Owner expectations and custody
 
-The bounded, duplicate-key-rejecting public JSON has exactly these fields:
+The bounded, duplicate-key-rejecting public JSON has these required fields:
 
 - `role`: capture or emission; `job_policy` and `artifact_policy`: all fields of
   the existing dataclasses, JSON arrays for tuple fields. The server owns the
@@ -76,6 +76,15 @@ The bounded, duplicate-key-rejecting public JSON has exactly these fields:
   `attestation_output_root`: the actual admitted runner temporary root for
   emission, null for capture; `deadline_seconds`: 1–10800 per phase, chosen by
   the owner and bounded by independent whole-job supervision.
+
+The only additional optional field is `role_binding`, containing the exact
+reviewed names/templates in [the binder contract](android-workflow-job-binder.md).
+The fixed phase selects capture or emission and requires its existing job policy
+to match that template before lookup. Discovery is inside the original phase
+deadline and retains the separate 20-second transport ceiling. The deployment
+is rechecked before private input reads or controller requests. Pending/error
+does not permit a retry. Static policies remain supported when the field is absent.
+The admitted import closure must include the binder before these steps execute.
 
 Emission prepare and submit use the same deployment bytes/digest, same retained
 manifest and same private attempt directory. The action output must be a

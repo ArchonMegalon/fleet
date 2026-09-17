@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts import android_local_capture_owner as owner
+from scripts import android_workflow_job_binder as binder
 from scripts import android_builder_handoff as capture
 from scripts import android_preview12_external_rebuilder as fleet
 from scripts import android_protected_capture_intake as intake
@@ -142,6 +143,49 @@ def construct(deployment, change=None):
     deployment.flow.model.policy = current.policy
     deployment.flow.model.docker = current.pins["docker"]
     return current
+
+
+def test_admitted_role_binding_is_consumed_before_owner_controller(deployment, monkeypatch):
+    binder_path = Path(deployment.value["fleet_root"]) / "scripts/android_workflow_job_binder.py"
+    binder_path.write_bytes(Path(binder.__file__).read_bytes()); binder_path.chmod(0o600)
+    deployment.value["code_pins"]["scripts/android_workflow_job_binder.py"] = sha(binder_path.read_bytes())
+    deployment.value["role_binding"] = {
+        "job_names": {role: "preview12-" + role for role in binder.ROLES},
+        "templates": {role: deployment.value[key] for role, key in zip(
+            binder.ROLES, ("capture_policy", "emission_policy", "protected_job_policy"))},
+    }
+    calls = []
+    def bind(*, role_policies, job_names, deadline):
+        calls.append((role_policies, job_names))
+        return {role: replace(policy, check_run_id=str(1200 + index))
+                for index, (role, policy) in enumerate(role_policies.items(), 1)}
+    monkeypatch.setattr(binder, "bind_live_roles", bind)
+    current = construct(deployment)
+    try:
+        assert len(calls) == 1
+        assert [job.check_run_id for job in current.jobs] == ["1201", "1202", "1203"]
+        assert current.controller._capture_policy.check_run_id == "1201"
+        assert current.controller._emission_policy.check_run_id == "1202"
+    finally:
+        current.close()
+
+
+def test_role_lookup_source_drift_stops_before_owner_controller(deployment, monkeypatch):
+    binder_path = Path(deployment.value["fleet_root"]) / "scripts/android_workflow_job_binder.py"
+    binder_path.write_bytes(Path(binder.__file__).read_bytes()); binder_path.chmod(0o600)
+    deployment.value["code_pins"]["scripts/android_workflow_job_binder.py"] = sha(binder_path.read_bytes())
+    deployment.value["role_binding"] = {
+        "job_names": {role: "preview12-" + role for role in binder.ROLES},
+        "templates": {role: deployment.value[key] for role, key in zip(
+            binder.ROLES, ("capture_policy", "emission_policy", "protected_job_policy"))},
+    }
+    def drift(*, role_policies, job_names, deadline):
+        binder_path.write_bytes(b"PUBLIC-TEST-source-drift")
+        return {role: replace(policy, check_run_id=str(1400 + index))
+                for index, (role, policy) in enumerate(role_policies.items(), 1)}
+    monkeypatch.setattr(binder, "bind_live_roles", drift)
+    with pytest.raises(owner.OwnerError): construct(deployment)
+    assert deployment.flow.model.calls == [] and deployment.mounted == []
 
 
 def capture_done(current, flow):
