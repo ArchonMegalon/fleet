@@ -478,6 +478,7 @@ class PacketTests(unittest.TestCase):
     def test_private_directory_rejection_reports_exact_metadata_without_paths_or_relaxation(self):
         for mode, uid, gid in ((stat.S_IFDIR | 0o700, 65534, 0),
                                (stat.S_IFDIR | 0o700, 0, 65534),
+                               (stat.S_IFDIR | 0o700, 4294967294, 4294967294),
                                (stat.S_IFDIR | 0o755, 0, 0),
                                (stat.S_IFREG | 0o700, 0, 0)):
             with self.subTest(mode=mode, uid=uid, gid=gid):
@@ -778,6 +779,21 @@ class PacketTests(unittest.TestCase):
         profile = (PACKET / 'client.apparmor').read_text()
         self.assertIn('mount fstype=nfs4 -> /mnt/recovery-store/,', profile)
         self.assertNotIn('mount,', profile)
+
+    def test_nfs_owner_attributes_are_numeric_without_anonymous_or_squash_override(self):
+        config = (PACKET / 'ganesha.conf').read_text()
+        self.assertEqual(config.count('NFSv4 {'), 1)
+        nfs4 = config.split('NFSv4 {', 1)[1].split('}', 1)[0]
+        for option in ('Allow_Numeric_Owners = true;', 'Only_Numeric_Owners = true;'):
+            self.assertEqual(nfs4.count(option), 1)
+            self.assertEqual(config.count(option), 1)
+        self.assertNotIn('Anonymous_uid', config)
+        self.assertNotIn('Anonymous_gid', config)
+        self.assertEqual(config.count('Squash = Root_Squash;'), 1)
+        self.assertEqual(config.count('Squash = No_Root_Squash;'), 1)
+        self.assertEqual(config.count('Clients = 172.30.249.3;'), 1)
+        self.assertEqual(config.count('Access_Type = None;'), 1)
+        self.assertEqual(config.count('Access_Type = RW;'), 1)
 
     def test_events_require_both_real_phase_observations(self):
         mounted = {'observation': 'mounted', 'filesystem': 'nfs4', 'version': '4.1',
