@@ -47,6 +47,10 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
+      - name: Verify public fixture source before preparation
+        run: |
+          /usr/bin/python3 -I -B -m unittest discover -s tests -p test_android_nfs_disposable.py -v
+          /bin/sh -n tests/fixtures/android_nfs_recovery/public-image/install-bounded.sh
       - name: Acquire fixed public archives and build a local fixture image
         timeout-minutes: 10
         # The JSON receipt is a same-job Docker observation, never release authority.
@@ -77,7 +81,7 @@ jobs:
             sudo install -o 0 -g 0 -m 0400 "tests/fixtures/android_nfs_recovery/$name" "$program/$name"
           done
           sudo mkdir -m 0555 -- "$program/public-image"
-          for name in Dockerfile install-offline.sh policy-rc.d package-files.tsv install-order.tsv public-packages.tsv; do
+          for name in install-bounded.sh install-offline.sh policy-rc.d package-files.tsv install-order.tsv public-packages.tsv; do
             sudo install -o 0 -g 0 -m 0444 "tests/fixtures/android_nfs_recovery/public-image/$name" "$program/public-image/$name"
           done
           sudo install -o 0 -g 0 -m 0400 "$RUNNER_TEMP/nfs-public-image-observation.json" "$program/image-observation.json"
