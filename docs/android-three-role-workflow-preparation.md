@@ -16,10 +16,15 @@ where those admissions came from or provision the interpreter, source closure,
 root-owned files, credentials, private route or durable recovery mount. A
 candidate profile plus its own SHA256 cannot supply that missing authority.
 
-There is no reviewed hosted provisioning entrypoint to invoke here. Adding a
+There is no complete reviewed hosted provisioning entrypoint to invoke here. Adding a
 made-up `provision` command, an arbitrary bootstrap/command input, a synthetic
 active profile or a successful placeholder job would hide this gap. The
-existing owner/bootstrap custody checks must remain unchanged. See the
+existing owner/bootstrap custody checks must remain unchanged. The fixed
+`android_hosted_input_stager.py` now stages only the two explicitly injected
+OIDC request values into fresh files at admitted paths, after checking the exact
+rendered deployment and already-delivered role bearer. It does not supply
+source/interpreter/profile admission, role-bearer delivery, protected credentials,
+private routing or durable storage. See the
 [materializer](android-deployment-materializer.md),
 [hosted roles](android-hosted-controller-roles.md), and
 [protected supervisor](android-protected-job-supervisor.md) contracts.
@@ -140,9 +145,9 @@ OIDC, attestation, Docker, network, listener or signing operation occurs.
 Existing dependency version checks remain active. These tests are preparation
 evidence only, not a substitute for the missing provisioning implementation.
 
-The source-test CI runs these tests and the five existing materializer,
-adversarial materializer, hosted-role, job-binder and supervisor suites on
-Ubuntu 24.04/Python 3.12, without path filters. It uses a fresh non-system-site
+The source-test CI runs seven suites: these composition tests plus materializer,
+adversarial materializer, hosted-role, job-binder, supervisor and hosted-input
+stager tests on Ubuntu 24.04/Python 3.12, without path filters. It uses a fresh non-system-site
 venv and ten hash-pinned binary wheels in
 `tests/android-role-source-requirements.txt`, with dependency resolution
 disabled and `pip check` required. No FastAPI/Uvicorn/optional server extras
@@ -150,4 +155,4 @@ are installed: the server import is inside the uncalled owner `run()` path.
 The five-minute job has only read-only repository permission, pinned checkout
 with persisted credentials disabled, no protected environment or artifact
 upload, and no dispatch/activation route. Public wheel download is installation
-of test dependencies only; the six suites do not contact live providers.
+of test dependencies only; the seven suites do not contact live providers.
