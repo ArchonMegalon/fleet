@@ -123,12 +123,13 @@ def read_receipt(path):
             value[key] = item
         return value
     value = json.loads(raw.decode('utf-8'), object_pairs_hook=no_duplicate)
-    required = {'kind', 'version', 'imageRef', 'imageId', 'rootfsDiffIds', 'baseImageRef',
+    required = {'kind', 'version', 'preparationMode', 'imageRef', 'imageId', 'rootfsDiffIds', 'baseImageRef',
                 'baseImageId', 'packageManifestSha256', 'packageCount', 'packageBytes',
                 'recipeFiles', 'fixtureSourceHashes', 'publicOnly', 'releaseAuthority'}
     require(type(value) is dict and set(value) == required
             and value.get('kind') == 'android-nfs-disposable-public-image-observation'
             and type(value.get('version')) is int and value.get('version') == 1
+            and value.get('preparationMode') == 'bounded_container_install_then_local_commit'
             and value.get('imageRef') == IMAGE_REF
             and value.get('baseImageRef') == BASE_IMAGE_REF and value.get('baseImageId') == BASE_IMAGE_ID
             and value.get('publicOnly') is True and value.get('releaseAuthority') is False
@@ -144,7 +145,7 @@ def read_receipt(path):
     manifest = PACKET / 'public-image' / 'public-packages.tsv'
     require(manifest.is_file() and value.get('packageManifestSha256') ==
             hashlib.sha256(manifest.read_bytes()).hexdigest(), 'public manifest drift')
-    recipe_names = ('Dockerfile', 'install-offline.sh', 'policy-rc.d', 'package-files.tsv',
+    recipe_names = ('install-bounded.sh', 'install-offline.sh', 'policy-rc.d', 'package-files.tsv',
                     'install-order.tsv', 'public-packages.tsv')
     require(type(value['recipeFiles']) is dict and set(value['recipeFiles']) == set(recipe_names)
             and all(type(value['recipeFiles'][name]) is str

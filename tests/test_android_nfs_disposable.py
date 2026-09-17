@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import signal
 import stat
 import tempfile
 import time
@@ -37,6 +38,7 @@ class LostAcknowledgement(BaseException):
 class PacketTests(unittest.TestCase):
     def receipt_model(self):
         return {'kind': 'android-nfs-disposable-public-image-observation', 'version': 1,
+            'preparationMode': 'bounded_container_install_then_local_commit',
             'imageRef': driver.IMAGE_REF, 'imageId': 'sha256:' + 'a' * 64,
             'rootfsDiffIds': ['sha256:' + 'b' * 64], 'baseImageRef': driver.BASE_IMAGE_REF,
             'baseImageId': driver.BASE_IMAGE_ID, 'packageManifestSha256':
@@ -162,8 +164,10 @@ class PacketTests(unittest.TestCase):
         source = (PACKET.parents[2] / 'scripts/prepare_android_nfs_public_image.py').read_text()
         self.assertNotIn('login ghcr.io', source)
         self.assertNotIn("login ghcr", source)
-        self.assertIn("'buildx', 'build'", source)
-        self.assertIn("'--resource', 'memory=1g'", source)
+        self.assertIn("'container', 'create'", source)
+        self.assertIn("'--memory', CONTAINER_MEMORY", source)
+        self.assertNotIn("'buildx', 'build'", source)
+        self.assertNotIn("'--resource'", source)
 
     def test_public_manifest_drift_and_receipt_extra_keys_reject(self):
         with tempfile.TemporaryDirectory(prefix='public-recipe-unit-') as folder:
@@ -172,18 +176,215 @@ class PacketTests(unittest.TestCase):
             with self.assertRaises(ValueError): prep.read_manifest(bad)
             receipt = Path(folder) / 'receipt.json'
             value = {'kind': 'android-nfs-disposable-public-image-observation', 'version': 1,
+                'preparationMode': 'bounded_container_install_then_local_commit',
                 'imageRef': driver.IMAGE_REF, 'imageId': 'sha256:' + 'a' * 64,
                 'rootfsDiffIds': ['sha256:' + 'b' * 64], 'baseImageRef': driver.BASE_IMAGE_REF,
                 'baseImageId': driver.BASE_IMAGE_ID, 'packageManifestSha256':
                     __import__('hashlib').sha256((PACKET / 'public-image/public-packages.tsv').read_bytes()).hexdigest(),
                 'packageCount': 52, 'packageBytes': 13482674,
                 'recipeFiles': {n: __import__('hashlib').sha256((PACKET / 'public-image' / n).read_bytes()).hexdigest()
-                               for n in ('Dockerfile', 'install-offline.sh', 'policy-rc.d', 'package-files.tsv', 'install-order.tsv', 'public-packages.tsv')},
+                               for n in ('install-bounded.sh', 'install-offline.sh', 'policy-rc.d', 'package-files.tsv', 'install-order.tsv', 'public-packages.tsv')},
                 'fixtureSourceHashes': {n: __import__('hashlib').sha256((PACKET / n).read_bytes()).hexdigest()
                                         for n in ('run.py', 'client.py', 'server.py', 'ganesha.conf', 'client.apparmor')},
                 'publicOnly': True, 'releaseAuthority': False, 'extra': 'reject'}
             receipt.write_text(json.dumps(value)); receipt.chmod(0o600)
             with self.assertRaises(RuntimeError): driver.read_receipt(receipt)
+
+    def _base_image(self):
+        return {'Id': prep.BASE_ID, 'Architecture': 'amd64', 'Os': 'linux',
+                'Config': {'Env': ['BASE=public'], 'WorkingDir': '/work', 'Volumes': None},
+                'RootFS': {'Layers': ['sha256:' + '1' * 64]}}
+
+    def _install_container(self, context, *, running=True):
+        base = self._base_image()
+        name = 'nfs-public-install-1-2'; cid = 'a' * 64
+        return base, name, cid, {
+            'Id': cid, 'Name': '/' + name, 'Image': prep.BASE_ID,
+            'Config': {'Image': prep.BASE_ID, 'Labels': {prep.CONTAINER_LABEL: prep.CONTAINER_LABEL_VALUE},
+                       'Entrypoint': ['/bin/sh'],
+                       'Cmd': ['-c', 'exec /bin/sh /packages/install-bounded.sh --execute-bounded-install'],
+                       'User': '0:0', 'Env': ['BASE=public'], 'WorkingDir': '/work', 'Volumes': None},
+            'HostConfig': {'NetworkMode': 'none', 'Memory': 1073741824, 'MemorySwap': 1073741824,
+                           'NanoCpus': 500000000, 'Privileged': False, 'CapAdd': None, 'Devices': None},
+            'Mounts': [{'Type': 'bind', 'Source': str(context.resolve()), 'Destination': '/packages', 'RW': False}],
+            'State': {'Running': running, 'Status': 'running' if running else 'exited',
+                      'ExitCode': 0, 'OOMKilled': False}}
+
+    def test_bounded_install_script_requires_zero_swap_and_pinned_policy(self):
+        source = (PACKET / 'public-image/install-bounded.sh').read_text()
+        self.assertIn('test "$memory_swap_max" = 0', source)
+        self.assertIn('4b0d6972477a55bb64330f66e336903c39f5c93b0186a3553736ef6b9567f4aa', source)
+        with self.assertRaisesRegex(ValueError, 'effective install cgroup'):
+            prep._check_install_output('BOUNDED_INSTALL_CGROUP memory.max=1073741824 memory.swap.max=1073741824 cpu.max=50000 100000\n')
+
+    def test_bounded_container_command_order_and_exact_limits_are_mocked_only(self):
+        with tempfile.TemporaryDirectory(prefix='bounded-container-unit-') as folder:
+            context = Path(folder) / 'context'; context.mkdir()
+            base, name, cid, initial = self._install_container(context)
+            final = dict(initial); final['State'] = {'Running': False, 'Status': 'exited',
+                                                     'ExitCode': 0, 'OOMKilled': False}
+            commands = []
+            marker = 'BOUNDED_INSTALL_CGROUP memory.max=1073741824 memory.swap.max=0 cpu.max=50000 100000\n'
+            def docker(_config, *args, **_kwargs):
+                commands.append(args)
+                if args[:2] == ('container', 'create'):
+                    return cid + '\n'
+                if args[:2] == ('start', '--attach'):
+                    return marker
+                return ''
+            with patch.object(prep, '_container_name', return_value=name), \
+                    patch.object(prep, '_docker', side_effect=docker), \
+                    patch.object(prep, '_inspect_container', side_effect=[initial, final]):
+                self.assertEqual(prep._prepare_container(Path(folder) / 'docker-config', context, base), (name, cid))
+            self.assertEqual(commands[1][:2], ('start', '--attach'))
+            create = commands[0]
+            self.assertIn('--network', create); self.assertEqual(create[create.index('--network') + 1], 'none')
+            self.assertEqual(create[create.index('--memory') + 1], '1073741824')
+            self.assertEqual(create[create.index('--memory-swap') + 1], '1073741824')
+            self.assertEqual(create[create.index('--cpus') + 1], '0.5')
+            self.assertEqual(create[create.index('--entrypoint') + 2], prep.BASE_ID)
+            self.assertNotIn(prep.BASE, create)
+            self.assertNotIn('--privileged', create); self.assertNotIn('--cap-add', create)
+            self.assertNotIn('exec', create[create.index('--entrypoint'):])
+
+    def test_public_context_traverses_under_private_workflow_umask(self):
+        with tempfile.TemporaryDirectory(prefix='bounded-context-unit-') as folder:
+            root = Path(folder); root.chmod(0o700)
+            acquired = root / 'archives'; acquired.mkdir()
+            archive = acquired / 'synthetic.deb'; archive.write_bytes(b'public test bytes')
+            context = root / 'context'
+            previous = os.umask(0o077)
+            try:
+                prep.make_context(context, [('synthetic.deb', 17, '', '')], acquired)
+            finally:
+                os.umask(previous)
+            self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o700)
+            for directory in (context, context / 'debs'):
+                self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o755)
+            self.assertEqual(stat.S_IMODE((context / 'debs/synthetic.deb').stat().st_mode), 0o444)
+
+    def test_container_actual_image_mismatch_rejects(self):
+        context = Path('/tmp/public-context')
+        base, name, cid, value = self._install_container(context)
+        value['Image'] = 'sha256:' + 'f' * 64
+        with self.assertRaisesRegex(ValueError, 'container ownership'):
+            prep._assert_container_config(value, name, context, cid, base)
+
+    def test_cleanup_rechecks_owned_full_id_and_never_removes_by_name(self):
+        with tempfile.TemporaryDirectory(prefix='bounded-cleanup-unit-') as folder:
+            context = Path(folder) / 'context'; context.mkdir()
+            base, name, cid, value = self._install_container(context)
+            calls = []
+            with patch.object(prep, '_inspect_container', return_value=value), \
+                    patch.object(prep, '_docker', side_effect=lambda _c, *args, **kw: calls.append(args) or ''):
+                prep._stop_remove_owned(Path(folder) / 'docker-config', name, cid)
+            self.assertEqual(calls, [('stop', '--timeout', '5', cid), ('rm', '--force', cid)])
+
+    def test_installer_timeout_stops_and_removes_exact_container(self):
+        context = Path('/tmp/public-context')
+        base, name, cid, value = self._install_container(context)
+        calls = []
+        def docker(_config, *args, **_kwargs):
+            calls.append(args)
+            if args[:2] == ('container', 'create'):
+                return cid + '\n'
+            if args[:2] == ('start', '--attach'):
+                raise TimeoutError('modeled installer deadline')
+            return ''
+        with patch.object(prep, '_container_name', return_value=name), \
+                patch.object(prep, '_inspect_container', return_value=value), \
+                patch.object(prep, '_docker', side_effect=docker):
+            with self.assertRaisesRegex(TimeoutError, 'modeled installer deadline'):
+                prep._prepare_container(Path('/tmp/docker-config'), context, base)
+        self.assertEqual(calls[-2:], [('stop', '--timeout', '5', cid), ('rm', '--force', cid)])
+
+    def test_stop_error_still_force_removes_and_preserves_failure(self):
+        context = Path('/tmp/public-context')
+        base, name, cid, value = self._install_container(context)
+        calls = []
+        def docker(_config, *args, **_kwargs):
+            calls.append(args)
+            if args[0] == 'stop':
+                raise TimeoutError('modeled stop deadline')
+            return ''
+        with patch.object(prep, '_inspect_container', return_value=value), \
+                patch.object(prep, '_docker', side_effect=docker):
+            with self.assertRaisesRegex(TimeoutError, 'modeled stop deadline'):
+                prep._stop_remove_owned(Path('/tmp/docker-config'), name, cid)
+        self.assertEqual(calls, [('stop', '--timeout', '5', cid), ('rm', '--force', cid)])
+
+    def test_cleanup_rejects_rebound_identity_before_removal(self):
+        context = Path('/tmp/public-context')
+        base, name, cid, value = self._install_container(context)
+        value['Id'] = 'b' * 64
+        with patch.object(prep, '_inspect_container', return_value=value), \
+                patch.object(prep, '_docker') as docker:
+            with self.assertRaisesRegex(ValueError, 'container ownership'):
+                prep._stop_remove_owned(Path('/tmp/docker-config'), name, cid)
+            docker.assert_not_called()
+
+    def test_observation_is_written_only_after_cleanup_success(self):
+        # Entire daemon/acquisition boundary is modeled; no Docker/network runs.
+        original_exists = Path.exists
+        def modeled_exists(path):
+            return False if str(path) == '/docker/chummercomplete' else original_exists(path)
+        for cleanup_fails in (False, True):
+            with self.subTest(cleanup_fails=cleanup_fails), \
+                    tempfile.TemporaryDirectory(prefix='bounded-main-unit-') as folder, \
+                    contextlib.ExitStack() as stack:
+                receipt = Path(folder) / 'receipt.json'
+                base = self._base_image()
+                result = {'Id': 'sha256:' + 'c' * 64, 'RootFS': {'Layers': ['sha256:' + 'd' * 64]}}
+                stack.enter_context(patch.object(Path, 'exists', modeled_exists))
+                stack.enter_context(patch.dict(os.environ, {'GITHUB_ACTIONS': 'true',
+                    'RUNNER_ENVIRONMENT': 'github-hosted'}))
+                for name in ('acquire', 'make_context', 'bounded_command', 'verify_recipe'):
+                    stack.enter_context(patch.object(prep, name))
+                stack.enter_context(patch.object(prep, '_inspect_image_json', return_value=base))
+                stack.enter_context(patch.object(prep, '_prepare_container', return_value=('owned', 'a' * 64)))
+                stack.enter_context(patch.object(prep, '_commit_image', return_value=result))
+                def cleanup(*args):
+                    self.assertFalse(original_exists(receipt))
+                    if cleanup_fails:
+                        raise RuntimeError('modeled cleanup failure')
+                remover = stack.enter_context(patch.object(prep, '_stop_remove_owned', side_effect=cleanup))
+                args = ['--execute', '--disposable-vm', '--work-root', str(Path(folder) / 'work'),
+                        '--output-receipt', str(receipt)]
+                if cleanup_fails:
+                    with self.assertRaisesRegex(RuntimeError, 'modeled cleanup failure'):
+                        prep.main(args)
+                    self.assertFalse(original_exists(receipt))
+                else:
+                    prep.main(args)
+                    self.assertEqual(json.loads(receipt.read_text())['preparationMode'],
+                                     'bounded_container_install_then_local_commit')
+                remover.assert_called_once()
+
+    def test_sigterm_unwinds_preparation_and_restores_handler(self):
+        previous = signal.getsignal(signal.SIGTERM)
+        with patch.object(prep, '_main', side_effect=lambda _: signal.raise_signal(signal.SIGTERM)):
+            with self.assertRaisesRegex(InterruptedError, 'preparation terminated'):
+                prep.main([])
+        self.assertEqual(signal.getsignal(signal.SIGTERM), previous)
+
+    def test_commit_checks_base_config_and_clears_runtime_command(self):
+        base = self._base_image()
+        final = {'Id': 'sha256:' + '2' * 64, 'Architecture': 'amd64', 'Os': 'linux',
+                 'Config': {'Entrypoint': ['/usr/bin/python3', '-I', '-B'], 'Cmd': [], 'User': '0',
+                            'Env': ['BASE=public'], 'WorkingDir': '/work', 'Volumes': None},
+                 'RootFS': {'Layers': base['RootFS']['Layers'] + ['sha256:' + '3' * 64]}}
+        calls = []
+        committed = 'sha256:' + '2' * 64
+        final['Id'] = committed
+        def docker(_config, *args, **_kwargs):
+            calls.append(args)
+            return committed if args[0] == 'commit' else json.dumps(final)
+        with patch.object(prep, '_docker', side_effect=docker):
+            self.assertEqual(prep._commit_image(Path('/tmp/docker-config'), 'a' * 64, base), final)
+        self.assertEqual(calls[0][0], 'commit')
+        self.assertIn('ENTRYPOINT ["/usr/bin/python3","-I","-B"]', calls[0])
+        self.assertIn('CMD []', calls[0]); self.assertIn('USER 0', calls[0])
+        self.assertEqual(calls[0][-2:], ('a' * 64, prep.TAG))
 
     def profile(self):
         return {'errors': [], 'osRelease': 'ID=ubuntu\nVERSION_ID="24.04"\n',
@@ -367,6 +568,8 @@ class PacketTests(unittest.TestCase):
         self.assertNotIn('secrets.', source)
         self.assertEqual(source.count('${{ github.token }}'), 0)
         self.assertIn('persist-credentials: false', source)
+        self.assertLess(source.index('test_android_nfs_disposable.py -v'),
+                        source.index('Acquire fixed public archives'))
         self.assertIn('scripts/prepare_android_nfs_public_image.py', source)
         self.assertIn('archive.ubuntu.com', (PACKET / 'public-image/public-packages.tsv').read_text())
         self.assertNotIn('ghcr.io', source)
