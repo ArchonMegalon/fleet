@@ -20,6 +20,7 @@ PROFILE = 'nfs-qualification-client-bkpapg6l'
 SUBNET = '172.30.249.0/29'
 MAX_OUTPUT = 128 * 1024
 SERVER_STATE_ERROR_MAX = 4096
+CLIENT_DIAGNOSTIC_MAX = 8192
 SERVER_STATE_UNAVAILABLE = 'server-state-diagnostic-unavailable:'
 SERVER_LOG_UNAVAILABLE = 'server-log-unavailable:'
 SERVER_DIAGNOSTIC_RECORD_UNAVAILABLE = 'server-diagnostic-record-unavailable:'
@@ -35,6 +36,16 @@ HOST_TOOLS = ('/usr/bin/docker', '/usr/bin/findmnt', '/usr/sbin/modprobe',
 def require(ok, reason):
     if not ok:
         raise RuntimeError(reason)
+
+
+class CommandFailure(RuntimeError):
+    """Bounded command output; only the public-only client phase may retain it."""
+    def __init__(self, code, stdout, stderr):
+        super().__init__('command failed: ' + str(code))
+        self.diagnostic = {'cliExitCode': code,
+            'stdout': stdout[:CLIENT_DIAGNOSTIC_MAX], 'stderr': stderr[:CLIENT_DIAGNOSTIC_MAX],
+            'stdoutTruncated': len(stdout) > CLIENT_DIAGNOSTIC_MAX,
+            'stderrTruncated': len(stderr) > CLIENT_DIAGNOSTIC_MAX}
 
 
 def command(args, timeout=15, allowed=(0,), include_stderr=False):
@@ -61,7 +72,9 @@ def command(args, timeout=15, allowed=(0,), include_stderr=False):
                         streams[key.fileobj].extend(raw)
                         require(sum(map(len, streams.values())) <= MAX_OUTPUT, 'command output bound')
         code = process.wait(timeout=max(0.01, deadline - time.monotonic()))
-        require(code in allowed, 'command failed: ' + str(code))
+        if code not in allowed:
+            raise CommandFailure(code, bytes(streams[process.stdout]).decode('utf-8', errors='strict'),
+                                 bytes(streams[process.stderr]).decode('utf-8', errors='strict'))
         raw = bytes(streams[process.stdout])
         if include_stderr:
             raw += bytes(streams[process.stderr])
@@ -358,6 +371,7 @@ def run_fixture(args, progress):
                          for name in ('run.py', 'client.py', 'server.py', 'ganesha.conf', 'client.apparmor')},
         'scope': 'synthetic controlled restart and same-VM replacement client; no authority'})
     containers, network, profile_loaded, observations, cleanup_errors = {}, None, False, [], []
+    client_failures = []
     def identity(cid, role):
         rows = json_values(docker('inspect', '--format',
             '{{json .Id}} {{json .Image}} {{json .Name}} {{json .Config.Labels}} {{json .State.Status}}', cid))
@@ -401,7 +415,16 @@ def run_fixture(args, progress):
         cid = create(role)
         # Docker start/attach CLI exit does not substitute for container State.ExitCode.
         progress['stage'] = role + '-start-attach'
-        raw = docker('start', '--attach', cid, timeout=65, allowed=(0, 47))
+        try:
+            raw = docker('start', '--attach', cid, timeout=65, allowed=(0, 47))
+        except CommandFailure as error:
+            # Only this fixed credential-free synthetic command is public.
+            # Recheck ownership; never retain driver exception text or let a
+            # CLI failure substitute for the container's success/event proof.
+            state = identity(cid, role)
+            client_failures.append({'client': role, 'containerId': cid, 'state': state,
+                                    **error.diagnostic})
+            raise
         progress['stage'] = role + '-exit-and-events'
         require(identity(cid, role) == 'exited', 'client did not exit')
         actual = json.loads(docker('inspect', '--format', '{{json .State.ExitCode}}', cid))
@@ -511,7 +534,8 @@ def run_fixture(args, progress):
             signal.setitimer(signal.ITIMER_REAL, 0)
             record(args.output, 'OBSERVATIONS.json', {'exerciseCompleted': completed,
                 'failure': failed or ({'stage': 'cleanup', 'kind': 'unresolved'} if cleanup_errors else None),
-                'observations': observations, 'unresolvedCleanup': cleanup_errors,
+                'observations': observations, 'clientCommandFailures': client_failures,
+                'unresolvedCleanup': cleanup_errors,
                 'scope': 'same-VM controlled restart/remount only; no power-loss or deployment proof'})
     require(completed and not cleanup_errors, 'unfinished; retain records and dispose whole VM')
     print('Controlled NFS exercise complete; dispose VM after retaining public observations')

@@ -90,10 +90,20 @@ source staging directory, credentials, or private package bytes are uploaded.
 Fixture failure observations preserve a fixed stage/category, never exception text or
 command arguments. `SERVER_LOG.json` additionally retains only the verified server
 identity, bounded status/exit/OOM fields, and a bounded Docker `State.Error` prefix;
-if log capture is unavailable it records a fixed marker and empty log. Python
+if log capture is unavailable it records a fixed marker and empty log. Driver
 exception text is never retained. Missing evidence, ambiguous resource creation, cleanup errors,
 or failed phase assertions are failures, not success receipts or retry authority.
 The driver's exclusive output directory prevents adopting an earlier attempt.
+
+For an unexpected exit from the fixed public-only client start/attach command,
+`OBSERVATIONS.json` additionally retains `clientCommandFailures`: the rechecked
+owned container identity/state, CLI exit code, and separate stdout/stderr prefixes
+of at most 8192 characters each with explicit truncation flags. This output is
+JSON-escaped; driver exception strings and output from other failed commands
+remain excluded. Container-identity drift refuses diagnostic retention. Clients
+still have Docker logging disabled. These diagnostics never satisfy client events
+or success, and the original failure is re-raised before bounded cleanup. A CLI
+exit code is not substituted for the container's actual exit or persistence proof.
 
 Source tests model host commands and admission; local file fsync/rename tests use
 temporary synthetic files only. Preparation-bound tests use in-memory responses

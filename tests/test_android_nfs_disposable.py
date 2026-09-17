@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import signal
 import stat
+import sys
 import tempfile
 import time
 from types import SimpleNamespace
@@ -466,6 +467,14 @@ class PacketTests(unittest.TestCase):
         self.assertNotIn('DO_NOT_RETAIN_RAW_EXCEPTION', json.dumps(observed))
         with self.assertRaises(RuntimeError): driver.validate_host(observed, {'imageId': SYNTHETIC_IMAGE_ID, 'rootfsDiffIds': ['sha256:' + 'b' * 64]})
 
+    def test_failed_command_retains_bounded_separate_streams_without_exception_text(self):
+        script = 'import sys; print("synthetic stdout"); sys.stderr.write("E" * 9000); sys.exit(7)'
+        with patch.object(driver, 'COMMAND_DEADLINE', None), self.assertRaises(driver.CommandFailure) as caught:
+            driver.command([sys.executable, '-I', '-B', '-c', script])
+        self.assertEqual(str(caught.exception), 'command failed: 7')
+        self.assertEqual(caught.exception.diagnostic, {'cliExitCode': 7, 'stdout': 'synthetic stdout\n',
+            'stderr': 'E' * driver.CLIENT_DIAGNOSTIC_MAX, 'stdoutTruncated': False, 'stderrTruncated': True})
+
     def test_both_controlled_stop_paths_preserve_five_second_grace(self):
         source = (PACKET / 'run.py').read_text()
         calls = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)
@@ -524,7 +533,8 @@ class PacketTests(unittest.TestCase):
         # Driver control flow is real; every host command, signal and host admission is modeled.
         for target in ('nfs-module-load', 'server-start', 'client-a-start-attach', 'client-b-start-attach',
                        'server-start-log-unavailable', 'server-start-state-rebound',
-                       'server-start-record-failure'):
+                       'server-start-record-failure', 'server-start-command-output',
+                       'client-a-command-output', 'client-b-command-output', 'client-a-command-rebound'):
             states, roles = {}, {}
             original_record = driver.record
             def modeled_record(output, name, value):
@@ -563,10 +573,17 @@ class PacketTests(unittest.TestCase):
                             '/' + driver.PREFIX + '-' + role, driver.LABEL, states[cid],
                             0, False, state_error]))
                     if '.State.ExitCode' in tail[2]: return 0, '47' if role == 'client-a' else '0'
-                    return 0, ' '.join(map(json.dumps, [cid, SYNTHETIC_IMAGE_ID,
+                    observed_cid = ('d' * 64 if target == 'client-a-command-rebound'
+                                    and role == 'client-a' and states[cid] == 'exited' else cid)
+                    return 0, ' '.join(map(json.dumps, [observed_cid, SYNTHETIC_IMAGE_ID,
                         '/' + driver.PREFIX + '-' + role, driver.LABEL, states[cid]]))
                 if tail[0] == 'start':
                     stage = 'server-start' if role == 'server' else role + '-start-attach'
+                    if target == 'server-start-command-output' and role == 'server':
+                        raise driver.CommandFailure(1, 'DO_NOT_RETAIN_NONCLIENT', 'DO_NOT_RETAIN_NONCLIENT')
+                    if target.startswith(role + '-command-') and role in ('client-a', 'client-b'):
+                        states[cid] = 'exited'
+                        raise driver.CommandFailure(1, 'synthetic client stdout', 'synthetic mount failure\n')
                     if target == stage or (target.startswith('server-start-') and stage == 'server-start'):
                         raise RuntimeError('PRIVATE_EXCEPTION_BYTES')
                     states[cid] = 'running' if role == 'server' else 'exited'
@@ -590,6 +607,10 @@ class PacketTests(unittest.TestCase):
                     with self.assertRaises(RuntimeError): driver.exercise(args)
                 raw = (args.output / 'OBSERVATIONS.json').read_text(); value = json.loads(raw)
                 expected_stage = 'server-start' if target.startswith('server-start-') else target
+                if target.startswith('client-a-command-'):
+                    expected_stage = 'client-a-start-attach'
+                if target == 'client-b-command-output':
+                    expected_stage = 'client-b-start-attach'
                 self.assertEqual(value['failure'], {'stage': expected_stage, 'kind': 'rejected-or-command-failed'})
                 self.assertFalse(value['exerciseCompleted'])
                 expected_cleanup = ([driver.SERVER_LOG_UNAVAILABLE + 'a' * 64]
@@ -597,9 +618,18 @@ class PacketTests(unittest.TestCase):
                                     [driver.SERVER_STATE_UNAVAILABLE + 'a' * 64]
                                     if target == 'server-start-state-rebound' else
                                     [driver.SERVER_DIAGNOSTIC_RECORD_UNAVAILABLE + 'a' * 64]
-                                    if target == 'server-start-record-failure' else [])
+                                    if target == 'server-start-record-failure' else
+                                    ['container:' + 'b' * 64] if target == 'client-a-command-rebound' else [])
                 self.assertEqual(value['unresolvedCleanup'], expected_cleanup)
                 self.assertNotIn('PRIVATE_EXCEPTION_BYTES', raw)
+                self.assertNotIn('DO_NOT_RETAIN_NONCLIENT', raw)
+                failed_client = 'client-b' if target == 'client-b-command-output' else 'client-a'
+                failed_cid = 'c' * 64 if failed_client == 'client-b' else 'b' * 64
+                self.assertEqual(value['clientCommandFailures'],
+                    [{'client': failed_client, 'containerId': failed_cid, 'state': 'exited', 'cliExitCode': 1,
+                      'stdout': 'synthetic client stdout', 'stderr': 'synthetic mount failure\n',
+                      'stdoutTruncated': False, 'stderrTruncated': False}]
+                    if target in ('client-a-command-output', 'client-b-command-output') else [])
                 if target == 'server-start-log-unavailable':
                     server_log = json.loads((args.output / 'SERVER_LOG.json').read_text())
                     self.assertEqual(server_log, {'containerId': 'a' * 64, 'state': 'created',
@@ -612,7 +642,7 @@ class PacketTests(unittest.TestCase):
                 if target == 'server-start-record-failure':
                     self.assertFalse((args.output / 'SERVER_LOG.json').exists())
                     self.assertNotIn('PRIVATE_RECORD_EXCEPTION_BYTES', raw)
-                self.assertEqual(states, {})
+                self.assertEqual(states, {'b' * 64: 'exited'} if target == 'client-a-command-rebound' else {})
 
     def test_workflow_is_manual_pinned_credential_bounded_and_public_evidence_only(self):
         path = PACKET.parents[2] / '.github/workflows/android-nfs-disposable-fixture.yml'
