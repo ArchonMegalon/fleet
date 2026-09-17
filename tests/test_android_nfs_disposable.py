@@ -705,6 +705,16 @@ class PacketTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             driver.create_args('image', 'network', 'unrecognized', Path('/out/program'), Path('/out'))
 
+    def test_server_single_file_logging_disables_compression_without_enabling_client_logs(self):
+        for role in ('server', 'client-a', 'client-b'):
+            with self.subTest(role=role):
+                args = driver.create_args('image', 'network', role, Path('/out/program'), Path('/out'))
+                drivers = [args[index + 1] for index, arg in enumerate(args) if arg == '--log-driver']
+                options = [args[index + 1] for index, arg in enumerate(args) if arg == '--log-opt']
+                self.assertEqual(drivers, ['local'] if role == 'server' else ['none'])
+                self.assertEqual(options, ['max-size=64k', 'max-file=1', 'compress=false']
+                                 if role == 'server' else [])
+
     def test_mount_and_server_configuration_are_narrow(self):
         source = (PACKET / 'client.py').read_text()
         self.assertIn("['/usr/bin/mount', '-t', 'nfs4', '-o'", source)

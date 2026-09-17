@@ -277,7 +277,9 @@ def create_args(image, network, role, stage, output):
         '--volume', str(stage) + ':/packet:ro,rprivate',
         '--entrypoint', '/usr/bin/python3', '--workdir', '/']
     if role == 'server':
-        args.extend(('--log-driver', 'local', '--log-opt', 'max-size=64k', '--log-opt', 'max-file=1'))
+        # Docker local logging cannot compress rotated logs with only one file.
+        args.extend(('--log-driver', 'local', '--log-opt', 'max-size=64k', '--log-opt', 'max-file=1',
+                     '--log-opt', 'compress=false'))
         for cap in ('DAC_READ_SEARCH', 'SETUID', 'SETGID', 'NET_BIND_SERVICE'):
             args.extend(('--cap-add', cap))
         args.extend(('--volume', str(output / 'export') + ':/export:rw,rprivate',
