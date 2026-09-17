@@ -19,9 +19,9 @@ approval = fixture.approval
 EXTERNAL_INPUTS = (
     "CHUMMER_ANDROID_CURRENT_ROOT", "CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT",
 )
-# Retained ordered qualification run 35219818439 / artifact 10496043746.
+# Retained ordered qualification run 35260515080 / artifact 10514137838.
 # Hosted evidence stays external and byte-immutable; RFC signatures are test-only.
-ORIGINAL_RECEIPT_SHA256 = "9e4e568a2bf8022db713055489ff30015868fa9820c1d6bd3a86832b1d3928b6"
+ORIGINAL_RECEIPT_SHA256 = "b45784e1cab0f843315651d9f275d3cf0c67d928e6e51febffe2ca248221d341"
 CURRENT_CONSUMER_SHA256 = "a6ecfecb0c53a45e9f91706ff4b3c8ef97e0bd23fc69a7d9a48e094d5038cb76"
 
 
@@ -229,6 +229,8 @@ def test_qualified_commit_cannot_substitute_a_different_main_with_same_tree():
 @pytest.mark.parametrize("commit,tree", [
     ("b3fc0619ec61df3df25849db90593e1b6b66deb2", "9c71c65836cdeab038c3e88e8770d208e887ed1e"),
     ("840ac319c47e89e383876faea03b83dce31aaf22", "6d9a5fab10fd440fc30aaeae8023dd83bc01e472"),
+    ("8c98b0abef4fef25e0d0938e0e8df9bba9e5e99e", "616d388dcb4270488c4651fa2cc2a1c23daeef09"),
+    ("536ce7bcc83be62f1a3b35155e5a029c3e926d16", "103ff9fe1f4feba5d6134376191fcd9b03472351"),
 ])
 def test_previous_qualified_commit_and_tree_are_not_current_authority(commit, tree):
     inputs = fixture.inputs()
@@ -250,12 +252,16 @@ def test_qualified_source_must_still_equal_observed_protected_main(tmp_path, mon
         approval.create_approval_bundle(args, environment, now=fixture.NOW)
 
 
-def test_resealed_pre_sdk_staging_graph_cannot_replace_current_qualification():
+@pytest.mark.parametrize("tree,digest", [
+    ("6d9a5fab10fd440fc30aaeae8023dd83bc01e472", "dc784a6d2cc4c68ed17dfe778b44f4f58a0c8681765d72f2ee40a83ba9547821"),
+    ("616d388dcb4270488c4651fa2cc2a1c23daeef09", "2f2e7ffbe7a339e58fe6249588de8df4aa94a019681795e0dc70e4052fa79bc9"),
+])
+def test_resealed_pre_sdk_staging_graph_cannot_replace_current_qualification(tree, digest):
     value = fixture.receipt()
     graph = value["commonAuthority"]["dependencyGraph"]
-    graph["sources"]["android"]["tree"] = "6d9a5fab10fd440fc30aaeae8023dd83bc01e472"
+    graph["sources"]["android"]["tree"] = tree
     graph["sha256"] = approval.canonical_sha256({k: v for k, v in graph.items() if k != "sha256"})
-    assert graph["sha256"] == "dc784a6d2cc4c68ed17dfe778b44f4f58a0c8681765d72f2ee40a83ba9547821"
+    assert graph["sha256"] == digest
     reseal(value)
     with pytest.raises(approval.ApprovalError, match="qualified dependency graph"):
         approval.validate_receipt(
