@@ -221,6 +221,7 @@ SOURCE_SUITES = (
     "tests/test_android_workflow_job_binder.py",
     "tests/test_android_protected_job_supervisor.py",
     "tests/test_android_hosted_input_stager.py",
+    "tests/test_android_hosted_source_admission.py",
 )
 
 

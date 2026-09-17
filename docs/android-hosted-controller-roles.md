@@ -20,6 +20,42 @@ already-admitted absolute Fleet root, not cwd/PYTHONPATH or a dynamic factory.
 The configuration digest must come independently from protected provisioning,
 never from candidate JSON, local claims, a self-hash or chown-as-authentication.
 
+## Held pre-import source admission
+
+`android_hosted_source_admission.admit()` is a stdlib-only, callable source lease,
+not a provisioner, runtime attestation or role executor. Its keyword inputs are
+`profile`, `profile_sha256`, `context`, `context_sha256`, and an explicitly
+selected `hosted_root`. The original four-document profile/context formats are
+unchanged. It selects exactly `protected.launcher.code_pins`; overlapping
+`owner.code_pins` entries must agree. It never merges the maps or infers the
+hosted source root from either role's configured local path. Provisioning must
+independently bind that root and select a complete map for the reviewed source.
+
+Before target imports, the lease captures and hashes the two documents and the
+bounded Fleet source closure through held no-follow descriptors. It rejects
+source aliases, unsafe ancestry/modes, symlinks, bytecode caches, same-stem package
+shadows, ambient Fleet namespaces and omitted literal imports, including the
+known bare approval-ledger fallback. Its one-shot `import_targets()` returns
+only `materializer`, `stager`, and `hosted` modules for the three fixed existing
+entrypoints. A scoped loader executes captured bytes, not a reopened pathname;
+unknown `scripts` imports fail closed. It checks actual module origins, parent
+bindings and loader identities. It does not call any returned role function.
+
+The trusted caller keeps the context open and calls `lease.recheck()` immediately
+before and after each existing materializer/stager/role call. The original
+consumer parsers still validate full policy; the source gate's preliminary JSON
+checks do not replace them. On exit, it closes held descriptors and removes only
+the imports it created. Failed imports poison that lease, including caught
+failures; partial effects are not rolled back or retried. No files are changed.
+
+Initial admission of this helper/bootstrap, Python, stdlib, installed packages,
+`.pth`/site behavior and native libraries must happen **before this API runs**.
+`-I -B` and exact source hashes cannot retroactively supply that authority. A cold
+fixed bootstrap may load the already-admitted helper outside the `scripts`
+namespace; normal package import is also accepted only for the exact pinned
+helper and its otherwise empty matching namespace. No arbitrary module/command
+selector, new policy document, workflow or deployment authority is provided.
+
 ## Fixed request-input staging
 
 `scripts/android_hosted_input_stager.py` supplies one bounded preparation step,
