@@ -112,7 +112,9 @@ def modeled_preparation(tmp_path, monkeypatch):
         workspace.mkdir(mode=0o700)
     consumer = SimpleNamespace(VERIFY=SimpleNamespace(verify_release_eligibility=lambda *a, **k: {
         "sourceCommit": lock["android_authority"]["commit"], "sourceTree": lock["android_authority"]["tree"]}),
-        _sidecar_claims=lambda *a: {}, _load_trusted_java_toolchain=lambda path: {
+        _sidecar_claims=lambda sidecar, aab, graph: {
+            f"artifacts/{path.name}": hashlib.sha256(path.read_bytes()).hexdigest() for path in (aab, graph)},
+        _load_trusted_java_toolchain=lambda path: {
             "observationSha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             "tools": {"java": args["java_root"] / "bin/java"}, "dotnet": args["dotnet_root"] / "dotnet"})
     def measure(*a, **kwargs):

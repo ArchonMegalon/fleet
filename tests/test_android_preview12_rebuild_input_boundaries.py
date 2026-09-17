@@ -331,11 +331,19 @@ def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path,
         assert argv == ["/bin/bash", "-p", str(args["workspace"] / "chummer-android/scripts/build-release.sh")]
         # Orchestration fixture only: no compiler, package validation or build runs.
         outputs = args["build_input_root"] / "artifacts"
-        outputs.mkdir()
-        fixture.protected_file(outputs / "chummer-android-0.1.0-preview.12-unsigned.aab", b"TEST_ONLY")
-        fixture.protected_file(outputs / "chummer-android-0.1.0-preview.12-source-graph.json", graph)
+        outputs.mkdir(mode=0o700)  # Android's real build entry sets umask 077.
+        aab = fixture.protected_file(outputs / "chummer-android-0.1.0-preview.12-unsigned.aab", b"TEST_ONLY")
+        rebuilt_graph = fixture.protected_file(outputs / "chummer-android-0.1.0-preview.12-source-graph.json", graph)
+        sidecar = fixture.protected_file(aab.with_name(aab.name + ".sha256"), (
+            f"{hashlib.sha256(aab.read_bytes()).hexdigest()}  artifacts/{aab.name}\n"
+            f"{hashlib.sha256(graph).hexdigest()}  artifacts/{rebuilt_graph.name}\n").encode())
+        for path in (aab, rebuilt_graph, sidecar):
+            path.chmod(0o444)  # Actual canonical promotion mode, not private fixture mode.
         return subprocess.CompletedProcess(argv, 3)
-    module._run_independent_rebuild(**args, runner=observe_android_call)
+    _, private_graph = module._run_independent_rebuild(**args, runner=observe_android_call)
+    assert private_graph.parent.name == "private-rebuilt-metadata"
+    assert private_graph.read_bytes() == graph
+    assert private_graph.stat().st_mode & 0o777 == 0o600
     assert len(calls) == 1
 
 
@@ -488,7 +496,10 @@ def configured(*, protected=False):
     )
     value["state"] = "ready"
     value["rebuild"]["enabled"] = True
-    value["toolchain"].update(builder_image=BUILDER, installed_closure_receipt_sha256="c" * 64)
+    # Model absent downstream signer admission explicitly, independently of
+    # the checked-in dormant lock's public planned image selection.
+    value["toolchain"].update(builder_image=BUILDER, signer_image=None,
+                              installed_closure_receipt_sha256="c" * 64)
     if protected:
         value["toolchain"]["signer_image"] = SIGNER
         value["outputs"]["signed_content_handoff_enabled"] = True
@@ -813,7 +824,8 @@ def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(
     monkeypatch.setattr(fleet, "checkout_source_graph" if offline else "checkout_source_graph_from_bundles", forbidden)
     consumer = SimpleNamespace(VERIFY=SimpleNamespace(verify_release_eligibility=lambda *a, **k: {
         "sourceCommit": lock["android_authority"]["commit"], "sourceTree": lock["android_authority"]["tree"]}),
-        _sidecar_claims=lambda *a: {},
+        _sidecar_claims=lambda sidecar, aab, graph: {
+            f"artifacts/{path.name}": hashlib.sha256(path.read_bytes()).hexdigest() for path in (aab, graph)},
         _load_trusted_java_toolchain=lambda path: {
             "observationSha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             "tools": {"java": args["java_root"] / "bin/java"}, "dotnet": args["dotnet_root"] / "dotnet"})

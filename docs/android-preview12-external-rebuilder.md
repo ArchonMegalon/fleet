@@ -95,6 +95,17 @@ it does not rewrite that historical failure or establish runtime custody.
 It runs the Android unsigned build and
 requires its AAB digest to equal the producer.
 
+Canonical Android promotion leaves the rebuilt AAB, graph and sidecar at
+`0444`. Rebuild intake requires those owned, single-link, bounded regular
+outputs; writable files and symlink paths are rejected. The graph and sidecar
+are descriptor-captured into exclusive `0600` copies below a new `0700`
+directory, with identity, digest, sync and readback checks. The originals are
+neither chmodded nor replaced. Existing private-input checks stay strict, and
+the canonical Android sidecar parser binds both rebuilt digests before handoff.
+This copy boundary does not authenticate a workflow, qualify runtime custody,
+or turn a failed first-producer wrapper into success. The synthetic tests model
+compilation; actual independent rebuild equality remains required.
+
 ### Observed public builder inputs, not activation
 
 The dormant lock selects these existing public builder bytes:
