@@ -1,8 +1,10 @@
-"""Fixed root host-step supervisor; no network, credentials, activation or retry.
+"""Fixed root host-step supervisor; no credentials, activation or action retry.
 
 The caller admits this interpreter/dependency closure before executing this file.
 The already-installed exporter must support the explicitly selected pending mode.
 READY and the anonymous pipe sequence local execution, never remote authority.
+Optional public startup metadata delays child creation; it never releases the
+pipe or replaces the child's independent authentication and custody checks.
 """
 from __future__ import annotations
 
@@ -180,6 +182,60 @@ def _interrupted(_number, _frame):
     raise SupervisorError(ERROR)
 
 
+def _fleet_imports(root, pins):
+    """Reject ambient Fleet namespaces before any optional startup import."""
+    require({"scripts/android_startup_scheduling.py", "scripts/android_workflow_job_binder.py"} <= set(pins))
+    namespace = sys.modules.get("scripts")
+    require(namespace is not None and list(getattr(namespace, "__path__", ())) == [str(root / "scripts")])
+    missing = object()
+    for relative in pins:
+        name = relative.removesuffix(".py").replace("/", ".").removesuffix(".__init__")
+        if name == "scripts":
+            continue
+        parent_name, child = name.rsplit(".", 1)
+        loaded = sys.modules.get(name, missing)
+        attribute = getattr(sys.modules.get(parent_name), child, missing)
+        require((loaded is missing and attribute is missing)
+                or (loaded is not missing and loaded is attribute))
+    for name, module in tuple(sys.modules.items()):
+        if name != "scripts" and not name.startswith("scripts."):
+            continue
+        path = getattr(module, "__file__", None)
+        if name == "scripts" and path is None:
+            continue  # One exact namespace path above, no arbitrary search path.
+        if name != "scripts":
+            parent_name, child_name = name.rsplit(".", 1)
+            require(getattr(sys.modules.get(parent_name), child_name, None) is module)
+        expected = name.replace(".", "/") + ".py"
+        if expected not in pins:
+            expected = name.replace(".", "/") + "/__init__.py"
+        require(type(path) is str and expected in pins and Path(path) == root / expected
+                and Path(path).resolve(strict=True) == Path(path))
+
+
+def _wait_for_export(value, root, deadline, check):
+    pins = value["launcher"]["code_pins"]
+    _fleet_imports(root, pins)
+    from scripts import android_startup_scheduling as startup
+    from scripts import android_workflow_job_binder as binder
+    require(sys.modules.get("scripts.android_startup_scheduling") is startup
+            and sys.modules.get("scripts.android_workflow_job_binder") is binder)
+    _fleet_imports(root, pins)
+    check()
+    startup.validate_deployment(value)
+    observed = startup.wait_for_stage(value, "export", deadline=deadline, recheck=check)
+    check()
+    # A publication never supplies job identity. Resolve independently before
+    # creating a private child; its original binding/auth still runs as well.
+    bound = binder.bind_deployment_roles(binding=value["role_binding"],
+        current_policies={"protected": binder.identity.WorkflowJobPolicy(**value["job_policy"])},
+        role="protected", deadline=deadline)
+    check()
+    require(startup.binding_digest(bound) == observed)
+    _fleet_imports(root, pins)
+    check()
+
+
 def run(deployment, digest, interpreter_sha256, maximum_seconds):
     child = None
     read_fd = write_fd = pidfd = None
@@ -228,6 +284,8 @@ def run(deployment, digest, interpreter_sha256, maximum_seconds):
                 for item in snapshots:
                     item.recheck()
             check()
+            if "startup_barrier" in value:
+                _wait_for_export(value, root, deadline, check)
             read_fd, write_fd = os.pipe2(os.O_CLOEXEC)
             spawning = True
             child = subprocess.Popen([str(executable), "-I", "-B", "-c", CHILD_CODE, str(root),

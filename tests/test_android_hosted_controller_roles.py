@@ -112,6 +112,73 @@ def test_optional_lookup_failure_precedes_hosted_input_and_client(prepared, monk
     assert prepared.oidc_calls == [] and prepared.seen == []
 
 
+def _startup(prepared):
+    binding = _optional_binding(prepared)
+    binding["templates"]["protected"]["check_run_id"] = "911"
+    for role in ("capture", "emission"):
+        prepared.documents[role].update(role_binding=binding, startup_barrier={"publisher_id": 123})
+        save(prepared, role)
+    return {name: binder.identity.WorkflowJobPolicy(**item) for name, item in binding["templates"].items()}
+
+
+def test_startup_precedes_binder_and_private_role_work(prepared, monkeypatch):
+    from scripts import android_startup_scheduling as startup
+    bound = _startup(prepared)
+    order = []
+    def wait(value, stage, *, deadline, recheck):
+        recheck()
+        assert stage == "listener" and not prepared.oidc_calls and not prepared.seen
+        assert not Path(value["attempt_directory"]).exists()
+        order.append("startup")
+        return startup.binding_digest(bound)
+    def bind(**kwargs):
+        assert order == ["startup"]
+        order.append("binder")
+        return bound
+    monkeypatch.setattr(startup, "wait_for_stage", wait)
+    monkeypatch.setattr(binder, "bind_deployment_roles", bind)
+    monkeypatch.setattr(roles, "_hold_for_protected_success", lambda *_: None)
+    captured(prepared)
+    assert order == ["startup", "binder"] and len(prepared.oidc_calls) == 1
+
+
+@pytest.mark.parametrize("failure", ["pending-exhausted", "different-jobs", "deployment-drift", "deadline"])
+def test_startup_failure_stops_before_credentials_and_no_retry(prepared, monkeypatch, failure):
+    from scripts import android_startup_scheduling as startup
+    bound = _startup(prepared)
+    lookups = []
+    def wait(value, stage, *, deadline, recheck):
+        recheck()
+        if failure == "pending-exhausted":
+            raise RuntimeError("synthetic public scheduling failure")
+        if failure == "deployment-drift":
+            prepared.configs["capture"].write_bytes(b"PUBLIC drift")
+        if failure == "deadline":
+            monkeypatch.setattr(roles.time, "monotonic", lambda: deadline + 1)
+        return "0" * 64 if failure == "different-jobs" else startup.binding_digest(bound)
+    monkeypatch.setattr(startup, "wait_for_stage", wait)
+    monkeypatch.setattr(binder, "bind_deployment_roles", lambda **_: lookups.append(True) or bound)
+    with pytest.raises(roles.RoleError): invoke(prepared, "capture")
+    assert len(lookups) == (1 if failure == "different-jobs" else 0)
+    assert not prepared.oidc_calls and not prepared.seen
+    assert not Path(prepared.documents["capture"]["attempt_directory"]).exists()
+
+
+def test_submit_does_not_rewait_listener_or_reconsume_oidc(prepared, monkeypatch):
+    from scripts import android_startup_scheduling as startup
+    bound = _startup(prepared)
+    stages = []
+    monkeypatch.setattr(startup, "wait_for_stage", lambda value, stage, **_:
+                        stages.append(stage) or startup.binding_digest(bound))
+    monkeypatch.setattr(binder, "bind_deployment_roles", lambda **_: bound)
+    monkeypatch.setattr(roles, "_hold_for_protected_success", lambda *_: None)
+    manifest_ready(prepared)
+    assert stages == ["listener", "listener"]
+    monkeypatch.setattr(startup, "wait_for_stage", lambda *_args, **_kwargs: pytest.fail("submit waited again"))
+    monkeypatch.setattr(roles.oidc, "_request_token", lambda *_: pytest.fail("submit read OIDC"))
+    assert invoke(prepared, "emission-submit", actual_test_bundle(prepared)) == roles.COMPLETE["emission-submit"]
+
+
 def test_optional_lookup_rechecks_held_deployment_before_hosted_inputs(prepared, monkeypatch):
     prepared.documents["capture"]["role_binding"] = _optional_binding(prepared)
     save(prepared, "capture")
