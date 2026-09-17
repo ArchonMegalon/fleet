@@ -33,6 +33,14 @@ Python/stdlib/dependency runtime. See the
 [hosted roles](android-hosted-controller-roles.md), and
 [protected supervisor](android-protected-job-supervisor.md) contracts.
 
+The fixed `android_hosted_phase_caller.py` now composes that held source gate
+with exact rendered-deployment validation, request-input staging for the first
+two phases, and the existing hosted role functions. Submit re-admits without
+re-staging. Its initially admitted `__main__`/fixed-private bootstrap placement
+avoids an ambient `scripts.*` import before the gate; it captures only the one
+independently hash-admitted helper. It does not supply initial runtime admission
+or the still-missing deployment/custody prerequisites above.
+
 ## Fixed source wiring after independent provisioning exists
 
 The dedicated workflow must be manual-only (`workflow_dispatch`), on its
@@ -149,9 +157,9 @@ OIDC, attestation, Docker, network, listener or signing operation occurs.
 Existing dependency version checks remain active. These tests are preparation
 evidence only, not a substitute for the missing provisioning implementation.
 
-The source-test CI runs eight suites: these composition tests plus materializer,
+The source-test CI runs nine suites: these composition tests plus materializer,
 adversarial materializer, hosted-role, job-binder, supervisor and hosted-input
-stager tests, and held hosted-source admission tests, on Ubuntu 24.04/Python 3.12,
+stager, held hosted-source admission and fixed phase-caller tests, on Ubuntu 24.04/Python 3.12,
 without path filters. It uses a fresh non-system-site
 venv and ten hash-pinned binary wheels in
 `tests/android-role-source-requirements.txt`, with dependency resolution
@@ -160,4 +168,4 @@ are installed: the server import is inside the uncalled owner `run()` path.
 The five-minute job has only read-only repository permission, pinned checkout
 with persisted credentials disabled, no protected environment or artifact
 upload, and no dispatch/activation route. Public wheel download is installation
-of test dependencies only; the eight suites do not contact live providers.
+of test dependencies only; the nine suites do not contact live providers.

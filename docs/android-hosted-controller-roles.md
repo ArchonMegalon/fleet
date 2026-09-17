@@ -15,8 +15,8 @@ emission-submit  --deployment PATH --deployment-sha256 SHA256 --bundle ACTION_OU
 
 These are interface descriptions, not a supplied live configuration. The owner
 must admit exact source/import/dependency/interpreter bytes before invoking the
-script. Use an admitted fixed `-I -B -c` import bootstrap which inserts only its
-already-admitted absolute Fleet root, not cwd/PYTHONPATH or a dynamic factory.
+script. The fixed admitted phase caller below keeps source admission ahead of
+role imports; do not use cwd/PYTHONPATH or a dynamic command/module factory.
 The configuration digest must come independently from protected provisioning,
 never from candidate JSON, local claims, a self-hash or chown-as-authentication.
 
@@ -55,6 +55,41 @@ fixed bootstrap may load the already-admitted helper outside the `scripts`
 namespace; normal package import is also accepted only for the exact pinned
 helper and its otherwise empty matching namespace. No arbitrary module/command
 selector, new policy document, workflow or deployment authority is provided.
+
+## Fixed phase caller
+
+`android_hosted_phase_caller.py` composes the existing source lease, materializer,
+request-input stager and hosted role functions. The caller itself, its initial
+Python/stdlib/dependencies and native loaders must already be independently
+admitted. Execute those fixed caller bytes with `-I -B` as `__main__`, or load
+them under the fixed private `_chummer_hosted_phase_caller` bootstrap identity.
+Do **not** import `scripts.android_hosted_phase_caller` first: the resulting
+ambient Fleet namespace correctly fails admission. This is not permission to
+execute an unverified checkout file or a workflow-input-selected bootstrap.
+
+Its closed interface takes one of `capture`, `emission-prepare`, or
+`emission-submit`; `--hosted-root`; independently admitted `--helper-sha256`;
+and existing `--profile`, `--context`, `--deployment` paths with their respective
+`--*-sha256` values. Only submit takes `--bundle ACTION_OUTPUT_PATH`. The helper
+hash binds exactly `HOSTED_ROOT/scripts/android_hosted_source_admission.py`.
+The caller captures its bounded bytes through a held no-follow descriptor and
+verifies hash/name/parent identity before execution under one fixed private
+module name. It never selects arbitrary helper paths or imports it by lookup.
+No candidate-computed digest substitutes for independent input selection.
+
+Within the source lease, it holds all three documents and checks that the
+retained deployment equals the real materializer's rendered bytes. Capture and
+emission-prepare then stage the two explicitly injected request inputs and call
+the existing role. Submit cold-re-admits and checks the same deployment but
+never materializes, stages, or reads OIDC environment values again; it passes
+the actual action bundle path to the original submit function. Fences surround
+each call, and the held helper/documents remain checked through completion.
+One invocation per process is allowed. Failure keeps existing effects and
+original no-replay markers; it never retries, erases files or emits an authority
+receipt. Diagnostics are constants. Outer resource/deadline admission remains
+necessary, including bounds for filesystem stalls. This adds no live workflow,
+controller, bearer delivery, protected credential, private route or recovery
+storage. The root protected supervisor remains separate and unchanged.
 
 ## Fixed request-input staging
 
