@@ -41,3 +41,32 @@ jobs:
             tests/test_android_hosted_input_stager.py \
             tests/test_android_hosted_source_admission.py \
             tests/test_android_hosted_phase_caller.py
+
+  offline-import-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify offline importer and unchanged rebuild boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          ulimit -c 0
+          /usr/bin/python3.12 -I -c 'import os, sys; assert sys.version_info[:2] == (3, 12); assert os.getuid() != 0 and os.getgid() != 0'
+          import_test_venv="$(mktemp -d "$RUNNER_TEMP/android-import-unit.XXXXXX")"
+          /usr/bin/python3.12 -I -m venv "$import_test_venv"
+          timeout 180s "$import_test_venv/bin/python" -I -m pip --isolated install \
+            --index-url https://pypi.org/simple --retries 0 --timeout 20 \
+            --require-hashes --only-binary=:all: --no-deps --no-cache-dir \
+            --disable-pip-version-check -r tests/android-role-source-requirements.txt
+          "$import_test_venv/bin/python" -I -m pip --isolated check
+          timeout 180s env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONDONTWRITEBYTECODE=1 \
+            "$import_test_venv/bin/python" -m pytest --tb=short -p no:cacheprovider -q \
+            tests/test_android_preview12_offline_source_bundles.py \
+            tests/test_android_preview12_external_rebuilder.py \
+            tests/test_android_preview12_preserved_handoff.py \
+            tests/test_android_preview12_preserved_validation.py

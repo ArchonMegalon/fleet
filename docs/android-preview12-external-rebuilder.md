@@ -215,6 +215,29 @@ Actual installed closure, admitted immutable image/controller, complete offline 
 and package inputs, protected approval and real deterministic rebuild remain
 required.
 
+### Offline bundle snapshot lifetime
+
+`checkout_source_graph_from_bundles` still captures and authenticates all eight
+complete local bundles before any Git operation. It imports them in descending
+authenticated bundle size, retaining canonical repository order for ties. After
+each successful unbundle and strict full Git fsck, it removes only that owned
+private snapshot and immediately closes its held descriptor, before checking out
+that repository. The original transport files are never removed or reread in
+place of authenticated snapshots. Final exact graph, ancestry and repository-byte
+checks are unchanged.
+
+Held parent, staging-directory and snapshot identities fence retirement. A
+replaced entry, changed snapshot or uncertain unlink fails closed; scoped cleanup
+preserves unknown entries rather than recursively deleting the staging tree.
+Cleanup closes the other held descriptors even if retirement fails. This assumes
+the existing private owner-controlled staging custody, not atomic conditional
+unlink against a concurrent same-UID or root writer.
+
+This reduces overlapping transport copies and imported Git storage; it does not
+establish a new capacity floor. Bundle sizes do not bound Git expansion, checkout
+allocation, indexes or build/oracle scratch. Callers still need a filesystem quota
+and measured peak with reserve; no signing, deployment or eligibility gate changes.
+
 Its local handoff explicitly says:
 
 ```text
