@@ -225,6 +225,9 @@ class ControllerCaptureSession:
                 policy.__post_init__()
                 self._lock_snapshot = origin._capture(lock, 1024 * 1024)
                 self._lock_pin = lock
+                lock_value = fleet._strict_json(self._lock_snapshot.raw, "controller lock")
+                _require((fleet.build_verification_mode(lock_value) == "internal-single-build")
+                         == (self._owned_single_build is not None), "controller-build-order")
                 value = None
                 if self._owned_single_build is not None:
                     # Claim once before authentication. Invalid or lost transfer
@@ -247,7 +250,6 @@ class ControllerCaptureSession:
                          and value.artifact_closure_sha256 == self._artifact_policy.subject_sha256,
                          "controller-capture-binding")
                 capture._terminal(value.execution, policy)
-                lock_value = fleet._strict_json(self._lock_snapshot.raw, "controller lock")
                 expected = capture._limits(lock_value)
                 members = dict(value.file_sha256)
                 _require(len(members) == len(value.file_sha256) and set(members) == set(expected)

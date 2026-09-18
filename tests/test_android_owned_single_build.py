@@ -69,6 +69,14 @@ def test_one_owned_build_then_real_job_authentication_and_exact_emission(flow):
     assert json.loads((flow.model.operation / "capture-complete.json").read_bytes())["authenticatedJob"] is False
 
 
+def test_single_mode_without_live_preparation_rejects_before_build_or_authentication(flow):
+    select_single(flow.model)
+    with pytest.raises(controller.ControllerCaptureError):
+        sessions.run_capture(flow)
+    assert flow.model.calls == []
+    assert flow.store.status(journals.key_of(flow.first)) == "pending"
+
+
 @pytest.mark.parametrize("change", [
     lambda value: value["rebuild"].pop("verification_mode"),
     lambda value: value["rebuild"].update(distribution_track="production"),
@@ -164,4 +172,3 @@ def test_failed_builder_preserves_failure_without_preparation(model):
         prepare(model)
     assert model.calls == ["builder"]
     assert not (model.operation / "capture-complete.json").exists()
-

@@ -78,6 +78,8 @@ policy accepts an unknown digest, wildcard or provider-selected hash. Pass the
 same object as `owned_single_build` to the existing local owner/rendezvous. All
 runtime inputs and the measured subject must agree; only that object's already
 created operation directory is accepted. Other destinations must remain fresh.
+Single-build policy without this live preparation rejects before job consumption
+or another builder start, rather than compiling toward an unknowable old digest.
 
 The capture job then authenticates **transfer of the owner-built result**. It
 does not claim to have requested or run the earlier build. Claiming is once-only
