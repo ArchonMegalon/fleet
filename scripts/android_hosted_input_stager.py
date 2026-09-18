@@ -21,6 +21,7 @@ from scripts import android_hosted_controller_roles as hosted
 ERROR = "hosted input staging stopped; preserve partial files and reconcile"
 COMPLETE = "hosted request inputs staged; not authentication or deployment authority"
 BEARER_COMPLETE = "hosted role bearer delivered; not authentication or deployment authority"
+PROTECTED_COMPLETE = "protected request inputs staged; not authentication or deployment authority"
 ENVIRONMENT = (("oidc_request_url", "ACTIONS_ID_TOKEN_REQUEST_URL"),
                ("oidc_request_credential", "ACTIONS_ID_TOKEN_REQUEST_TOKEN"))
 ROLES = ("capture", "emission")
@@ -249,6 +250,153 @@ def stage(*, role, profile, profile_sha256, context, context_sha256,
         raise StagingError(ERROR) from None
 
 
+def stage_protected_request_inputs(*, profile, profile_sha256, context, context_sha256,
+                                   deployment, deployment_sha256, environment=None):
+    """Stage only the root protected consumer's two request files; never read keys."""
+    try:
+        protected = materializer.protected
+        _require(os.getuid() == os.geteuid() == os.getgid() == os.getegid() == 0)
+        specs = ((profile, profile_sha256, materializer.MAX_PROFILE, False),
+                 (context, context_sha256, materializer.MAX_CONTEXT, False),
+                 (deployment, deployment_sha256, protected.MAX_DEPLOYMENT, True))
+        for path, digest, _limit, _private in specs:
+            _require(isinstance(path, Path) and protected._path(str(path)) == path
+                     and hosted.identity._hex(digest, 64))
+        with ExitStack() as cleanup:
+            held, metadata, parents = [], {}, {}
+            def parent(path, private):
+                protected.fleet._trusted_root(path.parent, "owner input")
+                if private:
+                    hosted.journal._parent(path)  # Existing private-parent contract.
+                if path.parent not in parents:
+                    chain = tuple((part, _directory_stamp(part.lstat()))
+                                  for part in (*reversed(path.parent.parents), path.parent))
+                    fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+                    cleanup.callback(os.close, fd)
+                    _require(_directory_stamp(os.fstat(fd)) == chain[-1][1])
+                    parents[path.parent] = (chain, fd)
+            def observe(path, limit, private=True):
+                stamp = protected._metadata(path, limit, private=private)
+                parent(path, private)
+                metadata[path] = (limit, private, stamp)
+                return stamp
+            def hold(path, limit, *, expected, private=True):
+                item = protected._OwnedFile(path, limit, expected=expected, private=private)
+                cleanup.callback(item.close)
+                _require(item.stamp == metadata[path][2])
+                held.append(item)
+                return item
+            for path, _digest, limit, private in specs:
+                observe(path, limit, private)
+            documents = [hold(path, limit, expected=digest, private=private)
+                         for path, digest, limit, private in specs]
+            profile_value = materializer._json(documents[0].raw)
+            expected = materializer.render(profile_value, materializer._json(documents[1].raw), "protected")
+            _require(documents[2].raw == expected)
+            value, config, pins, secrets, transport, _job, _artifact, policy = protected._document(expected)
+            destinations = [transport[name] for name, _ in ENVIRONMENT]
+            bearers = {name: transport[name + "_bearer"] for name in ("intake", "binary")}
+            validation = {name: Path(config["validation"][name]) for name in protected.VALIDATION_FILE_LIMITS}
+            unused = [Path(value["operation_directory"]), Path(config["output"]),
+                      Path(config["recovery"]) / config["attempt"], Path(config["socket"])]
+            paths = [item.path for item in documents] + [pin.path for pin in pins.values()]
+            paths += [*validation.values(), *secrets.values(), *transport.values(), *unused]
+            _require(all(not left.is_relative_to(right) and not right.is_relative_to(left)
+                         for index, left in enumerate(paths) for right in paths[index + 1:]))
+            mounted = [Path(config[name]) for name in ("fleet_root", "handoff", "requests", "responses")]
+            mounted += [Path(config["socket"]).parent, Path(value["persistent"]["parent"])]
+            mounted += [Path(config["validation"][name]) for name in
+                        ("workspace_root", "authority_root", "dotnet_root", "java_root", "android_sdk_root")]
+            mounted += [Path(row.source) for row in policy.binds]
+            private_paths = [*secrets.values(), *transport.values()]
+            _require(all(not path.is_relative_to(root) and not root.is_relative_to(path)
+                         for path in private_paths for root in mounted))
+            # Metadata only for signing inputs. All aliases precede any transport read.
+            for path in secrets.values():
+                observe(path, 1400000)
+            for name, path in bearers.items():
+                observe(path, protected.TRANSPORT_LIMITS[name + "_bearer"])
+            for name, pin in pins.items():
+                observe(pin.path, protected.PIN_LIMITS[name], False)
+            for name, path in validation.items():
+                observe(path, protected.VALIDATION_FILE_LIMITS[name])
+            _require(len({row[2][:2] for row in metadata.values()}) == len(metadata))
+            for path in destinations:
+                _require(not os.path.lexists(path))
+                parent(path, True)
+            slots = [(parents[path.parent][0][-1][1][:2], path.name) for path in destinations]
+            _require(len(set(slots)) == 2)
+            boundaries = {}
+            for root in set(mounted):
+                if not os.path.lexists(root):
+                    boundaries[root] = None
+                    continue
+                _require(root.resolve(strict=True) == root)
+                fd = os.open(root, os.O_PATH | os.O_NOFOLLOW | os.O_CLOEXEC)
+                cleanup.callback(os.close, fd)
+                boundaries[root] = (fd, _directory_stamp(os.fstat(fd)))
+            created = set()
+            def check():
+                for path, (limit, private, stamp) in metadata.items():
+                    _require(protected._metadata(path, limit, private=private) == stamp)
+                for chain, fd in parents.values():
+                    _require(all(_directory_stamp(part.lstat()) == stamp for part, stamp in chain)
+                             and _directory_stamp(os.fstat(fd)) == chain[-1][1])
+                for item in held:
+                    item.recheck()
+                _require(all(not os.path.lexists(path) for path in [*destinations, *unused] if path not in created))
+                private_chains = [parents[path.parent][0] for path in private_paths]
+                private_ids = {metadata[path][2][:2] for path in (*secrets.values(), *bearers.values())}
+                for root, binding in boundaries.items():
+                    if binding is None:
+                        _require(not os.path.lexists(root))
+                    else:
+                        fd, stamp = binding
+                        _require(root.resolve(strict=True) == root and _directory_stamp(root.lstat()) == stamp
+                                 and _directory_stamp(os.fstat(fd)) == stamp and stamp[:2] not in private_ids)
+                        _require(all(stamp[:2] != ancestor[:2] for chain in private_chains for _, ancestor in chain))
+            check()
+            for name, pin in pins.items():
+                hold(pin.path, protected.PIN_LIMITS[name], expected=pin.sha256, private=False)
+                check()
+            # The admitted pin binds CA bytes; no TLS/client, token request, mount,
+            # lock execution, validation runner or signing-key reader is constructed.
+            for item in held:
+                _require(item.read() == item.raw)
+                check()
+            texts = []
+            for name, path in bearers.items():
+                item = hold(path, protected.TRANSPORT_LIMITS[name + "_bearer"],
+                            expected=profile_value["owner"]["bearer_sha256"][name])
+                texts.append(_text(item.raw.decode("ascii"), protected.TRANSPORT_LIMITS[name + "_bearer"]))
+                check()
+            _require(len(set(texts)) == 2)
+            selected_environment = os.environ if environment is None else environment
+            raw_inputs = {}
+            for name, variable in ENVIRONMENT:
+                check()
+                raw_inputs[name] = _text(selected_environment.get(variable), protected.TRANSPORT_LIMITS[name])
+                check()
+            protected.entrypoint._endpoint(raw_inputs["oidc_request_url"].decode("ascii"))
+            _require(raw_inputs["oidc_request_credential"] not in texts)
+            check()
+            for name, _variable in ENVIRONMENT:
+                path, raw = transport[name], raw_inputs[name]
+                check()
+                materializer._write_exclusive(path, raw)
+                observe(path, protected.TRANSPORT_LIMITS[name])
+                item = hold(path, protected.TRANSPORT_LIMITS[name], expected=hashlib.sha256(raw).hexdigest())
+                created.add(path)
+                _require(item.raw == raw and len({row[2][:2] for row in metadata.values()}) == len(metadata))
+                check()
+            for item in held:
+                _require(item.read() == item.raw)
+                check()
+            return PROTECTED_COMPLETE
+    except BaseException:
+        raise StagingError(ERROR) from None
+
+
 class _Parser(argparse.ArgumentParser):
     def error(self, _message):
         raise StagingError(ERROR)
@@ -257,14 +405,19 @@ class _Parser(argparse.ArgumentParser):
 def main(argv=None):
     try:
         parser = _Parser(allow_abbrev=False, add_help=False)
-        parser.add_argument("--deliver-role-bearer", action="store_true")
-        parser.add_argument("--role", choices=ROLES, required=True)
+        modes = parser.add_mutually_exclusive_group()
+        modes.add_argument("--deliver-role-bearer", action="store_true")
+        modes.add_argument("--stage-protected-request-inputs", action="store_true")
+        parser.add_argument("--role", choices=ROLES)
         for name in ("profile", "context", "deployment"):
             parser.add_argument("--" + name, required=True)
             parser.add_argument("--" + name + "-sha256", required=True)
         args = parser.parse_args(argv)
-        operation = deliver_role_bearer if args.deliver_role_bearer else stage
-        print(operation(role=args.role, profile=hosted._path(args.profile), profile_sha256=args.profile_sha256,
+        _require((args.role is None) if args.stage_protected_request_inputs else (args.role in ROLES))
+        operation = (stage_protected_request_inputs if args.stage_protected_request_inputs else
+                     deliver_role_bearer if args.deliver_role_bearer else stage)
+        role = {} if args.stage_protected_request_inputs else {"role": args.role}
+        print(operation(**role, profile=hosted._path(args.profile), profile_sha256=args.profile_sha256,
                     context=hosted._path(args.context), context_sha256=args.context_sha256,
                     deployment=hosted._path(args.deployment), deployment_sha256=args.deployment_sha256), flush=True)
         return 0

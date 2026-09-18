@@ -93,7 +93,7 @@ storage. The root protected supervisor remains separate and unchanged.
 
 ## Fixed bearer delivery and request-input staging
 
-`scripts/android_hosted_input_stager.py` supplies two separately selected local
+`scripts/android_hosted_input_stager.py` supplies separately selected local
 file preparation steps, not a complete hosted provisioner or role executor.
 Its closed CLI accepts `--role capture|emission`, plus `--profile`, `--context`,
 `--deployment` and each one's
@@ -154,6 +154,44 @@ authentication remains unchanged. Disposable
 tests use the real renderer, writer and `_Input` reader; operational callbacks
 are trapped. The source-test CI separately includes this dedicated suite; no
 operational workflow is added by this preparation step.
+
+### Protected request files
+
+The separate opt-in `--stage-protected-request-inputs` calls
+`stage_protected_request_inputs()` with the same six admitted document/path/hash
+arguments and **no `--role`**. It is root-only and requires the retained
+deployment to equal `render(profile, context, "protected")` exactly. It does not
+change either hosted mode, the phase caller, protected bootstrap or supervisor.
+The public profile/context/deployment paths, custody and expected hashes must
+already have been independently admitted before this call. Hash comparison
+necessarily reads those selected document bytes; it cannot retroactively make
+an arbitrary candidate-selected path safe to read. The metadata-only guarantee
+below concerns the configured signing inputs in that admitted profile.
+
+Before opening either existing intake/binary role bearer, it checks all four
+signing-file metadata records (never their bytes), public pins, validation-file
+metadata, input/output aliases and the protected consumer's runtime/recovery
+exclusions. Public pinned bytes, including both CA files, are hash-checked before
+the two explicit OIDC environment lookups. Existing intake and binary bearer
+bytes must match their separate admitted owner digests; no bearer is delivered
+by this mode. The endpoint and printable-ASCII/size rules remain those of the
+existing consumer, and all three credential values must differ.
+
+Only the configured request URL and request credential files are created, using
+the existing exclusive 0600 writer and held `_OwnedFile` readback. Their root
+0700 parents must already exist; signing files, bearers and validation files
+also retain private-parent custody. The two slots and operation/output/recovery
+attempt/socket paths must be fresh. Held file/parent/boundary identities are
+checked around reads and writes. Partial files survive failure; there is no
+retry, cleanup, token request, key read, runtime validation runner or owner call.
+Root ownership is custody, not independent admission or authentication.
+
+This closes only the missing two-file producer for the existing protected
+consumer. It supplies no interpreter/source trust, signing material, private
+route, durable mount or hosted deployment. Rootless tests explicitly model root
+ownership/ancestry while retaining real file primitives; they are not proof of
+actual protected root custody. The same disposable fixture can exercise real
+root metadata without those models in a separately admitted isolated runtime.
 
 ## Actual sequence across hosted steps
 
