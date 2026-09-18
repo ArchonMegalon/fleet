@@ -9,18 +9,18 @@ are backed by the exact successful reviewed and main API-36 Two-Green evidence.
 
 It never accepts, signs, uploads, or publishes an AAB. Its primary output is
 the exact `chummer.android.two-green-release-approval/v1` contract consumed by
-the bound Android `4e4c3153a9b476a66300c44b3e07e3c2580a5911` release
-verifier at tree `5ee1740f173774b8e92d5f78809dec9bd71e352c`. Public-key
+the bound Android `0d5c8f0cacfdfbb89288eb0f3906d2fdbab36d0a` release
+verifier at tree `7d2585c46236f975a7a4d73a591688fd84b4228f`. Public-key
 compatibility, hosted consumer qualification and issuer activation are separate
 claims. It always keeps
 `signingAuthorized`, `publicationAuthorized`, and
 `googlePlayUploadAuthorized` false.
 
-Ordered qualification run `35334690056` passed with the original artifact
-`10542239824`, pairing PR71 review `35320765094` attempt 2 and subsequent
-main `35328289747` attempt 1. The exact receipt SHA256 is
-`50375dd5e130490a19171fa1ccd0f0bd4dae84ab385c1893cedddc001023dfb2`.
-The previous `8c98` receipt and detached approval cannot qualify this commit.
+Ordered qualification run `35365960704` passed with the original artifact
+`10555893524`, pairing PR72 review `35350168111` attempt 1 and subsequent
+main `35357603833` attempt 1. The exact receipt SHA256 is
+`312bbf6478450f973f6b8e2cf804a066e75ba665c7cda66464c30ed6ab9f9528`.
+The previous `4e4c` receipt and detached approval cannot qualify this commit.
 Qualification is not issuance: a fresh protected-environment approval remains
 required, and signing and publication stay outside this contract.
 

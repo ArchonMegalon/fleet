@@ -19,9 +19,9 @@ approval = fixture.approval
 EXTERNAL_INPUTS = (
     "CHUMMER_ANDROID_CURRENT_ROOT", "CHUMMER_ANDROID_CURRENT_TWO_GREEN_RECEIPT",
 )
-# Retained ordered qualification run 35334690056 / artifact 10542239824.
+# Retained ordered qualification run 35365960704 / artifact 10555893524.
 # Hosted evidence stays external and byte-immutable; RFC signatures are test-only.
-ORIGINAL_RECEIPT_SHA256 = "50375dd5e130490a19171fa1ccd0f0bd4dae84ab385c1893cedddc001023dfb2"
+ORIGINAL_RECEIPT_SHA256 = "312bbf6478450f973f6b8e2cf804a066e75ba665c7cda66464c30ed6ab9f9528"
 CURRENT_CONSUMER_SHA256 = "a6ecfecb0c53a45e9f91706ff4b3c8ef97e0bd23fc69a7d9a48e094d5038cb76"
 
 
@@ -233,6 +233,7 @@ def test_qualified_commit_cannot_substitute_a_different_main_with_same_tree():
     ("536ce7bcc83be62f1a3b35155e5a029c3e926d16", "103ff9fe1f4feba5d6134376191fcd9b03472351"),
     ("5732c7803c934a6eeb02ab8dbe474e5ea9703755", "103ff9fe1f4feba5d6134376191fcd9b03472351"),
     ("76eece72bfb8e4f6bc8e45458253006898ae804b", "5ee1740f173774b8e92d5f78809dec9bd71e352c"),
+    ("4e4c3153a9b476a66300c44b3e07e3c2580a5911", "5ee1740f173774b8e92d5f78809dec9bd71e352c"),
 ])
 def test_previous_qualified_commit_and_tree_are_not_current_authority(commit, tree):
     inputs = fixture.inputs()
