@@ -3,7 +3,9 @@
 Execute this independently admitted file as __main__ or the one private
 bootstrap identity below, never import it through scripts. Supplied hashes and
 root are independently selected authority, not candidate self-hashes. This
-caller does not provision a runtime, credential, controller or deployment.
+caller does not provision a runtime or controller. Its explicit prepare-inputs
+mode creates only hosted role-local paths, a rendered deployment and an already
+injected bearer; neither its returned digest nor those files grant authority.
 """
 from __future__ import annotations
 
@@ -171,6 +173,142 @@ def run(phase, *, hosted_root, helper_sha256, profile, profile_sha256,
         raise PhaseError(ERROR) from None
 
 
+def prepare_inputs(role, *, hosted_root, helper_sha256, profile, profile_sha256,
+                   context, context_sha256, job_root, deployment, environment=None):
+    """Create one fresh hosted input tree; never request OIDC or execute a role."""
+    global _used
+    try:
+        _require(not _used)
+        _used = True
+        _require(__name__ in {"__main__", CALLER} and role in {"capture", "emission"}
+                 and os.getuid() == os.geteuid() and os.getgid() == os.getegid()
+                 and sys.flags.isolated == 1 and sys.dont_write_bytecode and sys.pycache_prefix is None)
+        for path in (hosted_root, profile, context, job_root, deployment):
+            _path(path)
+        for digest in (helper_sha256, profile_sha256, context_sha256):
+            _require(type(digest) is str and re.fullmatch(r"[0-9a-f]{64}", digest))
+        _require(not os.path.lexists(job_root))
+        with _helper(hosted_root, helper_sha256) as (admission, helper_check):
+            with admission.admit(profile=profile, profile_sha256=profile_sha256,
+                    context=context, context_sha256=context_sha256, hosted_root=hosted_root) as lease:
+                helper_check(); lease.recheck()
+                modules = lease.import_targets()
+                materializer, stager, hosted = (modules[key] for key in ("materializer", "stager", "hosted"))
+                with ExitStack() as cleanup:
+                    held, directories, created = [], {}, set()
+                    def hold(path, digest, limit, public=False):
+                        item = hosted._Input(path, limit, expected=digest, public=public)
+                        cleanup.callback(item.close); held.append(item)
+                        return item
+                    documents = (hold(profile, profile_sha256, materializer.MAX_PROFILE, True),
+                                 hold(context, context_sha256, materializer.MAX_CONTEXT, True))
+                    helper_check(); lease.recheck()
+                    rendered = materializer.render(materializer._json(documents[0].raw),
+                                                   materializer._json(documents[1].raw), role)
+                    phase = "capture" if role == "capture" else "emission-prepare"
+                    value, _, _, pins, inputs, attempt = hosted._document(rendered, phase)
+                    leaves = [deployment, *inputs.values(), attempt]
+                    _require(all(path != job_root and path.is_relative_to(job_root) for path in leaves)
+                             and all(not a.is_relative_to(b) and not b.is_relative_to(a)
+                                     for i, a in enumerate(leaves) for b in leaves[i+1:]))
+                    outside = [profile, context, hosted_root, *(pin.path for pin in pins.values())]
+                    action_root = value["attestation_output_root"]
+                    if action_root is not None:
+                        outside.append(Path(action_root))
+                    _require(all(not path.is_relative_to(job_root) and not job_root.is_relative_to(path)
+                                 for path in outside))
+                    needed = {job_root}
+                    for path in leaves:
+                        relative = path.relative_to(job_root)
+                        _require(len(relative.parts) <= 8)
+                        for parent in path.parents:
+                            if parent == job_root:
+                                break
+                            needed.add(parent)
+                    _require(len(needed) <= 32 and not set(leaves) & needed)
+                    parent_chain = _parents(job_root)
+                    _require(parent_chain[-1][3:] == (os.getuid(), os.getgid())
+                             and stat.S_IMODE(parent_chain[-1][2]) == 0o700)
+                    parent_fd = os.open(job_root.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+                    cleanup.callback(os.close, parent_fd)
+                    directory_stamp = lambda info: (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid)
+                    _require(directory_stamp(os.fstat(parent_fd)) == parent_chain[-1])
+                    _require(directory_stamp(hosted_root.lstat())[:2] not in {row[:2] for row in parent_chain})
+                    action = None
+                    if action_root is not None:
+                        action_root = Path(action_root)
+                        action_chain = _parents(action_root / "unused")
+                        fd = os.open(action_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+                        cleanup.callback(os.close, fd)
+                        stamp = directory_stamp(os.fstat(fd))
+                        _require(stamp == action_chain[-1] and stamp[:2] not in {row[:2] for row in parent_chain})
+                        action = (fd, stamp, action_chain)
+                    for pin in pins.values():
+                        hold(pin.path, pin.sha256, 1024**2)
+                    _require(len({item.stamp[:2] for item in held}) == len(held))
+                    def check():
+                        helper_check(); lease.recheck()
+                        for item in held:
+                            _require(item.read() == item.raw)
+                        _require(_parents(job_root) == parent_chain
+                                 and directory_stamp(os.fstat(parent_fd)) == parent_chain[-1])
+                        if not directories:
+                            _require(not os.path.lexists(job_root))
+                        for path, (fd, stamp) in directories.items():
+                            _require(path.resolve(strict=True) == path
+                                     and directory_stamp(path.lstat()) == stamp == directory_stamp(os.fstat(fd)))
+                            expected = {p.name for p in (*directories, *created) if p.parent == path}
+                            with os.scandir(fd) as entries:
+                                actual = set()
+                                for entry in entries:
+                                    _require(entry.name in expected and entry.name not in actual)
+                                    actual.add(entry.name)
+                            _require(actual == expected)
+                        _require(all(path in created or not os.path.lexists(path) for path in leaves))
+                        if action is not None:
+                            fd, stamp, chain = action
+                            _require(_parents(action_root / "unused") == chain
+                                     and directory_stamp(os.fstat(fd)) == stamp == directory_stamp(action_root.lstat()))
+                        helper_check(); lease.recheck()
+                    check()
+                    for path in sorted(needed, key=lambda p: (len(p.parts), str(p))):
+                        check()
+                        base_fd = parent_fd if path == job_root else directories[path.parent][0]
+                        os.mkdir(path.name, 0o700, dir_fd=base_fd)
+                        fd = os.open(path.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=base_fd)
+                        cleanup.callback(os.close, fd)
+                        stamp = directory_stamp(os.fstat(fd))
+                        _require(stamp[3:] == (os.getuid(), os.getgid()) and stat.S_IMODE(stamp[2]) == 0o700)
+                        directories[path] = (fd, stamp)
+                        check(); os.fsync(fd); os.fsync(base_fd); check()
+                    digest = materializer.materialize(profile, profile_sha256, context, context_sha256, deployment, role)
+                    created.add(deployment)
+                    output = hold(deployment, digest, hosted.MAX_CONFIG)
+                    _require(output.raw == rendered and digest == hashlib.sha256(rendered).hexdigest())
+                    check()
+                    selected_environment = os.environ if environment is None else environment
+                    class BearerEnvironment:
+                        def get(self, name):
+                            _require(name == "ANDROID_PREVIEW12_ROLE_BEARER")
+                            check()
+                            raw = selected_environment.get(name)
+                            check()
+                            return raw
+                    result = stager.deliver_role_bearer(role=role, profile=profile, profile_sha256=profile_sha256,
+                        context=context, context_sha256=context_sha256, deployment=deployment,
+                        deployment_sha256=digest, environment=BearerEnvironment())
+                    created.add(inputs["role_bearer"])
+                    bearer = hold(inputs["role_bearer"],
+                                  materializer._json(documents[0].raw)["owner"]["bearer_sha256"][role],
+                                  hosted.INPUT_LIMITS["role_bearer"])
+                    _require(result == stager.BEARER_COMPLETE
+                             and len({item.stamp[:2] for item in held}) == len(held))
+                    check()
+                return digest
+    except BaseException:
+        raise PhaseError(ERROR) from None
+
+
 class _Parser(argparse.ArgumentParser):
     def error(self, _message):
         raise PhaseError(ERROR)
@@ -179,14 +317,27 @@ class _Parser(argparse.ArgumentParser):
 def main(argv=None):
     try:
         parser = _Parser(allow_abbrev=False, add_help=False)
-        parser.add_argument("phase", choices=PHASES)
+        parser.add_argument("phase", choices=(*PHASES, "prepare-inputs"))
         parser.add_argument("--hosted-root", required=True)
         parser.add_argument("--helper-sha256", required=True)
-        for name in ("profile", "context", "deployment"):
+        for name in ("profile", "context"):
             parser.add_argument("--" + name, required=True)
             parser.add_argument("--" + name + "-sha256", required=True)
         parser.add_argument("--bundle")
+        parser.add_argument("--deployment", required=True)
+        parser.add_argument("--deployment-sha256")
+        parser.add_argument("--role", choices=("capture", "emission"))
+        parser.add_argument("--job-root")
         args = parser.parse_args(argv)
+        if args.phase == "prepare-inputs":
+            _require(args.role is not None and args.job_root is not None
+                     and args.deployment_sha256 is None and args.bundle is None)
+            print(prepare_inputs(args.role, hosted_root=Path(args.hosted_root),
+                helper_sha256=args.helper_sha256, profile=Path(args.profile), profile_sha256=args.profile_sha256,
+                context=Path(args.context), context_sha256=args.context_sha256,
+                job_root=Path(args.job_root), deployment=Path(args.deployment)), flush=True)
+            return 0
+        _require(args.role is None and args.job_root is None and args.deployment_sha256 is not None)
         print(run(args.phase, hosted_root=Path(args.hosted_root), helper_sha256=args.helper_sha256,
             profile=Path(args.profile), profile_sha256=args.profile_sha256,
             context=Path(args.context), context_sha256=args.context_sha256,

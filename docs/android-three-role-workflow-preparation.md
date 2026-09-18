@@ -54,6 +54,41 @@ avoids an ambient `scripts.*` import before the gate; it captures only the one
 independently hash-admitted helper. It does not supply initial runtime admission
 or the still-missing deployment/custody prerequisites above.
 
+Its separate opt-in `prepare-inputs` mode now performs the bounded hosted
+filesystem step for **capture or emission only**. It admits the same held
+profile/context/source closure, validates the real rendered role and existing
+CA custody, then creates a fresh owner-private job tree. It uses the original
+materializer to exclusively write the role deployment and the original
+`deliver_role_bearer()` to copy the explicitly injected bearer. It returns only
+the materializer's deployment byte digest, not a new authority envelope. The
+normal phase functions and their authentication remain unchanged.
+
+The closed preparation CLI takes `prepare-inputs --role capture|emission`,
+`--job-root`, `--deployment`, and the existing `--hosted-root`,
+`--helper-sha256`, `--profile`, `--profile-sha256`, `--context`,
+`--context-sha256` inputs. It accepts no command, module factory, bearer
+argument, attestation bundle or claimed deployment digest. The caller itself,
+interpreter/dependency runtime, profile/context and selected source digests must
+already be independently admitted; this mode does not authenticate itself.
+
+The job root must be absent beneath an existing canonical owner-owned 0700
+parent. The deployment, three transport paths and still-absent role attempt must
+all be distinct non-overlapping descendants of that fresh root. Only their
+required parents are created, at most32 directories and8 relative path
+components, all0700. No existing directory is adopted or chmodded. Public input
+files/source and the existing actual attestation-output root remain outside
+the new tree; preparation does not manufacture an attester runtime/output root.
+Directory descriptors, names, inventories and admitted input bytes remain
+fenced around creation and the sole bearer environment lookup.
+
+OIDC request files and the role attempt remain absent. Preparation performs no
+OIDC request, default input staging, role call, network activity or signer
+operation. A separate cold normal phase call then stages the two explicitly
+injected OIDC values and executes the original protocol. Emission submission
+reuses the same deployment and retained input files; it must never call
+preparation again. Same-process reuse and an existing fresh-root pathname reject;
+partial files/directories are preserved on failure, never deleted or retried.
+
 ## Fixed source wiring after independent provisioning exists
 
 The dedicated workflow must be manual-only (`workflow_dispatch`), on its
@@ -170,15 +205,28 @@ OIDC, attestation, Docker, network, listener or signing operation occurs.
 Existing dependency version checks remain active. These tests are preparation
 evidence only, not a substitute for the missing provisioning implementation.
 
-The source-test CI runs nine suites: these composition tests plus materializer,
+`tests/test_android_hosted_input_preparation.py` additionally uses real copied
+Fleet source under the captured-source lease, the real renderer/materializer
+and bearer writer, and disposable synthetic files. It proves downstream input
+staging can consume those outputs, with network/subprocess/SQLite and operational
+role calls blocked. It exercises source/profile/CA custody failure before bearer
+lookup, fresh-path and action-output separation, unexpected children, partial
+write preservation and cold replay rejection. It does not provide a live profile,
+workflow identity, credential, route, recovery mount or operational attestation.
+
+The source-test CI runs ten suites: these composition tests plus materializer,
 adversarial materializer, hosted-role, job-binder, supervisor and hosted-input
-stager, held hosted-source admission and fixed phase-caller tests, on Ubuntu 24.04/Python 3.12,
+stager, held hosted-source admission, fixed phase-caller and hosted-input
+preparation tests, on Ubuntu 24.04/Python 3.12,
 without path filters. It uses a fresh non-system-site
 venv and ten hash-pinned binary wheels in
 `tests/android-role-source-requirements.txt`, with dependency resolution
-disabled and `pip check` required. No FastAPI/Uvicorn/optional server extras
+disabled and `pip check` required. The original nine suites run in one required
+90-second pytest invocation; hosted-input preparation runs in a second required
+90-second invocation using the same venv. Both run under `set -euo pipefail`,
+with no retries or ignored failures. No FastAPI/Uvicorn/optional server extras
 are installed: the server import is inside the uncalled owner `run()` path.
 The five-minute job has only read-only repository permission, pinned checkout
 with persisted credentials disabled, no protected environment or artifact
 upload, and no dispatch/activation route. Public wheel download is installation
-of test dependencies only; the nine suites do not contact live providers.
+of test dependencies only; the ten suites do not contact live providers.

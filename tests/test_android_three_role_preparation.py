@@ -225,6 +225,10 @@ SOURCE_SUITES = (
     "tests/test_android_hosted_phase_caller.py",
 )
 
+INPUT_PREPARATION_SUITES = (
+    "tests/test_android_hosted_input_preparation.py",
+)
+
 OFFLINE_IMPORT_SUITES = (
     "tests/test_android_preview12_offline_source_bundles.py",
     "tests/test_android_preview12_external_rebuilder.py",
@@ -233,12 +237,12 @@ OFFLINE_IMPORT_SUITES = (
 )
 
 
-@pytest.mark.parametrize("job_id,suites,pytest_timeout", [
-    ("source-unit-tests", SOURCE_SUITES, "90s"),
-    ("offline-import-regression", OFFLINE_IMPORT_SUITES, "180s"),
+@pytest.mark.parametrize("job_id,suite_groups,pytest_timeout", [
+    ("source-unit-tests", (SOURCE_SUITES, INPUT_PREPARATION_SUITES), "90s"),
+    ("offline-import-regression", (OFFLINE_IMPORT_SUITES,), "180s"),
 ])
 def test_source_ci_is_read_only_pr_and_main_push_without_operational_jobs(
-    job_id, suites, pytest_timeout,
+    job_id, suite_groups, pytest_timeout,
 ):
     root = Path(__file__).resolve().parents[1]
     raw = (root / ".github/workflows/android-role-source-tests.yml").read_text()
@@ -262,7 +266,8 @@ def test_source_ci_is_read_only_pr_and_main_push_without_operational_jobs(
     body = tests["run"]
     assert "/usr/bin/python3.12 -I -m venv" in body
     assert "os.getuid() != 0 and os.getgid() != 0" in body
-    tokens = shlex.split(body.replace("\\\n", " "))
+    unfolded = body.replace("\\\n", " ")
+    tokens = shlex.split(unfolded)
     for flag in ("--isolated", "--require-hashes", "--only-binary=:all:", "--no-deps",
                  "--no-cache-dir", "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1",
                  "PYTHONDONTWRITEBYTECODE=1", "no:cacheprovider"):
@@ -270,9 +275,22 @@ def test_source_ci_is_read_only_pr_and_main_push_without_operational_jobs(
     assert tokens[tokens.index("--index-url") + 1] == "https://pypi.org/simple"
     assert tokens[tokens.index("-r") + 1] == "tests/android-role-source-requirements.txt"
     assert "-I -m pip --isolated check" in body
-    assert f"timeout {pytest_timeout} env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1" in body
     if job_id == "offline-import-regression":
         assert "umask 077" in body
+    commands = [shlex.split(line) for line in unfolded.splitlines() if line.strip()]
+    assert commands[0] == ["set", "-euo", "pipefail"]
+    venv = "role_test_venv" if job_id == "source-unit-tests" else "import_test_venv"
+    expected_commands = [
+        ["timeout", pytest_timeout, "env", "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1",
+         "PYTHONDONTWRITEBYTECODE=1", f"${venv}/bin/python", "-m", "pytest",
+         "--tb=short", "-p", "no:cacheprovider", "-q", *suites]
+        for suites in suite_groups
+    ]
+    first_pytest = next(index for index, command in enumerate(commands) if "pytest" in command)
+    # Exact mandatory final commands prohibit retry/ignore wrappers, extra calls,
+    # interpreter changes or timeout widening for either source-suite group.
+    assert commands[first_pytest:] == expected_commands
+    suites = tuple(suite for group in suite_groups for suite in group)
     assert [token for token in tokens if token.startswith("tests/test_")] == list(suites)
     assert all((root / suite).is_file() for suite in suites)
 
