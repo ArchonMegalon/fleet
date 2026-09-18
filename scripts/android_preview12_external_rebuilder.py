@@ -3331,15 +3331,7 @@ def prepare_rebuild_handoff(
     Neither mode itself authenticates job isolation or authorizes signing.
     """
 
-    lock, lock_raw = load_lock(lock_path)
-    single_build = build_verification_mode(lock) == "internal-single-build"
     producer_inputs = (external_request, producer_unsigned_aab, producer_sidecar)
-    if single_build:
-        if any(path is not None for path in producer_inputs) or retain_mismatch_diagnostics:
-            raise RebuilderError("single-build mode rejects prebuilt producer inputs and mismatch recovery")
-    elif any(path is None for path in producer_inputs):
-        raise RebuilderError("independent rebuild requires all producer inputs")
-
     _validate_authority_feed_paths(authority_root, owner_feed)
     _validate_offline_feeds(
         offline_nuget_feed, offline_aar_feed, authority_root, output_dir, package_authority,
@@ -3349,6 +3341,13 @@ def prepare_rebuild_handoff(
         two_green_receipt, approval, bundletool, upload_certificate,
         *((offline_source_manifest,) if offline_source_manifest is not None else ()),
     )
+    lock, lock_raw = load_lock(lock_path)
+    single_build = build_verification_mode(lock) == "internal-single-build"
+    if single_build:
+        if any(path is not None for path in producer_inputs) or retain_mismatch_diagnostics:
+            raise RebuilderError("single-build mode rejects prebuilt producer inputs and mismatch recovery")
+    elif any(path is None for path in producer_inputs):
+        raise RebuilderError("independent rebuild requires all producer inputs")
     failures = validate_unsigned_rebuild_lock(lock, lock_raw, reported_builder_image)
     if failures:
         raise RebuilderError("; ".join(failures))
