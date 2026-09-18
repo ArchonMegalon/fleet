@@ -232,6 +232,7 @@ INPUT_PREPARATION_SUITES = (
 OFFLINE_IMPORT_SUITES = (
     "tests/test_android_preview12_offline_source_bundles.py",
     "tests/test_android_preview12_external_rebuilder.py",
+    "tests/test_android_preview12_rebuild_input_boundaries.py",
     "tests/test_android_preview12_preserved_handoff.py",
     "tests/test_android_preview12_preserved_validation.py",
     "tests/test_android_preview12_mismatch_diagnostics.py",
