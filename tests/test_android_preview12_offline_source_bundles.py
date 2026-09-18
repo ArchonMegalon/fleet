@@ -630,3 +630,275 @@ def test_ordinary_checkout_link_owner_mode_does_not_change_protected_default(bun
     fleet._resolve_tree_link(root, root / "relative-link", "package-source.txt", "fixture", owner_uid=12345)
     with pytest.raises(fleet.RebuilderError, match="non-root-owned"):
         fleet._resolve_tree_link(root, root / "relative-link", "package-source.txt", "fixture")
+
+
+@pytest.fixture
+def snapshot_events(bundles, monkeypatch):
+    """Observe real tiny-file custody; no fake Git, file identities or content."""
+    trace = SimpleNamespace(stage=None, snapshots={}, hashes=[], headers=[], events=[],
+                            descriptors={}, live={}, retirements=[], processes=[])
+    mkdtemp, opening, closing, unlink = fleet.tempfile.mkdtemp, os.open, os.close, os.unlink
+    copying, header, offline_git = fleet._copy_offline_input, fleet._offline_bundle_header, fleet._offline_git
+    def stage(*args, **kwargs):
+        result = mkdtemp(*args, **kwargs)
+        if kwargs.get("prefix") == ".offline-source-": trace.stage = Path(result)
+        return result
+    def open_file(*args, **kwargs):
+        fd = opening(*args, **kwargs)
+        path = Path(os.readlink("/proc/self/fd/" + str(fd)))
+        if path == bundles.workspace.parent or (trace.stage is not None and
+                                                (path == trace.stage or path.parent == trace.stage)):
+            info = os.fstat(fd)
+            record = (path, info.st_dev, info.st_ino)
+            trace.descriptors[(fd, info.st_dev, info.st_ino)] = path
+            trace.live[fd] = record
+            trace.events.append(("open", path.name))
+        return fd
+    def close_file(fd):
+        record = trace.live.get(fd)
+        closing(fd)
+        if record is not None:
+            trace.live.pop(fd)
+            trace.events.append(("close", record[0].name))
+    def remove(path, *args, **kwargs):
+        parent = kwargs.get("dir_fd")
+        resolved = Path(path)
+        if not resolved.is_absolute() and parent is not None:
+            resolved = Path(os.readlink("/proc/self/fd/" + str(parent))) / resolved
+        unlink(path, *args, **kwargs)
+        if trace.stage is not None and resolved.parent == trace.stage:
+            trace.events.append(("unlink", resolved.name))
+            trace.retirements.append(resolved.name)
+    def copy(source, metadata, output, limit):
+        actual = copying(source, metadata, output, limit)
+        if source.parent == bundles.inputs:
+            trace.hashes.append(source.stem)
+            trace.events.append(("hash", source.stem))
+        return actual
+    def check_header(path):
+        result = header(path)
+        trace.snapshots[path.stem] = path
+        trace.headers.append(path.stem)
+        trace.events.append(("header", path.stem))
+        return result
+    def command(args, **kwargs):
+        assert set(trace.hashes) == set(trace.headers) == set(fleet.REPOSITORIES)
+        trace.processes.append(list(args))
+        result = offline_git(args, **kwargs)
+        if "fsck" in args:
+            assert "--full" in args and "--strict" in args and "--no-reflogs" in args
+            root = Path(args[args.index("-C") + 1])
+            name = next(name for name, (_, relative, _) in fleet.REPOSITORIES.items()
+                        if root == bundles.workspace / relative)
+            trace.events.append(("fsck", name))
+        return result
+    monkeypatch.setattr(fleet.tempfile, "mkdtemp", stage)
+    monkeypatch.setattr(os, "open", open_file); monkeypatch.setattr(os, "close", close_file)
+    monkeypatch.setattr(os, "unlink", remove)
+    monkeypatch.setattr(fleet, "_copy_offline_input", copy)
+    monkeypatch.setattr(fleet, "_offline_bundle_header", check_header)
+    monkeypatch.setattr(fleet, "_offline_git", command)
+    yield trace
+    assert trace.live == {}
+    # Also inspect actual descriptor identities, so a missed observer event or
+    # reused descriptor number cannot hide an open, already-unlinked snapshot.
+    for (fd, device, inode), _path in trace.descriptors.items():
+        try: info = os.fstat(fd)
+        except OSError: continue
+        assert (info.st_dev, info.st_ino) != (device, inode)
+
+
+def assert_materialization_error(case):
+    with pytest.raises(fleet.RebuilderError) as failure:
+        materialize(case)
+    assert str(failure.value) == "offline source bundle materialization failed"
+
+
+@pytest.mark.parametrize("different_sizes", [False, True])
+def test_snapshot_capacity_order_and_early_retirement_use_real_git(bundles, snapshot_events, monkeypatch, different_sizes):
+    trace = snapshot_events
+    names = list(fleet.REPOSITORIES)
+    if different_sizes:
+        header, pack = bundles.source.path.read_bytes().split(b"\n\n", 1)
+        # Valid extra ref advertisements change transport size, not the graph.
+        for name, padding in zip(names, [0, 3, 1, 3, 0, 2, 1, 2]):
+            path = Path(bundles.rows[name]["path"])
+            extra = b"" if not padding else ("\n" + bundles.source.commit + " refs/heads/pad-" + "x" * padding).encode()
+            path.write_bytes(header + extra + b"\n\n" + pack)
+            bind_bundle(bundles, name, path)
+    bundles.rows = dict(reversed(list(bundles.rows.items())))
+    write_manifest(bundles)
+    expected = sorted(names, key=lambda name: (-bundles.rows[name]["size_bytes"], names.index(name)))
+    originals = {Path(row["path"]): (Path(row["path"]).read_bytes(), fleet._file_identity(Path(row["path"]).stat()))
+                 for row in bundles.rows.values()}
+    original, imported, checked_out = fleet._offline_git, [], []
+    def observe(args, **kwargs):
+        if "unbundle" in args:
+            name = Path(args[-1]).stem
+            assert trace.snapshots[name].exists()
+            imported.append(name)
+        if "checkout" in args:
+            root = Path(args[args.index("-C") + 1])
+            name = next(name for name, (_, relative, _) in fleet.REPOSITORIES.items()
+                        if root == bundles.workspace / relative)
+            path = trace.snapshots[name]
+            assert not path.exists()
+            assert not any(record[0] == path for record in trace.live.values())
+            fsck = trace.events.index(("fsck", name))
+            assert fsck < trace.events.index(("unlink", path.name))
+            assert fsck < trace.events.index(("close", path.name))
+            checked_out.append(name)
+            assert {path.stem for path in trace.stage.iterdir()} == set(expected) - set(checked_out)
+        return original(args, **kwargs)
+    monkeypatch.setattr(fleet, "_offline_git", observe)
+    roots = materialize(bundles)
+    assert imported == checked_out == expected
+    assert len(trace.hashes) == len(trace.headers) == len(trace.retirements) == 8
+    assert set(roots) == set(names) and not trace.stage.exists()
+    for name, root in roots.items():
+        assert (root / "runtime.txt").read_bytes() == b"runtime source\n"
+        assert git(root, "rev-parse", "HEAD") == bundles.source.commit
+    for path, (raw, identity) in originals.items():
+        assert path.read_bytes() == raw and fleet._file_identity(path.stat()) == identity
+
+
+@pytest.mark.parametrize("failure_phase", ["verify", "unbundle", "fsck"])
+def test_failed_git_never_retires_snapshot_before_strict_fsck_success(bundles, snapshot_events, monkeypatch, failure_phase):
+    trace = snapshot_events; original = fleet._offline_git; failed = []
+    def fail(args, **kwargs):
+        result = original(args, **kwargs)
+        if failure_phase in args and not failed:
+            assert len(list(trace.stage.iterdir())) == 8 and trace.retirements == []
+            assert len([row for row in trace.live.values() if row[0].suffix == ".bundle"]) == 8
+            failed.append(True)
+            raise OSError("SYNTHETIC-PRIVATE-GIT-DETAIL")
+        return result
+    monkeypatch.setattr(fleet, "_offline_git", fail)
+    assert_materialization_error(bundles)
+    assert failed == [True] and not any("checkout" in args for args in trace.processes)
+    assert not bundles.workspace.exists() and not trace.stage.exists()
+
+
+@pytest.mark.parametrize("attack", ["symlink", "hardlink", "replacement", "mutation"])
+def test_private_snapshot_tampering_is_rejected_without_erasing_unknown_entries(bundles, snapshot_events, monkeypatch, attack):
+    trace = snapshot_events; original = fleet._offline_git; retained = []; fired = []
+    def mutate(args, **kwargs):
+        result = original(args, **kwargs)
+        if not fired:
+            fired.append(True)
+            path = trace.snapshots[next(iter(fleet.REPOSITORIES))]
+            other = path.with_name("unknown-preserved-entry")
+            if attack in {"symlink", "replacement"}:
+                path.rename(other)
+                if attack == "symlink": path.symlink_to(other)
+                else: path.write_bytes(other.read_bytes()); path.chmod(0o400)
+                retained.extend((path, other))
+            elif attack == "hardlink":
+                os.link(path, other); retained.extend((path, other))
+            else:
+                path.chmod(0o600); path.write_bytes(b"SYNTHETIC-MUTATED-SNAPSHOT")
+        return result
+    monkeypatch.setattr(fleet, "_offline_git", mutate)
+    assert_materialization_error(bundles)
+    assert fired == [True] and not any("unbundle" in args for args in trace.processes)
+    for path in retained: assert os.path.lexists(path)
+    assert not bundles.workspace.exists()
+
+
+@pytest.mark.parametrize("attack", ["stage-replaced", "unknown-child"])
+def test_snapshot_cleanup_preserves_unowned_stage_entries(bundles, snapshot_events, monkeypatch, attack):
+    trace = snapshot_events; original = fleet._offline_git; preserved = []
+    def fail(args, **kwargs):
+        result = original(args, **kwargs)
+        if not preserved:
+            if attack == "stage-replaced":
+                trace.stage.rename(trace.stage.with_name("retained-owned-stage"))
+                trace.stage.mkdir(mode=0o700)
+            sentinel = trace.stage / "unknown-child"
+            sentinel.write_bytes(b"SYNTHETIC-KEEP-UNKNOWN")
+            preserved.append(sentinel)
+            raise OSError("SYNTHETIC-PRIVATE-CLEANUP-DETAIL")
+        return result
+    monkeypatch.setattr(fleet, "_offline_git", fail)
+    assert_materialization_error(bundles)
+    assert preserved[0].read_bytes() == b"SYNTHETIC-KEEP-UNKNOWN"
+    assert not bundles.workspace.exists()
+
+
+@pytest.mark.parametrize("operation", ["unlink", "close"])
+def test_snapshot_retirement_failure_closes_remaining_descriptors_and_is_sanitized(bundles, snapshot_events, monkeypatch, operation):
+    trace = snapshot_events; actual_unlink, actual_close = os.unlink, os.close; failed = []
+    def unlink(path, *args, **kwargs):
+        if not failed and Path(path).suffix == ".bundle" and any(event[0] == "fsck" for event in trace.events):
+            failed.append(True)
+            raise OSError("SYNTHETIC-PRIVATE-UNLINK-DETAIL")
+        return actual_unlink(path, *args, **kwargs)
+    def close(fd):
+        record = trace.live.get(fd)
+        actual_close(fd)
+        if not failed and record is not None and record[0].suffix == ".bundle" and any(event[0] == "fsck" for event in trace.events):
+            failed.append(True)
+            raise OSError("SYNTHETIC-PRIVATE-CLOSE-DETAIL")
+    monkeypatch.setattr(os, operation, unlink if operation == "unlink" else close)
+    assert_materialization_error(bundles)
+    assert failed == [True] and not any("checkout" in args for args in trace.processes)
+    assert not bundles.workspace.exists()
+
+
+def test_initial_snapshot_fstat_failure_cannot_leak_unregistered_descriptor(bundles, snapshot_events, monkeypatch):
+    trace = snapshot_events; actual = os.fstat; failed = []
+    def fstat(fd):
+        record = trace.live.get(fd)
+        if not failed and record is not None and record[0].suffix == ".bundle":
+            failed.append(True)
+            raise OSError("SYNTHETIC-PRIVATE-FIRST-FSTAT-DETAIL")
+        return actual(fd)
+    monkeypatch.setattr(os, "fstat", fstat)
+    try:
+        assert_materialization_error(bundles)
+        assert failed == [True] and trace.processes == [] and trace.live == {}
+        # The unadmitted named entry is not evidence of safe cleanup ownership.
+        assert len(list(trace.stage.iterdir())) == 1
+    finally:
+        # A regression must fail without leaving its synthetic FD in pytest.
+        for fd, (_path, device, inode) in list(trace.live.items()):
+            info = actual(fd)
+            if (info.st_dev, info.st_ino) == (device, inode): os.close(fd)
+
+
+@pytest.mark.parametrize("phase", ["capture", "retirement", "final-parent"])
+def test_snapshot_fsync_failures_remain_content_free_and_close_all_owned_fds(bundles, snapshot_events, monkeypatch, phase):
+    trace = snapshot_events; actual = os.fsync; failed = []
+    def fsync(fd):
+        record = trace.live.get(fd)
+        path = None if record is None else record[0]
+        selected = (path is not None and path.suffix == ".bundle" if phase == "capture" else
+                    path == trace.stage if phase == "retirement" else path == bundles.workspace.parent)
+        if not failed and selected:
+            failed.append(True)
+            raise OSError("SYNTHETIC-PRIVATE-FSYNC-DETAIL")
+        return actual(fd)
+    monkeypatch.setattr(os, "fsync", fsync)
+    assert_materialization_error(bundles)
+    assert failed == [True] and not bundles.workspace.exists()
+    if phase == "capture": assert trace.processes == []
+    elif phase == "retirement": assert not any("checkout" in args for args in trace.processes)
+    else: assert len([args for args in trace.processes if "checkout" in args]) == 8
+
+
+def test_snapshot_parent_rebinding_preserves_foreign_parent_and_closes_descriptors(bundles, snapshot_events, monkeypatch):
+    trace = snapshot_events; original = fleet._offline_git; fired = []
+    parent = bundles.workspace.parent; moved = parent.with_name(parent.name + "-retained")
+    originals = {Path(row["path"]).relative_to(parent): Path(row["path"]).read_bytes()
+                 for row in bundles.rows.values()}
+    def replace(args, **kwargs):
+        result = original(args, **kwargs)
+        if not fired:
+            fired.append(True); parent.rename(moved); parent.mkdir(mode=0o700)
+            (parent / "unknown-parent-entry").write_bytes(b"SYNTHETIC-KEEP-PARENT")
+        return result
+    monkeypatch.setattr(fleet, "_offline_git", replace)
+    assert_materialization_error(bundles)
+    assert fired == [True] and not any("unbundle" in args for args in trace.processes)
+    assert (parent / "unknown-parent-entry").read_bytes() == b"SYNTHETIC-KEEP-PARENT"
+    for relative, raw in originals.items(): assert (moved / relative).read_bytes() == raw

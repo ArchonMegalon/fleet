@@ -804,6 +804,162 @@ def _offline_workspace_parent(parent: Path) -> None:
             raise RebuilderError("offline source workspace ancestry is not owner-controlled")
 
 
+class _OfflineBundleSnapshots:
+    """Owned, held transport copies; never cleanup an unrecognized pathname.
+
+    This relies on the existing private owner-controlled staging custody, not
+    an atomic conditional-unlink primitive or protection from a concurrent root
+    or same-UID writer. Directory timestamps legitimately change as we unlink.
+    """
+
+    def __init__(self, parent: Path):
+        self.parent = parent
+        self.parent_fd = self.descriptor = None
+        self.files: dict[str, tuple[int | None, os.stat_result]] = {}
+        self.unlink_attempted: set[str] = set()
+        try:
+            self.parent_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            self.parent_identity = os.fstat(self.parent_fd)
+            self.path = Path(tempfile.mkdtemp(prefix=".offline-source-", dir=parent))
+            self.identity = self.path.lstat()
+            if self.identity.st_uid != os.getuid() or stat.S_IMODE(self.identity.st_mode) != 0o700:
+                raise RebuilderError("offline source staging custody is not private")
+            self.descriptor = os.open(self.path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            self._stage()
+        except (OSError, RuntimeError, ValueError):
+            self._close_directories()
+            raise
+
+    @staticmethod
+    def _directory_identity(value: os.stat_result) -> tuple[int, ...]:
+        return value.st_dev, value.st_ino, value.st_mode, value.st_uid, value.st_gid
+
+    def _stage(self) -> None:
+        _offline_workspace_parent(self.parent)
+        for current in (os.fstat(self.parent_fd), self.parent.lstat()):
+            if self._directory_identity(current) != self._directory_identity(self.parent_identity):
+                raise RebuilderError("offline source staging custody changed")
+        for current in (os.fstat(self.descriptor),
+                        os.stat(self.path.name, dir_fd=self.parent_fd, follow_symlinks=False)):
+            if self._directory_identity(current) != self._directory_identity(self.identity):
+                raise RebuilderError("offline source staging custody changed")
+
+    def check(self, name: str) -> Path:
+        self._stage()
+        descriptor, expected = self.files[name]
+        for current in (os.fstat(descriptor),
+                        os.stat(name + ".bundle", dir_fd=self.descriptor, follow_symlinks=False)):
+            if (_file_identity(current) != _file_identity(expected) or current.st_gid != expected.st_gid
+                    or current.st_nlink != 1 or not stat.S_ISREG(current.st_mode)):
+                raise RebuilderError("offline source snapshot changed")
+        return self.path / (name + ".bundle")
+
+    def capture(self, name: str, source: Path, metadata: os.stat_result, expected_digest: str) -> None:
+        self._stage()
+        descriptor = os.open(name + ".bundle", os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+                             | os.O_CLOEXEC, 0o600, dir_fd=self.descriptor)
+        try:
+            identity = os.fstat(descriptor)
+        except OSError:
+            os.close(descriptor)
+            raise
+        self.files[name] = (descriptor, identity)
+        try:
+            with os.fdopen(descriptor, "wb", closefd=False) as output:
+                actual = _copy_offline_input(source, metadata, output, OFFLINE_BUNDLE_BYTES)
+                output.flush()
+                os.fsync(descriptor)
+                os.fchmod(descriptor, 0o400)
+        finally:
+            # Even a failed/partial copy is ours, but its named inode must still
+            # match this held descriptor before cleanup may remove it.
+            self.files[name] = (descriptor, os.fstat(descriptor))
+        if actual != expected_digest:
+            raise RebuilderError("offline source bundle digest differs from manifest")
+        _offline_bundle_header(self.check(name))
+        self.check(name)
+
+    def _unlink(self, name: str) -> None:
+        self.check(name)
+        descriptor, expected = self.files[name]
+        if name in self.unlink_attempted:
+            raise RebuilderError("offline source snapshot retirement is uncertain")
+        self.unlink_attempted.add(name)
+        os.unlink(name + ".bundle", dir_fd=self.descriptor)
+        current = os.fstat(descriptor)
+        if (current.st_dev, current.st_ino, current.st_nlink) != (expected.st_dev, expected.st_ino, 0):
+            raise RebuilderError("offline source snapshot retirement is uncertain")
+        try:
+            os.stat(name + ".bundle", dir_fd=self.descriptor, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            raise RebuilderError("offline source snapshot retirement is uncertain")
+        os.fsync(self.descriptor)
+        self._stage()
+
+    def _close_file(self, name: str) -> None:
+        descriptor, identity = self.files[name]
+        if descriptor is not None:
+            # A failed close must not be retried against a possibly reused FD.
+            self.files[name] = (None, identity)
+            os.close(descriptor)
+
+    def retire(self, name: str) -> None:
+        self._unlink(name)
+        # Unlink alone does not release disk blocks while this FD is held.
+        self._close_file(name)
+
+    def _close_directories(self) -> None:
+        failed = False
+        for attribute in ("descriptor", "parent_fd"):
+            descriptor = getattr(self, attribute)
+            if descriptor is not None:
+                setattr(self, attribute, None)
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    failed = True
+        if failed:
+            raise RebuilderError("offline source snapshot cleanup failed")
+
+    def close(self) -> None:
+        failed = False
+        try:
+            for name, (descriptor, _identity) in self.files.items():
+                if descriptor is None:
+                    continue
+                try:
+                    # Never retry a failed/uncertain unlink. Close its held FD
+                    # below and preserve any remaining named entry.
+                    if name not in self.unlink_attempted:
+                        self._unlink(name)
+                except (OSError, RuntimeError, ValueError):
+                    failed = True
+                finally:
+                    try:
+                        self._close_file(name)
+                    except OSError:
+                        failed = True
+            self._stage()
+            if os.listdir(self.descriptor):
+                # Includes foreign replacements and new entries: do not let a
+                # recursive finally cleanup erase what retirement rejected.
+                failed = True
+            else:
+                os.rmdir(self.path.name, dir_fd=self.parent_fd)
+                os.fsync(self.parent_fd)
+        except (OSError, RuntimeError, ValueError):
+            failed = True
+        finally:
+            try:
+                self._close_directories()
+            except (OSError, RuntimeError, ValueError):
+                failed = True
+        if failed:
+            raise RebuilderError("offline source snapshot cleanup failed")
+
+
 def checkout_source_graph_from_bundles(graph: Mapping[str, Any], workspace: Path, manifest_path: Path, *,
                                        timeout: int = 900) -> dict[str, Path]:
     """Snapshot all eight complete bundles, then materialize exact local sources.
@@ -812,8 +968,7 @@ def checkout_source_graph_from_bundles(graph: Mapping[str, Any], workspace: Path
     producer authentication, protected custody, signing or release eligibility.
     The caller must provide a filesystem quota for expanded Git/source bytes.
     """
-    workspace_identity = stage_identity = None
-    stage = None
+    workspace_identity = None
     try:
         rows = validate_source_graph(graph)
         if not workspace.is_absolute() or workspace.exists() or workspace.is_symlink() \
@@ -822,49 +977,45 @@ def checkout_source_graph_from_bundles(graph: Mapping[str, Any], workspace: Path
             raise RebuilderError("offline source workspace must be a new canonical absolute path")
         _offline_workspace_parent(workspace.parent)
         inputs = _offline_manifest(manifest_path, workspace)
-        stage = Path(tempfile.mkdtemp(prefix=".offline-source-", dir=workspace.parent))
-        stage_identity = stage.lstat()
-        snapshots = {}
-        # Complete every size/hash snapshot before creating any checkout.
-        for name, (source, metadata, expected_digest) in inputs.items():
-            snapshot = stage / (name + ".bundle")
-            with snapshot.open("xb") as output:
-                actual = _copy_offline_input(source, metadata, output, OFFLINE_BUNDLE_BYTES)
-                output.flush()
-                os.fsync(output.fileno())
-            snapshot.chmod(0o400)
-            if actual != expected_digest:
-                raise RebuilderError("offline source bundle digest differs from manifest")
-            _offline_bundle_header(snapshot)
-            snapshots[name] = snapshot
-        workspace.mkdir(mode=0o700)
-        workspace_identity = workspace.lstat()
-        for name, (_role, relative, repository) in REPOSITORIES.items():
-            root = workspace / relative
-            root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            _offline_git(["init", "--quiet", "--template=", os.fspath(root)], timeout=timeout)
-            command = ["-C", os.fspath(root)]
-            _offline_git([*command, "bundle", "verify", os.fspath(snapshots[name])], timeout=timeout)
-            _offline_git([*command, "bundle", "unbundle", os.fspath(snapshots[name])], timeout=timeout)
-            _offline_git([*command, "fsck", "--full", "--strict", "--no-reflogs", rows[name]["commit"]], timeout=timeout)
-            _offline_git([*command, "remote", "add", "origin", repository], timeout=timeout)
-            _preserved_git_storage(root, repository)
-            expected, _ = _preserved_git_inventory(root, rows[name]["commit"], _offline_git, timeout)
-            _preserved_checkout_attributes(root, rows[name]["commit"], expected, _offline_git, timeout)
-            _offline_git(["--attr-source=" + rows[name]["commit"], *command, "checkout", "--quiet",
-                          "--detach", rows[name]["commit"]], timeout=timeout)
-        roots = _verify_source_checkout_graph(graph, workspace, _offline_git, timeout=timeout)
-        for name, root in roots.items():
-            _preserved_repository_bytes(root, rows[name]["commit"], git=_offline_git,
-                                        owner_uid=os.getuid(), timeout=timeout)
+        snapshots = _OfflineBundleSnapshots(workspace.parent)
+        try:
+            # Complete every size/hash/header snapshot before creating any checkout.
+            for name, (source, metadata, expected_digest) in inputs.items():
+                snapshots.capture(name, source, metadata, expected_digest)
+            for name in inputs:
+                snapshots.check(name)
+            workspace.mkdir(mode=0o700)
+            workspace_identity = workspace.lstat()
+            # Stable sort retains canonical repository order for equal sizes.
+            for name in sorted(REPOSITORIES, key=lambda item: -inputs[item][1].st_size):
+                _role, relative, repository = REPOSITORIES[name]
+                root = workspace / relative
+                root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                snapshots.check(name)
+                _offline_git(["init", "--quiet", "--template=", os.fspath(root)], timeout=timeout)
+                command = ["-C", os.fspath(root)]
+                _offline_git([*command, "bundle", "verify", os.fspath(snapshots.check(name))], timeout=timeout)
+                _offline_git([*command, "bundle", "unbundle", os.fspath(snapshots.check(name))], timeout=timeout)
+                snapshots.check(name)
+                _offline_git([*command, "fsck", "--full", "--strict", "--no-reflogs", rows[name]["commit"]], timeout=timeout)
+                snapshots.retire(name)
+                _offline_git([*command, "remote", "add", "origin", repository], timeout=timeout)
+                _preserved_git_storage(root, repository)
+                expected, _ = _preserved_git_inventory(root, rows[name]["commit"], _offline_git, timeout)
+                _preserved_checkout_attributes(root, rows[name]["commit"], expected, _offline_git, timeout)
+                _offline_git(["--attr-source=" + rows[name]["commit"], *command, "checkout", "--quiet",
+                              "--detach", rows[name]["commit"]], timeout=timeout)
+            roots = _verify_source_checkout_graph(graph, workspace, _offline_git, timeout=timeout)
+            for name, root in roots.items():
+                _preserved_repository_bytes(root, rows[name]["commit"], git=_offline_git,
+                                            owner_uid=os.getuid(), timeout=timeout)
+        finally:
+            snapshots.close()
         return roots
     except (OSError, RuntimeError, ValueError, TypeError, subprocess.SubprocessError):
         if workspace_identity is not None:
             _remove_owned_directory(workspace, workspace_identity)
         raise RebuilderError("offline source bundle materialization failed") from None
-    finally:
-        if stage is not None and stage_identity is not None:
-            _remove_owned_directory(stage, stage_identity)
 
 
 def _trusted_root(path: Path, label: str) -> Path:

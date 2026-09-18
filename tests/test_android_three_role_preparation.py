@@ -225,16 +225,29 @@ SOURCE_SUITES = (
     "tests/test_android_hosted_phase_caller.py",
 )
 
+OFFLINE_IMPORT_SUITES = (
+    "tests/test_android_preview12_offline_source_bundles.py",
+    "tests/test_android_preview12_external_rebuilder.py",
+    "tests/test_android_preview12_preserved_handoff.py",
+    "tests/test_android_preview12_preserved_validation.py",
+)
 
-def test_source_ci_is_read_only_pr_and_main_push_without_operational_jobs():
+
+@pytest.mark.parametrize("job_id,suites,pytest_timeout", [
+    ("source-unit-tests", SOURCE_SUITES, "90s"),
+    ("offline-import-regression", OFFLINE_IMPORT_SUITES, "180s"),
+])
+def test_source_ci_is_read_only_pr_and_main_push_without_operational_jobs(
+    job_id, suites, pytest_timeout,
+):
     root = Path(__file__).resolve().parents[1]
     raw = (root / ".github/workflows/android-role-source-tests.yml").read_text()
     workflow = yaml.safe_load(raw)
     assert set(workflow) == {"name", "on", "permissions", "jobs"}
     assert workflow["on"] == {"pull_request": None, "push": {"branches": ["main"]}}
     assert workflow["permissions"] == {"contents": "read"}
-    assert set(workflow["jobs"]) == {"source-unit-tests"}
-    job = workflow["jobs"]["source-unit-tests"]
+    assert set(workflow["jobs"]) == {"source-unit-tests", "offline-import-regression"}
+    job = workflow["jobs"][job_id]
     assert set(job) == {"runs-on", "timeout-minutes", "steps"}
     assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == 5
     checkout, tests = job["steps"]
@@ -257,8 +270,11 @@ def test_source_ci_is_read_only_pr_and_main_push_without_operational_jobs():
     assert tokens[tokens.index("--index-url") + 1] == "https://pypi.org/simple"
     assert tokens[tokens.index("-r") + 1] == "tests/android-role-source-requirements.txt"
     assert "-I -m pip --isolated check" in body
-    assert [token for token in tokens if token.startswith("tests/test_")] == list(SOURCE_SUITES)
-    assert all((root / suite).is_file() for suite in SOURCE_SUITES)
+    assert f"timeout {pytest_timeout} env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1" in body
+    if job_id == "offline-import-regression":
+        assert "umask 077" in body
+    assert [token for token in tokens if token.startswith("tests/test_")] == list(suites)
+    assert all((root / suite).is_file() for suite in suites)
 
 
 def test_source_ci_lock_is_exact_hashed_binary_test_closure_only():
