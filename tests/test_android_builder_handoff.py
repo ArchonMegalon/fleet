@@ -105,6 +105,31 @@ def test_real_copy_validation_and_detached_bytes_without_preserved_or_release_cl
     assert not (model.operation / "capture-failed.json").exists()
 
 
+def test_single_build_copy_keeps_owner_policy_and_false_local_authority(model):
+    rewrite(model.lock.path, lambda value: value["rebuild"].update(
+        verification_mode="internal-single-build", distribution_track="internal",
+        authenticated_builder_execution_required=True,
+        deterministic_unsigned_digest_match_required=False, full_test_suite_required=False))
+    model.lock = origin.PinnedFile(model.lock.path, sha(model.lock.path.read_bytes()))
+    def request(value):
+        value["contractName"] = fleet.SINGLE_BUILD_REQUEST_CONTRACT
+        value["buildVerification"] = {"mode": "single-isolated-build", "distributionTrack": "internal"}
+        value["requiredExternalSigner"].update(mustRebuildAndMatchUnsignedAab=False,
+                                               mustAuthenticateBuilderExecutionProvenance=True)
+    rewrite(model.paths["externalSignerRequest"], request)
+    def handoff(value):
+        value["contractName"] = fleet.SINGLE_BUILD_HANDOFF_CONTRACT
+        value["bindings"].update(lockSha256=model.lock.sha256,
+                                 requestSha256=sha(model.paths["externalSignerRequest"].read_bytes()))
+    rewrite(model.manifest, handoff)
+    result = run(model)
+    assert model.calls == ["builder"]
+    value, _ = fleet.validate_local_rebuild_handoff(result.directory, json.loads(model.lock.path.read_bytes()))
+    assert value["contractName"] == fleet.SINGLE_BUILD_HANDOFF_CONTRACT
+    assert value["eligibleForProtectedSigner"] is False
+    assert value["signingPerformed"] is False
+
+
 def test_replay_fails_before_second_builder_or_capture(model):
     run(model)
     with pytest.raises(capture.HandoffCaptureError):

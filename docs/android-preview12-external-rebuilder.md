@@ -507,8 +507,36 @@ certificate, artifact/source bindings, qualification, and proof-exclusion checks
 and adds an explicit builder-execution-provenance requirement. All authorization
 flags remain false.
 
-This is parser/producer support, not an activated signer path. Existing rebuild,
-capture and signing transactions still use their v1 policy and reject v2. The
-next change must bind the single producing build to protected controller
-provenance before enabling that path. Never substitute a local hash report for
-that provenance or reclassify the existing failed comparison as successful.
+The opt-in execution path is now implemented, but not activated in the checked-in
+lock or a live controller. Under `rebuild`, owner configuration must explicitly set:
+
+```json
+{
+  "verification_mode": "internal-single-build",
+  "distribution_track": "internal",
+  "authenticated_builder_execution_required": true,
+  "deterministic_unsigned_digest_match_required": false,
+  "full_test_suite_required": false
+}
+```
+
+All other readiness, isolated credential-free builder, exact source/toolchain,
+qualification, certificate and separately credentialed signer checks remain.
+`prepare-single-build --source-graph ...` accepts source intent and the existing
+qualification/tool inputs, not producer AAB, request, sidecar or source-test feeds.
+It executes the Android build once, selects the fresh fixed-path request, verifies
+the new AAB/sidecar/graph against it and the original source intent, and captures
+the same seven handoff files. It cannot promote a prior failed comparison.
+
+This handoff uses v2; local validation, capture and protected validation select
+the expected version from the owner lock, never artifact metadata. The existing
+authenticated runtime/custody boundary must still pass before signing-key access.
+The final audit explicitly records `independent_rebuild.performed=false` and a
+`single_isolated_build` request match, not `producerMatch=true`.
+
+Omitted mode keeps legacy independent rebuilding and its full source suite.
+Mismatched command/policy, v1/v2 mixing, prebuilt single-mode inputs and weakened
+provenance fail closed. Focused tests cover orchestration, byte bindings and key
+admission order with modeled SDK/signing operations. No real single-mode build,
+protected signer execution or upload is evidenced by those tests. Activation
+still needs admitted updated controller/Android identities and owner policy.

@@ -61,6 +61,7 @@ LEGACY_BUILDER_BINDING = (
     "c46a4e9a224c8c77a4038bca83f7d9ed66146318d8b5c2c9fc81cd19fdd18ea7",
 )
 REBUILD_HANDOFF_CONTRACT = "fleet.android_preview12_external_rebuild_handoff.v1"
+SINGLE_BUILD_HANDOFF_CONTRACT = "fleet.android_preview12_external_rebuild_handoff.v2"
 RECOVERY_CONTRACT = "fleet.android_preview12_external_signer_recovery.v1"
 PACKAGE_ID = "com.myexternalbrain.chummer"
 VERSION_NAME = "0.1.0-preview.12"
@@ -235,6 +236,33 @@ def load_lock(path: Path) -> tuple[dict[str, Any], bytes]:
     return value, raw
 
 
+def build_verification_mode(lock: Mapping[str, Any]) -> str:
+    """Select verification from admitted owner policy, never artifact metadata."""
+    policy = lock.get("rebuild")
+    if not isinstance(policy, Mapping):
+        raise RebuilderError("build verification policy is missing")
+    mode = policy.get("verification_mode", "independent-rebuild")
+    if mode not in ("independent-rebuild", "internal-single-build"):
+        raise RebuilderError("unknown build verification policy")
+    if mode == "internal-single-build" and (
+        policy.get("distribution_track") != "internal"
+        or policy.get("authenticated_builder_execution_required") is not True
+        or policy.get("deterministic_unsigned_digest_match_required") is not False
+        or policy.get("full_test_suite_required") is not False
+    ):
+        raise RebuilderError("internal single-build policy is incomplete or claims a rebuild")
+    return mode
+
+
+def _request_policy(lock: Mapping[str, Any]) -> dict[str, str]:
+    mode = build_verification_mode(lock)
+    return {} if mode == "independent-rebuild" else {"build_verification": mode}
+
+
+def _handoff_contract(lock: Mapping[str, Any]) -> str:
+    return SINGLE_BUILD_HANDOFF_CONTRACT if _request_policy(lock) else REBUILD_HANDOFF_CONTRACT
+
+
 def validate_lock(lock: Mapping[str, Any], lock_bytes: bytes, builder_image: str | None = None) -> list[str]:
     """Validate full protected signing readiness; preserve every existing gate."""
     return _validate_lock_configuration(lock, lock_bytes, builder_image, protected_signer=True)
@@ -330,11 +358,19 @@ def _validate_lock_configuration(
     if lock.get("state") != "ready":
         failures.append("external rebuilder lock is dormant")
     rebuild = lock.get("rebuild", {})
+    try:
+        build_mode = build_verification_mode(lock)
+    except RebuilderError as error:
+        failures.append(str(error))
+        build_mode = "independent-rebuild"
+    if not isinstance(rebuild, Mapping):
+        rebuild = {}
     if rebuild.get("enabled") is not True or rebuild.get("ambient_siblings_allowed") is not False \
             or rebuild.get("builder_credential_mounts_allowed") is not False \
             or rebuild.get("builder_runs_in_separate_job") is not True \
-            or rebuild.get("deterministic_unsigned_digest_match_required") is not True \
-            or rebuild.get("full_test_suite_required") is not True:
+            or (build_mode == "independent-rebuild" and (
+                rebuild.get("deterministic_unsigned_digest_match_required") is not True
+                or rebuild.get("full_test_suite_required") is not True)):
         failures.append("independent rebuild is disabled or weakened")
     if protected_signer:
         reservation = lock.get("reservation", {})
@@ -426,7 +462,7 @@ def validate_external_request(request_path: Path, source_graph_path: Path, json_
                               *, build_verification: str = "independent-rebuild") \
         -> tuple[dict[str, Any], dict[str, Any]]:
     # The expected mode comes from protected owner configuration, never from
-    # the untrusted request. Existing transaction callers retain v1-only policy.
+    # the untrusted request. Callers without an explicit policy retain v1 only.
     if build_verification not in ("independent-rebuild", "internal-single-build"):
         raise RebuilderError("unknown external signer build-verification mode")
     single_build = build_verification == "internal-single-build"
@@ -2465,6 +2501,16 @@ def require_rebuild_match(rebuilt_aab: Path, request: Mapping[str, Any], limit: 
     return {"sha256": actual, "sizeBytes": len(raw), "producerMatch": True}
 
 
+def _verify_unsigned_candidate(aab: Path, request: Mapping[str, Any], lock: Mapping[str, Any]) -> dict[str, Any]:
+    if build_verification_mode(lock) == "independent-rebuild":
+        return require_rebuild_match(aab, request, lock["limits"]["aab_bytes"])
+    raw = _stable_bytes(aab, "isolated build unsigned AAB", lock["limits"]["aab_bytes"])
+    actual = hashlib.sha256(raw).hexdigest()
+    if actual != request["unsignedAab"]["sha256"] or len(raw) != request["unsignedAab"]["sizeBytes"]:
+        raise RebuilderError("isolated build AAB differs from its captured request")
+    return {"sha256": actual, "sizeBytes": len(raw), "requestMatch": True}
+
+
 def fleet_audit(lock: Mapping[str, Any], lock_raw: bytes, request_raw: bytes, graph_raw: bytes,
                 rebuilt: Mapping[str, Any], signed: Mapping[str, Any], toolchain: Mapping[str, Any],
                 ledger_commit: Mapping[str, Any], android_attestation: Path,
@@ -2506,6 +2552,9 @@ def fleet_audit(lock: Mapping[str, Any], lock_raw: bytes, request_raw: bytes, gr
         "google_play_upload_performed": False,
         "publication_performed": False,
     }
+    if build_verification_mode(lock) == "internal-single-build":
+        value["independent_rebuild"] = {"performed": False}
+        value["single_isolated_build"] = dict(rebuilt)
     forbidden = ("password", "private_key", "keystore", "token", "authorization", "endpoint")
     serialized = _canonical_json(value).decode("utf-8").lower()
     if any(name in serialized for name in forbidden):
@@ -2759,6 +2808,10 @@ def _release_test_capability(lock: Mapping[str, Any]) -> str | None:
 
 def _admit_release_test_inputs(lock: Mapping[str, Any], bootstrap: Path | None, wheels: Path | None,
                               oracle: Path | None, *separate_roots: Path) -> None:
+    if build_verification_mode(lock) == "internal-single-build":
+        if any(path is not None for path in (bootstrap, wheels, oracle)):
+            raise RebuilderError("single-build mode does not accept duplicated source-test inputs")
+        return
     required = _release_test_capability(lock) is not None
     paths = (bootstrap, wheels, oracle)
     if not required:
@@ -2900,6 +2953,10 @@ def _stage_test_oracle(module: Any, android: Path, source: Path, destination: Pa
 @contextmanager
 def _staged_release_test_inputs(lock: Mapping[str, Any], workspace: Path, scratch: Path,
                                 bootstrap: Path | None, wheels: Path | None, oracle: Path | None):
+    if build_verification_mode(lock) == "internal-single-build":
+        _admit_release_test_inputs(lock, bootstrap, wheels, oracle)
+        yield {}
+        return
     if _release_test_capability(lock) is None:
         yield {}
         return
@@ -3159,6 +3216,8 @@ def _run_independent_rebuild(
         environment["CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_FEED"] = os.fspath(offline_nuget_feed)
     if offline_aar_feed is not None:
         environment["CHUMMER_ANDROID_RELEASE_OFFLINE_AAR_FEED"] = os.fspath(offline_aar_feed)
+    if build_verification_mode(lock) == "internal-single-build":
+        environment["CHUMMER_ANDROID_BUILD_VERIFICATION"] = "internal-single-build"
     build_script = workspace / "chummer-android/scripts/build-release.sh"
     stdout_path, stderr_path = build_input_root / "build.stdout", build_input_root / "build.stderr"
     with _staged_release_test_inputs(lock, workspace, build_input_root,
@@ -3198,8 +3257,8 @@ def _run_independent_rebuild(
 
 
 def prepare_rebuild_handoff(
-    lock_path: Path, external_request: Path, producer_unsigned_aab: Path,
-    producer_source_graph: Path, producer_sidecar: Path, two_green_receipt: Path,
+    lock_path: Path, external_request: Path | None, producer_unsigned_aab: Path | None,
+    producer_source_graph: Path, producer_sidecar: Path | None, two_green_receipt: Path,
     approval: Path, package_authority: Path, authority_root: Path, owner_feed: Path,
     ui_authority_receipt: Path, java_tool_observation: Path, installed_closure_receipt: Path, bundletool: Path,
     upload_certificate: Path, dotnet_root: Path, java_root: Path,
@@ -3213,33 +3272,52 @@ def prepare_rebuild_handoff(
     test_oracle_root: Path | None = None,
     retain_mismatch_diagnostics: bool = False,
 ) -> dict[str, Any]:
-    """Run the secret-free rebuild stage in a job with no credential mounts."""
+    """Build in a secret-free job; owner policy selects one build or comparison.
+
+    Single-build mode accepts only source intent, never a prebuilt artifact or
+    request. The request is captured from the fresh isolated build below.
+    Neither mode itself authenticates job isolation or authorizes signing.
+    """
+
+    lock, lock_raw = load_lock(lock_path)
+    single_build = build_verification_mode(lock) == "internal-single-build"
+    producer_inputs = (external_request, producer_unsigned_aab, producer_sidecar)
+    if single_build:
+        if any(path is not None for path in producer_inputs) or retain_mismatch_diagnostics:
+            raise RebuilderError("single-build mode rejects prebuilt producer inputs and mismatch recovery")
+    elif any(path is None for path in producer_inputs):
+        raise RebuilderError("independent rebuild requires all producer inputs")
 
     _validate_authority_feed_paths(authority_root, owner_feed)
     _validate_offline_feeds(
         offline_nuget_feed, offline_aar_feed, authority_root, output_dir, package_authority,
         ui_authority_receipt, java_tool_observation, installed_closure_receipt,
         dotnet_root, java_root, android_sdk_root,
-        lock_path, external_request, producer_unsigned_aab, producer_source_graph, producer_sidecar,
+        lock_path, producer_source_graph, *(path for path in producer_inputs if path is not None),
         two_green_receipt, approval, bundletool, upload_certificate,
         *((offline_source_manifest,) if offline_source_manifest is not None else ()),
     )
-    lock, lock_raw = load_lock(lock_path)
     failures = validate_unsigned_rebuild_lock(lock, lock_raw, reported_builder_image)
     if failures:
         raise RebuilderError("; ".join(failures))
     _admit_release_test_inputs(lock, test_bootstrap_dir, test_wheelhouse, test_oracle_root,
         authority_root, output_dir, package_authority, ui_authority_receipt, java_tool_observation,
-        installed_closure_receipt, dotnet_root, java_root, android_sdk_root, lock_path, external_request,
-        producer_unsigned_aab, producer_source_graph, producer_sidecar, two_green_receipt, approval,
+        installed_closure_receipt, dotnet_root, java_root, android_sdk_root, lock_path,
+        producer_source_graph, *(path for path in producer_inputs if path is not None), two_green_receipt, approval,
         bundletool, upload_certificate,
         *(path for path in (offline_source_manifest, offline_nuget_feed, offline_aar_feed) if path is not None))
     toolchain_inputs = _RebuildToolchainInputs(installed_closure_receipt, java_tool_observation)
     if toolchain_inputs.bindings[0][1] != lock["toolchain"]["installed_closure_receipt_sha256"]:
         raise RebuilderError("installed toolchain closure receipt differs from lock")
-    request, graph = validate_external_request(
-        external_request, producer_source_graph, lock["limits"]["json_bytes"]
+    graph_raw = _stable_bytes(
+        producer_source_graph, "source graph intent", lock["limits"]["json_bytes"], owner_only=True
     )
+    if single_build:
+        graph = json.loads(graph_raw)
+    else:
+        request, graph = validate_external_request(
+            external_request, producer_source_graph, lock["limits"]["json_bytes"]
+        )
     rows = validate_source_graph(graph)
     android_row = rows["chummer-android"]
     authority = lock["android_authority"]
@@ -3247,21 +3325,19 @@ def prepare_rebuild_handoff(
         authority["commit"], authority["tree"], authority["repository"]
     ):
         raise RebuilderError("producer source graph is not the qualified Preview12 Android authority")
-    producer_raw = _stable_bytes(
-        producer_unsigned_aab, "producer unsigned AAB", lock["limits"]["aab_bytes"]
-    )
-    if hashlib.sha256(producer_raw).hexdigest() != request["unsignedAab"]["sha256"] \
-            or len(producer_raw) != request["unsignedAab"]["sizeBytes"]:
-        raise RebuilderError("producer unsigned AAB differs from external signer request")
-    graph_raw = _stable_bytes(
-        producer_source_graph, "producer source graph", lock["limits"]["json_bytes"], owner_only=True
-    )
-    request_raw = _stable_bytes(
-        external_request, "external signer request", lock["limits"]["json_bytes"], owner_only=True
-    )
-    sidecar_raw = _stable_bytes(producer_sidecar, "producer build sidecar", 64 * 1024, owner_only=True)
-    if hashlib.sha256(sidecar_raw).hexdigest() != request["buildSidecar"]["sha256"]:
-        raise RebuilderError("producer build sidecar differs from external signer request")
+    if not single_build:
+        producer_raw = _stable_bytes(
+            producer_unsigned_aab, "producer unsigned AAB", lock["limits"]["aab_bytes"]
+        )
+        if hashlib.sha256(producer_raw).hexdigest() != request["unsignedAab"]["sha256"] \
+                or len(producer_raw) != request["unsignedAab"]["sizeBytes"]:
+            raise RebuilderError("producer unsigned AAB differs from external signer request")
+        request_raw = _stable_bytes(
+            external_request, "external signer request", lock["limits"]["json_bytes"], owner_only=True
+        )
+        sidecar_raw = _stable_bytes(producer_sidecar, "producer build sidecar", 64 * 1024, owner_only=True)
+        if hashlib.sha256(sidecar_raw).hexdigest() != request["buildSidecar"]["sha256"]:
+            raise RebuilderError("producer build sidecar differs from external signer request")
     if not output_dir.is_absolute() or output_dir.exists() or output_dir.is_symlink() \
             or output_dir.parent.is_symlink() or output_dir.parent.resolve(strict=True) != output_dir.parent \
             or output_dir.parent.stat().st_uid != os.getuid() \
@@ -3301,7 +3377,8 @@ def prepare_rebuild_handoff(
             expected_version_name=VERSION_NAME, expected_version_code=VERSION_CODE,
             source_graph_path=source_graph_copy,
         )
-        android._sidecar_claims(producer_sidecar, producer_unsigned_aab, producer_source_graph)
+        if not single_build:
+            android._sidecar_claims(producer_sidecar, producer_unsigned_aab, producer_source_graph)
         toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
         rebuilt_aab, rebuilt_graph = _run_independent_rebuild(
             lock, workspace, two_green_receipt, approval, package_authority, authority_root, owner_feed,
@@ -3315,8 +3392,16 @@ def prepare_rebuild_handoff(
             test_oracle_root=test_oracle_root,
         )
         toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
+        if single_build:
+            external_request = stage / "build-input/ANDROID_EXTERNAL_SIGNER_REQUEST.generated.json"
+            request, _ = validate_external_request(
+                external_request, rebuilt_graph, lock["limits"]["json_bytes"], **_request_policy(lock)
+            )
+            request_raw = _stable_bytes(
+                external_request, "fresh build signer request", lock["limits"]["json_bytes"], owner_only=True
+            )
         try:
-            rebuilt = require_rebuild_match(rebuilt_aab, request, lock["limits"]["aab_bytes"])
+            rebuilt = _verify_unsigned_candidate(rebuilt_aab, request, lock)
         except _RebuildMismatch as mismatch:
             if retain_mismatch_diagnostics:
                 # Set before capture, including interrupts and unexpected I/O
@@ -3346,6 +3431,16 @@ def prepare_rebuild_handoff(
         for field, value in graph.items():
             if field != "generatedAtUtc" and rebuilt_graph_value.get(field) != value:
                 raise RebuilderError(f"independent source graph differs from producer: {field}")
+        if single_build:
+            # Transport only outputs from this build. The input source graph is
+            # intent, not an artifact receipt; its generated timestamp can differ.
+            producer_source_graph, producer_sidecar = rebuilt_graph, rebuilt_sidecar
+            graph_raw = _stable_bytes(
+                rebuilt_graph, "fresh build source graph", lock["limits"]["json_bytes"], owner_only=True
+            )
+            if _sha256_file(rebuilt_sidecar, "fresh build sidecar", 64 * 1024, owner_only=True) \
+                    != request["buildSidecar"]["sha256"]:
+                raise RebuilderError("fresh build sidecar differs from external signer request")
         outputs = {
             "unsignedAab": f"chummer-android-{VERSION_NAME}-unsigned.aab",
             "sourceGraph": f"chummer-android-{VERSION_NAME}-source-graph.json",
@@ -3380,7 +3475,7 @@ def prepare_rebuild_handoff(
             "sourceTree": qualification["sourceTree"],
         }
         handoff = {
-            "contractName": REBUILD_HANDOFF_CONTRACT,
+            "contractName": _handoff_contract(lock),
             "status": "verified",
             "releaseIdentity": {"packageId": PACKAGE_ID, "versionName": VERSION_NAME, "versionCode": VERSION_CODE},
             "outputs": outputs,
@@ -3420,7 +3515,7 @@ def validate_local_rebuild_handoff(directory: Path, lock: Mapping[str, Any]) -> 
         "signingPerformed", "publicationAuthorized",
         "googlePlayUploadAuthorized",
     }
-    if set(handoff) != expected_fields or handoff.get("contractName") != REBUILD_HANDOFF_CONTRACT \
+    if set(handoff) != expected_fields or handoff.get("contractName") != _handoff_contract(lock) \
             or handoff.get("status") != "verified" \
             or handoff.get("releaseIdentity") != {
                 "packageId": PACKAGE_ID, "versionName": VERSION_NAME, "versionCode": VERSION_CODE
@@ -3443,8 +3538,8 @@ def validate_local_rebuild_handoff(directory: Path, lock: Mapping[str, Any]) -> 
     if names != expected_names:
         raise RebuilderError("rebuild handoff output inventory is not exact")
     paths = {name: directory / file_name for name, file_name in expected_names.items()}
-    request, _graph = validate_external_request(paths["externalSignerRequest"], paths["sourceGraph"])
-    rebuilt = require_rebuild_match(paths["unsignedAab"], request, lock["limits"]["aab_bytes"])
+    request, _graph = validate_external_request(paths["externalSignerRequest"], paths["sourceGraph"], **_request_policy(lock))
+    rebuilt = _verify_unsigned_candidate(paths["unsignedAab"], request, lock)
     bindings = handoff.get("bindings")
     digest_fields = {
         "lockSha256", "requestSha256", "sourceGraphSha256", "unsignedAabSha256",
@@ -3506,7 +3601,8 @@ class PreservedRebuildHandoff:
             if before["lock"] != first_lock or first_lock[1] != hashlib.sha256(lock_raw).hexdigest():
                 raise RebuilderError("preserved handoff lock changed during admission")
             handoff, paths = validate_local_rebuild_handoff(directory, lock)
-            request, graph = validate_external_request(paths["externalSignerRequest"], paths["sourceGraph"], json_limit)
+            request, graph = validate_external_request(paths["externalSignerRequest"], paths["sourceGraph"], json_limit,
+                                                     **_request_policy(lock))
             android = validate_source_graph(graph)["chummer-android"]
             bindings = handoff["bindings"]
             if bindings["lockSha256"] != first_lock[1] \
@@ -3690,7 +3786,7 @@ def _validate_authenticated_handoff(
         "unsignedAabSizeBytes", "twoGreenReceiptSha256", "twoGreenApprovalSha256",
         "toolchainClosureSha256", "sourceCommit", "sourceTree",
     }
-    if handoff.get("contractName") != REBUILD_HANDOFF_CONTRACT \
+    if handoff.get("contractName") != _handoff_contract(lock) \
             or handoff.get("releaseIdentity") != {
                 "packageId": PACKAGE_ID, "versionName": VERSION_NAME, "versionCode": VERSION_CODE
             } \
@@ -3829,10 +3925,9 @@ def _validate_pre_signing_inputs(
     request, graph = validate_external_request(
         lease.paths["externalSignerRequest"], lease.paths["sourceGraph"],
         lock["limits"]["json_bytes"],
+        **_request_policy(lock),
     )
-    rebuilt = require_rebuild_match(
-        lease.paths["unsignedAab"], request, lock["limits"]["aab_bytes"]
-    )
+    rebuilt = _verify_unsigned_candidate(lease.paths["unsignedAab"], request, lock)
     rows = validate_source_graph(graph)
     android_row = rows["chummer-android"]
     if (android_row["commit"], android_row["tree"], android_row["repository"]) != (
@@ -4634,16 +4729,17 @@ def _offline_aar_feed_argument(value: str) -> Path:
     return _offline_feed_argument(value, "AAR")
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--lock", required=True, type=Path)
-    commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("contract-check")
-    compatibility = commands.add_parser("consumer-check")
-    compatibility.add_argument("--android-root", required=True, type=Path)
-    prepare = commands.add_parser("prepare-rebuild")
+def _add_build_arguments(prepare: argparse.ArgumentParser, *, single_build: bool) -> None:
+    if single_build:
+        prepare.add_argument("--source-graph", dest="producer_source_graph", required=True, type=Path,
+                             help="source intent only; artifact request comes from the fresh isolated build")
+        prepare.set_defaults(external_request=None, producer_unsigned_aab=None, producer_sidecar=None,
+                             test_bootstrap_dir=None, test_wheelhouse=None, test_oracle_root=None,
+                             retain_mismatch_diagnostics=False)
+    else:
+        for name in ("external-request", "producer-unsigned-aab", "producer-source-graph", "producer-sidecar"):
+            prepare.add_argument(f"--{name}", required=True, type=Path)
     for name in (
-        "external-request", "producer-unsigned-aab", "producer-source-graph", "producer-sidecar",
         "two-green-receipt", "approval", "package-authority", "authority-root", "owner-feed",
         "ui-authority-receipt", "bundletool", "upload-certificate",
         "dotnet-root", "java-root", "android-sdk-root", "output-dir",
@@ -4653,11 +4749,12 @@ def _parser() -> argparse.ArgumentParser:
         prepare.add_argument(f"--{name}", required=True, type=Path,
                             help="separate canonical owner-only input; no legacy toolchain-authority fallback")
     prepare.add_argument("--builder-image", required=True)
-    prepare.add_argument(
-        "--retain-mismatch-diagnostics", action="store_true",
-        help="on AAB mismatch retain only rejected outputs at OUTPUT_DIR.mismatch-diagnostics; "
-             "never overwrite or grant signing/retry authority; preserve original private stage if retention fails",
-    )
+    if not single_build:
+        prepare.add_argument(
+            "--retain-mismatch-diagnostics", action="store_true",
+            help="on AAB mismatch retain only rejected outputs at OUTPUT_DIR.mismatch-diagnostics; "
+                 "never overwrite or grant signing/retry authority; preserve original private stage if retention fails",
+        )
     prepare.add_argument(
         "--offline-source-manifest", type=Path,
         help="absolute JSON path mapping all eight repositories to path, sha256 and size_bytes; source transport only",
@@ -4670,9 +4767,21 @@ def _parser() -> argparse.ArgumentParser:
         "--offline-aar-feed", type=_offline_aar_feed_argument,
         help="absolute canonical directory of offline Android archives; Android owns manifest and byte validation",
     )
-    for name in ("test-bootstrap-dir", "test-wheelhouse", "test-oracle-root"):
-        prepare.add_argument("--" + name, type=lambda value: _offline_feed_argument(value, "source-test"),
-                            help="explicit offline test-only input; mandatory together for the admitted new test runner")
+    if not single_build:
+        for name in ("test-bootstrap-dir", "test-wheelhouse", "test-oracle-root"):
+            prepare.add_argument("--" + name, type=lambda value: _offline_feed_argument(value, "source-test"),
+                                help="explicit offline test-only input; mandatory together for the admitted new test runner")
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--lock", required=True, type=Path)
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("contract-check")
+    compatibility = commands.add_parser("consumer-check")
+    compatibility.add_argument("--android-root", required=True, type=Path)
+    _add_build_arguments(commands.add_parser("prepare-rebuild"), single_build=False)
+    _add_build_arguments(commands.add_parser("prepare-single-build"), single_build=True)
     return parser
 
 
@@ -4691,10 +4800,13 @@ def main(argv: list[str] | None = None) -> int:
                       "consumer_sha256": lock["android_authority"]["attestation_consumer"]["sha256"],
                       "signing_performed": False, "publication_performed": False}
         else:
+            single_build = arguments.command == "prepare-single-build"
+            if single_build != (build_verification_mode(lock) == "internal-single-build"):
+                raise RebuilderError("build command differs from admitted owner verification policy")
             result = prepare_rebuild_handoff(
-                arguments.lock.absolute(), arguments.external_request.absolute(),
-                arguments.producer_unsigned_aab.absolute(), arguments.producer_source_graph.absolute(),
-                arguments.producer_sidecar.absolute(), arguments.two_green_receipt.absolute(),
+                arguments.lock.absolute(), arguments.external_request.absolute() if not single_build else None,
+                arguments.producer_unsigned_aab.absolute() if not single_build else None, arguments.producer_source_graph.absolute(),
+                arguments.producer_sidecar.absolute() if not single_build else None, arguments.two_green_receipt.absolute(),
                 arguments.approval.absolute(), arguments.package_authority.absolute(),
                 arguments.authority_root.absolute(), arguments.owner_feed.absolute(),
                 arguments.ui_authority_receipt.absolute(), arguments.java_tool_observation,
