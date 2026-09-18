@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
-      - name: Install exact test wheels and run ten offline source suites
+      - name: Install exact test wheels and run offline source suites
         shell: bash
         run: |
           set -euo pipefail
@@ -44,6 +44,12 @@ jobs:
           timeout 90s env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONDONTWRITEBYTECODE=1 \
             "$role_test_venv/bin/python" -m pytest --tb=short -p no:cacheprovider -q \
             tests/test_android_hosted_input_preparation.py
+          timeout 90s env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONDONTWRITEBYTECODE=1 \
+            "$role_test_venv/bin/python" -m pytest --tb=short -p no:cacheprovider -q \
+            tests/test_android_owned_single_build.py \
+            tests/test_android_controller_capture.py \
+            tests/test_android_controller_rendezvous.py \
+            tests/test_android_local_capture_owner.py
 
   offline-import-regression:
     runs-on: ubuntu-24.04

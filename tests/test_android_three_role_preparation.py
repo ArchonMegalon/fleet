@@ -229,6 +229,13 @@ INPUT_PREPARATION_SUITES = (
     "tests/test_android_hosted_input_preparation.py",
 )
 
+OWNED_CAPTURE_SUITES = (
+    "tests/test_android_owned_single_build.py",
+    "tests/test_android_controller_capture.py",
+    "tests/test_android_controller_rendezvous.py",
+    "tests/test_android_local_capture_owner.py",
+)
+
 OFFLINE_IMPORT_SUITES = (
     "tests/test_android_preview12_offline_source_bundles.py",
     "tests/test_android_preview12_external_rebuilder.py",
@@ -240,7 +247,7 @@ OFFLINE_IMPORT_SUITES = (
 
 
 @pytest.mark.parametrize("job_id,suite_groups,pytest_timeout", [
-    ("source-unit-tests", (SOURCE_SUITES, INPUT_PREPARATION_SUITES), "90s"),
+    ("source-unit-tests", (SOURCE_SUITES, INPUT_PREPARATION_SUITES, OWNED_CAPTURE_SUITES), "90s"),
     ("offline-import-regression", (OFFLINE_IMPORT_SUITES,), "180s"),
 ])
 def test_source_ci_is_read_only_pr_and_main_push_without_operational_jobs(

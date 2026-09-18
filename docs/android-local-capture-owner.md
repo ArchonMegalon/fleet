@@ -23,6 +23,17 @@ adjacent candidate sidecar. Root ownership and the later `code_pins` check are
 necessary file controls, not retroactive authentication of code already run.
 No sample live descriptor or deployment approval accompanies this source.
 
+For explicit internal single-build policy, the independently admitted local
+bootstrap may keep an actual `android_controller_capture.OwnedSingleBuild` and
+pass it to `run(..., owned_single_build=...)` in the same process. The build
+precedes hosted role provisioning so its measured manifest digest can be bound
+exactly; the object executes the fixed build itself, never imports retained
+AABs. See [the single-build order](android-preview12-controller-capture-join.md#internal-single-build-order).
+The owner checks every original runtime input and subject before TLS-key use.
+Only its already completed operation directory may exist; custody and attempt
+destinations remain fresh. The CLI has no preparation/artifact import option.
+Normal invocation and all credential/hosted-job/signing controls are unchanged.
+
 The executable requires UID/GID0 in its admitted local owner boundary. The
 intended all-local infrastructure remains Docker: a reviewed owner container
 needs its actual mount namespace/privileges and restricted Docker-daemon access

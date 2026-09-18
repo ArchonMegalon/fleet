@@ -22,6 +22,7 @@ import time
 
 from scripts import android_artifact_origin as origin
 from scripts import android_builder_handoff as capture
+from scripts import android_controller_capture as controller
 from scripts import android_container_runtime as runtime
 from scripts import android_controller_rendezvous as rendezvous
 from scripts import android_preview12_external_rebuilder as fleet
@@ -210,7 +211,7 @@ def preserve_capture(result, lock, packet, policy, operation):
 
 class LocalCaptureOwner:
     """Actual fixed constructors from independently admitted owner expectations."""
-    def __init__(self, deployment, expected_sha256):
+    def __init__(self, deployment, expected_sha256, *, owned_single_build=None):
         self._stack = ExitStack()
         self.controller = self.exporter = self.custody = self.retained = None
         self._app = self._export_app = None
@@ -242,6 +243,11 @@ class LocalCaptureOwner:
             lock, raw = fleet.load_lock(self.pins["lock"].path)
             require(hashlib.sha256(raw).hexdigest() == self.pins["lock"].sha256
                     and not fleet.validate_lock(lock, raw, self.policy.requested_image))
+            if owned_single_build is not None:
+                require(type(owned_single_build) is controller.OwnedSingleBuild)
+                owned_single_build.check_binding(self.policy, self.pins["docker"], self.pins["lock"],
+                    _path(self.value["operation_directory"]), self.value["output_bind_target"],
+                    self.value["handoff_child_name"], self.artifact)
             self._key = self._stack.enter_context(_held(_path(self.value["tls"]["key_file"]), 16384))
             if "startup_barrier" in self.value:
                 self._status_token = self._stack.enter_context(
@@ -250,7 +256,9 @@ class LocalCaptureOwner:
                             ("operation_directory", "attempt_directory", "custody_packet")]
             for target in destinations:
                 intake._root_directory(target.parent)
-                require(not os.path.lexists(target) and target.resolve(strict=False) == target)
+                require(target.resolve(strict=False) == target)
+                if owned_single_build is None or target != destinations[0]:
+                    require(not os.path.lexists(target))
                 require(all(_separate(target, other) for other in destinations if other != target))
                 require(all(_separate(target, Path(bind.source)) for bind in self.policy.binds))
             require(len(set(destinations)) == 3)
@@ -269,6 +277,7 @@ class LocalCaptureOwner:
             require(self._key.stamp[:2] != self._deployment.stamp[:2])
             database = self.value["journal"]
             digests = self.value["bearer_sha256"]
+            single = {} if owned_single_build is None else {"owned_single_build": owned_single_build}
             self.controller = rendezvous.ControllerRendezvous(
                 journal_path=_path(database["path"]), controller_id=database["controller_id"],
                 database_id=database["database_id"], capture_policy=self.jobs[0], emission_policy=self.jobs[1],
@@ -278,7 +287,7 @@ class LocalCaptureOwner:
                 attempt_directory=destinations[1], verifier=self.pins["verifier"], trusted_root=self.pins["trusted_root"],
                 base_url=self.value["base_url"], capture_bearer_sha256=digests["capture"],
                 emission_bearer_sha256=digests["emission"], approval_bearer_sha256=digests["approval"],
-                binary_bearer_sha256=digests["binary"])
+                binary_bearer_sha256=digests["binary"], **single)
             self._peers = tuple(self.value["tls"]["trusted_proxy_addresses"])
             self._app = rendezvous.RendezvousApp(self.controller, trusted_proxy_addresses=self._peers)
             self._deadline = binding_deadline or time.monotonic() + self.value["limits"]["whole_seconds"]
@@ -450,14 +459,15 @@ class _held:
     def __exit__(self, *_): self.file.close()
 
 
-def run(deployment, expected_sha256):
+def run(deployment, expected_sha256, *, owned_single_build=None):
     """Real TLS listener and fixed local owner; never a test factory/plugin."""
     # Import only this existing pinned serving implementation, not a configured
     # module. Ledger prepare()/stores/receipt keys are deliberately never used.
     from scripts import android_preview12_approval_ledger_server as transport
     require(transport.uvicorn.__version__ == "0.34.2")
     with ExitStack() as stack:
-        owner = LocalCaptureOwner(deployment, expected_sha256)
+        single = {} if owned_single_build is None else {"owned_single_build": owned_single_build}
+        owner = LocalCaptureOwner(deployment, expected_sha256, **single)
         stack.callback(owner.close)
         cert = transport._sealed(owner._captured["tls_certificate"].raw, stack)
         key = transport._sealed(owner._key.read(), stack)  # Explicit local TLS key only.
