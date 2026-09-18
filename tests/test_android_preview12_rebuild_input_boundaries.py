@@ -18,6 +18,7 @@ import test_android_preview12_external_rebuilder as fixture
 from scripts import android_preview12_external_rebuilder as fleet
 from test_android_preview12_external_rebuilder import LOCK, protected_file
 from test_android_preview12_preserved_handoff import handoff_inputs
+from test_android_preview12_protected_transaction import external_request as modeled_request
 
 
 def modeled_contextual_observer(module):
@@ -292,12 +293,16 @@ def offline_consumer(args, raw=(b'input="$CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_
 
 @pytest.mark.parametrize("offline", [False, True])
 @pytest.mark.parametrize("offline_aar", [False, True])
-def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path, monkeypatch, offline, offline_aar):
+@pytest.mark.parametrize("single_build", [False, True])
+def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path, monkeypatch, offline, offline_aar, single_build):
     module = fixture.load_module()
     monkeypatch.setattr(module, "_contextual_rebuild_observation", modeled_contextual_observer(module))
     feed = tmp_path / "authority" / "owner-feed"
     feed.mkdir(parents=True)
     args = entry_arguments(module, tmp_path, feed.parent, feed, "direct")
+    if single_build:
+        single_build_policy(args["lock"])
+    monkeypatch.setenv("CHUMMER_ANDROID_BUILD_VERIFICATION", "must-not-be-inherited")
     args["workspace"].mkdir()
     expected_offline = {}
     for kind, enabled in (("nuget", offline), ("aar", offline_aar)):
@@ -321,6 +326,9 @@ def test_direct_rebuild_passes_exact_feed_to_existing_android_boundary(tmp_path,
     calls = []
     def observe_android_call(argv, **kwargs):
         calls.append(argv)
+        assert kwargs["env"].get("CHUMMER_ANDROID_BUILD_VERIFICATION") == (
+            "internal-single-build" if single_build else None)
+        assert not any("TEST_BOOTSTRAP" in key or "TEST_WHEELHOUSE" in key for key in kwargs["env"])
         assert kwargs["env"]["CHUMMER_INTERNAL_PHONE_BETA_PACKAGE_FEED"] == str(feed)
         assert Path(kwargs["env"]["CHUMMER_INTERNAL_PHONE_BETA_PACKAGE_FEED"]).parent == args["authority_root"]
         assert kwargs["env"]["CHUMMER_ANDROID_RELEASE_PACKAGE_AUTHORITY"] == str(args["package_authority"])
@@ -512,6 +520,106 @@ def configured(*, protected=False):
             value["upload_key"][name] = "unit-symbolic-reference"
         value["approval_authority"]["private_key_secret"] = "unit-symbolic-reference"
     return value
+
+
+def single_build_policy(value):
+    value["rebuild"].update(verification_mode="internal-single-build", distribution_track="internal",
+                            authenticated_builder_execution_required=True,
+                            deterministic_unsigned_digest_match_required=False, full_test_suite_required=False)
+    return value
+
+
+def test_single_build_policy_is_explicit_internal_and_keeps_credential_boundary():
+    lock = single_build_policy(configured())
+    assert fleet.validate_unsigned_rebuild_lock(lock, raw(lock), BUILDER) == []
+    assert fleet.validate_lock(lock, raw(lock), BUILDER)  # Signing still unconfigured.
+    fleet._admit_release_test_inputs(lock, None, None, None)
+    with pytest.raises(fleet.RebuilderError, match="source-test inputs"):
+        fleet._admit_release_test_inputs(lock, Path("/unused"), None, None)
+    for field, value in (("verification_mode", "unknown"), ("distribution_track", "production"),
+                         ("authenticated_builder_execution_required", False),
+                         ("deterministic_unsigned_digest_match_required", 0),
+                         ("full_test_suite_required", True), ("builder_credential_mounts_allowed", True)):
+        hostile = deepcopy(lock)
+        hostile["rebuild"][field] = value
+        assert fleet.validate_unsigned_rebuild_lock(hostile, raw(hostile), BUILDER)
+
+
+def test_single_build_rejects_prebuilt_inputs_before_build(tmp_path):
+    args = prepare_arguments(tmp_path, single_build_policy(configured()))
+    with pytest.raises(fleet.RebuilderError, match="rejects prebuilt"):
+        fleet.prepare_rebuild_handoff(**args)
+
+
+def test_qualified_v1_single_build_keeps_original_source_test_inputs(tmp_path):
+    lock = single_build_policy(json.loads(LOCK.read_bytes()))
+    assert fleet._qualified_v1_single_build_producer(lock)
+    with pytest.raises(fleet.RebuilderError, match="require explicit"):
+        fleet._admit_release_test_inputs(lock, None, None, None)
+    feeds = tuple(tmp_path / name for name in ("bootstrap", "wheels", "oracle"))
+    for path in feeds:
+        path.mkdir(mode=0o700)
+    fleet._admit_release_test_inputs(lock, *feeds)
+    lock["android_authority"]["commit"] = "f" * 40
+    assert not fleet._qualified_v1_single_build_producer(lock)
+
+
+@pytest.mark.parametrize("fault", [None, "wrong-producer", "multiple-requests", "modified-aab", "modified-sidecar", "existing-output"])
+def test_qualified_v1_adapter_captures_new_request_without_rewriting_original(tmp_path, fault):
+    _, directory, paths, _ = handoff_inputs(fleet, tmp_path)
+    lock = single_build_policy(json.loads(LOCK.read_bytes()))
+    old = paths["externalSignerRequest"]
+    original_bytes = old.read_bytes()
+    original_aab = paths["unsignedAab"].read_bytes()
+    original = directory / f".chummer-android-{fleet.VERSION_NAME}.release.AbCd12.external-signer-request.json"
+    old.rename(original)
+    if fault == "wrong-producer":
+        lock["android_authority"]["commit"] = "f" * 40
+    elif fault == "multiple-requests":
+        protected_file(directory / original.name.replace("AbCd12", "EfGh34"), original_bytes)
+    elif fault == "modified-aab":
+        protected_file(paths["unsignedAab"], b"changed")
+    elif fault == "modified-sidecar":
+        protected_file(paths["buildSidecar"], b"changed")
+    elif fault == "existing-output":
+        protected_file(old, b"existing request must not be overwritten")
+    def capture():
+        fleet._capture_qualified_v1_single_build_request(
+            lock, directory, paths["unsignedAab"], paths["sourceGraph"], paths["buildSidecar"])
+    if fault:
+        with pytest.raises((fleet.RebuilderError, FileExistsError)):
+            capture()
+        assert not old.exists() or old.read_bytes() == b"existing request must not be overwritten"
+    else:
+        capture()
+        request, _ = fleet.validate_external_request(old, paths["sourceGraph"], **fleet._request_policy(lock))
+        assert request["contractName"] == fleet.SINGLE_BUILD_REQUEST_CONTRACT
+        assert request["signingAuthorized"] is False
+        assert paths["unsignedAab"].read_bytes() == original_aab
+    assert original.read_bytes() == original_bytes
+
+
+def test_single_build_cli_passes_only_source_intent_and_rejects_wrong_policy(tmp_path, monkeypatch):
+    args = prepare_arguments(tmp_path, single_build_policy(configured()))
+    argv = ["--lock", str(args["lock_path"]), "prepare-single-build"]
+    for name, value in args.items():
+        if name in ("lock_path", "external_request", "producer_unsigned_aab", "producer_sidecar"):
+            continue
+        option = {"reported_builder_image": "builder-image", "producer_source_graph": "source-graph"}.get(
+            name, name.replace("_", "-"))
+        argv += ["--" + option, str(value)]
+    calls = []
+    def prepare(*positional, **kwargs):
+        calls.append(positional)
+        assert positional[1:5] == (None, None, args["producer_source_graph"], None)
+        assert all(kwargs[name] is None for name in ("test_bootstrap_dir", "test_wheelhouse", "test_oracle_root"))
+        return {"unitFixture": True}
+    monkeypatch.setattr(fleet, "prepare_rebuild_handoff", prepare)
+    assert fleet.main(argv) == 0
+    assert len(calls) == 1
+    protected_file(args["lock_path"], raw(configured()))
+    assert fleet.main(argv) == 2
+    assert len(calls) == 1  # Mismatched policy never starts the SDK.
 
 
 def replace_field(value, path, replacement):
@@ -785,11 +893,14 @@ def test_both_toolchain_entrypoints_reject_changed_build_inputs(observations, fa
 @pytest.mark.parametrize("offline", [False, True])
 @pytest.mark.parametrize("offline_nuget", [False, True])
 @pytest.mark.parametrize("offline_aar", [False, True])
-def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(tmp_path, monkeypatch, offline, offline_nuget, offline_aar):
+@pytest.mark.parametrize("single_build", [False, True])
+def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(tmp_path, monkeypatch, offline, offline_nuget, offline_aar, single_build):
     inputs = tmp_path / "inputs"
     inputs.mkdir(mode=0o700)
     _, _, paths, _ = handoff_inputs(fleet, inputs)
     lock = configured()
+    if single_build:
+        single_build_policy(lock)
     observation = protected_file(tmp_path / "java-observation.json", b'{"TEST_ONLY_observation":true}\n')
     inventory = protected_file(tmp_path / "installed-inventory.json", b'{"TEST_ONLY_inventory":true}\n')
     lock["toolchain"]["installed_closure_receipt_sha256"] = hashlib.sha256(inventory.read_bytes()).hexdigest()
@@ -804,6 +915,8 @@ def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(
     args.update(external_request=paths["externalSignerRequest"], producer_unsigned_aab=paths["unsignedAab"],
                 producer_source_graph=paths["sourceGraph"], producer_sidecar=paths["buildSidecar"],
                 two_green_receipt=paths["twoGreenReceipt"], approval=paths["twoGreenApproval"])
+    if single_build:
+        args.update(external_request=None, producer_unsigned_aab=None, producer_sidecar=None)
     events = []
     def forbidden(*args, **kwargs):
         pytest.fail("unsigned preparation selected protected validation or a real process")
@@ -853,6 +966,27 @@ def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(
                      "offline_aar_feed": args.get("offline_aar_feed"), "test_bootstrap_dir": None,
                      "test_wheelhouse": None, "test_oracle_root": None}
         a[-1].mkdir(mode=0o700)
+        if single_build:
+            # Model fresh output differing from the old fixture. No old artifact
+            # was passed as input. Real compiler execution is not claimed here.
+            output_graph = json.loads(paths["sourceGraph"].read_bytes())
+            output_graph["generatedAtUtc"] = "2026-09-18T19:00:00Z"
+            graph_bytes = raw(output_graph)
+            aab_bytes = b"fresh modeled single build; not a real Android AAB"
+            aab = protected_file(a[-1] / paths["unsignedAab"].name, aab_bytes)
+            graph = protected_file(a[-1] / paths["sourceGraph"].name, graph_bytes)
+            sidecar_bytes = (
+                f"{hashlib.sha256(aab_bytes).hexdigest()}  artifacts/{aab.name}\n"
+                f"{hashlib.sha256(graph_bytes).hexdigest()}  artifacts/{graph.name}\n"
+            ).encode()
+            protected_file(a[-1] / paths["buildSidecar"].name, sidecar_bytes)
+            request = modeled_request(fleet, graph_bytes, aab_bytes, sidecar_bytes)
+            request["contractName"] = fleet.SINGLE_BUILD_REQUEST_CONTRACT
+            request["buildVerification"] = {"mode": "single-isolated-build", "distributionTrack": "internal"}
+            request["requiredExternalSigner"].update(mustRebuildAndMatchUnsignedAab=False,
+                                                   mustAuthenticateBuilderExecutionProvenance=True)
+            protected_file(a[-1] / "ANDROID_EXTERNAL_SIGNER_REQUEST.generated.json", raw(request))
+            return aab, graph
         return paths["unsignedAab"], paths["sourceGraph"]
     monkeypatch.setattr(fleet, "_run_independent_rebuild", rebuild)
     result = fleet.prepare_rebuild_handoff(**args, runner=forbidden)
@@ -864,7 +998,12 @@ def test_prepare_uses_unsigned_paths_and_emits_only_existing_ineligible_handoff(
     assert result["eligibleForProtectedSigner"] is False
     assert result["builderCredentialIsolationAuthority"] == "none_local_preparation_only"
     assert all(result[name] is False for name in ("signingPerformed", "publicationAuthorized", "googlePlayUploadAuthorized"))
-    assert copied["unsignedAab"].read_bytes() == paths["unsignedAab"].read_bytes()
+    assert (copied["unsignedAab"].read_bytes() == paths["unsignedAab"].read_bytes()) is (not single_build)
+    if single_build:
+        assert result["contractName"] == fleet.SINGLE_BUILD_HANDOFF_CONTRACT
+        assert json.loads(copied["sourceGraph"].read_bytes())["generatedAtUtc"] == "2026-09-18T19:00:00Z"
+        with pytest.raises(fleet.RebuilderError, match="posture"):
+            fleet.validate_local_rebuild_handoff(args["output_dir"], configured())
     assert result["bindings"]["lockSha256"] == hashlib.sha256(args["lock_path"].read_bytes()).hexdigest()
 
 

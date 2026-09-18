@@ -193,7 +193,8 @@ def _terminal(execution, policy):
 def _validate_copy(path, lock, lock_sha256, digests):
     handoff, paths = fleet.validate_local_rebuild_handoff(path, lock)
     request, graph = fleet.validate_external_request(
-        paths["externalSignerRequest"], paths["sourceGraph"], lock["limits"]["json_bytes"])
+        paths["externalSignerRequest"], paths["sourceGraph"], lock["limits"]["json_bytes"],
+        **fleet._request_policy(lock))
     android = fleet.validate_source_graph(graph)["chummer-android"]
     bindings = handoff["bindings"]
     _require(bindings["lockSha256"] == lock_sha256

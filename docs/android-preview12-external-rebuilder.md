@@ -497,3 +497,61 @@ new Android consumer, then update this lock in a separate reviewed change.
 
 Play upload and publication remain false even after those items are complete;
 they require their existing separate owner transactions.
+## Internal single-build transition
+
+The Android producer can now explicitly request an internal-only single isolated
+build using external signer request v2. `validate_external_request` accepts that
+format only when its caller explicitly selects `internal-single-build`; the
+request itself cannot select a weaker policy. It retains the exact upload
+certificate, artifact/source bindings, qualification, and proof-exclusion checks
+and adds an explicit builder-execution-provenance requirement. All authorization
+flags remain false.
+
+The opt-in execution path is now implemented, but not activated in the checked-in
+lock or a live controller. Under `rebuild`, owner configuration must explicitly set:
+
+```json
+{
+  "verification_mode": "internal-single-build",
+  "distribution_track": "internal",
+  "authenticated_builder_execution_required": true,
+  "deterministic_unsigned_digest_match_required": false,
+  "full_test_suite_required": false
+}
+```
+
+All other readiness, isolated credential-free builder, exact source/toolchain,
+qualification, certificate and separately credentialed signer checks remain.
+`prepare-single-build --source-graph ...` accepts source intent and the existing
+qualification/tool inputs, not producer AAB, request or sidecar.
+It executes the Android build once, selects the fresh fixed-path request, verifies
+the new AAB/sidecar/graph against it and the original source intent, and captures
+the same seven handoff files. It cannot promote a prior failed comparison.
+
+This handoff uses v2; local validation, capture and protected validation select
+the expected version from the owner lock, never artifact metadata. The existing
+authenticated runtime/custody boundary must still pass before signing-key access.
+The final audit explicitly records `independent_rebuild.performed=false` and a
+`single_isolated_build` request match, not `producerMatch=true`.
+
+Omitted mode keeps legacy independent rebuilding and its full source suite.
+Mismatched command/policy, v1/v2 mixing, prebuilt single-mode inputs and weakened
+provenance fail closed. Focused tests cover orchestration, byte bindings and key
+admission order with modeled SDK/signing operations. No real single-mode build,
+protected signer execution or upload is evidenced by those tests. Activation
+still needs admitted updated controller/Android identities and owner policy.
+
+For delivery without changing the already-qualified app, one exact legacy recipe
+is supported: Android `0d5c8f0c` / tree `7d2585c4`, build-script SHA-256
+`e3b746f73d3a557f12ff93d77888aab6ffc24eca5320a49b56b782bc0836ad0c`.
+That unchanged script still requires its three source-test feeds and runs that
+suite once. It does NOT launch another hosted Wizard qualification. After a
+successful fresh SDK invocation, Fleet validates the exact fresh v1 request and
+outputs, then creates a separate v2 request under the owner-selected single-build
+policy. The v1 file and AAB are not rewritten. Other legacy scripts, missing or
+ambiguous fresh requests, altered outputs and pre-existing v2 output are rejected.
+This adapter cannot take an old producer request through the CLI or convert a
+retained failed attempt into success. Runtime provenance and private key custody
+remain separate mandatory checks. The new native v2 Android recipe can skip its
+duplicate source suite when separately admitted; it need not invalidate the
+current app's existing qualification merely to deliver this internal release.

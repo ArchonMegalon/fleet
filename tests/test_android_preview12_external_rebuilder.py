@@ -411,6 +411,45 @@ def test_source_graph_rejects_stale_release_and_repository_authority() -> None:
         module.validate_source_graph(stale_repository)
 
 
+def test_single_build_request_requires_explicit_policy_and_preserves_safety(tmp_path: Path) -> None:
+    module = load_module()
+    tmp_path.chmod(0o700)
+    graph_raw = json.dumps(graph(module)).encode()
+    graph_path = protected_file(tmp_path / "graph.json", graph_raw)
+    value = request(module, graph_raw)
+    value["contractName"] = module.SINGLE_BUILD_REQUEST_CONTRACT
+    value["buildVerification"] = {"mode": "single-isolated-build", "distributionTrack": "internal"}
+    value["requiredExternalSigner"].update(
+        mustRebuildAndMatchUnsignedAab=False,
+        mustAuthenticateBuilderExecutionProvenance=True,
+    )
+    request_path = protected_file(tmp_path / "request.json", json.dumps(value).encode())
+    with pytest.raises(module.RebuilderError):
+        module.validate_external_request(request_path, graph_path)
+    parsed, _ = module.validate_external_request(
+        request_path, graph_path, build_verification="internal-single-build",
+    )
+    assert parsed == value
+    assert all(parsed[name] is False for name in
+               ("signingAuthorized", "publicationAuthorized", "googlePlayUploadAuthorized"))
+    mutations = (
+        lambda item: item["buildVerification"].update(distributionTrack="production"),
+        lambda item: item["requiredExternalSigner"].update(mustAuthenticateBuilderExecutionProvenance=False),
+        lambda item: item["requiredExternalSigner"].update(mustRebuildAndMatchUnsignedAab=True),
+        lambda item: item["requiredExternalSigner"].update(mustRebuildAndMatchUnsignedAab=0),
+        lambda item: item["requiredExternalSigner"].update(mustValidatePackageVersionAbiAndProofExclusion=False),
+        lambda item: item["requiredExternalSigner"].update(mustVerifyOutputCertificate=False),
+        lambda item: item.update(googlePlayUploadAuthorized=True),
+        lambda item: item.update(contractName=module.REQUEST_CONTRACT),
+    )
+    for mutate in mutations:
+        hostile = deepcopy(value)
+        mutate(hostile)
+        protected_file(request_path, json.dumps(hostile).encode())
+        with pytest.raises(module.RebuilderError):
+            module.validate_external_request(request_path, graph_path, build_verification="internal-single-build")
+
+
 def test_online_checkout_is_full_history_unfiltered_and_cleans_up_on_failure(tmp_path: Path) -> None:
     module = load_module()
     origin = tmp_path / "origin"

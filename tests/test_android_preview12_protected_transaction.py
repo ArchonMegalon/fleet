@@ -130,7 +130,7 @@ def external_request(module, graph_raw: bytes, unsigned: bytes, sidecar_raw: byt
     }
 
 
-def fixture(module, tmp_path: Path, events: list[str]):
+def fixture(module, tmp_path: Path, events: list[str], *, single_build=False):
     tmp_path.chmod(0o700)
     lock = json.loads(LOCK.read_text())
     graph_raw = (json.dumps(source_graph(module, lock), sort_keys=True) + "\n").encode()
@@ -141,9 +141,18 @@ def fixture(module, tmp_path: Path, events: list[str]):
         f"{hashlib.sha256(unsigned_raw).hexdigest()}  artifacts/{unsigned.name}\n"
         f"{hashlib.sha256(graph_raw).hexdigest()}  artifacts/{graph_path.name}\n"
     ).encode()
+    request_value = external_request(module, graph_raw, unsigned_raw, sidecar_raw)
+    if single_build:
+        request_value["contractName"] = module.SINGLE_BUILD_REQUEST_CONTRACT
+        request_value["buildVerification"] = {"mode": "single-isolated-build", "distributionTrack": "internal"}
+        request_value["requiredExternalSigner"].update(mustRebuildAndMatchUnsignedAab=False,
+                                                     mustAuthenticateBuilderExecutionProvenance=True)
+        lock["rebuild"].update(verification_mode="internal-single-build", distribution_track="internal",
+                               authenticated_builder_execution_required=True,
+                               deterministic_unsigned_digest_match_required=False, full_test_suite_required=False)
     request_path = protected_file(
         tmp_path / "ANDROID_EXTERNAL_SIGNER_REQUEST.generated.json",
-        (json.dumps(external_request(module, graph_raw, unsigned_raw, sidecar_raw), sort_keys=True) + "\n").encode(),
+        (json.dumps(request_value, sort_keys=True) + "\n").encode(),
     )
     paths = {
         "unsignedAab": unsigned,
@@ -201,7 +210,7 @@ def fixture(module, tmp_path: Path, events: list[str]):
         module._canonical_json(toolchain)
     ).hexdigest()
     handoff = {
-        "contractName": module.REBUILD_HANDOFF_CONTRACT,
+        "contractName": module.SINGLE_BUILD_HANDOFF_CONTRACT if single_build else module.REBUILD_HANDOFF_CONTRACT,
         "releaseIdentity": {
             "packageId": module.PACKAGE_ID,
             "versionName": module.VERSION_NAME,
@@ -410,10 +419,11 @@ def install_fakes(module, monkeypatch, events, lock, lock_raw):
     return client
 
 
-def test_reservation_precedes_key_admission_and_all_signing(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("single_build", [False, True])
+def test_reservation_precedes_key_admission_and_all_signing(tmp_path: Path, monkeypatch, single_build) -> None:
     module = load_module()
     events: list[str] = []
-    lock, lock_raw, lease = fixture(module, tmp_path, events)
+    lock, lock_raw, lease = fixture(module, tmp_path, events, single_build=single_build)
     install_fakes(module, monkeypatch, events, lock, lock_raw)
     consumer = fake_consumer(module, lease, events)
     original_fsync = module._fsync_directory
@@ -436,6 +446,13 @@ def test_reservation_precedes_key_admission_and_all_signing(tmp_path: Path, monk
         two_green_artifact_id=123, two_green_artifact_sha256="e" * 64,
     )
     assert result["status"] == "verified"
+    if single_build:
+        assert result["independent_rebuild"] == {"performed": False}
+        assert result["single_isolated_build"]["requestMatch"] is True
+        assert "producerMatch" not in result["single_isolated_build"]
+    else:
+        assert result["independent_rebuild"]["producerMatch"] is True
+        assert "single_isolated_build" not in result
     assert events.index("authenticate") < events.index("reserve") < events.index("credentials") < events.index("sign")
     assert events.index("credentials") < events.index("owner-key-preflight") < events.index("sign")
     assert events.index(f"fsync:{lease.recovery_root}") < events.index("credentials")
@@ -578,15 +595,21 @@ def test_owner_key_rejected_before_any_aab_signing(tmp_path: Path, monkeypatch, 
 
 
 @pytest.mark.parametrize(
-    "failure", ["tampered-provenance", "replayed-reservation", "rejected-reservation"]
+    "failure", ["tampered-provenance", "missing-builder-provenance", "wrong-handoff-mode",
+                "replayed-reservation", "rejected-reservation"]
 )
-def test_tamper_or_replay_cannot_read_keys_or_sign(tmp_path: Path, monkeypatch, failure: str) -> None:
+@pytest.mark.parametrize("single_build", [False, True])
+def test_tamper_or_replay_cannot_read_keys_or_sign(tmp_path: Path, monkeypatch, failure: str, single_build) -> None:
     module = load_module()
     events: list[str] = []
-    lock, lock_raw, lease = fixture(module, tmp_path, events)
+    lock, lock_raw, lease = fixture(module, tmp_path, events, single_build=single_build)
     client = install_fakes(module, monkeypatch, events, lock, lock_raw)
     if failure == "tampered-provenance":
         lease.provenance["lockSha256"] = "0" * 64
+    elif failure == "missing-builder-provenance":
+        lease.provenance["builderExecutionProvenanceAuthenticated"] = False
+    elif failure == "wrong-handoff-mode":
+        lease.handoff["contractName"] = module.REBUILD_HANDOFF_CONTRACT if single_build else module.SINGLE_BUILD_HANDOFF_CONTRACT
     elif failure == "replayed-reservation":
         client.state = "committed"
     else:
