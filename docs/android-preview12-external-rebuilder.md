@@ -497,7 +497,7 @@ new Android consumer, then update this lock in a separate reviewed change.
 
 Play upload and publication remain false even after those items are complete;
 they require their existing separate owner transactions.
-# Internal single-build transition
+## Internal single-build transition
 
 The Android producer can now explicitly request an internal-only single isolated
 build using external signer request v2. `validate_external_request` accepts that
