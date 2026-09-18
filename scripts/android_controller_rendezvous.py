@@ -88,7 +88,8 @@ class ControllerRendezvous:
                  artifact_policy: origin.OriginPolicy, preserved_directory: Path,
                  inputs: CaptureInputs, attempt_directory: Path, verifier: origin.PinnedFile,
                  trusted_root: origin.PinnedFile, base_url: str, capture_bearer_sha256: str,
-                 emission_bearer_sha256: str, approval_bearer_sha256: str, binary_bearer_sha256: str):
+                 emission_bearer_sha256: str, approval_bearer_sha256: str, binary_bearer_sha256: str,
+                 owned_single_build: controller.OwnedSingleBuild | None = None):
         self._condition = threading.Condition(threading.RLock())
         self._state, self._stopped = "unarmed", False
         self._capture_armed = self._emission_armed = self._bundle_claimed = False
@@ -105,7 +106,9 @@ class ControllerRendezvous:
             inputs.policy.__post_init__()
             # Validate the complete job relation before creating any attempt or challenge.
             store = journal.SQLiteWorkflowChallengeStore(journal_path, controller_id=controller_id, database_id=database_id)
-            controller.ControllerCaptureSession(store, capture_policy, emission_policy, artifact_policy, preserved_directory)
+            single = {} if owned_single_build is None else {"owned_single_build": owned_single_build}
+            controller.ControllerCaptureSession(store, capture_policy, emission_policy, artifact_policy,
+                                                preserved_directory, **single)
             origin._capture(verifier, 256 * 1024 * 1024, executable=True)
             origin._capture(trusted_root, 16 * 1024 * 1024)
             lock = origin._capture(inputs.lock, 1024 * 1024)
@@ -118,7 +121,11 @@ class ControllerRendezvous:
                           *(Path(bind.source) for bind in inputs.policy.binds)):
                 _require(other != attempt_directory and other not in attempt_directory.parents
                          and attempt_directory not in other.parents)
-            _require(not os.path.lexists(inputs.operation_directory))
+            if owned_single_build is None:
+                _require(not os.path.lexists(inputs.operation_directory))
+            else:
+                owned_single_build.check_binding(inputs.policy, inputs.docker, inputs.lock,
+                    inputs.operation_directory, inputs.output_bind_target, inputs.handoff_child_name, artifact_policy)
             os.mkdir(attempt_directory, 0o700)  # Never reuse, repair or remove a failed attempt.
             journal._sync_directory(attempt_directory.parent)
             _write_new(attempt_directory / "no-replay", _MARKER)
@@ -128,6 +135,7 @@ class ControllerRendezvous:
             self._store, self._inputs = store, inputs
             self._capture_policy, self._emission_policy = capture_policy, emission_policy
             self._artifact_policy, self._preserved_directory = artifact_policy, preserved_directory
+            self._owned_single_build = owned_single_build
             self._directory, self._verifier, self._trusted_root = attempt_directory, verifier, trusted_root
             self._digests = dict(zip(("capture", "emission"), (bytes.fromhex(value) for value in digests[:2])))
             self.prefix = "/android-controller/" + capture_policy.transaction_id
@@ -159,8 +167,10 @@ class ControllerRendezvous:
             try:
                 self._exact()
                 self._issued_capture = self._store.issue(self._capture_policy)
+                single = ({} if self._owned_single_build is None
+                          else {"owned_single_build": self._owned_single_build})
                 self._session = controller.ControllerCaptureSession(self._store, self._issued_capture,
-                    self._emission_policy, self._artifact_policy, self._preserved_directory)
+                    self._emission_policy, self._artifact_policy, self._preserved_directory, **single)
                 self._state = "capture-ready"
             except BaseException:
                 self._fail()

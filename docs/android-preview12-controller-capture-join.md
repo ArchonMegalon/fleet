@@ -42,7 +42,7 @@ admission; this implementation is not that admission.
 
 ### Pre-capture subject availability
 
-The existing `prepare_rebuild_handoff` manifest is deterministic from admitted
+For legacy independent-rebuild mode, the manifest is deterministic from admitted
 producer inputs: fixed contract/status/output names and release identity; exact
 lock, external request, original producer source graph, eligibility and approval
 file hashes; admitted toolchain closure hash and source commit/tree; and the
@@ -60,6 +60,40 @@ or timestamp fields. Dynamic `capture-complete.json` is separate operation
 evidence, outside the seven-file closure and outside this origin subject. A
 future change adding dynamic fields to the subject must revisit this admission
 sequence, not substitute a candidate-selected digest or placeholder.
+
+### Internal single-build order
+
+Single-build mode cannot know the final AAB/manifest digest before compilation.
+The owner therefore uses `OwnedSingleBuild` with the independently admitted
+runtime policy, Docker pin, ready internal-only lock and fresh output/operation
+paths. Its constructor executes the existing isolated builder and exact capture
+itself. It accepts neither an AAB path nor a detached capture/receipt as input.
+Builder failure, nonterminal execution, incorrect policy or capture drift yields
+no usable preparation. No signing secret or hosted authentication is involved
+in this credential-free, explicitly owner-authorized preparation.
+
+The same live owner reads `manifest_sha256` from that object and admits it into
+the existing exact artifact policies before opening the hosted roles. No origin
+policy accepts an unknown digest, wildcard or provider-selected hash. Pass the
+same object as `owned_single_build` to the existing local owner/rendezvous. All
+runtime inputs and the measured subject must agree; only that object's already
+created operation directory is accepted. Other destinations must remain fresh.
+
+The capture job then authenticates **transfer of the owner-built result**. It
+does not claim to have requested or run the earlier build. Claiming is once-only
+even when authentication fails. The result records
+`capture_order=owner-build-before-authenticated-transfer`, while the capture
+receipt retains `authenticatedJob=false`. Legacy mode retains its original
+authenticate-before-build order. Both use unchanged emission authentication,
+exact seven-file custody, real origin verification and protected signer gates.
+
+The preparation keeps the actual capture and fences original file identities,
+inventory, bytes and lock through transfer and emission. It cannot be restored
+from JSON or passed through a new CLI/import-AAB switch. Owner loss requires
+reconciliation; retained files cannot recreate the preparation. Deployment must
+keep the single owner alive from build through transfer, admit its source/runtime
+before invocation and separately provision the existing hosted roles. This source
+support is not an activated deployment or a signing/publication receipt.
 
 ## Boundaries that are not solved by composition
 

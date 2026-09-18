@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from datetime import UTC, datetime
 import hashlib
+import os
 from pathlib import Path
 import threading
 import time
@@ -38,6 +39,7 @@ class ControllerEmission:
     emission_job: identity.WorkflowJobIdentity
     capture: capture.BuilderHandoffCapture
     artifact_origin: origin.OriginFacts
+    capture_order: str = "authenticated-job-before-build"
     # Ordinary local composition facts, never an authenticated signing lease.
 
 
@@ -55,6 +57,102 @@ def _challenge(policy):
     return hashlib.sha256(policy.audience.encode("ascii")).hexdigest()
 
 
+class OwnedSingleBuild:
+    """One real owner-invoked build kept live until authenticated transfer.
+
+    This is not deserializable build evidence or a signing capability. The
+    admitted owner invokes the fixed builder itself, without a supplied AAB,
+    then admits the measured manifest digest into the existing exact policies.
+    GitHub subsequently authorizes transfer/emission, not this earlier build.
+    A lost owner process cannot reconstruct this object from retained files.
+    """
+
+    def __init__(self, *, policy: runtime.RuntimePolicy, docker: origin.PinnedFile,
+                 lock: origin.PinnedFile, operation_directory: Path,
+                 output_bind_target: str, handoff_child_name: str):
+        self._mutex = threading.RLock()
+        self._claimed = self._failed = False
+        self._arguments = (policy, docker, lock, operation_directory,
+                           output_bind_target, handoff_child_name)
+        try:
+            _require(type(policy) is runtime.RuntimePolicy and policy.process_role == "builder"
+                     and type(docker) is origin.PinnedFile and type(lock) is origin.PinnedFile,
+                     "single-build-admission")
+            policy.__post_init__()
+            self._lock = origin._capture(lock, 1024 * 1024)
+            value = fleet._strict_json(self._lock.raw, "single-build owner lock")
+            _require(fleet.build_verification_mode(value) == "internal-single-build"
+                     and not fleet.validate_unsigned_rebuild_lock(value, self._lock.raw,
+                                                                  policy.requested_image),
+                     "single-build-owner-policy")
+            self._limits = capture._limits(value)
+            self._result = capture.run_builder_capture_handoff(
+                policy, docker, operation_directory, lock, output_bind_target, handoff_child_name)
+            self._lock.recheck()
+            _require(type(self._result) is capture.BuilderHandoffCapture
+                     and self._result.directory == operation_directory / capture.COPY_DIRECTORY
+                     and self._result.lock_sha256 == lock.sha256, "single-build-capture")
+            self._digests = dict(self._result.file_sha256)
+            _require(len(self._digests) == len(self._result.file_sha256)
+                     and set(self._digests) == set(self._limits)
+                     and self._digests[capture.MANIFEST] == self._result.artifact_closure_sha256,
+                     "single-build-inventory")
+            self._owner = os.getuid(), os.getgid()
+            fd = capture._directory(self._result.directory, self._owner)
+            try:
+                self._root = capture._identity(os.fstat(fd))
+                self._metadata = capture._metadata(fd, self._limits, self._owner)
+            finally:
+                os.close(fd)
+            self.assert_exact()
+        except BaseException:
+            self._failed = True
+            raise ControllerCaptureError("owned-single-build-failed-no-retry") from None
+
+    def assert_exact(self):
+        with self._mutex:
+            try:
+                _require(not self._failed, "single-build-stopped")
+                self._lock.recheck()
+                capture._terminal(self._result.execution, self._arguments[0])
+                fd = capture._directory(self._result.directory, self._owner)
+                try:
+                    capture._recheck(fd, self._result.directory, self._root, self._metadata,
+                                     self._limits, self._owner, self._digests)
+                finally:
+                    os.close(fd)
+                self._lock.recheck()
+            except BaseException:
+                self._failed = True
+                raise ControllerCaptureError("owned-single-build-drift") from None
+
+    @property
+    def manifest_sha256(self):
+        self.assert_exact()
+        return self._result.artifact_closure_sha256
+
+    def check_binding(self, policy, docker, lock, operation_directory,
+                      output_bind_target, handoff_child_name, artifact_policy):
+        with self._mutex:
+            try:
+                self.assert_exact()
+                _require(not self._claimed and self._arguments ==
+                         (policy, docker, lock, operation_directory, output_bind_target, handoff_child_name)
+                         and type(artifact_policy) is origin.OriginPolicy
+                         and artifact_policy.subject_name == capture.MANIFEST
+                         and artifact_policy.subject_sha256 == self._result.artifact_closure_sha256,
+                         "single-build-binding")
+            except BaseException:
+                self._failed = True
+                raise ControllerCaptureError("owned-single-build-binding") from None
+
+    def _claim(self, *arguments):
+        with self._mutex:
+            self.check_binding(*arguments)
+            self._claimed = True  # A later authentication/copy failure cannot reuse this build.
+            return self._result
+
+
 class ControllerCaptureSession:
     """Single in-memory attempt; lost/failed actions never replay from receipts.
 
@@ -63,11 +161,14 @@ class ControllerCaptureSession:
     the owner only after the long build, without renewing the capture job slot.
     Policies must select distinct exact check runs in the same transaction and
     workflow invocation. The store remains the only challenge/crypto authority.
+    An explicit live ``owned_single_build`` instead authorizes transfer of the
+    owner's earlier build; it never makes that build GitHub-requested or hosted.
     """
 
     def __init__(self, store: challenges.SQLiteWorkflowChallengeStore,
                  capture_job: identity.WorkflowJobPolicy, emission_job: identity.WorkflowJobPolicy,
-                 artifact_policy: origin.OriginPolicy, preserved_directory: Path):
+                 artifact_policy: origin.OriginPolicy, preserved_directory: Path, *,
+                 owned_single_build: OwnedSingleBuild | None = None):
         try:
             _require(type(store) is challenges.SQLiteWorkflowChallengeStore
                      and type(capture_job) is identity.WorkflowJobPolicy
@@ -89,6 +190,12 @@ class ControllerCaptureSession:
                      and runtime._path(str(preserved_directory)), "controller-subject-admission")
             self._store, self._capture_job, self._emission_job = store, capture_job, emission_job
             self._artifact_policy, self._preserved_directory = artifact_policy, preserved_directory
+            _require(owned_single_build is None or type(owned_single_build) is OwnedSingleBuild,
+                     "controller-owned-build-type")
+            if owned_single_build is not None:
+                _require(owned_single_build.manifest_sha256 == artifact_policy.subject_sha256,
+                         "controller-owned-build-subject")
+            self._owned_single_build = owned_single_build
             self._capture_started = self._emission_started = False
             self._captured = self._requester = self._lock_pin = self._lock_snapshot = None
             self._mutex = threading.RLock()
@@ -107,7 +214,7 @@ class ControllerCaptureSession:
     def capture(self, token: str, *, policy: runtime.RuntimePolicy, docker: origin.PinnedFile,
                 lock: origin.PinnedFile, operation_directory: Path, output_bind_target: str,
                 handoff_child_name: str) -> capture.BuilderHandoffCapture:
-        """Consume fresh job authentication, then invoke the real fixed capture."""
+        """Authenticate capture or one-time transfer of the live owner build."""
         with self._mutex:
             _require(not self._capture_started and not self._emission_started, "controller-capture-already-started")
             self._capture_started = True
@@ -118,11 +225,21 @@ class ControllerCaptureSession:
                 policy.__post_init__()
                 self._lock_snapshot = origin._capture(lock, 1024 * 1024)
                 self._lock_pin = lock
+                value = None
+                if self._owned_single_build is not None:
+                    # Claim once before authentication. Invalid or lost transfer
+                    # authorization never licenses reassignment to another job.
+                    value = self._owned_single_build._claim(
+                        policy, docker, lock, operation_directory, output_bind_target,
+                        handoff_child_name, self._artifact_policy)
                 self._requester = self._consume(self._capture_job, token)
                 self._lock_snapshot.recheck()
                 self._store._match(self._requester, self._capture_job, int(time.time()))
-                value = capture.run_builder_capture_handoff(
-                    policy, docker, operation_directory, lock, output_bind_target, handoff_child_name)
+                if value is None:
+                    value = capture.run_builder_capture_handoff(
+                        policy, docker, operation_directory, lock, output_bind_target, handoff_child_name)
+                else:
+                    self._owned_single_build.assert_exact()
                 self._lock_snapshot.recheck()
                 _require(type(value) is capture.BuilderHandoffCapture
                          and value.directory == operation_directory / capture.COPY_DIRECTORY
@@ -144,6 +261,8 @@ class ControllerCaptureSession:
                 raise ControllerCaptureError("controller-capture-failed-no-retry") from None
 
     def _retained(self, retained):
+        if self._owned_single_build is not None:
+            self._owned_single_build.assert_exact()
         _require(type(retained) is fleet.PreservedRebuildHandoff
                  and retained.artifact_subject_path == self._preserved_directory / capture.MANIFEST,
                  "controller-preserved-path")
@@ -203,6 +322,8 @@ class ControllerCaptureSession:
                     self._retained(retained)
                     tool.recheck()
                     root.recheck()
-                return ControllerEmission(self._requester, facts, self._captured, verified)
+                order = ("owner-build-before-authenticated-transfer" if self._owned_single_build is not None
+                         else "authenticated-job-before-build")
+                return ControllerEmission(self._requester, facts, self._captured, verified, order)
             except BaseException:
                 raise ControllerCaptureError("controller-emission-failed-no-retry") from None

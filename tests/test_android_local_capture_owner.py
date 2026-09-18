@@ -314,6 +314,25 @@ def capture_done(current, flow):
     flows.wait(exchange, "capture-complete")
 
 
+def test_local_owner_accepts_only_the_live_exact_preparation(deployment):
+    from test_android_owned_single_build import select_single, prepare
+    flow = deployment.flow
+    select_single(flow.model)
+    owned = prepare(flow.model)
+    flow.policy = replace(flow.policy, subject_sha256=owned.manifest_sha256)
+    deployment.value["pins"]["lock"]["sha256"] = flow.model.lock.sha256
+    deployment.value["artifact_policy"]["subject_sha256"] = owned.manifest_sha256
+    deployment.path.write_bytes(raw(deployment.value))
+    current = owner.LocalCaptureOwner(deployment.path, sha(deployment.path.read_bytes()),
+                                     owned_single_build=owned)
+    try:
+        capture_done(current, flow)
+        assert current.controller.capture_completed().artifact_closure_sha256 == owned.manifest_sha256
+        assert flow.model.calls == ["builder"]
+    finally:
+        current.close()
+
+
 def export_ready(current, flow):
     capture_done(current, flow)
     current.advance()
