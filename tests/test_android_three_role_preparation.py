@@ -234,6 +234,7 @@ OFFLINE_IMPORT_SUITES = (
     "tests/test_android_preview12_external_rebuilder.py",
     "tests/test_android_preview12_preserved_handoff.py",
     "tests/test_android_preview12_preserved_validation.py",
+    "tests/test_android_preview12_mismatch_diagnostics.py",
 )
 
 

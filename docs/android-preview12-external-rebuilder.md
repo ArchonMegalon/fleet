@@ -106,6 +106,27 @@ This copy boundary does not authenticate a workflow, qualify runtime custody,
 or turn a failed first-producer wrapper into success. The synthetic tests model
 compilation; actual independent rebuild equality remains required.
 
+`prepare-rebuild --retain-mismatch-diagnostics` optionally retains a rejected
+independent AAB at the fixed sibling `OUTPUT_DIR.mismatch-diagnostics`. The
+original mismatch remains a failure (CLI exit 2), with no verified handoff.
+This exclusive `0700` directory contains only `0600` copies of the rejected AAB,
+its rebuilt graph and sidecar, and `REBUILD_MISMATCH_DIAGNOSTICS.json`. Copies
+are bounded by the existing AAB/JSON limits and a 16 KiB sidecar limit; the
+small receipt binds their exact hashes/sizes and records all signing, publishing,
+upload and retry authority as false. An existing diagnostic path blocks this
+opt-in invocation before rebuilding; it is never overwritten or reused.
+
+The owner must select durable private output storage. Files and directories are
+synced and read back before ordinary stage cleanup. If retention fails, the CLI
+reports that explicitly and preserves the original `.<OUTPUT_DIR-name>-*`
+private stage alongside any partial diagnostics for operator inspection. That
+exception can retain build scratch/logs; successful diagnostic capture retains
+only the four named files, with no approvals or toolchain observations. Inspect
+and retire these diagnostic files explicitly; they grant no rebuild retry or
+release authority. These checks assume private owner-controlled custody, not
+atomic protection from a concurrent same-UID/root writer. Default behavior and
+successful rebuild handoff contents remain unchanged.
+
 ### Observed public builder inputs, not activation
 
 The dormant lock selects these existing public builder bytes:
