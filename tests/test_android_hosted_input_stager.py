@@ -641,3 +641,333 @@ def test_delivery_cli_rejects_bearer_in_arguments(delivery_packet, capsys):
     captured = capsys.readouterr()
     assert captured.out == "" and captured.err == stager.ERROR + "\n"
     assert BEARER.decode() not in captured.out + captured.err and not p.bearer.exists()
+
+
+def protected_reseal(p, *, render=True):
+    p.args["profile_sha256"] = put(p.args["profile"], encode(p.profile), 0o444)
+    p.args["context_sha256"] = put(p.args["context"], encode(p.context), 0o444)
+    if render:
+        p.args["deployment_sha256"] = put(p.args["deployment"],
+            stager.materializer.render(p.profile, p.context, "protected"))
+
+
+@pytest.fixture
+def protected_packet(tmp_path, monkeypatch):
+    """Use real root custody when root; otherwise explicitly model ownership.
+
+    The unprivileged test owner represents root for these private fixture
+    directories. External ancestry above tmp_path is trusted by this model,
+    not proven suitable for real protected provisioning. A real-root canary
+    uses TMPDIR=/proof (root-owned 0700) and retains production admission,
+    _metadata and _trusted_root checks, with observation-only metadata tracing.
+    """
+    actual_root = os.getuid() == os.geteuid() == os.getgid() == os.getegid() == 0
+    tmp_path.chmod(0o700)
+    boot = stager.materializer.protected
+    profile = deepcopy(fixtures._profile(tmp_path)); value = profile["protected"]
+    directories = {name: tmp_path / ("protected-" + name) for name in
+                   ("keys", "bearers", "oidc", "validation", "control", "operations")}
+    for directory in directories.values(): directory.mkdir(mode=0o700)
+    keys = {name: directories["keys"] / str(index) for index, name in enumerate(boot.credentials.SECRET_NAMES)}
+    for path in keys.values(): put(path, b"SYNTHETIC-SIGNING-FILE-NEVER-READ")
+    value["secret_inputs"] = {name: str(path) for name, path in keys.items()}
+    texts = {"intake_bearer": b"SYNTHETIC-PROTECTED-INTAKE-BEARER",
+             "binary_bearer": b"SYNTHETIC-PROTECTED-BINARY-BEARER"}
+    for name, raw in texts.items():
+        path = directories["bearers"] / name
+        value["transport_inputs"][name] = str(path)
+        profile["owner"]["bearer_sha256"][name.removesuffix("_bearer")] = put(path, raw)
+    for name, _ in stager.ENVIRONMENT:
+        value["transport_inputs"][name] = str(directories["oidc"] / name)
+    for name, pin in value["pins"].items():
+        pin["sha256"] = put(Path(pin["path"]), ("PUBLIC-SYNTHETIC-" + name).encode())
+    profile["owner"]["pins"]["lock"]["sha256"] = value["pins"]["lock"]["sha256"]
+    config = value["launcher"]
+    for name in ("requests", "responses", "credentials", "socket"):
+        config[name] = str(directories["control"] / name)
+    value["operation_directory"] = str(directories["operations"] / "once")
+    for name in boot.VALIDATION_FIELDS:
+        path = directories["validation"] / name
+        config["validation"][name] = str(path)
+        if name in boot.VALIDATION_FILE_LIMITS: put(path, ("PUBLIC-VALIDATION-" + name).encode())
+        else: path.mkdir(mode=0o700)
+    Path(value["persistent"]["parent"]).mkdir(mode=0o700)
+    Path(config["fleet_root"]).mkdir(mode=0o700)
+    p = SimpleNamespace(root=tmp_path, boot=boot, profile=profile, context=fixtures._context(),
+        keys=keys, texts=texts, outputs=directories["oidc"], environment=Injected(),
+        metadata_seen=[], reads=[], live=set(), forbidden=[], args={"profile": tmp_path / "protected-profile.json",
+        "context": tmp_path / "protected-context.json", "deployment": tmp_path / "protected-deployment.json"})
+    protected_reseal(p)
+    def trusted_root(path, _label):
+        boot.require(path.is_absolute() and path.is_relative_to(tmp_path)
+                     and path.resolve(strict=True) == path and path.is_dir())
+        for part in (path, *path.parents):
+            if not part.is_relative_to(tmp_path): break
+            info = part.lstat()
+            boot.require(info.st_uid == os.getuid() and info.st_gid == os.getgid()
+                         and not info.st_mode & 0o022)
+        return path
+    def metadata(path, limit, *, private=True):
+        p.metadata_seen.append(path)
+        trusted_root(path.parent, "modeled protected input")
+        boot.require(path.resolve(strict=True) == path)
+        info = path.lstat()
+        boot.require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_gid == os.getgid()
+                     and info.st_nlink == 1 and 0 < info.st_size <= limit
+                     and (stat.S_IMODE(info.st_mode) in {0o400, 0o600} if private else not info.st_mode & 0o022))
+        return boot.origin._identity(info)
+    class RootAdmission:
+        getuid = geteuid = getgid = getegid = staticmethod(lambda: 0)
+        def __getattr__(self, name): return getattr(os, name)
+    if actual_root:
+        actual_metadata = boot._metadata
+        def observed_metadata(path, limit, *, private=True):
+            p.metadata_seen.append(path)
+            return actual_metadata(path, limit, private=private)
+        monkeypatch.setattr(boot, "_metadata", observed_metadata)
+    else:
+        monkeypatch.setattr(stager, "os", RootAdmission())
+        monkeypatch.setattr(boot, "_metadata", metadata)
+        monkeypatch.setattr(boot.fleet, "_trusted_root", trusted_root)
+    real_open, real_close, real_read = os.open, os.close, boot._OwnedFile.read
+    def opening(path, *args, **kwargs):
+        if Path(path) in keys.values():
+            p.forbidden.append("key-open"); pytest.fail("signing file opened")
+        fd = real_open(path, *args, **kwargs); p.live.add(fd); return fd
+    def closing(fd): real_close(fd); p.live.discard(fd)
+    def read(item):
+        if item.path in keys.values():
+            p.forbidden.append("key-read"); pytest.fail("signing bytes read")
+        if item.path in {Path(value["transport_inputs"][name]) for name in texts}:
+            assert set(keys.values()) <= set(p.metadata_seen)
+        result = real_read(item); p.reads.append(item.path); return result
+    monkeypatch.setattr(os, "open", opening); monkeypatch.setattr(os, "close", closing)
+    monkeypatch.setattr(boot._OwnedFile, "read", read)
+    def forbidden(*_args, **_kwargs):
+        p.forbidden.append("operation"); pytest.fail("protected operational action")
+    for module, names in ((boot, ("run", "_tls", "_release_fd", "_wait_release")),
+        (boot.launcher, ("ProtectedJobLauncher", "RecoveryMount")),
+        (boot.entrypoint, ("ProtectedJobEntrypoint",)), (boot.intake, ("PublicCaptureClient",)),
+        (boot.fleet, ("PreservedProtectedValidation",))):
+        for name in names: monkeypatch.setattr(module, name, forbidden)
+    yield p
+    assert p.forbidden == [] and p.live == set()
+
+
+def invoke_protected(p):
+    return stager.stage_protected_request_inputs(**p.args, environment=p.environment)
+
+
+def protected_rejected(p, *, before_environment=False, before_transport=False):
+    with pytest.raises(stager.StagingError, match="^" + stager.ERROR + "$"):
+        invoke_protected(p)
+    if before_environment: assert p.environment.reads == []
+    if before_transport:
+        transport = p.profile["protected"]["transport_inputs"]
+        assert not set(p.reads) & {Path(transport[name]) for name in p.texts}
+
+
+def test_protected_staging_uses_real_ownedfiles_without_signing_file_reads(protected_packet):
+    p = protected_packet; value = p.profile["protected"]
+    preserved = [p.args[name] for name in ("profile", "context", "deployment")]
+    preserved += [Path(pin["path"]) for pin in value["pins"].values()]
+    preserved += [Path(value["transport_inputs"][name]) for name in p.texts]
+    before = {path: (path.read_bytes(), p.boot.origin._identity(path.stat())) for path in preserved}
+    key_stamps = {path: p.boot.origin._identity(path.stat()) for path in p.keys.values()}
+    original_get = p.environment.get
+    def get(key, *args):
+        assert set(p.keys.values()) <= set(p.metadata_seen)
+        assert set(preserved) <= set(p.reads)
+        return original_get(key, *args)
+    p.environment.get = get
+    assert invoke_protected(p) == stager.PROTECTED_COMPLETE
+    assert p.environment.reads == [name for _, name in stager.ENVIRONMENT]
+    for name, raw in (("oidc_request_url", URL.encode()), ("oidc_request_credential", TOKEN.encode())):
+        path = Path(value["transport_inputs"][name])
+        held = p.boot._OwnedFile(path, p.boot.TRANSPORT_LIMITS[name], expected=sha(raw))
+        try: assert held.raw == held.read() == raw
+        finally: held.close()
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600 and path.stat().st_nlink == 1
+    for path, (raw, identity) in before.items():
+        assert path.read_bytes() == raw and p.boot.origin._identity(path.stat()) == identity
+    for path, identity in key_stamps.items(): assert p.boot.origin._identity(path.stat()) == identity
+    assert not Path(value["operation_directory"]).exists()
+
+
+def test_protected_request_staging_remains_root_only(protected_packet, monkeypatch):
+    monkeypatch.setattr(stager.os, "geteuid", lambda: 1000)
+    protected_rejected(protected_packet, before_environment=True, before_transport=True)
+    no_outputs(protected_packet)
+
+
+@pytest.mark.parametrize("name", ["profile", "context", "deployment", "pin", "key"])
+def test_protected_bad_public_or_key_custody_precedes_transport_and_environment(protected_packet, name):
+    p = protected_packet
+    if name == "key": next(iter(p.keys.values())).chmod(0o644)
+    else:
+        path = p.args[name] if name != "pin" else Path(p.profile["protected"]["pins"]["intake_ca"]["path"])
+        put(path, path.read_bytes() + b" ")
+    protected_rejected(p, before_environment=True, before_transport=True); no_outputs(p)
+
+
+@pytest.mark.parametrize("change", ["equivalent-json", "new-context", "mismatched-sha"])
+def test_protected_requires_exact_existing_renderer_equality(protected_packet, change):
+    p = protected_packet
+    if change == "equivalent-json":
+        p.args["deployment_sha256"] = put(p.args["deployment"],
+            json.dumps(json.loads(p.args["deployment"].read_bytes()), indent=2).encode())
+    else:
+        p.context["run_id" if change == "new-context" else "workflow_sha"] = "78" if change == "new-context" else "f" * 40
+        protected_reseal(p, render=False)
+    protected_rejected(p, before_environment=True, before_transport=True); no_outputs(p)
+
+
+@pytest.mark.parametrize("attack", ["key-key", "key-bearer", "key-pin", "key-validation", "bearer-validation",
+    "key-runtime-bind", "bearer-runtime-bind", "output-key", "output-bearer", "same-output", "existing-url",
+    "existing-request", "existing-operation", "output-symlink", "key-symlink", "bearer-hardlink", "output-recovery"])
+def test_protected_aliases_reject_before_any_transport_bytes(protected_packet, attack):
+    p = protected_packet; value = p.profile["protected"]; config = value["launcher"]
+    transport = value["transport_inputs"]; keys = value["secret_inputs"]; key_names = list(keys)
+    if attack == "key-key": keys[key_names[1]] = keys[key_names[0]]
+    elif attack == "key-bearer": transport["intake_bearer"] = keys[key_names[0]]
+    elif attack == "key-pin": keys[key_names[0]] = value["pins"]["trusted_root"]["path"]
+    elif attack == "key-validation": config["validation"]["bundletool"] = keys[key_names[0]]
+    elif attack == "bearer-validation": config["validation"]["bundletool"] = transport["intake_bearer"]
+    elif attack in {"key-runtime-bind", "bearer-runtime-bind"}:
+        path = keys[key_names[0]] if attack.startswith("key") else transport["intake_bearer"]
+        value["runtime_policy"]["binds"] = [*value["runtime_policy"]["binds"],
+            {"source": str(Path(path).parent), "target": "/synthetic-extra", "read_only": True}]
+    elif attack == "output-key": transport["oidc_request_url"] = keys[key_names[0]]
+    elif attack == "output-bearer": transport["oidc_request_url"] = transport["intake_bearer"]
+    elif attack == "same-output": transport["oidc_request_credential"] = transport["oidc_request_url"]
+    elif attack in {"existing-url", "existing-request"}:
+        name = "oidc_request_url" if attack == "existing-url" else "oidc_request_credential"
+        put(Path(transport[name]), b"SYNTHETIC-PREEXISTING")
+    elif attack == "existing-operation": Path(value["operation_directory"]).mkdir(mode=0o700)
+    elif attack == "output-symlink": Path(transport["oidc_request_url"]).symlink_to(Path(transport["intake_bearer"]))
+    elif attack == "key-symlink":
+        path = next(iter(p.keys.values())); retained = path.with_name("retained-key")
+        path.rename(retained); path.symlink_to(retained)
+    elif attack == "bearer-hardlink":
+        path = Path(transport["intake_bearer"]); os.link(path, path.with_name("retained-bearer"))
+    else: transport["oidc_request_url"] = str(Path(config["recovery"]) / "nested-output")
+    protected_reseal(p)
+    protected_rejected(p, before_environment=True, before_transport=True)
+
+
+@pytest.mark.parametrize("kind", ["wrong-intake", "wrong-binary", "shared-bearers", "shared-token"])
+def test_protected_transport_hash_and_distinctness_bindings(protected_packet, kind):
+    p = protected_packet; transport = p.profile["protected"]["transport_inputs"]
+    if kind in {"wrong-intake", "wrong-binary"}:
+        name = "intake_bearer" if kind == "wrong-intake" else "binary_bearer"
+        put(Path(transport[name]), b"SYNTHETIC-WRONG-ROLE")
+    elif kind == "shared-bearers":
+        put(Path(transport["binary_bearer"]), p.texts["intake_bearer"])
+        p.profile["owner"]["bearer_sha256"]["binary"] = sha(p.texts["intake_bearer"])
+        protected_reseal(p, render=False)
+    else: p.environment["ACTIONS_ID_TOKEN_REQUEST_TOKEN"] = p.texts["intake_bearer"].decode()
+    protected_rejected(p, before_environment=kind != "shared-token"); no_outputs(p)
+
+
+@pytest.mark.parametrize("value", [None, "", "x" * 16385, "nön-ascii", "white space", "line\nbreak"],
+    ids=["missing", "empty", "oversize", "non-ascii", "space", "newline"])
+def test_protected_invalid_explicit_oidc_value_never_writes(protected_packet, value):
+    p = protected_packet; p.environment["ACTIONS_ID_TOKEN_REQUEST_TOKEN"] = value
+    protected_rejected(p); no_outputs(p)
+
+
+@pytest.mark.parametrize("value", ["http://token.actions.githubusercontent.com/issue", "https://evil.invalid/issue",
+    "https://user@token.actions.githubusercontent.com/issue", "https://token.actions.githubusercontent.com/issue#fragment"])
+def test_protected_invalid_oidc_endpoint_never_writes(protected_packet, value):
+    p = protected_packet; p.environment["ACTIONS_ID_TOKEN_REQUEST_URL"] = value
+    protected_rejected(p); no_outputs(p)
+
+
+@pytest.mark.parametrize("when", ["environment", "first-write"])
+@pytest.mark.parametrize("name", ["profile", "pin", "key", "intake_bearer"])
+def test_protected_input_drift_fails_and_retains_partial_output(protected_packet, monkeypatch, when, name):
+    p = protected_packet; value = p.profile["protected"]
+    path = p.args["profile"] if name == "profile" else (Path(value["pins"]["lock"]["path"]) if name == "pin"
+        else (next(iter(p.keys.values())) if name == "key" else Path(value["transport_inputs"][name])))
+    def change():
+        if name == "key": path.chmod(0o644)
+        else: put(path, b"SYNTHETIC-PUBLIC-OR-TRANSPORT-DRIFT")
+    if when == "environment":
+        actual = p.environment.get
+        def get(key, *args): change(); return actual(key, *args)
+        p.environment.get = get
+    else:
+        actual = stager.materializer._write_exclusive
+        def write(destination, raw): actual(destination, raw); change()
+        monkeypatch.setattr(stager.materializer, "_write_exclusive", write)
+    protected_rejected(p)
+    if when == "environment":
+        assert p.environment.reads == ["ACTIONS_ID_TOKEN_REQUEST_URL"]
+        no_outputs(p)
+    else:
+        assert (p.outputs / "oidc_request_url").read_bytes() == URL.encode()
+        assert not (p.outputs / "oidc_request_credential").exists()
+
+
+@pytest.mark.parametrize("failure_call", [1, 2, 3, 4])
+def test_protected_fsync_failure_preserves_partial_and_blocks_replay(protected_packet, monkeypatch, failure_call):
+    p = protected_packet; actual = os.fsync; calls = []
+    def fsync(fd):
+        calls.append(fd)
+        if len(calls) == failure_call: raise OSError("SYNTHETIC-PRIVATE-DETAIL")
+        return actual(fd)
+    monkeypatch.setattr(os, "fsync", fsync)
+    protected_rejected(p)
+    retained = {path: path.read_bytes() for path in p.outputs.iterdir()}
+    assert retained
+    count = len(calls); p.environment.reads.clear(); p.reads.clear()
+    protected_rejected(p, before_environment=True, before_transport=True)
+    assert len(calls) == count and {path: path.read_bytes() for path in p.outputs.iterdir()} == retained
+
+
+@pytest.mark.parametrize("mutation", ["parent", "same-byte-file"])
+@pytest.mark.parametrize("write_index", [0, 1])
+def test_protected_name_or_parent_rebinding_during_fsync_retains_original(protected_packet, monkeypatch, mutation, write_index):
+    p = protected_packet; actual = os.fsync; calls = 0
+    destination = p.outputs / ("oidc_request_url" if write_index == 0 else "oidc_request_credential")
+    raw = URL.encode() if write_index == 0 else TOKEN.encode()
+    retained = p.outputs.with_name("retained-protected-oidc") if mutation == "parent" else destination.with_name("retained-request")
+    def fsync(fd):
+        nonlocal calls
+        actual(fd); calls += 1
+        if calls == 1 + 2 * write_index:
+            if mutation == "parent":
+                p.outputs.rename(retained); p.outputs.mkdir(mode=0o700)
+            else:
+                destination.rename(retained); put(destination, raw)
+    monkeypatch.setattr(os, "fsync", fsync)
+    protected_rejected(p)
+    assert (retained / destination.name if mutation == "parent" else retained).read_bytes() == raw
+    if mutation == "parent": assert not destination.exists()
+    else: assert destination.read_bytes() == raw
+
+
+@pytest.mark.parametrize("name", ["oidc_request_url", "oidc_request_credential"])
+def test_protected_second_write_rechecks_both_output_files(protected_packet, monkeypatch, name):
+    p = protected_packet; actual = stager.materializer._write_exclusive; calls = []
+    def write(path, raw):
+        calls.append(path); actual(path, raw)
+        if len(calls) == 2: put(p.outputs / name, b"SYNTHETIC-POSTWRITE-DRIFT")
+    monkeypatch.setattr(stager.materializer, "_write_exclusive", write)
+    protected_rejected(p)
+    assert len(calls) == 2
+    assert (p.outputs / name).read_bytes() == b"SYNTHETIC-POSTWRITE-DRIFT"
+    assert {path.name for path in p.outputs.iterdir()} == {"oidc_request_url", "oidc_request_credential"}
+
+
+@pytest.mark.parametrize("extra", [[], ["--role", "capture"], ["--deliver-role-bearer"], ["--oidc-token", TOKEN]])
+def test_protected_cli_optin_has_no_role_or_secret_arguments(protected_packet, monkeypatch, capsys, extra):
+    p = protected_packet
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_URL", URL)
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", TOKEN)
+    assert stager.main(cli_args(p) + ["--stage-protected-request-inputs", *extra]) == (1 if extra else 0)
+    captured = capsys.readouterr()
+    assert captured.out == ("" if extra else stager.PROTECTED_COMPLETE + "\n")
+    assert captured.err == (stager.ERROR + "\n" if extra else "")
+    for private in (TOKEN, URL, *(raw.decode() for raw in p.texts.values()), str(p.outputs)):
+        assert private not in captured.out + captured.err

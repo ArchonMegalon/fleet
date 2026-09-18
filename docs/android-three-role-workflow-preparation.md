@@ -31,6 +31,13 @@ public/CA custody checks and exact owner-digest matching. This closes only the
 host-file delivery step; it neither selects/fetches a bearer nor transfers it
 into GitHub environment secrets. The separate remote transfer/exclusive-writer
 prerequisites remain. The phase caller does not opt into delivery automatically.
+The separate root-only `stage_protected_request_inputs()` / CLI
+`--stage-protected-request-inputs` now supplies the existing protected consumer's
+two fresh OIDC request files from explicit injection, after exact protected
+render equality, public pin admission and signing-file **metadata-only** alias
+checks. Existing intake/binary bearers stay separately delivered and owner-hash
+bound; this mode never reads signing-file bytes. It neither starts the protected
+supervisor nor provisions its credentials, runtime, route or recovery mount.
 The callable `android_hosted_source_admission.admit()` now holds independently selected
 profile/context/source bytes before importing the three fixed helpers from
 captured source. It does not choose their authority or admit its own initial
