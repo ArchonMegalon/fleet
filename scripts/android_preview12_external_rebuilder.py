@@ -2797,6 +2797,23 @@ RELEASE_TEST_CONSUMERS = {
 }
 TEST_ORACLE_REPOSITORY = "https://github.com/ArchonMegalon/chummer5a.git"
 TEST_ORACLE_FILE_COUNT = 250_000
+# The already-qualified app can be built once without changing its source tree.
+# It still runs its own source tests and emits v1. Only its exact reviewed recipe
+# may use the fresh-output adapter below; retained historical requests cannot.
+QUALIFIED_V1_SINGLE_BUILD_PRODUCER = (
+    "0d5c8f0cacfdfbb89288eb0f3906d2fdbab36d0a",
+    "7d2585c46236f975a7a4d73a591688fd84b4228f",
+    "scripts/build-release.sh",
+    "e3b746f73d3a557f12ff93d77888aab6ffc24eca5320a49b56b782bc0836ad0c",
+)
+
+
+def _qualified_v1_single_build_producer(lock: Mapping[str, Any]) -> bool:
+    authority = lock["android_authority"]
+    binding = authority["build_script"]
+    return build_verification_mode(lock) == "internal-single-build" and (
+        authority.get("commit"), authority.get("tree"), binding.get("path"), binding.get("sha256")
+    ) == QUALIFIED_V1_SINGLE_BUILD_PRODUCER
 
 
 def _release_test_capability(lock: Mapping[str, Any]) -> str | None:
@@ -2808,7 +2825,7 @@ def _release_test_capability(lock: Mapping[str, Any]) -> str | None:
 
 def _admit_release_test_inputs(lock: Mapping[str, Any], bootstrap: Path | None, wheels: Path | None,
                               oracle: Path | None, *separate_roots: Path) -> None:
-    if build_verification_mode(lock) == "internal-single-build":
+    if build_verification_mode(lock) == "internal-single-build" and not _qualified_v1_single_build_producer(lock):
         if any(path is not None for path in (bootstrap, wheels, oracle)):
             raise RebuilderError("single-build mode does not accept duplicated source-test inputs")
         return
@@ -2953,7 +2970,7 @@ def _stage_test_oracle(module: Any, android: Path, source: Path, destination: Pa
 @contextmanager
 def _staged_release_test_inputs(lock: Mapping[str, Any], workspace: Path, scratch: Path,
                                 bootstrap: Path | None, wheels: Path | None, oracle: Path | None):
-    if build_verification_mode(lock) == "internal-single-build":
+    if build_verification_mode(lock) == "internal-single-build" and not _qualified_v1_single_build_producer(lock):
         _admit_release_test_inputs(lock, bootstrap, wheels, oracle)
         yield {}
         return
@@ -3131,6 +3148,36 @@ def _contextual_rebuild_observation(
     return contextual
 
 
+def _capture_qualified_v1_single_build_request(
+    lock: Mapping[str, Any], build_input_root: Path, aab: Path, graph: Path, sidecar: Path,
+) -> None:
+    """Create a new owner-policy request only from this invocation's fresh outputs.
+
+    Called after successful SDK exit and canonical output capture. This is a
+    request adapter, NOT job provenance or permission to sign prebuilt bytes.
+    The original v1 request and all artifact bytes are left untouched.
+    """
+    if not _qualified_v1_single_build_producer(lock):
+        raise RebuilderError("single-build v1 adapter is not admitted for this producer")
+    pattern = re.compile(r"\.chummer-android-" + re.escape(VERSION_NAME)
+                         + r"\.release\.[A-Za-z0-9]{6}\.external-signer-request\.json")
+    candidates = [path for path in build_input_root.iterdir() if pattern.fullmatch(path.name)]
+    if len(candidates) != 1:
+        raise RebuilderError("fresh single-build legacy request inventory is not exact")
+    request, _ = validate_external_request(candidates[0], graph, lock["limits"]["json_bytes"])
+    _verify_unsigned_candidate(aab, request, lock)
+    if _sha256_file(sidecar, "fresh build sidecar", 64 * 1024, owner_only=True) \
+            != request["buildSidecar"]["sha256"]:
+        raise RebuilderError("fresh legacy sidecar differs from its request")
+    request["contractName"] = SINGLE_BUILD_REQUEST_CONTRACT
+    request["buildVerification"] = {"mode": "single-isolated-build", "distributionTrack": "internal"}
+    request["requiredExternalSigner"].update(mustRebuildAndMatchUnsignedAab=False,
+                                           mustAuthenticateBuilderExecutionProvenance=True)
+    output = build_input_root / "ANDROID_EXTERNAL_SIGNER_REQUEST.generated.json"
+    _write_exclusive(output, _pretty_json(request))
+    validate_external_request(output, graph, lock["limits"]["json_bytes"], **_request_policy(lock))
+
+
 def _run_independent_rebuild(
     lock: Mapping[str, Any],
     workspace: Path,
@@ -3216,7 +3263,7 @@ def _run_independent_rebuild(
         environment["CHUMMER_ANDROID_RELEASE_OFFLINE_NUGET_FEED"] = os.fspath(offline_nuget_feed)
     if offline_aar_feed is not None:
         environment["CHUMMER_ANDROID_RELEASE_OFFLINE_AAR_FEED"] = os.fspath(offline_aar_feed)
-    if build_verification_mode(lock) == "internal-single-build":
+    if build_verification_mode(lock) == "internal-single-build" and not _qualified_v1_single_build_producer(lock):
         environment["CHUMMER_ANDROID_BUILD_VERIFICATION"] = "internal-single-build"
     build_script = workspace / "chummer-android/scripts/build-release.sh"
     stdout_path, stderr_path = build_input_root / "build.stdout", build_input_root / "build.stderr"
@@ -3253,6 +3300,11 @@ def _run_independent_rebuild(
                            "independently rebuilt source graph", lock["limits"]["json_bytes"])
     _copy_canonical_output(rebuilt_sidecar, private_metadata / rebuilt_sidecar.name,
                            "independently rebuilt sidecar", 16 * 1024)
+    if _qualified_v1_single_build_producer(lock):
+        _capture_qualified_v1_single_build_request(
+            lock, build_input_root, rebuilt_aab, private_metadata / rebuilt_graph.name,
+            private_metadata / rebuilt_sidecar.name,
+        )
     return rebuilt_aab, private_metadata / rebuilt_graph.name
 
 
@@ -4767,10 +4819,9 @@ def _add_build_arguments(prepare: argparse.ArgumentParser, *, single_build: bool
         "--offline-aar-feed", type=_offline_aar_feed_argument,
         help="absolute canonical directory of offline Android archives; Android owns manifest and byte validation",
     )
-    if not single_build:
-        for name in ("test-bootstrap-dir", "test-wheelhouse", "test-oracle-root"):
-            prepare.add_argument("--" + name, type=lambda value: _offline_feed_argument(value, "source-test"),
-                                help="explicit offline test-only input; mandatory together for the admitted new test runner")
+    for name in ("test-bootstrap-dir", "test-wheelhouse", "test-oracle-root"):
+        prepare.add_argument("--" + name, type=lambda value: _offline_feed_argument(value, "source-test"),
+                            help="offline test-only input; required by the unchanged qualified v1 build helper")
 
 
 def _parser() -> argparse.ArgumentParser:

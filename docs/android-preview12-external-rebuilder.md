@@ -523,7 +523,7 @@ lock or a live controller. Under `rebuild`, owner configuration must explicitly 
 All other readiness, isolated credential-free builder, exact source/toolchain,
 qualification, certificate and separately credentialed signer checks remain.
 `prepare-single-build --source-graph ...` accepts source intent and the existing
-qualification/tool inputs, not producer AAB, request, sidecar or source-test feeds.
+qualification/tool inputs, not producer AAB, request or sidecar.
 It executes the Android build once, selects the fresh fixed-path request, verifies
 the new AAB/sidecar/graph against it and the original source intent, and captures
 the same seven handoff files. It cannot promote a prior failed comparison.
@@ -540,3 +540,18 @@ provenance fail closed. Focused tests cover orchestration, byte bindings and key
 admission order with modeled SDK/signing operations. No real single-mode build,
 protected signer execution or upload is evidenced by those tests. Activation
 still needs admitted updated controller/Android identities and owner policy.
+
+For delivery without changing the already-qualified app, one exact legacy recipe
+is supported: Android `0d5c8f0c` / tree `7d2585c4`, build-script SHA-256
+`e3b746f73d3a557f12ff93d77888aab6ffc24eca5320a49b56b782bc0836ad0c`.
+That unchanged script still requires its three source-test feeds and runs that
+suite once. It does NOT launch another hosted Wizard qualification. After a
+successful fresh SDK invocation, Fleet validates the exact fresh v1 request and
+outputs, then creates a separate v2 request under the owner-selected single-build
+policy. The v1 file and AAB are not rewritten. Other legacy scripts, missing or
+ambiguous fresh requests, altered outputs and pre-existing v2 output are rejected.
+This adapter cannot take an old producer request through the CLI or convert a
+retained failed attempt into success. Runtime provenance and private key custody
+remain separate mandatory checks. The new native v2 Android recipe can skip its
+duplicate source suite when separately admitted; it need not invalidate the
+current app's existing qualification merely to deliver this internal release.

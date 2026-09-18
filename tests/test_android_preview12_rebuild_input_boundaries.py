@@ -551,6 +551,54 @@ def test_single_build_rejects_prebuilt_inputs_before_build(tmp_path):
         fleet.prepare_rebuild_handoff(**args)
 
 
+def test_qualified_v1_single_build_keeps_original_source_test_inputs(tmp_path):
+    lock = single_build_policy(json.loads(LOCK.read_bytes()))
+    assert fleet._qualified_v1_single_build_producer(lock)
+    with pytest.raises(fleet.RebuilderError, match="require explicit"):
+        fleet._admit_release_test_inputs(lock, None, None, None)
+    feeds = tuple(tmp_path / name for name in ("bootstrap", "wheels", "oracle"))
+    for path in feeds:
+        path.mkdir(mode=0o700)
+    fleet._admit_release_test_inputs(lock, *feeds)
+    lock["android_authority"]["commit"] = "f" * 40
+    assert not fleet._qualified_v1_single_build_producer(lock)
+
+
+@pytest.mark.parametrize("fault", [None, "wrong-producer", "multiple-requests", "modified-aab", "modified-sidecar", "existing-output"])
+def test_qualified_v1_adapter_captures_new_request_without_rewriting_original(tmp_path, fault):
+    _, directory, paths, _ = handoff_inputs(fleet, tmp_path)
+    lock = single_build_policy(json.loads(LOCK.read_bytes()))
+    old = paths["externalSignerRequest"]
+    original_bytes = old.read_bytes()
+    original_aab = paths["unsignedAab"].read_bytes()
+    original = directory / f".chummer-android-{fleet.VERSION_NAME}.release.AbCd12.external-signer-request.json"
+    old.rename(original)
+    if fault == "wrong-producer":
+        lock["android_authority"]["commit"] = "f" * 40
+    elif fault == "multiple-requests":
+        protected_file(directory / original.name.replace("AbCd12", "EfGh34"), original_bytes)
+    elif fault == "modified-aab":
+        protected_file(paths["unsignedAab"], b"changed")
+    elif fault == "modified-sidecar":
+        protected_file(paths["buildSidecar"], b"changed")
+    elif fault == "existing-output":
+        protected_file(old, b"existing request must not be overwritten")
+    def capture():
+        fleet._capture_qualified_v1_single_build_request(
+            lock, directory, paths["unsignedAab"], paths["sourceGraph"], paths["buildSidecar"])
+    if fault:
+        with pytest.raises((fleet.RebuilderError, FileExistsError)):
+            capture()
+        assert not old.exists() or old.read_bytes() == b"existing request must not be overwritten"
+    else:
+        capture()
+        request, _ = fleet.validate_external_request(old, paths["sourceGraph"], **fleet._request_policy(lock))
+        assert request["contractName"] == fleet.SINGLE_BUILD_REQUEST_CONTRACT
+        assert request["signingAuthorized"] is False
+        assert paths["unsignedAab"].read_bytes() == original_aab
+    assert original.read_bytes() == original_bytes
+
+
 def test_single_build_cli_passes_only_source_intent_and_rejects_wrong_policy(tmp_path, monkeypatch):
     args = prepare_arguments(tmp_path, single_build_policy(configured()))
     argv = ["--lock", str(args["lock_path"]), "prepare-single-build"]
