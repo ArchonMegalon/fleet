@@ -43,6 +43,13 @@ approval-consumer test requires that original receipt, SHA256
 `50375dd5e130490a19171fa1ccd0f0bd4dae84ab385c1893cedddc001023dfb2`.
 Old run `35219818439` remains historical only. No predecessor receipt or
 approval may be relabeled. This is not builder or signer qualification.
+The executable source-test capability table now includes the exact PR71 build
+script digest above, not only its predecessor. Hosted offline-import regression
+also runs the checked-in-lock/input-boundary suite; the exact-checkout test
+compares both script and capture-helper bytes when that checkout is supplied.
+Unknown scripts and missing/unsafe bootstrap, wheelhouse or oracle inputs remain
+rejected. This closes an admission failure before rebuilding, not a byte-equality,
+runtime-custody, signing or publication claim.
 The lock's historical `approval_authority` field selects the **builder** identity
 already trusted by this exact `4e4c` consumer: `fleet-release-builder-2026-09`,
 `eng/trusted-release-builders/fleet-release-builder-2026-09.public.pem`, PEM SHA256

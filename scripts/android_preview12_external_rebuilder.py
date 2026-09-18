@@ -2722,6 +2722,9 @@ RELEASE_TEST_CONSUMERS = {
         "a295c226850edda9ce3a57a3c43690188e271b3059c33dd14abca04f65ef4bcf",
     "4e29b255aae29d30f1b8ddb7fc96947cf851df2c661fa820031bd5db2604f3f6":
         "a295c226850edda9ce3a57a3c43690188e271b3059c33dd14abca04f65ef4bcf",
+    # Android PR71 adds deterministic compilation; source-test intake is unchanged.
+    "e3b746f73d3a557f12ff93d77888aab6ffc24eca5320a49b56b782bc0836ad0c":
+        "a295c226850edda9ce3a57a3c43690188e271b3059c33dd14abca04f65ef4bcf",
 }
 TEST_ORACLE_REPOSITORY = "https://github.com/ArchonMegalon/chummer5a.git"
 TEST_ORACLE_FILE_COUNT = 250_000

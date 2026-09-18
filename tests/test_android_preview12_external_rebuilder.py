@@ -744,6 +744,11 @@ def test_real_android_v2_consumer_binding_when_exact_checkout_is_available(
     original = deepcopy(lock)
     assert lock["approval_authority"] == CURRENT_BUILDER_PUBLIC_BINDING
     consumer = module.validate_android_consumer(Path(value), lock)
+    build_script = Path(value) / lock["android_authority"]["build_script"]["path"]
+    assert hashlib.sha256(build_script.read_bytes()).hexdigest() == lock["android_authority"]["build_script"]["sha256"]
+    assert module._release_test_capability(lock) == hashlib.sha256(
+        (Path(value) / "scripts/run_release_source_tests.py").read_bytes()
+    ).hexdigest()
     assert consumer.CONTRACT == module.ANDROID_ATTESTATION_CONTRACT
     assert module._android_builder_selection(consumer) == ("fleet-release-builder-2026-09", True)
     assert consumer._fleet_expected_spki_sha256 == CURRENT_BUILDER_PUBLIC_BINDING["public_key_spki_sha256"]
