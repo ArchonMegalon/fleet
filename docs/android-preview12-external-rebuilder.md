@@ -497,3 +497,18 @@ new Android consumer, then update this lock in a separate reviewed change.
 
 Play upload and publication remain false even after those items are complete;
 they require their existing separate owner transactions.
+# Internal single-build transition
+
+The Android producer can now explicitly request an internal-only single isolated
+build using external signer request v2. `validate_external_request` accepts that
+format only when its caller explicitly selects `internal-single-build`; the
+request itself cannot select a weaker policy. It retains the exact upload
+certificate, artifact/source bindings, qualification, and proof-exclusion checks
+and adds an explicit builder-execution-provenance requirement. All authorization
+flags remain false.
+
+This is parser/producer support, not an activated signer path. Existing rebuild,
+capture and signing transactions still use their v1 policy and reject v2. The
+next change must bind the single producing build to protected controller
+provenance before enabling that path. Never substitute a local hash report for
+that provenance or reclassify the existing failed comparison as successful.

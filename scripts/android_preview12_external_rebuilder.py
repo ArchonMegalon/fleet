@@ -35,6 +35,7 @@ from typing import Any, Callable, Mapping
 
 LOCK_CONTRACT = "fleet.android_preview12_external_rebuilder_lock.v1"
 REQUEST_CONTRACT = "chummer.android.external-release-signer-request/v1"
+SINGLE_BUILD_REQUEST_CONTRACT = "chummer.android.external-release-signer-request/v2"
 ANDROID_ATTESTATION_CONTRACT = "chummer.android.release-build-attestation/v2"
 FLEET_AUDIT_CONTRACT = "fleet.android_preview12_external_rebuild_audit.v3"
 SOURCE_GRAPH_CONTRACT = "chummer.android.release-source-graph/v3"
@@ -421,8 +422,14 @@ def validate_source_graph(value: Mapping[str, Any]) -> dict[str, dict[str, Any]]
     return result
 
 
-def validate_external_request(request_path: Path, source_graph_path: Path, json_limit: int = 8 * 1024 * 1024) \
+def validate_external_request(request_path: Path, source_graph_path: Path, json_limit: int = 8 * 1024 * 1024,
+                              *, build_verification: str = "independent-rebuild") \
         -> tuple[dict[str, Any], dict[str, Any]]:
+    # The expected mode comes from protected owner configuration, never from
+    # the untrusted request. Existing transaction callers retain v1-only policy.
+    if build_verification not in ("independent-rebuild", "internal-single-build"):
+        raise RebuilderError("unknown external signer build-verification mode")
+    single_build = build_verification == "internal-single-build"
     request, _ = _json_file(request_path, "external signer request", json_limit, owner_only=True)
     graph, graph_raw = _json_file(source_graph_path, "producer source graph", json_limit, owner_only=True)
     expected_fields = {
@@ -430,7 +437,14 @@ def validate_external_request(request_path: Path, source_graph_path: Path, json_
         "buildSidecar", "expectedUploadCertificateSha256", "requiredExternalSigner",
         "expectedExternalSignerOutput", "signingAuthorized", "publicationAuthorized", "googlePlayUploadAuthorized",
     }
-    if set(request) != expected_fields or request.get("contractName") != REQUEST_CONTRACT \
+    if single_build:
+        expected_fields.add("buildVerification")
+        if request.get("buildVerification") != {
+            "mode": "single-isolated-build", "distributionTrack": "internal",
+        }:
+            raise RebuilderError("single-build request must be restricted to internal distribution")
+    expected_contract = SINGLE_BUILD_REQUEST_CONTRACT if single_build else REQUEST_CONTRACT
+    if set(request) != expected_fields or request.get("contractName") != expected_contract \
             or request.get("requestAuthority") != "none" \
             or any(request.get(name) is not False for name in (
                 "signingAuthorized", "publicationAuthorized", "googlePlayUploadAuthorized"
@@ -468,6 +482,12 @@ def validate_external_request(request_path: Path, source_graph_path: Path, json_
         "outputMustBindSignedAabSha256", "outputMustBindSourceGraphSha256", "outputMustBindReleaseIdentity",
     }
     required_fields = required_true | {"implementedByThisRepository", "inputTransport"}
+    if single_build:
+        required_true.remove("mustRebuildAndMatchUnsignedAab")
+        required_true.add("mustAuthenticateBuilderExecutionProvenance")
+        required_fields.add("mustAuthenticateBuilderExecutionProvenance")
+        if not isinstance(required, dict) or required.get("mustRebuildAndMatchUnsignedAab") is not False:
+            raise RebuilderError("single-build request must not claim independent rebuild verification")
     if not isinstance(required, dict) or set(required) != required_fields \
             or required.get("implementedByThisRepository") is not False \
             or required.get("inputTransport") != "authenticated_descriptor_or_immutable_artifact" \
