@@ -91,14 +91,34 @@ necessary, including bounds for filesystem stalls. This adds no live workflow,
 controller, bearer delivery, protected credential, private route or recovery
 storage. The root protected supervisor remains separate and unchanged.
 
-## Fixed request-input staging
+## Fixed bearer delivery and request-input staging
 
-`scripts/android_hosted_input_stager.py` supplies one bounded preparation step,
-not a hosted provisioner or role executor. Its closed CLI accepts only `--role
-capture|emission`, plus `--profile`, `--context`, `--deployment` and each one's
+`scripts/android_hosted_input_stager.py` supplies two separately selected local
+file preparation steps, not a complete hosted provisioner or role executor.
+Its closed CLI accepts `--role capture|emission`, plus `--profile`, `--context`,
+`--deployment` and each one's
 independently admitted `--*-sha256`. The deployment must equal the actual
-`android_deployment_materializer.render()` output byte-for-byte. The existing
-configured role bearer must already be delivered; its bytes must match the
+`android_deployment_materializer.render()` output byte-for-byte.
+
+The opt-in `--deliver-role-bearer` mode calls `deliver_role_bearer()` with those
+same admitted inputs. Only after validating all document/CA bytes and custody,
+it reads the one explicitly injected `ANDROID_PREVIEW12_ROLE_BEARER` value.
+The exact printable-ASCII bytes must match the admitted owner's
+`bearer_sha256[role]` before the existing exclusive writer creates the configured
+0600 `role_bearer` file. It neither strips nor generates a token. The real held
+`_Input` reader verifies the resulting file and all original inputs before
+returning a constant diagnostic, never a credential digest or authentication
+claim. This mode does not read either OIDC request environment variable.
+
+Bearer delivery requires the bearer destination, both OIDC destinations and
+the attempt directory all to be absent under existing private parents. Equal,
+ancestor/descendant and held-parent/name aliases with documents, CA files,
+other output slots or the emission action-output root reject before reading
+the injected value. Parent/input bindings remain held and checked around I/O;
+uncertain partial files are retained, never overwritten, deleted or retried.
+
+Without that flag, the original `stage()` behavior is unchanged. The configured
+role bearer must already be delivered; its bytes must match the
 admitted owner document's `bearer_sha256` for that exact role. It is not copied.
 
 After public/input/CA alias and custody preflight, the stager reads only
@@ -122,7 +142,15 @@ Interpreter/source/dependency admission still precedes importing this helper.
 It does not establish that supplied environment values are genuine GitHub
 identity, request an OIDC token, call the owner/client, start a role, or supply
 protected signing credentials, storage, private routing or deployment. The
-original OIDC/Jobs API/journal authentication remains unchanged. Disposable
+delivery mode closes only injected-value-to-host-file delivery: it does not
+read local controller custody, fetch credentials, configure GitHub environment
+secrets or resolve their separate exclusive-writer/transfer prerequisites.
+The phase caller still invokes only the original request-input stage; it does
+not automatically opt into bearer delivery. Independent provisioning must
+invoke delivery separately before the first phase and retain the same inputs.
+Neither operation claims Python-memory zeroization or removes injected values
+from a parent process's environment. The original OIDC/Jobs API/journal
+authentication remains unchanged. Disposable
 tests use the real renderer, writer and `_Input` reader; operational callbacks
 are trapped. The source-test CI separately includes this dedicated suite; no
 operational workflow is added by this preparation step.

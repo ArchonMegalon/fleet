@@ -332,3 +332,312 @@ def test_cli_rejects_secret_argument_without_printing_it(packet, capsys):
     assert captured.out == "" and captured.err == stager.ERROR + "\n"
     assert packet.environment.reads == []
     no_outputs(packet)
+
+
+BEARER_VARIABLE = "ANDROID_PREVIEW12_ROLE_BEARER"
+
+
+class BearerEnvironment(dict):
+    """Delivery has exactly one explicit capability, not an environment scan."""
+    def __init__(self, value=BEARER.decode()):
+        super().__init__({} if value is None else {BEARER_VARIABLE: value})
+        self.reads = []
+    def get(self, key, *args):
+        self.reads.append(key)
+        assert key == BEARER_VARIABLE
+        return super().get(key, *args)
+    def __iter__(self):
+        pytest.fail("bearer environment scan")
+    def items(self):
+        pytest.fail("bearer environment scan")
+    def keys(self):
+        pytest.fail("bearer environment scan")
+
+
+@pytest.fixture
+def delivery_packet(packet, monkeypatch):
+    # The original staging fixture and all its tests stay unchanged. Only this
+    # derived disposable fixture starts with a fresh bearer destination.
+    packet.bearer.unlink()
+    parent = packet.args["profile"].parent / "bearer-custody"
+    parent.mkdir(mode=0o700)
+    packet.bearer = parent / "role-bearer"
+    packet.profile[packet.args["role"]]["transport_inputs"]["role_bearer"] = str(packet.bearer)
+    packet.bearer_environment = BearerEnvironment()
+    reseal(packet)
+    live = set()
+    actual_open, actual_close = os.open, os.close
+    def opening(*args, **kwargs):
+        fd = actual_open(*args, **kwargs); live.add(fd); return fd
+    def closing(fd):
+        actual_close(fd); live.discard(fd)
+    monkeypatch.setattr(os, "open", opening)
+    monkeypatch.setattr(os, "close", closing)
+    yield packet
+    assert live == set(), "delivery leaked held file/directory descriptors"
+
+
+def deliver(p):
+    return stager.deliver_role_bearer(**p.args, environment=p.bearer_environment)
+
+
+def delivery_rejected(p, *, before_environment=False):
+    with pytest.raises(stager.StagingError, match="^" + stager.ERROR + "$"):
+        deliver(p)
+    if before_environment:
+        assert p.bearer_environment.reads == []
+    no_outputs(p)
+
+
+@pytest.mark.parametrize("packet", ["capture", "emission"], indirect=True)
+def test_delivered_bearer_is_consumed_by_real_input_then_unchanged_stage(delivery_packet, monkeypatch):
+    p = delivery_packet
+    originals = [p.args[name] for name in ("profile", "context", "deployment")]
+    originals += [Path(pin["path"]) for pin in p.profile[p.args["role"]]["pins"].values()]
+    before = {path: (path.read_bytes(), stager.hosted.origin._identity(path.stat())) for path in originals}
+    reads = []
+    actual_read = stager.hosted._Input.read
+    def read(item):
+        result = actual_read(item); reads.append(item.path); return result
+    monkeypatch.setattr(stager.hosted._Input, "read", read)
+    actual_get = p.bearer_environment.get
+    def get(key, *args):
+        assert set(originals) <= set(reads)
+        assert not p.bearer.exists() and list(p.outputs.iterdir()) == []
+        return actual_get(key, *args)
+    p.bearer_environment.get = get
+    assert deliver(p) == stager.BEARER_COMPLETE
+    assert p.bearer_environment.reads == [BEARER_VARIABLE]
+    assert stat.S_IMODE(p.bearer.stat().st_mode) == 0o600 and p.bearer.stat().st_nlink == 1
+    held = stager.hosted._Input(p.bearer, stager.hosted.INPUT_LIMITS["role_bearer"], expected=sha(BEARER))
+    try:
+        assert held.raw == held.read() == BEARER
+    finally:
+        held.close()
+    no_outputs(p)
+    assert invoke(p) == stager.COMPLETE
+    for name, raw in (("role_bearer", BEARER), ("oidc_request_url", URL.encode()),
+                      ("oidc_request_credential", TOKEN.encode())):
+        path = Path(p.profile[p.args["role"]]["transport_inputs"][name])
+        held = stager.hosted._Input(path, stager.hosted.INPUT_LIMITS[name], expected=sha(raw))
+        try:
+            assert held.raw == held.read() == raw
+        finally:
+            held.close()
+    for path, (raw, identity) in before.items():
+        assert path.read_bytes() == raw and stager.hosted.origin._identity(path.stat()) == identity
+
+
+@pytest.mark.parametrize("value", [None, "", "x" * 4097, "nön-ascii", "white space", "line\nbreak",
+                                   "tab\tvalue", "nul\x00value", "SYNTHETIC-WRONG-BEARER", True, b"bytes"])
+def test_delivery_rejects_missing_invalid_or_wrong_digest_value_without_output(delivery_packet, value):
+    p = delivery_packet; p.bearer_environment = BearerEnvironment(value)
+    if type(value) is str and value != "SYNTHETIC-WRONG-BEARER":
+        # Matching hashes cannot make malformed text an admitted credential.
+        p.profile["owner"]["bearer_sha256"][p.args["role"]] = sha(value.encode("utf-8"))
+        reseal(p)
+    delivery_rejected(p)
+    assert p.bearer_environment.reads == [BEARER_VARIABLE]
+    assert not p.bearer.exists()
+
+
+def test_delivery_accepts_the_exact_existing_4096_byte_boundary(delivery_packet):
+    p = delivery_packet; raw = b"S" * 4096
+    p.profile["owner"]["bearer_sha256"][p.args["role"]] = sha(raw)
+    p.bearer_environment = BearerEnvironment(raw.decode())
+    reseal(p)
+    assert deliver(p) == stager.BEARER_COMPLETE
+    assert p.bearer_environment.reads == [BEARER_VARIABLE] and p.bearer.read_bytes() == raw
+    held = stager.hosted._Input(p.bearer, stager.hosted.INPUT_LIMITS["role_bearer"], expected=sha(raw))
+    try:
+        assert held.raw == held.read() == raw
+    finally:
+        held.close()
+    no_outputs(p)
+
+
+@pytest.mark.parametrize("role", ["owner", "protected", "emission-submit", "anything"])
+def test_delivery_rejects_other_roles_before_environment(delivery_packet, role):
+    p = delivery_packet; p.args["role"] = role
+    delivery_rejected(p, before_environment=True)
+    assert not p.bearer.exists()
+
+
+def test_delivery_cannot_use_the_other_roles_hash(delivery_packet):
+    p = delivery_packet
+    other = "SYNTHETIC-OTHER-ROLE-BEARER"
+    p.profile["owner"]["bearer_sha256"]["emission"] = sha(other.encode())
+    p.bearer_environment = BearerEnvironment(other)
+    reseal(p)
+    delivery_rejected(p)
+    assert p.bearer_environment.reads == [BEARER_VARIABLE] and not p.bearer.exists()
+
+
+@pytest.mark.parametrize("name", ["profile", "context", "deployment", "ca"])
+def test_delivery_public_drift_precedes_bearer_environment(delivery_packet, name):
+    p = delivery_packet
+    path = p.args[name] if name != "ca" else Path(p.profile[p.args["role"]]["pins"]["controller_ca"]["path"])
+    put(path, path.read_bytes() + b" ")
+    delivery_rejected(p, before_environment=True)
+    assert not p.bearer.exists()
+
+
+@pytest.mark.parametrize("change", ["equivalent-json", "new-context", "mismatched-sha"])
+def test_delivery_requires_exact_existing_renderer_equality(delivery_packet, change):
+    p = delivery_packet
+    if change == "equivalent-json":
+        p.args["deployment_sha256"] = put(p.args["deployment"], json.dumps(json.loads(p.args["deployment"].read_bytes()), indent=2).encode())
+    else:
+        p.context["run_id" if change == "new-context" else "workflow_sha"] = "78" if change == "new-context" else "f" * 40
+        reseal(p, render=False)
+    delivery_rejected(p, before_environment=True)
+    assert not p.bearer.exists()
+
+
+@pytest.mark.parametrize("attack", ["bearer-profile", "bearer-ca", "bearer-oidc", "same-oidc",
+    "attempt-bearer", "attempt-oidc", "bearer-in-attempt", "bearer-under-document", "oidc-ca",
+    "attempt-ca", "existing-bearer", "existing-url", "existing-request", "existing-attempt",
+    "bearer-symlink", "oidc-symlink", "bearer-parent-mode", "bearer-parent-symlink", "ca-hardlink"])
+def test_delivery_aliases_and_existing_custody_reject_without_lookup_or_write(delivery_packet, monkeypatch, attack):
+    p = delivery_packet; role = p.args["role"]; inputs = p.profile[role]["transport_inputs"]
+    ca = Path(p.profile[role]["pins"]["controller_ca"]["path"])
+    if attack == "bearer-profile": inputs["role_bearer"] = str(p.args["profile"])
+    elif attack == "bearer-ca": inputs["role_bearer"] = str(ca)
+    elif attack == "bearer-oidc": inputs["role_bearer"] = inputs["oidc_request_url"]
+    elif attack == "same-oidc": inputs["oidc_request_credential"] = inputs["oidc_request_url"]
+    elif attack == "attempt-bearer": p.profile[role]["attempt_directory"] = str(p.bearer)
+    elif attack == "attempt-oidc": p.profile[role]["attempt_directory"] = inputs["oidc_request_url"]
+    elif attack == "bearer-in-attempt": inputs["role_bearer"] = str(Path(p.profile[role]["attempt_directory"]) / "bearer")
+    elif attack == "bearer-under-document": inputs["role_bearer"] = str(p.args["profile"] / "bearer")
+    elif attack == "oidc-ca": inputs["oidc_request_url"] = str(ca)
+    elif attack == "attempt-ca": p.profile[role]["attempt_directory"] = str(ca)
+    elif attack == "existing-bearer": put(p.bearer, b"PREEXISTING-BEARER")
+    elif attack in {"existing-url", "existing-request"}: put(p.outputs / attack.removeprefix("existing-"), b"PREEXISTING-OIDC")
+    elif attack == "existing-attempt": Path(p.profile[role]["attempt_directory"]).mkdir(mode=0o700)
+    elif attack == "bearer-symlink": p.bearer.symlink_to(ca)
+    elif attack == "oidc-symlink": (p.outputs / "url").symlink_to(ca)
+    elif attack == "bearer-parent-mode": p.bearer.parent.chmod(0o755)
+    elif attack == "bearer-parent-symlink":
+        parent = p.bearer.parent; moved = parent.with_name("retained-custody")
+        parent.rename(moved); parent.symlink_to(moved, target_is_directory=True)
+    else:
+        os.link(ca, ca.with_name("retained-ca-alias"))
+    # The real renderer already rejects these shapes. Admit their raw profile
+    # hash without pre-rendering so the subject owns that fail-closed check.
+    reseal(p, render=attack not in {"attempt-bearer", "attempt-oidc", "bearer-in-attempt", "attempt-ca"})
+    before = {path: path.read_bytes() for path in [p.args["profile"], p.args["context"], p.args["deployment"], ca]}
+    writes = []
+    monkeypatch.setattr(stager.materializer, "_write_exclusive", lambda *_: writes.append(True))
+    with pytest.raises(stager.StagingError, match="^" + stager.ERROR + "$"):
+        deliver(p)
+    assert p.bearer_environment.reads == [] and writes == []
+    for path, raw in before.items(): assert path.read_bytes() == raw
+    if attack == "existing-bearer": assert p.bearer.read_bytes() == b"PREEXISTING-BEARER"
+    if attack in {"existing-url", "existing-request"}:
+        assert (p.outputs / attack.removeprefix("existing-")).read_bytes() == b"PREEXISTING-OIDC"
+
+
+@pytest.mark.parametrize("packet", ["emission"], indirect=True)
+@pytest.mark.parametrize("slot", ["role_bearer", "oidc_request_url", "oidc_request_credential", "attempt"])
+def test_delivery_rejects_all_custody_slots_inside_action_output(delivery_packet, slot):
+    p = delivery_packet; profile = p.profile["emission"]
+    path = str(Path(profile["attestation_output_root"]) / "collision")
+    if slot == "attempt": profile["attempt_directory"] = path
+    else: profile["transport_inputs"][slot] = path
+    reseal(p, render=slot != "attempt")
+    delivery_rejected(p, before_environment=True)
+    assert not p.bearer.exists()
+
+
+@pytest.mark.parametrize("name", ["profile", "context", "deployment", "ca"])
+def test_delivery_rechecks_public_inputs_after_environment_lookup(delivery_packet, name):
+    p = delivery_packet
+    path = p.args[name] if name != "ca" else Path(p.profile[p.args["role"]]["pins"]["controller_ca"]["path"])
+    actual_get = p.bearer_environment.get
+    def get(key, *args):
+        put(path, path.read_bytes() + b" ")
+        return actual_get(key, *args)
+    p.bearer_environment.get = get
+    delivery_rejected(p)
+    assert p.bearer_environment.reads == [BEARER_VARIABLE] and not p.bearer.exists()
+
+
+@pytest.mark.parametrize("name", ["profile", "context", "deployment", "ca", "bearer"])
+def test_delivery_postwrite_drift_preserves_the_created_file(delivery_packet, monkeypatch, name):
+    p = delivery_packet
+    path = p.bearer if name == "bearer" else p.args.get(name)
+    if name == "ca": path = Path(p.profile[p.args["role"]]["pins"]["controller_ca"]["path"])
+    actual = stager.materializer._write_exclusive
+    calls = []
+    def write(destination, raw):
+        calls.append(destination); actual(destination, raw); put(path, b"SYNTHETIC-POSTWRITE-DRIFT")
+    monkeypatch.setattr(stager.materializer, "_write_exclusive", write)
+    delivery_rejected(p)
+    assert calls == [p.bearer] and p.bearer.exists()
+    assert p.bearer.read_bytes() == (b"SYNTHETIC-POSTWRITE-DRIFT" if name == "bearer" else BEARER)
+
+
+@pytest.mark.parametrize("failure_call", [1, 2])
+def test_delivery_fsync_failure_retains_partial_bearer_and_replay_never_erases_it(delivery_packet, monkeypatch, failure_call):
+    p = delivery_packet; actual = os.fsync; calls = []
+    def fsync(fd):
+        calls.append(fd)
+        if len(calls) == failure_call: raise OSError("SYNTHETIC-PRIVATE-FSYNC-DETAIL")
+        return actual(fd)
+    monkeypatch.setattr(stager.materializer.os, "fsync", fsync)
+    delivery_rejected(p)
+    assert p.bearer.read_bytes() == BEARER
+    count, reads = len(calls), list(p.bearer_environment.reads)
+    delivery_rejected(p)
+    assert len(calls) == count and p.bearer_environment.reads == reads
+    assert p.bearer.read_bytes() == BEARER
+
+
+@pytest.mark.parametrize("mutation", ["parent", "same-byte-file"])
+def test_delivery_name_or_parent_rebinding_during_fsync_retains_original(delivery_packet, monkeypatch, mutation):
+    p = delivery_packet; actual = os.fsync; fired = False
+    retained = p.bearer.parent.with_name("retained-delivery-parent") if mutation == "parent" else p.bearer.with_name("retained-bearer")
+    def fsync(fd):
+        nonlocal fired
+        actual(fd)
+        if not fired:
+            fired = True
+            if mutation == "parent":
+                p.bearer.parent.rename(retained); p.bearer.parent.mkdir(mode=0o700)
+            else:
+                p.bearer.rename(retained); put(p.bearer, BEARER)
+    monkeypatch.setattr(stager.materializer.os, "fsync", fsync)
+    delivery_rejected(p)
+    assert (retained / p.bearer.name if mutation == "parent" else retained).read_bytes() == BEARER
+    if mutation == "parent": assert not p.bearer.exists()
+    else: assert p.bearer.read_bytes() == BEARER
+
+
+def test_successful_delivery_cannot_be_replayed_or_overwritten(delivery_packet):
+    p = delivery_packet
+    assert deliver(p) == stager.BEARER_COMPLETE
+    before = (p.bearer.read_bytes(), stager.hosted.origin._identity(p.bearer.stat()))
+    p.bearer_environment.reads.clear()
+    delivery_rejected(p, before_environment=True)
+    assert (p.bearer.read_bytes(), stager.hosted.origin._identity(p.bearer.stat())) == before
+
+
+@pytest.mark.parametrize("success", [False, True])
+def test_delivery_cli_is_explicit_and_emits_only_constant(delivery_packet, monkeypatch, capsys, success):
+    p = delivery_packet
+    monkeypatch.setenv(BEARER_VARIABLE, BEARER.decode() if success else "SYNTHETIC-WRONG-BEARER")
+    assert stager.main(cli_args(p) + ["--deliver-role-bearer"]) == (0 if success else 1)
+    captured = capsys.readouterr()
+    assert captured.out == (stager.BEARER_COMPLETE + "\n" if success else "")
+    assert captured.err == ("" if success else stager.ERROR + "\n")
+    for private in (BEARER.decode(), sha(BEARER), str(p.bearer), "SYNTHETIC-WRONG-BEARER"):
+        assert private not in captured.out + captured.err
+    no_outputs(p)
+
+
+def test_delivery_cli_rejects_bearer_in_arguments(delivery_packet, capsys):
+    p = delivery_packet
+    assert stager.main(cli_args(p) + ["--deliver-role-bearer", "--role-bearer", BEARER.decode()]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err == stager.ERROR + "\n"
+    assert BEARER.decode() not in captured.out + captured.err and not p.bearer.exists()
