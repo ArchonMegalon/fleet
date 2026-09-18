@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
-      - name: Install exact test wheels and run ten offline source suites
+      - name: Install exact test wheels and run offline source suites
         shell: bash
         run: |
           set -euo pipefail
