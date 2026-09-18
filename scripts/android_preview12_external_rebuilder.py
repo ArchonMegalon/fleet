@@ -119,6 +119,13 @@ class RebuilderError(RuntimeError):
     """One deliberately sanitized fail-closed external-rebuilder failure."""
 
 
+class _RebuildMismatch(RebuilderError):
+    def __init__(self, digest: str, size: int):
+        super().__init__("independent unsigned AAB differs from producer")
+        self.observed = {"sha256": digest, "sizeBytes": size}
+        self.diagnostic_retention: str | None = None
+
+
 def _canonical_json(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
@@ -2434,7 +2441,7 @@ def require_rebuild_match(rebuilt_aab: Path, request: Mapping[str, Any], limit: 
     expected = request["unsignedAab"]
     actual = hashlib.sha256(raw).hexdigest()
     if actual != expected["sha256"] or len(raw) != expected["sizeBytes"]:
-        raise RebuilderError("independent unsigned AAB differs from producer")
+        raise _RebuildMismatch(actual, len(raw))
     return {"sha256": actual, "sizeBytes": len(raw), "producerMatch": True}
 
 
@@ -2535,6 +2542,101 @@ def _copy_canonical_output(source: Path, destination: Path, label: str, limit: i
         fence()
     except (OSError, ValueError):
         raise RebuilderError(f"{label} canonical private capture failed") from None
+
+
+def _retain_rebuild_mismatch(
+    directory: Path, parent_fd: int, aab: Path, graph: Path,
+    request: Mapping[str, Any], lock: Mapping[str, Any], mismatch: _RebuildMismatch,
+) -> None:
+    """Retain three bounded rejected outputs, never a signer/retry handoff.
+
+    The caller keeps the original private stage on ANY failure. Partial copies
+    are deliberately left for inspection, and the fixed target is never reused.
+    """
+    directory_identity = lambda item: (item.st_dev, item.st_ino, item.st_mode, item.st_uid, item.st_gid)
+    parent = directory_identity(os.fstat(parent_fd))
+
+    def parent_fence():
+        current = directory.parent.lstat()
+        if directory.parent.resolve(strict=True) != directory.parent \
+                or directory_identity(current) != parent \
+                or directory_identity(os.fstat(parent_fd)) != parent \
+                or current.st_uid != os.getuid() or stat.S_IMODE(current.st_mode) & 0o077:
+            raise RebuilderError("mismatch diagnostic parent custody changed")
+
+    parent_fence()
+    os.mkdir(directory.name, mode=0o700, dir_fd=parent_fd)  # Exclusive even after preflight.
+    parent_fence()
+    admitted_directory = directory_identity(directory.lstat())
+    sidecar = graph.parent / (aab.name + ".sha256")
+    inventory = {}
+    originals = []
+    for source, limit, canonical in (
+        (aab, lock["limits"]["aab_bytes"], True),
+        (graph, lock["limits"]["json_bytes"], False),
+        (sidecar, 16 * 1024, False),
+    ):
+        originals.append((source, limit, _file_identity(_offline_input_identity(source, limit)),
+                          directory_identity(source.parent.lstat())))
+        target = directory / source.name
+        if canonical:
+            _copy_canonical_output(source, target, "rejected unsigned AAB", limit)
+        else:
+            metadata = _offline_input_identity(source, limit)
+            source_parent = directory_identity(source.parent.lstat())
+            if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600 \
+                    or source_parent[3] != os.getuid() or stat.S_IMODE(source_parent[2]) & 0o077:
+                raise RebuilderError("rejected rebuild metadata is not private custody")
+            with io.BytesIO() as captured:
+                digest = _copy_offline_input(source, metadata, captured, limit)
+                raw = captured.getvalue()
+            if _stable_file_sha256(source, metadata, "rejected rebuild metadata") != digest:
+                raise RebuilderError("rejected rebuild metadata capture changed")
+            _write_exclusive(target, raw)
+            if _file_identity(_offline_input_identity(source, limit)) != _file_identity(metadata) \
+                    or directory_identity(source.parent.lstat()) != source_parent:
+                raise RebuilderError("rejected rebuild metadata custody changed")
+        copied = _offline_input_identity(target, limit)
+        if copied.st_uid != os.getuid() or stat.S_IMODE(copied.st_mode) != 0o600:
+            raise RebuilderError("mismatch diagnostic copy is not private")
+        observed = {"sha256": _stable_file_sha256(target, copied, "mismatch diagnostic copy"),
+                    "sizeBytes": copied.st_size}
+        if (canonical and observed != mismatch.observed) or (not canonical and observed["sha256"] != digest):
+            raise RebuilderError("mismatch diagnostic copy differs from rejected output")
+        inventory[source.name] = observed
+    receipt = {
+        "status": "independent_unsigned_aab_mismatch", "diagnosticOnly": True,
+        "producer": {key: request["unsignedAab"][key] for key in ("sha256", "sizeBytes")},
+        "observed": mismatch.observed, "files": inventory,
+        "eligibleForProtectedSigner": False, "retryAuthorized": False,
+        "signingPerformed": False, "publicationAuthorized": False, "googlePlayUploadAuthorized": False,
+    }
+    receipt_name = "REBUILD_MISMATCH_DIAGNOSTICS.json"
+    _write_exclusive(directory / receipt_name, _pretty_json(receipt))
+    _fsync_directory(directory)
+    os.fsync(parent_fd)
+    parent_fence()
+    if directory_identity(directory.lstat()) != admitted_directory \
+            or set(entry.name for entry in directory.iterdir()) != set(inventory) | {receipt_name}:
+        raise RebuilderError("mismatch diagnostic directory custody changed")
+    # Recheck every retained byte after receipt publication/fsync. No arbitrary
+    # log, workspace, approval, toolchain observation or credential is copied.
+    for name, expected in {**inventory, receipt_name: {
+        "sha256": hashlib.sha256(_pretty_json(receipt)).hexdigest(),
+        "sizeBytes": len(_pretty_json(receipt)),
+    }}.items():
+        copied = _offline_input_identity(directory / name, expected["sizeBytes"])
+        if copied.st_uid != os.getuid() or stat.S_IMODE(copied.st_mode) != 0o600 \
+                or _stable_file_sha256(directory / name, copied, "retained mismatch diagnostic") != expected["sha256"]:
+            raise RebuilderError("retained mismatch diagnostic changed")
+    for source, limit, identity, source_parent in originals:
+        if _file_identity(_offline_input_identity(source, limit)) != identity \
+                or directory_identity(source.parent.lstat()) != source_parent:
+            raise RebuilderError("rejected rebuild output custody changed")
+    parent_fence()
+    if directory_identity(directory.lstat()) != admitted_directory \
+            or set(entry.name for entry in directory.iterdir()) != set(inventory) | {receipt_name}:
+        raise RebuilderError("mismatch diagnostic directory custody changed")
 
 
 def _validate_authority_feed_paths(authority_root: Path, owner_feed: Path) -> None:
@@ -3086,6 +3188,7 @@ def prepare_rebuild_handoff(
     test_bootstrap_dir: Path | None = None,
     test_wheelhouse: Path | None = None,
     test_oracle_root: Path | None = None,
+    retain_mismatch_diagnostics: bool = False,
 ) -> dict[str, Any]:
     """Run the secret-free rebuild stage in a job with no credential mounts."""
 
@@ -3141,10 +3244,17 @@ def prepare_rebuild_handoff(
             or output_dir.parent.stat().st_uid != os.getuid() \
             or stat.S_IMODE(output_dir.parent.stat().st_mode) & 0o077:
         raise RebuilderError("rebuild handoff must be a new path below one owner-only directory")
+    diagnostics = output_dir.with_name(output_dir.name + ".mismatch-diagnostics")
+    if retain_mismatch_diagnostics and (diagnostics.exists() or diagnostics.is_symlink()):
+        raise RebuilderError("mismatch diagnostic path already exists; it cannot be overwritten or reused")
     stage = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
     stage.chmod(0o700)
     moved = False
+    keep_stage = False
+    diagnostic_parent_fd = None
     try:
+        if retain_mismatch_diagnostics:
+            diagnostic_parent_fd = os.open(output_dir.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         source_graph_copy = stage / "producer-source-graph.json"
         _write_exclusive(source_graph_copy, graph_raw)
         workspace = stage / "workspace"
@@ -3182,7 +3292,25 @@ def prepare_rebuild_handoff(
             test_oracle_root=test_oracle_root,
         )
         toolchain_inputs.assert_exact(installed_closure_receipt, java_tool_observation)
-        rebuilt = require_rebuild_match(rebuilt_aab, request, lock["limits"]["aab_bytes"])
+        try:
+            rebuilt = require_rebuild_match(rebuilt_aab, request, lock["limits"]["aab_bytes"])
+        except _RebuildMismatch as mismatch:
+            if retain_mismatch_diagnostics:
+                # Set before capture, including interrupts and unexpected I/O
+                # failures: never erase the sole candidate on retention failure.
+                keep_stage = True
+                try:
+                    _retain_rebuild_mismatch(
+                        diagnostics, diagnostic_parent_fd, rebuilt_aab, rebuilt_graph, request, lock, mismatch,
+                    )
+                except Exception:
+                    mismatch.diagnostic_retention = (
+                        "diagnostic retention incomplete; original private rebuild stage retained"
+                    )
+                else:
+                    keep_stage = False
+                    mismatch.diagnostic_retention = "rejected rebuild diagnostics retained at OUTPUT_DIR.mismatch-diagnostics"
+            raise
         rebuilt_sidecar = rebuilt_graph.parent / (rebuilt_aab.name + ".sha256")
         sidecar_claims = android._sidecar_claims(rebuilt_sidecar, rebuilt_aab, rebuilt_graph)
         if sidecar_claims.get(f"artifacts/{rebuilt_aab.name}") != rebuilt["sha256"] \
@@ -3249,7 +3377,9 @@ def prepare_rebuild_handoff(
         moved = True
         return handoff
     finally:
-        if not moved:
+        if diagnostic_parent_fd is not None:
+            os.close(diagnostic_parent_fd)
+        if not moved and not keep_stage:
             shutil.rmtree(stage, ignore_errors=True)
 
 
@@ -4501,6 +4631,11 @@ def _parser() -> argparse.ArgumentParser:
                             help="separate canonical owner-only input; no legacy toolchain-authority fallback")
     prepare.add_argument("--builder-image", required=True)
     prepare.add_argument(
+        "--retain-mismatch-diagnostics", action="store_true",
+        help="on AAB mismatch retain only rejected outputs at OUTPUT_DIR.mismatch-diagnostics; "
+             "never overwrite or grant signing/retry authority; preserve original private stage if retention fails",
+    )
+    prepare.add_argument(
         "--offline-source-manifest", type=Path,
         help="absolute JSON path mapping all eight repositories to path, sha256 and size_bytes; source transport only",
     )
@@ -4551,9 +4686,12 @@ def main(argv: list[str] | None = None) -> int:
                 test_bootstrap_dir=arguments.test_bootstrap_dir,
                 test_wheelhouse=arguments.test_wheelhouse,
                 test_oracle_root=arguments.test_oracle_root,
+                retain_mismatch_diagnostics=arguments.retain_mismatch_diagnostics,
             )
     except (OSError, KeyError, TypeError, ValueError, subprocess.SubprocessError, RebuilderError) as error:
         print(f"android-preview12-external-rebuilder: {error}", file=sys.stderr)
+        if isinstance(error, _RebuildMismatch) and error.diagnostic_retention:
+            print(error.diagnostic_retention, file=sys.stderr)
         return 2
     print(json.dumps(result, sort_keys=True))
     return 0
