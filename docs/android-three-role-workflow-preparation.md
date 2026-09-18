@@ -20,12 +20,18 @@ There is no complete reviewed hosted provisioning entrypoint to invoke here. Add
 made-up `provision` command, an arbitrary bootstrap/command input, a synthetic
 active profile or a successful placeholder job would hide this gap. The
 existing owner/bootstrap custody checks must remain unchanged. The fixed
-`android_hosted_input_stager.py` now stages only the two explicitly injected
+`android_hosted_input_stager.py` default mode stages only the two explicitly injected
 OIDC request values into fresh files at admitted paths, after checking the exact
 rendered deployment and already-delivered role bearer. It does not supply
-source/interpreter/profile admission, role-bearer delivery, protected credentials,
-private routing or durable storage. The callable
-`android_hosted_source_admission.admit()` now holds independently selected
+source/interpreter/profile admission, protected credentials, private routing or
+durable storage. Its separate opt-in `deliver_role_bearer()` / CLI
+`--deliver-role-bearer` now exclusively copies the one explicitly injected
+`ANDROID_PREVIEW12_ROLE_BEARER` into the configured fresh private file, after
+public/CA custody checks and exact owner-digest matching. This closes only the
+host-file delivery step; it neither selects/fetches a bearer nor transfers it
+into GitHub environment secrets. The separate remote transfer/exclusive-writer
+prerequisites remain. The phase caller does not opt into delivery automatically.
+The callable `android_hosted_source_admission.admit()` now holds independently selected
 profile/context/source bytes before importing the three fixed helpers from
 captured source. It does not choose their authority or admit its own initial
 Python/stdlib/dependency runtime. See the
