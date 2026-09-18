@@ -74,8 +74,21 @@ def trace(frame, event, argument):
             violations.append(name); raise AssertionError('operational role call forbidden')
         if name in {'render', 'materialize', 'deliver_role_bearer', 'stage'}:
             events.append(name)
-    return trace
+    # The global trace still sees every nested Python function call. No guard
+    # uses line/return/exception events, so do not trace each frame's body.
+    return None
+probe = {'__name__': 'scripts.synthetic_guard_probe', 'entered': False}
+exec('def run():\n global entered\n entered = True\ndef outer():\n return run()', probe)
 sys.settrace(trace)
+try:
+    probe['outer']()
+except AssertionError:
+    pass
+else:
+    raise AssertionError('nested operational trace guard missing')
+assert violations == ['run'] and probe['entered'] is False
+violations.clear()
+sys.settrace(trace)  # A deliberately raised trace exception disables tracing.
 class Injection:
     def get(self, name):
         reads.append(name)
